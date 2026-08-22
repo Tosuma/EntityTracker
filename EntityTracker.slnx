@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EntityTracker.Domain/EntityTracker.Domain.csproj" />
+    <Project Path="src/EntityTracker.Infrastructure/EntityTracker.Infrastructure.csproj" />
+    <Project Path="src/EntityTracker.Reporting/EntityTracker.Reporting.csproj" />
+    <Project Path="src/EntityTracker.Wpf/EntityTracker.Wpf.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EntityTracker.Domain.Tests/EntityTracker.Domain.Tests.csproj" />
+    <Project Path="tests/EntityTracker.Application.Tests/EntityTracker.Application.Tests.csproj" />
+  </Folder>
+</Solution>
