@@ -12,6 +12,68 @@ public sealed class TrackedEntityTests
         Assert.Same(id, entity.Id);
         Assert.Equal(" sales.Customer ", entity.SourceName);
         Assert.Equal(DevelopmentStatus.NotStarted, entity.Status);
+        Assert.Equal(string.Empty, entity.Notes);
+    }
+
+    [Fact]
+    public void Constructor_PreservesNotes()
+    {
+        TrackedEntity entity = new(
+            EntityId.New(),
+            "sales.Customer",
+            DevelopmentStatus.InProgress,
+            " Keep formatting. \nSecond line. ");
+
+        Assert.Equal(" Keep formatting. \nSecond line. ", entity.Notes);
+    }
+
+    [Fact]
+    public void ChangeSourceName_UpdatesSourceName()
+    {
+        TrackedEntity entity = new(EntityId.New(), "sales.Customer");
+
+        entity.ChangeSourceName("sales.Client");
+
+        Assert.Equal("sales.Client", entity.SourceName);
+    }
+
+    [Fact]
+    public void ChangeSourceName_RejectsInvalidValueAndPreservesCurrentName()
+    {
+        TrackedEntity entity = new(EntityId.New(), "sales.Customer");
+
+        Assert.Throws<ArgumentException>(() => entity.ChangeSourceName("   "));
+        Assert.Equal("sales.Customer", entity.SourceName);
+    }
+
+    [Fact]
+    public void ChangeNotes_UpdatesNotesWithoutNormalizingText()
+    {
+        TrackedEntity entity = new(EntityId.New(), "sales.Customer");
+
+        entity.ChangeNotes("  Review with team.  ");
+
+        Assert.Equal("  Review with team.  ", entity.Notes);
+    }
+
+    [Fact]
+    public void Notes_RejectNullAndPreserveCurrentValue()
+    {
+        Assert.Throws<ArgumentNullException>(() =>
+            new TrackedEntity(
+                EntityId.New(),
+                "sales.Customer",
+                DevelopmentStatus.NotStarted,
+                null!));
+
+        TrackedEntity entity = new(
+            EntityId.New(),
+            "sales.Customer",
+            DevelopmentStatus.NotStarted,
+            "Existing");
+
+        Assert.Throws<ArgumentNullException>(() => entity.ChangeNotes(null!));
+        Assert.Equal("Existing", entity.Notes);
     }
 
     [Fact]

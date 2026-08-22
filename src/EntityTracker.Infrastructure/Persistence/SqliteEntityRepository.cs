@@ -1,0 +1,191 @@
+using EntityTracker.Application.Importing;
+using EntityTracker.Application.Persistence;
+using EntityTracker.Domain;
+
+using Microsoft.Data.Sqlite;
+
+namespace EntityTracker.Infrastructure.Persistence;
+
+public sealed class SqliteEntityRepository : IEntityRepository
+{
+    private readonly SqliteDatabase _database;
+
+    public SqliteEntityRepository(SqliteDatabase database)
+    {
+        ArgumentNullException.ThrowIfNull(database);
+        _database = database;
+    }
+
+    public async Task<TrackedEntity?> GetAsync(
+        EntityId id,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(id);
+
+        await using SqliteConnection connection =
+            await _database.OpenConnectionAsync(cancellationToken);
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT id, source_name, development_status, notes
+            FROM tracked_entities
+            WHERE id = $id;
+            """;
+        command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(id));
+
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken)
+            ? ReadEntity(reader)
+            : null;
+    }
+
+    public async Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection =
+            await _database.OpenConnectionAsync(cancellationToken);
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT id, source_name, development_status, notes
+            FROM tracked_entities
+            ORDER BY source_name COLLATE NOCASE, id;
+            """;
+
+        List<TrackedEntity> entities = [];
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            entities.Add(ReadEntity(reader));
+        }
+
+        return entities.AsReadOnly();
+    }
+
+    public async Task<bool> TryAddAsync(
+        TrackedEntity entity,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        string timestamp = SqlitePersistenceValues.FormatTimestamp(
+            _database.TimeProvider.GetUtcNow());
+        await using SqliteConnection connection =
+            await _database.OpenConnectionAsync(cancellationToken);
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO tracked_entities
+            (
+                id,
+                source_key,
+                source_name,
+                development_status,
+                notes,
+                created_at_utc,
+                schema_updated_at_utc,
+                progress_updated_at_utc
+            )
+            VALUES
+            (
+                $id,
+                $sourceKey,
+                $sourceName,
+                $developmentStatus,
+                $notes,
+                $createdAtUtc,
+                $schemaUpdatedAtUtc,
+                $progressUpdatedAtUtc
+            )
+            ON CONFLICT DO NOTHING;
+            """;
+        AddEntityParameters(command, entity);
+        command.Parameters.AddWithValue("$createdAtUtc", timestamp);
+        command.Parameters.AddWithValue("$schemaUpdatedAtUtc", timestamp);
+        command.Parameters.AddWithValue("$progressUpdatedAtUtc", timestamp);
+
+        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+    }
+
+    public async Task<bool> UpdateSchemaMetadataAsync(
+        TrackedEntity entity,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        await using SqliteConnection connection =
+            await _database.OpenConnectionAsync(cancellationToken);
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE tracked_entities
+            SET source_key = $sourceKey,
+                source_name = $sourceName,
+                schema_updated_at_utc = $schemaUpdatedAtUtc
+            WHERE id = $id;
+            """;
+        command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
+        command.Parameters.AddWithValue("$sourceKey", EntitySourceKey.From(entity.SourceName).Value);
+        command.Parameters.AddWithValue("$sourceName", entity.SourceName);
+        command.Parameters.AddWithValue(
+            "$schemaUpdatedAtUtc",
+            SqlitePersistenceValues.FormatTimestamp(_database.TimeProvider.GetUtcNow()));
+
+        try
+        {
+            return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+        {
+            throw new InvalidOperationException(
+                "The schema metadata conflicts with an existing tracked entity.",
+                exception);
+        }
+    }
+
+    public async Task<bool> UpdateProgressAsync(
+        TrackedEntity entity,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        await using SqliteConnection connection =
+            await _database.OpenConnectionAsync(cancellationToken);
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE tracked_entities
+            SET development_status = $developmentStatus,
+                notes = $notes,
+                progress_updated_at_utc = $progressUpdatedAtUtc
+            WHERE id = $id;
+            """;
+        command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
+        command.Parameters.AddWithValue("$developmentStatus", entity.Status.ToString());
+        command.Parameters.AddWithValue("$notes", entity.Notes);
+        command.Parameters.AddWithValue(
+            "$progressUpdatedAtUtc",
+            SqlitePersistenceValues.FormatTimestamp(_database.TimeProvider.GetUtcNow()));
+
+        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+    }
+
+    private static void AddEntityParameters(
+        SqliteCommand command,
+        TrackedEntity entity)
+    {
+        command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
+        command.Parameters.AddWithValue("$sourceKey", EntitySourceKey.From(entity.SourceName).Value);
+        command.Parameters.AddWithValue("$sourceName", entity.SourceName);
+        command.Parameters.AddWithValue("$developmentStatus", entity.Status.ToString());
+        command.Parameters.AddWithValue("$notes", entity.Notes);
+    }
+
+    private static TrackedEntity ReadEntity(SqliteDataReader reader)
+    {
+        EntityId id = SqlitePersistenceValues.ParseEntityId(reader.GetString(0));
+        string sourceName = reader.GetString(1);
+        DevelopmentStatus status = SqlitePersistenceValues.ParseEnum<DevelopmentStatus>(
+            reader.GetString(2),
+            "development status");
+        string notes = reader.GetString(3);
+
+        return new TrackedEntity(id, sourceName, status, notes);
+    }
+}

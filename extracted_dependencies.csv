@@ -1,0 +1,7 @@
+table_name;mandatory_dependencies;mandatory_dependency_count;optional_dependencies;optional_dependency_count;total_dependency_count
+unit;structure;1;;0;1
+space;facility, structure;2;;0;2
+structure;property;1;;0;1
+facility;property;1;;0;1
+property;legal_entity;1;;0;1
+legal_entity;;0;;0;0

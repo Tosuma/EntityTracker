@@ -2,6 +2,7 @@ namespace EntityTracker.Application.Importing;
 
 public enum ImportDiagnosticCode
 {
+    FileAccessError,
     InvalidHeader,
     MalformedRow,
     MissingValue,

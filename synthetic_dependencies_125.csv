@@ -1,0 +1,126 @@
+table_name;mandatory_dependencies;mandatory_dependency_count;optional_dependencies;optional_dependency_count;total_dependency_count
+country_code;;0;;0;0
+region_code;;0;;0;0
+currency_code;;0;;0;0
+language_code;;0;;0;0
+time_zone;;0;;0;0
+tax_category;;0;;0;0
+document_type;;0;;0;0
+status_code;;0;;0;0
+priority_level;currency_code, time_zone;2;;0;2
+measurement_unit;country_code;1;time_zone;1;2
+customer_account;priority_level;1;;0;1
+customer_profile;tax_category, document_type;2;;0;2
+customer_contact;customer_account, tax_category;2;measurement_unit, country_code;2;4
+customer_address;tax_category;1;;0;1
+customer_preference;language_code;1;measurement_unit;1;2
+supplier_account;tax_category, unit;2;;0;2
+supplier_profile;region_code, document_type;2;space;1;3
+supplier_contact;document_type, priority_level, tax_category, structure;4;currency_code;1;5
+supplier_address;customer_preference, priority_level;2;facility;1;3
+supplier_contract;priority_level, measurement_unit, currency_code, property;4;supplier_profile;1;5
+employee_record;region_code;1;legal_entity;1;2
+employee_contact;supplier_contact, region_code, unit;3;customer_preference, measurement_unit;2;5
+employee_role;customer_contact, supplier_address;2;employee_record, space;2;4
+employee_assignment;customer_profile, structure;2;;0;2
+employee_schedule;customer_address;1;facility;1;2
+department_record;customer_address;1;tax_category;1;2
+team_record;employee_role, employee_record;2;language_code;1;3
+position_record;supplier_profile, team_record, customer_profile;3;;0;3
+skill_record;customer_account, customer_address;2;priority_level;1;3
+certification_record;supplier_account, supplier_contract;2;;0;2
+product_category;employee_record, supplier_contract;2;;0;2
+product_brand;measurement_unit;1;language_code, team_record;2;3
+product_record;priority_level;1;;0;1
+product_variant;product_brand, customer_profile, measurement_unit;3;employee_schedule, supplier_address;2;5
+product_attribute;department_record;1;product_brand;1;2
+product_price;product_category;1;;0;1
+product_cost;position_record;1;certification_record;1;2
+product_inventory;region_code;1;supplier_contract, measurement_unit;2;3
+product_supplier;skill_record, supplier_profile;2;;0;2
+product_bundle;status_code, employee_schedule;2;product_variant;1;3
+warehouse_record;customer_address;1;language_code;1;2
+warehouse_zone;product_record;1;supplier_address;1;2
+storage_bin;supplier_contact, product_cost;2;;0;2
+inventory_balance;supplier_profile;1;;0;1
+inventory_movement;team_record, supplier_contact;2;;0;2
+stock_adjustment;supplier_contact;1;;0;1
+stock_reservation;tax_category, supplier_contact;2;time_zone;1;3
+reorder_rule;skill_record, inventory_balance;2;;0;2
+inventory_count;tax_category, product_cost;2;;0;2
+inventory_snapshot;time_zone, supplier_profile;2;employee_contact, product_supplier;2;4
+sales_channel;stock_reservation, customer_profile, time_zone;3;region_code;1;4
+sales_order;product_cost;1;supplier_contract;1;2
+sales_order_line;tax_category;1;stock_adjustment;1;2
+sales_quote;employee_contact;1;employee_schedule;1;2
+sales_quote_line;storage_bin, priority_level, currency_code;3;supplier_contract;1;4
+sales_invoice;sales_quote, reorder_rule;2;;0;2
+sales_invoice_line;employee_contact, supplier_profile;2;currency_code;1;3
+sales_return;measurement_unit, region_code, product_record;3;;0;3
+sales_return_line;supplier_contract, stock_reservation;2;;0;2
+sales_discount;country_code;1;;0;1
+purchase_order;inventory_count;1;inventory_balance;1;2
+purchase_order_line;country_code, stock_reservation;2;sales_return_line, supplier_contract;2;4
+purchase_receipt;sales_discount, document_type;2;supplier_account;1;3
+purchase_receipt_line;team_record, warehouse_record;2;product_inventory;1;3
+purchase_return;employee_role, skill_record, priority_level;3;;0;3
+shipment_record;inventory_movement, stock_reservation;2;customer_preference;1;3
+shipment_item;product_cost;1;supplier_contact;1;2
+shipment_route;inventory_balance, region_code, employee_contact;3;purchase_order_line;1;4
+delivery_record;stock_reservation;1;;0;1
+delivery_attempt;purchase_order_line;1;;0;1
+carrier_record;customer_profile, purchase_receipt;2;;0;2
+freight_rate;certification_record;1;shipment_record;1;2
+tracking_event;employee_assignment, customer_address;2;;0;2
+package_record;employee_assignment, product_attribute, position_record;3;sales_return_line;1;4
+package_item;inventory_snapshot;1;;0;1
+payment_method;time_zone, tax_category, sales_order_line;3;;0;3
+payment_record;shipment_route, product_price;2;;0;2
+payment_allocation;delivery_record;1;;0;1
+refund_record;sales_order;1;language_code;1;2
+credit_note;purchase_order_line, sales_invoice_line;2;department_record;1;3
+billing_account;package_item, customer_preference;2;product_inventory;1;3
+billing_schedule;inventory_count;1;;0;1
+billing_cycle;product_bundle, warehouse_record;2;;0;2
+billing_event;billing_account, inventory_balance, billing_cycle;3;;0;3
+account_balance;billing_account, reorder_rule;2;;0;2
+general_ledger_account;sales_return_line, supplier_contact, sales_quote;3;;0;3
+journal_entry;employee_schedule;1;;0;1
+journal_entry_line;delivery_record;1;billing_schedule;1;2
+fiscal_period;product_record, purchase_receipt, tracking_event;3;delivery_attempt, credit_note;2;5
+cost_center;storage_bin;1;;0;1
+budget_record;delivery_attempt;1;;0;1
+budget_line;product_price;1;;0;1
+expense_record;customer_address, language_code;2;;0;2
+expense_category;journal_entry_line;1;purchase_order_line, inventory_snapshot;2;3
+expense_approval;product_bundle;1;;0;1
+project_record;product_category;1;employee_contact;1;2
+project_phase;sales_discount, product_supplier;2;;0;2
+project_task;purchase_order;1;;0;1
+task_assignment;sales_order_line, certification_record;2;;0;2
+task_dependency;purchase_return, task_assignment;2;;0;2
+service_catalog;purchase_receipt, journal_entry, billing_schedule;3;;0;3
+service_request;stock_reservation, product_supplier, billing_cycle;3;;0;3
+service_request_item;language_code;1;;0;1
+service_assignment;status_code, journal_entry;2;;0;2
+service_event;sales_order, task_assignment;2;;0;2
+support_ticket;customer_address;1;reorder_rule, billing_account;2;3
+support_comment;general_ledger_account, purchase_return, product_supplier;3;;0;3
+support_category;delivery_attempt, employee_role;2;status_code;1;3
+support_priority;expense_category;1;;0;1
+support_resolution;package_record;1;;0;1
+contract_record;product_supplier, employee_contact;2;budget_record;1;3
+contract_term;budget_record, status_code;2;purchase_order;1;3
+contract_party;stock_adjustment;1;sales_order;1;2
+contract_document;contract_record, product_bundle;2;;0;2
+contract_renewal;product_supplier, customer_address;2;supplier_account, general_ledger_account;2;4
+audit_event;customer_address;1;freight_rate;1;2
+audit_detail;sales_return, journal_entry;2;;0;2
+notification_record;product_attribute;1;measurement_unit;1;2
+notification_template;support_comment, customer_profile;2;;0;2
+notification_delivery;purchase_return, purchase_receipt;2;;0;2
+report_definition;supplier_contact;1;country_code, sales_invoice_line;2;3
+report_run;sales_channel, tax_category;2;;0;2
+dashboard_definition;package_record, department_record;2;service_request, budget_record;2;4
+dashboard_widget;credit_note, purchase_return;2;;0;2
+user_preference;measurement_unit;1;;0;1
