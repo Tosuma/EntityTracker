@@ -1,3 +1,4 @@
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Persistence;
@@ -125,7 +126,9 @@ public sealed class ManualEntityCreationViewModelTests
         ManualEntityCreationService service = new(
             new StubEntityRepository(entities),
             new StubDependencyRepository(),
+            new StubManualDependencyOverrideRepository(),
             new DependencyRanker(),
+            new EffectiveDependencyResolver(),
             store);
         return new ManualEntityCreationViewModel(
             service,

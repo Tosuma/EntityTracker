@@ -1,5 +1,6 @@
 using System.Globalization;
 
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
@@ -14,7 +15,7 @@ namespace EntityTracker.Infrastructure.Tests.Persistence;
 public sealed class SqlitePersistenceTests
 {
     [Fact]
-    public async Task InitializeAsync_FreshDatabaseCreatesVersionFourSchemaAndIsIdempotent()
+    public async Task InitializeAsync_FreshDatabaseCreatesVersionFiveSchemaAndIsIdempotent()
     {
         await using TemporarySqliteFile file = new();
         SqliteDatabase database = new(file.DatabasePath);
@@ -23,7 +24,7 @@ public sealed class SqlitePersistenceTests
         await database.InitializeAsync();
 
         await using SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(4L, await ExecuteScalarInt64Async(connection, "PRAGMA user_version;"));
+        Assert.Equal(5L, await ExecuteScalarInt64Async(connection, "PRAGMA user_version;"));
 
         string[] tableNames = await ReadStringsAsync(
             connection,
@@ -31,6 +32,7 @@ public sealed class SqlitePersistenceTests
         Assert.Contains("tracked_entities", tableNames);
         Assert.Contains("schema_dependencies", tableNames);
         Assert.Contains("unresolved_schema_dependencies", tableNames);
+        Assert.Contains("manual_dependency_overrides", tableNames);
 
         string[] entityColumns = await ReadStringsAsync(
             connection,
@@ -50,7 +52,7 @@ public sealed class SqlitePersistenceTests
         await using (SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath))
         {
             using SqliteCommand command = connection.CreateCommand();
-            command.CommandText = "PRAGMA user_version = 5;";
+            command.CommandText = "PRAGMA user_version = 6;";
             await command.ExecuteNonQueryAsync();
         }
 
@@ -59,7 +61,7 @@ public sealed class SqlitePersistenceTests
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => database.InitializeAsync());
         Assert.Contains("newer", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("5", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("6", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -123,7 +125,7 @@ public sealed class SqlitePersistenceTests
         await using SqliteConnection migratedConnection =
             await OpenConnectionAsync(file.DatabasePath);
         Assert.Equal(
-            4L,
+            5L,
             await ExecuteScalarInt64Async(migratedConnection, "PRAGMA user_version;"));
         Assert.All(
             await entityRepository.GetAllAsync(),
@@ -172,7 +174,7 @@ public sealed class SqlitePersistenceTests
         Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
         Assert.Equal("Keep notes", loaded.Notes);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(4L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal(5L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
         Assert.Equal(EntityProvenance.Imported, loaded.Provenance);
     }
 
@@ -217,7 +219,63 @@ public sealed class SqlitePersistenceTests
         Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
         Assert.Equal("Keep notes", loaded.Notes);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(4L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal(5L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+    }
+
+    [Fact]
+    public async Task InitializeAsync_VersionFourPromotesManualOnlyDependenciesToOverrides()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteEntityRepository entities = new(database);
+        SqliteDependencyRepository dependencies = new(database);
+        TrackedEntity manualOwner = new(
+            EntityId.New(),
+            "ManualOwner",
+            provenance: EntityProvenance.ManualOnly);
+        TrackedEntity importedOwner = new(EntityId.New(), "ImportedOwner");
+        TrackedEntity target = new(EntityId.New(), "Target");
+        Assert.True(await entities.TryAddAsync(manualOwner));
+        Assert.True(await entities.TryAddAsync(importedOwner));
+        Assert.True(await entities.TryAddAsync(target));
+        await dependencies.SaveAsync(new PersistedDependency(
+            new DependencyEdge(manualOwner.Id, target.Id),
+            ImportedDependencyKind.Mandatory));
+        await dependencies.SaveUnresolvedAsync(new PersistedUnresolvedDependency(
+            new UnresolvedDependency(manualOwner.Id, "Missing"),
+            ImportedDependencyKind.Mandatory));
+        await dependencies.SaveAsync(new PersistedDependency(
+            new DependencyEdge(importedOwner.Id, target.Id),
+            ImportedDependencyKind.Optional));
+
+        await using (SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath))
+        {
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                DROP TABLE manual_dependency_overrides;
+                PRAGMA user_version = 4;
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await database.InitializeAsync();
+
+        ManualDependencyOverride[] migrated =
+            (await new SqliteManualDependencyOverrideRepository(database).GetAllAsync())
+            .ToArray();
+        Assert.Contains(migrated, item =>
+            item.DependentEntityId == manualOwner.Id &&
+            item.DependencySourceName == target.SourceName &&
+            item.Action == ManualDependencyOverrideAction.Add);
+        Assert.Contains(migrated, item =>
+            item.DependentEntityId == manualOwner.Id &&
+            item.DependencySourceName == "Missing" &&
+            item.Action == ManualDependencyOverrideAction.Add);
+        PersistedDependency remainingImported = Assert.Single(
+            await dependencies.GetAllAsync());
+        Assert.Equal(importedOwner.Id, remainingImported.Edge.DependentEntityId);
+        Assert.Empty(await dependencies.GetAllUnresolvedAsync());
     }
 
     [Fact]
@@ -466,7 +524,9 @@ public sealed class SqlitePersistenceTests
         EntityOverviewService overviewService = new(
             new SqliteEntityRepository(restartedDatabase),
             new SqliteDependencyRepository(restartedDatabase),
-            new DependencyRanker());
+            new SqliteManualDependencyOverrideRepository(restartedDatabase),
+            new DependencyRanker(),
+            new EffectiveDependencyResolver());
 
         EntityOverviewResult result = await overviewService.GetAsync();
 

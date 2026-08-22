@@ -13,6 +13,7 @@ public sealed class EntityOverviewItem
         DevelopmentStatus status,
         string notes,
         int dependencyCount,
+        IEnumerable<string> dependencyNames,
         DependencyResolutionState dependencyState,
         IEnumerable<string> missingDependencyNames)
     {
@@ -23,6 +24,7 @@ public sealed class EntityOverviewItem
         Status = status;
         Notes = notes;
         DependencyCount = dependencyCount;
+        DependencyNames = Array.AsReadOnly(dependencyNames.ToArray());
         DependencyState = dependencyState;
         MissingDependencyNames = Array.AsReadOnly(missingDependencyNames.ToArray());
     }
@@ -40,6 +42,8 @@ public sealed class EntityOverviewItem
     public string Notes { get; }
 
     public int DependencyCount { get; }
+
+    public IReadOnlyList<string> DependencyNames { get; }
 
     public DependencyResolutionState DependencyState { get; }
 

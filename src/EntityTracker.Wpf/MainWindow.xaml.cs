@@ -31,6 +31,60 @@ public partial class MainWindow : Window
         await _viewModel.InitializeAsync();
     }
 
+    private void OnEntityActionsClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { ContextMenu: not null } button)
+        {
+            return;
+        }
+
+        button.ContextMenu.PlacementTarget = button;
+        button.ContextMenu.IsOpen = true;
+        e.Handled = true;
+    }
+
+    private void OnOpenOverviewSearchClick(object sender, RoutedEventArgs e) =>
+        QueueOverviewSearchFocus();
+
+    private void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.F &&
+            (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        {
+            if (_viewModel.OpenOverviewSearchCommand.CanExecute(null))
+            {
+                _viewModel.OpenOverviewSearchCommand.Execute(null);
+                QueueOverviewSearchFocus();
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (e.Key == Key.Escape &&
+            _viewModel.SelectedTabIndex == 0 &&
+            !_viewModel.Editor.IsOpen &&
+            _viewModel.CloseOverviewSearchCommand.CanExecute(null))
+        {
+            _viewModel.CloseOverviewSearchCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
+    private void QueueOverviewSearchFocus()
+    {
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (!_viewModel.IsOverviewSearchOpen)
+            {
+                return;
+            }
+
+            OverviewSearchTextBox.Focus();
+            OverviewSearchTextBox.SelectAll();
+        }));
+    }
+
     private void OnDataGridPreviewMouseWheel(
         object sender,
         MouseWheelEventArgs e)

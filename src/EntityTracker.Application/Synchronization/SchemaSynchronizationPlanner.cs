@@ -12,11 +12,15 @@ namespace EntityTracker.Application.Synchronization;
 public sealed class SchemaSynchronizationPlanner
 {
     private readonly DependencyRanker _dependencyRanker;
+    private readonly EffectiveDependencyResolver _effectiveDependencyResolver;
 
-    public SchemaSynchronizationPlanner(DependencyRanker dependencyRanker)
+    public SchemaSynchronizationPlanner(
+        DependencyRanker dependencyRanker,
+        EffectiveDependencyResolver? effectiveDependencyResolver = null)
     {
         ArgumentNullException.ThrowIfNull(dependencyRanker);
         _dependencyRanker = dependencyRanker;
+        _effectiveDependencyResolver = effectiveDependencyResolver ?? new EffectiveDependencyResolver();
     }
 
     public SchemaSynchronizationPlan CreatePlan(
@@ -24,7 +28,51 @@ public sealed class SchemaSynchronizationPlanner
         SchemaImportMode mode,
         IEnumerable<TrackedEntity> persistedEntities,
         IEnumerable<PersistedDependency> persistedDependencies,
-        IEnumerable<PersistedUnresolvedDependency> persistedUnresolvedDependencies)
+        IEnumerable<PersistedUnresolvedDependency> persistedUnresolvedDependencies,
+        IEnumerable<ManualDependencyOverride>? manualDependencyOverrides = null) =>
+        CreatePlanCore(
+            importCandidate,
+            mode,
+            persistedEntities,
+            persistedDependencies,
+            persistedUnresolvedDependencies,
+            manualDependencyOverrides ?? [],
+            manualDependencyOverrides ?? [],
+            null);
+
+    public SchemaSynchronizationPlan ReviseManualOverrides(
+        SchemaSynchronizationPlan plan,
+        EntityId ownerId,
+        IEnumerable<ManualDependencyOverride> desiredOwnerOverrides)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(ownerId);
+        ArgumentNullException.ThrowIfNull(desiredOwnerOverrides);
+
+        ManualDependencyOverride[] revisedOverrides = plan.CandidateManualOverrides
+            .Where(item => item.DependentEntityId != ownerId)
+            .Concat(desiredOwnerOverrides)
+            .ToArray();
+        return CreatePlanCore(
+            plan.ImportCandidate,
+            plan.Mode,
+            plan.PersistedEntities,
+            plan.PersistedResolvedDependencies,
+            plan.PersistedUnresolvedDependencies,
+            plan.PersistedManualOverrides,
+            revisedOverrides,
+            plan.PlannedNewEntityIds);
+    }
+
+    private SchemaSynchronizationPlan CreatePlanCore(
+        SchemaImportCandidate importCandidate,
+        SchemaImportMode mode,
+        IEnumerable<TrackedEntity> persistedEntities,
+        IEnumerable<PersistedDependency> persistedDependencies,
+        IEnumerable<PersistedUnresolvedDependency> persistedUnresolvedDependencies,
+        IEnumerable<ManualDependencyOverride> persistedManualOverrides,
+        IEnumerable<ManualDependencyOverride> candidateManualOverrides,
+        IReadOnlyDictionary<EntitySourceKey, EntityId>? plannedNewEntityIds)
     {
         ArgumentNullException.ThrowIfNull(importCandidate);
         ArgumentNullException.ThrowIfNull(persistedEntities);
@@ -39,6 +87,8 @@ public sealed class SchemaSynchronizationPlanner
         PersistedDependency[] currentResolved = persistedDependencies.ToArray();
         PersistedUnresolvedDependency[] currentUnresolved =
             persistedUnresolvedDependencies.ToArray();
+        ManualDependencyOverride[] persistedOverrides = persistedManualOverrides.ToArray();
+        ManualDependencyOverride[] candidateOverrides = candidateManualOverrides.ToArray();
         Dictionary<EntityId, TrackedEntity> currentById = currentEntities.ToDictionary(
             static entity => entity.Id);
         Dictionary<EntitySourceKey, TrackedEntity> currentByKey = currentEntities.ToDictionary(
@@ -82,19 +132,24 @@ public sealed class SchemaSynchronizationPlanner
                         ? EntityProvenance.ManualAndImported
                         : existingEntity.Provenance)
                 : new TrackedEntity(
-                    EntityId.New(),
+                    plannedNewEntityIds is not null &&
+                    plannedNewEntityIds.TryGetValue(
+                        importedEntity.SourceKey,
+                        out EntityId? plannedId)
+                        ? plannedId
+                        : EntityId.New(),
                     importedEntity.SourceName,
                     provenance: EntityProvenance.Imported);
             candidateActiveByKey[importedEntity.SourceKey] = candidateEntity;
         }
 
         Dictionary<EntityId, Dictionary<EntitySourceKey, DependencyDeclaration>>
-            currentDeclarations = DependencyStateResolver.BuildCurrentDeclarations(
+            currentImportedDeclarations = DependencyStateResolver.BuildCurrentDeclarations(
                 currentResolved,
                 currentUnresolved,
                 currentById);
         Dictionary<EntityId, Dictionary<EntitySourceKey, DependencyDeclaration>>
-            candidateDeclarations = [];
+            candidateImportedDeclarations = [];
 
         foreach (TrackedEntity candidateEntity in candidateActiveByKey.Values)
         {
@@ -110,30 +165,53 @@ public sealed class SchemaSynchronizationPlanner
             }
             else
             {
-                declarations = currentDeclarations.TryGetValue(
+                declarations = currentImportedDeclarations.TryGetValue(
                     candidateEntity.Id,
                     out Dictionary<EntitySourceKey, DependencyDeclaration>? existingDeclarations)
                     ? existingDeclarations.ToDictionary(static item => item.Key, static item => item.Value)
                     : [];
             }
 
-            candidateDeclarations[candidateEntity.Id] = declarations;
+            candidateImportedDeclarations[candidateEntity.Id] = declarations;
         }
 
         // Resolve only after Complete/Partial membership is settled. This also re-evaluates
         // declarations retained from owners outside a Partial import.
-        DependencyStateResolver.Resolve(candidateDeclarations, candidateActiveByKey);
+        DependencyStateResolver.Resolve(candidateImportedDeclarations, candidateActiveByKey);
 
         TrackedEntity[] candidateEntities = candidateActiveByKey.Values.ToArray();
-        PersistedDependency[] candidateResolved =
-            DependencyStateResolver.CreateResolvedDependencies(candidateDeclarations);
-        PersistedUnresolvedDependency[] candidateUnresolved =
-            DependencyStateResolver.CreateUnresolvedDependencies(candidateDeclarations);
+        PersistedDependency[] candidateImportedResolved =
+            DependencyStateResolver.CreateResolvedDependencies(candidateImportedDeclarations);
+        PersistedUnresolvedDependency[] candidateImportedUnresolved =
+            DependencyStateResolver.CreateUnresolvedDependencies(candidateImportedDeclarations);
+
+        EffectiveDependencyState currentEffective = _effectiveDependencyResolver.Resolve(
+            currentEntities,
+            currentResolved,
+            currentUnresolved,
+            persistedOverrides);
+        EffectiveDependencyState candidateEffective = _effectiveDependencyResolver.Resolve(
+            candidateEntities,
+            candidateImportedResolved,
+            candidateImportedUnresolved,
+            candidateOverrides);
+        Dictionary<EntityId, Dictionary<EntitySourceKey, DependencyDeclaration>>
+            currentEffectiveDeclarations = DependencyStateResolver.BuildCurrentDeclarations(
+                currentEffective.ResolvedDependencies,
+                currentEffective.UnresolvedDependencies,
+                currentById);
+        Dictionary<EntityId, TrackedEntity> candidateById = candidateEntities.ToDictionary(
+            static entity => entity.Id);
+        Dictionary<EntityId, Dictionary<EntitySourceKey, DependencyDeclaration>>
+            candidateEffectiveDeclarations = DependencyStateResolver.BuildCurrentDeclarations(
+                candidateEffective.ResolvedDependencies,
+                candidateEffective.UnresolvedDependencies,
+                candidateById);
 
         DependencyRankingResult ranking = _dependencyRanker.Rank(
             candidateEntities,
-            candidateResolved.Select(static dependency => dependency.Edge),
-            candidateUnresolved.Select(static dependency => dependency.Dependency));
+            candidateEffective.ResolvedDependencies.Select(static dependency => dependency.Edge),
+            candidateEffective.UnresolvedDependencies.Select(static dependency => dependency.Dependency));
 
         List<EntitySynchronizationChange> newChanges = [];
         List<EntitySynchronizationChange> changedChanges = [];
@@ -153,15 +231,27 @@ public sealed class SchemaSynchronizationPlanner
             bool isImported = importedByKey.ContainsKey(sourceKey);
             currentById.TryGetValue(candidateEntity.Id, out TrackedEntity? currentEntity);
             Dictionary<EntitySourceKey, DependencyDeclaration> oldDeclarations =
-                currentDeclarations.TryGetValue(
+                currentEffectiveDeclarations.TryGetValue(
                     candidateEntity.Id,
                     out Dictionary<EntitySourceKey, DependencyDeclaration>? oldValue)
                     ? oldValue
                     : [];
             Dictionary<EntitySourceKey, DependencyDeclaration> newDeclarations =
-                candidateDeclarations[candidateEntity.Id];
+                candidateEffectiveDeclarations.TryGetValue(
+                    candidateEntity.Id,
+                    out Dictionary<EntitySourceKey, DependencyDeclaration>? effectiveValue)
+                    ? effectiveValue
+                    : [];
             IReadOnlyList<DependencySynchronizationChange> dependencyChanges =
                 CompareDeclarations(oldDeclarations, newDeclarations);
+            IReadOnlyList<DependencySynchronizationChange> importedDependencyChanges =
+                CompareDeclarations(
+                    currentImportedDeclarations.TryGetValue(
+                        candidateEntity.Id,
+                        out Dictionary<EntitySourceKey, DependencyDeclaration>? oldImported)
+                        ? oldImported
+                        : [],
+                    candidateImportedDeclarations[candidateEntity.Id]);
 
             if (currentEntity is null)
             {
@@ -196,7 +286,7 @@ public sealed class SchemaSynchronizationPlanner
                 entitiesToUpdate.Add(candidateEntity);
             }
 
-            if (dependencyChanges.Count > 0)
+            if (importedDependencyChanges.Count > 0)
             {
                 reconciledOwnerIds.Add(candidateEntity.Id);
             }
@@ -244,15 +334,21 @@ public sealed class SchemaSynchronizationPlanner
         }
 
         HashSet<EntityId> ownerIds = reconciledOwnerIds;
+        EntityId[] reconciledOverrideOwnerIds = FindChangedOverrideOwners(
+            persistedOverrides,
+            candidateOverrides);
         TrackedSchemaChangeSet changeSet = new(
             entitiesToAdd,
             entitiesToUpdate,
             idsToArchive,
             ownerIds,
-            candidateResolved.Where(dependency =>
+            candidateImportedResolved.Where(dependency =>
                 ownerIds.Contains(dependency.Edge.DependentEntityId)),
-            candidateUnresolved.Where(dependency =>
-                ownerIds.Contains(dependency.Dependency.DependentEntityId)));
+            candidateImportedUnresolved.Where(dependency =>
+                ownerIds.Contains(dependency.Dependency.DependentEntityId)),
+            reconciledOverrideOwnerIds,
+            candidateOverrides.Where(item =>
+                reconciledOverrideOwnerIds.Contains(item.DependentEntityId)));
 
         IReadOnlyList<EntitySynchronizationChange> unresolvedChanges =
             ranking.UnrankedEntities
@@ -278,7 +374,55 @@ public sealed class SchemaSynchronizationPlanner
             unchangedCount,
             unresolvedChanges,
             ranking,
-            changeSet);
+            changeSet,
+            importCandidate,
+            currentEntities,
+            currentResolved,
+            currentUnresolved,
+            persistedOverrides,
+            candidateEntities,
+            candidateImportedResolved,
+            candidateImportedUnresolved,
+            candidateOverrides,
+            candidateEntities
+                .Where(entity => !currentById.ContainsKey(entity.Id))
+                .ToDictionary(
+                    entity => EntitySourceKey.From(entity.SourceName),
+                    static entity => entity.Id));
+    }
+
+    private static EntityId[] FindChangedOverrideOwners(
+        IEnumerable<ManualDependencyOverride> current,
+        IEnumerable<ManualDependencyOverride> candidate)
+    {
+        Dictionary<EntityId, ManualDependencyOverride[]> currentByOwner = current
+            .GroupBy(static item => item.DependentEntityId)
+            .ToDictionary(static group => group.Key, static group => group.ToArray());
+        Dictionary<EntityId, ManualDependencyOverride[]> candidateByOwner = candidate
+            .GroupBy(static item => item.DependentEntityId)
+            .ToDictionary(static group => group.Key, static group => group.ToArray());
+
+        return currentByOwner.Keys.Concat(candidateByOwner.Keys)
+            .Distinct()
+            .Where(ownerId => !OverridesAreEquivalent(
+                currentByOwner.GetValueOrDefault(ownerId) ?? [],
+                candidateByOwner.GetValueOrDefault(ownerId) ?? []))
+            .ToArray();
+    }
+
+    private static bool OverridesAreEquivalent(
+        IEnumerable<ManualDependencyOverride> left,
+        IEnumerable<ManualDependencyOverride> right)
+    {
+        Dictionary<EntitySourceKey, ManualDependencyOverrideAction> leftByKey = left.ToDictionary(
+            item => EntitySourceKey.From(item.DependencySourceName),
+            static item => item.Action);
+        Dictionary<EntitySourceKey, ManualDependencyOverrideAction> rightByKey = right.ToDictionary(
+            item => EntitySourceKey.From(item.DependencySourceName),
+            static item => item.Action);
+        return leftByKey.Count == rightByKey.Count && leftByKey.All(item =>
+            rightByKey.TryGetValue(item.Key, out ManualDependencyOverrideAction action) &&
+            action == item.Value);
     }
 
     private static Dictionary<EntitySourceKey, DependencyDeclaration> BuildImportedDeclarations(

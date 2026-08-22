@@ -28,6 +28,12 @@ public sealed class SchemaSynchronizationResult
         IEnumerable<ImportDiagnostic> diagnostics) =>
         new(plan, diagnostics.ToArray(), []);
 
+    public static SchemaSynchronizationResult Review(
+        SchemaSynchronizationPlan plan,
+        IEnumerable<ImportDiagnostic> importDiagnostics,
+        IEnumerable<DependencyRankingDiagnostic> rankingDiagnostics) =>
+        new(plan, importDiagnostics.ToArray(), rankingDiagnostics.ToArray());
+
     public static SchemaSynchronizationResult ImportFailure(
         IEnumerable<ImportDiagnostic> diagnostics) =>
         new(null, diagnostics.ToArray(), []);

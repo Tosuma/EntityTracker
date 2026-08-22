@@ -1,0 +1,243 @@
+using EntityTracker.Application.Dependencies;
+using EntityTracker.Application.Importing;
+using EntityTracker.Application.ManualOverrides;
+using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Ranking;
+using EntityTracker.Domain;
+
+namespace EntityTracker.Application.Tests.ManualOverrides;
+
+public sealed class EntityDependencyEditorServiceTests
+{
+    [Fact]
+    public async Task LoadAsync_DescribesImportedDependencyWithoutCreatingOverride()
+    {
+        TrackedEntity owner = Entity(1, "Owner");
+        TrackedEntity target = Entity(2, "Target");
+        EntityDependencyEditorService service = Service(
+            [owner, target],
+            [Dependency(owner, target)],
+            [],
+            [],
+            out _);
+
+        EntityDependencyEditPlan plan = await service.LoadAsync(owner.Id);
+
+        EntityDependencyEditItem dependency = Assert.Single(plan.Dependencies);
+        Assert.Equal(DependencyEditOrigin.Imported, dependency.Origin);
+        Assert.True(dependency.IsResolved);
+        Assert.Empty(plan.DesiredOverrides);
+        Assert.True(plan.IsValid);
+    }
+
+    [Fact]
+    public void CreatePlan_SuppressesImportedFactWithoutRemovingRawDependency()
+    {
+        TrackedEntity owner = Entity(1, "Owner");
+        TrackedEntity target = Entity(2, "Target");
+        PersistedDependency imported = Dependency(owner, target);
+        EntityDependencyEditorService service = Service(
+            [owner, target],
+            [imported],
+            [],
+            [],
+            out _);
+
+        EntityDependencyEditPlan plan = service.CreatePlan(
+            owner.Id,
+            [owner, target],
+            [imported],
+            [],
+            [],
+            [new ManualDependencyOverride(
+                owner.Id,
+                target.SourceName,
+                ManualDependencyOverrideAction.Suppress)]);
+
+        Assert.True(plan.IsValid);
+        Assert.Equal(
+            DependencyEditOrigin.SuppressedImported,
+            Assert.Single(plan.Dependencies).Origin);
+        Assert.Empty(plan.EffectiveState.ResolvedDependencies);
+        Assert.Equal(new DependencyEdge(owner.Id, target.Id), imported.Edge);
+    }
+
+    [Fact]
+    public void CreatePlan_UnknownManualAdditionIsAValidUnresolvedWarning()
+    {
+        TrackedEntity owner = Entity(1, "Owner");
+        EntityDependencyEditorService service = Service([owner], [], [], [], out _);
+
+        EntityDependencyEditPlan plan = service.CreatePlan(
+            owner.Id,
+            [owner],
+            [],
+            [],
+            [],
+            [new ManualDependencyOverride(
+                owner.Id,
+                "Future",
+                ManualDependencyOverrideAction.Add)]);
+
+        Assert.True(plan.IsValid);
+        Assert.NotEmpty(plan.Warnings);
+        Assert.Equal(
+            "Future",
+            Assert.Single(plan.EffectiveState.UnresolvedDependencies)
+                .Dependency.DependencySourceName);
+    }
+
+    [Fact]
+    public void CreatePlan_CycleIsRejectedImmediately()
+    {
+        TrackedEntity a = Entity(1, "A");
+        TrackedEntity b = Entity(2, "B");
+        EntityDependencyEditorService service = Service(
+            [a, b],
+            [Dependency(a, b)],
+            [],
+            [],
+            out _);
+
+        EntityDependencyEditPlan plan = service.CreatePlan(
+            b.Id,
+            [a, b],
+            [Dependency(a, b)],
+            [],
+            [],
+            [new ManualDependencyOverride(
+                b.Id,
+                a.SourceName,
+                ManualDependencyOverrideAction.Add)]);
+
+        Assert.False(plan.IsValid);
+        Assert.Contains(plan.CandidateRanking.Diagnostics, diagnostic =>
+            diagnostic.Code == DependencyRankingDiagnosticCode.CycleDetected);
+    }
+
+    [Fact]
+    public async Task SaveAsync_ReconcilesOnlySelectedOwnersOverrides()
+    {
+        TrackedEntity owner = Entity(1, "Owner");
+        EntityDependencyEditorService service = Service([owner], [], [], [], out StubStore store);
+        EntityDependencyEditPlan plan = service.CreatePlan(
+            owner.Id,
+            [owner],
+            [],
+            [],
+            [],
+            [new ManualDependencyOverride(
+                owner.Id,
+                "Future",
+                ManualDependencyOverrideAction.Add)]);
+
+        await service.SaveAsync(plan);
+
+        TrackedSchemaChangeSet changeSet = Assert.IsType<TrackedSchemaChangeSet>(
+            store.LastChangeSet);
+        Assert.Equal(owner.Id, Assert.Single(changeSet.ReconciledOverrideOwnerIds));
+        Assert.Single(changeSet.ManualDependencyOverrides);
+        Assert.Empty(changeSet.ReconciledOwnerIds);
+        Assert.Empty(changeSet.ResolvedDependencies);
+        Assert.Empty(changeSet.UnresolvedDependencies);
+    }
+
+    [Fact]
+    public async Task SearchDependenciesAsync_ExcludesOwnerAndArchivedEntities()
+    {
+        TrackedEntity owner = Entity(1, "Owner");
+        TrackedEntity active = Entity(2, "ActiveTarget");
+        TrackedEntity archived = new(
+            Id(3),
+            "ArchivedTarget",
+            lifecycleState: EntityLifecycleState.Archived);
+        EntityDependencyEditorService service = Service(
+            [owner, active, archived], [], [], [], out _);
+
+        var result = await service.SearchDependenciesAsync(owner.Id, "target");
+
+        Assert.Equal(active.Id, Assert.Single(result.Suggestions).EntityId);
+        Assert.DoesNotContain(result.Suggestions, item => item.EntityId == owner.Id);
+        Assert.DoesNotContain(result.Suggestions, item => item.EntityId == archived.Id);
+    }
+
+    private static EntityDependencyEditorService Service(
+        IReadOnlyList<TrackedEntity> entities,
+        IReadOnlyList<PersistedDependency> resolved,
+        IReadOnlyList<PersistedUnresolvedDependency> unresolved,
+        IReadOnlyList<ManualDependencyOverride> overrides,
+        out StubStore store)
+    {
+        store = new StubStore();
+        return new EntityDependencyEditorService(
+            new StubEntityRepository(entities),
+            new StubDependencyRepository(resolved, unresolved),
+            new StubManualDependencyOverrideRepository(overrides),
+            new EffectiveDependencyResolver(),
+            new DependencyRanker(),
+            store);
+    }
+
+    private static TrackedEntity Entity(int id, string name) => new(Id(id), name);
+
+    private static EntityId Id(int id) => new(new Guid(id, 0, 0, new byte[8]));
+
+    private static PersistedDependency Dependency(TrackedEntity owner, TrackedEntity target) =>
+        new(new DependencyEdge(owner.Id, target.Id), ImportedDependencyKind.Mandatory);
+
+    private sealed class StubEntityRepository(IReadOnlyList<TrackedEntity> entities)
+        : IEntityRepository
+    {
+        public Task<TrackedEntity?> GetAsync(
+            EntityId id,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(entities.SingleOrDefault(entity => entity.Id == id));
+
+        public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
+            CancellationToken cancellationToken = default) => Task.FromResult(entities);
+
+        public Task<bool> TryAddAsync(
+            TrackedEntity entity,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<bool> UpdateSchemaMetadataAsync(
+            TrackedEntity entity,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<bool> UpdateProgressAsync(
+            TrackedEntity entity,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    private sealed class StubDependencyRepository(
+        IReadOnlyList<PersistedDependency> resolved,
+        IReadOnlyList<PersistedUnresolvedDependency> unresolved) : IDependencyRepository
+    {
+        public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
+            CancellationToken cancellationToken = default) => Task.FromResult(resolved);
+
+        public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
+            CancellationToken cancellationToken = default) => Task.FromResult(unresolved);
+
+        public Task SaveAsync(
+            PersistedDependency dependency,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task SaveUnresolvedAsync(
+            PersistedUnresolvedDependency dependency,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    private sealed class StubStore : ITrackedSchemaStore
+    {
+        public TrackedSchemaChangeSet? LastChangeSet { get; private set; }
+
+        public Task ApplyAsync(
+            TrackedSchemaChangeSet changeSet,
+            CancellationToken cancellationToken = default)
+        {
+            LastChangeSet = changeSet;
+            return Task.CompletedTask;
+        }
+    }
+}

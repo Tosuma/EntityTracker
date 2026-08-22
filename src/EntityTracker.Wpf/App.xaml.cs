@@ -2,8 +2,11 @@ using System.IO;
 using System.Windows;
 
 using EntityTracker.Application.Importing;
+using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
+using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Overview;
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
@@ -30,14 +33,19 @@ public partial class App : System.Windows.Application
         services.AddSingleton(new SqliteDatabase(databasePath));
         services.AddSingleton<IEntityRepository, SqliteEntityRepository>();
         services.AddSingleton<IDependencyRepository, SqliteDependencyRepository>();
+        services.AddSingleton<IManualDependencyOverrideRepository,
+            SqliteManualDependencyOverrideRepository>();
         services.AddSingleton<ISchemaImportParser, CsvSchemaImportParser>();
         services.AddSingleton<ISchemaImportFileParser, CsvSchemaImportFileParser>();
         services.AddSingleton<DependencyRanker>();
+        services.AddSingleton<EffectiveDependencyResolver>();
         services.AddSingleton<EntityOverviewService>();
         services.AddSingleton<SchemaSynchronizationPlanner>();
         services.AddSingleton<ITrackedSchemaStore, SqliteTrackedSchemaStore>();
         services.AddSingleton<SchemaSynchronizationService>();
         services.AddSingleton<ManualEntityCreationService>();
+        services.AddSingleton<EntityDependencyEditorService>();
+        services.AddSingleton<EntityArchivalService>();
         services.AddSingleton<ICsvFilePicker, CsvFilePicker>();
         services.AddSingleton<MainWindowViewModel>();
         services.AddSingleton<MainWindow>();

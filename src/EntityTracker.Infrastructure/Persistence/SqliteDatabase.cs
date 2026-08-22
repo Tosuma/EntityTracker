@@ -4,7 +4,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    private const int CurrentSchemaVersion = 4;
+    private const int CurrentSchemaVersion = 5;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -65,6 +65,114 @@ public sealed class SqliteDatabase
         ALTER TABLE tracked_entities
             ADD COLUMN provenance TEXT NOT NULL DEFAULT 'Imported'
                 CHECK (provenance IN ('Imported', 'ManualOnly', 'ManualAndImported'));
+        """;
+
+    private const string ManualDependencyOverrideSchemaSql = """
+        CREATE TABLE IF NOT EXISTS schema_dependencies
+        (
+            dependent_entity_id TEXT NOT NULL,
+            dependency_entity_id TEXT NOT NULL,
+            dependency_kind TEXT NOT NULL
+                CHECK (dependency_kind IN ('Mandatory', 'Optional')),
+            created_at_utc TEXT NOT NULL,
+            updated_at_utc TEXT NOT NULL,
+            PRIMARY KEY (dependent_entity_id, dependency_entity_id),
+            CHECK (dependent_entity_id <> dependency_entity_id),
+            FOREIGN KEY (dependent_entity_id) REFERENCES tracked_entities (id) ON DELETE CASCADE,
+            FOREIGN KEY (dependency_entity_id) REFERENCES tracked_entities (id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS ix_schema_dependencies_dependency_entity_id
+            ON schema_dependencies (dependency_entity_id);
+
+        CREATE TABLE IF NOT EXISTS unresolved_schema_dependencies
+        (
+            dependent_entity_id TEXT NOT NULL,
+            dependency_source_key TEXT NOT NULL,
+            dependency_source_name TEXT NOT NULL,
+            dependency_kind TEXT NOT NULL
+                CHECK (dependency_kind IN ('Mandatory', 'Optional')),
+            created_at_utc TEXT NOT NULL,
+            updated_at_utc TEXT NOT NULL,
+            PRIMARY KEY (dependent_entity_id, dependency_source_key),
+            CHECK (length(trim(dependency_source_key)) > 0),
+            CHECK (length(trim(dependency_source_name)) > 0),
+            FOREIGN KEY (dependent_entity_id) REFERENCES tracked_entities (id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE manual_dependency_overrides
+        (
+            dependent_entity_id TEXT NOT NULL,
+            dependency_source_key TEXT NOT NULL,
+            dependency_source_name TEXT NOT NULL,
+            override_action TEXT NOT NULL
+                CHECK (override_action IN ('Add', 'Suppress')),
+            created_at_utc TEXT NOT NULL,
+            updated_at_utc TEXT NOT NULL,
+            PRIMARY KEY (dependent_entity_id, dependency_source_key),
+            CHECK (length(trim(dependency_source_key)) > 0),
+            CHECK (length(trim(dependency_source_name)) > 0),
+            FOREIGN KEY (dependent_entity_id) REFERENCES tracked_entities (id) ON DELETE CASCADE
+        );
+
+        INSERT INTO manual_dependency_overrides
+        (
+            dependent_entity_id,
+            dependency_source_key,
+            dependency_source_name,
+            override_action,
+            created_at_utc,
+            updated_at_utc
+        )
+        SELECT dependency.dependent_entity_id,
+               target.source_key,
+               target.source_name,
+               'Add',
+               dependency.created_at_utc,
+               dependency.updated_at_utc
+        FROM schema_dependencies dependency
+        INNER JOIN tracked_entities owner
+            ON owner.id = dependency.dependent_entity_id
+        INNER JOIN tracked_entities target
+            ON target.id = dependency.dependency_entity_id
+        WHERE owner.provenance = 'ManualOnly';
+
+        INSERT INTO manual_dependency_overrides
+        (
+            dependent_entity_id,
+            dependency_source_key,
+            dependency_source_name,
+            override_action,
+            created_at_utc,
+            updated_at_utc
+        )
+        SELECT dependency.dependent_entity_id,
+               dependency.dependency_source_key,
+               dependency.dependency_source_name,
+               'Add',
+               dependency.created_at_utc,
+               dependency.updated_at_utc
+        FROM unresolved_schema_dependencies dependency
+        INNER JOIN tracked_entities owner
+            ON owner.id = dependency.dependent_entity_id
+        WHERE owner.provenance = 'ManualOnly'
+        ON CONFLICT (dependent_entity_id, dependency_source_key)
+        DO UPDATE SET
+            dependency_source_name = excluded.dependency_source_name,
+            override_action = 'Add',
+            updated_at_utc = excluded.updated_at_utc;
+
+        DELETE FROM schema_dependencies
+        WHERE dependent_entity_id IN
+        (
+            SELECT id FROM tracked_entities WHERE provenance = 'ManualOnly'
+        );
+
+        DELETE FROM unresolved_schema_dependencies
+        WHERE dependent_entity_id IN
+        (
+            SELECT id FROM tracked_entities WHERE provenance = 'ManualOnly'
+        );
         """;
 
     private readonly string _connectionString;
@@ -155,6 +263,15 @@ public sealed class SqliteDatabase
                 connection,
                 transaction,
                 ProvenanceSchemaSql,
+                cancellationToken);
+        }
+
+        if (schemaVersion < 5)
+        {
+            await ExecuteAsync(
+                connection,
+                transaction,
+                ManualDependencyOverrideSchemaSql,
                 cancellationToken);
         }
 

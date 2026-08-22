@@ -1,3 +1,4 @@
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Overview;
@@ -150,6 +151,44 @@ public sealed class SqliteTrackedSchemaStoreTests
     }
 
     [Fact]
+    public async Task ApplyAsync_ReconcilesOverridesWithoutChangingImportedDependencies()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteEntityRepository entities = new(database);
+        SqliteDependencyRepository dependencies = new(database);
+        SqliteManualDependencyOverrideRepository overrides = new(database);
+        TrackedEntity owner = new(EntityId.New(), "Owner");
+        TrackedEntity target = new(EntityId.New(), "Target");
+        Assert.True(await entities.TryAddAsync(owner));
+        Assert.True(await entities.TryAddAsync(target));
+        PersistedDependency imported = new(
+            new DependencyEdge(owner.Id, target.Id),
+            ImportedDependencyKind.Optional);
+        await dependencies.SaveAsync(imported);
+
+        await new SqliteTrackedSchemaStore(database).ApplyAsync(
+            new TrackedSchemaChangeSet(
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                [owner.Id],
+                [new ManualDependencyOverride(
+                    owner.Id,
+                    target.SourceName,
+                    ManualDependencyOverrideAction.Suppress)]));
+
+        Assert.Equal(imported, Assert.Single(await dependencies.GetAllAsync()));
+        ManualDependencyOverride persisted = Assert.Single(await overrides.GetAllAsync());
+        Assert.Equal(ManualDependencyOverrideAction.Suppress, persisted.Action);
+        Assert.Equal(target.SourceName, persisted.DependencySourceName);
+    }
+
+    [Fact]
     public async Task PlannedSynchronization_PreservesProgressWhenDependencyChangesShiftRanks()
     {
         await using TemporarySqliteFile file = new();
@@ -191,7 +230,9 @@ public sealed class SqliteTrackedSchemaStoreTests
         EntityOverviewResult overview = await new EntityOverviewService(
             entities,
             dependencies,
-            ranker).GetAsync();
+            new SqliteManualDependencyOverrideRepository(database),
+            ranker,
+            new EffectiveDependencyResolver()).GetAsync();
         Assert.Equal(["Zulu", "Alpha"], overview.Items.Select(static item => item.SourceName));
         TrackedEntity loadedAlpha = (await entities.GetAsync(alpha.Id))!;
         TrackedEntity loadedZulu = (await entities.GetAsync(zulu.Id))!;
@@ -245,7 +286,9 @@ public sealed class SqliteTrackedSchemaStoreTests
         ManualEntityCreationService service = new(
             entities,
             dependencies,
+            new SqliteManualDependencyOverrideRepository(database),
             new DependencyRanker(),
+            new EffectiveDependencyResolver(),
             new SqliteTrackedSchemaStore(database));
 
         ManualEntityCreationResult result = await service.CreateAsync(
@@ -272,7 +315,9 @@ public sealed class SqliteTrackedSchemaStoreTests
         ManualEntityCreationService service = new(
             entities,
             dependencies,
+            new SqliteManualDependencyOverrideRepository(database),
             ranker,
+            new EffectiveDependencyResolver(),
             new SqliteTrackedSchemaStore(database));
 
         ManualEntityCreationResult result = await service.CreateAsync(
@@ -282,7 +327,9 @@ public sealed class SqliteTrackedSchemaStoreTests
         EntityOverviewResult overview = await new EntityOverviewService(
             entities,
             dependencies,
-            ranker).GetAsync();
+            new SqliteManualDependencyOverrideRepository(database),
+            ranker,
+            new EffectiveDependencyResolver()).GetAsync();
 
         Assert.True(result.IsSuccess);
         EntityOverviewItem item = Assert.Single(overview.Items);
@@ -304,7 +351,9 @@ public sealed class SqliteTrackedSchemaStoreTests
         ManualEntityCreationResult creation = await new ManualEntityCreationService(
             entities,
             dependencies,
+            new SqliteManualDependencyOverrideRepository(database),
             ranker,
+            new EffectiveDependencyResolver(),
             store).CreateAsync(new ManualEntityCreationRequest("Future", []));
         TrackedEntity withProgress = new(
             creation.CreatedEntityId!,

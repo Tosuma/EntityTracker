@@ -110,6 +110,30 @@ public sealed class SqliteTrackedSchemaStore : ITrackedSchemaStore
                 }
             }
 
+            foreach (EntityId ownerId in changeSet.ReconciledOverrideOwnerIds)
+            {
+                ManualDependencyOverride[] desiredOverrides =
+                    changeSet.ManualDependencyOverrides
+                        .Where(item => item.DependentEntityId == ownerId)
+                        .ToArray();
+
+                await DeleteRemovedOverridesAsync(
+                    connection,
+                    transaction,
+                    ownerId,
+                    desiredOverrides,
+                    cancellationToken);
+                foreach (ManualDependencyOverride dependencyOverride in desiredOverrides)
+                {
+                    await UpsertOverrideAsync(
+                        connection,
+                        transaction,
+                        dependencyOverride,
+                        timestamp,
+                        cancellationToken);
+                }
+            }
+
             await transaction.CommitAsync(cancellationToken);
         }
         catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
@@ -291,6 +315,60 @@ public sealed class SqliteTrackedSchemaStore : ITrackedSchemaStore
             "$targetName",
             dependency.Dependency.DependencySourceName);
         command.Parameters.AddWithValue("$kind", dependency.Kind.ToString());
+        command.Parameters.AddWithValue("$timestamp", timestamp);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task DeleteRemovedOverridesAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        EntityId ownerId,
+        IReadOnlyList<ManualDependencyOverride> desired,
+        CancellationToken cancellationToken)
+    {
+        string keepClause = AddKeepParameters(
+            "dependency_source_key",
+            desired.Select(static item =>
+                EntitySourceKey.From(item.DependencySourceName).Value),
+            out string[] values);
+        using SqliteCommand command = CreateCommand(
+            connection,
+            transaction,
+            $"DELETE FROM manual_dependency_overrides WHERE dependent_entity_id = $ownerId{keepClause};");
+        command.Parameters.AddWithValue("$ownerId", SqlitePersistenceValues.Format(ownerId));
+        AddKeepValues(command, values);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task UpsertOverrideAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        ManualDependencyOverride dependencyOverride,
+        string timestamp,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = CreateCommand(connection, transaction, """
+            INSERT INTO manual_dependency_overrides
+            (
+                dependent_entity_id, dependency_source_key, dependency_source_name,
+                override_action, created_at_utc, updated_at_utc
+            )
+            VALUES ($ownerId, $targetKey, $targetName, $action, $timestamp, $timestamp)
+            ON CONFLICT (dependent_entity_id, dependency_source_key)
+            DO UPDATE SET dependency_source_name = excluded.dependency_source_name,
+                          override_action = excluded.override_action,
+                          updated_at_utc = excluded.updated_at_utc
+            WHERE dependency_source_name <> excluded.dependency_source_name
+               OR override_action <> excluded.override_action;
+            """);
+        command.Parameters.AddWithValue(
+            "$ownerId",
+            SqlitePersistenceValues.Format(dependencyOverride.DependentEntityId));
+        command.Parameters.AddWithValue(
+            "$targetKey",
+            EntitySourceKey.From(dependencyOverride.DependencySourceName).Value);
+        command.Parameters.AddWithValue("$targetName", dependencyOverride.DependencySourceName);
+        command.Parameters.AddWithValue("$action", dependencyOverride.Action.ToString());
         command.Parameters.AddWithValue("$timestamp", timestamp);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

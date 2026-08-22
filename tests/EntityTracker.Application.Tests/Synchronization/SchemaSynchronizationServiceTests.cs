@@ -1,4 +1,6 @@
 using EntityTracker.Application.Importing;
+using EntityTracker.Application.Dependencies;
+using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
@@ -78,7 +80,7 @@ public sealed class SchemaSynchronizationServiceTests
     }
 
     [Fact]
-    public async Task PlanAsync_CandidateCycle_ReturnsFailureAndCannotBeApplied()
+    public async Task PlanAsync_CandidateCycle_ReturnsReviewThatCannotBeApplied()
     {
         StubStore store = new();
         SchemaSynchronizationService service = CreateService(
@@ -94,11 +96,55 @@ public sealed class SchemaSynchronizationServiceTests
             "schema.csv",
             SchemaImportMode.Complete);
 
-        Assert.False(result.IsSuccess);
-        Assert.Null(result.Plan);
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Plan);
+        Assert.False(result.Plan.CanApply);
         Assert.Contains(result.RankingDiagnostics, static diagnostic =>
             diagnostic.Code == DependencyRankingDiagnosticCode.CycleDetected);
         Assert.Equal(0, store.ApplyCount);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.ApplyAsync(result.Plan));
+    }
+
+    [Fact]
+    public async Task StageDependencyEdit_CanCorrectCycleAndAppliesImportAndOverrideTogether()
+    {
+        StubStore store = new();
+        SchemaSynchronizationService service = CreateService(
+            SchemaImportResult.Success(Candidate(
+                ["A", "B"],
+                [("A", "B"), ("B", "A")])),
+            [],
+            [],
+            [],
+            store);
+        SchemaSynchronizationPlan initial = (await service.PlanAsync(
+            "schema.csv",
+            SchemaImportMode.Complete)).Plan!;
+        TrackedEntity b = initial.CandidateEntities.Single(entity => entity.SourceName == "B");
+
+        EntityDependencyEditPlan edit = service.PreviewDependencyEdit(
+            initial,
+            b.Id,
+            [new ManualDependencyOverride(
+                b.Id,
+                "A",
+                ManualDependencyOverrideAction.Suppress)]);
+        SchemaSynchronizationPlan revised = service.StageDependencyEdit(initial, edit);
+
+        Assert.True(edit.IsValid);
+        Assert.True(revised.CanApply);
+        Assert.Equal(0, store.ApplyCount);
+        Assert.Equal(b.Id, Assert.Single(revised.ChangeSet.ReconciledOverrideOwnerIds));
+        Assert.Equal(
+            ManualDependencyOverrideAction.Suppress,
+            Assert.Single(revised.ChangeSet.ManualDependencyOverrides).Action);
+
+        await service.ApplyAsync(revised);
+
+        Assert.Equal(1, store.ApplyCount);
+        Assert.Equal(2, store.LastChangeSet!.EntitiesToAdd.Count);
     }
 
     private static SchemaSynchronizationService CreateService(
@@ -109,11 +155,25 @@ public sealed class SchemaSynchronizationServiceTests
         StubStore store)
     {
         DependencyRanker ranker = new();
+        StubEntityRepository entityRepository = new(entities);
+        StubDependencyRepository dependencyRepository = new(dependencies, unresolved);
+        StubManualDependencyOverrideRepository overrideRepository = new();
+        EffectiveDependencyResolver resolver = new();
+        SchemaSynchronizationPlanner planner = new(ranker, resolver);
+        EntityDependencyEditorService editor = new(
+            entityRepository,
+            dependencyRepository,
+            overrideRepository,
+            resolver,
+            ranker,
+            store);
         return new SchemaSynchronizationService(
             new StubParser(importResult),
-            new StubEntityRepository(entities),
-            new StubDependencyRepository(dependencies, unresolved),
-            new SchemaSynchronizationPlanner(ranker),
+            entityRepository,
+            dependencyRepository,
+            overrideRepository,
+            planner,
+            editor,
             store);
     }
 

@@ -13,7 +13,9 @@ public sealed class TrackedSchemaChangeSet
         IEnumerable<EntityId> entityIdsToArchive,
         IEnumerable<EntityId> reconciledOwnerIds,
         IEnumerable<PersistedDependency> resolvedDependencies,
-        IEnumerable<PersistedUnresolvedDependency> unresolvedDependencies)
+        IEnumerable<PersistedUnresolvedDependency> unresolvedDependencies,
+        IEnumerable<EntityId>? reconciledOverrideOwnerIds = null,
+        IEnumerable<ManualDependencyOverride>? manualDependencyOverrides = null)
     {
         EntitiesToAdd = entitiesToAdd.ToArray();
         EntitiesToUpdate = entitiesToUpdate.ToArray();
@@ -21,6 +23,8 @@ public sealed class TrackedSchemaChangeSet
         ReconciledOwnerIds = reconciledOwnerIds.ToArray();
         ResolvedDependencies = resolvedDependencies.ToArray();
         UnresolvedDependencies = unresolvedDependencies.ToArray();
+        ReconciledOverrideOwnerIds = (reconciledOverrideOwnerIds ?? []).ToArray();
+        ManualDependencyOverrides = (manualDependencyOverrides ?? []).ToArray();
     }
 
     public IReadOnlyList<TrackedEntity> EntitiesToAdd { get; }
@@ -35,9 +39,14 @@ public sealed class TrackedSchemaChangeSet
 
     public IReadOnlyList<PersistedUnresolvedDependency> UnresolvedDependencies { get; }
 
+    public IReadOnlyList<EntityId> ReconciledOverrideOwnerIds { get; }
+
+    public IReadOnlyList<ManualDependencyOverride> ManualDependencyOverrides { get; }
+
     public bool HasChanges =>
         EntitiesToAdd.Count > 0 ||
         EntitiesToUpdate.Count > 0 ||
         EntityIdsToArchive.Count > 0 ||
-        ReconciledOwnerIds.Count > 0;
+        ReconciledOwnerIds.Count > 0 ||
+        ReconciledOverrideOwnerIds.Count > 0;
 }

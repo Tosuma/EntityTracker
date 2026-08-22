@@ -1,3 +1,4 @@
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Persistence;
@@ -118,14 +119,18 @@ public sealed class ManualEntityCreationServiceTests
             diagnostic.Code == ManualEntityCreationDiagnosticCode.UnresolvedDependency &&
             diagnostic.Severity == ManualEntityCreationDiagnosticSeverity.Warning);
         TrackedEntity added = Assert.Single(store.LastChangeSet!.EntitiesToAdd);
-        PersistedDependency resolved = Assert.Single(store.LastChangeSet.ResolvedDependencies);
-        Assert.Equal(new DependencyEdge(added.Id, known.Id), resolved.Edge);
-        Assert.Equal(ImportedDependencyKind.Mandatory, resolved.Kind);
-        PersistedUnresolvedDependency unresolved =
-            Assert.Single(store.LastChangeSet.UnresolvedDependencies);
-        Assert.Equal(added.Id, unresolved.Dependency.DependentEntityId);
-        Assert.Equal("Future", unresolved.Dependency.DependencySourceName);
-        Assert.Equal(ImportedDependencyKind.Mandatory, unresolved.Kind);
+        Assert.Empty(store.LastChangeSet.ResolvedDependencies);
+        Assert.Empty(store.LastChangeSet.UnresolvedDependencies);
+        ManualDependencyOverride[] overrides =
+            store.LastChangeSet.ManualDependencyOverrides.ToArray();
+        Assert.Contains(overrides, item =>
+            item.DependentEntityId == added.Id &&
+            item.DependencySourceName == known.SourceName &&
+            item.Action == ManualDependencyOverrideAction.Add);
+        Assert.Contains(overrides, item =>
+            item.DependentEntityId == added.Id &&
+            item.DependencySourceName == "Future" &&
+            item.Action == ManualDependencyOverrideAction.Add);
     }
 
     [Fact]
@@ -171,7 +176,11 @@ public sealed class ManualEntityCreationServiceTests
         Assert.True(result.IsSuccess);
         Assert.DoesNotContain(result.Diagnostics, diagnostic =>
             diagnostic.Code == ManualEntityCreationDiagnosticCode.UnresolvedDependency);
-        Assert.Single(store.LastChangeSet!.ResolvedDependencies);
+        ManualDependencyOverride dependencyOverride = Assert.Single(
+            store.LastChangeSet!.ManualDependencyOverrides);
+        Assert.Equal(ManualDependencyOverrideAction.Add, dependencyOverride.Action);
+        Assert.Equal("Known", dependencyOverride.DependencySourceName);
+        Assert.Empty(store.LastChangeSet.ResolvedDependencies);
         Assert.Empty(store.LastChangeSet.UnresolvedDependencies);
     }
 
@@ -307,7 +316,9 @@ public sealed class ManualEntityCreationServiceTests
         return new ManualEntityCreationService(
             new StubEntityRepository(entities),
             new StubDependencyRepository(dependencies, unresolved),
+            new StubManualDependencyOverrideRepository(),
             new DependencyRanker(),
+            new EffectiveDependencyResolver(),
             store);
     }
 

@@ -58,6 +58,7 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
                 OnPropertyChanged(nameof(ShowEmptyState));
                 OnPropertyChanged(nameof(ImportModeLabel));
                 OnPropertyChanged(nameof(CanSelectImportMode));
+                OnPropertyChanged(nameof(CanApply));
             }
         }
     }
@@ -133,6 +134,8 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
 
     public bool CanSelectImportMode => CurrentPlan is null;
 
+    public bool CanApply => CurrentPlan?.CanApply == true;
+
     public string ImportModeLabel => CurrentPlan?.Mode.ToString() ?? Mode.ToString();
 
     public void BeginImport(string selectedFileName)
@@ -168,20 +171,53 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
         ChangedEntities = plan.ChangedEntities.Select(ToRow).ToArray();
         MissingEntities = plan.MissingEntities
             .Select(static change => new SchemaSynchronizationReviewRow(
+                change.Entity.Id,
                 change.Entity.SourceName,
                 "Will be soft-archived; progress and notes will be preserved."))
             .ToArray();
         ManualOnlyEntities = plan.ManualOnlyEntities
             .Select(static change => new SchemaSynchronizationReviewRow(
+                change.Entity.Id,
                 change.Entity.SourceName,
                 FormatManualOnlyDetails(change)))
             .ToArray();
         UnresolvedEntities = plan.UnresolvedEntities
             .Select(static change => new SchemaSynchronizationReviewRow(
+                change.Entity.Id,
                 change.Entity.SourceName,
                 $"Missing: {string.Join(", ", change.MissingDependencyNames)}"))
             .ToArray();
         UnchangedEntityCount = plan.UnchangedEntityCount;
+        CurrentPlan = plan;
+    }
+
+    public void ReplacePlan(SchemaSynchronizationPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        NewEntities = plan.NewEntities.Select(ToRow).ToArray();
+        ChangedEntities = plan.ChangedEntities.Select(ToRow).ToArray();
+        MissingEntities = plan.MissingEntities
+            .Select(static change => new SchemaSynchronizationReviewRow(
+                change.Entity.Id,
+                change.Entity.SourceName,
+                "Will be soft-archived; progress and notes will be preserved."))
+            .ToArray();
+        ManualOnlyEntities = plan.ManualOnlyEntities
+            .Select(static change => new SchemaSynchronizationReviewRow(
+                change.Entity.Id,
+                change.Entity.SourceName,
+                FormatManualOnlyDetails(change)))
+            .ToArray();
+        UnresolvedEntities = plan.UnresolvedEntities
+            .Select(static change => new SchemaSynchronizationReviewRow(
+                change.Entity.Id,
+                change.Entity.SourceName,
+                $"Missing: {string.Join(", ", change.MissingDependencyNames)}"))
+            .ToArray();
+        UnchangedEntityCount = plan.UnchangedEntityCount;
+        Diagnostics = plan.CandidateRanking.Diagnostics
+            .Select(static diagnostic => diagnostic.Message)
+            .ToArray();
         CurrentPlan = plan;
     }
 
@@ -241,6 +277,7 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
         }
 
         return new SchemaSynchronizationReviewRow(
+            change.Entity.Id,
             change.Entity.SourceName,
             string.Join(Environment.NewLine, details));
     }

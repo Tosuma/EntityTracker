@@ -1,5 +1,8 @@
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Importing;
+using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
+using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
@@ -35,6 +38,201 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(1, viewModel.InProgressCount);
         Assert.Equal(1, viewModel.CompletedCount);
         Assert.Equal(50, viewModel.CompletionPercentage);
+    }
+
+    [Fact]
+    public async Task OverviewSearch_FiltersNamesAfterDebounceAndKeepsOverallSummary()
+    {
+        MainWindowViewModel viewModel = CreateViewModel(
+            [
+                Entity(1, "Customer Orders", DevelopmentStatus.Completed),
+                Entity(2, "Invoice"),
+                Entity(3, "Customer Profile", DevelopmentStatus.InProgress)
+            ],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+        await viewModel.InitializeAsync();
+        viewModel.OpenOverviewSearchCommand.Execute(null);
+
+        viewModel.OverviewSearchQuery = "invoice";
+        viewModel.OverviewSearchQuery = "CUSTOMER";
+
+        Assert.Equal(3, viewModel.OverviewItems.Count);
+        await WaitUntilAsync(() => viewModel.OverviewItems.Count == 2);
+        Assert.Equal(
+            ["Customer Orders", "Customer Profile"],
+            viewModel.OverviewItems.Select(static row => row.SourceName));
+        Assert.Equal(3, viewModel.TotalEntityCount);
+        Assert.Equal(1, viewModel.CompletedCount);
+        Assert.Equal(1, viewModel.InProgressCount);
+        Assert.Equal("Showing 2 of 3 entities", viewModel.OverviewSearchResultSummary);
+    }
+
+    [Fact]
+    public async Task OverviewSearch_DependencyModeFindsDirectResolvedAndUnresolvedDependents()
+    {
+        TrackedEntity alpha = Entity(1, "Alpha");
+        TrackedEntity beta = Entity(2, "Beta");
+        TrackedEntity downstream = Entity(3, "Downstream");
+        TrackedEntity unresolvedOwner = Entity(4, "Unresolved Owner");
+        MainWindowViewModel viewModel = CreateViewModel(
+            [alpha, beta, downstream, unresolvedOwner],
+            [Dependency(beta, alpha), Dependency(downstream, beta)],
+            FailureResult(),
+            new StubFilePicker(),
+            out _,
+            [Unresolved(unresolvedOwner, "Legacy API")]);
+        await viewModel.InitializeAsync();
+        viewModel.OpenOverviewSearchCommand.Execute(null);
+        viewModel.SearchOverviewDependencies = true;
+
+        viewModel.OverviewSearchQuery = "alpha";
+        await WaitUntilAsync(() => viewModel.OverviewItems.Count == 1);
+
+        Assert.Equal("Beta", Assert.Single(viewModel.OverviewItems).SourceName);
+        Assert.DoesNotContain(viewModel.OverviewItems, row => row.SourceName == "Downstream");
+
+        viewModel.OverviewSearchQuery = "legacy";
+        await WaitUntilAsync(() =>
+            viewModel.OverviewItems.Count == 1 &&
+            viewModel.OverviewItems[0].SourceName == "Unresolved Owner");
+    }
+
+    [Fact]
+    public async Task OverviewSearch_NoMatchesClearCloseAndRefreshBehaveConsistently()
+    {
+        MainWindowViewModel viewModel = CreateViewModel(
+            [Entity(1, "Alpha"), Entity(2, "Beta")],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+        await viewModel.InitializeAsync();
+        viewModel.OpenOverviewSearchCommand.Execute(null);
+        viewModel.OverviewSearchQuery = "missing";
+        await WaitUntilAsync(() => viewModel.ShowOverviewSearchEmptyState);
+
+        Assert.Empty(viewModel.OverviewItems);
+        Assert.False(viewModel.ShowOverviewEmptyState);
+        await viewModel.RefreshAsync();
+        Assert.True(viewModel.ShowOverviewSearchEmptyState);
+        Assert.Empty(viewModel.OverviewItems);
+
+        viewModel.ClearOverviewSearchCommand.Execute(null);
+        Assert.Equal(2, viewModel.OverviewItems.Count);
+        Assert.True(viewModel.IsOverviewSearchOpen);
+        viewModel.CloseOverviewSearchCommand.Execute(null);
+        Assert.False(viewModel.IsOverviewSearchOpen);
+        Assert.Empty(viewModel.OverviewSearchQuery);
+    }
+
+    [Fact]
+    public void OpenOverviewSearchCommand_IsAvailableOnlyOnOverview()
+    {
+        MainWindowViewModel viewModel = CreateViewModel(
+            [], [], FailureResult(), new StubFilePicker(), out _);
+
+        Assert.True(viewModel.OpenOverviewSearchCommand.CanExecute(null));
+        viewModel.SelectedTabIndex = 1;
+        Assert.False(viewModel.OpenOverviewSearchCommand.CanExecute(null));
+        viewModel.SelectedTabIndex = 0;
+        viewModel.OpenOverviewSearchCommand.Execute(null);
+        Assert.True(viewModel.IsOverviewSearchOpen);
+    }
+
+    [Fact]
+    public async Task EditOverviewEntityCommand_OpensStandaloneModalWithoutChangingTab()
+    {
+        TrackedEntity entity = Entity(1, "Customer");
+        MainWindowViewModel viewModel = CreateViewModel(
+            [entity],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+        await viewModel.InitializeAsync();
+
+        viewModel.EditOverviewEntityCommand.Execute(Assert.Single(viewModel.OverviewItems));
+
+        Assert.True(viewModel.Editor.IsOpen);
+        Assert.False(viewModel.Editor.IsReviewMode);
+        Assert.True(viewModel.Editor.CanArchive);
+        Assert.Equal("Customer", viewModel.Editor.SelectedEntityName);
+        Assert.Equal(0, viewModel.SelectedTabIndex);
+    }
+
+    [Fact]
+    public async Task ArchiveConfirmation_CancelKeepsEntityAndEditorOpenWithoutWriting()
+    {
+        TrackedEntity entity = Entity(1, "Customer");
+        MainWindowViewModel viewModel = CreateViewModel(
+            [entity],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out StubSynchronizationStore store);
+        await viewModel.InitializeAsync();
+        viewModel.EditOverviewEntityCommand.Execute(Assert.Single(viewModel.OverviewItems));
+
+        viewModel.Editor.RequestArchiveCommand.Execute(null);
+
+        Assert.True(viewModel.Editor.IsArchiveConfirmationOpen);
+        Assert.False(viewModel.Editor.SaveCommand.CanExecute(null));
+        viewModel.Editor.CancelArchiveCommand.Execute(null);
+        Assert.False(viewModel.Editor.IsArchiveConfirmationOpen);
+        Assert.True(viewModel.Editor.IsOpen);
+        Assert.True(viewModel.Editor.CanArchive);
+        Assert.Equal(0, store.ApplyCount);
+    }
+
+    [Fact]
+    public async Task ConfirmArchive_ArchivesEntityClosesModalAndRefreshesOverview()
+    {
+        TrackedEntity entity = Entity(1, "Customer");
+        MainWindowViewModel viewModel = CreateViewModel(
+            [entity],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out StubSynchronizationStore store);
+        await viewModel.InitializeAsync();
+        viewModel.EditOverviewEntityCommand.Execute(Assert.Single(viewModel.OverviewItems));
+        viewModel.Editor.RequestArchiveCommand.Execute(null);
+
+        Assert.True(viewModel.Editor.ConfirmArchiveCommand.CanExecute(null));
+        viewModel.Editor.ConfirmArchiveCommand.Execute(null);
+        await WaitUntilAsync(() => !viewModel.Editor.IsOpen);
+
+        Assert.False(viewModel.Editor.IsOpen);
+        Assert.False(viewModel.Editor.IsArchiveConfirmationOpen);
+        Assert.Empty(viewModel.OverviewItems);
+        Assert.Equal(entity.Id, Assert.Single(store.AppliedChangeSet!.EntityIdsToArchive));
+    }
+
+    [Fact]
+    public async Task ConfirmArchive_StoreFailureKeepsConfirmationOpenWithError()
+    {
+        TrackedEntity entity = Entity(1, "Customer");
+        MainWindowViewModel viewModel = CreateViewModel(
+            [entity],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out StubSynchronizationStore store);
+        store.Exception = new InvalidOperationException("Database unavailable");
+        await viewModel.InitializeAsync();
+        viewModel.EditOverviewEntityCommand.Execute(Assert.Single(viewModel.OverviewItems));
+        viewModel.Editor.RequestArchiveCommand.Execute(null);
+
+        viewModel.Editor.ConfirmArchiveCommand.Execute(null);
+        await WaitUntilAsync(() => viewModel.Editor.HasArchiveError);
+
+        Assert.True(viewModel.Editor.IsOpen);
+        Assert.True(viewModel.Editor.IsArchiveConfirmationOpen);
+        Assert.Contains("Database unavailable", viewModel.Editor.ArchiveErrorMessage);
+        Assert.Single(viewModel.OverviewItems);
     }
 
     [Fact]
@@ -265,6 +463,51 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task CyclicReview_CanStageSuppressionBeforeAtomicApply()
+    {
+        MainWindowViewModel viewModel = CreateViewModel(
+            [],
+            [],
+            SchemaImportResult.Success(Candidate(
+                ["A", "B"],
+                [
+                    ("A", "B", ImportedDependencyKind.Mandatory),
+                    ("B", "A", ImportedDependencyKind.Mandatory)
+                ])),
+            new StubFilePicker("cycle.csv"),
+            out StubSynchronizationStore store);
+        await viewModel.ImportCsvAsync();
+        SchemaSynchronizationReviewRow b = viewModel.Review.NewEntities.Single(
+            row => row.SourceName == "B");
+
+        viewModel.EditReviewEntityCommand.Execute(b);
+
+        Assert.Equal(1, viewModel.SelectedTabIndex);
+        Assert.True(viewModel.Editor.IsOpen);
+        Assert.True(viewModel.Editor.IsReviewMode);
+        Assert.False(viewModel.Editor.CanArchive);
+        Assert.False(viewModel.Editor.RequestArchiveCommand.CanExecute(null));
+        Assert.Equal("B", viewModel.Editor.SelectedEntityName);
+        EntityDependencyEditRow imported = Assert.Single(viewModel.Editor.Dependencies);
+        viewModel.Editor.SuppressCommand.Execute(imported);
+        Assert.False(viewModel.Editor.HasErrors);
+        Assert.True(viewModel.Editor.SaveCommand.CanExecute(null));
+
+        viewModel.Editor.SaveCommand.Execute(null);
+
+        Assert.Equal(1, viewModel.SelectedTabIndex);
+        Assert.True(viewModel.Review.CanApply);
+        Assert.Equal(0, store.ApplyCount);
+
+        await viewModel.ApplySynchronizationAsync();
+
+        Assert.Equal(1, store.ApplyCount);
+        Assert.Equal(
+            ManualDependencyOverrideAction.Suppress,
+            Assert.Single(store.AppliedChangeSet!.ManualDependencyOverrides).Action);
+    }
+
+    [Fact]
     public async Task ImportCsvAsync_CancelledPicker_PreservesExistingReview()
     {
         MainWindowViewModel viewModel = CreateViewModel(
@@ -287,31 +530,63 @@ public sealed class MainWindowViewModelTests
         IReadOnlyList<PersistedDependency> dependencies,
         SchemaImportResult importResult,
         ICsvFilePicker picker,
-        out StubSynchronizationStore store)
+        out StubSynchronizationStore store,
+        IReadOnlyList<PersistedUnresolvedDependency>? unresolvedDependencies = null)
     {
         StubEntityRepository entityRepository = new(entities);
-        StubDependencyRepository dependencyRepository = new(dependencies);
+        StubDependencyRepository dependencyRepository = new(
+            dependencies,
+            unresolvedDependencies ?? []);
         DependencyRanker ranker = new();
+        EffectiveDependencyResolver resolver = new();
+        StubManualDependencyOverrideRepository overrideRepository = new();
         store = new StubSynchronizationStore(entityRepository);
+        EntityDependencyEditorService editorService = new(
+            entityRepository,
+            dependencyRepository,
+            overrideRepository,
+            resolver,
+            ranker,
+            store);
         SchemaSynchronizationService synchronizationService = new(
             new StubFileParser(importResult),
             entityRepository,
             dependencyRepository,
-            new SchemaSynchronizationPlanner(ranker),
+            overrideRepository,
+            new SchemaSynchronizationPlanner(ranker, resolver),
+            editorService,
             store);
         return new MainWindowViewModel(
-            new EntityOverviewService(entityRepository, dependencyRepository, ranker),
+            new EntityOverviewService(
+                entityRepository,
+                dependencyRepository,
+                overrideRepository,
+                ranker,
+                resolver),
             synchronizationService,
             new ManualEntityCreationService(
                 entityRepository,
                 dependencyRepository,
+                overrideRepository,
                 ranker,
+                resolver,
                 store),
+            editorService,
+            new EntityArchivalService(entityRepository, store),
             picker);
     }
 
     private static SchemaImportResult FailureResult() => SchemaImportResult.Failure(
         [new ImportDiagnostic(ImportDiagnosticCode.FileAccessError, "No file configured.")]);
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));
+        while (!condition())
+        {
+            await Task.Delay(10, timeout.Token);
+        }
+    }
 
     private static TrackedEntity Entity(
         int id,
@@ -328,6 +603,13 @@ public sealed class MainWindowViewModelTests
 
     private static PersistedDependency Dependency(TrackedEntity owner, TrackedEntity target) =>
         new(new DependencyEdge(owner.Id, target.Id), ImportedDependencyKind.Mandatory);
+
+    private static PersistedUnresolvedDependency Unresolved(
+        TrackedEntity owner,
+        string dependencySourceName) =>
+        new(
+            new UnresolvedDependency(owner.Id, dependencySourceName),
+            ImportedDependencyKind.Mandatory);
 
     private static SchemaImportCandidate Candidate(
         IEnumerable<string> names,
@@ -367,6 +649,10 @@ public sealed class MainWindowViewModelTests
 
         public void Add(TrackedEntity entity) => _entities.Add(entity);
 
+        public void Archive(EntityId entityId) =>
+            _entities.Single(entity => entity.Id == entityId)
+                .ChangeLifecycleState(EntityLifecycleState.Archived);
+
         public Task<bool> TryAddAsync(TrackedEntity entity, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
@@ -378,14 +664,16 @@ public sealed class MainWindowViewModelTests
     }
 
     private sealed class StubDependencyRepository(
-        IReadOnlyList<PersistedDependency> dependencies) : IDependencyRepository
+        IReadOnlyList<PersistedDependency> dependencies,
+        IReadOnlyList<PersistedUnresolvedDependency> unresolvedDependencies)
+        : IDependencyRepository
     {
         public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
             CancellationToken cancellationToken = default) => Task.FromResult(dependencies);
 
         public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<PersistedUnresolvedDependency>>([]);
+            Task.FromResult(unresolvedDependencies);
 
         public Task SaveAsync(PersistedDependency dependency, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
@@ -431,6 +719,11 @@ public sealed class MainWindowViewModelTests
             foreach (TrackedEntity entity in changeSet.EntitiesToAdd)
             {
                 entityRepository.Add(entity);
+            }
+
+            foreach (EntityId entityId in changeSet.EntityIdsToArchive)
+            {
+                entityRepository.Archive(entityId);
             }
 
             return Task.CompletedTask;

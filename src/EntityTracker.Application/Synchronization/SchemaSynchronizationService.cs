@@ -1,4 +1,5 @@
 using EntityTracker.Application.Importing;
+using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Domain;
 
@@ -9,26 +10,34 @@ public sealed class SchemaSynchronizationService
     private readonly ISchemaImportFileParser _fileParser;
     private readonly IEntityRepository _entityRepository;
     private readonly IDependencyRepository _dependencyRepository;
+    private readonly IManualDependencyOverrideRepository _overrideRepository;
     private readonly SchemaSynchronizationPlanner _planner;
+    private readonly EntityDependencyEditorService _dependencyEditorService;
     private readonly ITrackedSchemaStore _store;
 
     public SchemaSynchronizationService(
         ISchemaImportFileParser fileParser,
         IEntityRepository entityRepository,
         IDependencyRepository dependencyRepository,
+        IManualDependencyOverrideRepository overrideRepository,
         SchemaSynchronizationPlanner planner,
+        EntityDependencyEditorService dependencyEditorService,
         ITrackedSchemaStore store)
     {
         ArgumentNullException.ThrowIfNull(fileParser);
         ArgumentNullException.ThrowIfNull(entityRepository);
         ArgumentNullException.ThrowIfNull(dependencyRepository);
+        ArgumentNullException.ThrowIfNull(overrideRepository);
         ArgumentNullException.ThrowIfNull(planner);
+        ArgumentNullException.ThrowIfNull(dependencyEditorService);
         ArgumentNullException.ThrowIfNull(store);
 
         _fileParser = fileParser;
         _entityRepository = entityRepository;
         _dependencyRepository = dependencyRepository;
+        _overrideRepository = overrideRepository;
         _planner = planner;
+        _dependencyEditorService = dependencyEditorService;
         _store = store;
     }
 
@@ -56,23 +65,58 @@ public sealed class SchemaSynchronizationService
             _dependencyRepository.GetAllAsync(cancellationToken);
         Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
             _dependencyRepository.GetAllUnresolvedAsync(cancellationToken);
-        await Task.WhenAll(entitiesTask, dependenciesTask, unresolvedTask);
+        Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
+            _overrideRepository.GetAllAsync(cancellationToken);
+        await Task.WhenAll(entitiesTask, dependenciesTask, unresolvedTask, overridesTask);
 
         SchemaSynchronizationPlan plan = _planner.CreatePlan(
             importResult.Candidate!,
             mode,
             await entitiesTask,
             await dependenciesTask,
-            await unresolvedTask);
+            await unresolvedTask,
+            await overridesTask);
         ImportDiagnostic[] applicableDiagnostics = importResult.Diagnostics
             .Where(static diagnostic => diagnostic.Code != ImportDiagnosticCode.UnknownDependency)
             .ToArray();
 
-        return plan.CandidateRanking.IsSuccess
-            ? SchemaSynchronizationResult.Success(plan, applicableDiagnostics)
-            : SchemaSynchronizationResult.RankingFailure(
-                applicableDiagnostics,
-                plan.CandidateRanking.Diagnostics);
+        return SchemaSynchronizationResult.Review(
+            plan,
+            applicableDiagnostics,
+            plan.CandidateRanking.Diagnostics);
+    }
+
+    public EntityDependencyEditPlan PreviewDependencyEdit(
+        SchemaSynchronizationPlan plan,
+        EntityId ownerId,
+        IEnumerable<ManualDependencyOverride> desiredOwnerOverrides)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        return _dependencyEditorService.CreatePlan(
+            ownerId,
+            plan.CandidateEntities,
+            plan.CandidateImportedResolvedDependencies,
+            plan.CandidateImportedUnresolvedDependencies,
+            plan.CandidateManualOverrides,
+            desiredOwnerOverrides);
+    }
+
+    public SchemaSynchronizationPlan StageDependencyEdit(
+        SchemaSynchronizationPlan plan,
+        EntityDependencyEditPlan editPlan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(editPlan);
+        if (!editPlan.IsValid)
+        {
+            throw new InvalidOperationException(
+                "Dependency edits cannot be staged while validation errors remain.");
+        }
+
+        return _planner.ReviseManualOverrides(
+            plan,
+            editPlan.Entity.Id,
+            editPlan.DesiredOverrides);
     }
 
     public Task ApplyAsync(
@@ -80,6 +124,12 @@ public sealed class SchemaSynchronizationService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(plan);
+        if (!plan.CanApply)
+        {
+            throw new InvalidOperationException(
+                "Synchronization cannot be applied until dependency errors are corrected.");
+        }
+
         return plan.ChangeSet.HasChanges
             ? _store.ApplyAsync(plan.ChangeSet, cancellationToken)
             : Task.CompletedTask;

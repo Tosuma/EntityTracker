@@ -1,4 +1,5 @@
 using EntityTracker.Application.Importing;
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
@@ -32,6 +33,9 @@ public sealed class EntityOverviewServiceTests
             result.Items.Select(static item => item.SourceName));
         Assert.Equal([1, 2, 3], result.Items.Select(static item => item.Rank));
         Assert.Equal([0, 1, 1], result.Items.Select(static item => item.DependencyCount));
+        Assert.Empty(result.Items[0].DependencyNames);
+        Assert.Equal(["Foundation"], result.Items[1].DependencyNames);
+        Assert.Equal(["Service"], result.Items[2].DependencyNames);
         Assert.Equal(DevelopmentStatus.Completed, result.Items[0].Status);
         Assert.Equal("Stable", result.Items[0].Notes);
         Assert.Equal(DevelopmentStatus.InProgress, result.Items[1].Status);
@@ -48,6 +52,37 @@ public sealed class EntityOverviewServiceTests
         Assert.True(result.IsSuccess);
         Assert.Empty(result.Items);
         Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public async Task GetAsync_DependencyNamesReflectEffectiveManualOverrides()
+    {
+        TrackedEntity owner = Entity(1, "Owner");
+        TrackedEntity suppressed = Entity(2, "Suppressed");
+        TrackedEntity retained = Entity(3, "Retained");
+        EntityOverviewService service = CreateService(
+            [owner, suppressed, retained],
+            [
+                Dependency(owner, suppressed, ImportedDependencyKind.Mandatory),
+                Dependency(owner, retained, ImportedDependencyKind.Optional)
+            ],
+            overrides:
+            [
+                new ManualDependencyOverride(
+                    owner.Id,
+                    suppressed.SourceName,
+                    ManualDependencyOverrideAction.Suppress),
+                new ManualDependencyOverride(
+                    owner.Id,
+                    "Manual Missing",
+                    ManualDependencyOverrideAction.Add)
+            ]);
+
+        EntityOverviewResult result = await service.GetAsync();
+
+        EntityOverviewItem ownerItem = result.Items.Single(item => item.EntityId == owner.Id);
+        Assert.Equal(["Manual Missing", "Retained"], ownerItem.DependencyNames);
+        Assert.Equal(2, ownerItem.DependencyCount);
     }
 
     [Fact]
@@ -128,6 +163,9 @@ public sealed class EntityOverviewServiceTests
             ],
             result.Items.Select(static item => item.DependencyState));
         Assert.Equal([0, 1, 1], result.Items.Select(static item => item.DependencyCount));
+        Assert.Empty(result.Items[0].DependencyNames);
+        Assert.Equal(["MissingX"], result.Items[1].DependencyNames);
+        Assert.Equal(["Alpha"], result.Items[2].DependencyNames);
         Assert.Empty(result.Items[0].MissingDependencyNames);
         Assert.Equal(["MissingX"], result.Items[1].MissingDependencyNames);
         Assert.Equal(["MissingX"], result.Items[2].MissingDependencyNames);
@@ -136,14 +174,17 @@ public sealed class EntityOverviewServiceTests
     private static EntityOverviewService CreateService(
         IEnumerable<TrackedEntity> entities,
         IEnumerable<PersistedDependency> dependencies,
-        IEnumerable<PersistedUnresolvedDependency>? unresolvedDependencies = null)
+        IEnumerable<PersistedUnresolvedDependency>? unresolvedDependencies = null,
+        IEnumerable<ManualDependencyOverride>? overrides = null)
     {
         return new EntityOverviewService(
             new StubEntityRepository(entities.ToArray()),
             new StubDependencyRepository(
                 dependencies.ToArray(),
                 unresolvedDependencies?.ToArray() ?? []),
-            new DependencyRanker());
+            new StubManualDependencyOverrideRepository(overrides?.ToArray()),
+            new DependencyRanker(),
+            new EffectiveDependencyResolver());
     }
 
     private static TrackedEntity Entity(

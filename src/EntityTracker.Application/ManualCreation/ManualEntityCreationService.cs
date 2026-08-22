@@ -8,27 +8,33 @@ namespace EntityTracker.Application.ManualCreation;
 
 public sealed class ManualEntityCreationService
 {
-    private const int MaximumSearchSuggestions = 10;
-
     private readonly IEntityRepository _entityRepository;
     private readonly IDependencyRepository _dependencyRepository;
+    private readonly IManualDependencyOverrideRepository _overrideRepository;
     private readonly DependencyRanker _dependencyRanker;
+    private readonly EffectiveDependencyResolver _effectiveDependencyResolver;
     private readonly ITrackedSchemaStore _store;
 
     public ManualEntityCreationService(
         IEntityRepository entityRepository,
         IDependencyRepository dependencyRepository,
+        IManualDependencyOverrideRepository overrideRepository,
         DependencyRanker dependencyRanker,
+        EffectiveDependencyResolver effectiveDependencyResolver,
         ITrackedSchemaStore store)
     {
         ArgumentNullException.ThrowIfNull(entityRepository);
         ArgumentNullException.ThrowIfNull(dependencyRepository);
+        ArgumentNullException.ThrowIfNull(overrideRepository);
         ArgumentNullException.ThrowIfNull(dependencyRanker);
+        ArgumentNullException.ThrowIfNull(effectiveDependencyResolver);
         ArgumentNullException.ThrowIfNull(store);
 
         _entityRepository = entityRepository;
         _dependencyRepository = dependencyRepository;
+        _overrideRepository = overrideRepository;
         _dependencyRanker = dependencyRanker;
+        _effectiveDependencyResolver = effectiveDependencyResolver;
         _store = store;
     }
 
@@ -39,79 +45,9 @@ public sealed class ManualEntityCreationService
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        string enteredName = query.Trim();
-        if (enteredName.Length == 0)
-        {
-            return new ManualDependencySearchResult(string.Empty, null, [], false, null);
-        }
-
-        if (!IsSupportedSourceName(enteredName))
-        {
-            return new ManualDependencySearchResult(
-                enteredName,
-                null,
-                [],
-                false,
-                "Dependency names cannot contain commas.");
-        }
-
-        EntitySourceKey queryKey = EntitySourceKey.From(enteredName);
-        EntitySourceKey? proposedEntityKey = string.IsNullOrWhiteSpace(proposedEntityName)
-            ? null
-            : EntitySourceKey.From(proposedEntityName);
         IReadOnlyList<TrackedEntity> entities =
             await _entityRepository.GetAllAsync(cancellationToken);
-
-        TrackedEntity? archivedExactMatch = entities.SingleOrDefault(entity =>
-            entity.LifecycleState == EntityLifecycleState.Archived &&
-            EntitySourceKey.From(entity.SourceName) == queryKey);
-        TrackedEntity? activeExactMatch = entities.SingleOrDefault(entity =>
-            entity.LifecycleState == EntityLifecycleState.Active &&
-            EntitySourceKey.From(entity.SourceName) == queryKey);
-        bool isSelfMatch = proposedEntityKey == queryKey;
-
-        ManualDependencySuggestion[] suggestions = entities
-            .Where(static entity => entity.LifecycleState == EntityLifecycleState.Active)
-            .Where(entity => proposedEntityKey is null ||
-                             EntitySourceKey.From(entity.SourceName) != proposedEntityKey)
-            .Where(entity => entity.SourceName.Contains(
-                enteredName,
-                StringComparison.OrdinalIgnoreCase))
-            .OrderBy(entity => MatchPriority(entity.SourceName, enteredName))
-            .ThenBy(static entity => entity.SourceName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static entity => entity.SourceName, StringComparer.Ordinal)
-            .Take(MaximumSearchSuggestions)
-            .Select(static entity => new ManualDependencySuggestion(
-                entity.Id,
-                entity.SourceName))
-            .ToArray();
-
-        if (isSelfMatch)
-        {
-            return new ManualDependencySearchResult(
-                enteredName,
-                queryKey,
-                suggestions,
-                false,
-                "An entity cannot depend on itself.");
-        }
-
-        if (archivedExactMatch is not null)
-        {
-            return new ManualDependencySearchResult(
-                enteredName,
-                queryKey,
-                suggestions,
-                false,
-                $"'{archivedExactMatch.SourceName}' exists but is archived.");
-        }
-
-        return new ManualDependencySearchResult(
-            enteredName,
-            queryKey,
-            suggestions,
-            activeExactMatch is null,
-            null);
+        return DependencySearch.Search(query, proposedEntityName, entities);
     }
 
     public async Task<ManualEntityCreationResult> CreateAsync(
@@ -126,7 +62,9 @@ public sealed class ManualEntityCreationService
             _dependencyRepository.GetAllAsync(cancellationToken);
         Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
             _dependencyRepository.GetAllUnresolvedAsync(cancellationToken);
-        await Task.WhenAll(entitiesTask, dependenciesTask, unresolvedTask);
+        Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
+            _overrideRepository.GetAllAsync(cancellationToken);
+        await Task.WhenAll(entitiesTask, dependenciesTask, unresolvedTask, overridesTask);
 
         TrackedEntity[] currentEntities = (await entitiesTask).ToArray();
         PersistedDependency[] currentResolved = (await dependenciesTask).ToArray();
@@ -173,7 +111,7 @@ public sealed class ManualEntityCreationService
                 currentUnresolved,
                 currentById);
         Dictionary<EntityId, Dictionary<EntitySourceKey, DependencyDeclaration>>
-            candidateDeclarations = candidateActiveByKey.Values.ToDictionary(
+            candidateImportedDeclarations = candidateActiveByKey.Values.ToDictionary(
                 static entity => entity.Id,
                 entity => currentDeclarations.TryGetValue(
                     entity.Id,
@@ -181,26 +119,31 @@ public sealed class ManualEntityCreationService
                     ? declarations.ToDictionary(static item => item.Key, static item => item.Value)
                     : []);
 
-        // Milestone 6.1 intentionally treats every manual dependency as mandatory.
-        // These are initial declarations, not durable overrides of a later CSV row.
-        candidateDeclarations[createdEntity.Id] = validatedDependencies.ToDictionary(
-            static dependency => dependency.TargetKey,
-            static dependency => new DependencyDeclaration(
-                dependency.TargetKey,
-                dependency.TargetName,
-                ImportedDependencyKind.Mandatory,
-                dependency.ResolvedTargetId));
-        DependencyStateResolver.Resolve(candidateDeclarations, candidateActiveByKey);
+        DependencyStateResolver.Resolve(candidateImportedDeclarations, candidateActiveByKey);
 
-        PersistedDependency[] candidateResolved =
-            DependencyStateResolver.CreateResolvedDependencies(candidateDeclarations);
-        PersistedUnresolvedDependency[] candidateUnresolved =
-            DependencyStateResolver.CreateUnresolvedDependencies(candidateDeclarations);
+        PersistedDependency[] candidateImportedResolved =
+            DependencyStateResolver.CreateResolvedDependencies(candidateImportedDeclarations);
+        PersistedUnresolvedDependency[] candidateImportedUnresolved =
+            DependencyStateResolver.CreateUnresolvedDependencies(candidateImportedDeclarations);
+        ManualDependencyOverride[] createdOverrides = validatedDependencies
+            .Select(dependency => new ManualDependencyOverride(
+                createdEntity.Id,
+                dependency.TargetName,
+                ManualDependencyOverrideAction.Add))
+            .ToArray();
+        ManualDependencyOverride[] candidateOverrides = (await overridesTask)
+            .Concat(createdOverrides)
+            .ToArray();
         TrackedEntity[] candidateEntities = candidateActiveByKey.Values.ToArray();
+        EffectiveDependencyState effectiveState = _effectiveDependencyResolver.Resolve(
+            candidateEntities,
+            candidateImportedResolved,
+            candidateImportedUnresolved,
+            candidateOverrides);
         DependencyRankingResult ranking = _dependencyRanker.Rank(
             candidateEntities,
-            candidateResolved.Select(static dependency => dependency.Edge),
-            candidateUnresolved.Select(static dependency => dependency.Dependency));
+            effectiveState.ResolvedDependencies.Select(static dependency => dependency.Edge),
+            effectiveState.UnresolvedDependencies.Select(static dependency => dependency.Dependency));
 
         if (!ranking.IsSuccess)
         {
@@ -223,7 +166,7 @@ public sealed class ManualEntityCreationService
                     out Dictionary<EntitySourceKey, DependencyDeclaration>? declarations)
                     ? declarations
                     : new Dictionary<EntitySourceKey, DependencyDeclaration>();
-            if (!AreEquivalent(current, candidateDeclarations[entity.Id]))
+            if (!AreEquivalent(current, candidateImportedDeclarations[entity.Id]))
             {
                 reconciledOwnerIds.Add(entity.Id);
             }
@@ -234,10 +177,12 @@ public sealed class ManualEntityCreationService
             [],
             [],
             reconciledOwnerIds,
-            candidateResolved.Where(dependency =>
+            candidateImportedResolved.Where(dependency =>
                 reconciledOwnerIds.Contains(dependency.Edge.DependentEntityId)),
-            candidateUnresolved.Where(dependency =>
-                reconciledOwnerIds.Contains(dependency.Dependency.DependentEntityId)));
+            candidateImportedUnresolved.Where(dependency =>
+                reconciledOwnerIds.Contains(dependency.Dependency.DependentEntityId)),
+            [createdEntity.Id],
+            createdOverrides);
         await _store.ApplyAsync(changeSet, cancellationToken);
 
         return ManualEntityCreationResult.Success(createdEntity.Id, diagnostics);
@@ -409,16 +354,6 @@ public sealed class ManualEntityCreationService
         current.Count == candidate.Count && current.All(item =>
             candidate.TryGetValue(item.Key, out DependencyDeclaration? value) &&
             item.Value == value);
-
-    private static int MatchPriority(string sourceName, string query)
-    {
-        if (sourceName.Equals(query, StringComparison.OrdinalIgnoreCase))
-        {
-            return 0;
-        }
-
-        return sourceName.StartsWith(query, StringComparison.OrdinalIgnoreCase) ? 1 : 2;
-    }
 
     private static bool IsSupportedSourceName(string sourceName) =>
         !sourceName.Contains(',', StringComparison.Ordinal);

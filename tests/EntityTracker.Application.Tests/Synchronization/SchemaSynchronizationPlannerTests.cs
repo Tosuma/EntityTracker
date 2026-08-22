@@ -335,7 +335,7 @@ public sealed class SchemaSynchronizationPlannerTests
     }
 
     [Fact]
-    public void FirstImportOfManualEntity_ReplacesItsInitialDependencies()
+    public void FirstImportOfManualEntity_KeepsManualAdditionBesideImportedDependency()
     {
         TrackedEntity oldDependency = Entity(1, "OldDependency");
         TrackedEntity newDependency = Entity(2, "NewDependency");
@@ -350,19 +350,30 @@ public sealed class SchemaSynchronizationPlannerTests
                 [("Owner", "NewDependency", ImportedDependencyKind.Mandatory)]),
             SchemaImportMode.Partial,
             [oldDependency, newDependency, manual],
-            [Dependency(manual, oldDependency)]);
+            [],
+            manualOverrides:
+            [new ManualDependencyOverride(
+                manual.Id,
+                oldDependency.SourceName,
+                ManualDependencyOverrideAction.Add)]);
 
         EntitySynchronizationChange change = Assert.Single(plan.ChangedEntities);
-        Assert.Contains(change.DependencyChanges, dependency =>
-            dependency.ChangeKind == DependencySynchronizationChangeKind.Removed &&
-            dependency.DependencySourceName == "OldDependency");
         Assert.Contains(change.DependencyChanges, dependency =>
             dependency.ChangeKind == DependencySynchronizationChangeKind.Added &&
             dependency.DependencySourceName == "NewDependency");
         Assert.Contains(plan.ChangeSet.ResolvedDependencies, dependency =>
             dependency.Edge == new DependencyEdge(manual.Id, newDependency.Id));
-        Assert.DoesNotContain(plan.ChangeSet.ResolvedDependencies, dependency =>
-            dependency.Edge == new DependencyEdge(manual.Id, oldDependency.Id));
+        Assert.Contains(plan.CandidateManualOverrides, dependencyOverride =>
+            dependencyOverride.DependentEntityId == manual.Id &&
+            dependencyOverride.DependencySourceName == oldDependency.SourceName &&
+            dependencyOverride.Action == ManualDependencyOverrideAction.Add);
+        EntityRanking ownerRanking = plan.CandidateRanking.Rankings.Single(
+            item => item.EntityId == manual.Id);
+        Assert.Contains(oldDependency.Id, ownerRanking.DirectDependencies);
+        Assert.Contains(newDependency.Id, ownerRanking.DirectDependencies);
+        Assert.DoesNotContain(change.DependencyChanges, dependency =>
+            dependency.ChangeKind == DependencySynchronizationChangeKind.Removed &&
+            dependency.DependencySourceName == oldDependency.SourceName);
     }
 
     private SchemaSynchronizationPlan Plan(
@@ -370,8 +381,15 @@ public sealed class SchemaSynchronizationPlannerTests
         SchemaImportMode mode,
         IEnumerable<TrackedEntity> entities,
         IEnumerable<PersistedDependency> dependencies,
-        IEnumerable<PersistedUnresolvedDependency>? unresolved = null) =>
-        _planner.CreatePlan(candidate, mode, entities, dependencies, unresolved ?? []);
+        IEnumerable<PersistedUnresolvedDependency>? unresolved = null,
+        IEnumerable<ManualDependencyOverride>? manualOverrides = null) =>
+        _planner.CreatePlan(
+            candidate,
+            mode,
+            entities,
+            dependencies,
+            unresolved ?? [],
+            manualOverrides ?? []);
 
     private static TrackedEntity Entity(
         int id,
