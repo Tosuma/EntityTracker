@@ -13,6 +13,7 @@ public sealed class TrackedEntityTests
         Assert.Equal(" sales.Customer ", entity.SourceName);
         Assert.Equal(DevelopmentStatus.NotStarted, entity.Status);
         Assert.Equal(string.Empty, entity.Notes);
+        Assert.Equal(EntityLifecycleState.Active, entity.LifecycleState);
     }
 
     [Fact]
@@ -118,5 +119,31 @@ public sealed class TrackedEntityTests
 
         Assert.Throws<ArgumentOutOfRangeException>(() => entity.ChangeStatus((DevelopmentStatus)999));
         Assert.Equal(DevelopmentStatus.NotStarted, entity.Status);
+    }
+
+    [Fact]
+    public void LifecycleState_CanBeArchivedAndReactivated()
+    {
+        TrackedEntity entity = new(EntityId.New(), "sales.Customer");
+
+        entity.ChangeLifecycleState(EntityLifecycleState.Archived);
+        Assert.Equal(EntityLifecycleState.Archived, entity.LifecycleState);
+
+        entity.ChangeLifecycleState(EntityLifecycleState.Active);
+        Assert.Equal(EntityLifecycleState.Active, entity.LifecycleState);
+    }
+
+    [Fact]
+    public void LifecycleState_RejectsUndefinedValues()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TrackedEntity(
+            EntityId.New(),
+            "sales.Customer",
+            lifecycleState: (EntityLifecycleState)999));
+
+        TrackedEntity entity = new(EntityId.New(), "sales.Customer");
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            entity.ChangeLifecycleState((EntityLifecycleState)999));
+        Assert.Equal(EntityLifecycleState.Active, entity.LifecycleState);
     }
 }

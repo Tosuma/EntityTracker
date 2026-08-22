@@ -26,7 +26,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
             await _database.OpenConnectionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, source_name, development_status, notes
+            SELECT id, source_name, development_status, notes, lifecycle_state
             FROM tracked_entities
             WHERE id = $id;
             """;
@@ -45,7 +45,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
             await _database.OpenConnectionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, source_name, development_status, notes
+            SELECT id, source_name, development_status, notes, lifecycle_state
             FROM tracked_entities
             ORDER BY source_name COLLATE NOCASE, id;
             """;
@@ -80,6 +80,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
                 source_name,
                 development_status,
                 notes,
+                lifecycle_state,
                 created_at_utc,
                 schema_updated_at_utc,
                 progress_updated_at_utc
@@ -91,6 +92,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
                 $sourceName,
                 $developmentStatus,
                 $notes,
+                $lifecycleState,
                 $createdAtUtc,
                 $schemaUpdatedAtUtc,
                 $progressUpdatedAtUtc
@@ -175,6 +177,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
         command.Parameters.AddWithValue("$sourceName", entity.SourceName);
         command.Parameters.AddWithValue("$developmentStatus", entity.Status.ToString());
         command.Parameters.AddWithValue("$notes", entity.Notes);
+        command.Parameters.AddWithValue("$lifecycleState", entity.LifecycleState.ToString());
     }
 
     private static TrackedEntity ReadEntity(SqliteDataReader reader)
@@ -185,7 +188,11 @@ public sealed class SqliteEntityRepository : IEntityRepository
             reader.GetString(2),
             "development status");
         string notes = reader.GetString(3);
+        EntityLifecycleState lifecycleState =
+            SqlitePersistenceValues.ParseEnum<EntityLifecycleState>(
+                reader.GetString(4),
+                "entity lifecycle state");
 
-        return new TrackedEntity(id, sourceName, status, notes);
+        return new TrackedEntity(id, sourceName, status, notes, lifecycleState);
     }
 }

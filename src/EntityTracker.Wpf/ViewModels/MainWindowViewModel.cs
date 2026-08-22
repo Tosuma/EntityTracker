@@ -3,9 +3,9 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Ranking;
+using EntityTracker.Application.Synchronization;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
@@ -15,17 +15,14 @@ namespace EntityTracker.Wpf.ViewModels;
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     private readonly EntityOverviewService _overviewService;
-    private readonly SchemaImportPreviewService _previewService;
+    private readonly SchemaSynchronizationService _synchronizationService;
     private readonly ICsvFilePicker _filePicker;
     private readonly AsyncCommand _refreshCommand;
     private readonly AsyncCommand _importCsvCommand;
-
+    private readonly AsyncCommand _applySynchronizationCommand;
+    private readonly AsyncCommand _cancelSynchronizationCommand;
     private IReadOnlyList<EntityOverviewRow> _overviewItems = [];
-    private IReadOnlyList<ImportPreviewRow> _previewItems = [];
-    private IReadOnlyList<string> _previewDiagnostics = [];
-    private IReadOnlyList<string> _previewWarnings = [];
     private string? _overviewErrorMessage;
-    private string? _selectedFileName;
     private string _busyMessage = string.Empty;
     private bool _isBusy;
     private int _selectedTabIndex;
@@ -35,21 +32,29 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public MainWindowViewModel(
         EntityOverviewService overviewService,
-        SchemaImportPreviewService previewService,
+        SchemaSynchronizationService synchronizationService,
         ICsvFilePicker filePicker)
     {
         ArgumentNullException.ThrowIfNull(overviewService);
-        ArgumentNullException.ThrowIfNull(previewService);
+        ArgumentNullException.ThrowIfNull(synchronizationService);
         ArgumentNullException.ThrowIfNull(filePicker);
-
         _overviewService = overviewService;
-        _previewService = previewService;
+        _synchronizationService = synchronizationService;
         _filePicker = filePicker;
+        Review = new SchemaSynchronizationReviewViewModel();
         _refreshCommand = new AsyncCommand(() => RefreshAsync(), () => !IsBusy);
         _importCsvCommand = new AsyncCommand(() => ImportCsvAsync(), () => !IsBusy);
+        _applySynchronizationCommand = new AsyncCommand(
+            () => ApplySynchronizationAsync(),
+            () => !IsBusy && Review.HasReview);
+        _cancelSynchronizationCommand = new AsyncCommand(
+            () => CancelSynchronizationAsync(),
+            () => !IsBusy && (Review.HasReview || Review.HasDiagnostics));
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    public SchemaSynchronizationReviewViewModel Review { get; }
 
     public IReadOnlyList<EntityOverviewRow> OverviewItems
     {
@@ -61,47 +66,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(HasOverviewItems));
                 OnPropertyChanged(nameof(ShowOverviewEmptyState));
                 OnPropertyChanged(nameof(TotalEntityCount));
-            }
-        }
-    }
-
-    public IReadOnlyList<ImportPreviewRow> PreviewItems
-    {
-        get => _previewItems;
-        private set
-        {
-            if (SetField(ref _previewItems, value))
-            {
-                OnPropertyChanged(nameof(HasPreviewItems));
-                OnPropertyChanged(nameof(ShowPreviewEmptyState));
-                OnPropertyChanged(nameof(PreviewEntityCount));
-                OnPropertyChanged(nameof(PreviewDependencyCount));
-            }
-        }
-    }
-
-    public IReadOnlyList<string> PreviewDiagnostics
-    {
-        get => _previewDiagnostics;
-        private set
-        {
-            if (SetField(ref _previewDiagnostics, value))
-            {
-                OnPropertyChanged(nameof(HasPreviewDiagnostics));
-                OnPropertyChanged(nameof(ShowPreviewEmptyState));
-            }
-        }
-    }
-
-    public IReadOnlyList<string> PreviewWarnings
-    {
-        get => _previewWarnings;
-        private set
-        {
-            if (SetField(ref _previewWarnings, value))
-            {
-                OnPropertyChanged(nameof(HasPreviewWarnings));
-                OnPropertyChanged(nameof(ShowPreviewEmptyState));
+                OnPropertyChanged(nameof(CompletionPercentage));
             }
         }
     }
@@ -119,12 +84,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    public string SelectedFileName => _selectedFileName ?? "No file selected";
-
-    public string PreviewEmptyMessage => _selectedFileName is null
-        ? "Choose Import CSV to validate and preview a schema file."
-        : "The selected file does not contain previewable entities.";
-
     public string BusyMessage
     {
         get => _busyMessage;
@@ -138,10 +97,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _isBusy, value))
             {
-                _refreshCommand.NotifyCanExecuteChanged();
-                _importCsvCommand.NotifyCanExecuteChanged();
+                NotifyCommandsChanged();
                 OnPropertyChanged(nameof(ShowOverviewEmptyState));
-                OnPropertyChanged(nameof(ShowPreviewEmptyState));
             }
         }
     }
@@ -178,10 +135,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public int TotalEntityCount => OverviewItems.Count;
 
-    public int PreviewEntityCount => PreviewItems.Count;
-
-    public int PreviewDependencyCount => PreviewItems.Sum(static item => item.DependencyCount);
-
     public double CompletionPercentage => TotalEntityCount == 0
         ? 0
         : CompletedCount * 100.0 / TotalEntityCount;
@@ -190,26 +143,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public bool HasOverviewError => !string.IsNullOrWhiteSpace(OverviewErrorMessage);
 
-    public bool ShowOverviewEmptyState =>
-        !IsBusy && !HasOverviewItems && !HasOverviewError;
-
-    public bool HasPreviewItems => PreviewItems.Count > 0;
-
-    public bool HasPreviewDiagnostics => PreviewDiagnostics.Count > 0;
-
-    public bool HasPreviewWarnings => PreviewWarnings.Count > 0;
-
-    public bool ShowPreviewEmptyState =>
-        !IsBusy && !HasPreviewItems && !HasPreviewDiagnostics && !HasPreviewWarnings;
+    public bool ShowOverviewEmptyState => !IsBusy && !HasOverviewItems && !HasOverviewError;
 
     public ICommand RefreshCommand => _refreshCommand;
 
     public ICommand ImportCsvCommand => _importCsvCommand;
 
-    public Task InitializeAsync(CancellationToken cancellationToken = default)
-    {
-        return RefreshAsync(cancellationToken);
-    }
+    public ICommand ApplySynchronizationCommand => _applySynchronizationCommand;
+
+    public ICommand CancelSynchronizationCommand => _cancelSynchronizationCommand;
+
+    public Task InitializeAsync(CancellationToken cancellationToken = default) =>
+        RefreshAsync(cancellationToken);
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
@@ -220,31 +165,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         IsBusy = true;
         BusyMessage = "Loading persisted entities…";
-
         try
         {
-            EntityOverviewResult result = await _overviewService.GetAsync(cancellationToken);
-
-            if (result.IsSuccess)
-            {
-                OverviewErrorMessage = null;
-                OverviewItems = result.Items
-                    .Select(static item => new EntityOverviewRow(
-                        FormatRank(item.Rank),
-                        item.SourceName,
-                        FormatStatus(item.Status),
-                        FormatDependencyState(item.DependencyState),
-                        item.DependencyCount,
-                        FormatMissingDependencies(item.MissingDependencyNames),
-                        item.Notes))
-                    .ToArray();
-                UpdateProgressCounts(result.Items);
-            }
-            else
-            {
-                SetOverviewFailure(string.Join(Environment.NewLine,
-                    result.Diagnostics.Select(static diagnostic => diagnostic.Message)));
-            }
+            await LoadOverviewAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -256,8 +179,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         finally
         {
-            IsBusy = false;
-            BusyMessage = string.Empty;
+            EndBusyOperation();
         }
     }
 
@@ -275,8 +197,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
-            SetPreviewFailure($"A CSV file could not be selected: {exception.Message}");
+            Review.SetFailure($"A CSV file could not be selected: {exception.Message}");
             SelectedTabIndex = 1;
+            NotifyCommandsChanged();
             return;
         }
 
@@ -285,65 +208,100 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        _selectedFileName = Path.GetFileName(filePath);
-        OnPropertyChanged(nameof(SelectedFileName));
-        OnPropertyChanged(nameof(PreviewEmptyMessage));
+        Review.BeginImport(Path.GetFileName(filePath));
+        SchemaImportMode mode = Review.Mode;
         SelectedTabIndex = 1;
         IsBusy = true;
-        BusyMessage = $"Validating {_selectedFileName}…";
-        PreviewItems = [];
-        PreviewDiagnostics = [];
-        PreviewWarnings = [];
-
+        BusyMessage = $"Comparing {Review.SelectedFileName} with persisted state…";
         try
         {
-            SchemaImportPreviewResult result =
-                await _previewService.PreviewAsync(filePath, cancellationToken);
-
-            PreviewWarnings = result.ImportDiagnostics
-                .Where(static diagnostic =>
-                    diagnostic.Severity == ImportDiagnosticSeverity.Warning)
-                .Select(FormatImportDiagnostic)
-                .ToArray();
-            PreviewDiagnostics = result.ImportDiagnostics
-                .Where(static diagnostic =>
-                    diagnostic.Severity == ImportDiagnosticSeverity.Error)
-                .Select(FormatImportDiagnostic)
-                .Concat(result.RankingDiagnostics.Select(
-                    static diagnostic => diagnostic.Message))
-                .ToArray();
-
-            if (result.IsSuccess)
-            {
-                PreviewItems = result.Items
-                    .Select(static item => new ImportPreviewRow(
-                        FormatRank(item.Rank),
-                        item.SourceName,
-                        item.MandatoryDependencyCount,
-                        item.OptionalDependencyCount,
-                        item.DependencyCount,
-                        FormatDependencyState(item.DependencyState),
-                        FormatMissingDependencies(item.MissingDependencyNames)))
-                    .ToArray();
-            }
-            else
-            {
-                PreviewItems = [];
-            }
+            SchemaSynchronizationResult result = await _synchronizationService.PlanAsync(
+                filePath,
+                mode,
+                cancellationToken);
+            Review.Load(result);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            SetPreviewFailure("CSV preview was cancelled.");
+            Review.SetFailure("CSV synchronization review was cancelled.");
         }
         catch (Exception exception)
         {
-            SetPreviewFailure($"The CSV could not be previewed: {exception.Message}");
+            Review.SetFailure($"The CSV could not be compared: {exception.Message}");
         }
         finally
         {
-            IsBusy = false;
-            BusyMessage = string.Empty;
+            EndBusyOperation();
         }
+    }
+
+    public async Task ApplySynchronizationAsync(CancellationToken cancellationToken = default)
+    {
+        if (IsBusy || Review.CurrentPlan is null)
+        {
+            return;
+        }
+
+        SchemaSynchronizationPlan plan = Review.CurrentPlan;
+        IsBusy = true;
+        BusyMessage = "Applying schema synchronization…";
+        try
+        {
+            await _synchronizationService.ApplyAsync(plan, cancellationToken);
+            Review.Clear();
+            SelectedTabIndex = 0;
+            BusyMessage = "Recomputing dependency ranking…";
+            await LoadOverviewAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            Review.SetOperationFailure(
+                "Applying synchronization was cancelled; no partial changes were saved.");
+        }
+        catch (Exception exception)
+        {
+            Review.SetOperationFailure($"Synchronization could not be applied: {exception.Message}");
+        }
+        finally
+        {
+            EndBusyOperation();
+        }
+    }
+
+    public Task CancelSynchronizationAsync()
+    {
+        if (!IsBusy)
+        {
+            Review.Clear();
+            NotifyCommandsChanged();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task LoadOverviewAsync(CancellationToken cancellationToken)
+    {
+        EntityOverviewResult result = await _overviewService.GetAsync(cancellationToken);
+        if (!result.IsSuccess)
+        {
+            SetOverviewFailure(string.Join(
+                Environment.NewLine,
+                result.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+            return;
+        }
+
+        OverviewErrorMessage = null;
+        OverviewItems = result.Items
+            .Select(static item => new EntityOverviewRow(
+                FormatRank(item.Rank),
+                item.SourceName,
+                FormatStatus(item.Status),
+                FormatDependencyState(item.DependencyState),
+                item.DependencyCount,
+                FormatMissingDependencies(item.MissingDependencyNames),
+                item.Notes))
+            .ToArray();
+        UpdateProgressCounts(result.Items);
     }
 
     private void SetOverviewFailure(string message)
@@ -351,13 +309,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OverviewItems = [];
         OverviewErrorMessage = message;
         UpdateProgressCounts([]);
-    }
-
-    private void SetPreviewFailure(string message)
-    {
-        PreviewItems = [];
-        PreviewDiagnostics = [message];
-        PreviewWarnings = [];
     }
 
     private void UpdateProgressCounts(IEnumerable<EntityOverviewItem> items)
@@ -369,53 +320,42 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(CompletionPercentage));
     }
 
-    private static string FormatStatus(DevelopmentStatus status)
+    private void EndBusyOperation()
     {
-        return status switch
-        {
-            DevelopmentStatus.NotStarted => "Not started",
-            DevelopmentStatus.InProgress => "In progress",
-            DevelopmentStatus.Completed => "Completed",
-            _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
-        };
+        IsBusy = false;
+        BusyMessage = string.Empty;
+        NotifyCommandsChanged();
     }
 
-    private static string FormatRank(int? rank)
+    private void NotifyCommandsChanged()
     {
-        return rank?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—";
+        _refreshCommand.NotifyCanExecuteChanged();
+        _importCsvCommand.NotifyCanExecuteChanged();
+        _applySynchronizationCommand.NotifyCanExecuteChanged();
+        _cancelSynchronizationCommand.NotifyCanExecuteChanged();
     }
 
-    private static string FormatDependencyState(DependencyResolutionState state)
+    private static string FormatStatus(DevelopmentStatus status) => status switch
     {
-        return state switch
-        {
-            DependencyResolutionState.Resolved => "Resolved",
-            DependencyResolutionState.Unresolved => "Unresolved",
-            DependencyResolutionState.Blocked => "Blocked",
-            _ => throw new ArgumentOutOfRangeException(nameof(state), state, null)
-        };
-    }
+        DevelopmentStatus.NotStarted => "Not started",
+        DevelopmentStatus.InProgress => "In progress",
+        DevelopmentStatus.Completed => "Completed",
+        _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
+    };
 
-    private static string FormatMissingDependencies(
-        IReadOnlyList<string> missingDependencyNames)
+    private static string FormatRank(int? rank) =>
+        rank?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—";
+
+    private static string FormatDependencyState(DependencyResolutionState state) => state switch
     {
-        return missingDependencyNames.Count == 0
-            ? "—"
-            : string.Join(", ", missingDependencyNames);
-    }
+        DependencyResolutionState.Resolved => "Resolved",
+        DependencyResolutionState.Unresolved => "Unresolved",
+        DependencyResolutionState.Blocked => "Blocked",
+        _ => throw new ArgumentOutOfRangeException(nameof(state), state, null)
+    };
 
-    private static string FormatImportDiagnostic(ImportDiagnostic diagnostic)
-    {
-        string location = diagnostic.RowNumber switch
-        {
-            null when diagnostic.ColumnName is null => string.Empty,
-            null => $"Column {diagnostic.ColumnName}: ",
-            _ when diagnostic.ColumnName is null => $"Row {diagnostic.RowNumber}: ",
-            _ => $"Row {diagnostic.RowNumber}, {diagnostic.ColumnName}: "
-        };
-
-        return location + diagnostic.Message;
-    }
+    private static string FormatMissingDependencies(IReadOnlyList<string> names) =>
+        names.Count == 0 ? "—" : string.Join(", ", names);
 
     private bool SetField<T>(
         ref T field,
@@ -432,8 +372,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         return true;
     }
 
-    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
-    {
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-    }
 }

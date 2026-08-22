@@ -110,13 +110,9 @@
 
                     <DockPanel Margin="0,0,0,14">
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                            <Button Margin="0,0,8,0"
-                                    Command="{Binding RefreshCommand}"
+                            <Button Command="{Binding RefreshCommand}"
                                     Content="Refresh"
                                     Style="{StaticResource SecondaryButtonStyle}" />
-                            <Button Command="{Binding ImportCsvCommand}"
-                                    Content="Import CSV"
-                                    Style="{StaticResource PrimaryButtonStyle}" />
                         </StackPanel>
                         <StackPanel>
                             <TextBlock FontSize="20"
@@ -231,129 +227,208 @@
                                            Text="No persisted entities" />
                                 <TextBlock Margin="0,7,0,0"
                                            Foreground="#74828A"
-                                           Text="Use Import CSV to validate and preview a schema file without saving changes." />
+                                           Text="Open Schema Synchronization to choose an import type and CSV." />
                             </StackPanel>
                         </Border>
                     </Grid>
                 </Grid>
             </TabItem>
 
-            <TabItem Header="Import Preview">
+            <TabItem Header="Schema Synchronization">
                 <Grid Margin="12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <DockPanel Margin="0,0,0,14">
+                    <DockPanel Margin="0,0,0,12">
                         <Button DockPanel.Dock="Right"
                                 Command="{Binding ImportCsvCommand}"
-                                Content="Import CSV"
+                                Content="Choose CSV and Review"
                                 Style="{StaticResource PrimaryButtonStyle}" />
                         <StackPanel>
                             <TextBlock FontSize="20"
                                        FontWeight="SemiBold"
                                        Foreground="#26343D"
-                                       Text="CSV import preview" />
+                                       Text="Schema synchronization" />
                             <TextBlock Margin="0,3,0,0"
                                        Foreground="#64737C"
-                                       Text="{Binding SelectedFileName}" />
+                                       Text="{Binding Review.SelectedFileName}" />
                         </StackPanel>
                     </DockPanel>
 
                     <Border Grid.Row="1"
-                            Margin="0,0,0,14"
+                            Margin="0,0,0,12"
                             Padding="12"
-                            Background="#FFF8DC"
-                            BorderBrush="#E5D28B"
+                            Background="White"
+                            BorderBrush="#D7DEE2"
                             BorderThickness="1"
                             CornerRadius="4">
-                        <TextBlock Foreground="#6E5A18"
-                                   FontWeight="SemiBold"
-                                   Text="Preview only — no changes are saved to the database." />
+                        <StackPanel>
+                            <TextBlock FontWeight="SemiBold" Text="Import type" />
+                            <RadioButton Margin="0,8,0,0"
+                                         GroupName="ImportMode"
+                                         IsEnabled="{Binding Review.CanSelectImportMode}"
+                                         IsChecked="{Binding Review.IsCompleteImport}"
+                                         Content="Complete database snapshot (default)" />
+                            <TextBlock Margin="22,2,0,0"
+                                       Foreground="#64737C"
+                                       Text="The CSV contains the entire schema. Existing entities missing from the file will be archived." />
+                            <RadioButton Margin="0,9,0,0"
+                                         GroupName="ImportMode"
+                                         IsEnabled="{Binding Review.CanSelectImportMode}"
+                                         IsChecked="{Binding Review.IsPartialImport}"
+                                         Content="Partial database snapshot" />
+                            <TextBlock Margin="22,2,0,0"
+                                       Foreground="#64737C"
+                                       Text="The CSV contains only part of the schema. Existing entities missing from the file will be left unchanged." />
+                            <TextBlock Margin="0,10,0,0"
+                                       Foreground="#7A5A00"
+                                       FontWeight="SemiBold"
+                                       Text="Import type is locked for while reviewing. Cancel the review to choose a different type."
+                                       TextWrapping="Wrap"
+                                       Visibility="{Binding Review.HasReview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        </StackPanel>
                     </Border>
 
-                    <StackPanel Grid.Row="2" Margin="0,0,0,12">
-                        <StackPanel Margin="0,0,0,10" Orientation="Horizontal">
-                            <TextBlock FontWeight="SemiBold"
-                                       Text="{Binding PreviewEntityCount, StringFormat={}{0} entities}" />
-                            <TextBlock Margin="18,0,0,0"
-                                       FontWeight="SemiBold"
-                                       Text="{Binding PreviewDependencyCount, StringFormat={}{0} dependencies}" />
-                        </StackPanel>
+                    <Grid Grid.Row="2">
+                        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                      PreviewMouseWheel="OnReviewPreviewMouseWheel"
+                                      VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <Border Margin="0,0,0,8"
+                                        MaxHeight="120"
+                                        Padding="10"
+                                        Background="#FFF8DC"
+                                        BorderBrush="#E5D28B"
+                                        BorderThickness="1"
+                                        CornerRadius="4"
+                                        Visibility="{Binding Review.HasWarnings, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl ItemsSource="{Binding Review.Warnings}" />
+                                    </ScrollViewer>
+                                </Border>
 
-                        <Border Margin="0,0,0,8"
-                                MaxHeight="120"
-                                Padding="12"
-                                Background="#FFF8DC"
-                                BorderBrush="#E5D28B"
-                                BorderThickness="1"
-                                CornerRadius="4"
-                                Visibility="{Binding HasPreviewWarnings, Converter={StaticResource BooleanToVisibilityConverter}}">
-                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                                          VerticalScrollBarVisibility="Auto">
-                                <ItemsControl ItemsSource="{Binding PreviewWarnings}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Margin="0,2"
-                                                       Foreground="#6E5A18"
-                                                       Text="{Binding}"
-                                                       TextWrapping="Wrap" />
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
-                        </Border>
+                                <Border Margin="0,0,0,8"
+                                        MaxHeight="120"
+                                        Padding="10"
+                                        Background="#FDEAEA"
+                                        BorderBrush="#E6A6A6"
+                                        BorderThickness="1"
+                                        CornerRadius="4"
+                                        Visibility="{Binding Review.HasDiagnostics, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl ItemsSource="{Binding Review.Diagnostics}" />
+                                    </ScrollViewer>
+                                </Border>
 
-                        <Border MaxHeight="120"
-                                Padding="12"
-                                Background="#FDEAEA"
-                                BorderBrush="#E6A6A6"
-                                BorderThickness="1"
-                                CornerRadius="4"
-                                Visibility="{Binding HasPreviewDiagnostics, Converter={StaticResource BooleanToVisibilityConverter}}">
-                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                                          VerticalScrollBarVisibility="Auto">
-                                <ItemsControl ItemsSource="{Binding PreviewDiagnostics}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Margin="0,2"
-                                                       Foreground="#8A2D2D"
-                                                       Text="{Binding}"
-                                                       TextWrapping="Wrap" />
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
-                        </Border>
-                    </StackPanel>
+                                <StackPanel Visibility="{Binding Review.HasReview, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <TextBlock Margin="0,0,0,10"
+                                               FontWeight="SemiBold"
+                                               Text="{Binding Review.ImportModeLabel, StringFormat=Import mode: {0}}" />
 
-                    <Grid Grid.Row="3">
-                        <DataGrid ItemsSource="{Binding PreviewItems}">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Width="70" Binding="{Binding Rank}" Header="Rank" />
-                                <DataGridTextColumn Width="2*" Binding="{Binding SourceName}" Header="Entity" />
-                                <DataGridTextColumn Width="105" Binding="{Binding MandatoryDependencyCount}" Header="Mandatory" />
-                                <DataGridTextColumn Width="105" Binding="{Binding OptionalDependencyCount}" Header="Optional" />
-                                <DataGridTextColumn Width="80" Binding="{Binding DependencyCount}" Header="Total" />
-                                <DataGridTextColumn Width="120" Binding="{Binding DependencyState}" Header="Dependency State" />
-                                <DataGridTextColumn Width="2*" Binding="{Binding MissingDependencies}" Header="Missing Dependencies" />
-                            </DataGrid.Columns>
-                        </DataGrid>
+                                    <StackPanel Margin="0,0,0,12"
+                                                Visibility="{Binding Review.HasNewEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="#176B87" Text="New entities" />
+                                        <ItemsControl ItemsSource="{Binding Review.NewEntities}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Margin="0,5,0,0" Padding="10" Background="White" BorderBrush="#D7DEE2" BorderThickness="1">
+                                                        <StackPanel>
+                                                            <TextBlock FontWeight="SemiBold" Text="{Binding SourceName, StringFormat=+ {0}}" />
+                                                            <TextBlock Margin="16,3,0,0" Foreground="#52616A" Text="{Binding Details}" TextWrapping="Wrap" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
 
-                        <Border Background="#F8FAFB"
-                                BorderBrush="#D7DEE2"
-                                BorderThickness="1"
-                                Visibility="{Binding ShowPreviewEmptyState, Converter={StaticResource BooleanToVisibilityConverter}}">
-                            <TextBlock HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"
-                                       FontSize="16"
-                                       Foreground="#65747C"
-                                       Text="{Binding PreviewEmptyMessage}" />
-                        </Border>
+                                    <StackPanel Margin="0,0,0,12"
+                                                Visibility="{Binding Review.HasChangedEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="#7A5A00" Text="Changed entities" />
+                                        <ItemsControl ItemsSource="{Binding Review.ChangedEntities}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Margin="0,5,0,0" Padding="10" Background="White" BorderBrush="#D7DEE2" BorderThickness="1">
+                                                        <StackPanel>
+                                                            <TextBlock FontWeight="SemiBold" Text="{Binding SourceName, StringFormat=~ {0}}" />
+                                                            <TextBlock Margin="16,3,0,0" Foreground="#52616A" Text="{Binding Details}" TextWrapping="Wrap" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+
+                                    <StackPanel Margin="0,0,0,12"
+                                                Visibility="{Binding Review.HasMissingEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="#9A3030" Text="Missing / possibly removed" />
+                                        <ItemsControl ItemsSource="{Binding Review.MissingEntities}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Margin="0,5,0,0" Padding="10" Background="#FFF2F2" BorderBrush="#E6A6A6" BorderThickness="1">
+                                                        <StackPanel>
+                                                            <TextBlock FontWeight="SemiBold" Text="{Binding SourceName, StringFormat=− {0}}" />
+                                                            <TextBlock Margin="16,3,0,0" Foreground="#7C4545" Text="{Binding Details}" TextWrapping="Wrap" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+
+                                    <StackPanel Margin="0,0,0,12"
+                                                Visibility="{Binding Review.HasUnresolvedEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="#9A5B1B" Text="Unresolved dependencies" />
+                                        <ItemsControl ItemsSource="{Binding Review.UnresolvedEntities}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Margin="0,5,0,0" Padding="10" Background="#FFF8DC" BorderBrush="#E5D28B" BorderThickness="1">
+                                                        <StackPanel>
+                                                            <TextBlock FontWeight="SemiBold" Text="{Binding SourceName, StringFormat=! {0}}" />
+                                                            <TextBlock Margin="16,3,0,0" Foreground="#6E5A18" Text="{Binding Details}" TextWrapping="Wrap" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+
+                                    <Border Padding="10" Background="#EDF6EF" BorderBrush="#BFD8C4" BorderThickness="1">
+                                        <TextBlock Foreground="#365D3D"
+                                                   Text="{Binding Review.UnchangedEntityCount, StringFormat=✓ {0} imported entities unchanged}" />
+                                    </Border>
+                                </StackPanel>
+
+                                <Border Padding="20"
+                                        Background="#F8FAFB"
+                                        BorderBrush="#D7DEE2"
+                                        BorderThickness="1"
+                                        Visibility="{Binding Review.ShowEmptyState, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <TextBlock HorizontalAlignment="Center"
+                                               Foreground="#65747C"
+                                               Text="Choose an import type, then select a CSV to create a review. Nothing is saved until Apply Changes." />
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
                     </Grid>
+
+                    <StackPanel Grid.Row="3"
+                                Margin="0,12,0,0"
+                                HorizontalAlignment="Right"
+                                Orientation="Horizontal"
+                                Visibility="{Binding Review.HasReview, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Button Margin="0,0,8,0"
+                                Command="{Binding CancelSynchronizationCommand}"
+                                Content="Cancel"
+                                Style="{StaticResource SecondaryButtonStyle}" />
+                        <Button Command="{Binding ApplySynchronizationCommand}"
+                                Content="Apply Changes"
+                                Style="{StaticResource PrimaryButtonStyle}" />
+                    </StackPanel>
                 </Grid>
             </TabItem>
         </TabControl>

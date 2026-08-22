@@ -51,6 +51,21 @@ public sealed class EntityOverviewServiceTests
     }
 
     [Fact]
+    public async Task GetAsync_ArchivedEntitiesAreExcludedFromTheEffectiveOverview()
+    {
+        TrackedEntity active = Entity(1, "Active");
+        TrackedEntity archived = new(
+            new EntityId(new Guid(2, 0, 0, new byte[8])),
+            "Archived",
+            lifecycleState: EntityLifecycleState.Archived);
+        EntityOverviewService service = CreateService([active, archived], []);
+
+        EntityOverviewResult result = await service.GetAsync();
+
+        Assert.Equal("Active", Assert.Single(result.Items).SourceName);
+    }
+
+    [Fact]
     public async Task GetAsync_Cycle_ReturnsDiagnosticAndNoRows()
     {
         TrackedEntity alpha = Entity(1, "Alpha");

@@ -4,7 +4,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    private const int CurrentSchemaVersion = 2;
+    private const int CurrentSchemaVersion = 3;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -53,6 +53,12 @@ public sealed class SqliteDatabase
             CHECK (length(trim(dependency_source_name)) > 0),
             FOREIGN KEY (dependent_entity_id) REFERENCES tracked_entities (id) ON DELETE CASCADE
         );
+        """;
+
+    private const string LifecycleSchemaSql = """
+        ALTER TABLE tracked_entities
+            ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'Active'
+                CHECK (lifecycle_state IN ('Active', 'Archived'));
         """;
 
     private readonly string _connectionString;
@@ -125,6 +131,15 @@ public sealed class SqliteDatabase
                 connection,
                 transaction,
                 UnresolvedDependencySchemaSql,
+                cancellationToken);
+        }
+
+        if (schemaVersion < 3)
+        {
+            await ExecuteAsync(
+                connection,
+                transaction,
+                LifecycleSchemaSql,
                 cancellationToken);
         }
 

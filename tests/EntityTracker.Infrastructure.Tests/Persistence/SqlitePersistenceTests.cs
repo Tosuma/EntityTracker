@@ -14,7 +14,7 @@ namespace EntityTracker.Infrastructure.Tests.Persistence;
 public sealed class SqlitePersistenceTests
 {
     [Fact]
-    public async Task InitializeAsync_FreshDatabaseCreatesVersionTwoSchemaAndIsIdempotent()
+    public async Task InitializeAsync_FreshDatabaseCreatesVersionThreeSchemaAndIsIdempotent()
     {
         await using TemporarySqliteFile file = new();
         SqliteDatabase database = new(file.DatabasePath);
@@ -23,7 +23,7 @@ public sealed class SqlitePersistenceTests
         await database.InitializeAsync();
 
         await using SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(2L, await ExecuteScalarInt64Async(connection, "PRAGMA user_version;"));
+        Assert.Equal(3L, await ExecuteScalarInt64Async(connection, "PRAGMA user_version;"));
 
         string[] tableNames = await ReadStringsAsync(
             connection,
@@ -38,6 +38,7 @@ public sealed class SqlitePersistenceTests
         Assert.Contains("created_at_utc", entityColumns);
         Assert.Contains("schema_updated_at_utc", entityColumns);
         Assert.Contains("progress_updated_at_utc", entityColumns);
+        Assert.Contains("lifecycle_state", entityColumns);
         Assert.DoesNotContain("rank", entityColumns);
     }
 
@@ -48,7 +49,7 @@ public sealed class SqlitePersistenceTests
         await using (SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath))
         {
             using SqliteCommand command = connection.CreateCommand();
-            command.CommandText = "PRAGMA user_version = 3;";
+            command.CommandText = "PRAGMA user_version = 4;";
             await command.ExecuteNonQueryAsync();
         }
 
@@ -57,7 +58,7 @@ public sealed class SqlitePersistenceTests
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => database.InitializeAsync());
         Assert.Contains("newer", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("3", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("4", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -121,8 +122,53 @@ public sealed class SqlitePersistenceTests
         await using SqliteConnection migratedConnection =
             await OpenConnectionAsync(file.DatabasePath);
         Assert.Equal(
-            2L,
+            3L,
             await ExecuteScalarInt64Async(migratedConnection, "PRAGMA user_version;"));
+        Assert.All(
+            await entityRepository.GetAllAsync(),
+            static entity => Assert.Equal(EntityLifecycleState.Active, entity.LifecycleState));
+    }
+
+    [Fact]
+    public async Task InitializeAsync_VersionTwoEntityMigratesAsActiveWithoutLosingProgress()
+    {
+        await using TemporarySqliteFile file = new();
+        EntityId id = EntityId.New();
+        await using (SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath))
+        {
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                CREATE TABLE tracked_entities
+                (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    source_key TEXT NOT NULL UNIQUE,
+                    source_name TEXT NOT NULL,
+                    development_status TEXT NOT NULL,
+                    notes TEXT NOT NULL,
+                    created_at_utc TEXT NOT NULL,
+                    schema_updated_at_utc TEXT NOT NULL,
+                    progress_updated_at_utc TEXT NOT NULL
+                );
+
+                INSERT INTO tracked_entities VALUES
+                    ($id, 'CUSTOMER', 'Customer', 'InProgress', 'Keep notes',
+                     $timestamp, $timestamp, $timestamp);
+                PRAGMA user_version = 2;
+                """;
+            command.Parameters.AddWithValue("$id", id.Value.ToString("D"));
+            command.Parameters.AddWithValue("$timestamp", "2026-01-01T00:00:00.0000000+00:00");
+            await command.ExecuteNonQueryAsync();
+        }
+
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        TrackedEntity loaded = (await new SqliteEntityRepository(database).GetAsync(id))!;
+
+        Assert.Equal(EntityLifecycleState.Active, loaded.LifecycleState);
+        Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
+        Assert.Equal("Keep notes", loaded.Notes);
+        await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
+        Assert.Equal(3L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
     }
 
     [Fact]

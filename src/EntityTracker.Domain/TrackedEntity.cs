@@ -6,18 +6,21 @@ public sealed class TrackedEntity
         EntityId id,
         string sourceName,
         DevelopmentStatus status = DevelopmentStatus.NotStarted,
-        string notes = "")
+        string notes = "",
+        EntityLifecycleState lifecycleState = EntityLifecycleState.Active)
     {
         ArgumentNullException.ThrowIfNull(id);
         ValidateSourceName(sourceName);
         ArgumentNullException.ThrowIfNull(notes);
 
         EnsureDefinedStatus(status);
+        EnsureDefinedLifecycleState(lifecycleState);
 
         Id = id;
         SourceName = sourceName;
         Status = status;
         Notes = notes;
+        LifecycleState = lifecycleState;
     }
 
     public EntityId Id { get; }
@@ -27,6 +30,8 @@ public sealed class TrackedEntity
     public DevelopmentStatus Status { get; private set; }
 
     public string Notes { get; private set; }
+
+    public EntityLifecycleState LifecycleState { get; private set; }
 
     public void ChangeSourceName(string sourceName)
     {
@@ -46,6 +51,12 @@ public sealed class TrackedEntity
         Notes = notes;
     }
 
+    public void ChangeLifecycleState(EntityLifecycleState lifecycleState)
+    {
+        EnsureDefinedLifecycleState(lifecycleState);
+        LifecycleState = lifecycleState;
+    }
+
     private static void ValidateSourceName(string sourceName)
     {
         ArgumentNullException.ThrowIfNull(sourceName);
@@ -61,6 +72,17 @@ public sealed class TrackedEntity
         if (!Enum.IsDefined(status))
         {
             throw new ArgumentOutOfRangeException(nameof(status), status, "The development status is not defined.");
+        }
+    }
+
+    private static void EnsureDefinedLifecycleState(EntityLifecycleState lifecycleState)
+    {
+        if (!Enum.IsDefined(lifecycleState))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(lifecycleState),
+                lifecycleState,
+                "The entity lifecycle state is not defined.");
         }
     }
 }

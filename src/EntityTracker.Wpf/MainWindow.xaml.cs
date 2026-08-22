@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Media3D;
 
 using EntityTracker.Wpf.ViewModels;
 
@@ -10,7 +11,7 @@ namespace EntityTracker.Wpf;
 public partial class MainWindow : Window
 {
     private const double MouseWheelDeltaPerNotch = 120;
-    private const double GridScrollPixelsPerNotch = 10;
+    private const double ScrollPixelsPerNotch = 10;
 
     private readonly MainWindowViewModel _viewModel;
 
@@ -45,7 +46,49 @@ public partial class MainWindow : Window
             return;
         }
 
-        double scrollDelta = e.Delta / MouseWheelDeltaPerNotch * GridScrollPixelsPerNotch;
+        if (TryScroll(scrollViewer, e.Delta))
+        {
+            e.Handled = true;
+        }
+    }
+
+    private void OnReviewPreviewMouseWheel(
+        object sender,
+        MouseWheelEventArgs e)
+    {
+        if (sender is not ScrollViewer reviewScrollViewer ||
+            e.OriginalSource is not DependencyObject originalSource ||
+            e.Delta == 0)
+        {
+            return;
+        }
+
+        DependencyObject? current = originalSource;
+        while (current is not null)
+        {
+            if (current is ScrollViewer scrollViewer && TryScroll(scrollViewer, e.Delta))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            if (ReferenceEquals(current, reviewScrollViewer))
+            {
+                return;
+            }
+
+            current = GetParent(current);
+        }
+    }
+
+    private static bool TryScroll(ScrollViewer scrollViewer, int wheelDelta)
+    {
+        if (scrollViewer.ScrollableHeight <= 0)
+        {
+            return false;
+        }
+
+        double scrollDelta = wheelDelta / MouseWheelDeltaPerNotch * ScrollPixelsPerNotch;
         double targetOffset = Math.Clamp(
             scrollViewer.VerticalOffset - scrollDelta,
             0,
@@ -53,11 +96,28 @@ public partial class MainWindow : Window
 
         if (targetOffset == scrollViewer.VerticalOffset)
         {
-            return;
+            return false;
         }
 
         scrollViewer.ScrollToVerticalOffset(targetOffset);
-        e.Handled = true;
+        return true;
+    }
+
+    private static DependencyObject? GetParent(DependencyObject child)
+    {
+        if (child is FrameworkContentElement frameworkContentElement)
+        {
+            return frameworkContentElement.Parent;
+        }
+
+        if (child is ContentElement contentElement)
+        {
+            return ContentOperations.GetParent(contentElement);
+        }
+
+        return child is Visual or Visual3D
+            ? VisualTreeHelper.GetParent(child)
+            : LogicalTreeHelper.GetParent(child);
     }
 
     private static T? FindVisualDescendant<T>(DependencyObject parent)

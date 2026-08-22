@@ -36,10 +36,41 @@ public sealed class EntityOverviewService
 
         await Task.WhenAll(entityTask, dependencyTask, unresolvedDependencyTask);
 
-        IReadOnlyList<TrackedEntity> entities = await entityTask;
-        IReadOnlyList<PersistedDependency> persistedDependencies = await dependencyTask;
+        IReadOnlyList<TrackedEntity> allEntities = await entityTask;
+        IReadOnlyDictionary<EntityId, TrackedEntity> allEntitiesById =
+            allEntities.ToDictionary(static entity => entity.Id);
+        IReadOnlyList<TrackedEntity> entities = allEntities
+            .Where(static entity => entity.LifecycleState == EntityLifecycleState.Active)
+            .ToArray();
+        HashSet<EntityId> activeEntityIds = entities
+            .Select(static entity => entity.Id)
+            .ToHashSet();
+        IReadOnlyList<PersistedDependency> persistedDependencies = (await dependencyTask)
+            .Where(dependency =>
+                activeEntityIds.Contains(dependency.Edge.DependentEntityId) &&
+                (!allEntitiesById.ContainsKey(dependency.Edge.DependencyEntityId) ||
+                 activeEntityIds.Contains(dependency.Edge.DependencyEntityId)))
+            .ToArray();
+        IReadOnlyList<PersistedUnresolvedDependency> storedUnresolvedDependencies =
+            (await unresolvedDependencyTask)
+                .Where(dependency =>
+                    activeEntityIds.Contains(dependency.Dependency.DependentEntityId))
+                .ToArray();
         IReadOnlyList<PersistedUnresolvedDependency> persistedUnresolvedDependencies =
-            await unresolvedDependencyTask;
+            storedUnresolvedDependencies.Concat(
+                (await dependencyTask)
+                    .Where(dependency =>
+                        activeEntityIds.Contains(dependency.Edge.DependentEntityId) &&
+                        allEntitiesById.TryGetValue(
+                            dependency.Edge.DependencyEntityId,
+                            out TrackedEntity? target) &&
+                        target.LifecycleState == EntityLifecycleState.Archived)
+                    .Select(dependency => new PersistedUnresolvedDependency(
+                        new UnresolvedDependency(
+                            dependency.Edge.DependentEntityId,
+                            allEntitiesById[dependency.Edge.DependencyEntityId].SourceName),
+                        dependency.Kind)))
+                .ToArray();
 
         DependencyRankingResult rankingResult = await Task.Run(
             () => _dependencyRanker.Rank(

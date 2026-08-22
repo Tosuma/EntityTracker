@@ -5,6 +5,7 @@ using EntityTracker.Application.Importing;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
+using EntityTracker.Application.Synchronization;
 using EntityTracker.Infrastructure.Importing;
 using EntityTracker.Infrastructure.Persistence;
 using EntityTracker.Wpf.Services;
@@ -32,7 +33,9 @@ public partial class App : System.Windows.Application
         services.AddSingleton<ISchemaImportFileParser, CsvSchemaImportFileParser>();
         services.AddSingleton<DependencyRanker>();
         services.AddSingleton<EntityOverviewService>();
-        services.AddSingleton<SchemaImportPreviewService>();
+        services.AddSingleton<SchemaSynchronizationPlanner>();
+        services.AddSingleton<ISchemaSynchronizationStore, SqliteSchemaSynchronizationStore>();
+        services.AddSingleton<SchemaSynchronizationService>();
         services.AddSingleton<ICsvFilePicker, CsvFilePicker>();
         services.AddSingleton<MainWindowViewModel>();
         services.AddSingleton<MainWindow>();
