@@ -219,6 +219,152 @@ public sealed class SchemaSynchronizationPlannerTests
         Assert.Equal(EntityLifecycleState.Active, change.Entity.LifecycleState);
     }
 
+    [Fact]
+    public void CompleteImport_AbsentManualOnlyEntity_IsListedAndKeptActive()
+    {
+        TrackedEntity manual = Entity(
+            1,
+            "PlannedTable",
+            provenance: EntityProvenance.ManualOnly);
+
+        SchemaSynchronizationPlan plan = Plan(
+            Candidate([], []),
+            SchemaImportMode.Complete,
+            [manual],
+            []);
+
+        EntitySynchronizationChange protectedEntity =
+            Assert.Single(plan.ManualOnlyEntities);
+        Assert.Equal(manual.Id, protectedEntity.Entity.Id);
+        Assert.Empty(plan.MissingEntities);
+        Assert.Empty(plan.ChangeSet.EntityIdsToArchive);
+        Assert.False(plan.ChangeSet.HasChanges);
+        Assert.False(plan.HasActionableChanges);
+    }
+
+    [Fact]
+    public void PartialImport_AbsentManualOnlyEntity_IsUntouchedAndNotReviewed()
+    {
+        TrackedEntity manual = Entity(
+            1,
+            "PlannedTable",
+            provenance: EntityProvenance.ManualOnly);
+
+        SchemaSynchronizationPlan plan = Plan(
+            Candidate([], []),
+            SchemaImportMode.Partial,
+            [manual],
+            []);
+
+        Assert.Empty(plan.ManualOnlyEntities);
+        Assert.Empty(plan.MissingEntities);
+        Assert.False(plan.ChangeSet.HasChanges);
+    }
+
+    [Fact]
+    public void CompleteImport_ProtectedManualOnlyEntityCanResolveAgainstImportedTarget()
+    {
+        TrackedEntity manual = Entity(
+            1,
+            "PlannedTable",
+            provenance: EntityProvenance.ManualOnly);
+
+        SchemaSynchronizationPlan plan = Plan(
+            Candidate(["FutureTarget"], []),
+            SchemaImportMode.Complete,
+            [manual],
+            [],
+            [Unresolved(manual, "FutureTarget")]);
+
+        EntitySynchronizationChange protectedEntity =
+            Assert.Single(plan.ManualOnlyEntities);
+        Assert.Contains(protectedEntity.DependencyChanges, change =>
+            change.ChangeKind == DependencySynchronizationChangeKind.Resolved);
+        Assert.Contains(manual.Id, plan.ChangeSet.ReconciledOwnerIds);
+        Assert.Contains(plan.ChangeSet.ResolvedDependencies, dependency =>
+            dependency.Edge.DependentEntityId == manual.Id);
+        Assert.True(plan.HasActionableChanges);
+    }
+
+    [Theory]
+    [InlineData(SchemaImportMode.Complete)]
+    [InlineData(SchemaImportMode.Partial)]
+    public void ImportedManualOnlyEntity_PreservesIdentityAndBecomesManualAndImported(
+        SchemaImportMode mode)
+    {
+        TrackedEntity manual = Entity(
+            1,
+            "PlannedTable",
+            DevelopmentStatus.InProgress,
+            "Keep progress",
+            provenance: EntityProvenance.ManualOnly);
+
+        SchemaSynchronizationPlan plan = Plan(
+            Candidate(["plannedtable"], []),
+            mode,
+            [manual],
+            []);
+
+        EntitySynchronizationChange change = Assert.Single(plan.ChangedEntities);
+        Assert.Equal(manual.Id, change.Entity.Id);
+        Assert.Equal(DevelopmentStatus.InProgress, change.Entity.Status);
+        Assert.Equal("Keep progress", change.Entity.Notes);
+        Assert.Equal(EntityProvenance.ManualAndImported, change.Entity.Provenance);
+        Assert.True(change.WasFirstObservedInImport);
+        Assert.Single(plan.ChangeSet.EntitiesToUpdate);
+        Assert.Empty(plan.NewEntities);
+    }
+
+    [Fact]
+    public void CompleteImport_AbsentManualAndImportedEntity_IsArchivedNormally()
+    {
+        TrackedEntity tracked = Entity(
+            1,
+            "TrackedTable",
+            provenance: EntityProvenance.ManualAndImported);
+
+        SchemaSynchronizationPlan plan = Plan(
+            Candidate([], []),
+            SchemaImportMode.Complete,
+            [tracked],
+            []);
+
+        Assert.Empty(plan.ManualOnlyEntities);
+        Assert.Equal(tracked.Id, Assert.Single(plan.ChangeSet.EntityIdsToArchive));
+        Assert.Equal(tracked.Id, Assert.Single(plan.MissingEntities).Entity.Id);
+    }
+
+    [Fact]
+    public void FirstImportOfManualEntity_ReplacesItsInitialDependencies()
+    {
+        TrackedEntity oldDependency = Entity(1, "OldDependency");
+        TrackedEntity newDependency = Entity(2, "NewDependency");
+        TrackedEntity manual = Entity(
+            3,
+            "Owner",
+            provenance: EntityProvenance.ManualOnly);
+
+        SchemaSynchronizationPlan plan = Plan(
+            Candidate(
+                ["OldDependency", "NewDependency", "Owner"],
+                [("Owner", "NewDependency", ImportedDependencyKind.Mandatory)]),
+            SchemaImportMode.Partial,
+            [oldDependency, newDependency, manual],
+            [Dependency(manual, oldDependency)]);
+
+        EntitySynchronizationChange change = Assert.Single(plan.ChangedEntities);
+        Assert.Contains(change.DependencyChanges, dependency =>
+            dependency.ChangeKind == DependencySynchronizationChangeKind.Removed &&
+            dependency.DependencySourceName == "OldDependency");
+        Assert.Contains(change.DependencyChanges, dependency =>
+            dependency.ChangeKind == DependencySynchronizationChangeKind.Added &&
+            dependency.DependencySourceName == "NewDependency");
+        Assert.Contains(plan.ChangeSet.ResolvedDependencies, dependency =>
+            dependency.Edge == new DependencyEdge(manual.Id, newDependency.Id));
+        Assert.DoesNotContain(plan.ChangeSet.ResolvedDependencies, dependency =>
+            dependency.Edge == new DependencyEdge(manual.Id, oldDependency.Id));
+    }
+
     private SchemaSynchronizationPlan Plan(
         SchemaImportCandidate candidate,
         SchemaImportMode mode,
@@ -232,8 +378,15 @@ public sealed class SchemaSynchronizationPlannerTests
         string name,
         DevelopmentStatus status = DevelopmentStatus.NotStarted,
         string notes = "",
-        EntityLifecycleState lifecycle = EntityLifecycleState.Active) =>
-        new(new EntityId(new Guid(id, 0, 0, new byte[8])), name, status, notes, lifecycle);
+        EntityLifecycleState lifecycle = EntityLifecycleState.Active,
+        EntityProvenance provenance = EntityProvenance.Imported) =>
+        new(
+            new EntityId(new Guid(id, 0, 0, new byte[8])),
+            name,
+            status,
+            notes,
+            lifecycle,
+            provenance);
 
     private static PersistedDependency Dependency(
         TrackedEntity owner,

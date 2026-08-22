@@ -26,7 +26,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
             await _database.OpenConnectionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, source_name, development_status, notes, lifecycle_state
+            SELECT id, source_name, development_status, notes, lifecycle_state, provenance
             FROM tracked_entities
             WHERE id = $id;
             """;
@@ -45,7 +45,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
             await _database.OpenConnectionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, source_name, development_status, notes, lifecycle_state
+            SELECT id, source_name, development_status, notes, lifecycle_state, provenance
             FROM tracked_entities
             ORDER BY source_name COLLATE NOCASE, id;
             """;
@@ -81,6 +81,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
                 development_status,
                 notes,
                 lifecycle_state,
+                provenance,
                 created_at_utc,
                 schema_updated_at_utc,
                 progress_updated_at_utc
@@ -93,6 +94,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
                 $developmentStatus,
                 $notes,
                 $lifecycleState,
+                $provenance,
                 $createdAtUtc,
                 $schemaUpdatedAtUtc,
                 $progressUpdatedAtUtc
@@ -120,12 +122,14 @@ public sealed class SqliteEntityRepository : IEntityRepository
             UPDATE tracked_entities
             SET source_key = $sourceKey,
                 source_name = $sourceName,
+                provenance = $provenance,
                 schema_updated_at_utc = $schemaUpdatedAtUtc
             WHERE id = $id;
             """;
         command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
         command.Parameters.AddWithValue("$sourceKey", EntitySourceKey.From(entity.SourceName).Value);
         command.Parameters.AddWithValue("$sourceName", entity.SourceName);
+        command.Parameters.AddWithValue("$provenance", entity.Provenance.ToString());
         command.Parameters.AddWithValue(
             "$schemaUpdatedAtUtc",
             SqlitePersistenceValues.FormatTimestamp(_database.TimeProvider.GetUtcNow()));
@@ -178,6 +182,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
         command.Parameters.AddWithValue("$developmentStatus", entity.Status.ToString());
         command.Parameters.AddWithValue("$notes", entity.Notes);
         command.Parameters.AddWithValue("$lifecycleState", entity.LifecycleState.ToString());
+        command.Parameters.AddWithValue("$provenance", entity.Provenance.ToString());
     }
 
     private static TrackedEntity ReadEntity(SqliteDataReader reader)
@@ -192,7 +197,10 @@ public sealed class SqliteEntityRepository : IEntityRepository
             SqlitePersistenceValues.ParseEnum<EntityLifecycleState>(
                 reader.GetString(4),
                 "entity lifecycle state");
+        EntityProvenance provenance = SqlitePersistenceValues.ParseEnum<EntityProvenance>(
+            reader.GetString(5),
+            "entity provenance");
 
-        return new TrackedEntity(id, sourceName, status, notes, lifecycleState);
+        return new TrackedEntity(id, sourceName, status, notes, lifecycleState, provenance);
     }
 }

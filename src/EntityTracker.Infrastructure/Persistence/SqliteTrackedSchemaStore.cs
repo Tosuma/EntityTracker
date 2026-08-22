@@ -1,6 +1,5 @@
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
-using EntityTracker.Application.Synchronization;
 using EntityTracker.Domain;
 
 using Microsoft.Data.Sqlite;
@@ -8,21 +7,21 @@ using Microsoft.Data.Sqlite;
 namespace EntityTracker.Infrastructure.Persistence;
 
 /// <summary>
-/// Applies one approved schema synchronization using a single SQLite transaction.
+/// Applies one validated tracked-schema change set using a single SQLite transaction.
 /// Conditional upserts leave audit timestamps unchanged for relationships that did not change.
 /// </summary>
-public sealed class SqliteSchemaSynchronizationStore : ISchemaSynchronizationStore
+public sealed class SqliteTrackedSchemaStore : ITrackedSchemaStore
 {
     private readonly SqliteDatabase _database;
 
-    public SqliteSchemaSynchronizationStore(SqliteDatabase database)
+    public SqliteTrackedSchemaStore(SqliteDatabase database)
     {
         ArgumentNullException.ThrowIfNull(database);
         _database = database;
     }
 
     public async Task ApplyAsync(
-        SchemaSynchronizationChangeSet changeSet,
+        TrackedSchemaChangeSet changeSet,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(changeSet);
@@ -116,7 +115,7 @@ public sealed class SqliteSchemaSynchronizationStore : ISchemaSynchronizationSto
         catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
         {
             throw new InvalidOperationException(
-                "The synchronization could not be applied because its candidate state is invalid.",
+                "The tracked schema could not be changed because its candidate state is invalid.",
                 exception);
         }
     }
@@ -132,13 +131,13 @@ public sealed class SqliteSchemaSynchronizationStore : ISchemaSynchronizationSto
             INSERT INTO tracked_entities
             (
                 id, source_key, source_name, development_status, notes,
-                lifecycle_state, created_at_utc, schema_updated_at_utc,
+                lifecycle_state, provenance, created_at_utc, schema_updated_at_utc,
                 progress_updated_at_utc
             )
             VALUES
             (
                 $id, $sourceKey, $sourceName, $developmentStatus, $notes,
-                $lifecycleState, $timestamp, $timestamp, $timestamp
+                $lifecycleState, $provenance, $timestamp, $timestamp, $timestamp
             );
             """);
         AddEntityParameters(command, entity);
@@ -158,6 +157,7 @@ public sealed class SqliteSchemaSynchronizationStore : ISchemaSynchronizationSto
             SET source_key = $sourceKey,
                 source_name = $sourceName,
                 lifecycle_state = $lifecycleState,
+                provenance = $provenance,
                 schema_updated_at_utc = $timestamp
             WHERE id = $id;
             """);
@@ -165,6 +165,7 @@ public sealed class SqliteSchemaSynchronizationStore : ISchemaSynchronizationSto
         command.Parameters.AddWithValue("$sourceKey", EntitySourceKey.From(entity.SourceName).Value);
         command.Parameters.AddWithValue("$sourceName", entity.SourceName);
         command.Parameters.AddWithValue("$lifecycleState", entity.LifecycleState.ToString());
+        command.Parameters.AddWithValue("$provenance", entity.Provenance.ToString());
         command.Parameters.AddWithValue("$timestamp", timestamp);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -302,6 +303,7 @@ public sealed class SqliteSchemaSynchronizationStore : ISchemaSynchronizationSto
         command.Parameters.AddWithValue("$developmentStatus", entity.Status.ToString());
         command.Parameters.AddWithValue("$notes", entity.Notes);
         command.Parameters.AddWithValue("$lifecycleState", entity.LifecycleState.ToString());
+        command.Parameters.AddWithValue("$provenance", entity.Provenance.ToString());
     }
 
     private static string AddKeepParameters(

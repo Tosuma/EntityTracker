@@ -3,6 +3,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 
+using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
@@ -33,28 +34,44 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public MainWindowViewModel(
         EntityOverviewService overviewService,
         SchemaSynchronizationService synchronizationService,
+        ManualEntityCreationService manualEntityCreationService,
         ICsvFilePicker filePicker)
     {
         ArgumentNullException.ThrowIfNull(overviewService);
         ArgumentNullException.ThrowIfNull(synchronizationService);
+        ArgumentNullException.ThrowIfNull(manualEntityCreationService);
         ArgumentNullException.ThrowIfNull(filePicker);
         _overviewService = overviewService;
         _synchronizationService = synchronizationService;
         _filePicker = filePicker;
         Review = new SchemaSynchronizationReviewViewModel();
-        _refreshCommand = new AsyncCommand(() => RefreshAsync(), () => !IsBusy);
-        _importCsvCommand = new AsyncCommand(() => ImportCsvAsync(), () => !IsBusy);
+        ManualCreation = new ManualEntityCreationViewModel(
+            manualEntityCreationService,
+            OnManualEntityCreatedAsync,
+            () => SelectedTabIndex = 0,
+            () => !IsBusy);
+        ManualCreation.PropertyChanged += OnManualCreationPropertyChanged;
+        _refreshCommand = new AsyncCommand(
+            () => RefreshAsync(),
+            () => !IsBusy && !ManualCreation.IsBusy);
+        _importCsvCommand = new AsyncCommand(
+            () => ImportCsvAsync(),
+            () => !IsBusy && !ManualCreation.IsBusy);
         _applySynchronizationCommand = new AsyncCommand(
             () => ApplySynchronizationAsync(),
-            () => !IsBusy && Review.HasReview);
+            () => !IsBusy && !ManualCreation.IsBusy && Review.HasReview);
         _cancelSynchronizationCommand = new AsyncCommand(
             () => CancelSynchronizationAsync(),
-            () => !IsBusy && (Review.HasReview || Review.HasDiagnostics));
+            () => !IsBusy &&
+                  !ManualCreation.IsBusy &&
+                  (Review.HasReview || Review.HasDiagnostics));
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public SchemaSynchronizationReviewViewModel Review { get; }
+
+    public ManualEntityCreationViewModel ManualCreation { get; }
 
     public IReadOnlyList<EntityOverviewRow> OverviewItems
     {
@@ -98,6 +115,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             if (SetField(ref _isBusy, value))
             {
                 NotifyCommandsChanged();
+                ManualCreation.NotifyHostCanExecuteChanged();
                 OnPropertyChanged(nameof(ShowOverviewEmptyState));
             }
         }
@@ -158,7 +176,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
-        if (IsBusy)
+        if (IsBusy || ManualCreation.IsBusy)
         {
             return;
         }
@@ -185,7 +203,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task ImportCsvAsync(CancellationToken cancellationToken = default)
     {
-        if (IsBusy)
+        if (IsBusy || ManualCreation.IsBusy)
         {
             return;
         }
@@ -237,7 +255,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task ApplySynchronizationAsync(CancellationToken cancellationToken = default)
     {
-        if (IsBusy || Review.CurrentPlan is null)
+        if (IsBusy || ManualCreation.IsBusy || Review.CurrentPlan is null)
         {
             return;
         }
@@ -270,7 +288,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public Task CancelSynchronizationAsync()
     {
-        if (!IsBusy)
+        if (!IsBusy && !ManualCreation.IsBusy)
         {
             Review.Clear();
             NotifyCommandsChanged();
@@ -295,6 +313,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             .Select(static item => new EntityOverviewRow(
                 FormatRank(item.Rank),
                 item.SourceName,
+                FormatProvenance(item.Provenance),
                 FormatStatus(item.Status),
                 FormatDependencyState(item.DependencyState),
                 item.DependencyCount,
@@ -335,12 +354,50 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _cancelSynchronizationCommand.NotifyCanExecuteChanged();
     }
 
+    private async Task OnManualEntityCreatedAsync()
+    {
+        SelectedTabIndex = 0;
+        IsBusy = true;
+        BusyMessage = "Recomputing dependency ranking…";
+        try
+        {
+            await LoadOverviewAsync(CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            SetOverviewFailure(
+                $"The entity was created, but persisted entities could not be reloaded: {exception.Message}");
+        }
+        finally
+        {
+            EndBusyOperation();
+        }
+    }
+
+    private void OnManualCreationPropertyChanged(
+        object? sender,
+        PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ManualEntityCreationViewModel.IsBusy))
+        {
+            NotifyCommandsChanged();
+        }
+    }
+
     private static string FormatStatus(DevelopmentStatus status) => status switch
     {
         DevelopmentStatus.NotStarted => "Not started",
         DevelopmentStatus.InProgress => "In progress",
         DevelopmentStatus.Completed => "Completed",
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
+    };
+
+    private static string FormatProvenance(EntityProvenance provenance) => provenance switch
+    {
+        EntityProvenance.Imported => "CSV",
+        EntityProvenance.ManualOnly => "Manual only",
+        EntityProvenance.ManualAndImported => "Manual + CSV",
+        _ => throw new ArgumentOutOfRangeException(nameof(provenance), provenance, null)
     };
 
     private static string FormatRank(int? rank) =>

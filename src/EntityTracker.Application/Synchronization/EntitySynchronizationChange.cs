@@ -18,7 +18,8 @@ public sealed class EntitySynchronizationChange
         IEnumerable<DependencySynchronizationChange>? dependencyChanges = null,
         bool isReactivation = false,
         DependencyResolutionState resolutionState = DependencyResolutionState.Resolved,
-        IEnumerable<string>? missingDependencyNames = null)
+        IEnumerable<string>? missingDependencyNames = null,
+        bool wasFirstObservedInImport = false)
     {
         ArgumentNullException.ThrowIfNull(entity);
         if (!Enum.IsDefined(changeKind))
@@ -30,6 +31,7 @@ public sealed class EntitySynchronizationChange
         ChangeKind = changeKind;
         DependencyChanges = (dependencyChanges ?? []).ToArray();
         IsReactivation = isReactivation;
+        WasFirstObservedInImport = wasFirstObservedInImport;
         ResolutionState = resolutionState;
         MissingDependencyNames = (missingDependencyNames ?? []).ToArray();
     }
@@ -41,6 +43,8 @@ public sealed class EntitySynchronizationChange
     public IReadOnlyList<DependencySynchronizationChange> DependencyChanges { get; }
 
     public bool IsReactivation { get; }
+
+    public bool WasFirstObservedInImport { get; }
 
     public DependencyResolutionState ResolutionState { get; }
 

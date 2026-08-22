@@ -1,4 +1,5 @@
 using EntityTracker.Application.Importing;
+using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
@@ -34,6 +35,61 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(1, viewModel.InProgressCount);
         Assert.Equal(1, viewModel.CompletedCount);
         Assert.Equal(50, viewModel.CompletionPercentage);
+    }
+
+    [Fact]
+    public async Task Overview_ShowsManualProvenance()
+    {
+        MainWindowViewModel viewModel = CreateViewModel(
+            [Entity(1, "Planned", provenance: EntityProvenance.ManualOnly)],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal("Manual only", Assert.Single(viewModel.OverviewItems).Provenance);
+    }
+
+    [Fact]
+    public async Task CompleteReview_ShowsAbsentManualOnlyEntityAsKeptActive()
+    {
+        MainWindowViewModel viewModel = CreateViewModel(
+            [Entity(1, "Planned", provenance: EntityProvenance.ManualOnly)],
+            [],
+            SchemaImportResult.Success(Candidate([], [])),
+            new StubFilePicker("empty.csv"),
+            out _);
+
+        await viewModel.ImportCsvAsync();
+
+        SchemaSynchronizationReviewRow row =
+            Assert.Single(viewModel.Review.ManualOnlyEntities);
+        Assert.Equal("Planned", row.SourceName);
+        Assert.Contains("kept active", row.Details, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(viewModel.Review.MissingEntities);
+    }
+
+    [Fact]
+    public async Task ManualCreation_SuccessReturnsToRefreshedOverview()
+    {
+        MainWindowViewModel viewModel = CreateViewModel(
+            [],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+        viewModel.SelectedTabIndex = 2;
+        viewModel.ManualCreation.EntityName = "NewManualEntity";
+
+        await viewModel.ManualCreation.CreateAsync();
+
+        Assert.Equal(0, viewModel.SelectedTabIndex);
+        EntityOverviewRow row = Assert.Single(viewModel.OverviewItems);
+        Assert.Equal("NewManualEntity", row.SourceName);
+        Assert.Equal("Manual only", row.Provenance);
+        Assert.Equal("Not started", row.Status);
     }
 
     [Fact]
@@ -236,7 +292,7 @@ public sealed class MainWindowViewModelTests
         StubEntityRepository entityRepository = new(entities);
         StubDependencyRepository dependencyRepository = new(dependencies);
         DependencyRanker ranker = new();
-        store = new StubSynchronizationStore();
+        store = new StubSynchronizationStore(entityRepository);
         SchemaSynchronizationService synchronizationService = new(
             new StubFileParser(importResult),
             entityRepository,
@@ -246,6 +302,11 @@ public sealed class MainWindowViewModelTests
         return new MainWindowViewModel(
             new EntityOverviewService(entityRepository, dependencyRepository, ranker),
             synchronizationService,
+            new ManualEntityCreationService(
+                entityRepository,
+                dependencyRepository,
+                ranker,
+                store),
             picker);
     }
 
@@ -256,8 +317,14 @@ public sealed class MainWindowViewModelTests
         int id,
         string name,
         DevelopmentStatus status = DevelopmentStatus.NotStarted,
-        string notes = "") =>
-        new(new EntityId(new Guid(id, 0, 0, new byte[8])), name, status, notes);
+        string notes = "",
+        EntityProvenance provenance = EntityProvenance.Imported) =>
+        new(
+            new EntityId(new Guid(id, 0, 0, new byte[8])),
+            name,
+            status,
+            notes,
+            provenance: provenance);
 
     private static PersistedDependency Dependency(TrackedEntity owner, TrackedEntity target) =>
         new(new DependencyEdge(owner.Id, target.Id), ImportedDependencyKind.Mandatory);
@@ -282,14 +349,23 @@ public sealed class MainWindowViewModelTests
                 item.Kind)));
     }
 
-    private sealed class StubEntityRepository(IReadOnlyList<TrackedEntity> entities)
-        : IEntityRepository
+    private sealed class StubEntityRepository : IEntityRepository
     {
+        private readonly List<TrackedEntity> _entities;
+
+        public StubEntityRepository(IReadOnlyList<TrackedEntity> entities)
+        {
+            _entities = entities.ToList();
+        }
+
         public Task<TrackedEntity?> GetAsync(EntityId id, CancellationToken cancellationToken = default) =>
-            Task.FromResult(entities.SingleOrDefault(entity => entity.Id == id));
+            Task.FromResult(_entities.SingleOrDefault(entity => entity.Id == id));
 
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
-            CancellationToken cancellationToken = default) => Task.FromResult(entities);
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<TrackedEntity>>(_entities.ToArray());
+
+        public void Add(TrackedEntity entity) => _entities.Add(entity);
 
         public Task<bool> TryAddAsync(TrackedEntity entity, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
@@ -332,21 +408,32 @@ public sealed class MainWindowViewModelTests
         public string? SelectCsvFile() => _paths.Count == 0 ? null : _paths.Dequeue();
     }
 
-    private sealed class StubSynchronizationStore : ISchemaSynchronizationStore
+    private sealed class StubSynchronizationStore(StubEntityRepository entityRepository)
+        : ITrackedSchemaStore
     {
         public int ApplyCount { get; private set; }
 
-        public SchemaSynchronizationChangeSet? AppliedChangeSet { get; private set; }
+        public TrackedSchemaChangeSet? AppliedChangeSet { get; private set; }
 
         public Exception? Exception { get; set; }
 
         public Task ApplyAsync(
-            SchemaSynchronizationChangeSet changeSet,
+            TrackedSchemaChangeSet changeSet,
             CancellationToken cancellationToken = default)
         {
             ApplyCount++;
             AppliedChangeSet = changeSet;
-            return Exception is null ? Task.CompletedTask : Task.FromException(Exception);
+            if (Exception is not null)
+            {
+                return Task.FromException(Exception);
+            }
+
+            foreach (TrackedEntity entity in changeSet.EntitiesToAdd)
+            {
+                entityRepository.Add(entity);
+            }
+
+            return Task.CompletedTask;
         }
     }
 }

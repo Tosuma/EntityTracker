@@ -10,14 +10,14 @@ public sealed class SchemaSynchronizationService
     private readonly IEntityRepository _entityRepository;
     private readonly IDependencyRepository _dependencyRepository;
     private readonly SchemaSynchronizationPlanner _planner;
-    private readonly ISchemaSynchronizationStore _store;
+    private readonly ITrackedSchemaStore _store;
 
     public SchemaSynchronizationService(
         ISchemaImportFileParser fileParser,
         IEntityRepository entityRepository,
         IDependencyRepository dependencyRepository,
         SchemaSynchronizationPlanner planner,
-        ISchemaSynchronizationStore store)
+        ITrackedSchemaStore store)
     {
         ArgumentNullException.ThrowIfNull(fileParser);
         ArgumentNullException.ThrowIfNull(entityRepository);

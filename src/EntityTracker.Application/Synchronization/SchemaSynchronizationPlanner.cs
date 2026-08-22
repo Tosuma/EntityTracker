@@ -1,3 +1,4 @@
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
@@ -54,6 +55,17 @@ public sealed class SchemaSynchronizationPlanner
                 candidateActiveByKey.Add(EntitySourceKey.From(entity.SourceName), entity);
             }
         }
+        else
+        {
+            // Manual-only entities describe planned schema that CSV has not confirmed yet.
+            // Keep them active until either import mode matches them for the first time.
+            foreach (TrackedEntity entity in currentEntities.Where(static entity =>
+                         entity.LifecycleState == EntityLifecycleState.Active &&
+                         entity.Provenance == EntityProvenance.ManualOnly))
+            {
+                candidateActiveByKey.Add(EntitySourceKey.From(entity.SourceName), entity);
+            }
+        }
 
         foreach (ImportedEntity importedEntity in importCandidate.Entities)
         {
@@ -65,19 +77,29 @@ public sealed class SchemaSynchronizationPlanner
                     importedEntity.SourceName,
                     existingEntity.Status,
                     existingEntity.Notes,
-                    EntityLifecycleState.Active)
-                : new TrackedEntity(EntityId.New(), importedEntity.SourceName);
+                    EntityLifecycleState.Active,
+                    existingEntity.Provenance == EntityProvenance.ManualOnly
+                        ? EntityProvenance.ManualAndImported
+                        : existingEntity.Provenance)
+                : new TrackedEntity(
+                    EntityId.New(),
+                    importedEntity.SourceName,
+                    provenance: EntityProvenance.Imported);
             candidateActiveByKey[importedEntity.SourceKey] = candidateEntity;
         }
 
-        Dictionary<EntityId, Dictionary<EntitySourceKey, Declaration>> currentDeclarations =
-            BuildCurrentDeclarations(currentResolved, currentUnresolved, currentById);
-        Dictionary<EntityId, Dictionary<EntitySourceKey, Declaration>> candidateDeclarations = [];
+        Dictionary<EntityId, Dictionary<EntitySourceKey, DependencyDeclaration>>
+            currentDeclarations = DependencyStateResolver.BuildCurrentDeclarations(
+                currentResolved,
+                currentUnresolved,
+                currentById);
+        Dictionary<EntityId, Dictionary<EntitySourceKey, DependencyDeclaration>>
+            candidateDeclarations = [];
 
         foreach (TrackedEntity candidateEntity in candidateActiveByKey.Values)
         {
             EntitySourceKey ownerKey = EntitySourceKey.From(candidateEntity.SourceName);
-            Dictionary<EntitySourceKey, Declaration> declarations;
+            Dictionary<EntitySourceKey, DependencyDeclaration> declarations;
 
             if (importedByKey.ContainsKey(ownerKey))
             {
@@ -90,7 +112,7 @@ public sealed class SchemaSynchronizationPlanner
             {
                 declarations = currentDeclarations.TryGetValue(
                     candidateEntity.Id,
-                    out Dictionary<EntitySourceKey, Declaration>? existingDeclarations)
+                    out Dictionary<EntitySourceKey, DependencyDeclaration>? existingDeclarations)
                     ? existingDeclarations.ToDictionary(static item => item.Key, static item => item.Value)
                     : [];
             }
@@ -100,25 +122,13 @@ public sealed class SchemaSynchronizationPlanner
 
         // Resolve only after Complete/Partial membership is settled. This also re-evaluates
         // declarations retained from owners outside a Partial import.
-        ResolveDeclarations(candidateDeclarations, candidateActiveByKey);
+        DependencyStateResolver.Resolve(candidateDeclarations, candidateActiveByKey);
 
         TrackedEntity[] candidateEntities = candidateActiveByKey.Values.ToArray();
-        PersistedDependency[] candidateResolved = candidateDeclarations
-            .SelectMany(static item => item.Value.Values.Select(declaration =>
-                (OwnerId: item.Key, Declaration: declaration)))
-            .Where(static item => item.Declaration.ResolvedTargetId is not null)
-            .Select(static item => new PersistedDependency(
-                new DependencyEdge(item.OwnerId, item.Declaration.ResolvedTargetId!),
-                item.Declaration.Kind))
-            .ToArray();
-        PersistedUnresolvedDependency[] candidateUnresolved = candidateDeclarations
-            .SelectMany(static item => item.Value.Values.Select(declaration =>
-                (OwnerId: item.Key, Declaration: declaration)))
-            .Where(static item => item.Declaration.ResolvedTargetId is null)
-            .Select(static item => new PersistedUnresolvedDependency(
-                new UnresolvedDependency(item.OwnerId, item.Declaration.TargetName),
-                item.Declaration.Kind))
-            .ToArray();
+        PersistedDependency[] candidateResolved =
+            DependencyStateResolver.CreateResolvedDependencies(candidateDeclarations);
+        PersistedUnresolvedDependency[] candidateUnresolved =
+            DependencyStateResolver.CreateUnresolvedDependencies(candidateDeclarations);
 
         DependencyRankingResult ranking = _dependencyRanker.Rank(
             candidateEntities,
@@ -128,6 +138,7 @@ public sealed class SchemaSynchronizationPlanner
         List<EntitySynchronizationChange> newChanges = [];
         List<EntitySynchronizationChange> changedChanges = [];
         List<EntitySynchronizationChange> missingChanges = [];
+        List<EntitySynchronizationChange> manualOnlyChanges = [];
         List<TrackedEntity> entitiesToAdd = [];
         List<TrackedEntity> entitiesToUpdate = [];
         HashSet<EntityId> reconciledOwnerIds = [];
@@ -141,13 +152,13 @@ public sealed class SchemaSynchronizationPlanner
             EntitySourceKey sourceKey = EntitySourceKey.From(candidateEntity.SourceName);
             bool isImported = importedByKey.ContainsKey(sourceKey);
             currentById.TryGetValue(candidateEntity.Id, out TrackedEntity? currentEntity);
-            Dictionary<EntitySourceKey, Declaration> oldDeclarations =
+            Dictionary<EntitySourceKey, DependencyDeclaration> oldDeclarations =
                 currentDeclarations.TryGetValue(
                     candidateEntity.Id,
-                    out Dictionary<EntitySourceKey, Declaration>? oldValue)
+                    out Dictionary<EntitySourceKey, DependencyDeclaration>? oldValue)
                     ? oldValue
                     : [];
-            Dictionary<EntitySourceKey, Declaration> newDeclarations =
+            Dictionary<EntitySourceKey, DependencyDeclaration> newDeclarations =
                 candidateDeclarations[candidateEntity.Id];
             IReadOnlyList<DependencySynchronizationChange> dependencyChanges =
                 CompareDeclarations(oldDeclarations, newDeclarations);
@@ -168,10 +179,18 @@ public sealed class SchemaSynchronizationPlanner
 
             bool isReactivation =
                 currentEntity.LifecycleState == EntityLifecycleState.Archived;
+            bool wasFirstObservedInImport =
+                currentEntity.Provenance == EntityProvenance.ManualOnly &&
+                candidateEntity.Provenance == EntityProvenance.ManualAndImported;
+            bool isProtectedManualOnly =
+                mode == SchemaImportMode.Complete &&
+                currentEntity.Provenance == EntityProvenance.ManualOnly &&
+                !isImported;
             bool metadataChanged = !StringComparer.Ordinal.Equals(
                                        currentEntity.SourceName,
                                        candidateEntity.SourceName) ||
-                                   isReactivation;
+                                   isReactivation ||
+                                   currentEntity.Provenance != candidateEntity.Provenance;
             if (metadataChanged)
             {
                 entitiesToUpdate.Add(candidateEntity);
@@ -182,14 +201,24 @@ public sealed class SchemaSynchronizationPlanner
                 reconciledOwnerIds.Add(candidateEntity.Id);
             }
 
-            if (metadataChanged || dependencyChanges.Count > 0)
+            if (isProtectedManualOnly)
+            {
+                manualOnlyChanges.Add(CreateEntityChange(
+                    candidateEntity,
+                    EntitySynchronizationChangeKind.Changed,
+                    dependencyChanges,
+                    false,
+                    unrankedById));
+            }
+            else if (metadataChanged || dependencyChanges.Count > 0)
             {
                 changedChanges.Add(CreateEntityChange(
                     candidateEntity,
                     EntitySynchronizationChangeKind.Changed,
                     dependencyChanges,
                     isReactivation,
-                    unrankedById));
+                    unrankedById,
+                    wasFirstObservedInImport));
             }
             else if (isImported)
             {
@@ -201,6 +230,7 @@ public sealed class SchemaSynchronizationPlanner
             ? currentEntities
                 .Where(entity =>
                     entity.LifecycleState == EntityLifecycleState.Active &&
+                    entity.Provenance != EntityProvenance.ManualOnly &&
                     !importedByKey.ContainsKey(EntitySourceKey.From(entity.SourceName)))
                 .Select(static entity => entity.Id)
                 .ToArray()
@@ -214,7 +244,7 @@ public sealed class SchemaSynchronizationPlanner
         }
 
         HashSet<EntityId> ownerIds = reconciledOwnerIds;
-        SchemaSynchronizationChangeSet changeSet = new(
+        TrackedSchemaChangeSet changeSet = new(
             entitiesToAdd,
             entitiesToUpdate,
             idsToArchive,
@@ -244,60 +274,19 @@ public sealed class SchemaSynchronizationPlanner
             Sort(newChanges),
             Sort(changedChanges),
             Sort(missingChanges),
+            Sort(manualOnlyChanges),
             unchangedCount,
             unresolvedChanges,
             ranking,
             changeSet);
     }
 
-    private static Dictionary<EntityId, Dictionary<EntitySourceKey, Declaration>>
-        BuildCurrentDeclarations(
-            IEnumerable<PersistedDependency> resolvedDependencies,
-            IEnumerable<PersistedUnresolvedDependency> unresolvedDependencies,
-            IReadOnlyDictionary<EntityId, TrackedEntity> entitiesById)
-    {
-        Dictionary<EntityId, Dictionary<EntitySourceKey, Declaration>> result = [];
-
-        foreach (PersistedDependency dependency in resolvedDependencies)
-        {
-            if (!entitiesById.TryGetValue(
-                    dependency.Edge.DependencyEntityId,
-                    out TrackedEntity? target))
-            {
-                continue;
-            }
-
-            AddDeclaration(
-                result,
-                dependency.Edge.DependentEntityId,
-                new Declaration(
-                    EntitySourceKey.From(target.SourceName),
-                    target.SourceName,
-                    dependency.Kind,
-                    target.Id));
-        }
-
-        foreach (PersistedUnresolvedDependency dependency in unresolvedDependencies)
-        {
-            AddDeclaration(
-                result,
-                dependency.Dependency.DependentEntityId,
-                new Declaration(
-                    EntitySourceKey.From(dependency.Dependency.DependencySourceName),
-                    dependency.Dependency.DependencySourceName,
-                    dependency.Kind,
-                    null));
-        }
-
-        return result;
-    }
-
-    private static Dictionary<EntitySourceKey, Declaration> BuildImportedDeclarations(
+    private static Dictionary<EntitySourceKey, DependencyDeclaration> BuildImportedDeclarations(
         EntitySourceKey ownerKey,
         SchemaImportCandidate importCandidate,
         IReadOnlyDictionary<EntitySourceKey, ImportedEntity> importedByKey)
     {
-        Dictionary<EntitySourceKey, Declaration> result = [];
+        Dictionary<EntitySourceKey, DependencyDeclaration> result = [];
 
         foreach (ImportedDependency dependency in importCandidate.Dependencies.Where(
                      dependency => dependency.DependentSourceKey == ownerKey))
@@ -305,7 +294,7 @@ public sealed class SchemaSynchronizationPlanner
             ImportedEntity target = importedByKey[dependency.DependencySourceKey];
             result.Add(
                 dependency.DependencySourceKey,
-                new Declaration(
+                new DependencyDeclaration(
                     dependency.DependencySourceKey,
                     target.SourceName,
                     dependency.Kind,
@@ -318,7 +307,7 @@ public sealed class SchemaSynchronizationPlanner
         {
             result.Add(
                 dependency.DependencySourceKey,
-                new Declaration(
+                new DependencyDeclaration(
                     dependency.DependencySourceKey,
                     dependency.DependencySourceName,
                     dependency.Kind,
@@ -328,31 +317,9 @@ public sealed class SchemaSynchronizationPlanner
         return result;
     }
 
-    private static void ResolveDeclarations(
-        IDictionary<EntityId, Dictionary<EntitySourceKey, Declaration>> declarations,
-        IReadOnlyDictionary<EntitySourceKey, TrackedEntity> activeEntitiesByKey)
-    {
-        foreach (Dictionary<EntitySourceKey, Declaration> ownerDeclarations in declarations.Values)
-        {
-            foreach (EntitySourceKey key in ownerDeclarations.Keys.ToArray())
-            {
-                Declaration declaration = ownerDeclarations[key];
-                ownerDeclarations[key] = activeEntitiesByKey.TryGetValue(
-                    declaration.TargetKey,
-                    out TrackedEntity? target)
-                    ? declaration with
-                    {
-                        TargetName = target.SourceName,
-                        ResolvedTargetId = target.Id
-                    }
-                    : declaration with { ResolvedTargetId = null };
-            }
-        }
-    }
-
     private static IReadOnlyList<DependencySynchronizationChange> CompareDeclarations(
-        IReadOnlyDictionary<EntitySourceKey, Declaration> current,
-        IReadOnlyDictionary<EntitySourceKey, Declaration> candidate)
+        IReadOnlyDictionary<EntitySourceKey, DependencyDeclaration> current,
+        IReadOnlyDictionary<EntitySourceKey, DependencyDeclaration> candidate)
     {
         List<DependencySynchronizationChange> changes = [];
         IEnumerable<EntitySourceKey> keys = current.Keys
@@ -362,8 +329,12 @@ public sealed class SchemaSynchronizationPlanner
 
         foreach (EntitySourceKey key in keys)
         {
-            bool hasCurrent = current.TryGetValue(key, out Declaration? oldDeclaration);
-            bool hasCandidate = candidate.TryGetValue(key, out Declaration? newDeclaration);
+            bool hasCurrent = current.TryGetValue(
+                key,
+                out DependencyDeclaration? oldDeclaration);
+            bool hasCandidate = candidate.TryGetValue(
+                key,
+                out DependencyDeclaration? newDeclaration);
             if (!hasCurrent)
             {
                 changes.Add(new DependencySynchronizationChange(
@@ -431,7 +402,8 @@ public sealed class SchemaSynchronizationPlanner
         EntitySynchronizationChangeKind kind,
         IEnumerable<DependencySynchronizationChange> dependencyChanges,
         bool isReactivation,
-        IReadOnlyDictionary<EntityId, UnrankedEntity> unrankedById)
+        IReadOnlyDictionary<EntityId, UnrankedEntity> unrankedById,
+        bool wasFirstObservedInImport = false)
     {
         return unrankedById.TryGetValue(entity.Id, out UnrankedEntity? unranked)
             ? new EntitySynchronizationChange(
@@ -440,12 +412,14 @@ public sealed class SchemaSynchronizationPlanner
                 dependencyChanges,
                 isReactivation,
                 unranked.State,
-                unranked.MissingDependencyNames)
+                unranked.MissingDependencyNames,
+                wasFirstObservedInImport)
             : new EntitySynchronizationChange(
                 entity,
                 kind,
                 dependencyChanges,
-                isReactivation);
+                isReactivation,
+                wasFirstObservedInImport: wasFirstObservedInImport);
     }
 
     private static IEnumerable<EntitySynchronizationChange> Sort(
@@ -453,25 +427,4 @@ public sealed class SchemaSynchronizationPlanner
         changes.OrderBy(static change => change.Entity.SourceName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static change => change.Entity.SourceName, StringComparer.Ordinal);
 
-    private static void AddDeclaration(
-        IDictionary<EntityId, Dictionary<EntitySourceKey, Declaration>> declarations,
-        EntityId ownerId,
-        Declaration declaration)
-    {
-        if (!declarations.TryGetValue(
-                ownerId,
-                out Dictionary<EntitySourceKey, Declaration>? ownerDeclarations))
-        {
-            ownerDeclarations = [];
-            declarations.Add(ownerId, ownerDeclarations);
-        }
-
-        ownerDeclarations[declaration.TargetKey] = declaration;
-    }
-
-    private sealed record Declaration(
-        EntitySourceKey TargetKey,
-        string TargetName,
-        ImportedDependencyKind Kind,
-        EntityId? ResolvedTargetId);
 }

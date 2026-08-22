@@ -207,6 +207,7 @@
                             <DataGrid.Columns>
                                 <DataGridTextColumn Width="70" Binding="{Binding Rank}" Header="Rank" />
                                 <DataGridTextColumn Width="2*" Binding="{Binding SourceName}" Header="Entity" />
+                                <DataGridTextColumn Width="125" Binding="{Binding Provenance}" Header="Source" />
                                 <DataGridTextColumn Width="130" Binding="{Binding Status}" Header="Status" />
                                 <DataGridTextColumn Width="120" Binding="{Binding DependencyState}" Header="Dependency State" />
                                 <DataGridTextColumn Width="105" Binding="{Binding DependencyCount}" Header="Dependencies" />
@@ -227,7 +228,7 @@
                                            Text="No persisted entities" />
                                 <TextBlock Margin="0,7,0,0"
                                            Foreground="#74828A"
-                                           Text="Open Schema Synchronization to choose an import type and CSV." />
+                                           Text="Add an entity manually or open Schema Synchronization to import a CSV." />
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -381,6 +382,34 @@
                                     </StackPanel>
 
                                     <StackPanel Margin="0,0,0,12"
+                                                Visibility="{Binding Review.HasManualOnlyEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <TextBlock FontSize="16"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#176B87"
+                                                   Text="Manual entities not yet in CSV — kept active" />
+                                        <ItemsControl ItemsSource="{Binding Review.ManualOnlyEntities}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Margin="0,5,0,0"
+                                                            Padding="10"
+                                                            Background="#EAF5FA"
+                                                            BorderBrush="#A9CDD9"
+                                                            BorderThickness="1">
+                                                        <StackPanel>
+                                                            <TextBlock FontWeight="SemiBold"
+                                                                       Text="{Binding SourceName, StringFormat=• {0}}" />
+                                                            <TextBlock Margin="16,3,0,0"
+                                                                       Foreground="#315B6B"
+                                                                       Text="{Binding Details}"
+                                                                       TextWrapping="Wrap" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+
+                                    <StackPanel Margin="0,0,0,12"
                                                 Visibility="{Binding Review.HasUnresolvedEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="#9A5B1B" Text="Unresolved dependencies" />
                                         <ItemsControl ItemsSource="{Binding Review.UnresolvedEntities}">
@@ -427,6 +456,162 @@
                                 Style="{StaticResource SecondaryButtonStyle}" />
                         <Button Command="{Binding ApplySynchronizationCommand}"
                                 Content="Apply Changes"
+                                Style="{StaticResource PrimaryButtonStyle}" />
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Add Entity">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Margin="0,0,0,14">
+                        <TextBlock FontSize="20"
+                                   FontWeight="SemiBold"
+                                   Foreground="#26343D"
+                                   Text="Create a tracked entity" />
+                        <TextBlock Margin="0,3,0,0"
+                                   Foreground="#64737C"
+                                   Text="Add a new entity and its initial mandatory dependencies. Unknown names are kept as unresolved warnings."
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <ScrollViewer Grid.Row="1"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  PreviewMouseWheel="OnReviewPreviewMouseWheel"
+                                  VerticalScrollBarVisibility="Auto">
+                        <StackPanel MaxWidth="760" HorizontalAlignment="Left">
+                            <TextBlock FontWeight="SemiBold" Text="Entity name" />
+                            <TextBox Margin="0,6,0,18"
+                                     MinWidth="420"
+                                     Padding="9,7"
+                                     Text="{Binding ManualCreation.EntityName, UpdateSourceTrigger=PropertyChanged}" />
+
+                            <TextBlock FontWeight="SemiBold" Text="Add dependencies" />
+                            <TextBlock Margin="0,3,0,7"
+                                       Foreground="#64737C"
+                                       Text="Search active entities, or deliberately keep an unknown name as unresolved."
+                                       TextWrapping="Wrap" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox MinWidth="420"
+                                         Padding="9,7"
+                                         Text="{Binding ManualCreation.DependencyQuery, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button Grid.Column="1"
+                                        Margin="8,0,0,0"
+                                        Command="{Binding ManualCreation.AddUnresolvedCommand}"
+                                        Content="Add as unresolved"
+                                        Style="{StaticResource SecondaryButtonStyle}" />
+                            </Grid>
+
+                            <TextBlock Margin="0,7,0,0"
+                                       Foreground="#7A5A00"
+                                       Text="{Binding ManualCreation.SearchMessage}"
+                                       TextWrapping="Wrap"
+                                       Visibility="{Binding ManualCreation.HasSearchMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+                            <ItemsControl Margin="0,6,0,0"
+                                          ItemsSource="{Binding ManualCreation.Suggestions}"
+                                          Visibility="{Binding ManualCreation.HasSuggestions, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,0,5"
+                                                Padding="8"
+                                                Background="White"
+                                                BorderBrush="#D7DEE2"
+                                                BorderThickness="1">
+                                            <DockPanel>
+                                                <Button DockPanel.Dock="Right"
+                                                        Padding="12,5"
+                                                        Command="{Binding DataContext.ManualCreation.AddExistingCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        Content="Add"
+                                                        Style="{StaticResource SecondaryButtonStyle}" />
+                                                <TextBlock VerticalAlignment="Center" Text="{Binding SourceName}" />
+                                            </DockPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock Margin="0,18,0,7"
+                                       FontWeight="SemiBold"
+                                       Text="Selected dependencies" />
+                            <ItemsControl ItemsSource="{Binding ManualCreation.SelectedDependencies}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,0,6"
+                                                Padding="9"
+                                                Background="White"
+                                                BorderBrush="#D7DEE2"
+                                                BorderThickness="1">
+                                            <DockPanel>
+                                                <Button DockPanel.Dock="Right"
+                                                        Padding="12,5"
+                                                        Command="{Binding DataContext.ManualCreation.RemoveDependencyCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        Content="Remove"
+                                                        Style="{StaticResource SecondaryButtonStyle}" />
+                                                <StackPanel>
+                                                    <TextBlock FontWeight="SemiBold" Text="{Binding SourceName}" />
+                                                    <TextBlock Margin="0,2,0,0"
+                                                               Foreground="#64737C"
+                                                               Text="{Binding ResolutionLabel}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <Border Margin="0,12,0,0"
+                                    MaxHeight="110"
+                                    Padding="10"
+                                    Background="#FFF8DC"
+                                    BorderBrush="#E5D28B"
+                                    BorderThickness="1"
+                                    Visibility="{Binding ManualCreation.HasWarnings, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding ManualCreation.Warnings}" />
+                                </ScrollViewer>
+                            </Border>
+
+                            <Border Margin="0,12,0,0"
+                                    MaxHeight="110"
+                                    Padding="10"
+                                    Background="#FDEAEA"
+                                    BorderBrush="#E6A6A6"
+                                    BorderThickness="1"
+                                    Visibility="{Binding ManualCreation.HasErrors, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding ManualCreation.Errors}" />
+                                </ScrollViewer>
+                            </Border>
+
+                            <TextBlock Margin="0,12,0,0"
+                                       Foreground="#31505D"
+                                       Text="{Binding ManualCreation.OperationMessage}"
+                                       Visibility="{Binding ManualCreation.HasOperationMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <StackPanel Grid.Row="2"
+                                Margin="0,12,0,0"
+                                HorizontalAlignment="Right"
+                                Orientation="Horizontal">
+                        <Button Margin="0,0,8,0"
+                                Command="{Binding ManualCreation.CancelCommand}"
+                                Content="Cancel"
+                                Style="{StaticResource SecondaryButtonStyle}" />
+                        <Button Command="{Binding ManualCreation.CreateCommand}"
+                                Content="Create Entity"
                                 Style="{StaticResource PrimaryButtonStyle}" />
                     </StackPanel>
                 </Grid>

@@ -1,14 +1,13 @@
-using EntityTracker.Application.Persistence;
 using EntityTracker.Domain;
 
-namespace EntityTracker.Application.Synchronization;
+namespace EntityTracker.Application.Persistence;
 
 /// <summary>
-/// Describes the complete persistence mutation for one approved synchronization.
+/// Describes a complete atomic mutation of tracked entities and their schema dependencies.
 /// </summary>
-public sealed class SchemaSynchronizationChangeSet
+public sealed class TrackedSchemaChangeSet
 {
-    public SchemaSynchronizationChangeSet(
+    public TrackedSchemaChangeSet(
         IEnumerable<TrackedEntity> entitiesToAdd,
         IEnumerable<TrackedEntity> entitiesToUpdate,
         IEnumerable<EntityId> entityIdsToArchive,

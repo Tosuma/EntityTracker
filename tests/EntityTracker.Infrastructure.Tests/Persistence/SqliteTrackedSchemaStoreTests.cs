@@ -1,4 +1,5 @@
 using EntityTracker.Application.Importing;
+using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
@@ -10,7 +11,7 @@ using Microsoft.Data.Sqlite;
 
 namespace EntityTracker.Infrastructure.Tests.Persistence;
 
-public sealed class SqliteSchemaSynchronizationStoreTests
+public sealed class SqliteTrackedSchemaStoreTests
 {
     [Fact]
     public async Task ApplyAsync_ArchivesAndReconcilesDependenciesWithoutLosingProgress()
@@ -20,7 +21,7 @@ public sealed class SqliteSchemaSynchronizationStoreTests
         await database.InitializeAsync();
         SqliteEntityRepository entities = new(database);
         SqliteDependencyRepository dependencies = new(database);
-        SqliteSchemaSynchronizationStore store = new(database);
+        SqliteTrackedSchemaStore store = new(database);
         TrackedEntity target = new(EntityId.New(), "Target", DevelopmentStatus.Completed, "Keep target");
         TrackedEntity owner = new(EntityId.New(), "Owner", DevelopmentStatus.InProgress, "Keep owner");
         Assert.True(await entities.TryAddAsync(target));
@@ -29,7 +30,7 @@ public sealed class SqliteSchemaSynchronizationStoreTests
             new DependencyEdge(owner.Id, target.Id),
             ImportedDependencyKind.Mandatory));
 
-        SchemaSynchronizationChangeSet changeSet = new(
+        TrackedSchemaChangeSet changeSet = new(
             [],
             [],
             [target.Id],
@@ -61,14 +62,14 @@ public sealed class SqliteSchemaSynchronizationStoreTests
         SqliteDatabase database = new(file.DatabasePath);
         await database.InitializeAsync();
         SqliteEntityRepository entities = new(database);
-        SqliteSchemaSynchronizationStore store = new(database);
+        SqliteTrackedSchemaStore store = new(database);
         TrackedEntity existing = new(EntityId.New(), "Existing");
         TrackedEntity added = new(EntityId.New(), "Added");
         Assert.True(await entities.TryAddAsync(existing));
         PersistedDependency invalidDependency = new(
             new DependencyEdge(added.Id, EntityId.New()),
             ImportedDependencyKind.Mandatory);
-        SchemaSynchronizationChangeSet changeSet = new(
+        TrackedSchemaChangeSet changeSet = new(
             [added],
             [],
             [],
@@ -98,8 +99,8 @@ public sealed class SqliteSchemaSynchronizationStoreTests
             new DependencyEdge(owner.Id, target.Id),
             ImportedDependencyKind.Mandatory));
 
-        await new SqliteSchemaSynchronizationStore(database).ApplyAsync(
-            new SchemaSynchronizationChangeSet([], [], [owner.Id], [], [], []));
+        await new SqliteTrackedSchemaStore(database).ApplyAsync(
+            new TrackedSchemaChangeSet([], [], [owner.Id], [], [], []));
 
         Assert.Equal(EntityLifecycleState.Archived, (await entities.GetAsync(owner.Id))!.LifecycleState);
         Assert.Single(await dependencies.GetAllAsync());
@@ -115,7 +116,7 @@ public sealed class SqliteSchemaSynchronizationStoreTests
         await database.InitializeAsync();
         SqliteEntityRepository entities = new(database);
         SqliteDependencyRepository dependencies = new(database);
-        SqliteSchemaSynchronizationStore store = new(database);
+        SqliteTrackedSchemaStore store = new(database);
         TrackedEntity owner = new(EntityId.New(), "Owner");
         TrackedEntity a = new(EntityId.New(), "A");
         TrackedEntity b = new(EntityId.New(), "B");
@@ -129,7 +130,7 @@ public sealed class SqliteSchemaSynchronizationStoreTests
         string originalTimestamp = await ReadUpdatedTimestampAsync(file.DatabasePath, unchanged.Edge);
         time.Advance(TimeSpan.FromHours(1));
 
-        await store.ApplyAsync(new SchemaSynchronizationChangeSet(
+        await store.ApplyAsync(new TrackedSchemaChangeSet(
             [],
             [],
             [],
@@ -185,7 +186,7 @@ public sealed class SqliteSchemaSynchronizationStoreTests
             await dependencies.GetAllAsync(),
             await dependencies.GetAllUnresolvedAsync());
 
-        await new SqliteSchemaSynchronizationStore(database).ApplyAsync(plan.ChangeSet);
+        await new SqliteTrackedSchemaStore(database).ApplyAsync(plan.ChangeSet);
 
         EntityOverviewResult overview = await new EntityOverviewService(
             entities,
@@ -223,9 +224,114 @@ public sealed class SqliteSchemaSynchronizationStoreTests
                 [],
                 []);
 
-        await new SqliteSchemaSynchronizationStore(database).ApplyAsync(plan.ChangeSet);
+        await new SqliteTrackedSchemaStore(database).ApplyAsync(plan.ChangeSet);
 
         Assert.Equal(5, (await entities.GetAllAsync()).Count);
+    }
+
+    [Fact]
+    public async Task ManualCreation_PersistsEntityAndResolvesExistingReferenceAtomically()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteEntityRepository entities = new(database);
+        SqliteDependencyRepository dependencies = new(database);
+        TrackedEntity owner = new(EntityId.New(), "Owner");
+        Assert.True(await entities.TryAddAsync(owner));
+        await dependencies.SaveUnresolvedAsync(new PersistedUnresolvedDependency(
+            new UnresolvedDependency(owner.Id, "Future"),
+            ImportedDependencyKind.Optional));
+        ManualEntityCreationService service = new(
+            entities,
+            dependencies,
+            new DependencyRanker(),
+            new SqliteTrackedSchemaStore(database));
+
+        ManualEntityCreationResult result = await service.CreateAsync(
+            new ManualEntityCreationRequest("future", []));
+
+        Assert.True(result.IsSuccess);
+        TrackedEntity created = (await entities.GetAsync(result.CreatedEntityId!))!;
+        Assert.Equal(EntityProvenance.ManualOnly, created.Provenance);
+        Assert.Empty(await dependencies.GetAllUnresolvedAsync());
+        PersistedDependency resolved = Assert.Single(await dependencies.GetAllAsync());
+        Assert.Equal(new DependencyEdge(owner.Id, created.Id), resolved.Edge);
+        Assert.Equal(ImportedDependencyKind.Optional, resolved.Kind);
+    }
+
+    [Fact]
+    public async Task ManualCreation_UnknownDependencyPersistsAsUnrankedOverviewEntity()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteEntityRepository entities = new(database);
+        SqliteDependencyRepository dependencies = new(database);
+        DependencyRanker ranker = new();
+        ManualEntityCreationService service = new(
+            entities,
+            dependencies,
+            ranker,
+            new SqliteTrackedSchemaStore(database));
+
+        ManualEntityCreationResult result = await service.CreateAsync(
+            new ManualEntityCreationRequest(
+                "Owner",
+                [ManualDependencySelection.Unresolved("Missing")]));
+        EntityOverviewResult overview = await new EntityOverviewService(
+            entities,
+            dependencies,
+            ranker).GetAsync();
+
+        Assert.True(result.IsSuccess);
+        EntityOverviewItem item = Assert.Single(overview.Items);
+        Assert.Null(item.Rank);
+        Assert.Equal(DependencyResolutionState.Unresolved, item.DependencyState);
+        Assert.Equal(["Missing"], item.MissingDependencyNames);
+    }
+
+    [Fact]
+    public async Task PartialSynchronization_MatchesManualEntityAndPreservesProgress()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteEntityRepository entities = new(database);
+        SqliteDependencyRepository dependencies = new(database);
+        SqliteTrackedSchemaStore store = new(database);
+        DependencyRanker ranker = new();
+        ManualEntityCreationResult creation = await new ManualEntityCreationService(
+            entities,
+            dependencies,
+            ranker,
+            store).CreateAsync(new ManualEntityCreationRequest("Future", []));
+        TrackedEntity withProgress = new(
+            creation.CreatedEntityId!,
+            "Future",
+            DevelopmentStatus.InProgress,
+            "Keep manual progress",
+            provenance: EntityProvenance.ManualOnly);
+        Assert.True(await entities.UpdateProgressAsync(withProgress));
+        SchemaImportCandidate candidate = new(
+            [new ImportedEntity(EntitySourceKey.From("future"), "future")],
+            []);
+        SchemaSynchronizationPlan plan = new SchemaSynchronizationPlanner(ranker).CreatePlan(
+            candidate,
+            SchemaImportMode.Partial,
+            await entities.GetAllAsync(),
+            await dependencies.GetAllAsync(),
+            await dependencies.GetAllUnresolvedAsync());
+
+        await store.ApplyAsync(plan.ChangeSet);
+
+        TrackedEntity loaded = (await entities.GetAsync(creation.CreatedEntityId!))!;
+        Assert.Equal(creation.CreatedEntityId, loaded.Id);
+        Assert.Equal("future", loaded.SourceName);
+        Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
+        Assert.Equal("Keep manual progress", loaded.Notes);
+        Assert.Equal(EntityProvenance.ManualAndImported, loaded.Provenance);
+        Assert.Single(await entities.GetAllAsync());
     }
 
     private static async Task<string> ReadUpdatedTimestampAsync(

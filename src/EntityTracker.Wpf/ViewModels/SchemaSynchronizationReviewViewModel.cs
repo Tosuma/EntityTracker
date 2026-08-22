@@ -14,6 +14,7 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
     private IReadOnlyList<SchemaSynchronizationReviewRow> _newEntities = [];
     private IReadOnlyList<SchemaSynchronizationReviewRow> _changedEntities = [];
     private IReadOnlyList<SchemaSynchronizationReviewRow> _missingEntities = [];
+    private IReadOnlyList<SchemaSynchronizationReviewRow> _manualOnlyEntities = [];
     private IReadOnlyList<SchemaSynchronizationReviewRow> _unresolvedEntities = [];
     private IReadOnlyList<string> _warnings = [];
     private IReadOnlyList<string> _diagnostics = [];
@@ -79,6 +80,15 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
         private set => SetCollection(ref _missingEntities, value, nameof(HasMissingEntities));
     }
 
+    public IReadOnlyList<SchemaSynchronizationReviewRow> ManualOnlyEntities
+    {
+        get => _manualOnlyEntities;
+        private set => SetCollection(
+            ref _manualOnlyEntities,
+            value,
+            nameof(HasManualOnlyEntities));
+    }
+
     public IReadOnlyList<SchemaSynchronizationReviewRow> UnresolvedEntities
     {
         get => _unresolvedEntities;
@@ -110,6 +120,8 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
     public bool HasChangedEntities => ChangedEntities.Count > 0;
 
     public bool HasMissingEntities => MissingEntities.Count > 0;
+
+    public bool HasManualOnlyEntities => ManualOnlyEntities.Count > 0;
 
     public bool HasUnresolvedEntities => UnresolvedEntities.Count > 0;
 
@@ -159,6 +171,11 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
                 change.Entity.SourceName,
                 "Will be soft-archived; progress and notes will be preserved."))
             .ToArray();
+        ManualOnlyEntities = plan.ManualOnlyEntities
+            .Select(static change => new SchemaSynchronizationReviewRow(
+                change.Entity.SourceName,
+                FormatManualOnlyDetails(change)))
+            .ToArray();
         UnresolvedEntities = plan.UnresolvedEntities
             .Select(static change => new SchemaSynchronizationReviewRow(
                 change.Entity.SourceName,
@@ -193,6 +210,7 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
         NewEntities = [];
         ChangedEntities = [];
         MissingEntities = [];
+        ManualOnlyEntities = [];
         UnresolvedEntities = [];
         Warnings = [];
         Diagnostics = [];
@@ -210,6 +228,11 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
             details.Insert(0, "Reactivated with its existing identity and progress.");
         }
 
+        if (change.WasFirstObservedInImport)
+        {
+            details.Insert(0, "Now tracked by CSV; manual origin and existing progress are preserved.");
+        }
+
         if (details.Count == 0)
         {
             details.Add(change.ChangeKind == EntitySynchronizationChangeKind.New
@@ -220,6 +243,16 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
         return new SchemaSynchronizationReviewRow(
             change.Entity.SourceName,
             string.Join(Environment.NewLine, details));
+    }
+
+    private static string FormatManualOnlyDetails(EntitySynchronizationChange change)
+    {
+        List<string> details =
+        [
+            "Not present in this Complete CSV; kept active because it has never been imported."
+        ];
+        details.AddRange(change.DependencyChanges.Select(FormatDependencyChange));
+        return string.Join(Environment.NewLine, details);
     }
 
     private static string FormatDependencyChange(DependencySynchronizationChange change)

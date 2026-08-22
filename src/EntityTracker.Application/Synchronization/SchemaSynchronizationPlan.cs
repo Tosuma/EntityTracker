@@ -11,15 +11,17 @@ public sealed class SchemaSynchronizationPlan
         IEnumerable<EntitySynchronizationChange> newEntities,
         IEnumerable<EntitySynchronizationChange> changedEntities,
         IEnumerable<EntitySynchronizationChange> missingEntities,
+        IEnumerable<EntitySynchronizationChange> manualOnlyEntities,
         int unchangedEntityCount,
         IEnumerable<EntitySynchronizationChange> unresolvedEntities,
         DependencyRankingResult candidateRanking,
-        SchemaSynchronizationChangeSet changeSet)
+        TrackedSchemaChangeSet changeSet)
     {
         Mode = mode;
         NewEntities = newEntities.ToArray();
         ChangedEntities = changedEntities.ToArray();
         MissingEntities = missingEntities.ToArray();
+        ManualOnlyEntities = manualOnlyEntities.ToArray();
         UnchangedEntityCount = unchangedEntityCount;
         UnresolvedEntities = unresolvedEntities.ToArray();
         CandidateRanking = candidateRanking;
@@ -34,14 +36,22 @@ public sealed class SchemaSynchronizationPlan
 
     public IReadOnlyList<EntitySynchronizationChange> MissingEntities { get; }
 
+    /// <summary>
+    /// Manual-only entities absent from a Complete import and intentionally kept active.
+    /// </summary>
+    public IReadOnlyList<EntitySynchronizationChange> ManualOnlyEntities { get; }
+
     public int UnchangedEntityCount { get; }
 
     public IReadOnlyList<EntitySynchronizationChange> UnresolvedEntities { get; }
 
     public DependencyRankingResult CandidateRanking { get; }
 
-    public SchemaSynchronizationChangeSet ChangeSet { get; }
+    public TrackedSchemaChangeSet ChangeSet { get; }
 
     public bool HasActionableChanges =>
-        NewEntities.Count > 0 || ChangedEntities.Count > 0 || MissingEntities.Count > 0;
+        NewEntities.Count > 0 ||
+        ChangedEntities.Count > 0 ||
+        MissingEntities.Count > 0 ||
+        ManualOnlyEntities.Any(static change => change.DependencyChanges.Count > 0);
 }

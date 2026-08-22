@@ -7,7 +7,8 @@ public sealed class TrackedEntity
         string sourceName,
         DevelopmentStatus status = DevelopmentStatus.NotStarted,
         string notes = "",
-        EntityLifecycleState lifecycleState = EntityLifecycleState.Active)
+        EntityLifecycleState lifecycleState = EntityLifecycleState.Active,
+        EntityProvenance provenance = EntityProvenance.Imported)
     {
         ArgumentNullException.ThrowIfNull(id);
         ValidateSourceName(sourceName);
@@ -15,12 +16,14 @@ public sealed class TrackedEntity
 
         EnsureDefinedStatus(status);
         EnsureDefinedLifecycleState(lifecycleState);
+        EnsureDefinedProvenance(provenance);
 
         Id = id;
         SourceName = sourceName;
         Status = status;
         Notes = notes;
         LifecycleState = lifecycleState;
+        Provenance = provenance;
     }
 
     public EntityId Id { get; }
@@ -32,6 +35,8 @@ public sealed class TrackedEntity
     public string Notes { get; private set; }
 
     public EntityLifecycleState LifecycleState { get; private set; }
+
+    public EntityProvenance Provenance { get; private set; }
 
     public void ChangeSourceName(string sourceName)
     {
@@ -55,6 +60,20 @@ public sealed class TrackedEntity
     {
         EnsureDefinedLifecycleState(lifecycleState);
         LifecycleState = lifecycleState;
+    }
+
+    public void ChangeProvenance(EntityProvenance provenance)
+    {
+        EnsureDefinedProvenance(provenance);
+
+        if (Provenance != EntityProvenance.ManualOnly ||
+            provenance != EntityProvenance.ManualAndImported)
+        {
+            throw new InvalidOperationException(
+                "Entity provenance may only transition from ManualOnly to ManualAndImported.");
+        }
+
+        Provenance = provenance;
     }
 
     private static void ValidateSourceName(string sourceName)
@@ -83,6 +102,17 @@ public sealed class TrackedEntity
                 nameof(lifecycleState),
                 lifecycleState,
                 "The entity lifecycle state is not defined.");
+        }
+    }
+
+    private static void EnsureDefinedProvenance(EntityProvenance provenance)
+    {
+        if (!Enum.IsDefined(provenance))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(provenance),
+                provenance,
+                "The entity provenance is not defined.");
         }
     }
 }

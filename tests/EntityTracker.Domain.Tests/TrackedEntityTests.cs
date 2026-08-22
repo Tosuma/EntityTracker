@@ -14,6 +14,7 @@ public sealed class TrackedEntityTests
         Assert.Equal(DevelopmentStatus.NotStarted, entity.Status);
         Assert.Equal(string.Empty, entity.Notes);
         Assert.Equal(EntityLifecycleState.Active, entity.LifecycleState);
+        Assert.Equal(EntityProvenance.Imported, entity.Provenance);
     }
 
     [Fact]
@@ -145,5 +146,32 @@ public sealed class TrackedEntityTests
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             entity.ChangeLifecycleState((EntityLifecycleState)999));
         Assert.Equal(EntityLifecycleState.Active, entity.LifecycleState);
+    }
+
+    [Fact]
+    public void ManualOnlyProvenance_CanTransitionToManualAndImported()
+    {
+        TrackedEntity entity = new(
+            EntityId.New(),
+            "sales.Customer",
+            provenance: EntityProvenance.ManualOnly);
+
+        entity.ChangeProvenance(EntityProvenance.ManualAndImported);
+
+        Assert.Equal(EntityProvenance.ManualAndImported, entity.Provenance);
+    }
+
+    [Fact]
+    public void Provenance_RejectsUndefinedOrInvalidTransitions()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TrackedEntity(
+            EntityId.New(),
+            "sales.Customer",
+            provenance: (EntityProvenance)999));
+
+        TrackedEntity imported = new(EntityId.New(), "sales.Customer");
+        Assert.Throws<InvalidOperationException>(() =>
+            imported.ChangeProvenance(EntityProvenance.ManualAndImported));
+        Assert.Equal(EntityProvenance.Imported, imported.Provenance);
     }
 }

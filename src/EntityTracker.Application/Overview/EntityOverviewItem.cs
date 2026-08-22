@@ -9,6 +9,7 @@ public sealed class EntityOverviewItem
         EntityId entityId,
         int? rank,
         string sourceName,
+        EntityProvenance provenance,
         DevelopmentStatus status,
         string notes,
         int dependencyCount,
@@ -18,6 +19,7 @@ public sealed class EntityOverviewItem
         EntityId = entityId;
         Rank = rank;
         SourceName = sourceName;
+        Provenance = provenance;
         Status = status;
         Notes = notes;
         DependencyCount = dependencyCount;
@@ -30,6 +32,8 @@ public sealed class EntityOverviewItem
     public int? Rank { get; }
 
     public string SourceName { get; }
+
+    public EntityProvenance Provenance { get; }
 
     public DevelopmentStatus Status { get; }
 

@@ -176,13 +176,13 @@ public sealed class SchemaSynchronizationServiceTests
             throw new NotSupportedException();
     }
 
-    private sealed class StubStore : ISchemaSynchronizationStore
+    private sealed class StubStore : ITrackedSchemaStore
     {
         public int ApplyCount { get; private set; }
-        public SchemaSynchronizationChangeSet? LastChangeSet { get; private set; }
+        public TrackedSchemaChangeSet? LastChangeSet { get; private set; }
 
         public Task ApplyAsync(
-            SchemaSynchronizationChangeSet changeSet,
+            TrackedSchemaChangeSet changeSet,
             CancellationToken cancellationToken = default)
         {
             ApplyCount++;
