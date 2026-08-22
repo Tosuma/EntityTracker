@@ -1,12 +1,24 @@
-﻿<Window x:Class="EntityTracker.Wpf.MainWindow"
+<Window x:Class="EntityTracker.Wpf.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:EntityTracker.Wpf"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        Title="EntityTracker"
+        Width="520"
+        Height="320"
+        WindowStartupLocation="CenterScreen">
     <Grid>
-
+        <StackPanel HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+            <TextBlock HorizontalAlignment="Center"
+                       FontSize="32"
+                       FontWeight="SemiBold"
+                       Text="EntityTracker" />
+            <TextBlock Margin="0,12,0,0"
+                       HorizontalAlignment="Center"
+                       Foreground="DimGray"
+                       Text="Milestone 1 foundation" />
+        </StackPanel>
     </Grid>
 </Window>

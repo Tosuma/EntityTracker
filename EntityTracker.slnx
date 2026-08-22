@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/EntityTracker.Domain/EntityTracker.Domain.csproj" />
+    <Project Path="src/EntityTracker.Application/EntityTracker.Application.csproj" />
     <Project Path="src/EntityTracker.Infrastructure/EntityTracker.Infrastructure.csproj" />
     <Project Path="src/EntityTracker.Reporting/EntityTracker.Reporting.csproj" />
     <Project Path="src/EntityTracker.Wpf/EntityTracker.Wpf.csproj" />
