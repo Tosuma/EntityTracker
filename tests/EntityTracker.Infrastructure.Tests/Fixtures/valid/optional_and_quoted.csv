@@ -1,0 +1,3 @@
+table_name;mandatory_dependencies;mandatory_dependency_count;optional_dependencies;optional_dependency_count;total_dependency_count
+"sales; parent";;0;;0;0
+child;;0;" sales; parent ";1;1

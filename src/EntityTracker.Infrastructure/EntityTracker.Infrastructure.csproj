@@ -1,6 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="CsvHelper" Version="33.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\EntityTracker.Application\EntityTracker.Application.csproj" />
     <ProjectReference Include="..\EntityTracker.Domain\EntityTracker.Domain.csproj" />
   </ItemGroup>

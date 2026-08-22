@@ -1,10 +1,14 @@
+using System.Windows;
+
+using EntityTracker.Infrastructure.Importing;
+
 using Microsoft.Extensions.DependencyInjection;
 
-using System.Windows;
+using ISchemaImportParser = EntityTracker.Application.Importing.ISchemaImportParser;
 
 namespace EntityTracker.Wpf;
 
-public partial class App : Application
+public partial class App : System.Windows.Application
 {
     private ServiceProvider? _serviceProvider;
 
@@ -13,6 +17,7 @@ public partial class App : Application
         base.OnStartup(e);
 
         ServiceCollection services = new();
+        services.AddSingleton<ISchemaImportParser, CsvSchemaImportParser>();
         services.AddSingleton<MainWindow>();
 
         _serviceProvider = services.BuildServiceProvider(new ServiceProviderOptions

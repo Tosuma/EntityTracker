@@ -9,5 +9,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/EntityTracker.Domain.Tests/EntityTracker.Domain.Tests.csproj" />
     <Project Path="tests/EntityTracker.Application.Tests/EntityTracker.Application.Tests.csproj" />
+    <Project Path="tests/EntityTracker.Infrastructure.Tests/EntityTracker.Infrastructure.Tests.csproj" />
   </Folder>
 </Solution>
