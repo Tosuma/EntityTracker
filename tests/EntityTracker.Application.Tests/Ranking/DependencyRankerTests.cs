@@ -202,6 +202,115 @@ public sealed class DependencyRankerTests
     }
 
     [Fact]
+    public void Rank_UnresolvedEntityIsExcludedWhileResolvedGraphRemainsRanked()
+    {
+        TrackedEntity alpha = Entity(1, "Alpha");
+        TrackedEntity blocked = Entity(2, "Blocked");
+        TrackedEntity charlie = Entity(3, "Charlie");
+
+        DependencyRankingResult result = _ranker.Rank(
+            [blocked, charlie, alpha],
+            [new DependencyEdge(charlie.Id, alpha.Id)],
+            [new UnresolvedDependency(blocked.Id, "MissingX")]);
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(result.Diagnostics);
+        Assert.Equal(
+            [alpha.Id, charlie.Id],
+            result.Rankings.Select(static ranking => ranking.EntityId));
+        UnrankedEntity unranked = Assert.Single(result.UnrankedEntities);
+        Assert.Equal(blocked.Id, unranked.EntityId);
+        Assert.Equal(DependencyResolutionState.Unresolved, unranked.State);
+        Assert.Equal(["MissingX"], unranked.MissingDependencyNames);
+    }
+
+    [Fact]
+    public void Rank_KnownAndUnknownDependencies_DoNotAssignDependentRank()
+    {
+        TrackedEntity alpha = Entity(1, "Alpha");
+        TrackedEntity beta = Entity(2, "Beta");
+
+        DependencyRankingResult result = _ranker.Rank(
+            [beta, alpha],
+            [new DependencyEdge(beta.Id, alpha.Id)],
+            [new UnresolvedDependency(beta.Id, "MissingX")]);
+
+        Assert.Equal([alpha.Id], result.Rankings.Select(static ranking => ranking.EntityId));
+        Assert.Equal(beta.Id, Assert.Single(result.UnrankedEntities).EntityId);
+    }
+
+    [Fact]
+    public void Rank_PropagatesUnresolvedNamesToTransitiveDependents()
+    {
+        TrackedEntity alpha = Entity(1, "Alpha");
+        TrackedEntity beta = Entity(2, "Beta");
+        TrackedEntity charlie = Entity(3, "Charlie");
+
+        DependencyRankingResult result = _ranker.Rank(
+            [charlie, beta, alpha],
+            [
+                new DependencyEdge(beta.Id, alpha.Id),
+                new DependencyEdge(charlie.Id, beta.Id)
+            ],
+            [new UnresolvedDependency(alpha.Id, "MissingX")]);
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(result.Rankings);
+        Assert.Equal(
+            [alpha.Id, beta.Id, charlie.Id],
+            result.UnrankedEntities.Select(static entity => entity.EntityId));
+        Assert.Equal(
+            [
+                DependencyResolutionState.Unresolved,
+                DependencyResolutionState.Blocked,
+                DependencyResolutionState.Blocked
+            ],
+            result.UnrankedEntities.Select(static entity => entity.State));
+        Assert.All(result.UnrankedEntities, static entity =>
+            Assert.Equal(["MissingX"], entity.MissingDependencyNames));
+    }
+
+    [Fact]
+    public void Rank_PropagatesMultipleMissingNamesDeterministically()
+    {
+        TrackedEntity alpha = Entity(1, "Alpha");
+        TrackedEntity beta = Entity(2, "Beta");
+
+        DependencyRankingResult result = _ranker.Rank(
+            [beta, alpha],
+            [new DependencyEdge(beta.Id, alpha.Id)],
+            [
+                new UnresolvedDependency(alpha.Id, "ZuluMissing"),
+                new UnresolvedDependency(alpha.Id, "alphaMissing")
+            ]);
+
+        Assert.Equal(
+            ["alphaMissing", "ZuluMissing"],
+            result.UnrankedEntities[0].MissingDependencyNames);
+        Assert.Equal(
+            ["alphaMissing", "ZuluMissing"],
+            result.UnrankedEntities[1].MissingDependencyNames);
+    }
+
+    [Fact]
+    public void Rank_UnresolvedReferenceWithUnknownDependent_RemainsGraphError()
+    {
+        EntityId missingDependentId = Id(2);
+
+        DependencyRankingResult result = _ranker.Rank(
+            [Entity(1, "Known")],
+            [],
+            [new UnresolvedDependency(missingDependentId, "MissingX")]);
+
+        Assert.False(result.IsSuccess);
+        Assert.Empty(result.Rankings);
+        Assert.Empty(result.UnrankedEntities);
+        DependencyRankingDiagnostic diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(DependencyRankingDiagnosticCode.UnknownEntity, diagnostic.Code);
+        Assert.Equal([missingDependentId], diagnostic.RelatedEntityIds);
+    }
+
+    [Fact]
     public void Rank_RecomputesCompleteOrderingAfterGraphChanges()
     {
         TrackedEntity root = Entity(1, "ZuluRoot");

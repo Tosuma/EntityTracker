@@ -31,16 +31,22 @@ public sealed class EntityOverviewService
             _entityRepository.GetAllAsync(cancellationToken);
         Task<IReadOnlyList<PersistedDependency>> dependencyTask =
             _dependencyRepository.GetAllAsync(cancellationToken);
+        Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedDependencyTask =
+            _dependencyRepository.GetAllUnresolvedAsync(cancellationToken);
 
-        await Task.WhenAll(entityTask, dependencyTask);
+        await Task.WhenAll(entityTask, dependencyTask, unresolvedDependencyTask);
 
         IReadOnlyList<TrackedEntity> entities = await entityTask;
         IReadOnlyList<PersistedDependency> persistedDependencies = await dependencyTask;
+        IReadOnlyList<PersistedUnresolvedDependency> persistedUnresolvedDependencies =
+            await unresolvedDependencyTask;
 
         DependencyRankingResult rankingResult = await Task.Run(
             () => _dependencyRanker.Rank(
                 entities,
-                persistedDependencies.Select(static dependency => dependency.Edge)),
+                persistedDependencies.Select(static dependency => dependency.Edge),
+                persistedUnresolvedDependencies.Select(
+                    static dependency => dependency.Dependency)),
             cancellationToken);
 
         if (!rankingResult.IsSuccess)
@@ -51,7 +57,21 @@ public sealed class EntityOverviewService
         IReadOnlyDictionary<EntityId, TrackedEntity> entitiesById =
             entities.ToDictionary(static entity => entity.Id);
 
-        EntityOverviewItem[] items = rankingResult.Rankings
+        Dictionary<EntityId, int> dependencyCounts = entities.ToDictionary(
+            static entity => entity.Id,
+            static _ => 0);
+
+        foreach (PersistedDependency dependency in persistedDependencies)
+        {
+            dependencyCounts[dependency.Edge.DependentEntityId]++;
+        }
+
+        foreach (PersistedUnresolvedDependency dependency in persistedUnresolvedDependencies)
+        {
+            dependencyCounts[dependency.Dependency.DependentEntityId]++;
+        }
+
+        IEnumerable<EntityOverviewItem> rankedItems = rankingResult.Rankings
             .Select(ranking =>
             {
                 TrackedEntity entity = entitiesById[ranking.EntityId];
@@ -61,10 +81,26 @@ public sealed class EntityOverviewService
                     entity.SourceName,
                     entity.Status,
                     entity.Notes,
-                    ranking.DirectDependencies.Count);
-            })
-            .ToArray();
+                    dependencyCounts[entity.Id],
+                    DependencyResolutionState.Resolved,
+                    []);
+            });
 
-        return new EntityOverviewResult(items, []);
+        IEnumerable<EntityOverviewItem> unrankedItems = rankingResult.UnrankedEntities
+            .Select(unrankedEntity =>
+            {
+                TrackedEntity entity = entitiesById[unrankedEntity.EntityId];
+                return new EntityOverviewItem(
+                    entity.Id,
+                    null,
+                    entity.SourceName,
+                    entity.Status,
+                    entity.Notes,
+                    dependencyCounts[entity.Id],
+                    unrankedEntity.State,
+                    unrankedEntity.MissingDependencyNames);
+            });
+
+        return new EntityOverviewResult(rankedItems.Concat(unrankedItems), []);
     }
 }

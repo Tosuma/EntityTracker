@@ -185,16 +185,57 @@ public sealed class CsvSchemaImportParserTests
     }
 
     [Fact]
-    public void Parse_RejectsUnknownDependencyWithLocation()
+    public void Parse_RetainsUnknownDependencyAsWarningWithLocation()
     {
         SchemaImportResult result = Parse($"{Header}\nchild;missing;1;;0;1");
 
-        ImportDiagnostic diagnostic = AssertFailure(
-            result,
-            ImportDiagnosticCode.UnknownDependency,
-            "mandatory_dependencies");
+        Assert.True(result.IsSuccess);
+        SchemaImportCandidate candidate = Assert.IsType<SchemaImportCandidate>(result.Candidate);
+        Assert.Empty(candidate.Dependencies);
+        UnresolvedImportedDependency unresolved = Assert.Single(candidate.UnresolvedDependencies);
+        Assert.Equal(EntitySourceKey.From("child"), unresolved.DependentSourceKey);
+        Assert.Equal(EntitySourceKey.From("missing"), unresolved.DependencySourceKey);
+        Assert.Equal("missing", unresolved.DependencySourceName);
+        Assert.Equal(ImportedDependencyKind.Mandatory, unresolved.Kind);
+
+        ImportDiagnostic diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal(ImportDiagnosticCode.UnknownDependency, diagnostic.Code);
+        Assert.Equal(ImportDiagnosticSeverity.Warning, diagnostic.Severity);
+        Assert.Equal("mandatory_dependencies", diagnostic.ColumnName);
         Assert.Equal(2, diagnostic.RowNumber);
-        Assert.Contains("MISSING", diagnostic.Message, StringComparison.Ordinal);
+        Assert.Contains("missing", diagnostic.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Parse_RetainsMultipleUnknownDependencies()
+    {
+        SchemaImportResult result = Parse(
+            $"{Header}\nchild;MissingX, MissingY;2;;0;2");
+
+        Assert.True(result.IsSuccess);
+        SchemaImportCandidate candidate = Assert.IsType<SchemaImportCandidate>(result.Candidate);
+        Assert.Equal(
+            ["MissingX", "MissingY"],
+            candidate.UnresolvedDependencies.Select(
+                static dependency => dependency.DependencySourceName));
+        Assert.Equal(2, result.Diagnostics.Count);
+        Assert.All(result.Diagnostics, static diagnostic =>
+            Assert.Equal(ImportDiagnosticSeverity.Warning, diagnostic.Severity));
+    }
+
+    [Fact]
+    public void Parse_RetainsMixedResolvedAndUnresolvedDependencies()
+    {
+        SchemaImportResult result = Parse(
+            $"{Header}\nknown;;0;;0;0\nchild;known, MissingX;2;;0;2");
+
+        Assert.True(result.IsSuccess);
+        SchemaImportCandidate candidate = Assert.IsType<SchemaImportCandidate>(result.Candidate);
+        Assert.Single(candidate.Dependencies);
+        Assert.Equal(
+            "MissingX",
+            Assert.Single(candidate.UnresolvedDependencies).DependencySourceName);
+        Assert.Single(result.Diagnostics);
     }
 
     [Fact]

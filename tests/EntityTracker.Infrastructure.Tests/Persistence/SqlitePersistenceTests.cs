@@ -1,6 +1,7 @@
 using System.Globalization;
 
 using EntityTracker.Application.Importing;
+using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Domain;
@@ -13,7 +14,7 @@ namespace EntityTracker.Infrastructure.Tests.Persistence;
 public sealed class SqlitePersistenceTests
 {
     [Fact]
-    public async Task InitializeAsync_FreshDatabaseCreatesVersionOneSchemaAndIsIdempotent()
+    public async Task InitializeAsync_FreshDatabaseCreatesVersionTwoSchemaAndIsIdempotent()
     {
         await using TemporarySqliteFile file = new();
         SqliteDatabase database = new(file.DatabasePath);
@@ -22,13 +23,14 @@ public sealed class SqlitePersistenceTests
         await database.InitializeAsync();
 
         await using SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(1L, await ExecuteScalarInt64Async(connection, "PRAGMA user_version;"));
+        Assert.Equal(2L, await ExecuteScalarInt64Async(connection, "PRAGMA user_version;"));
 
         string[] tableNames = await ReadStringsAsync(
             connection,
             "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;");
         Assert.Contains("tracked_entities", tableNames);
         Assert.Contains("schema_dependencies", tableNames);
+        Assert.Contains("unresolved_schema_dependencies", tableNames);
 
         string[] entityColumns = await ReadStringsAsync(
             connection,
@@ -46,7 +48,7 @@ public sealed class SqlitePersistenceTests
         await using (SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath))
         {
             using SqliteCommand command = connection.CreateCommand();
-            command.CommandText = "PRAGMA user_version = 2;";
+            command.CommandText = "PRAGMA user_version = 3;";
             await command.ExecuteNonQueryAsync();
         }
 
@@ -55,7 +57,72 @@ public sealed class SqlitePersistenceTests
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => database.InitializeAsync());
         Assert.Contains("newer", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("2", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("3", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_VersionOneDatabaseMigratesWithoutLosingExistingData()
+    {
+        await using TemporarySqliteFile file = new();
+        EntityId dependentId = EntityId.New();
+        EntityId dependencyId = EntityId.New();
+
+        await using (SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath))
+        {
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                CREATE TABLE tracked_entities
+                (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    source_key TEXT NOT NULL UNIQUE,
+                    source_name TEXT NOT NULL,
+                    development_status TEXT NOT NULL,
+                    notes TEXT NOT NULL,
+                    created_at_utc TEXT NOT NULL,
+                    schema_updated_at_utc TEXT NOT NULL,
+                    progress_updated_at_utc TEXT NOT NULL
+                );
+
+                CREATE TABLE schema_dependencies
+                (
+                    dependent_entity_id TEXT NOT NULL,
+                    dependency_entity_id TEXT NOT NULL,
+                    dependency_kind TEXT NOT NULL,
+                    created_at_utc TEXT NOT NULL,
+                    updated_at_utc TEXT NOT NULL,
+                    PRIMARY KEY (dependent_entity_id, dependency_entity_id),
+                    FOREIGN KEY (dependent_entity_id) REFERENCES tracked_entities (id),
+                    FOREIGN KEY (dependency_entity_id) REFERENCES tracked_entities (id)
+                );
+
+                INSERT INTO tracked_entities VALUES
+                    ($dependentId, 'DEPENDENT', 'Dependent', 'InProgress', 'Keep notes', $timestamp, $timestamp, $timestamp),
+                    ($dependencyId, 'DEPENDENCY', 'Dependency', 'Completed', '', $timestamp, $timestamp, $timestamp);
+
+                INSERT INTO schema_dependencies VALUES
+                    ($dependentId, $dependencyId, 'Mandatory', $timestamp, $timestamp);
+
+                PRAGMA user_version = 1;
+                """;
+            command.Parameters.AddWithValue("$dependentId", dependentId.Value.ToString("D"));
+            command.Parameters.AddWithValue("$dependencyId", dependencyId.Value.ToString("D"));
+            command.Parameters.AddWithValue("$timestamp", "2026-01-01T00:00:00.0000000+00:00");
+            await command.ExecuteNonQueryAsync();
+        }
+
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteEntityRepository entityRepository = new(database);
+        SqliteDependencyRepository dependencyRepository = new(database);
+
+        Assert.Equal(2, (await entityRepository.GetAllAsync()).Count);
+        Assert.Single(await dependencyRepository.GetAllAsync());
+        Assert.Empty(await dependencyRepository.GetAllUnresolvedAsync());
+        await using SqliteConnection migratedConnection =
+            await OpenConnectionAsync(file.DatabasePath);
+        Assert.Equal(
+            2L,
+            await ExecuteScalarInt64Async(migratedConnection, "PRAGMA user_version;"));
     }
 
     [Fact]
@@ -220,6 +287,95 @@ public sealed class SqlitePersistenceTests
     }
 
     [Fact]
+    public async Task DependencyRepository_UnresolvedReferenceRoundTripsAndUpdatesKindAndName()
+    {
+        await using TemporarySqliteFile file = new();
+        MutableTimeProvider timeProvider = new(
+            new DateTimeOffset(2026, 3, 4, 5, 6, 7, TimeSpan.Zero));
+        SqliteDatabase database = new(file.DatabasePath, timeProvider);
+        await database.InitializeAsync();
+        SqliteEntityRepository entityRepository = new(database);
+        SqliteDependencyRepository dependencyRepository = new(database);
+        TrackedEntity dependent = new(EntityId.New(), "Dependent");
+        Assert.True(await entityRepository.TryAddAsync(dependent));
+
+        await dependencyRepository.SaveUnresolvedAsync(
+            new PersistedUnresolvedDependency(
+                new UnresolvedDependency(dependent.Id, "facility"),
+                ImportedDependencyKind.Mandatory));
+        DependencyAudit originalAudit = await ReadUnresolvedDependencyAuditAsync(
+            file.DatabasePath,
+            dependent.Id,
+            "FACILITY");
+
+        timeProvider.Advance(TimeSpan.FromMinutes(10));
+        await dependencyRepository.SaveUnresolvedAsync(
+            new PersistedUnresolvedDependency(
+                new UnresolvedDependency(dependent.Id, "Facility"),
+                ImportedDependencyKind.Optional));
+
+        SqliteDependencyRepository restartedRepository = new(
+            new SqliteDatabase(file.DatabasePath));
+        PersistedUnresolvedDependency loaded = Assert.Single(
+            await restartedRepository.GetAllUnresolvedAsync());
+        Assert.Equal(dependent.Id, loaded.Dependency.DependentEntityId);
+        Assert.Equal("Facility", loaded.Dependency.DependencySourceName);
+        Assert.Equal(ImportedDependencyKind.Optional, loaded.Kind);
+        DependencyAudit updatedAudit = await ReadUnresolvedDependencyAuditAsync(
+            file.DatabasePath,
+            dependent.Id,
+            "FACILITY");
+        Assert.Equal(originalAudit.CreatedAtUtc, updatedAudit.CreatedAtUtc);
+        Assert.NotEqual(originalAudit.UpdatedAtUtc, updatedAudit.UpdatedAtUtc);
+    }
+
+    [Fact]
+    public async Task DependencyRepository_UnresolvedUnknownDependent_ThrowsInfrastructureNeutralException()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteDependencyRepository repository = new(database);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            repository.SaveUnresolvedAsync(new PersistedUnresolvedDependency(
+                new UnresolvedDependency(EntityId.New(), "MissingX"),
+                ImportedDependencyKind.Mandatory)));
+    }
+
+    [Fact]
+    public async Task DependencyRepository_RestartReconstructsUnresolvedOverviewState()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteEntityRepository entityRepository = new(database);
+        SqliteDependencyRepository dependencyRepository = new(database);
+        TrackedEntity entity = new(EntityId.New(), "WarehouseAssignment");
+        Assert.True(await entityRepository.TryAddAsync(entity));
+        await dependencyRepository.SaveUnresolvedAsync(
+            new PersistedUnresolvedDependency(
+                new UnresolvedDependency(entity.Id, "facility"),
+                ImportedDependencyKind.Mandatory));
+
+        SqliteDatabase restartedDatabase = new(file.DatabasePath);
+        await restartedDatabase.InitializeAsync();
+        EntityOverviewService overviewService = new(
+            new SqliteEntityRepository(restartedDatabase),
+            new SqliteDependencyRepository(restartedDatabase),
+            new DependencyRanker());
+
+        EntityOverviewResult result = await overviewService.GetAsync();
+
+        Assert.True(result.IsSuccess);
+        EntityOverviewItem item = Assert.Single(result.Items);
+        Assert.Equal("WarehouseAssignment", item.SourceName);
+        Assert.Null(item.Rank);
+        Assert.Equal(DependencyResolutionState.Unresolved, item.DependencyState);
+        Assert.Equal(["facility"], item.MissingDependencyNames);
+    }
+
+    [Fact]
     public async Task RankChanges_DoNotMoveProgressBetweenStableEntities()
     {
         await using TemporarySqliteFile file = new();
@@ -348,6 +504,28 @@ public sealed class SqlitePersistenceTests
         command.Parameters.AddWithValue(
             "$dependencyEntityId",
             edge.DependencyEntityId.Value.ToString("D"));
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        return new DependencyAudit(reader.GetString(0), reader.GetString(1));
+    }
+
+    private static async Task<DependencyAudit> ReadUnresolvedDependencyAuditAsync(
+        string databasePath,
+        EntityId dependentEntityId,
+        string dependencySourceKey)
+    {
+        await using SqliteConnection connection = await OpenConnectionAsync(databasePath);
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT created_at_utc, updated_at_utc
+            FROM unresolved_schema_dependencies
+            WHERE dependent_entity_id = $dependentEntityId
+              AND dependency_source_key = $dependencySourceKey;
+            """;
+        command.Parameters.AddWithValue(
+            "$dependentEntityId",
+            dependentEntityId.Value.ToString("D"));
+        command.Parameters.AddWithValue("$dependencySourceKey", dependencySourceKey);
         await using SqliteDataReader reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
         return new DependencyAudit(reader.GetString(0), reader.GetString(1));

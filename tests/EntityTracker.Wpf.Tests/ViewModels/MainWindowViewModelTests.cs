@@ -28,7 +28,7 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(
             ["Foundation", "Service", "Screen"],
             viewModel.OverviewItems.Select(static item => item.SourceName));
-        Assert.Equal([1, 2, 3], viewModel.OverviewItems.Select(static item => item.Rank));
+        Assert.Equal(["1", "2", "3"], viewModel.OverviewItems.Select(static item => item.Rank));
         Assert.Equal([0, 1, 1], viewModel.OverviewItems.Select(static item => item.DependencyCount));
         Assert.Equal("Completed", viewModel.OverviewItems[0].Status);
         Assert.Equal("Ready", viewModel.OverviewItems[0].Notes);
@@ -51,6 +51,33 @@ public sealed class MainWindowViewModelTests
         Assert.Empty(viewModel.OverviewItems);
         Assert.True(viewModel.ShowOverviewEmptyState);
         Assert.Equal(0, viewModel.CompletionPercentage);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_UnresolvedAndTransitivelyBlockedEntities_AreVisibleWithoutRanks()
+    {
+        TrackedEntity alpha = Entity(1, "Alpha");
+        TrackedEntity beta = Entity(2, "Beta");
+        TrackedEntity gamma = Entity(3, "Gamma");
+        MainWindowViewModel viewModel = CreateViewModel(
+            [alpha, beta, gamma],
+            [Dependency(beta, alpha, ImportedDependencyKind.Mandatory)],
+            [Unresolved(alpha, "MissingX", ImportedDependencyKind.Optional)]);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal(
+            ["Gamma", "Alpha", "Beta"],
+            viewModel.OverviewItems.Select(static item => item.SourceName));
+        Assert.Equal(["1", "—", "—"], viewModel.OverviewItems.Select(static item => item.Rank));
+        Assert.Equal(
+            ["Resolved", "Unresolved", "Blocked"],
+            viewModel.OverviewItems.Select(static item => item.DependencyState));
+        Assert.Equal(
+            ["—", "MissingX", "MissingX"],
+            viewModel.OverviewItems.Select(static item => item.MissingDependencies));
+        Assert.Equal([0, 1, 1], viewModel.OverviewItems.Select(static item => item.DependencyCount));
+        Assert.False(viewModel.HasOverviewError);
     }
 
     [Fact]
@@ -163,6 +190,44 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task ImportCsvAsync_UnresolvedWarning_ShowsRecognizedAndBlockedEntities()
+    {
+        SchemaImportCandidate candidate = Candidate(
+            ["Alpha", "Beta", "Gamma"],
+            [("Beta", "Alpha", ImportedDependencyKind.Mandatory)],
+            [("Alpha", "MissingX", ImportedDependencyKind.Optional)]);
+        ImportDiagnostic warning = new(
+            ImportDiagnosticCode.UnknownDependency,
+            "Dependency 'MissingX' remains unresolved.",
+            2,
+            "optional_dependencies",
+            ImportDiagnosticSeverity.Warning);
+        MainWindowViewModel viewModel = CreateViewModel(
+            new StubEntityRepository([]),
+            new StubDependencyRepository([]),
+            new StubFileParser(SchemaImportResult.Success(candidate, [warning])),
+            new StubFilePicker("unresolved.csv"));
+
+        await viewModel.ImportCsvAsync();
+
+        Assert.Equal(
+            ["Gamma", "Alpha", "Beta"],
+            viewModel.PreviewItems.Select(static item => item.SourceName));
+        Assert.Equal(["1", "—", "—"], viewModel.PreviewItems.Select(static item => item.Rank));
+        Assert.Equal(
+            ["Resolved", "Unresolved", "Blocked"],
+            viewModel.PreviewItems.Select(static item => item.DependencyState));
+        Assert.Equal(
+            ["—", "MissingX", "MissingX"],
+            viewModel.PreviewItems.Select(static item => item.MissingDependencies));
+        Assert.Equal(
+            "Row 2, optional_dependencies: Dependency 'MissingX' remains unresolved.",
+            Assert.Single(viewModel.PreviewWarnings));
+        Assert.True(viewModel.HasPreviewWarnings);
+        Assert.Empty(viewModel.PreviewDiagnostics);
+    }
+
+    [Fact]
     public async Task ImportCsvAsync_Cycle_ShowsCycleDiagnosticWithoutRows()
     {
         SchemaImportCandidate candidate = Candidate(
@@ -220,11 +285,14 @@ public sealed class MainWindowViewModelTests
 
     private static MainWindowViewModel CreateViewModel(
         IEnumerable<TrackedEntity> entities,
-        IEnumerable<PersistedDependency> dependencies)
+        IEnumerable<PersistedDependency> dependencies,
+        IEnumerable<PersistedUnresolvedDependency>? unresolvedDependencies = null)
     {
         return CreateViewModel(
             new StubEntityRepository(entities.ToArray()),
-            new StubDependencyRepository(dependencies.ToArray()),
+            new StubDependencyRepository(
+                dependencies.ToArray(),
+                unresolvedDependencies?.ToArray()),
             new StubFileParser(FailureResult()),
             new StubFilePicker());
     }
@@ -273,9 +341,21 @@ public sealed class MainWindowViewModelTests
             kind);
     }
 
+    private static PersistedUnresolvedDependency Unresolved(
+        TrackedEntity dependent,
+        string dependencySourceName,
+        ImportedDependencyKind kind)
+    {
+        return new PersistedUnresolvedDependency(
+            new UnresolvedDependency(dependent.Id, dependencySourceName),
+            kind);
+    }
+
     private static SchemaImportCandidate Candidate(
         IEnumerable<string> names,
-        IEnumerable<(string Dependent, string Dependency, ImportedDependencyKind Kind)> dependencies)
+        IEnumerable<(string Dependent, string Dependency, ImportedDependencyKind Kind)> dependencies,
+        IEnumerable<(string Dependent, string Dependency, ImportedDependencyKind Kind)>?
+            unresolvedDependencies = null)
     {
         ImportedEntity[] entities = names
             .Select(static name => new ImportedEntity(EntitySourceKey.From(name), name))
@@ -286,7 +366,14 @@ public sealed class MainWindowViewModelTests
                 EntitySourceKey.From(dependency.Dependency),
                 dependency.Kind))
             .ToArray();
-        return new SchemaImportCandidate(entities, importedDependencies);
+        UnresolvedImportedDependency[] unresolved = (unresolvedDependencies ?? [])
+            .Select(static dependency => new UnresolvedImportedDependency(
+                EntitySourceKey.From(dependency.Dependent),
+                EntitySourceKey.From(dependency.Dependency),
+                dependency.Dependency,
+                dependency.Kind))
+            .ToArray();
+        return new SchemaImportCandidate(entities, importedDependencies, unresolved);
     }
 
     private sealed class StubEntityRepository : IEntityRepository
@@ -324,14 +411,24 @@ public sealed class MainWindowViewModelTests
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
-    private sealed class StubDependencyRepository(IReadOnlyList<PersistedDependency> dependencies)
+    private sealed class StubDependencyRepository(
+        IReadOnlyList<PersistedDependency> dependencies,
+        IReadOnlyList<PersistedUnresolvedDependency>? unresolvedDependencies = null)
         : IDependencyRepository
     {
         public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
             CancellationToken cancellationToken = default) => Task.FromResult(dependencies);
 
+        public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(unresolvedDependencies ?? []);
+
         public Task SaveAsync(
             PersistedDependency dependency,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task SaveUnresolvedAsync(
+            PersistedUnresolvedDependency dependency,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 

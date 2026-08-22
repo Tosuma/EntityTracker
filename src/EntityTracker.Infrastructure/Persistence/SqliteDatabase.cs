@@ -4,7 +4,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 2;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -36,6 +36,23 @@ public sealed class SqliteDatabase
 
         CREATE INDEX ix_schema_dependencies_dependency_entity_id
             ON schema_dependencies (dependency_entity_id);
+        """;
+
+    private const string UnresolvedDependencySchemaSql = """
+        CREATE TABLE unresolved_schema_dependencies
+        (
+            dependent_entity_id TEXT NOT NULL,
+            dependency_source_key TEXT NOT NULL,
+            dependency_source_name TEXT NOT NULL,
+            dependency_kind TEXT NOT NULL
+                CHECK (dependency_kind IN ('Mandatory', 'Optional')),
+            created_at_utc TEXT NOT NULL,
+            updated_at_utc TEXT NOT NULL,
+            PRIMARY KEY (dependent_entity_id, dependency_source_key),
+            CHECK (length(trim(dependency_source_key)) > 0),
+            CHECK (length(trim(dependency_source_name)) > 0),
+            FOREIGN KEY (dependent_entity_id) REFERENCES tracked_entities (id) ON DELETE CASCADE
+        );
         """;
 
     private readonly string _connectionString;
@@ -100,12 +117,22 @@ public sealed class SqliteDatabase
                 transaction,
                 InitialSchemaSql,
                 cancellationToken);
+        }
+
+        if (schemaVersion < 2)
+        {
             await ExecuteAsync(
                 connection,
                 transaction,
-                "PRAGMA user_version = 1;",
+                UnresolvedDependencySchemaSql,
                 cancellationToken);
         }
+
+        await ExecuteAsync(
+            connection,
+            transaction,
+            $"PRAGMA user_version = {CurrentSchemaVersion};",
+            cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
     }

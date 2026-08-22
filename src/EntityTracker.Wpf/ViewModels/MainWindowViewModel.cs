@@ -5,6 +5,7 @@ using System.Windows.Input;
 
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Overview;
+using EntityTracker.Application.Ranking;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
@@ -22,6 +23,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private IReadOnlyList<EntityOverviewRow> _overviewItems = [];
     private IReadOnlyList<ImportPreviewRow> _previewItems = [];
     private IReadOnlyList<string> _previewDiagnostics = [];
+    private IReadOnlyList<string> _previewWarnings = [];
     private string? _overviewErrorMessage;
     private string? _selectedFileName;
     private string _busyMessage = string.Empty;
@@ -86,6 +88,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             if (SetField(ref _previewDiagnostics, value))
             {
                 OnPropertyChanged(nameof(HasPreviewDiagnostics));
+                OnPropertyChanged(nameof(ShowPreviewEmptyState));
+            }
+        }
+    }
+
+    public IReadOnlyList<string> PreviewWarnings
+    {
+        get => _previewWarnings;
+        private set
+        {
+            if (SetField(ref _previewWarnings, value))
+            {
+                OnPropertyChanged(nameof(HasPreviewWarnings));
                 OnPropertyChanged(nameof(ShowPreviewEmptyState));
             }
         }
@@ -182,8 +197,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public bool HasPreviewDiagnostics => PreviewDiagnostics.Count > 0;
 
+    public bool HasPreviewWarnings => PreviewWarnings.Count > 0;
+
     public bool ShowPreviewEmptyState =>
-        !IsBusy && !HasPreviewItems && !HasPreviewDiagnostics;
+        !IsBusy && !HasPreviewItems && !HasPreviewDiagnostics && !HasPreviewWarnings;
 
     public ICommand RefreshCommand => _refreshCommand;
 
@@ -213,10 +230,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 OverviewErrorMessage = null;
                 OverviewItems = result.Items
                     .Select(static item => new EntityOverviewRow(
-                        item.Rank,
+                        FormatRank(item.Rank),
                         item.SourceName,
                         FormatStatus(item.Status),
+                        FormatDependencyState(item.DependencyState),
                         item.DependencyCount,
+                        FormatMissingDependencies(item.MissingDependencyNames),
                         item.Notes))
                     .ToArray();
                 UpdateProgressCounts(result.Items);
@@ -274,29 +293,42 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         BusyMessage = $"Validating {_selectedFileName}…";
         PreviewItems = [];
         PreviewDiagnostics = [];
+        PreviewWarnings = [];
 
         try
         {
             SchemaImportPreviewResult result =
                 await _previewService.PreviewAsync(filePath, cancellationToken);
 
+            PreviewWarnings = result.ImportDiagnostics
+                .Where(static diagnostic =>
+                    diagnostic.Severity == ImportDiagnosticSeverity.Warning)
+                .Select(FormatImportDiagnostic)
+                .ToArray();
+            PreviewDiagnostics = result.ImportDiagnostics
+                .Where(static diagnostic =>
+                    diagnostic.Severity == ImportDiagnosticSeverity.Error)
+                .Select(FormatImportDiagnostic)
+                .Concat(result.RankingDiagnostics.Select(
+                    static diagnostic => diagnostic.Message))
+                .ToArray();
+
             if (result.IsSuccess)
             {
                 PreviewItems = result.Items
                     .Select(static item => new ImportPreviewRow(
-                        item.Rank,
+                        FormatRank(item.Rank),
                         item.SourceName,
                         item.MandatoryDependencyCount,
                         item.OptionalDependencyCount,
-                        item.DependencyCount))
+                        item.DependencyCount,
+                        FormatDependencyState(item.DependencyState),
+                        FormatMissingDependencies(item.MissingDependencyNames)))
                     .ToArray();
             }
             else
             {
-                PreviewDiagnostics = result.ImportDiagnostics
-                    .Select(FormatImportDiagnostic)
-                    .Concat(result.RankingDiagnostics.Select(static diagnostic => diagnostic.Message))
-                    .ToArray();
+                PreviewItems = [];
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -325,6 +357,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         PreviewItems = [];
         PreviewDiagnostics = [message];
+        PreviewWarnings = [];
     }
 
     private void UpdateProgressCounts(IEnumerable<EntityOverviewItem> items)
@@ -345,6 +378,30 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             DevelopmentStatus.Completed => "Completed",
             _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
         };
+    }
+
+    private static string FormatRank(int? rank)
+    {
+        return rank?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—";
+    }
+
+    private static string FormatDependencyState(DependencyResolutionState state)
+    {
+        return state switch
+        {
+            DependencyResolutionState.Resolved => "Resolved",
+            DependencyResolutionState.Unresolved => "Unresolved",
+            DependencyResolutionState.Blocked => "Blocked",
+            _ => throw new ArgumentOutOfRangeException(nameof(state), state, null)
+        };
+    }
+
+    private static string FormatMissingDependencies(
+        IReadOnlyList<string> missingDependencyNames)
+    {
+        return missingDependencyNames.Count == 0
+            ? "—"
+            : string.Join(", ", missingDependencyNames);
     }
 
     private static string FormatImportDiagnostic(ImportDiagnostic diagnostic)

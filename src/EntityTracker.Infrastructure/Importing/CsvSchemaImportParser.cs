@@ -93,7 +93,8 @@ public sealed class CsvSchemaImportParser : ISchemaImportParser
             Dictionary<DependencyKey, ParsedDependency> uniqueDependencies = [];
             ValidateDependencies(entityRows, parsedDependencies, uniqueDependencies, diagnostics);
 
-            if (diagnostics.Count > 0)
+            if (diagnostics.Any(static diagnostic =>
+                    diagnostic.Severity == ImportDiagnosticSeverity.Error))
             {
                 return Failure(diagnostics);
             }
@@ -104,6 +105,7 @@ public sealed class CsvSchemaImportParser : ISchemaImportParser
                 .ToArray();
 
             ImportedDependency[] dependencies = uniqueDependencies.Values
+                .Where(dependency => entityRows.ContainsKey(dependency.DependencySourceKey))
                 .Select(static dependency => new ImportedDependency(
                     dependency.DependentSourceKey,
                     dependency.DependencySourceKey,
@@ -113,7 +115,21 @@ public sealed class CsvSchemaImportParser : ISchemaImportParser
                 .ThenBy(static dependency => dependency.DependencySourceKey.Value, StringComparer.Ordinal)
                 .ToArray();
 
-            return SchemaImportResult.Success(new SchemaImportCandidate(entities, dependencies));
+            UnresolvedImportedDependency[] unresolvedDependencies = uniqueDependencies.Values
+                .Where(dependency => !entityRows.ContainsKey(dependency.DependencySourceKey))
+                .Select(static dependency => new UnresolvedImportedDependency(
+                    dependency.DependentSourceKey,
+                    dependency.DependencySourceKey,
+                    dependency.DependencySourceName,
+                    dependency.Kind))
+                .OrderBy(static dependency => dependency.DependentSourceKey.Value, StringComparer.Ordinal)
+                .ThenBy(static dependency => dependency.Kind)
+                .ThenBy(static dependency => dependency.DependencySourceKey.Value, StringComparer.Ordinal)
+                .ToArray();
+
+            return SchemaImportResult.Success(
+                new SchemaImportCandidate(entities, dependencies, unresolvedDependencies),
+                OrderDiagnostics(diagnostics));
         }
         catch (CsvHelperException)
         {
@@ -253,14 +269,14 @@ public sealed class CsvSchemaImportParser : ISchemaImportParser
 
         AddDependencies(
             tableKey,
-            mandatoryDependencies.SourceKeys,
+            mandatoryDependencies.Dependencies,
             ImportedDependencyKind.Mandatory,
             rowNumber,
             MandatoryDependenciesHeader,
             parsedDependencies);
         AddDependencies(
             tableKey,
-            optionalDependencies.SourceKeys,
+            optionalDependencies.Dependencies,
             ImportedDependencyKind.Optional,
             rowNumber,
             OptionalDependenciesHeader,
@@ -315,7 +331,7 @@ public sealed class CsvSchemaImportParser : ISchemaImportParser
             return new ParsedDependencyList([], true);
         }
 
-        List<EntitySourceKey> sourceKeys = [];
+        List<ParsedDependencyName> dependencyNames = [];
         bool isValid = true;
 
         foreach (string part in value.Split(',', StringSplitOptions.None))
@@ -332,10 +348,12 @@ public sealed class CsvSchemaImportParser : ISchemaImportParser
                 continue;
             }
 
-            sourceKeys.Add(EntitySourceKey.From(dependencyName));
+            dependencyNames.Add(new ParsedDependencyName(
+                EntitySourceKey.From(dependencyName),
+                dependencyName));
         }
 
-        return new ParsedDependencyList(sourceKeys, isValid);
+        return new ParsedDependencyList(dependencyNames, isValid);
     }
 
     private static int? ParseCount(
@@ -382,11 +400,11 @@ public sealed class CsvSchemaImportParser : ISchemaImportParser
     {
         if (declaredCount is not null
             && dependencies.IsValid
-            && declaredCount != dependencies.SourceKeys.Count)
+            && declaredCount != dependencies.Dependencies.Count)
         {
             diagnostics.Add(new ImportDiagnostic(
                 ImportDiagnosticCode.CountMismatch,
-                $"The declared count {declaredCount} does not match the {dependencies.SourceKeys.Count} parsed dependencies.",
+                $"The declared count {declaredCount} does not match the {dependencies.Dependencies.Count} parsed dependencies.",
                 rowNumber,
                 columnName));
         }
@@ -394,17 +412,18 @@ public sealed class CsvSchemaImportParser : ISchemaImportParser
 
     private static void AddDependencies(
         EntitySourceKey dependentSourceKey,
-        IEnumerable<EntitySourceKey> dependencySourceKeys,
+        IEnumerable<ParsedDependencyName> dependencyNames,
         ImportedDependencyKind kind,
         int rowNumber,
         string columnName,
         ICollection<ParsedDependency> parsedDependencies)
     {
-        foreach (EntitySourceKey dependencySourceKey in dependencySourceKeys)
+        foreach (ParsedDependencyName dependencyName in dependencyNames)
         {
             parsedDependencies.Add(new ParsedDependency(
                 dependentSourceKey,
-                dependencySourceKey,
+                dependencyName.SourceKey,
+                dependencyName.SourceName,
                 kind,
                 rowNumber,
                 columnName));
@@ -432,9 +451,10 @@ public sealed class CsvSchemaImportParser : ISchemaImportParser
             {
                 diagnostics.Add(new ImportDiagnostic(
                     ImportDiagnosticCode.UnknownDependency,
-                    $"The dependency '{dependency.DependencySourceKey}' has no table declaration row.",
+                    $"The dependency '{dependency.DependencySourceName}' has no table declaration row and remains unresolved.",
                     dependency.RowNumber,
-                    dependency.ColumnName));
+                    dependency.ColumnName,
+                    ImportDiagnosticSeverity.Warning));
             }
 
             DependencyKey key = new(
@@ -462,19 +482,32 @@ public sealed class CsvSchemaImportParser : ISchemaImportParser
 
     private static SchemaImportResult Failure(IEnumerable<ImportDiagnostic> diagnostics)
     {
-        return SchemaImportResult.Failure(diagnostics
+        return SchemaImportResult.Failure(OrderDiagnostics(diagnostics));
+    }
+
+    private static IEnumerable<ImportDiagnostic> OrderDiagnostics(
+        IEnumerable<ImportDiagnostic> diagnostics)
+    {
+        return diagnostics
             .OrderBy(static diagnostic => diagnostic.RowNumber ?? 0)
             .ThenBy(static diagnostic => diagnostic.ColumnName ?? string.Empty, StringComparer.Ordinal)
-            .ThenBy(static diagnostic => diagnostic.Code));
+            .ThenBy(static diagnostic => diagnostic.Code);
     }
 
     private sealed record ParsedEntityRow(EntitySourceKey SourceKey, string SourceName);
 
-    private sealed record ParsedDependencyList(IReadOnlyList<EntitySourceKey> SourceKeys, bool IsValid);
+    private sealed record ParsedDependencyList(
+        IReadOnlyList<ParsedDependencyName> Dependencies,
+        bool IsValid);
+
+    private sealed record ParsedDependencyName(
+        EntitySourceKey SourceKey,
+        string SourceName);
 
     private sealed record ParsedDependency(
         EntitySourceKey DependentSourceKey,
         EntitySourceKey DependencySourceKey,
+        string DependencySourceName,
         ImportedDependencyKind Kind,
         int RowNumber,
         string ColumnName);

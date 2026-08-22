@@ -62,6 +62,8 @@
             <Setter Property="EnableColumnVirtualization" Value="True" />
             <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
             <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+            <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
+            <EventSetter Event="PreviewMouseWheel" Handler="OnDataGridPreviewMouseWheel" />
         </Style>
     </Window.Resources>
 
@@ -123,7 +125,7 @@
                                        Text="Persisted entities" />
                             <TextBlock Margin="0,3,0,0"
                                        Foreground="#64737C"
-                                       Text="Ordered so dependencies appear before the entities that use them." />
+                                       Text="Ranked entities are ordered so dependencies appear before the entities that use them." />
                         </StackPanel>
                     </DockPanel>
 
@@ -189,15 +191,19 @@
 
                     <Border Grid.Row="2"
                             Margin="0,0,0,12"
+                            MaxHeight="120"
                             Padding="12"
                             Background="#FDEAEA"
                             BorderBrush="#E6A6A6"
                             BorderThickness="1"
                             CornerRadius="4"
                             Visibility="{Binding HasOverviewError, Converter={StaticResource BooleanToVisibilityConverter}}">
-                        <TextBlock Foreground="#8A2D2D"
-                                   Text="{Binding OverviewErrorMessage}"
-                                   TextWrapping="Wrap" />
+                        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
+                            <TextBlock Foreground="#8A2D2D"
+                                       Text="{Binding OverviewErrorMessage}"
+                                       TextWrapping="Wrap" />
+                        </ScrollViewer>
                     </Border>
 
                     <Grid Grid.Row="3">
@@ -206,8 +212,10 @@
                                 <DataGridTextColumn Width="70" Binding="{Binding Rank}" Header="Rank" />
                                 <DataGridTextColumn Width="2*" Binding="{Binding SourceName}" Header="Entity" />
                                 <DataGridTextColumn Width="130" Binding="{Binding Status}" Header="Status" />
-                                <DataGridTextColumn Width="115" Binding="{Binding DependencyCount}" Header="Dependencies" />
-                                <DataGridTextColumn Width="3*" Binding="{Binding Notes}" Header="Notes" />
+                                <DataGridTextColumn Width="120" Binding="{Binding DependencyState}" Header="Dependency State" />
+                                <DataGridTextColumn Width="105" Binding="{Binding DependencyCount}" Header="Dependencies" />
+                                <DataGridTextColumn Width="2*" Binding="{Binding MissingDependencies}" Header="Missing Dependencies" />
+                                <DataGridTextColumn Width="2*" Binding="{Binding Notes}" Header="Notes" />
                             </DataGrid.Columns>
                         </DataGrid>
 
@@ -276,22 +284,49 @@
                                        Text="{Binding PreviewDependencyCount, StringFormat={}{0} dependencies}" />
                         </StackPanel>
 
-                        <Border Padding="12"
+                        <Border Margin="0,0,0,8"
+                                MaxHeight="120"
+                                Padding="12"
+                                Background="#FFF8DC"
+                                BorderBrush="#E5D28B"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Visibility="{Binding HasPreviewWarnings, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding PreviewWarnings}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Margin="0,2"
+                                                       Foreground="#6E5A18"
+                                                       Text="{Binding}"
+                                                       TextWrapping="Wrap" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Border>
+
+                        <Border MaxHeight="120"
+                                Padding="12"
                                 Background="#FDEAEA"
                                 BorderBrush="#E6A6A6"
                                 BorderThickness="1"
                                 CornerRadius="4"
                                 Visibility="{Binding HasPreviewDiagnostics, Converter={StaticResource BooleanToVisibilityConverter}}">
-                            <ItemsControl ItemsSource="{Binding PreviewDiagnostics}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Margin="0,2"
-                                                   Foreground="#8A2D2D"
-                                                   Text="{Binding}"
-                                                   TextWrapping="Wrap" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding PreviewDiagnostics}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Margin="0,2"
+                                                       Foreground="#8A2D2D"
+                                                       Text="{Binding}"
+                                                       TextWrapping="Wrap" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
                         </Border>
                     </StackPanel>
 
@@ -299,10 +334,12 @@
                         <DataGrid ItemsSource="{Binding PreviewItems}">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Width="70" Binding="{Binding Rank}" Header="Rank" />
-                                <DataGridTextColumn Width="3*" Binding="{Binding SourceName}" Header="Entity" />
-                                <DataGridTextColumn Width="130" Binding="{Binding MandatoryDependencyCount}" Header="Mandatory" />
-                                <DataGridTextColumn Width="130" Binding="{Binding OptionalDependencyCount}" Header="Optional" />
-                                <DataGridTextColumn Width="130" Binding="{Binding DependencyCount}" Header="Total" />
+                                <DataGridTextColumn Width="2*" Binding="{Binding SourceName}" Header="Entity" />
+                                <DataGridTextColumn Width="105" Binding="{Binding MandatoryDependencyCount}" Header="Mandatory" />
+                                <DataGridTextColumn Width="105" Binding="{Binding OptionalDependencyCount}" Header="Optional" />
+                                <DataGridTextColumn Width="80" Binding="{Binding DependencyCount}" Header="Total" />
+                                <DataGridTextColumn Width="120" Binding="{Binding DependencyState}" Header="Dependency State" />
+                                <DataGridTextColumn Width="2*" Binding="{Binding MissingDependencies}" Header="Missing Dependencies" />
                             </DataGrid.Columns>
                         </DataGrid>
 

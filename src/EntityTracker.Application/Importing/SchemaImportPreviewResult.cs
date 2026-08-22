@@ -14,7 +14,10 @@ public sealed class SchemaImportPreviewResult
         RankingDiagnostics = Array.AsReadOnly(rankingDiagnostics.ToArray());
     }
 
-    public bool IsSuccess => ImportDiagnostics.Count == 0 && RankingDiagnostics.Count == 0;
+    public bool IsSuccess =>
+        RankingDiagnostics.Count == 0
+        && !ImportDiagnostics.Any(static diagnostic =>
+            diagnostic.Severity == ImportDiagnosticSeverity.Error);
 
     public IReadOnlyList<SchemaImportPreviewItem> Items { get; }
 

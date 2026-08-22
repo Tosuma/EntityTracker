@@ -45,13 +45,25 @@ public sealed class SchemaImportPreviewService
                 entitiesBySourceKey[dependency.DependencySourceKey].Id))
             .ToArray();
 
+        UnresolvedDependency[] unresolvedDependencies = candidate.UnresolvedDependencies
+            .Select(dependency => new UnresolvedDependency(
+                entitiesBySourceKey[dependency.DependentSourceKey].Id,
+                dependency.DependencySourceName))
+            .ToArray();
+
         DependencyRankingResult rankingResult = await Task.Run(
-            () => _dependencyRanker.Rank(entitiesBySourceKey.Values, edges),
+            () => _dependencyRanker.Rank(
+                entitiesBySourceKey.Values,
+                edges,
+                unresolvedDependencies),
             cancellationToken);
 
         if (!rankingResult.IsSuccess)
         {
-            return new SchemaImportPreviewResult([], [], rankingResult.Diagnostics);
+            return new SchemaImportPreviewResult(
+                [],
+                importResult.Diagnostics,
+                rankingResult.Diagnostics);
         }
 
         IReadOnlyDictionary<EntityId, ImportedEntity> importedEntitiesById =
@@ -72,7 +84,16 @@ public sealed class SchemaImportPreviewService
                     : (mandatory, optional + 1);
         }
 
-        SchemaImportPreviewItem[] items = rankingResult.Rankings
+        foreach (UnresolvedImportedDependency dependency in candidate.UnresolvedDependencies)
+        {
+            (int mandatory, int optional) = countsByEntity[dependency.DependentSourceKey];
+            countsByEntity[dependency.DependentSourceKey] =
+                dependency.Kind == ImportedDependencyKind.Mandatory
+                    ? (mandatory + 1, optional)
+                    : (mandatory, optional + 1);
+        }
+
+        IEnumerable<SchemaImportPreviewItem> rankedItems = rankingResult.Rankings
             .Select(ranking =>
             {
                 ImportedEntity entity = importedEntitiesById[ranking.EntityId];
@@ -81,10 +102,28 @@ public sealed class SchemaImportPreviewService
                     ranking.Rank,
                     entity.SourceName,
                     mandatory,
-                    optional);
-            })
-            .ToArray();
+                    optional,
+                    DependencyResolutionState.Resolved,
+                    []);
+            });
 
-        return new SchemaImportPreviewResult(items, [], []);
+        IEnumerable<SchemaImportPreviewItem> unrankedItems =
+            rankingResult.UnrankedEntities.Select(unrankedEntity =>
+            {
+                ImportedEntity entity = importedEntitiesById[unrankedEntity.EntityId];
+                (int mandatory, int optional) = countsByEntity[entity.SourceKey];
+                return new SchemaImportPreviewItem(
+                    null,
+                    entity.SourceName,
+                    mandatory,
+                    optional,
+                    unrankedEntity.State,
+                    unrankedEntity.MissingDependencyNames);
+            });
+
+        return new SchemaImportPreviewResult(
+            rankedItems.Concat(unrankedItems),
+            importResult.Diagnostics,
+            []);
     }
 }

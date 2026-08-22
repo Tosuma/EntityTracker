@@ -11,19 +11,30 @@ public sealed class DependencyRanker
         IEnumerable<TrackedEntity> entities,
         IEnumerable<DependencyEdge> dependencyEdges)
     {
+        return Rank(entities, dependencyEdges, []);
+    }
+
+    public DependencyRankingResult Rank(
+        IEnumerable<TrackedEntity> entities,
+        IEnumerable<DependencyEdge> dependencyEdges,
+        IEnumerable<UnresolvedDependency> unresolvedDependencies)
+    {
         ArgumentNullException.ThrowIfNull(entities);
         ArgumentNullException.ThrowIfNull(dependencyEdges);
+        ArgumentNullException.ThrowIfNull(unresolvedDependencies);
 
         TrackedEntity[] entityArray = entities.ToArray();
         DependencyEdge[] edgeArray = dependencyEdges.ToArray();
+        UnresolvedDependency[] unresolvedDependencyArray = unresolvedDependencies.ToArray();
 
-        ValidateElements(entityArray, edgeArray);
+        ValidateElements(entityArray, edgeArray, unresolvedDependencyArray);
 
         Dictionary<EntityId, GraphNode> nodes = BuildNodes(entityArray);
         ValidateUniqueEdges(edgeArray);
+        ValidateUniqueUnresolvedDependencies(unresolvedDependencyArray);
 
         IReadOnlyList<DependencyRankingDiagnostic> unknownEntityDiagnostics =
-            FindUnknownEntityDiagnostics(edgeArray, nodes);
+            FindUnknownEntityDiagnostics(edgeArray, unresolvedDependencyArray, nodes);
         if (unknownEntityDiagnostics.Count > 0)
         {
             return DependencyRankingResult.Failure(unknownEntityDiagnostics);
@@ -49,13 +60,23 @@ public sealed class DependencyRanker
         }
 
         IReadOnlyDictionary<EntityId, int> impactScores = CalculateImpactScores(nodes, entityOrder);
+        IReadOnlyList<UnrankedEntity> unrankedEntities = CreateUnrankedEntities(
+            nodes,
+            unresolvedDependencyArray,
+            entityOrder);
+        HashSet<EntityId> unrankedEntityIds = unrankedEntities
+            .Select(static entity => entity.EntityId)
+            .ToHashSet();
+
         return DependencyRankingResult.Success(
-            CreateRankings(nodes, entityOrder, impactScores));
+            CreateRankings(nodes, entityOrder, impactScores, unrankedEntityIds),
+            unrankedEntities);
     }
 
     private static void ValidateElements(
         IReadOnlyList<TrackedEntity> entities,
-        IReadOnlyList<DependencyEdge> dependencyEdges)
+        IReadOnlyList<DependencyEdge> dependencyEdges,
+        IReadOnlyList<UnresolvedDependency> unresolvedDependencies)
     {
         if (entities.Any(static entity => entity is null))
         {
@@ -67,6 +88,13 @@ public sealed class DependencyRanker
             throw new ArgumentException(
                 "The dependency-edge collection cannot contain null.",
                 nameof(dependencyEdges));
+        }
+
+        if (unresolvedDependencies.Any(static dependency => dependency is null))
+        {
+            throw new ArgumentException(
+                "The unresolved-dependency collection cannot contain null.",
+                nameof(unresolvedDependencies));
         }
     }
 
@@ -103,8 +131,29 @@ public sealed class DependencyRanker
         }
     }
 
+    private static void ValidateUniqueUnresolvedDependencies(
+        IEnumerable<UnresolvedDependency> unresolvedDependencies)
+    {
+        HashSet<UnresolvedDependencyKey> uniqueDependencies = [];
+
+        foreach (UnresolvedDependency dependency in unresolvedDependencies)
+        {
+            UnresolvedDependencyKey key = new(
+                dependency.DependentEntityId,
+                dependency.DependencySourceName.ToUpperInvariant());
+
+            if (!uniqueDependencies.Add(key))
+            {
+                throw new ArgumentException(
+                    "The unresolved-dependency collection contains a duplicate relationship.",
+                    nameof(unresolvedDependencies));
+            }
+        }
+    }
+
     private static IReadOnlyList<DependencyRankingDiagnostic> FindUnknownEntityDiagnostics(
         IEnumerable<DependencyEdge> dependencyEdges,
+        IEnumerable<UnresolvedDependency> unresolvedDependencies,
         IReadOnlyDictionary<EntityId, GraphNode> nodes)
     {
         List<(DependencyEdge Edge, EntityId[] UnknownIds)> invalidEdges = [];
@@ -129,7 +178,7 @@ public sealed class DependencyRanker
             }
         }
 
-        return invalidEdges
+        IEnumerable<DependencyRankingDiagnostic> edgeDiagnostics = invalidEdges
             .OrderBy(static item => item.Edge.DependentEntityId.Value)
             .ThenBy(static item => item.Edge.DependencyEntityId.Value)
             .Select(static item => new DependencyRankingDiagnostic(
@@ -138,6 +187,21 @@ public sealed class DependencyRanker
                 $"{string.Join(", ", item.UnknownIds.Select(static id => id.Value))}.",
                 item.UnknownIds))
             .ToArray();
+
+        IEnumerable<DependencyRankingDiagnostic> unresolvedDiagnostics =
+            unresolvedDependencies
+                .Where(dependency => !nodes.ContainsKey(dependency.DependentEntityId))
+                .OrderBy(static dependency => dependency.DependentEntityId.Value)
+                .ThenBy(
+                    static dependency => dependency.DependencySourceName,
+                    StringComparer.OrdinalIgnoreCase)
+                .Select(static dependency => new DependencyRankingDiagnostic(
+                    DependencyRankingDiagnosticCode.UnknownEntity,
+                    $"Unresolved dependency '{dependency.DependencySourceName}' references " +
+                    $"unknown dependent entity ID '{dependency.DependentEntityId.Value}'.",
+                    [dependency.DependentEntityId]));
+
+        return edgeDiagnostics.Concat(unresolvedDiagnostics).ToArray();
     }
 
     private static void BuildEdges(
@@ -270,14 +334,83 @@ public sealed class DependencyRanker
         return result;
     }
 
+    private static IReadOnlyList<UnrankedEntity> CreateUnrankedEntities(
+        IReadOnlyDictionary<EntityId, GraphNode> nodes,
+        IEnumerable<UnresolvedDependency> unresolvedDependencies,
+        IComparer<EntityId> entityOrder)
+    {
+        Dictionary<EntityId, HashSet<string>> missingNamesByEntity = [];
+        HashSet<EntityId> directlyUnresolvedEntityIds = [];
+
+        foreach (UnresolvedDependency dependency in unresolvedDependencies)
+        {
+            directlyUnresolvedEntityIds.Add(dependency.DependentEntityId);
+
+            if (!missingNamesByEntity.TryGetValue(
+                    dependency.DependentEntityId,
+                    out HashSet<string>? missingNames))
+            {
+                missingNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                missingNamesByEntity.Add(dependency.DependentEntityId, missingNames);
+            }
+
+            missingNames.Add(dependency.DependencySourceName);
+        }
+
+        Queue<EntityId> pendingEntityIds = new(
+            directlyUnresolvedEntityIds.OrderBy(static id => id, entityOrder));
+
+        while (pendingEntityIds.Count > 0)
+        {
+            EntityId blockedEntityId = pendingEntityIds.Dequeue();
+            HashSet<string> missingNames = missingNamesByEntity[blockedEntityId];
+
+            foreach (EntityId dependentEntityId in nodes[blockedEntityId].DirectDependents
+                         .OrderBy(static id => id, entityOrder))
+            {
+                if (!missingNamesByEntity.TryGetValue(
+                        dependentEntityId,
+                        out HashSet<string>? dependentMissingNames))
+                {
+                    dependentMissingNames = new HashSet<string>(
+                        StringComparer.OrdinalIgnoreCase);
+                    missingNamesByEntity.Add(dependentEntityId, dependentMissingNames);
+                }
+
+                int previousCount = dependentMissingNames.Count;
+                dependentMissingNames.UnionWith(missingNames);
+                if (dependentMissingNames.Count > previousCount)
+                {
+                    pendingEntityIds.Enqueue(dependentEntityId);
+                }
+            }
+        }
+
+        return missingNamesByEntity.Keys
+            .OrderBy(static id => id, entityOrder)
+            .Select(entityId => new UnrankedEntity(
+                entityId,
+                directlyUnresolvedEntityIds.Contains(entityId)
+                    ? DependencyResolutionState.Unresolved
+                    : DependencyResolutionState.Blocked,
+                missingNamesByEntity[entityId]
+                    .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(static name => name, StringComparer.Ordinal)))
+            .ToArray();
+    }
+
     private static IEnumerable<EntityRanking> CreateRankings(
         IReadOnlyDictionary<EntityId, GraphNode> nodes,
         EntityOrderComparer entityOrder,
-        IReadOnlyDictionary<EntityId, int> impactScores)
+        IReadOnlyDictionary<EntityId, int> impactScores,
+        IReadOnlySet<EntityId> unrankedEntityIds)
     {
-        Dictionary<EntityId, int> remainingDependencyCounts = nodes.ToDictionary(
-            static item => item.Key,
-            static item => item.Value.DirectDependencies.Count);
+        Dictionary<EntityId, int> remainingDependencyCounts = nodes
+            .Where(item => !unrankedEntityIds.Contains(item.Key))
+            .ToDictionary(
+                static item => item.Key,
+                item => item.Value.DirectDependencies.Count(
+                    dependencyId => !unrankedEntityIds.Contains(dependencyId)));
         SortedSet<EntityId> eligibleEntities = new(
             new EligibleEntityComparer(impactScores, entityOrder));
 
@@ -289,7 +422,7 @@ public sealed class DependencyRanker
             }
         }
 
-        List<EntityRanking> rankings = new(nodes.Count);
+        List<EntityRanking> rankings = new(remainingDependencyCounts.Count);
 
         while (eligibleEntities.Count > 0)
         {
@@ -305,6 +438,7 @@ public sealed class DependencyRanker
                 node.DirectDependents.OrderBy(static id => id, entityOrder)));
 
             foreach (EntityId dependentId in node.DirectDependents
+                         .Where(dependentId => !unrankedEntityIds.Contains(dependentId))
                          .OrderBy(static id => id, entityOrder))
             {
                 remainingDependencyCounts[dependentId]--;
@@ -384,6 +518,10 @@ public sealed class DependencyRanker
                 : entityOrder.Compare(x, y);
         }
     }
+
+    private sealed record UnresolvedDependencyKey(
+        EntityId DependentEntityId,
+        string DependencySourceKey);
 
     private enum VisitState
     {

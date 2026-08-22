@@ -4,9 +4,11 @@ public sealed class DependencyRankingResult
 {
     private DependencyRankingResult(
         IReadOnlyList<EntityRanking> rankings,
+        IReadOnlyList<UnrankedEntity> unrankedEntities,
         IReadOnlyList<DependencyRankingDiagnostic> diagnostics)
     {
         Rankings = rankings;
+        UnrankedEntities = unrankedEntities;
         Diagnostics = diagnostics;
     }
 
@@ -14,13 +16,19 @@ public sealed class DependencyRankingResult
 
     public IReadOnlyList<EntityRanking> Rankings { get; }
 
+    public IReadOnlyList<UnrankedEntity> UnrankedEntities { get; }
+
     public IReadOnlyList<DependencyRankingDiagnostic> Diagnostics { get; }
 
-    internal static DependencyRankingResult Success(IEnumerable<EntityRanking> rankings)
+    internal static DependencyRankingResult Success(
+        IEnumerable<EntityRanking> rankings,
+        IEnumerable<UnrankedEntity> unrankedEntities)
     {
         EntityRanking[] rankingArray = rankings.ToArray();
+        UnrankedEntity[] unrankedEntityArray = unrankedEntities.ToArray();
         return new DependencyRankingResult(
             Array.AsReadOnly(rankingArray),
+            Array.AsReadOnly(unrankedEntityArray),
             Array.Empty<DependencyRankingDiagnostic>());
     }
 
@@ -30,6 +38,7 @@ public sealed class DependencyRankingResult
         DependencyRankingDiagnostic[] diagnosticArray = diagnostics.ToArray();
         return new DependencyRankingResult(
             Array.Empty<EntityRanking>(),
+            Array.Empty<UnrankedEntity>(),
             Array.AsReadOnly(diagnosticArray));
     }
 }

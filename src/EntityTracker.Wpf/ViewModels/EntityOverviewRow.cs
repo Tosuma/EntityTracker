@@ -1,8 +1,10 @@
 namespace EntityTracker.Wpf.ViewModels;
 
 public sealed record EntityOverviewRow(
-    int Rank,
+    string Rank,
     string SourceName,
     string Status,
+    string DependencyState,
     int DependencyCount,
+    string MissingDependencies,
     string Notes);

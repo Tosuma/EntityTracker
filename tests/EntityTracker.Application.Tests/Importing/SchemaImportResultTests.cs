@@ -35,4 +35,43 @@ public sealed class SchemaImportResultTests
     {
         Assert.Throws<ArgumentException>(() => SchemaImportResult.Failure([]));
     }
+
+    [Fact]
+    public void Success_AllowsWarningDiagnosticsWithCandidate()
+    {
+        SchemaImportCandidate candidate = new([], []);
+        ImportDiagnostic warning = new(
+            ImportDiagnosticCode.UnknownDependency,
+            "Missing dependency.",
+            Severity: ImportDiagnosticSeverity.Warning);
+
+        SchemaImportResult result = SchemaImportResult.Success(candidate, [warning]);
+
+        Assert.True(result.IsSuccess);
+        Assert.Same(candidate, result.Candidate);
+        Assert.Equal([warning], result.Diagnostics);
+    }
+
+    [Fact]
+    public void Success_RejectsErrorDiagnostics()
+    {
+        ImportDiagnostic error = new(
+            ImportDiagnosticCode.MalformedRow,
+            "Malformed row.");
+
+        Assert.Throws<ArgumentException>(() =>
+            SchemaImportResult.Success(new SchemaImportCandidate([], []), [error]));
+    }
+
+    [Fact]
+    public void Failure_RejectsWarningsWithoutAnError()
+    {
+        ImportDiagnostic warning = new(
+            ImportDiagnosticCode.UnknownDependency,
+            "Missing dependency.",
+            Severity: ImportDiagnosticSeverity.Warning);
+
+        Assert.Throws<ArgumentException>(() =>
+            SchemaImportResult.Failure([warning]));
+    }
 }

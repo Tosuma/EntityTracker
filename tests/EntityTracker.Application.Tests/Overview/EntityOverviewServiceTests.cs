@@ -87,13 +87,47 @@ public sealed class EntityOverviewServiceTests
             diagnostic.Code == DependencyRankingDiagnosticCode.UnknownEntity);
     }
 
+    [Fact]
+    public async Task GetAsync_ReturnsDirectlyUnresolvedAndTransitivelyBlockedRowsWithoutRanks()
+    {
+        TrackedEntity alpha = Entity(1, "Alpha");
+        TrackedEntity beta = Entity(2, "Beta");
+        TrackedEntity safe = Entity(3, "Safe", DevelopmentStatus.Completed);
+        EntityOverviewService service = CreateService(
+            [beta, safe, alpha],
+            [Dependency(beta, alpha, ImportedDependencyKind.Mandatory)],
+            [Unresolved(alpha, "MissingX", ImportedDependencyKind.Optional)]);
+
+        EntityOverviewResult result = await service.GetAsync();
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(
+            ["Safe", "Alpha", "Beta"],
+            result.Items.Select(static item => item.SourceName));
+        Assert.Equal([1, null, null], result.Items.Select(static item => item.Rank));
+        Assert.Equal(
+            [
+                DependencyResolutionState.Resolved,
+                DependencyResolutionState.Unresolved,
+                DependencyResolutionState.Blocked
+            ],
+            result.Items.Select(static item => item.DependencyState));
+        Assert.Equal([0, 1, 1], result.Items.Select(static item => item.DependencyCount));
+        Assert.Empty(result.Items[0].MissingDependencyNames);
+        Assert.Equal(["MissingX"], result.Items[1].MissingDependencyNames);
+        Assert.Equal(["MissingX"], result.Items[2].MissingDependencyNames);
+    }
+
     private static EntityOverviewService CreateService(
         IEnumerable<TrackedEntity> entities,
-        IEnumerable<PersistedDependency> dependencies)
+        IEnumerable<PersistedDependency> dependencies,
+        IEnumerable<PersistedUnresolvedDependency>? unresolvedDependencies = null)
     {
         return new EntityOverviewService(
             new StubEntityRepository(entities.ToArray()),
-            new StubDependencyRepository(dependencies.ToArray()),
+            new StubDependencyRepository(
+                dependencies.ToArray(),
+                unresolvedDependencies?.ToArray() ?? []),
             new DependencyRanker());
     }
 
@@ -117,6 +151,16 @@ public sealed class EntityOverviewServiceTests
     {
         return new PersistedDependency(
             new DependencyEdge(dependent.Id, dependency.Id),
+            kind);
+    }
+
+    private static PersistedUnresolvedDependency Unresolved(
+        TrackedEntity dependent,
+        string dependencySourceName,
+        ImportedDependencyKind kind)
+    {
+        return new PersistedUnresolvedDependency(
+            new UnresolvedDependency(dependent.Id, dependencySourceName),
             kind);
     }
 
@@ -144,14 +188,24 @@ public sealed class EntityOverviewServiceTests
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
-    private sealed class StubDependencyRepository(IReadOnlyList<PersistedDependency> dependencies)
+    private sealed class StubDependencyRepository(
+        IReadOnlyList<PersistedDependency> dependencies,
+        IReadOnlyList<PersistedUnresolvedDependency> unresolvedDependencies)
         : IDependencyRepository
     {
         public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
             CancellationToken cancellationToken = default) => Task.FromResult(dependencies);
 
+        public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(unresolvedDependencies);
+
         public Task SaveAsync(
             PersistedDependency dependency,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task SaveUnresolvedAsync(
+            PersistedUnresolvedDependency dependency,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 }

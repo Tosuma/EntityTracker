@@ -32,4 +32,30 @@ public sealed class PersistedDependencyTests
                 new DependencyEdge(EntityId.New(), EntityId.New()),
                 (ImportedDependencyKind)999));
     }
+
+    [Fact]
+    public void UnresolvedConstructor_PreservesReferenceAndImportedKind()
+    {
+        UnresolvedDependency unresolved = new(EntityId.New(), "facility");
+
+        PersistedUnresolvedDependency dependency = new(
+            unresolved,
+            ImportedDependencyKind.Optional);
+
+        Assert.Same(unresolved, dependency.Dependency);
+        Assert.Equal(ImportedDependencyKind.Optional, dependency.Kind);
+    }
+
+    [Fact]
+    public void UnresolvedConstructor_RejectsNullAndUndefinedKind()
+    {
+        Assert.Throws<ArgumentNullException>(() =>
+            new PersistedUnresolvedDependency(
+                null!,
+                ImportedDependencyKind.Mandatory));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new PersistedUnresolvedDependency(
+                new UnresolvedDependency(EntityId.New(), "facility"),
+                (ImportedDependencyKind)999));
+    }
 }
