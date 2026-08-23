@@ -136,6 +136,16 @@
 
                     <DockPanel Margin="0,0,0,14">
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <TextBlock Margin="0,0,7,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="#64737C"
+                                       Text="View" />
+                            <ComboBox MinWidth="155"
+                                      Margin="0,0,8,0"
+                                      DisplayMemberPath="DisplayName"
+                                      ItemsSource="{Binding OverviewFilters}"
+                                      SelectedValue="{Binding SelectedOverviewFilter}"
+                                      SelectedValuePath="Value" />
                             <Button Margin="0,0,8,0"
                                     Command="{Binding OpenOverviewSearchCommand}"
                                     Click="OnOpenOverviewSearchClick"
@@ -159,6 +169,7 @@
 
                     <Grid Grid.Row="1" Margin="0,0,0,14">
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
@@ -195,24 +206,42 @@
                         </Border>
                         <Border Grid.Column="3" Style="{StaticResource SummaryCardStyle}">
                             <StackPanel>
-                                <TextBlock Foreground="#6B7880" Text="Completed" />
+                                <TextBlock Foreground="#6B7880" Text="Dev. completed" />
                                 <TextBlock Margin="0,3,0,0"
                                            FontSize="22"
                                            FontWeight="SemiBold"
-                                           Text="{Binding CompletedCount}" />
+                                           Text="{Binding DevelopmentCompletedCount}" />
                             </StackPanel>
                         </Border>
 
-                        <Border Grid.Column="4"
+                        <Border Grid.Column="4" Style="{StaticResource SummaryCardStyle}">
+                            <StackPanel>
+                                <TextBlock Foreground="#6B7880" Text="Reconciled" />
+                                <TextBlock Margin="0,3,0,0"
+                                           FontSize="22"
+                                           FontWeight="SemiBold"
+                                           Text="{Binding ReconciledCount}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Column="5"
                                 Margin="0"
                                 Style="{StaticResource SummaryCardStyle}">
                             <StackPanel VerticalAlignment="Center">
                                 <TextBlock Foreground="#6B7880"
-                                           Text="{Binding CompletionPercentage, StringFormat={}{0:F0}% complete}" />
-                                <ProgressBar Height="10"
-                                             Margin="0,9,0,0"
-                                             Maximum="100"
-                                             Value="{Binding CompletionPercentage, Mode=OneWay}" />
+                                           Text="{Binding SuccessfulCompletionPercentage, StringFormat={}{0:F0}% dev. completed or reconciled}" />
+                                <Grid Height="10" Margin="0,9,0,0">
+                                    <ProgressBar Maximum="100"
+                                                 Value="{Binding SuccessfulCompletionPercentage, Mode=OneWay}" />
+                                    <ProgressBar Background="Transparent"
+                                                 Foreground="#2E8B57"
+                                                 Maximum="100"
+                                                 Value="{Binding ReconciledPercentage, Mode=OneWay}" />
+                                </Grid>
+                                <TextBlock Margin="0,5,0,0"
+                                           FontSize="11"
+                                           Foreground="#2E8B57"
+                                           Text="{Binding ReconciledPercentage, StringFormat={}{0:F0}% reconciled}" />
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -256,6 +285,7 @@
                                       Margin="0,9,0,0"
                                       VerticalAlignment="Center"
                                       Content="Search dependency names"
+                                      IsEnabled="{Binding CanSearchOverviewDependencies}"
                                       IsChecked="{Binding SearchOverviewDependencies}" />
                             <TextBlock Grid.Row="1"
                                        Grid.Column="1"
@@ -288,12 +318,94 @@
                         <DataGrid ItemsSource="{Binding OverviewItems}">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Width="70" Binding="{Binding Rank}" Header="Rank" />
-                                <DataGridTextColumn Width="2*" Binding="{Binding SourceName}" Header="Entity" />
+                                <DataGridTemplateColumn Width="2.2*" Header="Entity">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
+                                                <TextBlock VerticalAlignment="Center"
+                                                           Text="{Binding SourceName}" />
+                                                <Button Width="24"
+                                                        Height="24"
+                                                        Margin="6,0,0,0"
+                                                        Padding="2"
+                                                        VerticalAlignment="Center"
+                                                        AutomationProperties.Name="{Binding GraphIssueTitle}"
+                                                        Background="Transparent"
+                                                        BorderThickness="0"
+                                                        Cursor="Hand"
+                                                        ToolTip="{Binding GraphIssueTitle}"
+                                                        Visibility="{Binding HasGraphIssue, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                                        Click="OnContextMenuButtonClick">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button">
+                                                            <Setter Property="Foreground" Value="#B45309" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsDirectlyUnresolved}" Value="True">
+                                                                    <Setter Property="Foreground" Value="#C62828" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                    <Viewbox Width="18"
+                                                             Height="18"
+                                                             IsHitTestVisible="False">
+                                                        <Canvas Width="24" Height="24">
+                                                            <Ellipse Width="20"
+                                                                     Height="20"
+                                                                     Canvas.Left="2"
+                                                                     Canvas.Top="2"
+                                                                     Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                     StrokeThickness="2" />
+                                                            <Path Data="M12,6 L12,14"
+                                                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                  StrokeEndLineCap="Round"
+                                                                  StrokeStartLineCap="Round"
+                                                                  StrokeThickness="2" />
+                                                            <Ellipse Width="2.5"
+                                                                     Height="2.5"
+                                                                     Canvas.Left="10.75"
+                                                                     Canvas.Top="17"
+                                                                     Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                                        </Canvas>
+                                                    </Viewbox>
+                                                    <Button.ContextMenu>
+                                                        <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                                            <MenuItem Focusable="False" IsHitTestVisible="False">
+                                                                <MenuItem.Template>
+                                                                    <ControlTemplate TargetType="MenuItem">
+                                                                        <ContentPresenter ContentSource="Header" />
+                                                                    </ControlTemplate>
+                                                                </MenuItem.Template>
+                                                                <MenuItem.Header>
+                                                                    <StackPanel Width="320" Margin="12">
+                                                                        <TextBlock FontSize="15"
+                                                                                   FontWeight="SemiBold"
+                                                                                   Foreground="#263238"
+                                                                                   Text="{Binding GraphIssueTitle}" />
+                                                                        <TextBlock Margin="0,8,0,0"
+                                                                                   Foreground="#455A64"
+                                                                                   Text="{Binding GraphIssueDescription}"
+                                                                                   TextWrapping="Wrap" />
+                                                                        <TextBlock Margin="0,10,0,0"
+                                                                                   FontWeight="SemiBold"
+                                                                                   Foreground="#263238"
+                                                                                   Text="{Binding GraphIssueNames}"
+                                                                                   TextWrapping="Wrap" />
+                                                                    </StackPanel>
+                                                                </MenuItem.Header>
+                                                            </MenuItem>
+                                                        </ContextMenu>
+                                                    </Button.ContextMenu>
+                                                </Button>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                                 <DataGridTextColumn Width="125" Binding="{Binding Provenance}" Header="Source" />
                                 <DataGridTextColumn Width="130" Binding="{Binding Status}" Header="Status" />
-                                <DataGridTextColumn Width="120" Binding="{Binding DependencyState}" Header="Dependency State" />
+                                <DataGridTextColumn Width="130" Binding="{Binding WorkStatus}" Header="Work status" />
                                 <DataGridTextColumn Width="105" Binding="{Binding DependencyCount}" Header="Dependencies" />
-                                <DataGridTextColumn Width="2*" Binding="{Binding MissingDependencies}" Header="Missing Dependencies" />
+                                <DataGridTextColumn Width="2.2*" Binding="{Binding MissingDependencies}" Header="Missing Dependencies" />
                                 <DataGridTextColumn Width="2*" Binding="{Binding Notes}" Header="Notes" />
                                 <DataGridTemplateColumn Width="52" Header="">
                                     <DataGridTemplateColumn.CellTemplate>
@@ -310,10 +422,10 @@
                                                     FontSize="19"
                                                     ToolTip="Entity actions"
                                                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    Click="OnEntityActionsClick">
+                                                    Click="OnContextMenuButtonClick">
                                                 <Button.ContextMenu>
                                                     <ContextMenu>
-                                                        <MenuItem Header="Edit entity"
+                                                        <MenuItem Header="{Binding PlacementTarget.DataContext.ActionLabel, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                                   Command="{Binding PlacementTarget.Tag.EditOverviewEntityCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                                   CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                                     </ContextMenu>
@@ -334,10 +446,10 @@
                                            FontSize="18"
                                            FontWeight="SemiBold"
                                            Foreground="#4E5E67"
-                                           Text="No persisted entities" />
+                                           Text="{Binding OverviewEmptyTitle}" />
                                 <TextBlock Margin="0,7,0,0"
                                            Foreground="#74828A"
-                                           Text="Add an entity manually or open Schema Synchronization to import a CSV." />
+                                           Text="{Binding OverviewEmptyDescription}" />
                             </StackPanel>
                         </Border>
 
@@ -479,7 +591,7 @@
                                                                         FontSize="19"
                                                                         ToolTip="Entity actions"
                                                                         Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                        Click="OnEntityActionsClick">
+                                                                        Click="OnContextMenuButtonClick">
                                                                     <Button.ContextMenu>
                                                                         <ContextMenu>
                                                                             <MenuItem Header="Edit dependencies"
@@ -518,7 +630,7 @@
                                                                         FontSize="19"
                                                                         ToolTip="Entity actions"
                                                                         Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                        Click="OnEntityActionsClick">
+                                                                        Click="OnContextMenuButtonClick">
                                                                     <Button.ContextMenu>
                                                                         <ContextMenu>
                                                                             <MenuItem Header="Edit dependencies"
@@ -757,6 +869,25 @@
                             </Border>
 
                             <Border Margin="0,12,0,0"
+                                    Padding="10"
+                                    Background="#FFF4E5"
+                                    BorderBrush="#D99A4E"
+                                    BorderThickness="1"
+                                    Visibility="{Binding ManualCreation.HasArchivedEntityMatch, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right"
+                                            Margin="12,0,0,0"
+                                            Command="{Binding ManualCreation.RestoreArchivedCommand}"
+                                            Content="Restore existing entity"
+                                            Style="{StaticResource SecondaryButtonStyle}" />
+                                    <TextBlock VerticalAlignment="Center"
+                                               Foreground="#69420E"
+                                               Text="{Binding ManualCreation.ArchivedEntityMessage}"
+                                               TextWrapping="Wrap" />
+                                </DockPanel>
+                            </Border>
+
+                            <Border Margin="0,12,0,0"
                                     MaxHeight="110"
                                     Padding="10"
                                     Background="#FDEAEA"
@@ -837,11 +968,33 @@
                                        Foreground="#64737C"
                                        Text="{Binding Editor.EntityDetails}" />
                             <StackPanel Visibility="{Binding Editor.HasSelectedEntity, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <TextBlock FontWeight="SemiBold" Text="Notes" />
-                                <TextBlock Margin="0,3,0,16"
-                                           Foreground="#64737C"
-                                           Text="{Binding Editor.EntityNotes}"
-                                           TextWrapping="Wrap" />
+                                <Grid Margin="0,0,0,12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,12,0">
+                                        <TextBlock FontWeight="SemiBold" Text="Development status" />
+                                        <ComboBox Margin="0,5,0,0"
+                                                  DisplayMemberPath="DisplayName"
+                                                  IsEnabled="{Binding Editor.CanEditProgress}"
+                                                  ItemsSource="{Binding Editor.StatusOptions}"
+                                                  SelectedValue="{Binding Editor.SelectedStatus}"
+                                                  SelectedValuePath="Value" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock FontWeight="SemiBold" Text="Notes" />
+                                        <TextBox MinHeight="64"
+                                                 Margin="0,5,0,0"
+                                                 Padding="8"
+                                                 AcceptsReturn="True"
+                                                 IsEnabled="{Binding Editor.CanEditProgress}"
+                                                 Text="{Binding Editor.EditedNotes, UpdateSourceTrigger=PropertyChanged}"
+                                                 TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <StackPanel Visibility="{Binding Editor.ShowDependencyEditor, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <TextBlock FontWeight="SemiBold" Text="Add a manual dependency" />
                                 <TextBlock Margin="0,3,0,7"
                                            Foreground="#64737C"
@@ -886,6 +1039,7 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
+                                </StackPanel>
 
                                 <TextBlock Margin="0,18,0,7" FontWeight="SemiBold" Text="Dependencies and overrides" />
                                 <ItemsControl ItemsSource="{Binding Editor.Dependencies}">
@@ -893,7 +1047,9 @@
                                         <DataTemplate>
                                             <Border Margin="0,0,0,6" Padding="9" Background="White" BorderBrush="#D7DEE2" BorderThickness="1">
                                                 <DockPanel>
-                                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                                    <StackPanel DockPanel.Dock="Right"
+                                                                Orientation="Horizontal"
+                                                                Visibility="{Binding DataContext.Editor.ShowDependencyEditor, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}">
                                                         <Button Margin="6,0,0,0"
                                                                 Command="{Binding DataContext.Editor.SuppressCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                                 CommandParameter="{Binding}"
@@ -958,6 +1114,12 @@
                                 Content="Archive entity"
                                 Style="{StaticResource DangerButtonStyle}"
                                 Visibility="{Binding Editor.CanArchive, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <Button DockPanel.Dock="Left"
+                                Margin="8,0,0,0"
+                                Command="{Binding Editor.RestoreEntityCommand}"
+                                Content="Restore entity"
+                                Style="{StaticResource PrimaryButtonStyle}"
+                                Visibility="{Binding Editor.CanRestoreEntity, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                             <Button Margin="0,0,8,0"
                                     Command="{Binding Editor.CancelCommand}"
@@ -965,7 +1127,8 @@
                                     Style="{StaticResource SecondaryButtonStyle}" />
                             <Button Command="{Binding Editor.SaveCommand}"
                                     Content="{Binding Editor.SaveLabel}"
-                                    Style="{StaticResource PrimaryButtonStyle}" />
+                                    Style="{StaticResource PrimaryButtonStyle}"
+                                    Visibility="{Binding Editor.ShowSave, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         </StackPanel>
                     </DockPanel>
 

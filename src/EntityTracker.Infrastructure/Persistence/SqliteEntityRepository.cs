@@ -146,32 +146,6 @@ public sealed class SqliteEntityRepository : IEntityRepository
         }
     }
 
-    public async Task<bool> UpdateProgressAsync(
-        TrackedEntity entity,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(entity);
-
-        await using SqliteConnection connection =
-            await _database.OpenConnectionAsync(cancellationToken);
-        using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = """
-            UPDATE tracked_entities
-            SET development_status = $developmentStatus,
-                notes = $notes,
-                progress_updated_at_utc = $progressUpdatedAtUtc
-            WHERE id = $id;
-            """;
-        command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
-        command.Parameters.AddWithValue("$developmentStatus", entity.Status.ToString());
-        command.Parameters.AddWithValue("$notes", entity.Notes);
-        command.Parameters.AddWithValue(
-            "$progressUpdatedAtUtc",
-            SqlitePersistenceValues.FormatTimestamp(_database.TimeProvider.GetUtcNow()));
-
-        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
-    }
-
     private static void AddEntityParameters(
         SqliteCommand command,
         TrackedEntity entity)

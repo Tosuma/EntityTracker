@@ -1,11 +1,11 @@
 namespace EntityTracker.Application.Persistence;
 
 /// <summary>
-/// Applies one validated tracked-schema mutation atomically.
+/// Applies one validated tracked-state mutation atomically.
 /// </summary>
-public interface ITrackedSchemaStore
+public interface ITrackedStateStore
 {
     Task ApplyAsync(
-        TrackedSchemaChangeSet changeSet,
+        TrackedStateChangeSet changeSet,
         CancellationToken cancellationToken = default);
 }

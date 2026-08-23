@@ -1,4 +1,5 @@
 using EntityTracker.Application.Ranking;
+using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 
 namespace EntityTracker.Application.Overview;
@@ -12,10 +13,13 @@ public sealed class EntityOverviewItem
         EntityProvenance provenance,
         DevelopmentStatus status,
         string notes,
+        EntityLifecycleState lifecycleState,
         int dependencyCount,
         IEnumerable<string> dependencyNames,
-        DependencyResolutionState dependencyState,
-        IEnumerable<string> missingDependencyNames)
+        DependencyResolutionState? dependencyState,
+        IEnumerable<string> dependencyResolutionIssueNames,
+        EntityWorkflowState workflowState,
+        IEnumerable<DependencyBlocker> blockers)
     {
         EntityId = entityId;
         Rank = rank;
@@ -23,10 +27,14 @@ public sealed class EntityOverviewItem
         Provenance = provenance;
         Status = status;
         Notes = notes;
+        LifecycleState = lifecycleState;
         DependencyCount = dependencyCount;
         DependencyNames = Array.AsReadOnly(dependencyNames.ToArray());
         DependencyState = dependencyState;
-        MissingDependencyNames = Array.AsReadOnly(missingDependencyNames.ToArray());
+        DependencyResolutionIssueNames = Array.AsReadOnly(
+            dependencyResolutionIssueNames.ToArray());
+        WorkflowState = workflowState;
+        Blockers = Array.AsReadOnly(blockers.ToArray());
     }
 
     public EntityId EntityId { get; }
@@ -41,11 +49,24 @@ public sealed class EntityOverviewItem
 
     public string Notes { get; }
 
+    public EntityLifecycleState LifecycleState { get; }
+
     public int DependencyCount { get; }
 
     public IReadOnlyList<string> DependencyNames { get; }
 
-    public DependencyResolutionState DependencyState { get; }
+    public DependencyResolutionState? DependencyState { get; }
 
-    public IReadOnlyList<string> MissingDependencyNames { get; }
+    /// <summary>
+    /// Gets the unresolved source names that prevent this entity from receiving a
+    /// dependency-safe rank, either directly or through its dependency chain.
+    /// </summary>
+    public IReadOnlyList<string> DependencyResolutionIssueNames { get; }
+
+    public EntityWorkflowState WorkflowState { get; }
+
+    public IReadOnlyList<DependencyBlocker> Blockers { get; }
+
+    public IReadOnlyList<string> MissingDependencyNames =>
+        Blockers.Select(static blocker => blocker.SourceName).ToArray();
 }

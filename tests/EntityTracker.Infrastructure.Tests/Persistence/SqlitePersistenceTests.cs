@@ -5,6 +5,7 @@ using EntityTracker.Application.Importing;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
+using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Persistence;
 
@@ -15,7 +16,7 @@ namespace EntityTracker.Infrastructure.Tests.Persistence;
 public sealed class SqlitePersistenceTests
 {
     [Fact]
-    public async Task InitializeAsync_FreshDatabaseCreatesVersionFiveSchemaAndIsIdempotent()
+    public async Task InitializeAsync_FreshDatabaseCreatesVersionSixSchemaAndIsIdempotent()
     {
         await using TemporarySqliteFile file = new();
         SqliteDatabase database = new(file.DatabasePath);
@@ -24,7 +25,7 @@ public sealed class SqlitePersistenceTests
         await database.InitializeAsync();
 
         await using SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(5L, await ExecuteScalarInt64Async(connection, "PRAGMA user_version;"));
+        Assert.Equal(6L, await ExecuteScalarInt64Async(connection, "PRAGMA user_version;"));
 
         string[] tableNames = await ReadStringsAsync(
             connection,
@@ -52,7 +53,7 @@ public sealed class SqlitePersistenceTests
         await using (SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath))
         {
             using SqliteCommand command = connection.CreateCommand();
-            command.CommandText = "PRAGMA user_version = 6;";
+            command.CommandText = "PRAGMA user_version = 7;";
             await command.ExecuteNonQueryAsync();
         }
 
@@ -61,7 +62,7 @@ public sealed class SqlitePersistenceTests
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => database.InitializeAsync());
         Assert.Contains("newer", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("6", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("7", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -125,7 +126,7 @@ public sealed class SqlitePersistenceTests
         await using SqliteConnection migratedConnection =
             await OpenConnectionAsync(file.DatabasePath);
         Assert.Equal(
-            5L,
+            6L,
             await ExecuteScalarInt64Async(migratedConnection, "PRAGMA user_version;"));
         Assert.All(
             await entityRepository.GetAllAsync(),
@@ -133,6 +134,9 @@ public sealed class SqlitePersistenceTests
         Assert.All(
             await entityRepository.GetAllAsync(),
             static entity => Assert.Equal(EntityProvenance.Imported, entity.Provenance));
+        Assert.Equal(
+            DevelopmentStatus.DevelopmentCompleted,
+            (await entityRepository.GetAsync(dependencyId))!.Status);
     }
 
     [Fact]
@@ -174,7 +178,7 @@ public sealed class SqlitePersistenceTests
         Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
         Assert.Equal("Keep notes", loaded.Notes);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(5L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal(6L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
         Assert.Equal(EntityProvenance.Imported, loaded.Provenance);
     }
 
@@ -219,7 +223,7 @@ public sealed class SqlitePersistenceTests
         Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
         Assert.Equal("Keep notes", loaded.Notes);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(5L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal(6L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
     }
 
     [Fact]
@@ -308,7 +312,27 @@ public sealed class SqlitePersistenceTests
     }
 
     [Fact]
-    public async Task EntityRepository_MetadataAndProgressUpdatesOwnDisjointFields()
+    public async Task EntityRepository_ReconciledStatusRoundTripsThroughVersionSixSchema()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteEntityRepository repository = new(database);
+        TrackedEntity reconciled = new(
+            EntityId.New(),
+            "VerifiedEntity",
+            DevelopmentStatus.Reconciled,
+            "Verified against the implementation");
+
+        Assert.True(await repository.TryAddAsync(reconciled));
+
+        TrackedEntity loaded = (await repository.GetAsync(reconciled.Id))!;
+        Assert.Equal(DevelopmentStatus.Reconciled, loaded.Status);
+        Assert.Equal(reconciled.Notes, loaded.Notes);
+    }
+
+    [Fact]
+    public async Task MetadataAndTrackedStateProgressUpdatesOwnDisjointFields()
     {
         await using TemporarySqliteFile file = new();
         MutableTimeProvider timeProvider = new(
@@ -320,7 +344,7 @@ public sealed class SqlitePersistenceTests
         TrackedEntity original = new(
             id,
             "OriginalName",
-            DevelopmentStatus.Completed,
+            DevelopmentStatus.DevelopmentCompleted,
             "Keep this manual progress",
             provenance: EntityProvenance.ManualOnly);
         Assert.True(await repository.TryAddAsync(original));
@@ -336,7 +360,7 @@ public sealed class SqlitePersistenceTests
         TrackedEntity? afterMetadataUpdate = await repository.GetAsync(id);
         Assert.NotNull(afterMetadataUpdate);
         Assert.Equal("RenamedEntity", afterMetadataUpdate.SourceName);
-        Assert.Equal(DevelopmentStatus.Completed, afterMetadataUpdate.Status);
+        Assert.Equal(DevelopmentStatus.DevelopmentCompleted, afterMetadataUpdate.Status);
         Assert.Equal("Keep this manual progress", afterMetadataUpdate.Notes);
         Assert.Equal(EntityProvenance.ManualAndImported, afterMetadataUpdate.Provenance);
         EntityAudit metadataAudit = await ReadEntityAuditAsync(file.DatabasePath, id);
@@ -351,7 +375,15 @@ public sealed class SqlitePersistenceTests
             "This name must be ignored",
             DevelopmentStatus.InProgress,
             "Updated manual notes");
-        Assert.True(await repository.UpdateProgressAsync(changedProgress));
+        await new SqliteTrackedStateStore(database).ApplyAsync(
+            new TrackedStateChangeSet(
+                [],
+                [],
+                [],
+                [],
+                [],
+                [],
+                entitiesWithProgressToUpdate: [changedProgress]));
 
         TrackedEntity? afterProgressUpdate = await repository.GetAsync(id);
         Assert.NotNull(afterProgressUpdate);
@@ -376,7 +408,6 @@ public sealed class SqlitePersistenceTests
         TrackedEntity missing = new(EntityId.New(), "Missing");
 
         Assert.False(await repository.UpdateSchemaMetadataAsync(missing));
-        Assert.False(await repository.UpdateProgressAsync(missing));
     }
 
     [Fact]
@@ -526,7 +557,8 @@ public sealed class SqlitePersistenceTests
             new SqliteDependencyRepository(restartedDatabase),
             new SqliteManualDependencyOverrideRepository(restartedDatabase),
             new DependencyRanker(),
-            new EffectiveDependencyResolver());
+            new EffectiveDependencyResolver(),
+            new WorkflowReadinessEvaluator());
 
         EntityOverviewResult result = await overviewService.GetAsync();
 
@@ -549,7 +581,7 @@ public sealed class SqlitePersistenceTests
         TrackedEntity alpha = new(
             EntityId.New(),
             "Alpha",
-            DevelopmentStatus.Completed,
+            DevelopmentStatus.DevelopmentCompleted,
             "Alpha progress");
         TrackedEntity zulu = new(
             EntityId.New(),
@@ -579,7 +611,7 @@ public sealed class SqlitePersistenceTests
         TrackedEntity reloadedAlpha = Assert.Single(
             reloadedEntities,
             entity => entity.Id == alpha.Id);
-        Assert.Equal(DevelopmentStatus.Completed, reloadedAlpha.Status);
+        Assert.Equal(DevelopmentStatus.DevelopmentCompleted, reloadedAlpha.Status);
         Assert.Equal("Alpha progress", reloadedAlpha.Notes);
     }
 

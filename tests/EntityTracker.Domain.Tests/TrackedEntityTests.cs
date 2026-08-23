@@ -79,16 +79,21 @@ public sealed class TrackedEntityTests
     }
 
     [Fact]
-    public void ChangeStatus_UpdatesStatus()
+    public void ChangeStatus_AllowsForwardAndBackwardWorkflowCorrections()
     {
         TrackedEntity entity = new(
             EntityId.New(),
             "sales.Customer",
             DevelopmentStatus.InProgress);
 
-        entity.ChangeStatus(DevelopmentStatus.Completed);
+        entity.ChangeStatus(DevelopmentStatus.DevelopmentCompleted);
+        Assert.Equal(DevelopmentStatus.DevelopmentCompleted, entity.Status);
 
-        Assert.Equal(DevelopmentStatus.Completed, entity.Status);
+        entity.ChangeStatus(DevelopmentStatus.Reconciled);
+        Assert.Equal(DevelopmentStatus.Reconciled, entity.Status);
+
+        entity.ChangeStatus(DevelopmentStatus.NotStarted);
+        Assert.Equal(DevelopmentStatus.NotStarted, entity.Status);
     }
 
     [Fact]

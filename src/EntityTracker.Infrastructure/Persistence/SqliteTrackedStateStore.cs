@@ -10,18 +10,18 @@ namespace EntityTracker.Infrastructure.Persistence;
 /// Applies one validated tracked-schema change set using a single SQLite transaction.
 /// Conditional upserts leave audit timestamps unchanged for relationships that did not change.
 /// </summary>
-public sealed class SqliteTrackedSchemaStore : ITrackedSchemaStore
+public sealed class SqliteTrackedStateStore : ITrackedStateStore
 {
     private readonly SqliteDatabase _database;
 
-    public SqliteTrackedSchemaStore(SqliteDatabase database)
+    public SqliteTrackedStateStore(SqliteDatabase database)
     {
         ArgumentNullException.ThrowIfNull(database);
         _database = database;
     }
 
     public async Task ApplyAsync(
-        TrackedSchemaChangeSet changeSet,
+        TrackedStateChangeSet changeSet,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(changeSet);
@@ -55,9 +55,29 @@ public sealed class SqliteTrackedSchemaStore : ITrackedSchemaStore
                     cancellationToken);
             }
 
+            foreach (TrackedEntity entity in changeSet.EntitiesWithProgressToUpdate)
+            {
+                await UpdateProgressAsync(
+                    connection,
+                    transaction,
+                    entity,
+                    timestamp,
+                    cancellationToken);
+            }
+
             foreach (EntityId entityId in changeSet.EntityIdsToArchive)
             {
                 await ArchiveEntityAsync(
+                    connection,
+                    transaction,
+                    entityId,
+                    timestamp,
+                    cancellationToken);
+            }
+
+            foreach (EntityId entityId in changeSet.EntityIdsToRestore)
+            {
+                await RestoreEntityAsync(
                     connection,
                     transaction,
                     entityId,
@@ -208,6 +228,46 @@ public sealed class SqliteTrackedSchemaStore : ITrackedSchemaStore
             WHERE id = $id AND lifecycle_state = 'Active';
             """);
         command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entityId));
+        command.Parameters.AddWithValue("$timestamp", timestamp);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task RestoreEntityAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        EntityId entityId,
+        string timestamp,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = CreateCommand(connection, transaction, """
+            UPDATE tracked_entities
+            SET lifecycle_state = 'Active',
+                schema_updated_at_utc = $timestamp
+            WHERE id = $id AND lifecycle_state = 'Archived';
+            """);
+        command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entityId));
+        command.Parameters.AddWithValue("$timestamp", timestamp);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task UpdateProgressAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        TrackedEntity entity,
+        string timestamp,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = CreateCommand(connection, transaction, """
+            UPDATE tracked_entities
+            SET development_status = $developmentStatus,
+                notes = $notes,
+                progress_updated_at_utc = $timestamp
+            WHERE id = $id
+              AND (development_status <> $developmentStatus OR notes <> $notes);
+            """);
+        command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
+        command.Parameters.AddWithValue("$developmentStatus", entity.Status.ToString());
+        command.Parameters.AddWithValue("$notes", entity.Notes);
         command.Parameters.AddWithValue("$timestamp", timestamp);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

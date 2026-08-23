@@ -2,6 +2,7 @@ using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
+using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 
 namespace EntityTracker.Application.Overview;
@@ -13,25 +14,29 @@ public sealed class EntityOverviewService
     private readonly IManualDependencyOverrideRepository _overrideRepository;
     private readonly DependencyRanker _dependencyRanker;
     private readonly EffectiveDependencyResolver _effectiveDependencyResolver;
+    private readonly WorkflowReadinessEvaluator _readinessEvaluator;
 
     public EntityOverviewService(
         IEntityRepository entityRepository,
         IDependencyRepository dependencyRepository,
         IManualDependencyOverrideRepository overrideRepository,
         DependencyRanker dependencyRanker,
-        EffectiveDependencyResolver effectiveDependencyResolver)
+        EffectiveDependencyResolver effectiveDependencyResolver,
+        WorkflowReadinessEvaluator readinessEvaluator)
     {
         ArgumentNullException.ThrowIfNull(entityRepository);
         ArgumentNullException.ThrowIfNull(dependencyRepository);
         ArgumentNullException.ThrowIfNull(overrideRepository);
         ArgumentNullException.ThrowIfNull(dependencyRanker);
         ArgumentNullException.ThrowIfNull(effectiveDependencyResolver);
+        ArgumentNullException.ThrowIfNull(readinessEvaluator);
 
         _entityRepository = entityRepository;
         _dependencyRepository = dependencyRepository;
         _overrideRepository = overrideRepository;
         _dependencyRanker = dependencyRanker;
         _effectiveDependencyResolver = effectiveDependencyResolver;
+        _readinessEvaluator = readinessEvaluator;
     }
 
     public async Task<EntityOverviewResult> GetAsync(
@@ -51,6 +56,9 @@ public sealed class EntityOverviewService
         IReadOnlyList<TrackedEntity> allEntities = await entityTask;
         IReadOnlyList<TrackedEntity> entities = allEntities
             .Where(static entity => entity.LifecycleState == EntityLifecycleState.Active)
+            .ToArray();
+        IReadOnlyList<TrackedEntity> archivedEntities = allEntities
+            .Where(static entity => entity.LifecycleState == EntityLifecycleState.Archived)
             .ToArray();
         EffectiveDependencyState effectiveState = _effectiveDependencyResolver.Resolve(
             allEntities,
@@ -73,6 +81,8 @@ public sealed class EntityOverviewService
 
         IReadOnlyDictionary<EntityId, TrackedEntity> entitiesById =
             entities.ToDictionary(static entity => entity.Id);
+        IReadOnlyDictionary<EntityId, EntityReadiness> readinessById =
+            _readinessEvaluator.Evaluate(entities, effectiveState);
 
         Dictionary<EntityId, int> dependencyCounts = entities.ToDictionary(
             static entity => entity.Id,
@@ -127,6 +137,7 @@ public sealed class EntityOverviewService
             .Select(ranking =>
             {
                 TrackedEntity entity = entitiesById[ranking.EntityId];
+                EntityReadiness readiness = readinessById[entity.Id];
                 return new EntityOverviewItem(
                     entity.Id,
                     ranking.Rank,
@@ -134,16 +145,20 @@ public sealed class EntityOverviewService
                     entity.Provenance,
                     entity.Status,
                     entity.Notes,
+                    entity.LifecycleState,
                     dependencyCounts[entity.Id],
                     orderedDependencyNames[entity.Id],
                     DependencyResolutionState.Resolved,
-                    []);
+                    [],
+                    _readinessEvaluator.Classify(entity, readiness),
+                    readiness.Blockers);
             });
 
         IEnumerable<EntityOverviewItem> unrankedItems = rankingResult.UnrankedEntities
             .Select(unrankedEntity =>
             {
                 TrackedEntity entity = entitiesById[unrankedEntity.EntityId];
+                EntityReadiness readiness = readinessById[entity.Id];
                 return new EntityOverviewItem(
                     entity.Id,
                     null,
@@ -151,12 +166,36 @@ public sealed class EntityOverviewService
                     entity.Provenance,
                     entity.Status,
                     entity.Notes,
+                    entity.LifecycleState,
                     dependencyCounts[entity.Id],
                     orderedDependencyNames[entity.Id],
                     unrankedEntity.State,
-                    unrankedEntity.MissingDependencyNames);
+                    unrankedEntity.MissingDependencyNames,
+                    _readinessEvaluator.Classify(entity, readiness),
+                    readiness.Blockers);
             });
 
-        return new EntityOverviewResult(rankedItems.Concat(unrankedItems), []);
+        IEnumerable<EntityOverviewItem> archivedItems = archivedEntities
+            .OrderBy(static entity => entity.SourceName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static entity => entity.SourceName, StringComparer.Ordinal)
+            .Select(entity => new EntityOverviewItem(
+                entity.Id,
+                null,
+                entity.SourceName,
+                entity.Provenance,
+                entity.Status,
+                entity.Notes,
+                entity.LifecycleState,
+                0,
+                [],
+                null,
+                [],
+                _readinessEvaluator.Classify(entity),
+                []));
+
+        return new EntityOverviewResult(
+            rankedItems.Concat(unrankedItems),
+            [],
+            archivedItems);
     }
 }

@@ -112,11 +112,36 @@ public sealed class ManualEntityCreationViewModelTests
         Assert.Null(store.LastChangeSet);
     }
 
+    [Fact]
+    public async Task ArchivedDuplicate_OffersExistingEntityDetailsInsteadOfCreating()
+    {
+        TrackedEntity archived = Entity(1, "Legacy", EntityLifecycleState.Archived);
+        List<EntityId> restoreRequests = [];
+        ManualEntityCreationViewModel viewModel = ViewModel(
+            [archived],
+            out RecordingStore store,
+            out _,
+            out _,
+            restoreRequests);
+        viewModel.EntityName = " legacy ";
+
+        await viewModel.CreateAsync();
+
+        Assert.True(viewModel.HasArchivedEntityMatch);
+        Assert.Equal(archived.Id, viewModel.ArchivedEntityMatch?.EntityId);
+        Assert.Null(store.LastChangeSet);
+
+        viewModel.RestoreArchivedCommand.Execute(null);
+        await WaitUntilAsync(() => restoreRequests.Count == 1);
+        Assert.Equal(archived.Id, Assert.Single(restoreRequests));
+    }
+
     private static ManualEntityCreationViewModel ViewModel(
         IReadOnlyList<TrackedEntity> entities,
         out RecordingStore store,
         out CallbackCounter created,
-        out CallbackCounter cancelled)
+        out CallbackCounter cancelled,
+        ICollection<EntityId>? restoreRequests = null)
     {
         store = new RecordingStore();
         created = new CallbackCounter();
@@ -137,7 +162,21 @@ public sealed class ManualEntityCreationViewModelTests
                 createdCounter.Count++;
                 return Task.CompletedTask;
             },
+            id =>
+            {
+                restoreRequests?.Add(id);
+                return Task.CompletedTask;
+            },
             () => cancelledCounter.Count++);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));
+        while (!condition())
+        {
+            await Task.Delay(10, timeout.Token);
+        }
     }
 
     private static TrackedEntity Entity(
@@ -173,9 +212,6 @@ public sealed class ManualEntityCreationViewModelTests
             TrackedEntity entity,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<bool> UpdateProgressAsync(
-            TrackedEntity entity,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class StubDependencyRepository : IDependencyRepository
@@ -197,12 +233,12 @@ public sealed class ManualEntityCreationViewModelTests
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
-    private sealed class RecordingStore : ITrackedSchemaStore
+    private sealed class RecordingStore : ITrackedStateStore
     {
-        public TrackedSchemaChangeSet? LastChangeSet { get; private set; }
+        public TrackedStateChangeSet? LastChangeSet { get; private set; }
 
         public Task ApplyAsync(
-            TrackedSchemaChangeSet changeSet,
+            TrackedStateChangeSet changeSet,
             CancellationToken cancellationToken = default)
         {
             LastChangeSet = changeSet;

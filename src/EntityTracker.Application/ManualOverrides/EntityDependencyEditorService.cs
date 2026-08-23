@@ -17,7 +17,7 @@ public sealed class EntityDependencyEditorService
     private readonly IManualDependencyOverrideRepository _overrideRepository;
     private readonly EffectiveDependencyResolver _effectiveDependencyResolver;
     private readonly DependencyRanker _dependencyRanker;
-    private readonly ITrackedSchemaStore _store;
+    private readonly ITrackedStateStore _store;
 
     public EntityDependencyEditorService(
         IEntityRepository entityRepository,
@@ -25,7 +25,7 @@ public sealed class EntityDependencyEditorService
         IManualDependencyOverrideRepository overrideRepository,
         EffectiveDependencyResolver effectiveDependencyResolver,
         DependencyRanker dependencyRanker,
-        ITrackedSchemaStore store)
+        ITrackedStateStore store)
     {
         ArgumentNullException.ThrowIfNull(entityRepository);
         ArgumentNullException.ThrowIfNull(dependencyRepository);
@@ -99,6 +99,41 @@ public sealed class EntityDependencyEditorService
             snapshot.UnresolvedDependencies,
             snapshot.Overrides,
             desiredOwnerOverrides);
+    }
+
+    public async Task<ArchivedEntityDetails> LoadArchivedDetailsAsync(
+        EntityId ownerId,
+        CancellationToken cancellationToken = default)
+    {
+        Snapshot snapshot = await LoadSnapshotAsync(cancellationToken);
+        TrackedEntity owner = snapshot.Entities.SingleOrDefault(entity => entity.Id == ownerId)
+            ?? throw new InvalidOperationException("The selected entity no longer exists.");
+        if (owner.LifecycleState != EntityLifecycleState.Archived)
+        {
+            throw new InvalidOperationException("The selected entity is no longer archived.");
+        }
+
+        Dictionary<EntityId, TrackedEntity> entitiesById = snapshot.Entities.ToDictionary(
+            static entity => entity.Id);
+        Dictionary<EntitySourceKey, TrackedEntity> entitiesByKey = snapshot.Entities.ToDictionary(
+            static entity => EntitySourceKey.From(entity.SourceName));
+        Dictionary<EntityId, Dictionary<EntitySourceKey, DependencyDeclaration>> imported =
+            DependencyStateResolver.BuildCurrentDeclarations(
+                snapshot.ResolvedDependencies,
+                snapshot.UnresolvedDependencies,
+                entitiesById);
+        Dictionary<EntitySourceKey, DependencyDeclaration> ownerImported = imported.TryGetValue(
+            ownerId,
+            out Dictionary<EntitySourceKey, DependencyDeclaration>? declarations)
+            ? declarations
+            : [];
+        Dictionary<EntitySourceKey, ManualDependencyOverride> ownerOverrides = snapshot.Overrides
+            .Where(item => item.DependentEntityId == ownerId)
+            .ToDictionary(static item => EntitySourceKey.From(item.DependencySourceName));
+
+        return new ArchivedEntityDetails(
+            owner,
+            CreateItems(ownerImported, ownerOverrides, entitiesByKey));
     }
 
     public EntityDependencyEditPlan CreatePlan(
@@ -211,17 +246,32 @@ public sealed class EntityDependencyEditorService
 
     public async Task SaveAsync(
         EntityDependencyEditPlan plan,
+        DevelopmentStatus status,
+        string notes,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(notes);
         if (!plan.IsValid)
         {
             throw new InvalidOperationException(
                 "Dependency edits cannot be saved while validation errors remain.");
         }
 
+        TrackedEntity updatedProgress = new(
+            plan.Entity.Id,
+            plan.Entity.SourceName,
+            status,
+            notes,
+            plan.Entity.LifecycleState,
+            plan.Entity.Provenance);
+        TrackedEntity[] progressUpdates =
+            status != plan.Entity.Status || !string.Equals(notes, plan.Entity.Notes, StringComparison.Ordinal)
+                ? [updatedProgress]
+                : [];
+
         await _store.ApplyAsync(
-            new TrackedSchemaChangeSet(
+            new TrackedStateChangeSet(
                 [],
                 [],
                 [],
@@ -229,7 +279,8 @@ public sealed class EntityDependencyEditorService
                 [],
                 [],
                 [plan.Entity.Id],
-                plan.DesiredOverrides),
+                plan.DesiredOverrides,
+                progressUpdates),
             cancellationToken);
     }
 

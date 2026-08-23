@@ -31,7 +31,7 @@ public partial class MainWindow : Window
         await _viewModel.InitializeAsync();
     }
 
-    private void OnEntityActionsClick(object sender, RoutedEventArgs e)
+    private void OnContextMenuButtonClick(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { ContextMenu: not null } button)
         {

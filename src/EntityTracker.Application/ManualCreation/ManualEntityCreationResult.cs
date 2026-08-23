@@ -6,10 +6,12 @@ public sealed class ManualEntityCreationResult
 {
     private ManualEntityCreationResult(
         EntityId? createdEntityId,
-        IEnumerable<ManualEntityCreationDiagnostic> diagnostics)
+        IEnumerable<ManualEntityCreationDiagnostic> diagnostics,
+        ArchivedEntityMatch? archivedEntityMatch = null)
     {
         CreatedEntityId = createdEntityId;
         Diagnostics = diagnostics.ToArray();
+        ArchivedEntityMatch = archivedEntityMatch;
     }
 
     public bool IsSuccess => CreatedEntityId is not null &&
@@ -21,12 +23,15 @@ public sealed class ManualEntityCreationResult
 
     public IReadOnlyList<ManualEntityCreationDiagnostic> Diagnostics { get; }
 
+    public ArchivedEntityMatch? ArchivedEntityMatch { get; }
+
     internal static ManualEntityCreationResult Success(
         EntityId createdEntityId,
         IEnumerable<ManualEntityCreationDiagnostic> diagnostics) =>
         new(createdEntityId, diagnostics);
 
     internal static ManualEntityCreationResult Failure(
-        IEnumerable<ManualEntityCreationDiagnostic> diagnostics) =>
-        new(null, diagnostics);
+        IEnumerable<ManualEntityCreationDiagnostic> diagnostics,
+        ArchivedEntityMatch? archivedEntityMatch = null) =>
+        new(null, diagnostics, archivedEntityMatch);
 }

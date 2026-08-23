@@ -25,7 +25,4 @@ public interface IEntityRepository
     /// <summary>
     /// Updates status and notes without changing imported schema fields.
     /// </summary>
-    Task<bool> UpdateProgressAsync(
-        TrackedEntity entity,
-        CancellationToken cancellationToken = default);
 }

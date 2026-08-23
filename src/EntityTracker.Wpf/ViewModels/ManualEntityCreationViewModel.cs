@@ -5,6 +5,7 @@ using System.Windows.Input;
 
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.ManualCreation;
+using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
 
 namespace EntityTracker.Wpf.ViewModels;
@@ -15,9 +16,11 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
 
     private readonly ManualEntityCreationService _service;
     private readonly Func<Task> _onCreated;
+    private readonly Func<EntityId, Task> _onRestoreArchived;
     private readonly Action _onCancelled;
     private readonly Func<bool> _canOperate;
     private readonly AsyncCommand _createCommand;
+    private readonly AsyncCommand _restoreArchivedCommand;
     private readonly RelayCommand<ManualDependencySuggestion> _addExistingCommand;
     private readonly RelayCommand<ManualDependencyRow> _removeDependencyCommand;
     private readonly RelayCommand _addUnresolvedCommand;
@@ -33,19 +36,23 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     private string? _operationMessage;
     private bool _canAddAsUnresolved;
     private bool _isBusy;
+    private ArchivedEntityMatch? _archivedEntityMatch;
 
     public ManualEntityCreationViewModel(
         ManualEntityCreationService service,
         Func<Task> onCreated,
+        Func<EntityId, Task> onRestoreArchived,
         Action onCancelled,
         Func<bool>? canOperate = null)
     {
         ArgumentNullException.ThrowIfNull(service);
         ArgumentNullException.ThrowIfNull(onCreated);
+        ArgumentNullException.ThrowIfNull(onRestoreArchived);
         ArgumentNullException.ThrowIfNull(onCancelled);
 
         _service = service;
         _onCreated = onCreated;
+        _onRestoreArchived = onRestoreArchived;
         _onCancelled = onCancelled;
         _canOperate = canOperate ?? (() => true);
         SelectedDependencies = [];
@@ -61,6 +68,9 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         _createCommand = new AsyncCommand(
             () => CreateAsync(),
             () => !IsBusy && _canOperate() && !string.IsNullOrWhiteSpace(EntityName));
+        _restoreArchivedCommand = new AsyncCommand(
+            RestoreArchivedAsync,
+            () => !IsBusy && _canOperate() && ArchivedEntityMatch is not null);
         _cancelCommand = new RelayCommand(Cancel, () => !IsBusy && _canOperate());
     }
 
@@ -73,6 +83,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _entityName, value ?? string.Empty))
             {
+                ArchivedEntityMatch = null;
                 _createCommand.NotifyCanExecuteChanged();
                 ScheduleSearch();
             }
@@ -165,6 +176,27 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         }
     }
 
+    public ArchivedEntityMatch? ArchivedEntityMatch
+    {
+        get => _archivedEntityMatch;
+        private set
+        {
+            if (SetField(ref _archivedEntityMatch, value))
+            {
+                OnPropertyChanged(nameof(HasArchivedEntityMatch));
+                OnPropertyChanged(nameof(ArchivedEntityMessage));
+                _restoreArchivedCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    public bool HasArchivedEntityMatch => ArchivedEntityMatch is not null;
+
+    public string ArchivedEntityMessage => ArchivedEntityMatch is null
+        ? string.Empty
+        : $"'{ArchivedEntityMatch.SourceName}' already exists and is archived. " +
+          "Restore it to keep its identity, progress, notes, and dependencies.";
+
     public bool IsBusy
     {
         get => _isBusy;
@@ -177,6 +209,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
                 _cancelCommand.NotifyCanExecuteChanged();
                 _addExistingCommand.NotifyCanExecuteChanged();
                 _removeDependencyCommand.NotifyCanExecuteChanged();
+                _restoreArchivedCommand.NotifyCanExecuteChanged();
             }
         }
     }
@@ -198,6 +231,8 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     public ICommand AddUnresolvedCommand => _addUnresolvedCommand;
 
     public ICommand CreateCommand => _createCommand;
+
+    public ICommand RestoreArchivedCommand => _restoreArchivedCommand;
 
     public ICommand CancelCommand => _cancelCommand;
 
@@ -270,6 +305,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         IsBusy = true;
         Errors = [];
         Warnings = [];
+        ArchivedEntityMatch = null;
         OperationMessage = "Creating entity…";
 
         ManualEntityCreationResult result;
@@ -306,6 +342,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
                 diagnostic.Severity == ManualEntityCreationDiagnosticSeverity.Warning)
             .Select(static diagnostic => diagnostic.Message)
             .ToArray();
+        ArchivedEntityMatch = result.ArchivedEntityMatch;
 
         if (!result.IsSuccess)
         {
@@ -337,6 +374,36 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         }
     }
 
+    private async Task RestoreArchivedAsync()
+    {
+        ArchivedEntityMatch? match = ArchivedEntityMatch;
+        if (match is null || IsBusy || !_canOperate())
+        {
+            return;
+        }
+
+        IsBusy = true;
+        OperationMessage = "Opening archived entity…";
+        try
+        {
+            IsBusy = false;
+            await _onRestoreArchived(match.EntityId);
+            OperationMessage = null;
+        }
+        catch (Exception exception)
+        {
+            Errors = [$"The archived entity could not be opened: {exception.Message}"];
+            OperationMessage = null;
+        }
+        finally
+        {
+            if (IsBusy)
+            {
+                IsBusy = false;
+            }
+        }
+    }
+
     public void NotifyHostCanExecuteChanged()
     {
         if (!_canOperate())
@@ -349,6 +416,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         _cancelCommand.NotifyCanExecuteChanged();
         _addExistingCommand.NotifyCanExecuteChanged();
         _removeDependencyCommand.NotifyCanExecuteChanged();
+        _restoreArchivedCommand.NotifyCanExecuteChanged();
     }
 
     private void AddExisting(ManualDependencySuggestion suggestion)
@@ -482,6 +550,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         Suggestions = [];
         Errors = [];
         Warnings = [];
+        ArchivedEntityMatch = null;
         SearchMessage = null;
         OperationMessage = null;
         CanAddAsUnresolved = false;

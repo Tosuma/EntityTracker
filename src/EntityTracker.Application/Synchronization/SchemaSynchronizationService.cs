@@ -13,7 +13,7 @@ public sealed class SchemaSynchronizationService
     private readonly IManualDependencyOverrideRepository _overrideRepository;
     private readonly SchemaSynchronizationPlanner _planner;
     private readonly EntityDependencyEditorService _dependencyEditorService;
-    private readonly ITrackedSchemaStore _store;
+    private readonly ITrackedStateStore _store;
 
     public SchemaSynchronizationService(
         ISchemaImportFileParser fileParser,
@@ -22,7 +22,7 @@ public sealed class SchemaSynchronizationService
         IManualDependencyOverrideRepository overrideRepository,
         SchemaSynchronizationPlanner planner,
         EntityDependencyEditorService dependencyEditorService,
-        ITrackedSchemaStore store)
+        ITrackedStateStore store)
     {
         ArgumentNullException.ThrowIfNull(fileParser);
         ArgumentNullException.ThrowIfNull(entityRepository);

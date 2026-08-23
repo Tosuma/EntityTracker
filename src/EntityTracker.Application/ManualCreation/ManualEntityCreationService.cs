@@ -13,7 +13,7 @@ public sealed class ManualEntityCreationService
     private readonly IManualDependencyOverrideRepository _overrideRepository;
     private readonly DependencyRanker _dependencyRanker;
     private readonly EffectiveDependencyResolver _effectiveDependencyResolver;
-    private readonly ITrackedSchemaStore _store;
+    private readonly ITrackedStateStore _store;
 
     public ManualEntityCreationService(
         IEntityRepository entityRepository,
@@ -21,7 +21,7 @@ public sealed class ManualEntityCreationService
         IManualDependencyOverrideRepository overrideRepository,
         DependencyRanker dependencyRanker,
         EffectiveDependencyResolver effectiveDependencyResolver,
-        ITrackedSchemaStore store)
+        ITrackedStateStore store)
     {
         ArgumentNullException.ThrowIfNull(entityRepository);
         ArgumentNullException.ThrowIfNull(dependencyRepository);
@@ -91,9 +91,19 @@ public sealed class ManualEntityCreationService
             activeByKey,
             diagnostics);
 
+        ArchivedEntityMatch? archivedEntityMatch = null;
+        if (entityKey is not null &&
+            currentByKey.TryGetValue(entityKey, out TrackedEntity? existingEntity) &&
+            existingEntity.LifecycleState == EntityLifecycleState.Archived)
+        {
+            archivedEntityMatch = new ArchivedEntityMatch(
+                existingEntity.Id,
+                existingEntity.SourceName);
+        }
+
         if (HasErrors(diagnostics))
         {
-            return ManualEntityCreationResult.Failure(diagnostics);
+            return ManualEntityCreationResult.Failure(diagnostics, archivedEntityMatch);
         }
 
         TrackedEntity createdEntity = new(
@@ -172,7 +182,7 @@ public sealed class ManualEntityCreationService
             }
         }
 
-        TrackedSchemaChangeSet changeSet = new(
+        TrackedStateChangeSet changeSet = new(
             [createdEntity],
             [],
             [],

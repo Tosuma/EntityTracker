@@ -337,7 +337,7 @@ public sealed class SchemaSynchronizationPlanner
         EntityId[] reconciledOverrideOwnerIds = FindChangedOverrideOwners(
             persistedOverrides,
             candidateOverrides);
-        TrackedSchemaChangeSet changeSet = new(
+        TrackedStateChangeSet changeSet = new(
             entitiesToAdd,
             entitiesToUpdate,
             idsToArchive,

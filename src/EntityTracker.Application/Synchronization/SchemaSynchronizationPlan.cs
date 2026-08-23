@@ -16,7 +16,7 @@ public sealed class SchemaSynchronizationPlan
         int unchangedEntityCount,
         IEnumerable<EntitySynchronizationChange> unresolvedEntities,
         DependencyRankingResult candidateRanking,
-        TrackedSchemaChangeSet changeSet,
+        TrackedStateChangeSet changeSet,
         SchemaImportCandidate importCandidate,
         IEnumerable<TrackedEntity> persistedEntities,
         IEnumerable<PersistedDependency> persistedResolvedDependencies,
@@ -68,7 +68,7 @@ public sealed class SchemaSynchronizationPlan
 
     public DependencyRankingResult CandidateRanking { get; }
 
-    public TrackedSchemaChangeSet ChangeSet { get; }
+    public TrackedStateChangeSet ChangeSet { get; }
 
     internal SchemaImportCandidate ImportCandidate { get; }
 

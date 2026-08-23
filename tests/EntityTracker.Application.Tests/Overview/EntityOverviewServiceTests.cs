@@ -3,6 +3,7 @@ using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
+using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 
 namespace EntityTracker.Application.Tests.Overview;
@@ -12,7 +13,7 @@ public sealed class EntityOverviewServiceTests
     [Fact]
     public async Task GetAsync_ReturnsRankedPersistedDetailsAndDependencyCounts()
     {
-        TrackedEntity foundation = Entity(1, "Foundation", DevelopmentStatus.Completed, "Stable");
+        TrackedEntity foundation = Entity(1, "Foundation", DevelopmentStatus.DevelopmentCompleted, "Stable");
         TrackedEntity service = Entity(2, "Service", DevelopmentStatus.InProgress, "API underway");
         TrackedEntity screen = Entity(3, "Screen");
         PersistedDependency[] dependencies =
@@ -36,7 +37,7 @@ public sealed class EntityOverviewServiceTests
         Assert.Empty(result.Items[0].DependencyNames);
         Assert.Equal(["Foundation"], result.Items[1].DependencyNames);
         Assert.Equal(["Service"], result.Items[2].DependencyNames);
-        Assert.Equal(DevelopmentStatus.Completed, result.Items[0].Status);
+        Assert.Equal(DevelopmentStatus.DevelopmentCompleted, result.Items[0].Status);
         Assert.Equal("Stable", result.Items[0].Notes);
         Assert.Equal(DevelopmentStatus.InProgress, result.Items[1].Status);
         Assert.Equal("API underway", result.Items[1].Notes);
@@ -83,10 +84,12 @@ public sealed class EntityOverviewServiceTests
         EntityOverviewItem ownerItem = result.Items.Single(item => item.EntityId == owner.Id);
         Assert.Equal(["Manual Missing", "Retained"], ownerItem.DependencyNames);
         Assert.Equal(2, ownerItem.DependencyCount);
+        Assert.Equal(["Manual Missing", "Retained"], ownerItem.MissingDependencyNames);
+        Assert.Equal(EntityWorkflowState.Blocked, ownerItem.WorkflowState);
     }
 
     [Fact]
-    public async Task GetAsync_ArchivedEntitiesAreExcludedFromTheEffectiveOverview()
+    public async Task GetAsync_ArchivedEntitiesAreSeparatedFromTheEffectiveOverview()
     {
         TrackedEntity active = Entity(1, "Active");
         TrackedEntity archived = new(
@@ -98,6 +101,12 @@ public sealed class EntityOverviewServiceTests
         EntityOverviewResult result = await service.GetAsync();
 
         Assert.Equal("Active", Assert.Single(result.Items).SourceName);
+        EntityOverviewItem archivedItem = Assert.Single(result.ArchivedItems);
+        Assert.Equal(archived.Id, archivedItem.EntityId);
+        Assert.Equal(EntityWorkflowState.Archived, archivedItem.WorkflowState);
+        Assert.Null(archivedItem.DependencyState);
+        Assert.Empty(archivedItem.DependencyResolutionIssueNames);
+        Assert.Null(archivedItem.Rank);
     }
 
     [Fact]
@@ -138,11 +147,11 @@ public sealed class EntityOverviewServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_ReturnsDirectlyUnresolvedAndTransitivelyBlockedRowsWithoutRanks()
+    public async Task GetAsync_UsesDirectImplementationBlockersWhileKeepingStructuralGraphState()
     {
         TrackedEntity alpha = Entity(1, "Alpha");
         TrackedEntity beta = Entity(2, "Beta");
-        TrackedEntity safe = Entity(3, "Safe", DevelopmentStatus.Completed);
+        TrackedEntity safe = Entity(3, "Safe", DevelopmentStatus.DevelopmentCompleted);
         EntityOverviewService service = CreateService(
             [beta, safe, alpha],
             [Dependency(beta, alpha, ImportedDependencyKind.Mandatory)],
@@ -168,7 +177,17 @@ public sealed class EntityOverviewServiceTests
         Assert.Equal(["Alpha"], result.Items[2].DependencyNames);
         Assert.Empty(result.Items[0].MissingDependencyNames);
         Assert.Equal(["MissingX"], result.Items[1].MissingDependencyNames);
-        Assert.Equal(["MissingX"], result.Items[2].MissingDependencyNames);
+        Assert.Equal(["Alpha"], result.Items[2].MissingDependencyNames);
+        Assert.Empty(result.Items[0].DependencyResolutionIssueNames);
+        Assert.Equal(["MissingX"], result.Items[1].DependencyResolutionIssueNames);
+        Assert.Equal(["MissingX"], result.Items[2].DependencyResolutionIssueNames);
+        Assert.Equal(
+            [
+                EntityWorkflowState.DevelopmentCompleted,
+                EntityWorkflowState.Blocked,
+                EntityWorkflowState.Blocked
+            ],
+            result.Items.Select(static item => item.WorkflowState));
     }
 
     private static EntityOverviewService CreateService(
@@ -184,7 +203,8 @@ public sealed class EntityOverviewServiceTests
                 unresolvedDependencies?.ToArray() ?? []),
             new StubManualDependencyOverrideRepository(overrides?.ToArray()),
             new DependencyRanker(),
-            new EffectiveDependencyResolver());
+            new EffectiveDependencyResolver(),
+            new WorkflowReadinessEvaluator());
     }
 
     private static TrackedEntity Entity(
@@ -239,9 +259,6 @@ public sealed class EntityOverviewServiceTests
             TrackedEntity entity,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<bool> UpdateProgressAsync(
-            TrackedEntity entity,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class StubDependencyRepository(

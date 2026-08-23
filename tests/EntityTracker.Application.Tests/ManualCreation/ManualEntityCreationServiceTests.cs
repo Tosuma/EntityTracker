@@ -202,6 +202,16 @@ public sealed class ManualEntityCreationServiceTests
         Assert.False(result.IsSuccess);
         Assert.Contains(result.Diagnostics, diagnostic =>
             diagnostic.Code == ManualEntityCreationDiagnosticCode.DuplicateEntity);
+        if (lifecycle == EntityLifecycleState.Archived)
+        {
+            Assert.Equal(existing.Id, result.ArchivedEntityMatch?.EntityId);
+            Assert.Equal(existing.SourceName, result.ArchivedEntityMatch?.SourceName);
+        }
+        else
+        {
+            Assert.Null(result.ArchivedEntityMatch);
+        }
+
         Assert.Null(store.LastChangeSet);
     }
 
@@ -350,9 +360,6 @@ public sealed class ManualEntityCreationServiceTests
             TrackedEntity entity,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<bool> UpdateProgressAsync(
-            TrackedEntity entity,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class StubDependencyRepository(
@@ -374,12 +381,12 @@ public sealed class ManualEntityCreationServiceTests
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
-    private sealed class RecordingStore : ITrackedSchemaStore
+    private sealed class RecordingStore : ITrackedStateStore
     {
-        public TrackedSchemaChangeSet? LastChangeSet { get; private set; }
+        public TrackedStateChangeSet? LastChangeSet { get; private set; }
 
         public Task ApplyAsync(
-            TrackedSchemaChangeSet changeSet,
+            TrackedStateChangeSet changeSet,
             CancellationToken cancellationToken = default)
         {
             LastChangeSet = changeSet;

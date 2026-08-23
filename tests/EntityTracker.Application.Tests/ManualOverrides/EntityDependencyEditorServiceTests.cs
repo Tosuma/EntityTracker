@@ -131,15 +131,74 @@ public sealed class EntityDependencyEditorServiceTests
                 "Future",
                 ManualDependencyOverrideAction.Add)]);
 
-        await service.SaveAsync(plan);
+        await service.SaveAsync(plan, owner.Status, owner.Notes);
 
-        TrackedSchemaChangeSet changeSet = Assert.IsType<TrackedSchemaChangeSet>(
+        TrackedStateChangeSet changeSet = Assert.IsType<TrackedStateChangeSet>(
             store.LastChangeSet);
         Assert.Equal(owner.Id, Assert.Single(changeSet.ReconciledOverrideOwnerIds));
         Assert.Single(changeSet.ManualDependencyOverrides);
         Assert.Empty(changeSet.ReconciledOwnerIds);
         Assert.Empty(changeSet.ResolvedDependencies);
         Assert.Empty(changeSet.UnresolvedDependencies);
+        Assert.Empty(changeSet.EntitiesWithProgressToUpdate);
+    }
+
+    [Fact]
+    public async Task SaveAsync_StatusNotesAndOverridesShareOneChangeSet()
+    {
+        TrackedEntity owner = Entity(1, "Owner");
+        EntityDependencyEditorService service = Service([owner], [], [], [], out StubStore store);
+        EntityDependencyEditPlan plan = service.CreatePlan(
+            owner.Id,
+            [owner],
+            [],
+            [],
+            [],
+            [new ManualDependencyOverride(
+                owner.Id,
+                "Future",
+                ManualDependencyOverrideAction.Add)]);
+
+        await service.SaveAsync(plan, DevelopmentStatus.Reconciled, "Verified notes");
+
+        TrackedStateChangeSet changeSet = Assert.IsType<TrackedStateChangeSet>(
+            store.LastChangeSet);
+        TrackedEntity progress = Assert.Single(changeSet.EntitiesWithProgressToUpdate);
+        Assert.Equal(owner.Id, progress.Id);
+        Assert.Equal(DevelopmentStatus.Reconciled, progress.Status);
+        Assert.Equal("Verified notes", progress.Notes);
+        Assert.Equal(owner.Id, Assert.Single(changeSet.ReconciledOverrideOwnerIds));
+        Assert.Single(changeSet.ManualDependencyOverrides);
+    }
+
+    [Fact]
+    public async Task LoadArchivedDetailsAsync_ReturnsPreservedFactsAndOverridesReadOnlyProjection()
+    {
+        TrackedEntity owner = new(
+            new EntityId(new Guid(1, 0, 0, new byte[8])),
+            "Owner",
+            DevelopmentStatus.Reconciled,
+            "Verified",
+            EntityLifecycleState.Archived);
+        TrackedEntity target = Entity(2, "Target");
+        EntityDependencyEditorService service = Service(
+            [owner, target],
+            [Dependency(owner, target, ImportedDependencyKind.Optional)],
+            [],
+            [new ManualDependencyOverride(
+                owner.Id,
+                "ManualMissing",
+                ManualDependencyOverrideAction.Add)],
+            out _);
+
+        ArchivedEntityDetails details = await service.LoadArchivedDetailsAsync(owner.Id);
+
+        Assert.Equal(owner.Id, details.Entity.Id);
+        Assert.Equal(DevelopmentStatus.Reconciled, details.Entity.Status);
+        Assert.Equal("Verified", details.Entity.Notes);
+        Assert.Equal(
+            ["ManualMissing", "Target"],
+            details.Dependencies.Select(static dependency => dependency.DependencySourceName));
     }
 
     [Fact]
@@ -182,8 +241,11 @@ public sealed class EntityDependencyEditorServiceTests
 
     private static EntityId Id(int id) => new(new Guid(id, 0, 0, new byte[8]));
 
-    private static PersistedDependency Dependency(TrackedEntity owner, TrackedEntity target) =>
-        new(new DependencyEdge(owner.Id, target.Id), ImportedDependencyKind.Mandatory);
+    private static PersistedDependency Dependency(
+        TrackedEntity owner,
+        TrackedEntity target,
+        ImportedDependencyKind kind = ImportedDependencyKind.Mandatory) =>
+        new(new DependencyEdge(owner.Id, target.Id), kind);
 
     private sealed class StubEntityRepository(IReadOnlyList<TrackedEntity> entities)
         : IEntityRepository
@@ -204,9 +266,6 @@ public sealed class EntityDependencyEditorServiceTests
             TrackedEntity entity,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public Task<bool> UpdateProgressAsync(
-            TrackedEntity entity,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class StubDependencyRepository(
@@ -228,12 +287,12 @@ public sealed class EntityDependencyEditorServiceTests
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
-    private sealed class StubStore : ITrackedSchemaStore
+    private sealed class StubStore : ITrackedStateStore
     {
-        public TrackedSchemaChangeSet? LastChangeSet { get; private set; }
+        public TrackedStateChangeSet? LastChangeSet { get; private set; }
 
         public Task ApplyAsync(
-            TrackedSchemaChangeSet changeSet,
+            TrackedStateChangeSet changeSet,
             CancellationToken cancellationToken = default)
         {
             LastChangeSet = changeSet;

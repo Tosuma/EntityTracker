@@ -4,7 +4,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    private const int CurrentSchemaVersion = 5;
+    private const int CurrentSchemaVersion = 6;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -13,7 +13,8 @@ public sealed class SqliteDatabase
             source_key TEXT NOT NULL UNIQUE,
             source_name TEXT NOT NULL,
             development_status TEXT NOT NULL
-                CHECK (development_status IN ('NotStarted', 'InProgress', 'Completed')),
+                CHECK (development_status IN
+                    ('NotStarted', 'InProgress', 'DevelopmentCompleted', 'Reconciled')),
             notes TEXT NOT NULL,
             created_at_utc TEXT NOT NULL,
             schema_updated_at_utc TEXT NOT NULL,
@@ -36,6 +37,50 @@ public sealed class SqliteDatabase
 
         CREATE INDEX ix_schema_dependencies_dependency_entity_id
             ON schema_dependencies (dependency_entity_id);
+        """;
+
+    private const string WorkflowStatusSchemaSql = """
+        CREATE TABLE tracked_entities_v6
+        (
+            id TEXT NOT NULL PRIMARY KEY,
+            source_key TEXT NOT NULL UNIQUE,
+            source_name TEXT NOT NULL,
+            development_status TEXT NOT NULL
+                CHECK (development_status IN
+                    ('NotStarted', 'InProgress', 'DevelopmentCompleted', 'Reconciled')),
+            notes TEXT NOT NULL,
+            created_at_utc TEXT NOT NULL,
+            schema_updated_at_utc TEXT NOT NULL,
+            progress_updated_at_utc TEXT NOT NULL,
+            lifecycle_state TEXT NOT NULL DEFAULT 'Active'
+                CHECK (lifecycle_state IN ('Active', 'Archived')),
+            provenance TEXT NOT NULL DEFAULT 'Imported'
+                CHECK (provenance IN ('Imported', 'ManualOnly', 'ManualAndImported'))
+        );
+
+        INSERT INTO tracked_entities_v6
+        (
+            id, source_key, source_name, development_status, notes,
+            created_at_utc, schema_updated_at_utc, progress_updated_at_utc,
+            lifecycle_state, provenance
+        )
+        SELECT id,
+               source_key,
+               source_name,
+               CASE development_status
+                   WHEN 'Completed' THEN 'DevelopmentCompleted'
+                   ELSE development_status
+               END,
+               notes,
+               created_at_utc,
+               schema_updated_at_utc,
+               progress_updated_at_utc,
+               lifecycle_state,
+               provenance
+        FROM tracked_entities;
+
+        DROP TABLE tracked_entities;
+        ALTER TABLE tracked_entities_v6 RENAME TO tracked_entities;
         """;
 
     private const string UnresolvedDependencySchemaSql = """
@@ -227,61 +272,90 @@ public sealed class SqliteDatabase
             return;
         }
 
-        await using SqliteTransaction transaction =
-            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
-
-        if (schemaVersion < 1)
+        bool rebuildTrackedEntities = schemaVersion is > 0 and < 6;
+        if (rebuildTrackedEntities)
         {
+            await ExecuteAsync(connection, "PRAGMA foreign_keys = OFF;", cancellationToken);
+        }
+
+        try
+        {
+            await using SqliteTransaction transaction =
+                (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+            if (schemaVersion < 1)
+            {
+                await ExecuteAsync(
+                    connection,
+                    transaction,
+                    InitialSchemaSql,
+                    cancellationToken);
+            }
+
+            if (schemaVersion < 2)
+            {
+                await ExecuteAsync(
+                    connection,
+                    transaction,
+                    UnresolvedDependencySchemaSql,
+                    cancellationToken);
+            }
+
+            if (schemaVersion < 3)
+            {
+                await ExecuteAsync(
+                    connection,
+                    transaction,
+                    LifecycleSchemaSql,
+                    cancellationToken);
+            }
+
+            if (schemaVersion < 4)
+            {
+                await ExecuteAsync(
+                    connection,
+                    transaction,
+                    ProvenanceSchemaSql,
+                    cancellationToken);
+            }
+
+            if (schemaVersion < 5)
+            {
+                await ExecuteAsync(
+                    connection,
+                    transaction,
+                    ManualDependencyOverrideSchemaSql,
+                    cancellationToken);
+            }
+
+            if (rebuildTrackedEntities)
+            {
+                await ExecuteAsync(
+                    connection,
+                    transaction,
+                    WorkflowStatusSchemaSql,
+                    cancellationToken);
+                await EnsureNoForeignKeyViolationsAsync(
+                    connection,
+                    transaction,
+                    cancellationToken);
+            }
+
             await ExecuteAsync(
                 connection,
                 transaction,
-                InitialSchemaSql,
+                $"PRAGMA user_version = {CurrentSchemaVersion};",
                 cancellationToken);
-        }
 
-        if (schemaVersion < 2)
+            await transaction.CommitAsync(cancellationToken);
+        }
+        finally
         {
-            await ExecuteAsync(
-                connection,
-                transaction,
-                UnresolvedDependencySchemaSql,
-                cancellationToken);
+            if (rebuildTrackedEntities)
+            {
+                await ExecuteAsync(connection, "PRAGMA foreign_keys = ON;", CancellationToken.None);
+            }
         }
-
-        if (schemaVersion < 3)
-        {
-            await ExecuteAsync(
-                connection,
-                transaction,
-                LifecycleSchemaSql,
-                cancellationToken);
-        }
-
-        if (schemaVersion < 4)
-        {
-            await ExecuteAsync(
-                connection,
-                transaction,
-                ProvenanceSchemaSql,
-                cancellationToken);
-        }
-
-        if (schemaVersion < 5)
-        {
-            await ExecuteAsync(
-                connection,
-                transaction,
-                ManualDependencyOverrideSchemaSql,
-                cancellationToken);
-        }
-
-        await ExecuteAsync(
-            connection,
-            transaction,
-            $"PRAGMA user_version = {CurrentSchemaVersion};",
-            cancellationToken);
-
-        await transaction.CommitAsync(cancellationToken);
     }
 
     internal async Task<SqliteConnection> OpenConnectionAsync(
@@ -321,5 +395,31 @@ public sealed class SqliteDatabase
         command.Transaction = transaction;
         command.CommandText = commandText;
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task ExecuteAsync(
+        SqliteConnection connection,
+        string commandText,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = commandText;
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task EnsureNoForeignKeyViolationsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "PRAGMA foreign_key_check;";
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (await reader.ReadAsync(cancellationToken))
+        {
+            throw new InvalidOperationException(
+                "The database migration found invalid dependency references and was rolled back.");
+        }
     }
 }

@@ -7,6 +7,7 @@ using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
+using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels;
@@ -18,7 +19,7 @@ public sealed class MainWindowViewModelTests
     [Fact]
     public async Task InitializeAsync_PopulatesRankedRowsAndProgressSummary()
     {
-        TrackedEntity foundation = Entity(1, "Foundation", DevelopmentStatus.Completed, "Ready");
+        TrackedEntity foundation = Entity(1, "Foundation", DevelopmentStatus.DevelopmentCompleted, "Ready");
         TrackedEntity service = Entity(2, "Service", DevelopmentStatus.InProgress);
         MainWindowViewModel viewModel = CreateViewModel(
             [service, foundation],
@@ -36,8 +37,108 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(2, viewModel.TotalEntityCount);
         Assert.Equal(0, viewModel.NotStartedCount);
         Assert.Equal(1, viewModel.InProgressCount);
-        Assert.Equal(1, viewModel.CompletedCount);
-        Assert.Equal(50, viewModel.CompletionPercentage);
+        Assert.Equal(1, viewModel.DevelopmentCompletedCount);
+        Assert.Equal(50, viewModel.SuccessfulCompletionPercentage);
+        Assert.Equal(0, viewModel.ReconciledCount);
+    }
+
+    [Fact]
+    public async Task ManagerFilters_AreExclusiveAndArchivedEntitiesStayOutsideActiveProgress()
+    {
+        TrackedEntity ready = Entity(1, "Ready");
+        TrackedEntity blocked = Entity(2, "Blocked");
+        TrackedEntity inProgress = Entity(3, "InProgress", DevelopmentStatus.InProgress);
+        TrackedEntity developmentCompleted = Entity(
+            4,
+            "DevelopmentCompleted",
+            DevelopmentStatus.DevelopmentCompleted);
+        TrackedEntity reconciled = Entity(5, "Reconciled", DevelopmentStatus.Reconciled);
+        TrackedEntity archived = Entity(
+            6,
+            "Archived",
+            DevelopmentStatus.Reconciled,
+            lifecycle: EntityLifecycleState.Archived);
+        MainWindowViewModel viewModel = CreateViewModel(
+            [ready, blocked, inProgress, developmentCompleted, reconciled, archived],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out _,
+            [Unresolved(blocked, "Missing")]);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal(5, viewModel.TotalEntityCount);
+        Assert.Equal(1, viewModel.ArchivedEntityCount);
+        Assert.Equal(40, viewModel.SuccessfulCompletionPercentage);
+        Assert.Equal(20, viewModel.ReconciledPercentage);
+
+        viewModel.SelectedOverviewFilter = OverviewManagerFilter.Ready;
+        Assert.Equal("Ready", Assert.Single(viewModel.OverviewItems).SourceName);
+        viewModel.SelectedOverviewFilter = OverviewManagerFilter.Blocked;
+        Assert.Equal("Blocked", Assert.Single(viewModel.OverviewItems).SourceName);
+        viewModel.SelectedOverviewFilter = OverviewManagerFilter.InProgress;
+        Assert.Equal("InProgress", Assert.Single(viewModel.OverviewItems).SourceName);
+        viewModel.SelectedOverviewFilter = OverviewManagerFilter.DevelopmentCompleted;
+        Assert.Equal("DevelopmentCompleted", Assert.Single(viewModel.OverviewItems).SourceName);
+        viewModel.SelectedOverviewFilter = OverviewManagerFilter.Reconciled;
+        Assert.Equal("Reconciled", Assert.Single(viewModel.OverviewItems).SourceName);
+
+        viewModel.SearchOverviewDependencies = true;
+        viewModel.SelectedOverviewFilter = OverviewManagerFilter.Archived;
+        EntityOverviewRow archivedRow = Assert.Single(viewModel.OverviewItems);
+        Assert.Equal("Archived", archivedRow.SourceName);
+        Assert.False(archivedRow.HasGraphIssue);
+        Assert.Empty(archivedRow.GraphIssueTitle);
+        Assert.False(viewModel.SearchOverviewDependencies);
+        Assert.False(viewModel.CanSearchOverviewDependencies);
+    }
+
+    [Fact]
+    public async Task OverviewRows_ExposeCompactDirectAndUpstreamGraphIssueDetails()
+    {
+        TrackedEntity resolved = Entity(1, "Resolved");
+        TrackedEntity direct = Entity(2, "Direct");
+        TrackedEntity upstream = Entity(3, "Upstream");
+        MainWindowViewModel viewModel = CreateViewModel(
+            [upstream, direct, resolved],
+            [Dependency(upstream, direct)],
+            FailureResult(),
+            new StubFilePicker(),
+            out _,
+            [Unresolved(direct, "Zulu Missing"), Unresolved(direct, "alpha missing")]);
+
+        await viewModel.InitializeAsync();
+
+        EntityOverviewRow resolvedRow = viewModel.OverviewItems.Single(row =>
+            row.SourceName == resolved.SourceName);
+        EntityOverviewRow directRow = viewModel.OverviewItems.Single(row =>
+            row.SourceName == direct.SourceName);
+        EntityOverviewRow upstreamRow = viewModel.OverviewItems.Single(row =>
+            row.SourceName == upstream.SourceName);
+
+        Assert.Equal("Ready", resolvedRow.WorkStatus);
+        Assert.False(resolvedRow.HasGraphIssue);
+        Assert.Empty(resolvedRow.DependencyResolutionIssueNames);
+
+        Assert.True(directRow.HasGraphIssue);
+        Assert.True(directRow.IsDirectlyUnresolved);
+        Assert.Equal("Unresolved dependency", directRow.GraphIssueTitle);
+        Assert.Contains("does not match an active entity", directRow.GraphIssueDescription);
+        Assert.Equal(
+            ["alpha missing", "Zulu Missing"],
+            directRow.DependencyResolutionIssueNames);
+        Assert.Equal(
+            "Unresolved names affecting this entity: alpha missing, Zulu Missing",
+            directRow.GraphIssueNames);
+
+        Assert.True(upstreamRow.HasGraphIssue);
+        Assert.False(upstreamRow.IsDirectlyUnresolved);
+        Assert.Equal("Upstream unresolved", upstreamRow.GraphIssueTitle);
+        Assert.Contains("dependency chain", upstreamRow.GraphIssueDescription);
+        Assert.Equal(
+            ["alpha missing", "Zulu Missing"],
+            upstreamRow.DependencyResolutionIssueNames);
     }
 
     [Fact]
@@ -45,7 +146,7 @@ public sealed class MainWindowViewModelTests
     {
         MainWindowViewModel viewModel = CreateViewModel(
             [
-                Entity(1, "Customer Orders", DevelopmentStatus.Completed),
+                Entity(1, "Customer Orders", DevelopmentStatus.DevelopmentCompleted),
                 Entity(2, "Invoice"),
                 Entity(3, "Customer Profile", DevelopmentStatus.InProgress)
             ],
@@ -65,9 +166,9 @@ public sealed class MainWindowViewModelTests
             ["Customer Orders", "Customer Profile"],
             viewModel.OverviewItems.Select(static row => row.SourceName));
         Assert.Equal(3, viewModel.TotalEntityCount);
-        Assert.Equal(1, viewModel.CompletedCount);
+        Assert.Equal(1, viewModel.DevelopmentCompletedCount);
         Assert.Equal(1, viewModel.InProgressCount);
-        Assert.Equal("Showing 2 of 3 entities", viewModel.OverviewSearchResultSummary);
+        Assert.Equal("Showing 2 of 3 in All active", viewModel.OverviewSearchResultSummary);
     }
 
     [Fact]
@@ -161,6 +262,78 @@ public sealed class MainWindowViewModelTests
         Assert.True(viewModel.Editor.CanArchive);
         Assert.Equal("Customer", viewModel.Editor.SelectedEntityName);
         Assert.Equal(0, viewModel.SelectedTabIndex);
+    }
+
+    [Fact]
+    public async Task StandaloneEditor_SavesStatusNotesAndDependenciesAsOneRefresh()
+    {
+        TrackedEntity entity = Entity(1, "Customer");
+        MainWindowViewModel viewModel = CreateViewModel(
+            [entity],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out StubSynchronizationStore store);
+        await viewModel.InitializeAsync();
+        viewModel.EditOverviewEntityCommand.Execute(Assert.Single(viewModel.OverviewItems));
+        await WaitUntilAsync(() => viewModel.Editor.IsOpen && !viewModel.Editor.IsBusy);
+
+        viewModel.Editor.SelectedStatus = DevelopmentStatus.Reconciled;
+        viewModel.Editor.EditedNotes = "Verified implementation";
+        viewModel.Editor.SaveCommand.Execute(null);
+        await WaitUntilAsync(() => !viewModel.Editor.IsOpen);
+
+        TrackedEntity progress = Assert.Single(
+            store.AppliedChangeSet!.EntitiesWithProgressToUpdate);
+        Assert.Equal(DevelopmentStatus.Reconciled, progress.Status);
+        Assert.Equal("Verified implementation", progress.Notes);
+        EntityOverviewRow row = Assert.Single(viewModel.OverviewItems);
+        Assert.Equal("Reconciled", row.Status);
+        Assert.Equal("Verified implementation", row.Notes);
+        Assert.Equal(100, viewModel.SuccessfulCompletionPercentage);
+        Assert.Equal(100, viewModel.ReconciledPercentage);
+    }
+
+    [Fact]
+    public async Task ArchivedDetails_CancelDoesNothingAndRestoreReusesSameEntity()
+    {
+        TrackedEntity archived = Entity(
+            1,
+            "Legacy",
+            DevelopmentStatus.Reconciled,
+            "Keep notes",
+            lifecycle: EntityLifecycleState.Archived);
+        MainWindowViewModel viewModel = CreateViewModel(
+            [archived],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out StubSynchronizationStore store);
+        await viewModel.InitializeAsync();
+        viewModel.SelectedOverviewFilter = OverviewManagerFilter.Archived;
+
+        viewModel.EditOverviewEntityCommand.Execute(Assert.Single(viewModel.OverviewItems));
+        await WaitUntilAsync(() => viewModel.Editor.IsOpen && !viewModel.Editor.IsBusy);
+        Assert.True(viewModel.Editor.IsArchivedMode);
+        Assert.False(viewModel.Editor.CanEditProgress);
+        Assert.False(viewModel.Editor.ShowSave);
+        Assert.True(viewModel.Editor.CanRestoreEntity);
+
+        viewModel.Editor.CancelCommand.Execute(null);
+        Assert.False(viewModel.Editor.IsOpen);
+        Assert.Equal(0, store.ApplyCount);
+
+        viewModel.EditOverviewEntityCommand.Execute(Assert.Single(viewModel.OverviewItems));
+        await WaitUntilAsync(() => viewModel.Editor.CanRestoreEntity);
+        viewModel.Editor.RestoreEntityCommand.Execute(null);
+        await WaitUntilAsync(() => !viewModel.Editor.IsOpen);
+
+        Assert.Equal(OverviewManagerFilter.AllActive, viewModel.SelectedOverviewFilter);
+        EntityOverviewRow restored = Assert.Single(viewModel.OverviewItems);
+        Assert.Equal(archived.Id, restored.EntityId);
+        Assert.Equal("Reconciled", restored.Status);
+        Assert.Equal("Keep notes", restored.Notes);
+        Assert.Equal(archived.Id, Assert.Single(store.AppliedChangeSet!.EntityIdsToRestore));
     }
 
     [Fact]
@@ -562,7 +735,8 @@ public sealed class MainWindowViewModelTests
                 dependencyRepository,
                 overrideRepository,
                 ranker,
-                resolver),
+                resolver,
+                new WorkflowReadinessEvaluator()),
             synchronizationService,
             new ManualEntityCreationService(
                 entityRepository,
@@ -572,7 +746,13 @@ public sealed class MainWindowViewModelTests
                 resolver,
                 store),
             editorService,
-            new EntityArchivalService(entityRepository, store),
+            new EntityLifecycleService(
+                entityRepository,
+                dependencyRepository,
+                overrideRepository,
+                store,
+                resolver,
+                ranker),
             picker);
     }
 
@@ -593,12 +773,14 @@ public sealed class MainWindowViewModelTests
         string name,
         DevelopmentStatus status = DevelopmentStatus.NotStarted,
         string notes = "",
-        EntityProvenance provenance = EntityProvenance.Imported) =>
+        EntityProvenance provenance = EntityProvenance.Imported,
+        EntityLifecycleState lifecycle = EntityLifecycleState.Active) =>
         new(
             new EntityId(new Guid(id, 0, 0, new byte[8])),
             name,
             status,
             notes,
+            lifecycle,
             provenance: provenance);
 
     private static PersistedDependency Dependency(TrackedEntity owner, TrackedEntity target) =>
@@ -653,14 +835,23 @@ public sealed class MainWindowViewModelTests
             _entities.Single(entity => entity.Id == entityId)
                 .ChangeLifecycleState(EntityLifecycleState.Archived);
 
+        public void Restore(EntityId entityId) =>
+            _entities.Single(entity => entity.Id == entityId)
+                .ChangeLifecycleState(EntityLifecycleState.Active);
+
+        public void UpdateProgress(TrackedEntity updated)
+        {
+            TrackedEntity entity = _entities.Single(item => item.Id == updated.Id);
+            entity.ChangeStatus(updated.Status);
+            entity.ChangeNotes(updated.Notes);
+        }
+
         public Task<bool> TryAddAsync(TrackedEntity entity, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
         public Task<bool> UpdateSchemaMetadataAsync(TrackedEntity entity, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public Task<bool> UpdateProgressAsync(TrackedEntity entity, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
     }
 
     private sealed class StubDependencyRepository(
@@ -697,16 +888,16 @@ public sealed class MainWindowViewModelTests
     }
 
     private sealed class StubSynchronizationStore(StubEntityRepository entityRepository)
-        : ITrackedSchemaStore
+        : ITrackedStateStore
     {
         public int ApplyCount { get; private set; }
 
-        public TrackedSchemaChangeSet? AppliedChangeSet { get; private set; }
+        public TrackedStateChangeSet? AppliedChangeSet { get; private set; }
 
         public Exception? Exception { get; set; }
 
         public Task ApplyAsync(
-            TrackedSchemaChangeSet changeSet,
+            TrackedStateChangeSet changeSet,
             CancellationToken cancellationToken = default)
         {
             ApplyCount++;
@@ -724,6 +915,16 @@ public sealed class MainWindowViewModelTests
             foreach (EntityId entityId in changeSet.EntityIdsToArchive)
             {
                 entityRepository.Archive(entityId);
+            }
+
+            foreach (EntityId entityId in changeSet.EntityIdsToRestore)
+            {
+                entityRepository.Restore(entityId);
+            }
+
+            foreach (TrackedEntity entity in changeSet.EntitiesWithProgressToUpdate)
+            {
+                entityRepository.UpdateProgress(entity);
             }
 
             return Task.CompletedTask;

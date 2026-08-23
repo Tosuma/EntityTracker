@@ -9,6 +9,7 @@ using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
+using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
@@ -32,6 +33,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly RelayCommand _clearOverviewSearchCommand;
     private readonly RelayCommand _closeOverviewSearchCommand;
     private IReadOnlyList<EntityOverviewRow> _allOverviewItems = [];
+    private IReadOnlyList<EntityOverviewRow> _archivedOverviewItems = [];
+    private IReadOnlyList<EntityOverviewRow> _currentViewItems = [];
     private IReadOnlyList<EntityOverviewRow> _overviewItems = [];
     private string? _overviewErrorMessage;
     private string _overviewSearchQuery = string.Empty;
@@ -39,10 +42,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private bool _isBusy;
     private bool _isOverviewSearchOpen;
     private bool _searchOverviewDependencies;
+    private OverviewManagerFilter _selectedOverviewFilter;
     private int _selectedTabIndex;
     private int _notStartedCount;
     private int _inProgressCount;
-    private int _completedCount;
+    private int _developmentCompletedCount;
+    private int _reconciledCount;
     private CancellationTokenSource? _overviewSearchCancellation;
     private int _overviewSearchVersion;
 
@@ -51,14 +56,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         SchemaSynchronizationService synchronizationService,
         ManualEntityCreationService manualEntityCreationService,
         EntityDependencyEditorService entityDependencyEditorService,
-        EntityArchivalService entityArchivalService,
+        EntityLifecycleService entityLifecycleService,
         ICsvFilePicker filePicker)
     {
         ArgumentNullException.ThrowIfNull(overviewService);
         ArgumentNullException.ThrowIfNull(synchronizationService);
         ArgumentNullException.ThrowIfNull(manualEntityCreationService);
         ArgumentNullException.ThrowIfNull(entityDependencyEditorService);
-        ArgumentNullException.ThrowIfNull(entityArchivalService);
+        ArgumentNullException.ThrowIfNull(entityLifecycleService);
         ArgumentNullException.ThrowIfNull(filePicker);
         _overviewService = overviewService;
         _synchronizationService = synchronizationService;
@@ -67,15 +72,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ManualCreation = new ManualEntityCreationViewModel(
             manualEntityCreationService,
             OnManualEntityCreatedAsync,
+            OpenArchivedFromCreationAsync,
             () => SelectedTabIndex = 0,
             () => !IsBusy);
         ManualCreation.PropertyChanged += OnManualCreationPropertyChanged;
         Editor = new EntityDependencyEditorViewModel(
             entityDependencyEditorService,
-            entityArchivalService,
+            entityLifecycleService,
             synchronizationService,
             OnDependencyEditsPersistedAsync,
             OnEntityArchivedAsync,
+            OnEntityRestoredAsync,
             OnReviewDependencyEditsStaged,
             () => !IsBusy && !ManualCreation.IsBusy);
         Editor.PropertyChanged += OnEditorPropertyChanged;
@@ -95,7 +102,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                   !Editor.IsOpen &&
                   (Review.HasReview || Review.HasDiagnostics));
         _editOverviewEntityCommand = new AsyncCommand<EntityOverviewRow>(
-            row => Editor.BeginStandaloneAsync(row.EntityId),
+            OpenOverviewEntityAsync,
             _ => !IsBusy &&
                  !ManualCreation.IsBusy &&
                  !Editor.IsOpen &&
@@ -124,6 +131,63 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ManualEntityCreationViewModel ManualCreation { get; }
 
     public EntityDependencyEditorViewModel Editor { get; }
+
+    public IReadOnlyList<OverviewManagerFilterOption> OverviewFilters { get; } =
+    [
+        new(OverviewManagerFilter.AllActive, "All active"),
+        new(OverviewManagerFilter.Ready, "Ready"),
+        new(OverviewManagerFilter.Blocked, "Blocked"),
+        new(OverviewManagerFilter.InProgress, "In progress"),
+        new(OverviewManagerFilter.DevelopmentCompleted, "Dev. completed"),
+        new(OverviewManagerFilter.Reconciled, "Reconciled"),
+        new(OverviewManagerFilter.Archived, "Archived")
+    ];
+
+    public OverviewManagerFilter SelectedOverviewFilter
+    {
+        get => _selectedOverviewFilter;
+        set
+        {
+            if (SetField(ref _selectedOverviewFilter, value))
+            {
+                if (!CanSearchOverviewDependencies && SearchOverviewDependencies)
+                {
+                    _searchOverviewDependencies = false;
+                    OnPropertyChanged(nameof(SearchOverviewDependencies));
+                }
+
+                OnPropertyChanged(nameof(CanSearchOverviewDependencies));
+                OnPropertyChanged(nameof(SelectedOverviewFilterName));
+                OnPropertyChanged(nameof(OverviewEmptyTitle));
+                OnPropertyChanged(nameof(OverviewEmptyDescription));
+                CancelPendingOverviewSearch();
+                ApplyOverviewFilterAndSearch();
+            }
+        }
+    }
+
+    public bool CanSearchOverviewDependencies =>
+        SelectedOverviewFilter != OverviewManagerFilter.Archived;
+
+    public string SelectedOverviewFilterName => OverviewFilters
+        .Single(option => option.Value == SelectedOverviewFilter)
+        .DisplayName;
+
+    public string OverviewEmptyTitle => SelectedOverviewFilter switch
+    {
+        OverviewManagerFilter.AllActive => "No active entities",
+        OverviewManagerFilter.Archived => "No archived entities",
+        _ => $"No {SelectedOverviewFilterName.ToLowerInvariant()} entities"
+    };
+
+    public string OverviewEmptyDescription => SelectedOverviewFilter switch
+    {
+        OverviewManagerFilter.AllActive =>
+            "Add an entity manually or open Schema Synchronization to import a CSV.",
+        OverviewManagerFilter.Archived =>
+            "Archived entities will appear here and can be inspected or restored.",
+        _ => "Choose another manager view or update entity progress."
+    };
 
     public IReadOnlyList<EntityOverviewRow> OverviewItems
     {
@@ -171,10 +235,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         get => _searchOverviewDependencies;
         set
         {
-            if (SetField(ref _searchOverviewDependencies, value))
+            if (CanSearchOverviewDependencies && SetField(ref _searchOverviewDependencies, value))
             {
                 CancelPendingOverviewSearch();
-                ApplyOverviewSearch();
+                ApplyOverviewFilterAndSearch();
             }
         }
     }
@@ -239,30 +303,49 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetField(ref _inProgressCount, value);
     }
 
-    public int CompletedCount
+    public int DevelopmentCompletedCount
     {
-        get => _completedCount;
+        get => _developmentCompletedCount;
         private set
         {
-            if (SetField(ref _completedCount, value))
+            if (SetField(ref _developmentCompletedCount, value))
             {
-                OnPropertyChanged(nameof(CompletionPercentage));
+                OnPropertyChanged(nameof(SuccessfulCompletionPercentage));
+            }
+        }
+    }
+
+    public int ReconciledCount
+    {
+        get => _reconciledCount;
+        private set
+        {
+            if (SetField(ref _reconciledCount, value))
+            {
+                OnPropertyChanged(nameof(SuccessfulCompletionPercentage));
+                OnPropertyChanged(nameof(ReconciledPercentage));
             }
         }
     }
 
     public int TotalEntityCount => _allOverviewItems.Count;
 
-    public double CompletionPercentage => TotalEntityCount == 0
-        ? 0
-        : CompletedCount * 100.0 / TotalEntityCount;
+    public int ArchivedEntityCount => _archivedOverviewItems.Count;
 
-    public bool HasOverviewItems => _allOverviewItems.Count > 0;
+    public double SuccessfulCompletionPercentage => TotalEntityCount == 0
+        ? 0
+        : (DevelopmentCompletedCount + ReconciledCount) * 100.0 / TotalEntityCount;
+
+    public double ReconciledPercentage => TotalEntityCount == 0
+        ? 0
+        : ReconciledCount * 100.0 / TotalEntityCount;
+
+    public bool HasOverviewItems => _currentViewItems.Count > 0;
 
     public bool HasOverviewSearchQuery => !string.IsNullOrWhiteSpace(OverviewSearchQuery);
 
     public string OverviewSearchResultSummary =>
-        $"Showing {OverviewItems.Count} of {TotalEntityCount} entities";
+        $"Showing {OverviewItems.Count} of {_currentViewItems.Count} in {SelectedOverviewFilterName}";
 
     public bool HasOverviewError => !string.IsNullOrWhiteSpace(OverviewErrorMessage);
 
@@ -433,39 +516,35 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         OverviewErrorMessage = null;
-        EntityOverviewRow[] rows = result.Items
-            .Select(static item => new EntityOverviewRow(
-                item.EntityId,
-                FormatRank(item.Rank),
-                item.SourceName,
-                FormatProvenance(item.Provenance),
-                FormatStatus(item.Status),
-                FormatDependencyState(item.DependencyState),
-                item.DependencyCount,
-                item.DependencyNames,
-                FormatMissingDependencies(item.MissingDependencyNames),
-                item.Notes))
+        EntityOverviewRow[] rows = result.Items.Select(CreateOverviewRow).ToArray();
+        EntityOverviewRow[] archivedRows = result.ArchivedItems
+            .Select(CreateOverviewRow)
             .ToArray();
-        ReplaceOverviewItems(rows);
+        ReplaceOverviewItems(rows, archivedRows);
         UpdateProgressCounts(result.Items);
     }
 
     private void SetOverviewFailure(string message)
     {
-        ReplaceOverviewItems([]);
+        ReplaceOverviewItems([], []);
         OverviewErrorMessage = message;
         UpdateProgressCounts([]);
     }
 
-    private void ReplaceOverviewItems(IReadOnlyList<EntityOverviewRow> items)
+    private void ReplaceOverviewItems(
+        IReadOnlyList<EntityOverviewRow> items,
+        IReadOnlyList<EntityOverviewRow> archivedItems)
     {
         _allOverviewItems = items;
-        ApplyOverviewSearch();
+        _archivedOverviewItems = archivedItems;
+        ApplyOverviewFilterAndSearch();
         OnPropertyChanged(nameof(HasOverviewItems));
         OnPropertyChanged(nameof(ShowOverviewEmptyState));
         OnPropertyChanged(nameof(ShowOverviewSearchEmptyState));
         OnPropertyChanged(nameof(TotalEntityCount));
-        OnPropertyChanged(nameof(CompletionPercentage));
+        OnPropertyChanged(nameof(ArchivedEntityCount));
+        OnPropertyChanged(nameof(SuccessfulCompletionPercentage));
+        OnPropertyChanged(nameof(ReconciledPercentage));
         OnPropertyChanged(nameof(OverviewSearchResultSummary));
     }
 
@@ -484,7 +563,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(HasOverviewSearchQuery));
         }
 
-        ApplyOverviewSearch();
+        ApplyOverviewFilterAndSearch();
         _clearOverviewSearchCommand.NotifyCanExecuteChanged();
     }
 
@@ -499,7 +578,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         CancelPendingOverviewSearch();
         if (!HasOverviewSearchQuery)
         {
-            ApplyOverviewSearch();
+            ApplyOverviewFilterAndSearch();
             return;
         }
 
@@ -518,7 +597,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             await Task.Delay(OverviewSearchDelay, cancellation.Token);
             if (version == _overviewSearchVersion)
             {
-                ApplyOverviewSearch();
+                ApplyOverviewFilterAndSearch();
             }
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
@@ -542,21 +621,51 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _overviewSearchCancellation = null;
     }
 
-    private void ApplyOverviewSearch()
+    private void ApplyOverviewFilterAndSearch()
     {
+        _currentViewItems = SelectedOverviewFilter switch
+        {
+            OverviewManagerFilter.AllActive => _allOverviewItems,
+            OverviewManagerFilter.Archived => _archivedOverviewItems,
+            OverviewManagerFilter.Ready => FilterByWorkflow(EntityWorkflowState.Ready),
+            OverviewManagerFilter.Blocked => FilterByWorkflow(EntityWorkflowState.Blocked),
+            OverviewManagerFilter.InProgress => FilterByWorkflow(EntityWorkflowState.InProgress),
+            OverviewManagerFilter.DevelopmentCompleted =>
+                FilterByWorkflow(EntityWorkflowState.DevelopmentCompleted),
+            OverviewManagerFilter.Reconciled =>
+                FilterByWorkflow(EntityWorkflowState.Reconciled),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(SelectedOverviewFilter),
+                SelectedOverviewFilter,
+                null)
+        };
+
         string query = OverviewSearchQuery.Trim();
         if (query.Length == 0)
         {
-            OverviewItems = _allOverviewItems;
+            OverviewItems = _currentViewItems;
+            NotifyOverviewViewChanged();
             return;
         }
 
-        OverviewItems = _allOverviewItems
+        OverviewItems = _currentViewItems
             .Where(row => SearchOverviewDependencies
                 ? row.DependencyNames.Any(name =>
                     name.Contains(query, StringComparison.OrdinalIgnoreCase))
                 : row.SourceName.Contains(query, StringComparison.OrdinalIgnoreCase))
             .ToArray();
+        NotifyOverviewViewChanged();
+    }
+
+    private IReadOnlyList<EntityOverviewRow> FilterByWorkflow(EntityWorkflowState workflowState) =>
+        _allOverviewItems.Where(row => row.WorkflowState == workflowState).ToArray();
+
+    private void NotifyOverviewViewChanged()
+    {
+        OnPropertyChanged(nameof(HasOverviewItems));
+        OnPropertyChanged(nameof(ShowOverviewEmptyState));
+        OnPropertyChanged(nameof(ShowOverviewSearchEmptyState));
+        OnPropertyChanged(nameof(OverviewSearchResultSummary));
     }
 
     private void UpdateProgressCounts(IEnumerable<EntityOverviewItem> items)
@@ -564,8 +673,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         EntityOverviewItem[] itemArray = items.ToArray();
         NotStartedCount = itemArray.Count(static item => item.Status == DevelopmentStatus.NotStarted);
         InProgressCount = itemArray.Count(static item => item.Status == DevelopmentStatus.InProgress);
-        CompletedCount = itemArray.Count(static item => item.Status == DevelopmentStatus.Completed);
-        OnPropertyChanged(nameof(CompletionPercentage));
+        DevelopmentCompletedCount = itemArray.Count(static item =>
+            item.Status == DevelopmentStatus.DevelopmentCompleted);
+        ReconciledCount = itemArray.Count(static item =>
+            item.Status == DevelopmentStatus.Reconciled);
+        OnPropertyChanged(nameof(SuccessfulCompletionPercentage));
+        OnPropertyChanged(nameof(ReconciledPercentage));
     }
 
     private void EndBusyOperation()
@@ -632,6 +745,30 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    private async Task OnEntityRestoredAsync()
+    {
+        ManualCreation.Reset();
+        SelectedTabIndex = 0;
+        SelectedOverviewFilter = OverviewManagerFilter.AllActive;
+        try
+        {
+            await LoadOverviewAsync(CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            SetOverviewFailure(
+                $"The entity was restored, but persisted entities could not be reloaded: {exception.Message}");
+        }
+    }
+
+    private Task OpenOverviewEntityAsync(EntityOverviewRow row) =>
+        row.LifecycleState == EntityLifecycleState.Archived
+            ? Editor.BeginArchivedAsync(row.EntityId)
+            : Editor.BeginStandaloneAsync(row.EntityId);
+
+    private Task OpenArchivedFromCreationAsync(EntityId entityId) =>
+        Editor.BeginArchivedAsync(entityId);
+
     private void OnReviewDependencyEditsStaged(SchemaSynchronizationPlan plan)
     {
         Review.ReplacePlan(plan);
@@ -668,12 +805,51 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    private static EntityOverviewRow CreateOverviewRow(EntityOverviewItem item)
+    {
+        bool isArchived = item.LifecycleState == EntityLifecycleState.Archived;
+        return new EntityOverviewRow(
+            item.EntityId,
+            item.LifecycleState,
+            item.WorkflowState,
+            item.DependencyState,
+            FormatRank(item.Rank),
+            item.SourceName,
+            FormatProvenance(item.Provenance),
+            FormatStatus(item.Status),
+            FormatWorkflowState(item.WorkflowState),
+            isArchived
+                ? "—"
+                : item.DependencyCount.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture),
+            item.DependencyNames,
+            item.DependencyResolutionIssueNames,
+            FormatGraphIssueTitle(item.DependencyState),
+            FormatGraphIssueDescription(item.DependencyState),
+            FormatGraphIssueNames(item.DependencyResolutionIssueNames),
+            isArchived ? "—" : FormatMissingDependencies(item.MissingDependencyNames),
+            item.Notes,
+            isArchived ? "View and restore" : "Edit entity");
+    }
+
     private static string FormatStatus(DevelopmentStatus status) => status switch
     {
         DevelopmentStatus.NotStarted => "Not started",
         DevelopmentStatus.InProgress => "In progress",
-        DevelopmentStatus.Completed => "Completed",
+        DevelopmentStatus.DevelopmentCompleted => "Dev. completed",
+        DevelopmentStatus.Reconciled => "Reconciled",
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
+    };
+
+    private static string FormatWorkflowState(EntityWorkflowState state) => state switch
+    {
+        EntityWorkflowState.Ready => "Ready",
+        EntityWorkflowState.Blocked => "Blocked",
+        EntityWorkflowState.InProgress => "In progress",
+        EntityWorkflowState.DevelopmentCompleted => "Dev. completed",
+        EntityWorkflowState.Reconciled => "Reconciled",
+        EntityWorkflowState.Archived => "Archived",
+        _ => throw new ArgumentOutOfRangeException(nameof(state), state, null)
     };
 
     private static string FormatProvenance(EntityProvenance provenance) => provenance switch
@@ -687,13 +863,31 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private static string FormatRank(int? rank) =>
         rank?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—";
 
-    private static string FormatDependencyState(DependencyResolutionState state) => state switch
+    private static string FormatGraphIssueTitle(DependencyResolutionState? state) => state switch
     {
-        DependencyResolutionState.Resolved => "Resolved",
-        DependencyResolutionState.Unresolved => "Unresolved",
-        DependencyResolutionState.Blocked => "Blocked",
+        DependencyResolutionState.Unresolved => "Unresolved dependency",
+        DependencyResolutionState.Blocked => "Upstream unresolved",
+        DependencyResolutionState.Resolved or null => string.Empty,
         _ => throw new ArgumentOutOfRangeException(nameof(state), state, null)
     };
+
+    private static string FormatGraphIssueDescription(DependencyResolutionState? state) =>
+        state switch
+        {
+            DependencyResolutionState.Unresolved =>
+                "This entity has at least one dependency name that does not match an active " +
+                "entity, so it cannot receive a dependency-safe rank.",
+            DependencyResolutionState.Blocked =>
+                "This entity depends on another entity whose dependency chain contains an " +
+                "unresolved reference, so it cannot receive a dependency-safe rank.",
+            DependencyResolutionState.Resolved or null => string.Empty,
+            _ => throw new ArgumentOutOfRangeException(nameof(state), state, null)
+        };
+
+    private static string FormatGraphIssueNames(IReadOnlyList<string> names) =>
+        names.Count == 0
+            ? string.Empty
+            : $"Unresolved names affecting this entity: {string.Join(", ", names)}";
 
     private static string FormatMissingDependencies(IReadOnlyList<string> names) =>
         names.Count == 0 ? "—" : string.Join(", ", names);

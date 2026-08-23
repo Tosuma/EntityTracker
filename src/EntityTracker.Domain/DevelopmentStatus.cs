@@ -4,5 +4,6 @@ public enum DevelopmentStatus
 {
     NotStarted,
     InProgress,
-    Completed
+    DevelopmentCompleted,
+    Reconciled
 }

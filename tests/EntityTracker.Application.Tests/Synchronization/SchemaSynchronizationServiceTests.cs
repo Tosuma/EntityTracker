@@ -218,8 +218,6 @@ public sealed class SchemaSynchronizationServiceTests
             throw new NotSupportedException();
         public Task<bool> UpdateSchemaMetadataAsync(TrackedEntity entity, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
-        public Task<bool> UpdateProgressAsync(TrackedEntity entity, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
     }
 
     private sealed class StubDependencyRepository(
@@ -236,13 +234,13 @@ public sealed class SchemaSynchronizationServiceTests
             throw new NotSupportedException();
     }
 
-    private sealed class StubStore : ITrackedSchemaStore
+    private sealed class StubStore : ITrackedStateStore
     {
         public int ApplyCount { get; private set; }
-        public TrackedSchemaChangeSet? LastChangeSet { get; private set; }
+        public TrackedStateChangeSet? LastChangeSet { get; private set; }
 
         public Task ApplyAsync(
-            TrackedSchemaChangeSet changeSet,
+            TrackedStateChangeSet changeSet,
             CancellationToken cancellationToken = default)
         {
             ApplyCount++;
