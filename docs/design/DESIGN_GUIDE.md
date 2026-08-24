@@ -21,6 +21,11 @@ Use semantic resources instead of choosing colors directly in individual screens
 
 The application icon is existing artwork and is not recolored by this guide.
 
+Synchronization review uses one additional warning palette for retained, non-fatal unresolved
+dependencies. Its centralized values are Warning Header `#9A5B1B`, Warning Surface `#FFF8DC`,
+Warning Border `#E5D28B`, and Warning Text `#6E5A18`. These values are not status colors and must
+not replace Coral for errors, removal, destructive actions, or blocked states.
+
 ## Contrast and text
 
 Normal text must meet a contrast ratio of at least 4.5:1. The combinations below satisfy that
@@ -50,10 +55,12 @@ Status colors are deliberately shared by the overview, progress dashboard, and P
 | Reconciled | Green 100% | Fully implemented/reconciled; use White text over the color |
 | Ready | Green 80% | Dependency-ready work |
 | Blocked/error/destructive | Coral | Always add a label, icon, or explanatory message |
+| Unresolved import warning | Warning palette | Retained non-fatal references in synchronization review only |
 
-Coral is the only accent color. Reserve it for conditions or actions that deserve attention rather
-than using it as decoration. Destructive actions require confirmation where the workflow already
-calls for it.
+Coral is the primary accent color. Reserve it for conditions or actions that deserve attention
+rather than using it as decoration. The synchronization-review warning palette is the sole
+exception and distinguishes retained, non-fatal unresolved references from removal/error states.
+Destructive actions require confirmation where the workflow already calls for it.
 
 ## Components and interaction states
 
@@ -66,8 +73,9 @@ calls for it.
 - Table headings use Green 10%, table separators use Green 20%, and selected rows use Green 20%.
 - Informational overlays use a translucent Dark Green scrim. Tooltips use Green 100% with White
   text.
-- Warnings and errors use a White surface with Coral border or icon and Dark Green explanatory
-  text.
+- Missing/removal and error states use Coral with Dark Green explanatory text. Synchronization
+  review uses a pale Coral fill for possibly removed entities and the dedicated yellow warning
+  palette for retained unresolved dependencies.
 - Charts use Dark Green for axes and labels, Green 20% for grid lines, the status mapping above for
   categories, Green 80% for positive/ready trends, and Coral for negative/blocked trends.
 
@@ -81,8 +89,9 @@ values to feature XAML.
 
 Reporting is intentionally independent of WPF. Its matching SkiaSharp values live in
 [`src/EntityTracker.Reporting/ProgressChartPalette.cs`](../../src/EntityTracker.Reporting/ProgressChartPalette.cs).
-This small duplication preserves project boundaries. Any palette or semantic status change must
-update the WPF theme, reporting palette, this guide, and the reporting palette tests together.
+This small duplication preserves project boundaries. Any shared brand or semantic status change
+must update the WPF theme, reporting palette, this guide, and the reporting palette tests together.
+Review-only warning colors do not belong in Reporting.
 
 Native Windows chrome and operating-system dialogs may retain system colors. New application-owned
 screens, overlays, charts, and exported visual reports must follow this guide.

@@ -13,6 +13,12 @@
     <Color x:Key="Color.Brand.White">#FFFFFF</Color>
     <Color x:Key="Color.Brand.Coral">#FF6359</Color>
 
+    <!-- Synchronization review warning palette -->
+    <Color x:Key="Color.Review.Warning.Header">#9A5B1B</Color>
+    <Color x:Key="Color.Review.Warning.Surface">#FFF8DC</Color>
+    <Color x:Key="Color.Review.Warning.Border">#E5D28B</Color>
+    <Color x:Key="Color.Review.Warning.Text">#6E5A18</Color>
+
     <!-- Base brushes -->
     <SolidColorBrush x:Key="Brush.Brand.DarkGreen" Color="{StaticResource Color.Brand.DarkGreen}" />
     <SolidColorBrush x:Key="Brush.Brand.Green100" Color="{StaticResource Color.Brand.Green100}" />
@@ -50,6 +56,16 @@
     <SolidColorBrush x:Key="Brush.Overlay"
                      Color="{StaticResource Color.Brand.DarkGreen}"
                      Opacity="0.60" />
+
+    <SolidColorBrush x:Key="Brush.Review.Missing.Header" Color="{StaticResource Color.Brand.Coral}" />
+    <SolidColorBrush x:Key="Brush.Review.Missing.Surface"
+                     Color="{StaticResource Color.Brand.Coral}"
+                     Opacity="0.08" />
+    <SolidColorBrush x:Key="Brush.Review.Missing.Border" Color="{StaticResource Color.Brand.Coral}" />
+    <SolidColorBrush x:Key="Brush.Review.Warning.Header" Color="{StaticResource Color.Review.Warning.Header}" />
+    <SolidColorBrush x:Key="Brush.Review.Warning.Surface" Color="{StaticResource Color.Review.Warning.Surface}" />
+    <SolidColorBrush x:Key="Brush.Review.Warning.Border" Color="{StaticResource Color.Review.Warning.Border}" />
+    <SolidColorBrush x:Key="Brush.Review.Warning.Text" Color="{StaticResource Color.Review.Warning.Text}" />
 
     <SolidColorBrush x:Key="Brush.Status.NotStarted" Color="{StaticResource Color.Brand.Green40}" />
     <SolidColorBrush x:Key="Brush.Status.InProgress" Color="{StaticResource Color.Brand.Green80}" />

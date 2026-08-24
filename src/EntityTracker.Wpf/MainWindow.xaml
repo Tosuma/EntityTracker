@@ -829,11 +829,22 @@
                                     <StackPanel x:Name="MissingReviewSection"
                                                 Margin="0,0,0,12"
                                                 Visibility="{Binding Review.HasMissingEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                        <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text.Primary}" Text="Missing / possibly removed" />
+                                        <Border Padding="8,5"
+                                                Background="{StaticResource Brush.Review.Missing.Header}"
+                                                CornerRadius="3">
+                                            <TextBlock FontSize="16"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{StaticResource Brush.Text.Primary}"
+                                                       Text="Missing / possibly removed" />
+                                        </Border>
                                         <ItemsControl ItemsSource="{Binding Review.MissingEntities}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Margin="0,5,0,0" Padding="10" Background="{StaticResource Brush.Surface.Alert}" BorderBrush="{StaticResource Brush.Accent}" BorderThickness="1">
+                                                    <Border Margin="0,5,0,0"
+                                                            Padding="10"
+                                                            Background="{StaticResource Brush.Review.Missing.Surface}"
+                                                            BorderBrush="{StaticResource Brush.Review.Missing.Border}"
+                                                            BorderThickness="1">
                                                         <StackPanel>
                                                             <TextBlock FontWeight="SemiBold" Text="{Binding SourceName, StringFormat=− {0}}" />
                                                             <TextBlock Margin="16,3,0,0" Foreground="{StaticResource Brush.Text.Primary}" Text="{Binding Details}" TextWrapping="Wrap" />
@@ -875,14 +886,24 @@
                                     <StackPanel x:Name="UnresolvedReviewSection"
                                                 Margin="0,0,0,12"
                                                 Visibility="{Binding Review.HasUnresolvedEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                        <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text.Primary}" Text="Unresolved dependencies" />
+                                        <TextBlock FontSize="16"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{StaticResource Brush.Review.Warning.Header}"
+                                                   Text="Unresolved dependencies" />
                                         <ItemsControl ItemsSource="{Binding Review.UnresolvedEntities}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Margin="0,5,0,0" Padding="10" Background="{StaticResource Brush.Surface.Subtle}" BorderBrush="{StaticResource Brush.Accent}" BorderThickness="1">
+                                                    <Border Margin="0,5,0,0"
+                                                            Padding="10"
+                                                            Background="{StaticResource Brush.Review.Warning.Surface}"
+                                                            BorderBrush="{StaticResource Brush.Review.Warning.Border}"
+                                                            BorderThickness="1">
                                                         <StackPanel>
                                                             <TextBlock FontWeight="SemiBold" Text="{Binding SourceName, StringFormat=! {0}}" />
-                                                            <TextBlock Margin="16,3,0,0" Foreground="{StaticResource Brush.Text.Primary}" Text="{Binding Details}" TextWrapping="Wrap" />
+                                                            <TextBlock Margin="16,3,0,0"
+                                                                       Foreground="{StaticResource Brush.Review.Warning.Text}"
+                                                                       Text="{Binding Details}"
+                                                                       TextWrapping="Wrap" />
                                                         </StackPanel>
                                                     </Border>
                                                 </DataTemplate>
