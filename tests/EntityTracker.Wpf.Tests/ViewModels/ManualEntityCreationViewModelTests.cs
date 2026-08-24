@@ -204,14 +204,6 @@ public sealed class ManualEntityCreationViewModelTests
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
             CancellationToken cancellationToken = default) => Task.FromResult(entities);
 
-        public Task<bool> TryAddAsync(
-            TrackedEntity entity,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task<bool> UpdateSchemaMetadataAsync(
-            TrackedEntity entity,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
     }
 
     private sealed class StubDependencyRepository : IDependencyRepository
@@ -224,13 +216,6 @@ public sealed class ManualEntityCreationViewModelTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<PersistedUnresolvedDependency>>([]);
 
-        public Task SaveAsync(
-            PersistedDependency dependency,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task SaveUnresolvedAsync(
-            PersistedUnresolvedDependency dependency,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class RecordingStore : ITrackedStateStore
@@ -244,5 +229,10 @@ public sealed class ManualEntityCreationViewModelTests
             LastChangeSet = changeSet;
             return Task.CompletedTask;
         }
+
+        public Task EnsureHistoryBaselineAsync(
+            IEnumerable<TrackedEntity> entities,
+            EntityTracker.Application.History.ProgressSnapshotState snapshot,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

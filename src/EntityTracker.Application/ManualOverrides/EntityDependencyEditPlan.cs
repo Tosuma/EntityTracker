@@ -8,6 +8,7 @@ public sealed class EntityDependencyEditPlan
 {
     internal EntityDependencyEditPlan(
         TrackedEntity entity,
+        IEnumerable<TrackedEntity> candidateEntities,
         IEnumerable<EntityDependencyEditItem> dependencies,
         IEnumerable<ManualDependencyOverride> desiredOverrides,
         EffectiveDependencyState effectiveState,
@@ -16,6 +17,7 @@ public sealed class EntityDependencyEditPlan
         IEnumerable<string> errors)
     {
         Entity = entity;
+        CandidateEntities = candidateEntities.ToArray();
         Dependencies = dependencies.ToArray();
         DesiredOverrides = desiredOverrides.ToArray();
         EffectiveState = effectiveState;
@@ -25,6 +27,8 @@ public sealed class EntityDependencyEditPlan
     }
 
     public TrackedEntity Entity { get; }
+
+    internal IReadOnlyList<TrackedEntity> CandidateEntities { get; }
 
     public IReadOnlyList<EntityDependencyEditItem> Dependencies { get; }
 

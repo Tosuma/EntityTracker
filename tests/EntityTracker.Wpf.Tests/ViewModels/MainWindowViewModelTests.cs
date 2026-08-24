@@ -1,4 +1,5 @@
 using EntityTracker.Application.Dependencies;
+using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
@@ -9,6 +10,7 @@ using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
+using EntityTracker.Reporting;
 using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels;
 
@@ -38,8 +40,68 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(0, viewModel.NotStartedCount);
         Assert.Equal(1, viewModel.InProgressCount);
         Assert.Equal(1, viewModel.DevelopmentCompletedCount);
-        Assert.Equal(50, viewModel.SuccessfulCompletionPercentage);
+        Assert.Equal(50, viewModel.ImplementedPercentage);
         Assert.Equal(0, viewModel.ReconciledCount);
+    }
+
+    [Fact]
+    public async Task ReworkNeeded_IsImplementedAndHasItsOwnOverviewPresentation()
+    {
+        MainWindowViewModel viewModel = CreateViewModel(
+            [Entity(1, "NeedsReview", DevelopmentStatus.ReworkNeeded)],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal(1, viewModel.ReworkNeededCount);
+        Assert.Equal(100, viewModel.ImplementedPercentage);
+        Assert.Equal(100, viewModel.ReworkNeededPercentage);
+        EntityOverviewRow row = Assert.Single(viewModel.OverviewItems);
+        Assert.Equal("Rework needed", row.Status);
+        Assert.Equal("Rework needed", row.WorkStatus);
+        viewModel.SelectedOverviewFilter = OverviewManagerFilter.ReworkNeeded;
+        Assert.Single(viewModel.OverviewItems);
+        Assert.Contains(
+            viewModel.Editor.StatusOptions,
+            static option => option.Value == DevelopmentStatus.ReworkNeeded);
+    }
+
+    [Fact]
+    public async Task SynchronizationReview_RequiresAndStagesCompletedEntityDecision()
+    {
+        TrackedEntity target = Entity(1, "Target");
+        TrackedEntity owner = Entity(
+            2,
+            "Owner",
+            DevelopmentStatus.DevelopmentCompleted);
+        MainWindowViewModel viewModel = CreateViewModel(
+            [target, owner],
+            [],
+            SchemaImportResult.Success(Candidate(
+                ["Target", "Owner"],
+                [("Owner", "Target", ImportedDependencyKind.Mandatory)])),
+            new StubFilePicker("schema.csv"),
+            out _);
+
+        await viewModel.ImportCsvAsync();
+
+        SynchronizationProgressImpactRow row = Assert.Single(viewModel.Review.ProgressImpacts);
+        Assert.Equal("Decision required", row.DecisionText);
+        Assert.False(viewModel.Review.CanApply);
+        Assert.False(viewModel.ApplySynchronizationCommand.CanExecute(null));
+
+        viewModel.MarkSynchronizationReworkCommand.Execute(row);
+
+        Assert.True(viewModel.Review.CanApply);
+        Assert.Equal(
+            SynchronizationProgressDecision.MarkReworkNeeded,
+            Assert.Single(viewModel.Review.ProgressImpacts).Decision);
+        Assert.Equal(
+            DevelopmentStatus.ReworkNeeded,
+            Assert.Single(viewModel.Review.CurrentPlan!.ChangeSet.EntitiesWithProgressToUpdate).Status);
     }
 
     [Fact]
@@ -70,7 +132,7 @@ public sealed class MainWindowViewModelTests
 
         Assert.Equal(5, viewModel.TotalEntityCount);
         Assert.Equal(1, viewModel.ArchivedEntityCount);
-        Assert.Equal(40, viewModel.SuccessfulCompletionPercentage);
+        Assert.Equal(40, viewModel.ImplementedPercentage);
         Assert.Equal(20, viewModel.ReconciledPercentage);
 
         viewModel.SelectedOverviewFilter = OverviewManagerFilter.Ready;
@@ -92,6 +154,89 @@ public sealed class MainWindowViewModelTests
         Assert.Empty(archivedRow.GraphIssueTitle);
         Assert.False(viewModel.SearchOverviewDependencies);
         Assert.False(viewModel.CanSearchOverviewDependencies);
+    }
+
+    [Fact]
+    public async Task StatusSummaryFilterCommand_FiltersByPersistedStatusAndTotalShowsAllActive()
+    {
+        TrackedEntity ready = Entity(1, "Ready");
+        TrackedEntity blocked = Entity(2, "Blocked");
+        TrackedEntity inProgress = Entity(3, "InProgress", DevelopmentStatus.InProgress);
+        TrackedEntity rework = Entity(4, "Rework", DevelopmentStatus.ReworkNeeded);
+        TrackedEntity developmentCompleted = Entity(
+            5,
+            "DevelopmentCompleted",
+            DevelopmentStatus.DevelopmentCompleted);
+        TrackedEntity reconciled = Entity(6, "Reconciled", DevelopmentStatus.Reconciled);
+        TrackedEntity archived = Entity(
+            7,
+            "Archived",
+            lifecycle: EntityLifecycleState.Archived);
+        MainWindowViewModel viewModel = CreateViewModel(
+            [ready, blocked, inProgress, rework, developmentCompleted, reconciled, archived],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out _,
+            [Unresolved(blocked, "Missing")]);
+
+        await viewModel.InitializeAsync();
+
+        viewModel.SelectOverviewFilterCommand.Execute(OverviewManagerFilter.NotStarted);
+
+        Assert.Equal(OverviewManagerFilter.NotStarted, viewModel.SelectedOverviewFilter);
+        Assert.Equal(
+            ["Blocked", "Ready"],
+            viewModel.OverviewItems
+                .Select(static row => row.SourceName)
+                .OrderBy(static name => name));
+
+        AssertStatusFilter(viewModel, OverviewManagerFilter.InProgress, "InProgress");
+        AssertStatusFilter(viewModel, OverviewManagerFilter.ReworkNeeded, "Rework");
+        AssertStatusFilter(
+            viewModel,
+            OverviewManagerFilter.DevelopmentCompleted,
+            "DevelopmentCompleted");
+        AssertStatusFilter(viewModel, OverviewManagerFilter.Reconciled, "Reconciled");
+
+        viewModel.SelectOverviewFilterCommand.Execute(OverviewManagerFilter.AllActive);
+
+        Assert.Equal(OverviewManagerFilter.AllActive, viewModel.SelectedOverviewFilter);
+        Assert.Equal(6, viewModel.OverviewItems.Count);
+        Assert.DoesNotContain(viewModel.OverviewItems, row => row.SourceName == "Archived");
+    }
+
+    [Fact]
+    public async Task StatusSummaryFilterCommand_DisablesEmptyStatusesAndKeepsActiveSearch()
+    {
+        MainWindowViewModel viewModel = CreateViewModel(
+            [Entity(1, "Matching entity"), Entity(2, "Other entity")],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+        await viewModel.InitializeAsync();
+
+        Assert.True(viewModel.SelectOverviewFilterCommand.CanExecute(
+            OverviewManagerFilter.NotStarted));
+        Assert.False(viewModel.SelectOverviewFilterCommand.CanExecute(
+            OverviewManagerFilter.Reconciled));
+
+        viewModel.SelectOverviewFilterCommand.Execute(OverviewManagerFilter.Reconciled);
+        Assert.Equal(OverviewManagerFilter.AllActive, viewModel.SelectedOverviewFilter);
+
+        viewModel.OverviewSearchQuery = "Matching";
+        await WaitUntilAsync(() => viewModel.OverviewItems.Count == 1);
+        viewModel.SelectOverviewFilterCommand.Execute(OverviewManagerFilter.NotStarted);
+        viewModel.SelectOverviewFilterCommand.Execute(OverviewManagerFilter.NotStarted);
+
+        Assert.Equal(OverviewManagerFilter.NotStarted, viewModel.SelectedOverviewFilter);
+        Assert.Equal("Matching entity", Assert.Single(viewModel.OverviewItems).SourceName);
+
+        viewModel.SelectOverviewFilterCommand.Execute(OverviewManagerFilter.AllActive);
+
+        Assert.Equal("Matching", viewModel.OverviewSearchQuery);
+        Assert.Equal("Matching entity", Assert.Single(viewModel.OverviewItems).SourceName);
     }
 
     [Fact]
@@ -290,7 +435,7 @@ public sealed class MainWindowViewModelTests
         EntityOverviewRow row = Assert.Single(viewModel.OverviewItems);
         Assert.Equal("Reconciled", row.Status);
         Assert.Equal("Verified implementation", row.Notes);
-        Assert.Equal(100, viewModel.SuccessfulCompletionPercentage);
+        Assert.Equal(100, viewModel.ImplementedPercentage);
         Assert.Equal(100, viewModel.ReconciledPercentage);
     }
 
@@ -753,7 +898,10 @@ public sealed class MainWindowViewModelTests
                 store,
                 resolver,
                 ranker),
-            picker);
+            picker,
+            new ProgressDashboardViewModel(new ProgressReportingService(
+                new EmptyProgressHistoryRepository(),
+                TimeZoneInfo.Utc)));
     }
 
     private static SchemaImportResult FailureResult() => SchemaImportResult.Failure(
@@ -766,6 +914,17 @@ public sealed class MainWindowViewModelTests
         {
             await Task.Delay(10, timeout.Token);
         }
+    }
+
+    private static void AssertStatusFilter(
+        MainWindowViewModel viewModel,
+        OverviewManagerFilter filter,
+        string expectedEntityName)
+    {
+        Assert.True(viewModel.SelectOverviewFilterCommand.CanExecute(filter));
+        viewModel.SelectOverviewFilterCommand.Execute(filter);
+        Assert.Equal(filter, viewModel.SelectedOverviewFilter);
+        Assert.Equal(expectedEntityName, Assert.Single(viewModel.OverviewItems).SourceName);
     }
 
     private static TrackedEntity Entity(
@@ -846,12 +1005,17 @@ public sealed class MainWindowViewModelTests
             entity.ChangeNotes(updated.Notes);
         }
 
-        public Task<bool> TryAddAsync(TrackedEntity entity, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+    }
 
-        public Task<bool> UpdateSchemaMetadataAsync(TrackedEntity entity, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+    private sealed class EmptyProgressHistoryRepository : IProgressHistoryRepository
+    {
+        public Task<IReadOnlyList<EntityStatusHistoryEntry>> GetStatusHistoryAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<EntityStatusHistoryEntry>>([]);
 
+        public Task<IReadOnlyList<ProgressSnapshot>> GetProgressSnapshotsAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ProgressSnapshot>>([]);
     }
 
     private sealed class StubDependencyRepository(
@@ -866,11 +1030,6 @@ public sealed class MainWindowViewModelTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(unresolvedDependencies);
 
-        public Task SaveAsync(PersistedDependency dependency, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task SaveUnresolvedAsync(PersistedUnresolvedDependency dependency, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
     }
 
     private sealed class StubFileParser(SchemaImportResult result) : ISchemaImportFileParser
@@ -929,5 +1088,10 @@ public sealed class MainWindowViewModelTests
 
             return Task.CompletedTask;
         }
+
+        public Task EnsureHistoryBaselineAsync(
+            IEnumerable<TrackedEntity> entities,
+            ProgressSnapshotState snapshot,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

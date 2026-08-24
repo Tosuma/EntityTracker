@@ -1,5 +1,5 @@
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Dependencies;
+using EntityTracker.Application.Importing;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
@@ -251,14 +251,6 @@ public sealed class EntityOverviewServiceTests
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
             CancellationToken cancellationToken = default) => Task.FromResult(entities);
 
-        public Task<bool> TryAddAsync(
-            TrackedEntity entity,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task<bool> UpdateSchemaMetadataAsync(
-            TrackedEntity entity,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
     }
 
     private sealed class StubDependencyRepository(
@@ -273,12 +265,5 @@ public sealed class EntityOverviewServiceTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(unresolvedDependencies);
 
-        public Task SaveAsync(
-            PersistedDependency dependency,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task SaveUnresolvedAsync(
-            PersistedUnresolvedDependency dependency,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 }

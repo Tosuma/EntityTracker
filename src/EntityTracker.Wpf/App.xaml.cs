@@ -1,18 +1,20 @@
 using System.IO;
 using System.Windows;
 
+using EntityTracker.Application.Dependencies;
+using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Overview;
-using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Infrastructure.Importing;
 using EntityTracker.Infrastructure.Persistence;
+using EntityTracker.Reporting;
 using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels;
 
@@ -41,9 +43,18 @@ public partial class App : System.Windows.Application
         services.AddSingleton<DependencyRanker>();
         services.AddSingleton<EffectiveDependencyResolver>();
         services.AddSingleton<WorkflowReadinessEvaluator>();
+        services.AddSingleton<ProgressSnapshotCalculator>();
         services.AddSingleton<EntityOverviewService>();
         services.AddSingleton<SchemaSynchronizationPlanner>();
         services.AddSingleton<ITrackedStateStore, SqliteTrackedStateStore>();
+        services.AddSingleton<IProgressHistoryRepository, SqliteProgressHistoryRepository>();
+        services.AddSingleton<ProgressHistoryInitializer>();
+        services.AddSingleton<ProgressDashboardBuilder>();
+        services.AddSingleton(serviceProvider => new ProgressReportingService(
+            serviceProvider.GetRequiredService<IProgressHistoryRepository>(),
+            TimeZoneInfo.Local,
+            serviceProvider.GetRequiredService<ProgressDashboardBuilder>()));
+        services.AddSingleton<ProgressDashboardViewModel>();
         services.AddSingleton<SchemaSynchronizationService>();
         services.AddSingleton<ManualEntityCreationService>();
         services.AddSingleton<EntityDependencyEditorService>();
@@ -62,6 +73,9 @@ public partial class App : System.Windows.Application
         {
             SqliteDatabase database = _serviceProvider.GetRequiredService<SqliteDatabase>();
             await database.InitializeAsync();
+            ProgressHistoryInitializer historyInitializer =
+                _serviceProvider.GetRequiredService<ProgressHistoryInitializer>();
+            await historyInitializer.EnsureInitializedAsync();
 
             MainWindow mainWindow = _serviceProvider.GetRequiredService<MainWindow>();
             MainWindow = mainWindow;

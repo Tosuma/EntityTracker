@@ -1,4 +1,5 @@
 using EntityTracker.Application.Dependencies;
+using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
@@ -14,6 +15,7 @@ public sealed class ManualEntityCreationService
     private readonly DependencyRanker _dependencyRanker;
     private readonly EffectiveDependencyResolver _effectiveDependencyResolver;
     private readonly ITrackedStateStore _store;
+    private readonly ProgressSnapshotCalculator _snapshotCalculator;
 
     public ManualEntityCreationService(
         IEntityRepository entityRepository,
@@ -21,7 +23,8 @@ public sealed class ManualEntityCreationService
         IManualDependencyOverrideRepository overrideRepository,
         DependencyRanker dependencyRanker,
         EffectiveDependencyResolver effectiveDependencyResolver,
-        ITrackedStateStore store)
+        ITrackedStateStore store,
+        ProgressSnapshotCalculator? snapshotCalculator = null)
     {
         ArgumentNullException.ThrowIfNull(entityRepository);
         ArgumentNullException.ThrowIfNull(dependencyRepository);
@@ -36,6 +39,7 @@ public sealed class ManualEntityCreationService
         _dependencyRanker = dependencyRanker;
         _effectiveDependencyResolver = effectiveDependencyResolver;
         _store = store;
+        _snapshotCalculator = snapshotCalculator ?? new ProgressSnapshotCalculator();
     }
 
     public async Task<ManualDependencySearchResult> SearchDependenciesAsync(
@@ -192,7 +196,10 @@ public sealed class ManualEntityCreationService
             candidateImportedUnresolved.Where(dependency =>
                 reconciledOwnerIds.Contains(dependency.Dependency.DependentEntityId)),
             [createdEntity.Id],
-            createdOverrides);
+            createdOverrides,
+            progressSnapshotAfterChanges: _snapshotCalculator.Calculate(
+                candidateEntities,
+                effectiveState));
         await _store.ApplyAsync(changeSet, cancellationToken);
 
         return ManualEntityCreationResult.Success(createdEntity.Id, diagnostics);

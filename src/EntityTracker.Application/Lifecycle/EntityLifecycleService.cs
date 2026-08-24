@@ -1,4 +1,5 @@
 using EntityTracker.Application.Dependencies;
+using EntityTracker.Application.History;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Domain;
@@ -16,6 +17,7 @@ public sealed class EntityLifecycleService
     private readonly ITrackedStateStore _store;
     private readonly EffectiveDependencyResolver _effectiveDependencyResolver;
     private readonly DependencyRanker _dependencyRanker;
+    private readonly ProgressSnapshotCalculator _snapshotCalculator;
 
     public EntityLifecycleService(
         IEntityRepository entityRepository,
@@ -23,7 +25,8 @@ public sealed class EntityLifecycleService
         IManualDependencyOverrideRepository overrideRepository,
         ITrackedStateStore store,
         EffectiveDependencyResolver effectiveDependencyResolver,
-        DependencyRanker dependencyRanker)
+        DependencyRanker dependencyRanker,
+        ProgressSnapshotCalculator? snapshotCalculator = null)
     {
         ArgumentNullException.ThrowIfNull(entityRepository);
         ArgumentNullException.ThrowIfNull(dependencyRepository);
@@ -38,6 +41,7 @@ public sealed class EntityLifecycleService
         _store = store;
         _effectiveDependencyResolver = effectiveDependencyResolver;
         _dependencyRanker = dependencyRanker;
+        _snapshotCalculator = snapshotCalculator ?? new ProgressSnapshotCalculator();
     }
 
     public async Task<bool> TryArchiveAsync(
@@ -46,14 +50,44 @@ public sealed class EntityLifecycleService
     {
         ArgumentNullException.ThrowIfNull(entityId);
 
-        TrackedEntity? entity = await _entityRepository.GetAsync(entityId, cancellationToken);
+        Task<IReadOnlyList<TrackedEntity>> entitiesTask =
+            _entityRepository.GetAllAsync(cancellationToken);
+        Task<IReadOnlyList<PersistedDependency>> resolvedTask =
+            _dependencyRepository.GetAllAsync(cancellationToken);
+        Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
+            _dependencyRepository.GetAllUnresolvedAsync(cancellationToken);
+        Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
+            _overrideRepository.GetAllAsync(cancellationToken);
+        await Task.WhenAll(entitiesTask, resolvedTask, unresolvedTask, overridesTask);
+
+        TrackedEntity[] entities = (await entitiesTask).ToArray();
+        TrackedEntity? entity = entities.SingleOrDefault(item => item.Id == entityId);
         if (entity?.LifecycleState != EntityLifecycleState.Active)
         {
             return false;
         }
 
+        TrackedEntity archived = new(
+            entity.Id,
+            entity.SourceName,
+            entity.Status,
+            entity.Notes,
+            EntityLifecycleState.Archived,
+            entity.Provenance);
+        TrackedEntity[] candidateEntities = entities
+            .Select(item => item.Id == entityId ? archived : item)
+            .ToArray();
+        EffectiveDependencyState effectiveState = _effectiveDependencyResolver.Resolve(
+            candidateEntities,
+            await resolvedTask,
+            await unresolvedTask,
+            await overridesTask);
         await _store.ApplyAsync(
-            new TrackedStateChangeSet([], [], [entityId], [], [], []),
+            new TrackedStateChangeSet(
+                [], [], [entityId], [], [], [],
+                progressSnapshotAfterChanges: _snapshotCalculator.Calculate(
+                    candidateEntities,
+                    effectiveState)),
             cancellationToken);
         return true;
     }
@@ -121,7 +155,10 @@ public sealed class EntityLifecycleService
                 [],
                 [],
                 [],
-                entityIdsToRestore: [entityId]),
+                entityIdsToRestore: [entityId],
+                progressSnapshotAfterChanges: _snapshotCalculator.Calculate(
+                    candidateEntities,
+                    effectiveState)),
             cancellationToken);
         return EntityRestorationResult.Success();
     }

@@ -1,4 +1,5 @@
 using EntityTracker.Application.Dependencies;
+using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Persistence;
@@ -18,6 +19,7 @@ public sealed class EntityDependencyEditorService
     private readonly EffectiveDependencyResolver _effectiveDependencyResolver;
     private readonly DependencyRanker _dependencyRanker;
     private readonly ITrackedStateStore _store;
+    private readonly ProgressSnapshotCalculator _snapshotCalculator;
 
     public EntityDependencyEditorService(
         IEntityRepository entityRepository,
@@ -25,7 +27,8 @@ public sealed class EntityDependencyEditorService
         IManualDependencyOverrideRepository overrideRepository,
         EffectiveDependencyResolver effectiveDependencyResolver,
         DependencyRanker dependencyRanker,
-        ITrackedStateStore store)
+        ITrackedStateStore store,
+        ProgressSnapshotCalculator? snapshotCalculator = null)
     {
         ArgumentNullException.ThrowIfNull(entityRepository);
         ArgumentNullException.ThrowIfNull(dependencyRepository);
@@ -40,6 +43,7 @@ public sealed class EntityDependencyEditorService
         _effectiveDependencyResolver = effectiveDependencyResolver;
         _dependencyRanker = dependencyRanker;
         _store = store;
+        _snapshotCalculator = snapshotCalculator ?? new ProgressSnapshotCalculator();
     }
 
     public async Task<IReadOnlyList<TrackedEntity>> GetEditableEntitiesAsync(
@@ -236,6 +240,7 @@ public sealed class EntityDependencyEditorService
 
         return new EntityDependencyEditPlan(
             owner,
+            entityArray,
             CreateItems(ownerImported, desiredByKey, entitiesByKey),
             desiredByKey.Values,
             effectiveState,
@@ -269,6 +274,9 @@ public sealed class EntityDependencyEditorService
             status != plan.Entity.Status || !string.Equals(notes, plan.Entity.Notes, StringComparison.Ordinal)
                 ? [updatedProgress]
                 : [];
+        TrackedEntity[] candidateEntities = plan.CandidateEntities
+            .Select(entity => entity.Id == updatedProgress.Id ? updatedProgress : entity)
+            .ToArray();
 
         await _store.ApplyAsync(
             new TrackedStateChangeSet(
@@ -280,7 +288,10 @@ public sealed class EntityDependencyEditorService
                 [],
                 [plan.Entity.Id],
                 plan.DesiredOverrides,
-                progressUpdates),
+                progressUpdates,
+                progressSnapshotAfterChanges: _snapshotCalculator.Calculate(
+                    candidateEntities,
+                    plan.EffectiveState)),
             cancellationToken);
     }
 

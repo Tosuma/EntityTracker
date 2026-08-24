@@ -78,7 +78,7 @@ public sealed class SqliteDependencyRepository : IDependencyRepository
         return dependencies.AsReadOnly();
     }
 
-    public async Task SaveAsync(
+    internal async Task SaveAsync(
         PersistedDependency dependency,
         CancellationToken cancellationToken = default)
     {
@@ -133,7 +133,7 @@ public sealed class SqliteDependencyRepository : IDependencyRepository
         }
     }
 
-    public async Task SaveUnresolvedAsync(
+    internal async Task SaveUnresolvedAsync(
         PersistedUnresolvedDependency dependency,
         CancellationToken cancellationToken = default)
     {

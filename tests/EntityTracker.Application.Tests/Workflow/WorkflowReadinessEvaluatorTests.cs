@@ -19,20 +19,22 @@ public sealed class WorkflowReadinessEvaluatorTests
             "DevelopmentCompleted",
             DevelopmentStatus.DevelopmentCompleted);
         TrackedEntity reconciled = Entity(5, "Reconciled", DevelopmentStatus.Reconciled);
+        TrackedEntity rework = Entity(6, "Rework", DevelopmentStatus.ReworkNeeded);
         EffectiveDependencyState dependencies = new EffectiveDependencyResolver().Resolve(
-            [owner, notStarted, inProgress, developmentCompleted, reconciled],
+            [owner, notStarted, inProgress, developmentCompleted, reconciled, rework],
             [
                 Dependency(owner, notStarted, ImportedDependencyKind.Optional),
                 Dependency(owner, inProgress, ImportedDependencyKind.Mandatory),
                 Dependency(owner, developmentCompleted, ImportedDependencyKind.Mandatory),
-                Dependency(owner, reconciled, ImportedDependencyKind.Optional)
+                Dependency(owner, reconciled, ImportedDependencyKind.Optional),
+                Dependency(owner, rework, ImportedDependencyKind.Mandatory)
             ],
             [Unresolved(owner, "Missing", ImportedDependencyKind.Optional)],
             []);
 
         EntityReadiness readiness = new WorkflowReadinessEvaluator()
             .Evaluate(
-                [owner, notStarted, inProgress, developmentCompleted, reconciled],
+                [owner, notStarted, inProgress, developmentCompleted, reconciled, rework],
                 dependencies)[owner.Id];
 
         Assert.False(readiness.IsReady);
@@ -46,7 +48,7 @@ public sealed class WorkflowReadinessEvaluatorTests
             ],
             readiness.Blockers.Select(static blocker => blocker.Kind));
         Assert.DoesNotContain(readiness.Blockers, blocker =>
-            blocker.SourceName is "DevelopmentCompleted" or "Reconciled");
+            blocker.SourceName is "DevelopmentCompleted" or "Reconciled" or "Rework");
     }
 
     [Fact]
@@ -91,6 +93,9 @@ public sealed class WorkflowReadinessEvaluatorTests
             EntityWorkflowState.InProgress,
             evaluator.Classify(Entity(3, "InProgress", DevelopmentStatus.InProgress), blockers));
         Assert.Equal(
+            EntityWorkflowState.ReworkNeeded,
+            evaluator.Classify(Entity(6, "Rework", DevelopmentStatus.ReworkNeeded), blockers));
+        Assert.Equal(
             EntityWorkflowState.DevelopmentCompleted,
             evaluator.Classify(Entity(
                 4,
@@ -102,7 +107,7 @@ public sealed class WorkflowReadinessEvaluatorTests
         Assert.Equal(
             EntityWorkflowState.Archived,
             evaluator.Classify(new TrackedEntity(
-                new EntityId(new Guid(6, 0, 0, new byte[8])),
+                new EntityId(new Guid(7, 0, 0, new byte[8])),
                 "Archived",
                 lifecycleState: EntityLifecycleState.Archived)));
     }

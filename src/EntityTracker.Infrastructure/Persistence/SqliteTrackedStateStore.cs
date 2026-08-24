@@ -1,3 +1,4 @@
+using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Domain;
@@ -43,6 +44,15 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore
                     entity,
                     timestamp,
                     cancellationToken);
+                await InsertStatusHistoryAsync(
+                    connection,
+                    transaction,
+                    entity.Id,
+                    null,
+                    entity.Status,
+                    StatusHistoryEntryKind.Created,
+                    timestamp,
+                    cancellationToken);
             }
 
             foreach (TrackedEntity entity in changeSet.EntitiesToUpdate)
@@ -57,6 +67,12 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore
 
             foreach (TrackedEntity entity in changeSet.EntitiesWithProgressToUpdate)
             {
+                await InsertTransitionIfChangedAsync(
+                    connection,
+                    transaction,
+                    entity,
+                    timestamp,
+                    cancellationToken);
                 await UpdateProgressAsync(
                     connection,
                     transaction,
@@ -154,6 +170,16 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore
                 }
             }
 
+            if (changeSet.ProgressSnapshotAfterChanges is not null)
+            {
+                await InsertSnapshotIfChangedAsync(
+                    connection,
+                    transaction,
+                    changeSet.ProgressSnapshotAfterChanges,
+                    timestamp,
+                    cancellationToken);
+            }
+
             await transaction.CommitAsync(cancellationToken);
         }
         catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
@@ -162,6 +188,198 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore
                 "The tracked schema could not be changed because its candidate state is invalid.",
                 exception);
         }
+    }
+
+    public async Task EnsureHistoryBaselineAsync(
+        IEnumerable<TrackedEntity> entities,
+        ProgressSnapshotState snapshot,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(entities);
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        TrackedEntity[] entityArray = entities.ToArray();
+        string timestamp = SqlitePersistenceValues.FormatTimestamp(
+            _database.TimeProvider.GetUtcNow());
+        await using SqliteConnection connection =
+            await _database.OpenConnectionAsync(cancellationToken);
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+        long historyCount = await CountAsync(
+            connection,
+            transaction,
+            "entity_status_history",
+            cancellationToken);
+        long snapshotCount = await CountAsync(
+            connection,
+            transaction,
+            "progress_snapshots",
+            cancellationToken);
+        if (historyCount > 0 || snapshotCount > 0)
+        {
+            if (snapshotCount == 0 || (entityArray.Length > 0 && historyCount == 0))
+            {
+                throw new InvalidDataException(
+                    "The persisted progress history is incomplete and cannot be initialized safely.");
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+            return;
+        }
+
+        foreach (TrackedEntity entity in entityArray)
+        {
+            await InsertStatusHistoryAsync(
+                connection,
+                transaction,
+                entity.Id,
+                null,
+                entity.Status,
+                StatusHistoryEntryKind.Baseline,
+                timestamp,
+                cancellationToken);
+        }
+
+        await InsertSnapshotAsync(
+            connection,
+            transaction,
+            snapshot,
+            timestamp,
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    private static async Task<long> CountAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string tableName,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = CreateCommand(
+            connection,
+            transaction,
+            $"SELECT COUNT(*) FROM {tableName};");
+        object? value = await command.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt64(value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static async Task InsertTransitionIfChangedAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        TrackedEntity entity,
+        string timestamp,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = CreateCommand(connection, transaction, """
+            INSERT INTO entity_status_history
+            (
+                entity_id, previous_status, new_status, entry_kind, occurred_at_utc
+            )
+            SELECT id, development_status, $newStatus, 'Transition', $timestamp
+            FROM tracked_entities
+            WHERE id = $id AND development_status <> $newStatus;
+            """);
+        command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
+        command.Parameters.AddWithValue("$newStatus", entity.Status.ToString());
+        command.Parameters.AddWithValue("$timestamp", timestamp);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task InsertStatusHistoryAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        EntityId entityId,
+        DevelopmentStatus? previousStatus,
+        DevelopmentStatus newStatus,
+        StatusHistoryEntryKind kind,
+        string timestamp,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = CreateCommand(connection, transaction, """
+            INSERT INTO entity_status_history
+            (
+                entity_id, previous_status, new_status, entry_kind, occurred_at_utc
+            )
+            VALUES ($entityId, $previousStatus, $newStatus, $kind, $timestamp);
+            """);
+        command.Parameters.AddWithValue("$entityId", SqlitePersistenceValues.Format(entityId));
+        command.Parameters.AddWithValue(
+            "$previousStatus",
+            previousStatus is null ? DBNull.Value : previousStatus.Value.ToString());
+        command.Parameters.AddWithValue("$newStatus", newStatus.ToString());
+        command.Parameters.AddWithValue("$kind", kind.ToString());
+        command.Parameters.AddWithValue("$timestamp", timestamp);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task InsertSnapshotIfChangedAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        ProgressSnapshotState snapshot,
+        string timestamp,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = CreateCommand(connection, transaction, """
+            SELECT ready_count, blocked_count, in_progress_count, rework_needed_count,
+                   development_completed_count, reconciled_count
+            FROM progress_snapshots
+            ORDER BY id DESC
+            LIMIT 1;
+            """);
+        bool unchanged;
+        await using (SqliteDataReader reader =
+                     await command.ExecuteReaderAsync(cancellationToken))
+        {
+            unchanged = await reader.ReadAsync(cancellationToken) &&
+                reader.GetInt32(0) == snapshot.ReadyCount &&
+                reader.GetInt32(1) == snapshot.BlockedCount &&
+                reader.GetInt32(2) == snapshot.InProgressCount &&
+                reader.GetInt32(3) == snapshot.ReworkNeededCount &&
+                reader.GetInt32(4) == snapshot.DevelopmentCompletedCount &&
+                reader.GetInt32(5) == snapshot.ReconciledCount;
+        }
+
+        if (!unchanged)
+        {
+            await InsertSnapshotAsync(
+                connection,
+                transaction,
+                snapshot,
+                timestamp,
+                cancellationToken);
+        }
+    }
+
+    private static async Task InsertSnapshotAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        ProgressSnapshotState snapshot,
+        string timestamp,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = CreateCommand(connection, transaction, """
+            INSERT INTO progress_snapshots
+            (
+                recorded_at_utc, ready_count, blocked_count, in_progress_count,
+                rework_needed_count, development_completed_count, reconciled_count
+            )
+            VALUES
+            (
+                $timestamp, $ready, $blocked, $inProgress, $rework,
+                $developmentCompleted, $reconciled
+            );
+            """);
+        command.Parameters.AddWithValue("$timestamp", timestamp);
+        command.Parameters.AddWithValue("$ready", snapshot.ReadyCount);
+        command.Parameters.AddWithValue("$blocked", snapshot.BlockedCount);
+        command.Parameters.AddWithValue("$inProgress", snapshot.InProgressCount);
+        command.Parameters.AddWithValue("$rework", snapshot.ReworkNeededCount);
+        command.Parameters.AddWithValue(
+            "$developmentCompleted",
+            snapshot.DevelopmentCompletedCount);
+        command.Parameters.AddWithValue("$reconciled", snapshot.ReconciledCount);
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private static async Task InsertEntityAsync(

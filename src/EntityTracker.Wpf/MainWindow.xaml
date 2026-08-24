@@ -3,6 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
+        xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels"
         mc:Ignorable="d"
         Title="EntityTracker"
         Width="1120"
@@ -44,13 +46,53 @@
         </Style>
 
         <Style x:Key="SummaryCardStyle" TargetType="Border">
-            <Setter Property="Margin" Value="0,0,10,0" />
+            <Setter Property="Margin" Value="0,0,10,8" />
             <Setter Property="Padding" Value="16,12" />
             <Setter Property="MinWidth" Value="128" />
             <Setter Property="Background" Value="White" />
             <Setter Property="BorderBrush" Value="#DDE3E7" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="5" />
+        </Style>
+
+        <Style x:Key="SummaryFilterButtonStyle" TargetType="Button">
+            <Setter Property="Margin" Value="0,0,10,8" />
+            <Setter Property="Padding" Value="16,12" />
+            <Setter Property="MinWidth" Value="128" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="White" />
+            <Setter Property="BorderBrush" Value="#DDE3E7" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Card"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Card" Property="BorderBrush" Value="#75A9BA" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Card" Property="BorderBrush" Value="#176B87" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Cursor" Value="Arrow" />
+                                <Setter TargetName="Card" Property="Opacity" Value="0.48" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style TargetType="DataGrid">
@@ -167,17 +209,25 @@
                         </StackPanel>
                     </DockPanel>
 
-                    <Grid Grid.Row="1" Margin="0,0,0,14">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                    <WrapPanel Grid.Row="1" Margin="0,0,0,6">
 
-                        <Border Grid.Column="0" Style="{StaticResource SummaryCardStyle}">
+                        <Button AutomationProperties.Name="Show all active entities"
+                                Command="{Binding SelectOverviewFilterCommand}"
+                                CommandParameter="{x:Static viewModels:OverviewManagerFilter.AllActive}"
+                                ToolTip="Show all active entities">
+                            <Button.Style>
+                                <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
+                                       TargetType="Button">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedOverviewFilter}"
+                                                     Value="{x:Static viewModels:OverviewManagerFilter.AllActive}">
+                                            <Setter Property="Background" Value="#EAF4F7" />
+                                            <Setter Property="BorderBrush" Value="#176B87" />
+                                            <Setter Property="BorderThickness" Value="2" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
                             <StackPanel>
                                 <TextBlock Foreground="#6B7880" Text="Total" />
                                 <TextBlock Margin="0,3,0,0"
@@ -185,8 +235,24 @@
                                            FontWeight="SemiBold"
                                            Text="{Binding TotalEntityCount}" />
                             </StackPanel>
-                        </Border>
-                        <Border Grid.Column="1" Style="{StaticResource SummaryCardStyle}">
+                        </Button>
+                        <Button AutomationProperties.Name="Show not started entities"
+                                Command="{Binding SelectOverviewFilterCommand}"
+                                CommandParameter="{x:Static viewModels:OverviewManagerFilter.NotStarted}"
+                                ToolTip="Show not started entities">
+                            <Button.Style>
+                                <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
+                                       TargetType="Button">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedOverviewFilter}"
+                                                     Value="{x:Static viewModels:OverviewManagerFilter.NotStarted}">
+                                            <Setter Property="Background" Value="#EAF4F7" />
+                                            <Setter Property="BorderBrush" Value="#176B87" />
+                                            <Setter Property="BorderThickness" Value="2" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
                             <StackPanel>
                                 <TextBlock Foreground="#6B7880" Text="Not started" />
                                 <TextBlock Margin="0,3,0,0"
@@ -194,8 +260,24 @@
                                            FontWeight="SemiBold"
                                            Text="{Binding NotStartedCount}" />
                             </StackPanel>
-                        </Border>
-                        <Border Grid.Column="2" Style="{StaticResource SummaryCardStyle}">
+                        </Button>
+                        <Button AutomationProperties.Name="Show in progress entities"
+                                Command="{Binding SelectOverviewFilterCommand}"
+                                CommandParameter="{x:Static viewModels:OverviewManagerFilter.InProgress}"
+                                ToolTip="Show in progress entities">
+                            <Button.Style>
+                                <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
+                                       TargetType="Button">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedOverviewFilter}"
+                                                     Value="{x:Static viewModels:OverviewManagerFilter.InProgress}">
+                                            <Setter Property="Background" Value="#EAF4F7" />
+                                            <Setter Property="BorderBrush" Value="#176B87" />
+                                            <Setter Property="BorderThickness" Value="2" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
                             <StackPanel>
                                 <TextBlock Foreground="#6B7880" Text="In progress" />
                                 <TextBlock Margin="0,3,0,0"
@@ -203,8 +285,51 @@
                                            FontWeight="SemiBold"
                                            Text="{Binding InProgressCount}" />
                             </StackPanel>
-                        </Border>
-                        <Border Grid.Column="3" Style="{StaticResource SummaryCardStyle}">
+                        </Button>
+                        <Button AutomationProperties.Name="Show rework needed entities"
+                                Command="{Binding SelectOverviewFilterCommand}"
+                                CommandParameter="{x:Static viewModels:OverviewManagerFilter.ReworkNeeded}"
+                                ToolTip="Show rework needed entities">
+                            <Button.Style>
+                                <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
+                                       TargetType="Button">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedOverviewFilter}"
+                                                     Value="{x:Static viewModels:OverviewManagerFilter.ReworkNeeded}">
+                                            <Setter Property="Background" Value="#EAF4F7" />
+                                            <Setter Property="BorderBrush" Value="#176B87" />
+                                            <Setter Property="BorderThickness" Value="2" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <StackPanel>
+                                <TextBlock Foreground="#6B7880" Text="Rework needed" />
+                                <TextBlock Margin="0,3,0,0"
+                                           FontSize="22"
+                                           FontWeight="SemiBold"
+                                           Foreground="#B45309"
+                                           Text="{Binding ReworkNeededCount}" />
+                            </StackPanel>
+                        </Button>
+
+                        <Button AutomationProperties.Name="Show development completed entities"
+                                Command="{Binding SelectOverviewFilterCommand}"
+                                CommandParameter="{x:Static viewModels:OverviewManagerFilter.DevelopmentCompleted}"
+                                ToolTip="Show development completed entities">
+                            <Button.Style>
+                                <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
+                                       TargetType="Button">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedOverviewFilter}"
+                                                     Value="{x:Static viewModels:OverviewManagerFilter.DevelopmentCompleted}">
+                                            <Setter Property="Background" Value="#EAF4F7" />
+                                            <Setter Property="BorderBrush" Value="#176B87" />
+                                            <Setter Property="BorderThickness" Value="2" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
                             <StackPanel>
                                 <TextBlock Foreground="#6B7880" Text="Dev. completed" />
                                 <TextBlock Margin="0,3,0,0"
@@ -212,9 +337,25 @@
                                            FontWeight="SemiBold"
                                            Text="{Binding DevelopmentCompletedCount}" />
                             </StackPanel>
-                        </Border>
+                        </Button>
 
-                        <Border Grid.Column="4" Style="{StaticResource SummaryCardStyle}">
+                        <Button AutomationProperties.Name="Show reconciled entities"
+                                Command="{Binding SelectOverviewFilterCommand}"
+                                CommandParameter="{x:Static viewModels:OverviewManagerFilter.Reconciled}"
+                                ToolTip="Show reconciled entities">
+                            <Button.Style>
+                                <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
+                                       TargetType="Button">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedOverviewFilter}"
+                                                     Value="{x:Static viewModels:OverviewManagerFilter.Reconciled}">
+                                            <Setter Property="Background" Value="#EAF4F7" />
+                                            <Setter Property="BorderBrush" Value="#176B87" />
+                                            <Setter Property="BorderThickness" Value="2" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
                             <StackPanel>
                                 <TextBlock Foreground="#6B7880" Text="Reconciled" />
                                 <TextBlock Margin="0,3,0,0"
@@ -222,17 +363,21 @@
                                            FontWeight="SemiBold"
                                            Text="{Binding ReconciledCount}" />
                             </StackPanel>
-                        </Border>
+                        </Button>
 
-                        <Border Grid.Column="5"
-                                Margin="0"
+                        <Border Margin="0,0,0,8"
                                 Style="{StaticResource SummaryCardStyle}">
                             <StackPanel VerticalAlignment="Center">
                                 <TextBlock Foreground="#6B7880"
-                                           Text="{Binding SuccessfulCompletionPercentage, StringFormat={}{0:F0}% dev. completed or reconciled}" />
+                                           Text="{Binding ImplementedPercentage, StringFormat={}{0:F0}% implemented}" />
                                 <Grid Height="10" Margin="0,9,0,0">
-                                    <ProgressBar Maximum="100"
-                                                 Value="{Binding SuccessfulCompletionPercentage, Mode=OneWay}" />
+                                    <ProgressBar Foreground="#2563EB"
+                                                 Maximum="100"
+                                                 Value="{Binding ImplementedPercentage, Mode=OneWay}" />
+                                    <ProgressBar Background="Transparent"
+                                                 Foreground="#D97706"
+                                                 Maximum="100"
+                                                 Value="{Binding ReconciledAndReworkPercentage, Mode=OneWay}" />
                                     <ProgressBar Background="Transparent"
                                                  Foreground="#2E8B57"
                                                  Maximum="100"
@@ -240,11 +385,11 @@
                                 </Grid>
                                 <TextBlock Margin="0,5,0,0"
                                            FontSize="11"
-                                           Foreground="#2E8B57"
-                                           Text="{Binding ReconciledPercentage, StringFormat={}{0:F0}% reconciled}" />
+                                           Foreground="#52616A"
+                                           Text="Blue: dev. completed · Amber: rework · Green: reconciled" />
                             </StackPanel>
                         </Border>
-                    </Grid>
+                    </WrapPanel>
 
                     <Border Grid.Row="2"
                             Margin="0,0,0,12"
@@ -711,6 +856,60 @@
                                         </ItemsControl>
                                     </StackPanel>
 
+                                    <StackPanel Margin="0,0,0,12"
+                                                Visibility="{Binding Review.HasProgressImpacts, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <TextBlock FontSize="16"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#B45309"
+                                                   Text="Completed entities with dependency changes" />
+                                        <TextBlock Margin="0,3,0,4"
+                                                   Foreground="#64737C"
+                                                   Text="Choose whether each entity keeps its current status or needs rework before applying."
+                                                   TextWrapping="Wrap" />
+                                        <ItemsControl ItemsSource="{Binding Review.ProgressImpacts}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Margin="0,5,0,0"
+                                                            Padding="10"
+                                                            Background="#FFF8DC"
+                                                            BorderBrush="#E5D28B"
+                                                            BorderThickness="1">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel>
+                                                                <TextBlock FontWeight="SemiBold" Text="{Binding SourceName}" />
+                                                                <TextBlock Margin="0,3,0,0"
+                                                                           Foreground="#6E5A18"
+                                                                           Text="{Binding CurrentStatus, StringFormat=Current: {0}}" />
+                                                                <TextBlock Margin="0,3,0,0"
+                                                                           FontWeight="SemiBold"
+                                                                           Foreground="#8A4B08"
+                                                                           Text="{Binding DecisionText}" />
+                                                            </StackPanel>
+                                                            <StackPanel Grid.Column="1"
+                                                                        Margin="12,0,0,0"
+                                                                        VerticalAlignment="Center"
+                                                                        Orientation="Horizontal">
+                                                                <Button Margin="0,0,8,0"
+                                                                        Command="{Binding DataContext.KeepSynchronizationStatusCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                        CommandParameter="{Binding}"
+                                                                        Content="Keep current status"
+                                                                        Style="{StaticResource SecondaryButtonStyle}" />
+                                                                <Button Command="{Binding DataContext.MarkSynchronizationReworkCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                        CommandParameter="{Binding}"
+                                                                        Content="Mark Rework needed"
+                                                                        Style="{StaticResource SecondaryButtonStyle}" />
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+
                                     <Border Padding="10" Background="#EDF6EF" BorderBrush="#BFD8C4" BorderThickness="1">
                                         <TextBlock Foreground="#365D3D"
                                                    Text="{Binding Review.UnchangedEntityCount, StringFormat=✓ {0} imported entities unchanged}" />
@@ -919,6 +1118,142 @@
                                 Style="{StaticResource PrimaryButtonStyle}" />
                     </StackPanel>
                 </Grid>
+            </TabItem>
+
+            <TabItem Header="Progress">
+                <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                              PreviewMouseWheel="OnReviewPreviewMouseWheel"
+                              VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="12">
+                        <DockPanel Margin="0,0,0,14">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <TextBlock Margin="0,0,7,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="#64737C"
+                                           Text="History" />
+                                <ComboBox MinWidth="145"
+                                          DisplayMemberPath="DisplayName"
+                                          ItemsSource="{Binding Progress.RangeOptions}"
+                                          SelectedValue="{Binding Progress.SelectedRange}"
+                                          SelectedValuePath="Value" />
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock FontSize="20"
+                                           FontWeight="SemiBold"
+                                           Foreground="#26343D"
+                                           Text="Progress history" />
+                                <TextBlock Margin="0,3,0,0"
+                                           Foreground="#64737C"
+                                           Text="Current work status and persisted implementation/readiness trends." />
+                            </StackPanel>
+                        </DockPanel>
+
+                        <Border Margin="0,0,0,12"
+                                Padding="12"
+                                Background="White"
+                                BorderBrush="#D7DEE2"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Visibility="{Binding Progress.IsCustomRange, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Margin="0,0,7,0" VerticalAlignment="Center" Text="From" />
+                                    <DatePicker Width="145" SelectedDate="{Binding Progress.CustomFrom}" />
+                                    <TextBlock Margin="14,0,7,0" VerticalAlignment="Center" Text="To" />
+                                    <DatePicker Width="145" SelectedDate="{Binding Progress.CustomTo}" />
+                                    <Button Margin="12,0,0,0"
+                                            Command="{Binding Progress.ApplyRangeCommand}"
+                                            Content="Apply range"
+                                            Style="{StaticResource PrimaryButtonStyle}" />
+                                </StackPanel>
+                                <TextBlock Margin="0,7,0,0"
+                                           Foreground="#9A3030"
+                                           Text="{Binding Progress.RangeValidationMessage}"
+                                           Visibility="{Binding Progress.HasRangeValidationError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Margin="0,0,0,12"
+                                MaxHeight="100"
+                                Padding="10"
+                                Background="#FDEAEA"
+                                BorderBrush="#E6A6A6"
+                                BorderThickness="1"
+                                Visibility="{Binding Progress.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <TextBlock Foreground="#8A2D2D"
+                                           Text="{Binding Progress.ErrorMessage}"
+                                           TextWrapping="Wrap" />
+                            </ScrollViewer>
+                        </Border>
+
+                        <TextBlock Margin="0,8"
+                                   HorizontalAlignment="Center"
+                                   Foreground="#64737C"
+                                   Text="No persisted progress history is available in this range."
+                                   Visibility="{Binding Progress.ShowNoHistoricalData, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+                        <UniformGrid Columns="2">
+                            <Border Height="290" Margin="0,0,6,12" Padding="12" Background="White" BorderBrush="#D7DEE2" BorderThickness="1" CornerRadius="5">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="Entities by current work status" />
+                                    <lvc:PieChart Grid.Row="1"
+                                                  LegendPosition="Right"
+                                                  Series="{Binding Progress.CurrentStatusSeries}" />
+                                </Grid>
+                            </Border>
+                            <Border Height="290" Margin="6,0,0,12" Padding="12" Background="White" BorderBrush="#D7DEE2" BorderThickness="1" CornerRadius="5">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="Implemented entities over time" />
+                                    <lvc:CartesianChart Grid.Row="1"
+                                                        LegendPosition="Top"
+                                                        Series="{Binding Progress.ImplementedSeries}"
+                                                        TooltipPosition="Top"
+                                                        XAxes="{Binding Progress.ImplementedXAxes}"
+                                                        YAxes="{Binding Progress.CountYAxes}" />
+                                </Grid>
+                            </Border>
+                            <Border Height="290" Margin="0,0,6,0" Padding="12" Background="White" BorderBrush="#D7DEE2" BorderThickness="1" CornerRadius="5">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="Ready vs blocked over time" />
+                                    <lvc:CartesianChart Grid.Row="1"
+                                                        LegendPosition="Top"
+                                                        Series="{Binding Progress.ReadinessSeries}"
+                                                        TooltipPosition="Top"
+                                                        XAxes="{Binding Progress.ReadinessXAxes}"
+                                                        YAxes="{Binding Progress.CountYAxes}" />
+                                </Grid>
+                            </Border>
+                            <Border Height="290" Margin="6,0,0,0" Padding="12" Background="White" BorderBrush="#D7DEE2" BorderThickness="1" CornerRadius="5">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="Weekly net implemented change" />
+                                    <lvc:CartesianChart Grid.Row="1"
+                                                        LegendPosition="Top"
+                                                        Series="{Binding Progress.WeeklySeries}"
+                                                        TooltipPosition="Top"
+                                                        XAxes="{Binding Progress.WeeklyXAxes}"
+                                                        YAxes="{Binding Progress.SignedYAxes}" />
+                                </Grid>
+                            </Border>
+                        </UniformGrid>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
 
         </TabControl>

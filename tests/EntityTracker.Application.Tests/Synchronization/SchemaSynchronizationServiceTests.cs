@@ -1,5 +1,6 @@
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Dependencies;
+using EntityTracker.Application.History;
+using EntityTracker.Application.Importing;
 using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
@@ -77,6 +78,10 @@ public sealed class SchemaSynchronizationServiceTests
 
         Assert.Equal(1, store.ApplyCount);
         Assert.Equal(2, store.LastChangeSet!.EntitiesToAdd.Count);
+        Assert.Equal(
+            2,
+            Assert.IsType<ProgressSnapshotState>(store.LastChangeSet.ProgressSnapshotAfterChanges)
+                .ReadyCount);
     }
 
     [Fact]
@@ -105,6 +110,37 @@ public sealed class SchemaSynchronizationServiceTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => service.ApplyAsync(result.Plan));
+    }
+
+    [Fact]
+    public async Task ApplyAsync_CompletedEntityDependencyChangeWaitsForProgressDecision()
+    {
+        TrackedEntity target = Entity(1, "Target");
+        TrackedEntity owner = Entity(2, "Owner", DevelopmentStatus.Reconciled);
+        StubStore store = new();
+        SchemaSynchronizationService service = CreateService(
+            SchemaImportResult.Success(Candidate(
+                ["Target", "Owner"],
+                [("Owner", "Target")])),
+            [target, owner],
+            [],
+            [],
+            store);
+        SchemaSynchronizationPlan plan = (await service.PlanAsync(
+            "schema.csv",
+            SchemaImportMode.Complete)).Plan!;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ApplyAsync(plan));
+        Assert.Equal(0, store.ApplyCount);
+
+        SchemaSynchronizationPlan revised = service.StageProgressDecision(
+            plan,
+            owner.Id,
+            SynchronizationProgressDecision.KeepCurrentStatus);
+        await service.ApplyAsync(revised);
+
+        Assert.Equal(1, store.ApplyCount);
+        Assert.Empty(store.LastChangeSet!.EntitiesWithProgressToUpdate);
     }
 
     [Fact]
@@ -177,8 +213,11 @@ public sealed class SchemaSynchronizationServiceTests
             store);
     }
 
-    private static TrackedEntity Entity(int id, string name) =>
-        new(new EntityId(new Guid(id, 0, 0, new byte[8])), name);
+    private static TrackedEntity Entity(
+        int id,
+        string name,
+        DevelopmentStatus status = DevelopmentStatus.NotStarted) =>
+        new(new EntityId(new Guid(id, 0, 0, new byte[8])), name, status);
 
     private static SchemaImportCandidate Candidate(
         IEnumerable<string> names,
@@ -214,10 +253,6 @@ public sealed class SchemaSynchronizationServiceTests
             Task.FromResult(entities.SingleOrDefault(entity => entity.Id == id));
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(entities);
-        public Task<bool> TryAddAsync(TrackedEntity entity, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-        public Task<bool> UpdateSchemaMetadataAsync(TrackedEntity entity, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
     }
 
     private sealed class StubDependencyRepository(
@@ -228,10 +263,6 @@ public sealed class SchemaSynchronizationServiceTests
             Task.FromResult(dependencies);
         public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(unresolved);
-        public Task SaveAsync(PersistedDependency dependency, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-        public Task SaveUnresolvedAsync(PersistedUnresolvedDependency dependency, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
     }
 
     private sealed class StubStore : ITrackedStateStore
@@ -247,5 +278,10 @@ public sealed class SchemaSynchronizationServiceTests
             LastChangeSet = changeSet;
             return Task.CompletedTask;
         }
+
+        public Task EnsureHistoryBaselineAsync(
+            IEnumerable<TrackedEntity> entities,
+            EntityTracker.Application.History.ProgressSnapshotState snapshot,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

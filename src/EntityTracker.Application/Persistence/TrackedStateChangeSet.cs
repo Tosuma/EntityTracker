@@ -1,3 +1,4 @@
+using EntityTracker.Application.History;
 using EntityTracker.Domain;
 
 namespace EntityTracker.Application.Persistence;
@@ -17,7 +18,8 @@ public sealed class TrackedStateChangeSet
         IEnumerable<EntityId>? reconciledOverrideOwnerIds = null,
         IEnumerable<ManualDependencyOverride>? manualDependencyOverrides = null,
         IEnumerable<TrackedEntity>? entitiesWithProgressToUpdate = null,
-        IEnumerable<EntityId>? entityIdsToRestore = null)
+        IEnumerable<EntityId>? entityIdsToRestore = null,
+        ProgressSnapshotState? progressSnapshotAfterChanges = null)
     {
         EntitiesToAdd = entitiesToAdd.ToArray();
         EntitiesToUpdate = entitiesToUpdate.ToArray();
@@ -29,6 +31,7 @@ public sealed class TrackedStateChangeSet
         ManualDependencyOverrides = (manualDependencyOverrides ?? []).ToArray();
         EntitiesWithProgressToUpdate = (entitiesWithProgressToUpdate ?? []).ToArray();
         EntityIdsToRestore = (entityIdsToRestore ?? []).ToArray();
+        ProgressSnapshotAfterChanges = progressSnapshotAfterChanges;
     }
 
     public IReadOnlyList<TrackedEntity> EntitiesToAdd { get; }
@@ -50,6 +53,8 @@ public sealed class TrackedStateChangeSet
     public IReadOnlyList<TrackedEntity> EntitiesWithProgressToUpdate { get; }
 
     public IReadOnlyList<EntityId> EntityIdsToRestore { get; }
+
+    public ProgressSnapshotState? ProgressSnapshotAfterChanges { get; }
 
     public bool HasChanges =>
         EntitiesToAdd.Count > 0 ||

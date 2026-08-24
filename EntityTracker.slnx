@@ -6,10 +6,15 @@
     <Project Path="src/EntityTracker.Reporting/EntityTracker.Reporting.csproj" />
     <Project Path="src/EntityTracker.Wpf/EntityTracker.Wpf.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/EntityTracker.DemoData/EntityTracker.DemoData.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/EntityTracker.Domain.Tests/EntityTracker.Domain.Tests.csproj" />
     <Project Path="tests/EntityTracker.Application.Tests/EntityTracker.Application.Tests.csproj" />
     <Project Path="tests/EntityTracker.Infrastructure.Tests/EntityTracker.Infrastructure.Tests.csproj" />
+    <Project Path="tests/EntityTracker.Reporting.Tests/EntityTracker.Reporting.Tests.csproj" />
     <Project Path="tests/EntityTracker.Wpf.Tests/EntityTracker.Wpf.Tests.csproj" />
+    <Project Path="tests/EntityTracker.DemoData.Tests/EntityTracker.DemoData.Tests.csproj" />
   </Folder>
 </Solution>

@@ -32,6 +32,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly RelayCommand _openOverviewSearchCommand;
     private readonly RelayCommand _clearOverviewSearchCommand;
     private readonly RelayCommand _closeOverviewSearchCommand;
+    private readonly RelayCommand<OverviewManagerFilter> _selectOverviewFilterCommand;
+    private readonly RelayCommand<SynchronizationProgressImpactRow> _keepSynchronizationStatusCommand;
+    private readonly RelayCommand<SynchronizationProgressImpactRow> _markSynchronizationReworkCommand;
     private IReadOnlyList<EntityOverviewRow> _allOverviewItems = [];
     private IReadOnlyList<EntityOverviewRow> _archivedOverviewItems = [];
     private IReadOnlyList<EntityOverviewRow> _currentViewItems = [];
@@ -46,6 +49,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private int _selectedTabIndex;
     private int _notStartedCount;
     private int _inProgressCount;
+    private int _reworkNeededCount;
     private int _developmentCompletedCount;
     private int _reconciledCount;
     private CancellationTokenSource? _overviewSearchCancellation;
@@ -57,7 +61,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ManualEntityCreationService manualEntityCreationService,
         EntityDependencyEditorService entityDependencyEditorService,
         EntityLifecycleService entityLifecycleService,
-        ICsvFilePicker filePicker)
+        ICsvFilePicker filePicker,
+        ProgressDashboardViewModel progressDashboard)
     {
         ArgumentNullException.ThrowIfNull(overviewService);
         ArgumentNullException.ThrowIfNull(synchronizationService);
@@ -65,9 +70,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ArgumentNullException.ThrowIfNull(entityDependencyEditorService);
         ArgumentNullException.ThrowIfNull(entityLifecycleService);
         ArgumentNullException.ThrowIfNull(filePicker);
+        ArgumentNullException.ThrowIfNull(progressDashboard);
         _overviewService = overviewService;
         _synchronizationService = synchronizationService;
         _filePicker = filePicker;
+        Progress = progressDashboard;
         Review = new SchemaSynchronizationReviewViewModel();
         ManualCreation = new ManualEntityCreationViewModel(
             manualEntityCreationService,
@@ -122,6 +129,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _closeOverviewSearchCommand = new RelayCommand(
             CloseOverviewSearch,
             () => IsOverviewSearchOpen);
+        _selectOverviewFilterCommand = new RelayCommand<OverviewManagerFilter>(
+            SelectOverviewFilter,
+            CanSelectOverviewFilter);
+        _keepSynchronizationStatusCommand = new RelayCommand<SynchronizationProgressImpactRow>(
+            row => StageSynchronizationProgressDecision(
+                row,
+                SynchronizationProgressDecision.KeepCurrentStatus),
+            _ => !IsBusy && Review.HasReview && !Editor.IsOpen);
+        _markSynchronizationReworkCommand = new RelayCommand<SynchronizationProgressImpactRow>(
+            row => StageSynchronizationProgressDecision(
+                row,
+                SynchronizationProgressDecision.MarkReworkNeeded),
+            _ => !IsBusy && Review.HasReview && !Editor.IsOpen);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -132,12 +152,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public EntityDependencyEditorViewModel Editor { get; }
 
+    public ProgressDashboardViewModel Progress { get; }
+
     public IReadOnlyList<OverviewManagerFilterOption> OverviewFilters { get; } =
     [
         new(OverviewManagerFilter.AllActive, "All active"),
+        new(OverviewManagerFilter.NotStarted, "Not started"),
         new(OverviewManagerFilter.Ready, "Ready"),
         new(OverviewManagerFilter.Blocked, "Blocked"),
         new(OverviewManagerFilter.InProgress, "In progress"),
+        new(OverviewManagerFilter.ReworkNeeded, "Rework needed"),
         new(OverviewManagerFilter.DevelopmentCompleted, "Dev. completed"),
         new(OverviewManagerFilter.Reconciled, "Reconciled"),
         new(OverviewManagerFilter.Archived, "Archived")
@@ -303,6 +327,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetField(ref _inProgressCount, value);
     }
 
+    public int ReworkNeededCount
+    {
+        get => _reworkNeededCount;
+        private set
+        {
+            if (SetField(ref _reworkNeededCount, value))
+            {
+                OnPropertyChanged(nameof(ImplementedPercentage));
+                OnPropertyChanged(nameof(ReworkNeededPercentage));
+                OnPropertyChanged(nameof(ReconciledAndReworkPercentage));
+            }
+        }
+    }
+
     public int DevelopmentCompletedCount
     {
         get => _developmentCompletedCount;
@@ -310,7 +348,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _developmentCompletedCount, value))
             {
-                OnPropertyChanged(nameof(SuccessfulCompletionPercentage));
+                OnPropertyChanged(nameof(ImplementedPercentage));
             }
         }
     }
@@ -322,8 +360,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _reconciledCount, value))
             {
-                OnPropertyChanged(nameof(SuccessfulCompletionPercentage));
+                OnPropertyChanged(nameof(ImplementedPercentage));
                 OnPropertyChanged(nameof(ReconciledPercentage));
+                OnPropertyChanged(nameof(ReconciledAndReworkPercentage));
             }
         }
     }
@@ -332,9 +371,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public int ArchivedEntityCount => _archivedOverviewItems.Count;
 
-    public double SuccessfulCompletionPercentage => TotalEntityCount == 0
+    public double ImplementedPercentage => TotalEntityCount == 0
         ? 0
-        : (DevelopmentCompletedCount + ReconciledCount) * 100.0 / TotalEntityCount;
+        : (ReworkNeededCount + DevelopmentCompletedCount + ReconciledCount) * 100.0 /
+          TotalEntityCount;
+
+    public double ReworkNeededPercentage => TotalEntityCount == 0
+        ? 0
+        : ReworkNeededCount * 100.0 / TotalEntityCount;
+
+    public double ReconciledAndReworkPercentage =>
+        ReconciledPercentage + ReworkNeededPercentage;
 
     public double ReconciledPercentage => TotalEntityCount == 0
         ? 0
@@ -377,6 +424,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ICommand CloseOverviewSearchCommand => _closeOverviewSearchCommand;
 
+    public ICommand SelectOverviewFilterCommand => _selectOverviewFilterCommand;
+
+    public ICommand KeepSynchronizationStatusCommand => _keepSynchronizationStatusCommand;
+
+    public ICommand MarkSynchronizationReworkCommand => _markSynchronizationReworkCommand;
+
     public Task InitializeAsync(CancellationToken cancellationToken = default) =>
         RefreshAsync(cancellationToken);
 
@@ -391,7 +444,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         BusyMessage = "Loading persisted entities…";
         try
         {
-            await LoadOverviewAsync(cancellationToken);
+            await LoadOverviewAndProgressAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -476,7 +529,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             Review.Clear();
             SelectedTabIndex = 0;
             BusyMessage = "Recomputing dependency ranking…";
-            await LoadOverviewAsync(cancellationToken);
+            await LoadOverviewAndProgressAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -524,6 +577,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         UpdateProgressCounts(result.Items);
     }
 
+    private async Task LoadOverviewAndProgressAsync(CancellationToken cancellationToken)
+    {
+        await LoadOverviewAsync(cancellationToken);
+        await Progress.LoadAsync(cancellationToken);
+    }
+
     private void SetOverviewFailure(string message)
     {
         ReplaceOverviewItems([], []);
@@ -543,7 +602,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ShowOverviewSearchEmptyState));
         OnPropertyChanged(nameof(TotalEntityCount));
         OnPropertyChanged(nameof(ArchivedEntityCount));
-        OnPropertyChanged(nameof(SuccessfulCompletionPercentage));
+        OnPropertyChanged(nameof(ImplementedPercentage));
+        OnPropertyChanged(nameof(ReworkNeededPercentage));
+        OnPropertyChanged(nameof(ReconciledAndReworkPercentage));
         OnPropertyChanged(nameof(ReconciledPercentage));
         OnPropertyChanged(nameof(OverviewSearchResultSummary));
     }
@@ -572,6 +633,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ClearOverviewSearch();
         IsOverviewSearchOpen = false;
     }
+
+    private void SelectOverviewFilter(OverviewManagerFilter filter) =>
+        SelectedOverviewFilter = filter;
+
+    private bool CanSelectOverviewFilter(OverviewManagerFilter filter) => filter switch
+    {
+        OverviewManagerFilter.AllActive => true,
+        OverviewManagerFilter.NotStarted => NotStartedCount > 0,
+        OverviewManagerFilter.InProgress => InProgressCount > 0,
+        OverviewManagerFilter.ReworkNeeded => ReworkNeededCount > 0,
+        OverviewManagerFilter.DevelopmentCompleted => DevelopmentCompletedCount > 0,
+        OverviewManagerFilter.Reconciled => ReconciledCount > 0,
+        _ => false
+    };
 
     private void ScheduleOverviewSearch()
     {
@@ -627,13 +702,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             OverviewManagerFilter.AllActive => _allOverviewItems,
             OverviewManagerFilter.Archived => _archivedOverviewItems,
+            OverviewManagerFilter.NotStarted =>
+                FilterByDevelopmentStatus(DevelopmentStatus.NotStarted),
             OverviewManagerFilter.Ready => FilterByWorkflow(EntityWorkflowState.Ready),
             OverviewManagerFilter.Blocked => FilterByWorkflow(EntityWorkflowState.Blocked),
-            OverviewManagerFilter.InProgress => FilterByWorkflow(EntityWorkflowState.InProgress),
+            OverviewManagerFilter.InProgress =>
+                FilterByDevelopmentStatus(DevelopmentStatus.InProgress),
+            OverviewManagerFilter.ReworkNeeded =>
+                FilterByDevelopmentStatus(DevelopmentStatus.ReworkNeeded),
             OverviewManagerFilter.DevelopmentCompleted =>
-                FilterByWorkflow(EntityWorkflowState.DevelopmentCompleted),
+                FilterByDevelopmentStatus(DevelopmentStatus.DevelopmentCompleted),
             OverviewManagerFilter.Reconciled =>
-                FilterByWorkflow(EntityWorkflowState.Reconciled),
+                FilterByDevelopmentStatus(DevelopmentStatus.Reconciled),
             _ => throw new ArgumentOutOfRangeException(
                 nameof(SelectedOverviewFilter),
                 SelectedOverviewFilter,
@@ -660,6 +740,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private IReadOnlyList<EntityOverviewRow> FilterByWorkflow(EntityWorkflowState workflowState) =>
         _allOverviewItems.Where(row => row.WorkflowState == workflowState).ToArray();
 
+    private IReadOnlyList<EntityOverviewRow> FilterByDevelopmentStatus(DevelopmentStatus status) =>
+        _allOverviewItems.Where(row => row.DevelopmentStatus == status).ToArray();
+
     private void NotifyOverviewViewChanged()
     {
         OnPropertyChanged(nameof(HasOverviewItems));
@@ -673,12 +756,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         EntityOverviewItem[] itemArray = items.ToArray();
         NotStartedCount = itemArray.Count(static item => item.Status == DevelopmentStatus.NotStarted);
         InProgressCount = itemArray.Count(static item => item.Status == DevelopmentStatus.InProgress);
+        ReworkNeededCount = itemArray.Count(static item =>
+            item.Status == DevelopmentStatus.ReworkNeeded);
         DevelopmentCompletedCount = itemArray.Count(static item =>
             item.Status == DevelopmentStatus.DevelopmentCompleted);
         ReconciledCount = itemArray.Count(static item =>
             item.Status == DevelopmentStatus.Reconciled);
-        OnPropertyChanged(nameof(SuccessfulCompletionPercentage));
+        OnPropertyChanged(nameof(ImplementedPercentage));
+        OnPropertyChanged(nameof(ReworkNeededPercentage));
+        OnPropertyChanged(nameof(ReconciledAndReworkPercentage));
         OnPropertyChanged(nameof(ReconciledPercentage));
+        _selectOverviewFilterCommand.NotifyCanExecuteChanged();
     }
 
     private void EndBusyOperation()
@@ -697,6 +785,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _editOverviewEntityCommand.NotifyCanExecuteChanged();
         _editReviewEntityCommand.NotifyCanExecuteChanged();
         _openOverviewSearchCommand.NotifyCanExecuteChanged();
+        _selectOverviewFilterCommand.NotifyCanExecuteChanged();
+        _keepSynchronizationStatusCommand.NotifyCanExecuteChanged();
+        _markSynchronizationReworkCommand.NotifyCanExecuteChanged();
     }
 
     private async Task OnManualEntityCreatedAsync()
@@ -706,7 +797,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         BusyMessage = "Recomputing dependency ranking…";
         try
         {
-            await LoadOverviewAsync(CancellationToken.None);
+            await LoadOverviewAndProgressAsync(CancellationToken.None);
         }
         catch (Exception exception)
         {
@@ -723,7 +814,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         try
         {
-            await LoadOverviewAsync(CancellationToken.None);
+            await LoadOverviewAndProgressAsync(CancellationToken.None);
         }
         catch (Exception exception)
         {
@@ -736,7 +827,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         try
         {
-            await LoadOverviewAsync(CancellationToken.None);
+            await LoadOverviewAndProgressAsync(CancellationToken.None);
         }
         catch (Exception exception)
         {
@@ -752,7 +843,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         SelectedOverviewFilter = OverviewManagerFilter.AllActive;
         try
         {
-            await LoadOverviewAsync(CancellationToken.None);
+            await LoadOverviewAndProgressAsync(CancellationToken.None);
         }
         catch (Exception exception)
         {
@@ -773,6 +864,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         Review.ReplacePlan(plan);
         SelectedTabIndex = 1;
+        NotifyCommandsChanged();
+    }
+
+    private void StageSynchronizationProgressDecision(
+        SynchronizationProgressImpactRow row,
+        SynchronizationProgressDecision decision)
+    {
+        if (Review.CurrentPlan is null)
+        {
+            return;
+        }
+
+        SchemaSynchronizationPlan revised = _synchronizationService.StageProgressDecision(
+            Review.CurrentPlan,
+            row.EntityId,
+            decision);
+        Review.ReplacePlan(revised);
         NotifyCommandsChanged();
     }
 
@@ -811,6 +919,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         return new EntityOverviewRow(
             item.EntityId,
             item.LifecycleState,
+            item.Status,
             item.WorkflowState,
             item.DependencyState,
             FormatRank(item.Rank),
@@ -836,6 +945,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         DevelopmentStatus.NotStarted => "Not started",
         DevelopmentStatus.InProgress => "In progress",
+        DevelopmentStatus.ReworkNeeded => "Rework needed",
         DevelopmentStatus.DevelopmentCompleted => "Dev. completed",
         DevelopmentStatus.Reconciled => "Reconciled",
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
@@ -846,6 +956,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         EntityWorkflowState.Ready => "Ready",
         EntityWorkflowState.Blocked => "Blocked",
         EntityWorkflowState.InProgress => "In progress",
+        EntityWorkflowState.ReworkNeeded => "Rework needed",
         EntityWorkflowState.DevelopmentCompleted => "Dev. completed",
         EntityWorkflowState.Reconciled => "Reconciled",
         EntityWorkflowState.Archived => "Archived",

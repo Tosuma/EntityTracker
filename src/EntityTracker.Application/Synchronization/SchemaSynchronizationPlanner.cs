@@ -1,4 +1,5 @@
 using EntityTracker.Application.Dependencies;
+using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
@@ -13,14 +14,17 @@ public sealed class SchemaSynchronizationPlanner
 {
     private readonly DependencyRanker _dependencyRanker;
     private readonly EffectiveDependencyResolver _effectiveDependencyResolver;
+    private readonly ProgressSnapshotCalculator _snapshotCalculator;
 
     public SchemaSynchronizationPlanner(
         DependencyRanker dependencyRanker,
-        EffectiveDependencyResolver? effectiveDependencyResolver = null)
+        EffectiveDependencyResolver? effectiveDependencyResolver = null,
+        ProgressSnapshotCalculator? snapshotCalculator = null)
     {
         ArgumentNullException.ThrowIfNull(dependencyRanker);
         _dependencyRanker = dependencyRanker;
         _effectiveDependencyResolver = effectiveDependencyResolver ?? new EffectiveDependencyResolver();
+        _snapshotCalculator = snapshotCalculator ?? new ProgressSnapshotCalculator();
     }
 
     public SchemaSynchronizationPlan CreatePlan(
@@ -38,7 +42,8 @@ public sealed class SchemaSynchronizationPlanner
             persistedUnresolvedDependencies,
             manualDependencyOverrides ?? [],
             manualDependencyOverrides ?? [],
-            null);
+            null,
+            new Dictionary<EntityId, SynchronizationProgressDecision>());
 
     public SchemaSynchronizationPlan ReviseManualOverrides(
         SchemaSynchronizationPlan plan,
@@ -61,7 +66,49 @@ public sealed class SchemaSynchronizationPlanner
             plan.PersistedUnresolvedDependencies,
             plan.PersistedManualOverrides,
             revisedOverrides,
-            plan.PlannedNewEntityIds);
+            plan.PlannedNewEntityIds,
+            plan.ProgressImpacts
+                .Where(static impact => impact.Decision is not null)
+                .ToDictionary(
+                    static impact => impact.EntityId,
+                    static impact => impact.Decision!.Value));
+    }
+
+    public SchemaSynchronizationPlan ReviseProgressDecision(
+        SchemaSynchronizationPlan plan,
+        EntityId entityId,
+        SynchronizationProgressDecision decision)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(entityId);
+        if (!Enum.IsDefined(decision))
+        {
+            throw new ArgumentOutOfRangeException(nameof(decision));
+        }
+
+        if (!plan.ProgressImpacts.Any(impact => impact.EntityId == entityId))
+        {
+            throw new InvalidOperationException(
+                "The entity does not require a synchronization progress decision.");
+        }
+
+        Dictionary<EntityId, SynchronizationProgressDecision> decisions = plan.ProgressImpacts
+            .Where(static impact => impact.Decision is not null)
+            .ToDictionary(
+                static impact => impact.EntityId,
+                static impact => impact.Decision!.Value);
+        decisions[entityId] = decision;
+
+        return CreatePlanCore(
+            plan.ImportCandidate,
+            plan.Mode,
+            plan.PersistedEntities,
+            plan.PersistedResolvedDependencies,
+            plan.PersistedUnresolvedDependencies,
+            plan.PersistedManualOverrides,
+            plan.CandidateManualOverrides,
+            plan.PlannedNewEntityIds,
+            decisions);
     }
 
     private SchemaSynchronizationPlan CreatePlanCore(
@@ -72,7 +119,8 @@ public sealed class SchemaSynchronizationPlanner
         IEnumerable<PersistedUnresolvedDependency> persistedUnresolvedDependencies,
         IEnumerable<ManualDependencyOverride> persistedManualOverrides,
         IEnumerable<ManualDependencyOverride> candidateManualOverrides,
-        IReadOnlyDictionary<EntitySourceKey, EntityId>? plannedNewEntityIds)
+        IReadOnlyDictionary<EntitySourceKey, EntityId>? plannedNewEntityIds,
+        IReadOnlyDictionary<EntityId, SynchronizationProgressDecision> progressDecisions)
     {
         ArgumentNullException.ThrowIfNull(importCandidate);
         ArgumentNullException.ThrowIfNull(persistedEntities);
@@ -221,6 +269,7 @@ public sealed class SchemaSynchronizationPlanner
         List<TrackedEntity> entitiesToUpdate = [];
         HashSet<EntityId> reconciledOwnerIds = [];
         int unchangedCount = 0;
+        HashSet<EntityId> progressImpactIds = [];
 
         Dictionary<EntityId, UnrankedEntity> unrankedById = ranking.UnrankedEntities
             .ToDictionary(static item => item.EntityId);
@@ -252,6 +301,17 @@ public sealed class SchemaSynchronizationPlanner
                         ? oldImported
                         : [],
                     candidateImportedDeclarations[candidateEntity.Id]);
+
+            if (currentEntity is not null &&
+                currentEntity.Status is DevelopmentStatus.DevelopmentCompleted or
+                    DevelopmentStatus.Reconciled &&
+                dependencyChanges.Any(static change => change.ChangeKind is
+                    DependencySynchronizationChangeKind.Added or
+                    DependencySynchronizationChangeKind.Removed or
+                    DependencySynchronizationChangeKind.KindChanged))
+            {
+                progressImpactIds.Add(candidateEntity.Id);
+            }
 
             if (currentEntity is null)
             {
@@ -337,6 +397,38 @@ public sealed class SchemaSynchronizationPlanner
         EntityId[] reconciledOverrideOwnerIds = FindChangedOverrideOwners(
             persistedOverrides,
             candidateOverrides);
+        SynchronizationProgressImpact[] progressImpacts = progressImpactIds
+            .Select(entityId => new SynchronizationProgressImpact(
+                entityId,
+                currentById[entityId].SourceName,
+                currentById[entityId].Status,
+                progressDecisions.TryGetValue(
+                    entityId,
+                    out SynchronizationProgressDecision decision)
+                    ? decision
+                    : null))
+            .OrderBy(static impact => impact.SourceName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static impact => impact.SourceName, StringComparer.Ordinal)
+            .ToArray();
+        HashSet<EntityId> markReworkIds = progressImpacts
+            .Where(static impact =>
+                impact.Decision == SynchronizationProgressDecision.MarkReworkNeeded)
+            .Select(static impact => impact.EntityId)
+            .ToHashSet();
+        TrackedEntity[] finalCandidateEntities = candidateEntities
+            .Select(entity => markReworkIds.Contains(entity.Id)
+                ? new TrackedEntity(
+                    entity.Id,
+                    entity.SourceName,
+                    DevelopmentStatus.ReworkNeeded,
+                    entity.Notes,
+                    entity.LifecycleState,
+                    entity.Provenance)
+                : entity)
+            .ToArray();
+        TrackedEntity[] progressUpdates = finalCandidateEntities
+            .Where(entity => markReworkIds.Contains(entity.Id))
+            .ToArray();
         TrackedStateChangeSet changeSet = new(
             entitiesToAdd,
             entitiesToUpdate,
@@ -348,7 +440,11 @@ public sealed class SchemaSynchronizationPlanner
                 ownerIds.Contains(dependency.Dependency.DependentEntityId)),
             reconciledOverrideOwnerIds,
             candidateOverrides.Where(item =>
-                reconciledOverrideOwnerIds.Contains(item.DependentEntityId)));
+                reconciledOverrideOwnerIds.Contains(item.DependentEntityId)),
+            progressUpdates,
+            progressSnapshotAfterChanges: _snapshotCalculator.Calculate(
+                finalCandidateEntities,
+                candidateEffective));
 
         IReadOnlyList<EntitySynchronizationChange> unresolvedChanges =
             ranking.UnrankedEntities
@@ -380,15 +476,16 @@ public sealed class SchemaSynchronizationPlanner
             currentResolved,
             currentUnresolved,
             persistedOverrides,
-            candidateEntities,
+            finalCandidateEntities,
             candidateImportedResolved,
             candidateImportedUnresolved,
             candidateOverrides,
-            candidateEntities
+            finalCandidateEntities
                 .Where(entity => !currentById.ContainsKey(entity.Id))
                 .ToDictionary(
                     entity => EntitySourceKey.From(entity.SourceName),
-                    static entity => entity.Id));
+                    static entity => entity.Id),
+            progressImpacts);
     }
 
     private static EntityId[] FindChangedOverrideOwners(

@@ -7,12 +7,4 @@ public interface IDependencyRepository
 
     Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
         CancellationToken cancellationToken = default);
-
-    Task SaveAsync(
-        PersistedDependency dependency,
-        CancellationToken cancellationToken = default);
-
-    Task SaveUnresolvedAsync(
-        PersistedUnresolvedDependency dependency,
-        CancellationToken cancellationToken = default);
 }

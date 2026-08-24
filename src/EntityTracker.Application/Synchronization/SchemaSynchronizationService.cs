@@ -119,6 +119,12 @@ public sealed class SchemaSynchronizationService
             editPlan.DesiredOverrides);
     }
 
+    public SchemaSynchronizationPlan StageProgressDecision(
+        SchemaSynchronizationPlan plan,
+        EntityId entityId,
+        SynchronizationProgressDecision decision) =>
+        _planner.ReviseProgressDecision(plan, entityId, decision);
+
     public Task ApplyAsync(
         SchemaSynchronizationPlan plan,
         CancellationToken cancellationToken = default)
@@ -127,7 +133,7 @@ public sealed class SchemaSynchronizationService
         if (!plan.CanApply)
         {
             throw new InvalidOperationException(
-                "Synchronization cannot be applied until dependency errors are corrected.");
+                "Synchronization cannot be applied until dependency errors are corrected and all progress decisions are made.");
         }
 
         return plan.ChangeSet.HasChanges

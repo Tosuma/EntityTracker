@@ -61,7 +61,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
         return entities.AsReadOnly();
     }
 
-    public async Task<bool> TryAddAsync(
+    internal async Task<bool> TryAddAsync(
         TrackedEntity entity,
         CancellationToken cancellationToken = default)
     {
@@ -109,7 +109,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
         return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
     }
 
-    public async Task<bool> UpdateSchemaMetadataAsync(
+    internal async Task<bool> UpdateSchemaMetadataAsync(
         TrackedEntity entity,
         CancellationToken cancellationToken = default)
     {

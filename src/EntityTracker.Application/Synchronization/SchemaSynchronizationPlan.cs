@@ -26,7 +26,8 @@ public sealed class SchemaSynchronizationPlan
         IEnumerable<PersistedDependency> candidateImportedResolvedDependencies,
         IEnumerable<PersistedUnresolvedDependency> candidateImportedUnresolvedDependencies,
         IEnumerable<ManualDependencyOverride> candidateManualOverrides,
-        IReadOnlyDictionary<EntitySourceKey, EntityId> plannedNewEntityIds)
+        IReadOnlyDictionary<EntitySourceKey, EntityId> plannedNewEntityIds,
+        IEnumerable<SynchronizationProgressImpact>? progressImpacts = null)
     {
         Mode = mode;
         NewEntities = newEntities.ToArray();
@@ -47,6 +48,7 @@ public sealed class SchemaSynchronizationPlan
         CandidateImportedUnresolvedDependencies = candidateImportedUnresolvedDependencies.ToArray();
         CandidateManualOverrides = candidateManualOverrides.ToArray();
         PlannedNewEntityIds = plannedNewEntityIds;
+        ProgressImpacts = (progressImpacts ?? []).ToArray();
     }
 
     public SchemaImportMode Mode { get; }
@@ -90,7 +92,11 @@ public sealed class SchemaSynchronizationPlan
 
     internal IReadOnlyDictionary<EntitySourceKey, EntityId> PlannedNewEntityIds { get; }
 
-    public bool CanApply => CandidateRanking.IsSuccess;
+    public IReadOnlyList<SynchronizationProgressImpact> ProgressImpacts { get; }
+
+    public bool CanApply =>
+        CandidateRanking.IsSuccess &&
+        ProgressImpacts.All(static impact => impact.Decision is not null);
 
     public bool HasActionableChanges =>
         NewEntities.Count > 0 ||

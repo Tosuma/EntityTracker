@@ -30,7 +30,7 @@ public sealed class RelayCommand : ICommand
         CanExecuteChanged?.Invoke(this, EventArgs.Empty);
 }
 
-public sealed class RelayCommand<T> : ICommand where T : class
+public sealed class RelayCommand<T> : ICommand
 {
     private readonly Action<T> _execute;
     private readonly Predicate<T>? _canExecute;

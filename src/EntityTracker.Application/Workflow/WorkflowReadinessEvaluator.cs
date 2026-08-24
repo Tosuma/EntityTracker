@@ -94,6 +94,7 @@ public sealed class WorkflowReadinessEvaluator
                 EntityWorkflowState.Ready,
             DevelopmentStatus.NotStarted => EntityWorkflowState.Blocked,
             DevelopmentStatus.InProgress => EntityWorkflowState.InProgress,
+            DevelopmentStatus.ReworkNeeded => EntityWorkflowState.ReworkNeeded,
             DevelopmentStatus.DevelopmentCompleted =>
                 EntityWorkflowState.DevelopmentCompleted,
             DevelopmentStatus.Reconciled => EntityWorkflowState.Reconciled,
@@ -105,5 +106,7 @@ public sealed class WorkflowReadinessEvaluator
     }
 
     private static bool IsDependencyImplemented(DevelopmentStatus status) =>
-        status is DevelopmentStatus.DevelopmentCompleted or DevelopmentStatus.Reconciled;
+        status is DevelopmentStatus.ReworkNeeded or
+            DevelopmentStatus.DevelopmentCompleted or
+            DevelopmentStatus.Reconciled;
 }

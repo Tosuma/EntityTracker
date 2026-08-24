@@ -4,7 +4,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    private const int CurrentSchemaVersion = 6;
+    private const int CurrentSchemaVersion = 7;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -14,7 +14,7 @@ public sealed class SqliteDatabase
             source_name TEXT NOT NULL,
             development_status TEXT NOT NULL
                 CHECK (development_status IN
-                    ('NotStarted', 'InProgress', 'DevelopmentCompleted', 'Reconciled')),
+                    ('NotStarted', 'InProgress', 'ReworkNeeded', 'DevelopmentCompleted', 'Reconciled')),
             notes TEXT NOT NULL,
             created_at_utc TEXT NOT NULL,
             schema_updated_at_utc TEXT NOT NULL,
@@ -40,14 +40,14 @@ public sealed class SqliteDatabase
         """;
 
     private const string WorkflowStatusSchemaSql = """
-        CREATE TABLE tracked_entities_v6
+        CREATE TABLE tracked_entities_v7
         (
             id TEXT NOT NULL PRIMARY KEY,
             source_key TEXT NOT NULL UNIQUE,
             source_name TEXT NOT NULL,
             development_status TEXT NOT NULL
                 CHECK (development_status IN
-                    ('NotStarted', 'InProgress', 'DevelopmentCompleted', 'Reconciled')),
+                    ('NotStarted', 'InProgress', 'ReworkNeeded', 'DevelopmentCompleted', 'Reconciled')),
             notes TEXT NOT NULL,
             created_at_utc TEXT NOT NULL,
             schema_updated_at_utc TEXT NOT NULL,
@@ -58,7 +58,7 @@ public sealed class SqliteDatabase
                 CHECK (provenance IN ('Imported', 'ManualOnly', 'ManualAndImported'))
         );
 
-        INSERT INTO tracked_entities_v6
+        INSERT INTO tracked_entities_v7
         (
             id, source_key, source_name, development_status, notes,
             created_at_utc, schema_updated_at_utc, progress_updated_at_utc,
@@ -80,7 +80,48 @@ public sealed class SqliteDatabase
         FROM tracked_entities;
 
         DROP TABLE tracked_entities;
-        ALTER TABLE tracked_entities_v6 RENAME TO tracked_entities;
+        ALTER TABLE tracked_entities_v7 RENAME TO tracked_entities;
+        """;
+
+    private const string ProgressHistorySchemaSql = """
+        CREATE TABLE entity_status_history
+        (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            entity_id TEXT NOT NULL,
+            previous_status TEXT NULL
+                CHECK (previous_status IS NULL OR previous_status IN
+                    ('NotStarted', 'InProgress', 'ReworkNeeded', 'DevelopmentCompleted', 'Reconciled')),
+            new_status TEXT NOT NULL
+                CHECK (new_status IN
+                    ('NotStarted', 'InProgress', 'ReworkNeeded', 'DevelopmentCompleted', 'Reconciled')),
+            entry_kind TEXT NOT NULL
+                CHECK (entry_kind IN ('Baseline', 'Created', 'Transition')),
+            occurred_at_utc TEXT NOT NULL,
+            CHECK (
+                (entry_kind = 'Transition' AND previous_status IS NOT NULL) OR
+                (entry_kind IN ('Baseline', 'Created') AND previous_status IS NULL)),
+            FOREIGN KEY (entity_id) REFERENCES tracked_entities (id) ON DELETE RESTRICT
+        );
+
+        CREATE INDEX ix_entity_status_history_entity_time
+            ON entity_status_history (entity_id, occurred_at_utc, id);
+        CREATE INDEX ix_entity_status_history_time
+            ON entity_status_history (occurred_at_utc, id);
+
+        CREATE TABLE progress_snapshots
+        (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            recorded_at_utc TEXT NOT NULL,
+            ready_count INTEGER NOT NULL CHECK (ready_count >= 0),
+            blocked_count INTEGER NOT NULL CHECK (blocked_count >= 0),
+            in_progress_count INTEGER NOT NULL CHECK (in_progress_count >= 0),
+            rework_needed_count INTEGER NOT NULL CHECK (rework_needed_count >= 0),
+            development_completed_count INTEGER NOT NULL CHECK (development_completed_count >= 0),
+            reconciled_count INTEGER NOT NULL CHECK (reconciled_count >= 0)
+        );
+
+        CREATE INDEX ix_progress_snapshots_time
+            ON progress_snapshots (recorded_at_utc, id);
         """;
 
     private const string UnresolvedDependencySchemaSql = """
@@ -272,7 +313,7 @@ public sealed class SqliteDatabase
             return;
         }
 
-        bool rebuildTrackedEntities = schemaVersion is > 0 and < 6;
+        bool rebuildTrackedEntities = schemaVersion is > 0 and < 7;
         if (rebuildTrackedEntities)
         {
             await ExecuteAsync(connection, "PRAGMA foreign_keys = OFF;", cancellationToken);
@@ -338,6 +379,15 @@ public sealed class SqliteDatabase
                 await EnsureNoForeignKeyViolationsAsync(
                     connection,
                     transaction,
+                    cancellationToken);
+            }
+
+            if (schemaVersion < 7)
+            {
+                await ExecuteAsync(
+                    connection,
+                    transaction,
+                    ProgressHistorySchemaSql,
                     cancellationToken);
             }
 

@@ -110,6 +110,81 @@ public sealed class SchemaSynchronizationPlannerTests
     }
 
     [Fact]
+    public void CompletedEntityWithStructuralDependencyChange_RequiresExplicitProgressDecision()
+    {
+        TrackedEntity target = Entity(1, "Target");
+        TrackedEntity owner = Entity(
+            2,
+            "Owner",
+            DevelopmentStatus.DevelopmentCompleted,
+            "Keep notes");
+        SchemaImportCandidate candidate = Candidate(
+            ["Target", "Owner"],
+            [("Owner", "Target", ImportedDependencyKind.Mandatory)]);
+
+        SchemaSynchronizationPlan undecided = Plan(
+            candidate,
+            SchemaImportMode.Complete,
+            [target, owner],
+            []);
+
+        SynchronizationProgressImpact impact = Assert.Single(undecided.ProgressImpacts);
+        Assert.Equal(owner.Id, impact.EntityId);
+        Assert.Null(impact.Decision);
+        Assert.False(undecided.CanApply);
+
+        SchemaSynchronizationPlan keep = _planner.ReviseProgressDecision(
+            undecided,
+            owner.Id,
+            SynchronizationProgressDecision.KeepCurrentStatus);
+        Assert.True(keep.CanApply);
+        Assert.Empty(keep.ChangeSet.EntitiesWithProgressToUpdate);
+        Assert.Equal(
+            DevelopmentStatus.DevelopmentCompleted,
+            keep.CandidateEntities.Single(entity => entity.Id == owner.Id).Status);
+
+        SchemaSynchronizationPlan rework = _planner.ReviseProgressDecision(
+            keep,
+            owner.Id,
+            SynchronizationProgressDecision.MarkReworkNeeded);
+        Assert.True(rework.CanApply);
+        Assert.Equal(
+            DevelopmentStatus.ReworkNeeded,
+            Assert.Single(rework.ChangeSet.EntitiesWithProgressToUpdate).Status);
+        Assert.Equal(
+            DevelopmentStatus.ReworkNeeded,
+            rework.CandidateEntities.Single(entity => entity.Id == owner.Id).Status);
+    }
+
+    [Fact]
+    public void ResolutionOnlyChangeAndInProgressStructuralChange_DoNotRequireDecision()
+    {
+        TrackedEntity completedOwner = Entity(
+            1,
+            "CompletedOwner",
+            DevelopmentStatus.Reconciled);
+        TrackedEntity inProgressOwner = Entity(
+            2,
+            "InProgressOwner",
+            DevelopmentStatus.InProgress);
+
+        SchemaSynchronizationPlan plan = Plan(
+            Candidate(
+                ["CompletedOwner", "InProgressOwner", "Target"],
+                [
+                    ("CompletedOwner", "Target", ImportedDependencyKind.Mandatory),
+                    ("InProgressOwner", "Target", ImportedDependencyKind.Optional)
+                ]),
+            SchemaImportMode.Partial,
+            [completedOwner, inProgressOwner],
+            [],
+            [Unresolved(completedOwner, "Target")]);
+
+        Assert.Empty(plan.ProgressImpacts);
+        Assert.True(plan.CanApply);
+    }
+
+    [Fact]
     public void CandidateState_NewTarget_ResolvesPreviouslyUnresolvedDependency()
     {
         TrackedEntity a = Entity(1, "A");

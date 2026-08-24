@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\EntityTracker.Application\EntityTracker.Application.csproj" />
+    <ProjectReference Include="..\..\src\EntityTracker.Domain\EntityTracker.Domain.csproj" />
+    <ProjectReference Include="..\..\src\EntityTracker.Infrastructure\EntityTracker.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

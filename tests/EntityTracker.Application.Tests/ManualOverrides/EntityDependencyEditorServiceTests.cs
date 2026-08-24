@@ -1,4 +1,5 @@
 using EntityTracker.Application.Dependencies;
+using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Persistence;
@@ -136,6 +137,10 @@ public sealed class EntityDependencyEditorServiceTests
         TrackedStateChangeSet changeSet = Assert.IsType<TrackedStateChangeSet>(
             store.LastChangeSet);
         Assert.Equal(owner.Id, Assert.Single(changeSet.ReconciledOverrideOwnerIds));
+        Assert.Equal(
+            1,
+            Assert.IsType<ProgressSnapshotState>(changeSet.ProgressSnapshotAfterChanges)
+                .BlockedCount);
         Assert.Single(changeSet.ManualDependencyOverrides);
         Assert.Empty(changeSet.ReconciledOwnerIds);
         Assert.Empty(changeSet.ResolvedDependencies);
@@ -166,6 +171,10 @@ public sealed class EntityDependencyEditorServiceTests
         TrackedEntity progress = Assert.Single(changeSet.EntitiesWithProgressToUpdate);
         Assert.Equal(owner.Id, progress.Id);
         Assert.Equal(DevelopmentStatus.Reconciled, progress.Status);
+        Assert.Equal(
+            1,
+            Assert.IsType<ProgressSnapshotState>(changeSet.ProgressSnapshotAfterChanges)
+                .ReconciledCount);
         Assert.Equal("Verified notes", progress.Notes);
         Assert.Equal(owner.Id, Assert.Single(changeSet.ReconciledOverrideOwnerIds));
         Assert.Single(changeSet.ManualDependencyOverrides);
@@ -258,14 +267,6 @@ public sealed class EntityDependencyEditorServiceTests
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
             CancellationToken cancellationToken = default) => Task.FromResult(entities);
 
-        public Task<bool> TryAddAsync(
-            TrackedEntity entity,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task<bool> UpdateSchemaMetadataAsync(
-            TrackedEntity entity,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
     }
 
     private sealed class StubDependencyRepository(
@@ -278,13 +279,6 @@ public sealed class EntityDependencyEditorServiceTests
         public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
             CancellationToken cancellationToken = default) => Task.FromResult(unresolved);
 
-        public Task SaveAsync(
-            PersistedDependency dependency,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task SaveUnresolvedAsync(
-            PersistedUnresolvedDependency dependency,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class StubStore : ITrackedStateStore
@@ -298,5 +292,10 @@ public sealed class EntityDependencyEditorServiceTests
             LastChangeSet = changeSet;
             return Task.CompletedTask;
         }
+
+        public Task EnsureHistoryBaselineAsync(
+            IEnumerable<TrackedEntity> entities,
+            EntityTracker.Application.History.ProgressSnapshotState snapshot,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

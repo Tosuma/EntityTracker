@@ -1,4 +1,5 @@
 using EntityTracker.Application.Dependencies;
+using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Persistence;
@@ -98,6 +99,10 @@ public sealed class ManualEntityCreationServiceTests
         Assert.Equal(added.Id, result.CreatedEntityId);
         Assert.Empty(store.LastChangeSet.ResolvedDependencies);
         Assert.Empty(store.LastChangeSet.UnresolvedDependencies);
+        ProgressSnapshotState snapshot = Assert.IsType<ProgressSnapshotState>(
+            store.LastChangeSet.ProgressSnapshotAfterChanges);
+        Assert.Equal(1, snapshot.ReadyCount);
+        Assert.Equal(1, snapshot.TotalActiveCount);
     }
 
     [Fact]
@@ -352,14 +357,6 @@ public sealed class ManualEntityCreationServiceTests
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
             CancellationToken cancellationToken = default) => Task.FromResult(entities);
 
-        public Task<bool> TryAddAsync(
-            TrackedEntity entity,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task<bool> UpdateSchemaMetadataAsync(
-            TrackedEntity entity,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
     }
 
     private sealed class StubDependencyRepository(
@@ -372,13 +369,6 @@ public sealed class ManualEntityCreationServiceTests
         public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
             CancellationToken cancellationToken = default) => Task.FromResult(unresolved);
 
-        public Task SaveAsync(
-            PersistedDependency dependency,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public Task SaveUnresolvedAsync(
-            PersistedUnresolvedDependency dependency,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class RecordingStore : ITrackedStateStore
@@ -392,5 +382,10 @@ public sealed class ManualEntityCreationServiceTests
             LastChangeSet = changeSet;
             return Task.CompletedTask;
         }
+
+        public Task EnsureHistoryBaselineAsync(
+            IEnumerable<TrackedEntity> entities,
+            EntityTracker.Application.History.ProgressSnapshotState snapshot,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

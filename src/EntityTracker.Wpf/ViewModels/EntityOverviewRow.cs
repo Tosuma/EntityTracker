@@ -1,12 +1,13 @@
-using EntityTracker.Domain;
-using EntityTracker.Application.Workflow;
 using EntityTracker.Application.Ranking;
+using EntityTracker.Application.Workflow;
+using EntityTracker.Domain;
 
 namespace EntityTracker.Wpf.ViewModels;
 
 public sealed record EntityOverviewRow(
     EntityId EntityId,
     EntityLifecycleState LifecycleState,
+    DevelopmentStatus DevelopmentStatus,
     EntityWorkflowState WorkflowState,
     DependencyResolutionState? DependencyState,
     string Rank,

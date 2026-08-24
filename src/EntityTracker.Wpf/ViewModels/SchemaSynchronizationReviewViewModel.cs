@@ -18,6 +18,7 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
     private IReadOnlyList<SchemaSynchronizationReviewRow> _unresolvedEntities = [];
     private IReadOnlyList<string> _warnings = [];
     private IReadOnlyList<string> _diagnostics = [];
+    private IReadOnlyList<SynchronizationProgressImpactRow> _progressImpacts = [];
     private int _unchangedEntityCount;
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -108,6 +109,12 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
         private set => SetCollection(ref _diagnostics, value, nameof(HasDiagnostics));
     }
 
+    public IReadOnlyList<SynchronizationProgressImpactRow> ProgressImpacts
+    {
+        get => _progressImpacts;
+        private set => SetCollection(ref _progressImpacts, value, nameof(HasProgressImpacts));
+    }
+
     public int UnchangedEntityCount
     {
         get => _unchangedEntityCount;
@@ -129,6 +136,8 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
     public bool HasWarnings => Warnings.Count > 0;
 
     public bool HasDiagnostics => Diagnostics.Count > 0;
+
+    public bool HasProgressImpacts => ProgressImpacts.Count > 0;
 
     public bool ShowEmptyState => !HasReview && !HasDiagnostics;
 
@@ -188,6 +197,7 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
                 $"Missing: {string.Join(", ", change.MissingDependencyNames)}"))
             .ToArray();
         UnchangedEntityCount = plan.UnchangedEntityCount;
+        ProgressImpacts = plan.ProgressImpacts.Select(ToProgressImpactRow).ToArray();
         CurrentPlan = plan;
     }
 
@@ -215,6 +225,7 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
                 $"Missing: {string.Join(", ", change.MissingDependencyNames)}"))
             .ToArray();
         UnchangedEntityCount = plan.UnchangedEntityCount;
+        ProgressImpacts = plan.ProgressImpacts.Select(ToProgressImpactRow).ToArray();
         Diagnostics = plan.CandidateRanking.Diagnostics
             .Select(static diagnostic => diagnostic.Message)
             .ToArray();
@@ -250,6 +261,7 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
         UnresolvedEntities = [];
         Warnings = [];
         Diagnostics = [];
+        ProgressImpacts = [];
         UnchangedEntityCount = 0;
     }
 
@@ -281,6 +293,16 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
             change.Entity.SourceName,
             string.Join(Environment.NewLine, details));
     }
+
+    private static SynchronizationProgressImpactRow ToProgressImpactRow(
+        SynchronizationProgressImpact impact) =>
+        new(
+            impact.EntityId,
+            impact.SourceName,
+            impact.CurrentStatus == EntityTracker.Domain.DevelopmentStatus.DevelopmentCompleted
+                ? "Dev. completed"
+                : "Reconciled",
+            impact.Decision);
 
     private static string FormatManualOnlyDetails(EntitySynchronizationChange change)
     {

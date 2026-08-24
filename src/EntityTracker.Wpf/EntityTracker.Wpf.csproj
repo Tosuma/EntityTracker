@@ -3,6 +3,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageReference Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.0.5" />
   </ItemGroup>
 
   <ItemGroup>
@@ -17,6 +18,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <!-- LiveCharts ships a net8.0-windows assembly, while three transitive WPF/OpenGL
+         assemblies are also packaged as .NET Framework assets. The selected stable
+         package is compatible with this Windows-only target despite NuGet's NU1701. -->
+    <NoWarn>$(NoWarn);NU1701</NoWarn>
   </PropertyGroup>
 
 </Project>

@@ -1,12 +1,13 @@
 using EntityTracker.Application.Dependencies;
+using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
-using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Lifecycle;
+using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
-using EntityTracker.Application.Workflow;
 using EntityTracker.Application.Synchronization;
+using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Persistence;
 
@@ -16,6 +17,83 @@ namespace EntityTracker.Infrastructure.Tests.Persistence;
 
 public sealed class SqliteTrackedStateStoreTests
 {
+    [Fact]
+    public async Task HistoryBaseline_IsTruthfulAndIdempotent()
+    {
+        await using TemporarySqliteFile file = new();
+        MutableTimeProvider time = new(
+            new DateTimeOffset(2026, 2, 1, 10, 0, 0, TimeSpan.Zero));
+        SqliteDatabase database = new(file.DatabasePath, time);
+        await database.InitializeAsync();
+        TrackedEntity entity = new(
+            EntityId.New(),
+            "Existing",
+            DevelopmentStatus.ReworkNeeded);
+        Assert.True(await new SqliteEntityRepository(database).TryAddAsync(entity));
+        SqliteTrackedStateStore store = new(database);
+        ProgressSnapshotState state = new(0, 0, 0, 1, 0, 0);
+
+        await store.EnsureHistoryBaselineAsync([entity], state);
+        time.Advance(TimeSpan.FromDays(1));
+        await store.EnsureHistoryBaselineAsync([entity], state);
+
+        SqliteProgressHistoryRepository history = new(database);
+        EntityStatusHistoryEntry entry = Assert.Single(await history.GetStatusHistoryAsync());
+        Assert.Equal(StatusHistoryEntryKind.Baseline, entry.Kind);
+        Assert.Equal(DevelopmentStatus.ReworkNeeded, entry.NewStatus);
+        ProgressSnapshot snapshot = Assert.Single(await history.GetProgressSnapshotsAsync());
+        Assert.Equal(state, snapshot.State);
+        Assert.Equal(new DateTimeOffset(2026, 2, 1, 10, 0, 0, TimeSpan.Zero), snapshot.RecordedAtUtc);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_RecordsCreationAndRealStatusTransitionsButNotNotesOnlyChanges()
+    {
+        await using TemporarySqliteFile file = new();
+        MutableTimeProvider time = new(
+            new DateTimeOffset(2026, 2, 1, 10, 0, 0, TimeSpan.Zero));
+        SqliteDatabase database = new(file.DatabasePath, time);
+        await database.InitializeAsync();
+        SqliteTrackedStateStore store = new(database);
+        TrackedEntity entity = new(EntityId.New(), "New");
+
+        await store.ApplyAsync(new TrackedStateChangeSet(
+            [entity], [], [], [], [], [],
+            progressSnapshotAfterChanges: new ProgressSnapshotState(1, 0, 0, 0, 0, 0)));
+        time.Advance(TimeSpan.FromHours(1));
+        await store.ApplyAsync(new TrackedStateChangeSet(
+            [], [], [], [], [], [],
+            entitiesWithProgressToUpdate:
+            [new TrackedEntity(entity.Id, entity.SourceName, entity.Status, "Notes only")],
+            progressSnapshotAfterChanges: new ProgressSnapshotState(1, 0, 0, 0, 0, 0)));
+        time.Advance(TimeSpan.FromHours(1));
+        await store.ApplyAsync(new TrackedStateChangeSet(
+            [], [], [], [], [], [],
+            entitiesWithProgressToUpdate:
+            [new TrackedEntity(
+                entity.Id,
+                entity.SourceName,
+                DevelopmentStatus.InProgress,
+                "Notes only")],
+            progressSnapshotAfterChanges: new ProgressSnapshotState(0, 0, 1, 0, 0, 0)));
+
+        SqliteProgressHistoryRepository history = new(database);
+        EntityStatusHistoryEntry[] entries = (await history.GetStatusHistoryAsync()).ToArray();
+        Assert.Equal(2, entries.Length);
+        Assert.Equal(StatusHistoryEntryKind.Created, entries[0].Kind);
+        Assert.Equal(StatusHistoryEntryKind.Transition, entries[1].Kind);
+        Assert.Equal(DevelopmentStatus.NotStarted, entries[1].PreviousStatus);
+        Assert.Equal(DevelopmentStatus.InProgress, entries[1].NewStatus);
+        ProgressSnapshot[] snapshots = (await history.GetProgressSnapshotsAsync()).ToArray();
+        Assert.Equal(2, snapshots.Length);
+
+        SqliteDatabase reopenedDatabase = new(file.DatabasePath, time);
+        await reopenedDatabase.InitializeAsync();
+        SqliteProgressHistoryRepository reopened = new(reopenedDatabase);
+        Assert.Equal(entries, await reopened.GetStatusHistoryAsync());
+        Assert.Equal(snapshots, await reopened.GetProgressSnapshotsAsync());
+    }
+
     [Fact]
     public async Task ApplyAsync_ArchivesAndReconcilesDependenciesWithoutLosingProgress()
     {
@@ -92,6 +170,9 @@ public sealed class SqliteTrackedStateStoreTests
         Assert.Equal(existing.Id, persisted.Id);
         Assert.Equal(DevelopmentStatus.NotStarted, persisted.Status);
         Assert.Equal(string.Empty, persisted.Notes);
+        SqliteProgressHistoryRepository history = new(database);
+        Assert.Empty(await history.GetStatusHistoryAsync());
+        Assert.Empty(await history.GetProgressSnapshotsAsync());
     }
 
     [Fact]
