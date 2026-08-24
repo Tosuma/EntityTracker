@@ -2,9 +2,11 @@
 
 ## Status and scope
 
-Milestone 12 defines the boundary and merge semantics needed by a future approved SharePoint
-adapter. It does **not** connect to SharePoint, authenticate a user, create lists, or synchronize
-remote data. SQLite is the only active provider in this build.
+Milestone 12 defines the boundary and merge semantics needed by an approved SharePoint adapter. It
+does **not** connect to SharePoint, authenticate a user, create lists, or synchronize remote data.
+SQLite is the only active provider in this build. The live adapter, authoritative cache, and
+conflict-review implementation belong to
+[Milestone 13](../milestones/13_sharepoint_integration.md).
 
 The future target is not symmetric multi-master storage:
 
@@ -129,4 +131,3 @@ A future migration tool may seed SharePoint only when the approved remote data s
 must preserve stable entity GUIDs, dependency keys, lifecycle/provenance, notes, progress, and
 history operation identity. It must refuse to overwrite or automatically merge into a non-empty
 remote data set; that requires a separately reviewed migration/reconciliation plan.
-

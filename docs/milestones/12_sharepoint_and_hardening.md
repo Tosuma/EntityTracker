@@ -7,7 +7,7 @@ Prove the architecture can replace or augment SQLite without rewriting core beha
 - Review persistence interfaces based on actual usage; simplify rather than generalize unnecessarily.
 - Ensure SQLite-specific types never escape Infrastructure.
 - Define collaborative-backend semantics for identity, concurrency, statuses, notes, archives, and history.
-- Once SharePoint access exists, implement a separate SharePoint adapter using the organization-approved Microsoft API/authentication approach.
+- Define the boundary for a separate SharePoint adapter; live integration is deferred to Milestone 13, once organization-approved access and permissions exist.
 - Keep SQLite available for local development/testing unless requirements change.
 - Add logging, recovery/backup considerations, migration tests, and architecture documentation.
 - Document replacement seams for WPF → another UI and SQLite → SharePoint.

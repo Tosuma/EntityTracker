@@ -24,3 +24,4 @@ Build a Windows C#/.NET WPF application that imports database relationships from
 10. Chart export/reporting
 11. SQL-query utility and polish
 12. SharePoint-ready boundary and hardening
+13. Live SharePoint integration
