@@ -151,6 +151,7 @@ application data.
 ## Documentation
 
 - [Development, build, and run guide](docs/DEVELOPMENT.md)
+- [Design and color guide](docs/design/DESIGN_GUIDE.md)
 - [PostgreSQL schema CSV contract](docs/importing/schema-csv-contract-v1.md)
 - [Local backup, logs, and recovery](docs/operations/RECOVERY.md)
 - [Architecture rules](docs/architecture/ARCHITECTURE.md)

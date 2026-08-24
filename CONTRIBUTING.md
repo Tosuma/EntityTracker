@@ -8,6 +8,7 @@ should preserve those boundaries and remain focused on a concrete requirement.
 
 - Read the [development guide](docs/DEVELOPMENT.md).
 - Read the [architecture rules](docs/architecture/ARCHITECTURE.md).
+- For UI or reporting changes, read the [design and color guide](docs/design/DESIGN_GUIDE.md).
 - Check the [roadmap](docs/milestones/00_README.md) and
   [milestone status](docs/milestones/milestone_status.md).
 - For a substantial change, open or reference an issue so behavior and scope can be agreed before
