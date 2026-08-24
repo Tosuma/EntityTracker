@@ -43,7 +43,8 @@ jobs:
 
   package:
     name: Package Windows application
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Push triggers are already restricted to main; pull-request runs intentionally skip this job.
+    if: ${{ github.event_name == 'push' }}
     needs: build_test
     runs-on: windows-latest
     timeout-minutes: 30

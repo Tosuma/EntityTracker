@@ -1,5 +1,6 @@
 # EntityTracker
 
+[![CI](https://github.com/Tosuma/Entity-Dependency-Manager/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Tosuma/Entity-Dependency-Manager/actions/workflows/ci.yml)
 [![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D4)](docs/DEVELOPMENT.md)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4)](global.json)
 [![UI: WPF](https://img.shields.io/badge/UI-WPF-0C54C2)](src/EntityTracker.Wpf)
@@ -112,8 +113,9 @@ connect, or synchronize with SharePoint.
 Live SharePoint integration is planned in
 [Milestone 13](docs/milestones/13_sharepoint_integration.md). The independent
 [CI-01 engineering milestone](docs/milestones/ci_01_continuous_integration.md) now validates pull
-requests and pushes to `main` and packages successful `main` builds. CI-01 remains in progress
-until its first successful `main` run is verified and the resulting live status badge can be added.
+requests and pushes to `main` and packages successful `main` builds. The live badge above reports
+the current `main` build status; CI-01 remains in progress until the `main` package artifact is
+verified.
 
 See the [milestone status](docs/milestones/milestone_status.md) and complete
 [roadmap](docs/milestones/00_README.md) for details.
