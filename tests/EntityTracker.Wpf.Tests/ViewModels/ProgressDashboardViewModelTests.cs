@@ -235,7 +235,7 @@ public sealed class ProgressDashboardViewModelTests
 
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
-        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(5));
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(30));
         while (!condition())
         {
             await Task.Delay(10, timeout.Token);

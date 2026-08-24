@@ -21,4 +21,5 @@
 
 ## Independent engineering milestones
 
-- CI-01 — Continuous integration — Planned
+- CI-01 — Continuous integration — In progress; awaiting the first successful `main` run and live
+  README badge

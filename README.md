@@ -110,9 +110,10 @@ Connections page can save non-secret SharePoint setup, but this release does not
 connect, or synchronize with SharePoint.
 
 Live SharePoint integration is planned in
-[Milestone 13](docs/milestones/13_sharepoint_integration.md). Continuous integration is tracked
-separately in the independent [CI-01 engineering milestone](docs/milestones/ci_01_continuous_integration.md),
-so it can be implemented without waiting for a product milestone.
+[Milestone 13](docs/milestones/13_sharepoint_integration.md). The independent
+[CI-01 engineering milestone](docs/milestones/ci_01_continuous_integration.md) now validates pull
+requests and pushes to `main` and packages successful `main` builds. CI-01 remains in progress
+until its first successful `main` run is verified and the resulting live status badge can be added.
 
 See the [milestone status](docs/milestones/milestone_status.md) and complete
 [roadmap](docs/milestones/00_README.md) for details.

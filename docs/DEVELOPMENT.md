@@ -46,6 +46,34 @@ Use the matching configuration when testing a Release build:
 dotnet test EntityTracker.slnx --configuration Release --no-build --no-restore
 ```
 
+## Continuous integration
+
+GitHub Actions runs the same Release restore, build, and test commands for every pull request and
+every push to `main`. A newer run for the same pull request or branch cancels an older run that is
+still in progress. The workflow uses a Windows runner and the SDK selected by `global.json`; it
+does not require a database, SharePoint access, organization credentials, or repository secrets.
+
+Successful pushes to `main` also run:
+
+```powershell
+.\scripts\Publish-Windows.ps1 -Configuration Release
+```
+
+The resulting `artifacts\EntityTracker-win-x64.zip` is uploaded to that workflow run as the
+`EntityTracker-windows-x64-self-contained` artifact and retained for 14 days. Pull requests never
+run the packaging job. GitHub Releases and external deployment targets are not part of this
+workflow.
+
+When CI fails, inspect the first failed step:
+
+- **Set up .NET** — confirm `global.json` selects an SDK available from Microsoft.
+- **Restore** — check NuGet availability and package versions.
+- **Build** — inspect compiler, analyzer, and WPF XAML diagnostics.
+- **Test** — reproduce with the Release test command above; tests must not depend on local data,
+  SharePoint, credentials, or execution order.
+- **Publish Windows package** — run the publishing command locally and inspect its output.
+- **Upload Windows package** — confirm the publishing script created the expected ZIP path.
+
 ## Run the WPF application
 
 From the repository root:

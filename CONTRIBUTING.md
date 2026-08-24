@@ -36,6 +36,12 @@ dotnet test EntityTracker.slnx --configuration Release --no-build --no-restore
 The complete solution must build without errors, and all existing milestone regression tests must
 continue to pass.
 
+GitHub Actions runs these same Release commands for pull requests and pushes to `main`. Pull
+requests validate the solution only; a successful push to `main` additionally creates the
+self-contained Windows package described in the
+[development guide](docs/DEVELOPMENT.md#continuous-integration). No credentials are required for
+ordinary CI, including pull requests from forks.
+
 ## Architecture expectations
 
 - Domain must remain independent of Application, Infrastructure, Reporting, and WPF.
