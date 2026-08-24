@@ -20,8 +20,10 @@ should preserve those boundaries and remain focused on a concrete requirement.
 2. Make the smallest coherent change that satisfies the agreed behavior.
 3. Add or update behavior-focused tests for new or changed behavior.
 4. Update user, development, architecture, or operational documentation when behavior changes.
-5. Run the complete verification commands below.
-6. Open a pull request explaining the problem, solution, tests, and any compatibility impact.
+5. For UI changes represented in the README, preview and review the deterministic screenshots as
+   described in the [development guide](docs/DEVELOPMENT.md#generate-readme-screenshots).
+6. Run the complete verification commands below.
+7. Open a pull request explaining the problem, solution, tests, and any compatibility impact.
 
 Avoid broad rewrites, speculative abstractions, and unrelated formatting changes in the same pull
 request.
@@ -66,6 +68,7 @@ The authoritative details are in
 - Existing tests pass.
 - Project dependency direction remains valid.
 - User-visible or operational changes are documented.
+- README screenshots affected by a UI change were regenerated and manually inspected.
 - No future milestone functionality was added incidentally.
 - No credentials, tokens, private connection details, machine-specific paths, databases, logs,
   build output, or other generated artifacts are included.

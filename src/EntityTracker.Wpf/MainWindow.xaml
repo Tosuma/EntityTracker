@@ -8,7 +8,7 @@
         xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels"
         mc:Ignorable="d"
         Title="EntityTracker"
-        Icon="Assets/EntityTracker.ico"
+        Icon="Assets/v2/EntityTracker.ico"
         Width="1120"
         Height="720"
         MinWidth="860"
@@ -712,7 +712,8 @@
                     </Border>
 
                     <Grid Grid.Row="2">
-                        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                        <ScrollViewer x:Name="SchemaReviewScrollViewer"
+                                      HorizontalScrollBarVisibility="Disabled"
                                       PreviewMouseWheel="OnReviewPreviewMouseWheel"
                                       VerticalScrollBarVisibility="Auto">
                             <StackPanel>
@@ -825,7 +826,8 @@
                                         </ItemsControl>
                                     </StackPanel>
 
-                                    <StackPanel Margin="0,0,0,12"
+                                    <StackPanel x:Name="MissingReviewSection"
+                                                Margin="0,0,0,12"
                                                 Visibility="{Binding Review.HasMissingEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text.Primary}" Text="Missing / possibly removed" />
                                         <ItemsControl ItemsSource="{Binding Review.MissingEntities}">
@@ -870,7 +872,8 @@
                                         </ItemsControl>
                                     </StackPanel>
 
-                                    <StackPanel Margin="0,0,0,12"
+                                    <StackPanel x:Name="UnresolvedReviewSection"
+                                                Margin="0,0,0,12"
                                                 Visibility="{Binding Review.HasUnresolvedEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text.Primary}" Text="Unresolved dependencies" />
                                         <ItemsControl ItemsSource="{Binding Review.UnresolvedEntities}">
@@ -1650,7 +1653,7 @@
                                   HorizontalScrollBarVisibility="Disabled"
                                   PreviewMouseWheel="OnReviewPreviewMouseWheel"
                                   VerticalScrollBarVisibility="Auto">
-                        <StackPanel MaxWidth="820" HorizontalAlignment="Left">
+                        <StackPanel MinWidth="650" MaxWidth="820" HorizontalAlignment="Left">
                             <TextBlock FontSize="17"
                                        FontWeight="SemiBold"
                                        Text="{Binding Editor.SelectedEntityName}" />
