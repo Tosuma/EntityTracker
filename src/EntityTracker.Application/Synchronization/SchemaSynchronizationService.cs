@@ -13,7 +13,7 @@ public sealed class SchemaSynchronizationService
     private readonly IManualDependencyOverrideRepository _overrideRepository;
     private readonly SchemaSynchronizationPlanner _planner;
     private readonly EntityDependencyEditorService _dependencyEditorService;
-    private readonly ITrackedStateStore _store;
+    private readonly ISchemaSynchronizationStore _synchronizationStore;
 
     public SchemaSynchronizationService(
         ISchemaImportFileParser fileParser,
@@ -22,7 +22,7 @@ public sealed class SchemaSynchronizationService
         IManualDependencyOverrideRepository overrideRepository,
         SchemaSynchronizationPlanner planner,
         EntityDependencyEditorService dependencyEditorService,
-        ITrackedStateStore store)
+        ISchemaSynchronizationStore synchronizationStore)
     {
         ArgumentNullException.ThrowIfNull(fileParser);
         ArgumentNullException.ThrowIfNull(entityRepository);
@@ -30,7 +30,7 @@ public sealed class SchemaSynchronizationService
         ArgumentNullException.ThrowIfNull(overrideRepository);
         ArgumentNullException.ThrowIfNull(planner);
         ArgumentNullException.ThrowIfNull(dependencyEditorService);
-        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(synchronizationStore);
 
         _fileParser = fileParser;
         _entityRepository = entityRepository;
@@ -38,7 +38,7 @@ public sealed class SchemaSynchronizationService
         _overrideRepository = overrideRepository;
         _planner = planner;
         _dependencyEditorService = dependencyEditorService;
-        _store = store;
+        _synchronizationStore = synchronizationStore;
     }
 
     public async Task<SchemaSynchronizationResult> PlanAsync(
@@ -125,8 +125,9 @@ public sealed class SchemaSynchronizationService
         SynchronizationProgressDecision decision) =>
         _planner.ReviseProgressDecision(plan, entityId, decision);
 
-    public Task ApplyAsync(
+    public Task<SchemaImportSummary> ApplyAsync(
         SchemaSynchronizationPlan plan,
+        string sourceFileName,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(plan);
@@ -136,8 +137,29 @@ public sealed class SchemaSynchronizationService
                 "Synchronization cannot be applied until dependency errors are corrected and all progress decisions are made.");
         }
 
-        return plan.ChangeSet.HasChanges
-            ? _store.ApplyAsync(plan.ChangeSet, cancellationToken)
-            : Task.CompletedTask;
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceFileName);
+        string normalizedFileName = Path.GetFileName(sourceFileName);
+        if (string.IsNullOrWhiteSpace(normalizedFileName))
+        {
+            throw new ArgumentException("An import source file name is required.", nameof(sourceFileName));
+        }
+
+        SchemaImportCompletion completion = new(
+            normalizedFileName,
+            plan.Mode,
+            plan.NewEntities.Count,
+            plan.ChangedEntities.Count,
+            plan.ChangeSet.EntityIdsToArchive.Count,
+            plan.UnchangedEntityCount,
+            plan.UnresolvedEntities.Count);
+
+        return _synchronizationStore.ApplyAsync(
+            plan.ChangeSet,
+            completion,
+            cancellationToken);
     }
+
+    public Task<SchemaImportSummary?> GetLatestImportAsync(
+        CancellationToken cancellationToken = default) =>
+        _synchronizationStore.GetLatestImportAsync(cancellationToken);
 }

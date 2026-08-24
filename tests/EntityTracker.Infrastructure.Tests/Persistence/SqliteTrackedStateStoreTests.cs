@@ -18,6 +18,59 @@ namespace EntityTracker.Infrastructure.Tests.Persistence;
 public sealed class SqliteTrackedStateStoreTests
 {
     [Fact]
+    public async Task SchemaSynchronizationApply_RecordsAndReplacesLatestSuccessfulImport()
+    {
+        await using TemporarySqliteFile file = new();
+        MutableTimeProvider time = new(
+            new DateTimeOffset(2026, 8, 24, 10, 0, 0, TimeSpan.Zero));
+        SqliteDatabase database = new(file.DatabasePath, time);
+        await database.InitializeAsync();
+        SqliteTrackedStateStore store = new(database);
+        TrackedStateChangeSet noChanges = new([], [], [], [], [], []);
+
+        SchemaImportSummary first = await store.ApplyAsync(
+            noChanges,
+            new SchemaImportCompletion("first.csv", SchemaImportMode.Complete, 0, 0, 0, 12, 2));
+        time.Advance(TimeSpan.FromHours(2));
+        SchemaImportSummary second = await store.ApplyAsync(
+            noChanges,
+            new SchemaImportCompletion("second.csv", SchemaImportMode.Partial, 1, 2, 0, 9, 1));
+
+        Assert.Equal(new DateTimeOffset(2026, 8, 24, 10, 0, 0, TimeSpan.Zero), first.AppliedAtUtc);
+        Assert.Equal("second.csv", second.SourceFileName);
+        SchemaImportSummary latest = Assert.IsType<SchemaImportSummary>(
+            await store.GetLatestImportAsync());
+        Assert.Equal(new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero), latest.AppliedAtUtc);
+        Assert.Equal(SchemaImportMode.Partial, latest.Mode);
+        Assert.Equal(1, latest.NewEntityCount);
+        Assert.Equal(2, latest.ChangedEntityCount);
+        Assert.Equal(9, latest.UnchangedEntityCount);
+        Assert.Equal(1, latest.UnresolvedEntityCount);
+    }
+
+    [Fact]
+    public async Task SchemaSynchronizationApply_WhenStateMutationFails_PreservesPreviousSummary()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteTrackedStateStore store = new(database);
+        TrackedEntity existing = new(EntityId.New(), "Existing");
+        await store.ApplyAsync(new TrackedStateChangeSet([existing], [], [], [], [], []));
+        await store.ApplyAsync(
+            new TrackedStateChangeSet([], [], [], [], [], []),
+            new SchemaImportCompletion("successful.csv", SchemaImportMode.Complete, 0, 0, 0, 1, 0));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.ApplyAsync(
+            new TrackedStateChangeSet([existing], [], [], [], [], []),
+            new SchemaImportCompletion("failed.csv", SchemaImportMode.Complete, 1, 0, 0, 1, 0)));
+
+        SchemaImportSummary latest = Assert.IsType<SchemaImportSummary>(
+            await store.GetLatestImportAsync());
+        Assert.Equal("successful.csv", latest.SourceFileName);
+    }
+
+    [Fact]
     public async Task HistoryBaseline_IsTruthfulAndIdempotent()
     {
         await using TemporarySqliteFile file = new();

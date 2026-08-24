@@ -443,7 +443,20 @@
                         </Grid>
                     </Border>
 
-                    <Border Grid.Row="3"
+                    <StackPanel Grid.Row="3">
+                    <Border Margin="0,0,0,12"
+                            Padding="12"
+                            Background="#EDF6EF"
+                            BorderBrush="#BFD8C4"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Visibility="{Binding HasOperationMessage, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <TextBlock Foreground="#365D3D"
+                                   Text="{Binding OperationMessage}"
+                                   TextWrapping="Wrap" />
+                    </Border>
+
+                    <Border
                             Margin="0,0,0,12"
                             MaxHeight="120"
                             Padding="12"
@@ -459,6 +472,7 @@
                                        TextWrapping="Wrap" />
                         </ScrollViewer>
                     </Border>
+                    </StackPanel>
 
                     <Grid Grid.Row="4">
                         <DataGrid ItemsSource="{Binding OverviewItems}">
@@ -632,10 +646,15 @@
                     </Grid.RowDefinitions>
 
                     <DockPanel Margin="0,0,0,12">
-                        <Button DockPanel.Dock="Right"
-                                Command="{Binding ImportCsvCommand}"
-                                Content="Choose CSV and Review"
-                                Style="{StaticResource PrimaryButtonStyle}" />
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <Button Margin="0,0,8,0"
+                                    Command="{Binding OpenSqlQueryCommand}"
+                                    Content="Get SQL Query"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Command="{Binding ImportCsvCommand}"
+                                    Content="Choose CSV and Review"
+                                    Style="{StaticResource PrimaryButtonStyle}" />
+                        </StackPanel>
                         <StackPanel>
                             <TextBlock FontSize="20"
                                        FontWeight="SemiBold"
@@ -655,6 +674,22 @@
                             BorderThickness="1"
                             CornerRadius="4">
                         <StackPanel>
+                            <Border Margin="0,0,0,12"
+                                    Padding="10"
+                                    Background="#F8FAFB"
+                                    BorderBrush="#D7DEE2"
+                                    BorderThickness="1"
+                                    CornerRadius="4">
+                                <StackPanel>
+                                    <TextBlock FontWeight="SemiBold"
+                                               Foreground="#31505D"
+                                               Text="{Binding LatestImportHeadline}" />
+                                    <TextBlock Margin="0,3,0,0"
+                                               Foreground="#64737C"
+                                               Text="{Binding LatestImportDetails}"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
                             <TextBlock FontWeight="SemiBold" Text="Import type" />
                             <RadioButton Margin="0,8,0,0"
                                          GroupName="ImportMode"
@@ -922,9 +957,15 @@
                                         BorderBrush="#D7DEE2"
                                         BorderThickness="1"
                                         Visibility="{Binding Review.ShowEmptyState, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                    <TextBlock HorizontalAlignment="Center"
-                                               Foreground="#65747C"
-                                               Text="Choose an import type, then select a CSV to create a review. Nothing is saved until Apply Changes." />
+                                    <StackPanel>
+                                        <TextBlock HorizontalAlignment="Center"
+                                                   Foreground="#65747C"
+                                                   Text="Choose an import type, then select a CSV to review. Nothing is saved until Apply Changes." />
+                                        <TextBlock Margin="0,5,0,0"
+                                                   HorizontalAlignment="Center"
+                                                   Foreground="#65747C"
+                                                   Text="Need an export query? Get it separately with Get SQL Query." />
+                                    </StackPanel>
                                 </Border>
                             </StackPanel>
                         </ScrollViewer>
@@ -1379,6 +1420,79 @@
                         </UniformGrid>
                     </StackPanel>
                 </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Help &amp; SQL">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <DockPanel Margin="0,0,0,14">
+                        <Button DockPanel.Dock="Right"
+                                Command="{Binding Help.BackToImportCommand}"
+                                Content="Back to Schema Synchronization"
+                                Style="{StaticResource SecondaryButtonStyle}" />
+                        <StackPanel>
+                            <TextBlock FontSize="20"
+                                       FontWeight="SemiBold"
+                                       Foreground="#26343D"
+                                       Text="PostgreSQL schema export" />
+                            <TextBlock Margin="0,3,0,0"
+                                       Foreground="#64737C"
+                                       Text="Run this query in PostgreSQL, export its result as a semicolon-delimited CSV, then import that CSV separately." />
+                        </StackPanel>
+                    </DockPanel>
+
+                    <Border Grid.Row="1"
+                            Margin="0,0,0,12"
+                            Padding="12"
+                            Background="#EAF4F7"
+                            BorderBrush="#B7CAD3"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                        <StackPanel>
+                            <TextBlock FontWeight="SemiBold"
+                                       Text="{Binding Help.CsvContractVersion, StringFormat=PostgreSQL · CSV contract v{0}}" />
+                            <TextBlock Margin="0,4,0,0"
+                                       Foreground="#52616A"
+                                       Text="The query targets the public schema by default. Change target_schema in the settings section near the top when needed. Keep the six column headers unchanged."
+                                       TextWrapping="Wrap" />
+                            <TextBlock Margin="0,4,0,0"
+                                       Foreground="#52616A"
+                                       Text="Export as UTF-8 CSV with a semicolon (;) delimiter and include the header row." />
+                        </StackPanel>
+                    </Border>
+
+                    <Grid Grid.Row="2">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <DockPanel Margin="0,0,0,8">
+                            <Button DockPanel.Dock="Right"
+                                    Command="{Binding Help.CopyQueryCommand}"
+                                    Content="Copy SQL"
+                                    Style="{StaticResource PrimaryButtonStyle}" />
+                            <TextBlock VerticalAlignment="Center"
+                                       Foreground="#365D3D"
+                                       Text="{Binding Help.CopyMessage}"
+                                       Visibility="{Binding Help.HasCopyMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        </DockPanel>
+                        <TextBox Grid.Row="1"
+                                 Padding="12"
+                                 AcceptsReturn="True"
+                                 AcceptsTab="True"
+                                 FontFamily="Consolas"
+                                 FontSize="13"
+                                 HorizontalScrollBarVisibility="Auto"
+                                 IsReadOnly="True"
+                                 Text="{Binding Help.Query, Mode=OneWay}"
+                                 VerticalScrollBarVisibility="Auto" />
+                    </Grid>
+                </Grid>
             </TabItem>
 
         </TabControl>

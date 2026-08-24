@@ -23,6 +23,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly EntityOverviewService _overviewService;
     private readonly SchemaSynchronizationService _synchronizationService;
     private readonly ICsvFilePicker _filePicker;
+    private readonly ISchemaSynchronizationConfirmation _confirmationService;
     private readonly AsyncCommand _refreshCommand;
     private readonly AsyncCommand _importCsvCommand;
     private readonly AsyncCommand _applySynchronizationCommand;
@@ -32,6 +33,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly RelayCommand _openOverviewSearchCommand;
     private readonly RelayCommand _clearOverviewSearchCommand;
     private readonly RelayCommand _closeOverviewSearchCommand;
+    private readonly RelayCommand _openSqlQueryCommand;
     private readonly RelayCommand<OverviewManagerFilter> _selectOverviewFilterCommand;
     private readonly RelayCommand<SynchronizationProgressImpactRow> _keepSynchronizationStatusCommand;
     private readonly RelayCommand<SynchronizationProgressImpactRow> _markSynchronizationReworkCommand;
@@ -42,6 +44,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string? _overviewErrorMessage;
     private string _overviewSearchQuery = string.Empty;
     private string _busyMessage = string.Empty;
+    private string? _operationMessage;
+    private SchemaImportSummary? _latestImportSummary;
     private bool _isBusy;
     private bool _isOverviewSearchOpen;
     private bool _searchOverviewDependencies;
@@ -62,7 +66,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         EntityDependencyEditorService entityDependencyEditorService,
         EntityLifecycleService entityLifecycleService,
         ICsvFilePicker filePicker,
-        ProgressDashboardViewModel progressDashboard)
+        ProgressDashboardViewModel progressDashboard,
+        IClipboardService clipboard,
+        ISchemaSynchronizationConfirmation confirmationService)
     {
         ArgumentNullException.ThrowIfNull(overviewService);
         ArgumentNullException.ThrowIfNull(synchronizationService);
@@ -71,10 +77,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ArgumentNullException.ThrowIfNull(entityLifecycleService);
         ArgumentNullException.ThrowIfNull(filePicker);
         ArgumentNullException.ThrowIfNull(progressDashboard);
+        ArgumentNullException.ThrowIfNull(clipboard);
+        ArgumentNullException.ThrowIfNull(confirmationService);
         _overviewService = overviewService;
         _synchronizationService = synchronizationService;
         _filePicker = filePicker;
+        _confirmationService = confirmationService;
         Progress = progressDashboard;
+        Help = new SqlQueryHelpViewModel(clipboard, () => SelectedTabIndex = 1);
         Review = new SchemaSynchronizationReviewViewModel();
         ManualCreation = new ManualEntityCreationViewModel(
             manualEntityCreationService,
@@ -129,6 +139,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _closeOverviewSearchCommand = new RelayCommand(
             CloseOverviewSearch,
             () => IsOverviewSearchOpen);
+        _openSqlQueryCommand = new RelayCommand(
+            () => SelectedTabIndex = 4,
+            () => !IsBusy && !ManualCreation.IsBusy && !Editor.IsOpen);
         _selectOverviewFilterCommand = new RelayCommand<OverviewManagerFilter>(
             SelectOverviewFilter,
             CanSelectOverviewFilter);
@@ -153,6 +166,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public EntityDependencyEditorViewModel Editor { get; }
 
     public ProgressDashboardViewModel Progress { get; }
+
+    public SqlQueryHelpViewModel Help { get; }
 
     public IReadOnlyList<OverviewManagerFilterOption> OverviewFilters { get; } =
     [
@@ -286,6 +301,50 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         get => _busyMessage;
         private set => SetField(ref _busyMessage, value);
     }
+
+    public string? OperationMessage
+    {
+        get => _operationMessage;
+        private set
+        {
+            if (SetField(ref _operationMessage, value))
+            {
+                OnPropertyChanged(nameof(HasOperationMessage));
+            }
+        }
+    }
+
+    public bool HasOperationMessage => !string.IsNullOrWhiteSpace(OperationMessage);
+
+    public SchemaImportSummary? LatestImportSummary
+    {
+        get => _latestImportSummary;
+        private set
+        {
+            if (SetField(ref _latestImportSummary, value))
+            {
+                OnPropertyChanged(nameof(HasLatestImport));
+                OnPropertyChanged(nameof(LatestImportHeadline));
+                OnPropertyChanged(nameof(LatestImportDetails));
+            }
+        }
+    }
+
+    public bool HasLatestImport => LatestImportSummary is not null;
+
+    public string LatestImportHeadline => LatestImportSummary is null
+        ? "No successful CSV import has been applied yet."
+        : $"Latest import: {LatestImportSummary.SourceFileName}";
+
+    public string LatestImportDetails => LatestImportSummary is null
+        ? "Choose an import type and select a CSV when you are ready."
+        : $"{LatestImportSummary.Mode} · " +
+          $"{LatestImportSummary.AppliedAtUtc.ToLocalTime():g} · " +
+          $"{LatestImportSummary.NewEntityCount} new, " +
+          $"{LatestImportSummary.ChangedEntityCount} changed, " +
+          $"{LatestImportSummary.ArchivedEntityCount} archived, " +
+          $"{LatestImportSummary.UnchangedEntityCount} unchanged, " +
+          $"{LatestImportSummary.UnresolvedEntityCount} unresolved";
 
     public bool IsBusy
     {
@@ -424,6 +483,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ICommand CloseOverviewSearchCommand => _closeOverviewSearchCommand;
 
+    public ICommand OpenSqlQueryCommand => _openSqlQueryCommand;
+
     public ICommand SelectOverviewFilterCommand => _selectOverviewFilterCommand;
 
     public ICommand KeepSynchronizationStatusCommand => _keepSynchronizationStatusCommand;
@@ -521,11 +582,25 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         SchemaSynchronizationPlan plan = Review.CurrentPlan;
+        int archiveCount = plan.ChangeSet.EntityIdsToArchive.Count;
+        if (archiveCount > 0 && !_confirmationService.ConfirmArchiveMissingEntities(archiveCount))
+        {
+            return;
+        }
+
         IsBusy = true;
         BusyMessage = "Applying schema synchronization…";
         try
         {
-            await _synchronizationService.ApplyAsync(plan, cancellationToken);
+            SchemaImportSummary summary = await _synchronizationService.ApplyAsync(
+                plan,
+                Review.SelectedFileName,
+                cancellationToken);
+            LatestImportSummary = summary;
+            OperationMessage =
+                $"Applied {summary.SourceFileName}: {summary.NewEntityCount} new, " +
+                $"{summary.ChangedEntityCount} changed, {summary.ArchivedEntityCount} archived, " +
+                $"{summary.UnresolvedEntityCount} unresolved.";
             Review.Clear();
             SelectedTabIndex = 0;
             BusyMessage = "Recomputing dependency ranking…";
@@ -581,6 +656,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         await LoadOverviewAsync(cancellationToken);
         await Progress.LoadAsync(cancellationToken);
+        LatestImportSummary = await _synchronizationService.GetLatestImportAsync(cancellationToken);
     }
 
     private void SetOverviewFailure(string message)
@@ -785,6 +861,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _editOverviewEntityCommand.NotifyCanExecuteChanged();
         _editReviewEntityCommand.NotifyCanExecuteChanged();
         _openOverviewSearchCommand.NotifyCanExecuteChanged();
+        _openSqlQueryCommand.NotifyCanExecuteChanged();
         _selectOverviewFilterCommand.NotifyCanExecuteChanged();
         _keepSynchronizationStatusCommand.NotifyCanExecuteChanged();
         _markSynchronizationReworkCommand.NotifyCanExecuteChanged();

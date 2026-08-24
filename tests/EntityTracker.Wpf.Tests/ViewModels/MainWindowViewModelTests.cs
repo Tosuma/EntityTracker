@@ -760,6 +760,28 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(0, viewModel.SelectedTabIndex);
         Assert.False(viewModel.Review.HasReview);
         Assert.Equal(SchemaImportMode.Complete, viewModel.Review.Mode);
+        Assert.True(viewModel.HasLatestImport);
+        Assert.Contains("new.csv", viewModel.LatestImportHeadline);
+        Assert.Contains("Applied new.csv", viewModel.OperationMessage);
+    }
+
+    [Fact]
+    public async Task ApplySynchronizationAsync_WhenArchivingIsDeclined_ChangesNothing()
+    {
+        MainWindowViewModel viewModel = CreateViewModel(
+            [Entity(1, "Missing")],
+            [],
+            SchemaImportResult.Success(Candidate([], [])),
+            new StubFilePicker("complete.csv"),
+            out StubSynchronizationStore store,
+            confirmationService: new DeclineConfirmationService());
+        await viewModel.ImportCsvAsync();
+
+        await viewModel.ApplySynchronizationAsync();
+
+        Assert.Equal(0, store.ApplyCount);
+        Assert.True(viewModel.Review.HasReview);
+        Assert.Equal(1, viewModel.SelectedTabIndex);
     }
 
     [Fact]
@@ -849,7 +871,8 @@ public sealed class MainWindowViewModelTests
         SchemaImportResult importResult,
         ICsvFilePicker picker,
         out StubSynchronizationStore store,
-        IReadOnlyList<PersistedUnresolvedDependency>? unresolvedDependencies = null)
+        IReadOnlyList<PersistedUnresolvedDependency>? unresolvedDependencies = null,
+        ISchemaSynchronizationConfirmation? confirmationService = null)
     {
         StubEntityRepository entityRepository = new(entities);
         StubDependencyRepository dependencyRepository = new(
@@ -899,7 +922,9 @@ public sealed class MainWindowViewModelTests
                 resolver,
                 ranker),
             picker,
-            CreateProgressDashboardViewModel());
+            CreateProgressDashboardViewModel(),
+            new NoOpImageClipboard(),
+            confirmationService ?? new AlwaysConfirmService());
     }
 
     private static ProgressDashboardViewModel CreateProgressDashboardViewModel()
@@ -920,11 +945,25 @@ public sealed class MainWindowViewModelTests
         public string? SelectPngPath(string suggestedFileName) => null;
     }
 
-    private sealed class NoOpImageClipboard : IImageClipboard
+    private sealed class NoOpImageClipboard : IClipboardService
     {
         public void SetPng(byte[] png)
         {
         }
+
+        public void SetText(string text)
+        {
+        }
+    }
+
+    private sealed class AlwaysConfirmService : ISchemaSynchronizationConfirmation
+    {
+        public bool ConfirmArchiveMissingEntities(int entityCount) => true;
+    }
+
+    private sealed class DeclineConfirmationService : ISchemaSynchronizationConfirmation
+    {
+        public bool ConfirmArchiveMissingEntities(int entityCount) => false;
     }
 
     private static SchemaImportResult FailureResult() => SchemaImportResult.Failure(
@@ -1070,13 +1109,15 @@ public sealed class MainWindowViewModelTests
     }
 
     private sealed class StubSynchronizationStore(StubEntityRepository entityRepository)
-        : ITrackedStateStore
+        : ITrackedStateStore, ISchemaSynchronizationStore
     {
         public int ApplyCount { get; private set; }
 
         public TrackedStateChangeSet? AppliedChangeSet { get; private set; }
 
         public Exception? Exception { get; set; }
+
+        public SchemaImportSummary? LatestSummary { get; private set; }
 
         public Task ApplyAsync(
             TrackedStateChangeSet changeSet,
@@ -1116,5 +1157,20 @@ public sealed class MainWindowViewModelTests
             IEnumerable<TrackedEntity> entities,
             ProgressSnapshotState snapshot,
             CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public async Task<SchemaImportSummary> ApplyAsync(
+            TrackedStateChangeSet changeSet,
+            SchemaImportCompletion completion,
+            CancellationToken cancellationToken = default)
+        {
+            await ApplyAsync(changeSet, cancellationToken);
+            LatestSummary = new SchemaImportSummary(
+                new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero),
+                completion);
+            return LatestSummary;
+        }
+
+        public Task<SchemaImportSummary?> GetLatestImportAsync(
+            CancellationToken cancellationToken = default) => Task.FromResult(LatestSummary);
     }
 }

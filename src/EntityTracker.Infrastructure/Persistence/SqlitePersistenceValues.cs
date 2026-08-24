@@ -26,6 +26,22 @@ internal static class SqlitePersistenceValues
         return value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
     }
 
+    public static DateTimeOffset ParseTimestamp(string value, string fieldName)
+    {
+        if (!DateTimeOffset.TryParseExact(
+                value,
+                "O",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind,
+                out DateTimeOffset timestamp))
+        {
+            throw new InvalidDataException(
+                $"The stored {fieldName} value '{value}' is not a valid timestamp.");
+        }
+
+        return timestamp.ToUniversalTime();
+    }
+
     public static TEnum ParseEnum<TEnum>(string value, string fieldName)
         where TEnum : struct, Enum
     {

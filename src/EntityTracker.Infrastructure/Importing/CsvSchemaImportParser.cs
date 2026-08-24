@@ -9,22 +9,19 @@ namespace EntityTracker.Infrastructure.Importing;
 
 public sealed class CsvSchemaImportParser : ISchemaImportParser
 {
-    private const string TableNameHeader = "table_name";
-    private const string MandatoryDependenciesHeader = "mandatory_dependencies";
-    private const string MandatoryDependencyCountHeader = "mandatory_dependency_count";
-    private const string OptionalDependenciesHeader = "optional_dependencies";
-    private const string OptionalDependencyCountHeader = "optional_dependency_count";
-    private const string TotalDependencyCountHeader = "total_dependency_count";
+    private const string TableNameHeader = SchemaCsvContract.TableNameHeader;
+    private const string MandatoryDependenciesHeader =
+        SchemaCsvContract.MandatoryDependenciesHeader;
+    private const string MandatoryDependencyCountHeader =
+        SchemaCsvContract.MandatoryDependencyCountHeader;
+    private const string OptionalDependenciesHeader =
+        SchemaCsvContract.OptionalDependenciesHeader;
+    private const string OptionalDependencyCountHeader =
+        SchemaCsvContract.OptionalDependencyCountHeader;
+    private const string TotalDependencyCountHeader =
+        SchemaCsvContract.TotalDependencyCountHeader;
 
-    private static readonly string[] RequiredHeaders =
-    [
-        TableNameHeader,
-        MandatoryDependenciesHeader,
-        MandatoryDependencyCountHeader,
-        OptionalDependenciesHeader,
-        OptionalDependencyCountHeader,
-        TotalDependencyCountHeader
-    ];
+    private static readonly IReadOnlyList<string> RequiredHeaders = SchemaCsvContract.Headers;
 
     public SchemaImportResult Parse(TextReader reader)
     {
@@ -32,7 +29,7 @@ public sealed class CsvSchemaImportParser : ISchemaImportParser
 
         CsvConfiguration configuration = new(CultureInfo.InvariantCulture)
         {
-            Delimiter = ";",
+            Delimiter = SchemaCsvContract.Delimiter.ToString(),
             HasHeaderRecord = true,
             IgnoreBlankLines = true
         };

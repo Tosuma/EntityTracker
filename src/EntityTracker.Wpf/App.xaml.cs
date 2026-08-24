@@ -1,4 +1,3 @@
-using System.IO;
 using System.Windows;
 
 using EntityTracker.Application.Dependencies;
@@ -31,8 +30,10 @@ public partial class App : System.Windows.Application
         base.OnStartup(e);
 
         ServiceCollection services = new();
-        string databasePath = Path.Combine(AppContext.BaseDirectory, "entity-tracker.db");
+        ApplicationDataPathResolver dataPathResolver = new();
+        string databasePath = dataPathResolver.ResolveDatabasePath();
 
+        services.AddSingleton(dataPathResolver);
         services.AddSingleton(new SqliteDatabase(databasePath));
         services.AddSingleton<IEntityRepository, SqliteEntityRepository>();
         services.AddSingleton<IDependencyRepository, SqliteDependencyRepository>();
@@ -46,7 +47,11 @@ public partial class App : System.Windows.Application
         services.AddSingleton<ProgressSnapshotCalculator>();
         services.AddSingleton<EntityOverviewService>();
         services.AddSingleton<SchemaSynchronizationPlanner>();
-        services.AddSingleton<ITrackedStateStore, SqliteTrackedStateStore>();
+        services.AddSingleton<SqliteTrackedStateStore>();
+        services.AddSingleton<ITrackedStateStore>(static provider =>
+            provider.GetRequiredService<SqliteTrackedStateStore>());
+        services.AddSingleton<ISchemaSynchronizationStore>(static provider =>
+            provider.GetRequiredService<SqliteTrackedStateStore>());
         services.AddSingleton<IProgressHistoryRepository, SqliteProgressHistoryRepository>();
         services.AddSingleton<ProgressHistoryInitializer>();
         services.AddSingleton<ProgressDashboardBuilder>();
@@ -57,7 +62,9 @@ public partial class App : System.Windows.Application
         services.AddSingleton<ProgressChartPresentationBuilder>();
         services.AddSingleton<ProgressChartPngExporter>();
         services.AddSingleton<IProgressChartFilePicker, ProgressChartFilePicker>();
-        services.AddSingleton<IImageClipboard, WpfImageClipboard>();
+        services.AddSingleton<IClipboardService, WpfClipboardService>();
+        services.AddSingleton<ISchemaSynchronizationConfirmation,
+            WpfSchemaSynchronizationConfirmation>();
         services.AddSingleton<ProgressDashboardViewModel>();
         services.AddSingleton<SchemaSynchronizationService>();
         services.AddSingleton<ManualEntityCreationService>();

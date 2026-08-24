@@ -19,7 +19,7 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
     private readonly ProgressChartPresentationBuilder _presentationBuilder;
     private readonly ProgressChartPngExporter _pngExporter;
     private readonly IProgressChartFilePicker _filePicker;
-    private readonly IImageClipboard _clipboard;
+    private readonly IClipboardService _clipboard;
     private readonly AsyncCommand _applyRangeCommand;
     private readonly AsyncCommand<ProgressChartKind> _saveChartCommand;
     private readonly AsyncCommand<ProgressChartKind> _copyChartCommand;
@@ -49,7 +49,7 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
         ProgressChartPresentationBuilder presentationBuilder,
         ProgressChartPngExporter pngExporter,
         IProgressChartFilePicker filePicker,
-        IImageClipboard clipboard)
+        IClipboardService clipboard)
     {
         ArgumentNullException.ThrowIfNull(reportingService);
         ArgumentNullException.ThrowIfNull(presentationBuilder);

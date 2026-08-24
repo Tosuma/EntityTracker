@@ -1,6 +1,7 @@
 using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Synchronization;
 using EntityTracker.Domain;
 
 using Microsoft.Data.Sqlite;
@@ -11,7 +12,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 /// Applies one validated tracked-schema change set using a single SQLite transaction.
 /// Conditional upserts leave audit timestamps unchanged for relationships that did not change.
 /// </summary>
-public sealed class SqliteTrackedStateStore : ITrackedStateStore
+public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchronizationStore
 {
     private readonly SqliteDatabase _database;
 
@@ -25,10 +26,27 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore
         TrackedStateChangeSet changeSet,
         CancellationToken cancellationToken = default)
     {
+        await ApplyInternalAsync(changeSet, null, cancellationToken);
+    }
+
+    public async Task<SchemaImportSummary> ApplyAsync(
+        TrackedStateChangeSet changeSet,
+        SchemaImportCompletion completion,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(completion);
+        return (await ApplyInternalAsync(changeSet, completion, cancellationToken))!;
+    }
+
+    private async Task<SchemaImportSummary?> ApplyInternalAsync(
+        TrackedStateChangeSet changeSet,
+        SchemaImportCompletion? completion,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(changeSet);
 
-        string timestamp = SqlitePersistenceValues.FormatTimestamp(
-            _database.TimeProvider.GetUtcNow());
+        DateTimeOffset appliedAtUtc = _database.TimeProvider.GetUtcNow();
+        string timestamp = SqlitePersistenceValues.FormatTimestamp(appliedAtUtc);
         await using SqliteConnection connection =
             await _database.OpenConnectionAsync(cancellationToken);
         await using SqliteTransaction transaction =
@@ -180,7 +198,19 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore
                     cancellationToken);
             }
 
+            SchemaImportSummary? summary = null;
+            if (completion is not null)
+            {
+                summary = new SchemaImportSummary(appliedAtUtc, completion);
+                await UpsertImportSummaryAsync(
+                    connection,
+                    transaction,
+                    summary,
+                    cancellationToken);
+            }
+
             await transaction.CommitAsync(cancellationToken);
+            return summary;
         }
         catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
         {
@@ -188,6 +218,38 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore
                 "The tracked schema could not be changed because its candidate state is invalid.",
                 exception);
         }
+    }
+
+    public async Task<SchemaImportSummary?> GetLatestImportAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection =
+            await _database.OpenConnectionAsync(cancellationToken);
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT applied_at_utc, source_file_name, import_mode,
+                   new_entity_count, changed_entity_count, archived_entity_count,
+                   unchanged_entity_count, unresolved_entity_count
+            FROM schema_import_summary
+            WHERE singleton_id = 1;
+            """;
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        SchemaImportCompletion completion = new(
+            reader.GetString(1),
+            SqlitePersistenceValues.ParseEnum<SchemaImportMode>(reader.GetString(2), "import mode"),
+            reader.GetInt32(3),
+            reader.GetInt32(4),
+            reader.GetInt32(5),
+            reader.GetInt32(6),
+            reader.GetInt32(7));
+        return new SchemaImportSummary(
+            SqlitePersistenceValues.ParseTimestamp(reader.GetString(0), "import timestamp"),
+            completion);
     }
 
     public async Task EnsureHistoryBaselineAsync(
@@ -248,6 +310,49 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore
             timestamp,
             cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    private static async Task UpsertImportSummaryAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        SchemaImportSummary summary,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = CreateCommand(connection, transaction, """
+            INSERT INTO schema_import_summary
+            (
+                singleton_id, applied_at_utc, source_file_name, import_mode,
+                new_entity_count, changed_entity_count, archived_entity_count,
+                unchanged_entity_count, unresolved_entity_count
+            )
+            VALUES
+            (
+                1, $appliedAtUtc, $sourceFileName, $importMode,
+                $newCount, $changedCount, $archivedCount,
+                $unchangedCount, $unresolvedCount
+            )
+            ON CONFLICT (singleton_id)
+            DO UPDATE SET
+                applied_at_utc = excluded.applied_at_utc,
+                source_file_name = excluded.source_file_name,
+                import_mode = excluded.import_mode,
+                new_entity_count = excluded.new_entity_count,
+                changed_entity_count = excluded.changed_entity_count,
+                archived_entity_count = excluded.archived_entity_count,
+                unchanged_entity_count = excluded.unchanged_entity_count,
+                unresolved_entity_count = excluded.unresolved_entity_count;
+            """);
+        command.Parameters.AddWithValue(
+            "$appliedAtUtc",
+            SqlitePersistenceValues.FormatTimestamp(summary.AppliedAtUtc));
+        command.Parameters.AddWithValue("$sourceFileName", summary.SourceFileName);
+        command.Parameters.AddWithValue("$importMode", summary.Mode.ToString());
+        command.Parameters.AddWithValue("$newCount", summary.NewEntityCount);
+        command.Parameters.AddWithValue("$changedCount", summary.ChangedEntityCount);
+        command.Parameters.AddWithValue("$archivedCount", summary.ArchivedEntityCount);
+        command.Parameters.AddWithValue("$unchangedCount", summary.UnchangedEntityCount);
+        command.Parameters.AddWithValue("$unresolvedCount", summary.UnresolvedEntityCount);
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private static async Task<long> CountAsync(

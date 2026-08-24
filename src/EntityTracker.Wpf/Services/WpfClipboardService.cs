@@ -4,7 +4,7 @@ using System.Windows.Media.Imaging;
 
 namespace EntityTracker.Wpf.Services;
 
-public sealed class WpfImageClipboard : IImageClipboard
+public sealed class WpfClipboardService : IClipboardService
 {
     public void SetPng(byte[] png)
     {
@@ -22,5 +22,11 @@ public sealed class WpfImageClipboard : IImageClipboard
         image.EndInit();
         image.Freeze();
         Clipboard.SetImage(image);
+    }
+
+    public void SetText(string text)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(text);
+        Clipboard.SetText(text);
     }
 }

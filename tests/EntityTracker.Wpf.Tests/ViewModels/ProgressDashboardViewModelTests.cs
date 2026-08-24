@@ -193,7 +193,7 @@ public sealed class ProgressDashboardViewModelTests
     private static ProgressDashboardViewModel CreateViewModel(
         ProgressReportingService reportingService,
         IProgressChartFilePicker? filePicker = null,
-        IImageClipboard? clipboard = null)
+        IClipboardService? clipboard = null)
     {
         ProgressChartPresentationBuilder presentationBuilder = new();
         return new ProgressDashboardViewModel(
@@ -215,18 +215,22 @@ public sealed class ProgressDashboardViewModelTests
         }
     }
 
-    private sealed class StubImageClipboard : IImageClipboard
+    private sealed class StubImageClipboard : IClipboardService
     {
         public void SetPng(byte[] png)
         {
         }
+
+        public void SetText(string text) => throw new NotSupportedException();
     }
 
-    private sealed class RecordingImageClipboard : IImageClipboard
+    private sealed class RecordingImageClipboard : IClipboardService
     {
         public byte[]? Png { get; private set; }
 
         public void SetPng(byte[] png) => Png = png;
+
+        public void SetText(string text) => throw new NotSupportedException();
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition)

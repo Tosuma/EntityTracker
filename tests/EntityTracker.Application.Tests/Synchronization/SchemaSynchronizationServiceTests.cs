@@ -12,6 +12,39 @@ namespace EntityTracker.Application.Tests.Synchronization;
 public sealed class SchemaSynchronizationServiceTests
 {
     [Fact]
+    public void SchemaImportCompletion_RejectsPathsAndNegativeCounts()
+    {
+        Assert.Throws<ArgumentException>(() => new SchemaImportCompletion(
+            Path.Combine("folder", "schema.csv"),
+            SchemaImportMode.Complete,
+            0, 0, 0, 0, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new SchemaImportCompletion(
+            "schema.csv",
+            SchemaImportMode.Complete,
+            -1, 0, 0, 0, 0));
+    }
+
+    [Fact]
+    public async Task GetLatestImportAsync_DelegatesToSynchronizationStore()
+    {
+        StubStore store = new();
+        SchemaImportCompletion completion = new(
+            "latest.csv", SchemaImportMode.Partial, 1, 2, 0, 3, 4);
+        store.LatestImport = new SchemaImportSummary(
+            new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero),
+            completion);
+        SchemaSynchronizationService service = CreateService(
+            SchemaImportResult.Success(Candidate([], [])),
+            [], [], [], store);
+
+        SchemaImportSummary latest = Assert.IsType<SchemaImportSummary>(
+            await service.GetLatestImportAsync());
+
+        Assert.Equal("latest.csv", latest.SourceFileName);
+        Assert.Equal(4, latest.UnresolvedEntityCount);
+    }
+
+    [Fact]
     public async Task PlanAsync_DoesNotWriteAndReplacesCsvRelativeUnknownWarning()
     {
         ImportDiagnostic warning = new(
@@ -41,7 +74,7 @@ public sealed class SchemaSynchronizationServiceTests
     }
 
     [Fact]
-    public async Task ApplyAsync_IdenticalPlan_IsNoOpWithoutStoreCall()
+    public async Task ApplyAsync_IdenticalPlan_RecordsSuccessfulImport()
     {
         TrackedEntity entity = Entity(1, "A");
         StubStore store = new();
@@ -55,9 +88,11 @@ public sealed class SchemaSynchronizationServiceTests
             "schema.csv",
             SchemaImportMode.Complete);
 
-        await service.ApplyAsync(result.Plan!);
+        await service.ApplyAsync(result.Plan!, "schema.csv");
 
-        Assert.Equal(0, store.ApplyCount);
+        Assert.Equal(1, store.ApplyCount);
+        Assert.False(store.LastChangeSet!.HasChanges);
+        Assert.Equal("schema.csv", store.LastCompletion!.SourceFileName);
     }
 
     [Fact]
@@ -74,10 +109,14 @@ public sealed class SchemaSynchronizationServiceTests
             "schema.csv",
             SchemaImportMode.Complete);
 
-        await service.ApplyAsync(result.Plan!);
+        SchemaImportSummary summary = await service.ApplyAsync(
+            result.Plan!,
+            @"C:\imports\schema.csv");
 
         Assert.Equal(1, store.ApplyCount);
         Assert.Equal(2, store.LastChangeSet!.EntitiesToAdd.Count);
+        Assert.Equal("schema.csv", store.LastCompletion!.SourceFileName);
+        Assert.Equal(2, summary.NewEntityCount);
         Assert.Equal(
             2,
             Assert.IsType<ProgressSnapshotState>(store.LastChangeSet.ProgressSnapshotAfterChanges)
@@ -109,7 +148,7 @@ public sealed class SchemaSynchronizationServiceTests
         Assert.Equal(0, store.ApplyCount);
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => service.ApplyAsync(result.Plan));
+            () => service.ApplyAsync(result.Plan, "schema.csv"));
     }
 
     [Fact]
@@ -130,14 +169,15 @@ public sealed class SchemaSynchronizationServiceTests
             "schema.csv",
             SchemaImportMode.Complete)).Plan!;
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ApplyAsync(plan));
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.ApplyAsync(plan, "schema.csv"));
         Assert.Equal(0, store.ApplyCount);
 
         SchemaSynchronizationPlan revised = service.StageProgressDecision(
             plan,
             owner.Id,
             SynchronizationProgressDecision.KeepCurrentStatus);
-        await service.ApplyAsync(revised);
+        await service.ApplyAsync(revised, "schema.csv");
 
         Assert.Equal(1, store.ApplyCount);
         Assert.Empty(store.LastChangeSet!.EntitiesWithProgressToUpdate);
@@ -177,7 +217,7 @@ public sealed class SchemaSynchronizationServiceTests
             ManualDependencyOverrideAction.Suppress,
             Assert.Single(revised.ChangeSet.ManualDependencyOverrides).Action);
 
-        await service.ApplyAsync(revised);
+        await service.ApplyAsync(revised, "schema.csv");
 
         Assert.Equal(1, store.ApplyCount);
         Assert.Equal(2, store.LastChangeSet!.EntitiesToAdd.Count);
@@ -265,10 +305,12 @@ public sealed class SchemaSynchronizationServiceTests
             Task.FromResult(unresolved);
     }
 
-    private sealed class StubStore : ITrackedStateStore
+    private sealed class StubStore : ITrackedStateStore, ISchemaSynchronizationStore
     {
         public int ApplyCount { get; private set; }
         public TrackedStateChangeSet? LastChangeSet { get; private set; }
+        public SchemaImportCompletion? LastCompletion { get; private set; }
+        public SchemaImportSummary? LatestImport { get; set; }
 
         public Task ApplyAsync(
             TrackedStateChangeSet changeSet,
@@ -283,5 +325,22 @@ public sealed class SchemaSynchronizationServiceTests
             IEnumerable<TrackedEntity> entities,
             EntityTracker.Application.History.ProgressSnapshotState snapshot,
             CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task<SchemaImportSummary> ApplyAsync(
+            TrackedStateChangeSet changeSet,
+            SchemaImportCompletion completion,
+            CancellationToken cancellationToken = default)
+        {
+            ApplyCount++;
+            LastChangeSet = changeSet;
+            LastCompletion = completion;
+            LatestImport = new SchemaImportSummary(
+                new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero),
+                completion);
+            return Task.FromResult(LatestImport);
+        }
+
+        public Task<SchemaImportSummary?> GetLatestImportAsync(
+            CancellationToken cancellationToken = default) => Task.FromResult(LatestImport);
     }
 }

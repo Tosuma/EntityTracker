@@ -4,7 +4,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    private const int CurrentSchemaVersion = 7;
+    private const int CurrentSchemaVersion = 8;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -122,6 +122,21 @@ public sealed class SqliteDatabase
 
         CREATE INDEX ix_progress_snapshots_time
             ON progress_snapshots (recorded_at_utc, id);
+        """;
+
+    private const string SchemaImportSummarySql = """
+        CREATE TABLE schema_import_summary
+        (
+            singleton_id INTEGER NOT NULL PRIMARY KEY CHECK (singleton_id = 1),
+            applied_at_utc TEXT NOT NULL,
+            source_file_name TEXT NOT NULL CHECK (length(trim(source_file_name)) > 0),
+            import_mode TEXT NOT NULL CHECK (import_mode IN ('Complete', 'Partial')),
+            new_entity_count INTEGER NOT NULL CHECK (new_entity_count >= 0),
+            changed_entity_count INTEGER NOT NULL CHECK (changed_entity_count >= 0),
+            archived_entity_count INTEGER NOT NULL CHECK (archived_entity_count >= 0),
+            unchanged_entity_count INTEGER NOT NULL CHECK (unchanged_entity_count >= 0),
+            unresolved_entity_count INTEGER NOT NULL CHECK (unresolved_entity_count >= 0)
+        );
         """;
 
     private const string UnresolvedDependencySchemaSql = """
@@ -388,6 +403,15 @@ public sealed class SqliteDatabase
                     connection,
                     transaction,
                     ProgressHistorySchemaSql,
+                    cancellationToken);
+            }
+
+            if (schemaVersion < 8)
+            {
+                await ExecuteAsync(
+                    connection,
+                    transaction,
+                    SchemaImportSummarySql,
                     cancellationToken);
             }
 
