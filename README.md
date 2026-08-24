@@ -54,6 +54,8 @@ EntityTracker keeps those concerns separate:
 
 ## Screenshots
 
+<!-- Generated with scripts/Generate-ReadmeScreenshots.ps1. See docs/DEVELOPMENT.md. -->
+
 <table>
   <tr>
     <td width="50%">
@@ -81,6 +83,18 @@ EntityTracker keeps those concerns separate:
   </tr>
 </table>
 
+### Find and maintain tracked entities
+
+Search entity names and, when needed, dependency names from the overview. The same search opens
+with <kbd>Ctrl</kbd>+<kbd>F</kbd>.
+
+![EntityTracker overview filtered by the dependency name unit](images/overview-search.png)
+
+Archived entities remain available as read-only records with their progress, notes, and
+dependencies intact. They can be deliberately restored from the archived view.
+
+![Archived EntityTracker entity with its preserved details and Restore entity action](images/archived-entity.png)
+
 ### Understand dependency blockers
 
 Entities with unresolved references—or dependencies that are themselves unresolved—are marked
@@ -103,6 +117,13 @@ them as unresolved dependencies, shows exactly which entities are affected, and 
 until matching entities become available.
 
 ![Schema synchronization review showing retained unresolved dependencies and their missing entity names](images/schema-synchronization-unresolved-dependencies.png)
+
+### Extract a PostgreSQL schema
+
+The built-in helper provides the versioned PostgreSQL query used to produce a compatible schema
+CSV without requiring a live database connection inside EntityTracker.
+
+![EntityTracker PostgreSQL schema extraction query helper](images/sql-query.png)
 
 ## Project status
 
@@ -151,6 +172,7 @@ application data.
 ## Documentation
 
 - [Development, build, and run guide](docs/DEVELOPMENT.md)
+- [Design and color guide](docs/design/DESIGN_GUIDE.md)
 - [PostgreSQL schema CSV contract](docs/importing/schema-csv-contract-v1.md)
 - [Local backup, logs, and recovery](docs/operations/RECOVERY.md)
 - [Architecture rules](docs/architecture/ARCHITECTURE.md)

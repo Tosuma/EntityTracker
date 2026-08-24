@@ -8,51 +8,24 @@
         xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels"
         mc:Ignorable="d"
         Title="EntityTracker"
-        Icon="Assets/EntityTracker.ico"
+        Icon="Assets/v2/EntityTracker.ico"
         Width="1120"
         Height="720"
         MinWidth="860"
         MinHeight="560"
-        Background="#F4F6F8"
+        Background="{StaticResource Brush.Surface.Page}"
+        Foreground="{StaticResource Brush.Text.Primary}"
         PreviewKeyDown="OnWindowPreviewKeyDown"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
 
-        <Style x:Key="PrimaryButtonStyle" TargetType="Button">
-            <Setter Property="Padding" Value="18,9" />
-            <Setter Property="Background" Value="#176B87" />
-            <Setter Property="Foreground" Value="White" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-
-        <Style x:Key="SecondaryButtonStyle" TargetType="Button">
-            <Setter Property="Padding" Value="18,9" />
-            <Setter Property="Background" Value="White" />
-            <Setter Property="Foreground" Value="#26343D" />
-            <Setter Property="BorderBrush" Value="#C7D0D6" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-
-        <Style x:Key="DangerButtonStyle" TargetType="Button">
-            <Setter Property="Padding" Value="18,9" />
-            <Setter Property="Background" Value="#B42318" />
-            <Setter Property="Foreground" Value="White" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-
         <Style x:Key="SummaryCardStyle" TargetType="Border">
             <Setter Property="Margin" Value="0,0,10,8" />
             <Setter Property="Padding" Value="16,12" />
             <Setter Property="MinWidth" Value="128" />
-            <Setter Property="Background" Value="White" />
-            <Setter Property="BorderBrush" Value="#DDE3E7" />
+            <Setter Property="Background" Value="{StaticResource Brush.Surface.Card}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Brush.Border.Default}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="5" />
         </Style>
@@ -63,8 +36,8 @@
             <Setter Property="MinWidth" Value="128" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Stretch" />
-            <Setter Property="Background" Value="White" />
-            <Setter Property="BorderBrush" Value="#DDE3E7" />
+            <Setter Property="Background" Value="{StaticResource Brush.Surface.Card}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Brush.Border.Default}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
@@ -82,10 +55,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Card" Property="BorderBrush" Value="#75A9BA" />
+                                <Setter TargetName="Card" Property="BorderBrush" Value="{StaticResource Brush.Border.Strong}" />
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Card" Property="BorderBrush" Value="#176B87" />
+                                <Setter TargetName="Card" Property="BorderBrush" Value="{StaticResource Brush.Brand.Green100}" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Cursor" Value="Arrow" />
@@ -97,26 +70,7 @@
             </Setter>
         </Style>
 
-        <Style TargetType="DataGrid">
-            <Setter Property="AutoGenerateColumns" Value="False" />
-            <Setter Property="CanUserAddRows" Value="False" />
-            <Setter Property="CanUserDeleteRows" Value="False" />
-            <Setter Property="CanUserReorderColumns" Value="False" />
-            <Setter Property="CanUserSortColumns" Value="False" />
-            <Setter Property="IsReadOnly" Value="True" />
-            <Setter Property="HeadersVisibility" Value="Column" />
-            <Setter Property="GridLinesVisibility" Value="Horizontal" />
-            <Setter Property="HorizontalGridLinesBrush" Value="#E6EAED" />
-            <Setter Property="BorderBrush" Value="#D7DEE2" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="RowHeaderWidth" Value="0" />
-            <Setter Property="RowHeight" Value="38" />
-            <Setter Property="ColumnHeaderHeight" Value="40" />
-            <Setter Property="EnableRowVirtualization" Value="True" />
-            <Setter Property="EnableColumnVirtualization" Value="True" />
-            <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
-            <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
-            <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
+        <Style TargetType="DataGrid" BasedOn="{StaticResource EntityTrackerDataGridStyle}">
             <EventSetter Event="PreviewMouseWheel" Handler="OnDataGridPreviewMouseWheel" />
         </Style>
     </Window.Resources>
@@ -139,21 +93,21 @@
         </DockPanel.Style>
         <Border DockPanel.Dock="Top"
                 Padding="26,18"
-                Background="#163A4A">
+                Background="{StaticResource Brush.Surface.Primary}">
             <StackPanel>
-                <TextBlock Foreground="White"
+                <TextBlock Foreground="{StaticResource Brush.Text.OnDark}"
                            FontSize="26"
                            FontWeight="SemiBold"
                            Text="EntityTracker" />
                 <TextBlock Margin="0,4,0,0"
-                           Foreground="#C9DCE4"
+                           Foreground="{StaticResource Brush.Text.OnDarkMuted}"
                            Text="Dependency-safe implementation overview" />
             </StackPanel>
         </Border>
 
         <Border DockPanel.Dock="Bottom"
                 Padding="18,10"
-                Background="#E2EFF4"
+                Background="{StaticResource Brush.Surface.Subtle}"
                 Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
             <StackPanel Orientation="Horizontal">
                 <ProgressBar Width="110"
@@ -161,7 +115,7 @@
                              Margin="0,0,12,0"
                              IsIndeterminate="True" />
                 <TextBlock VerticalAlignment="Center"
-                           Foreground="#31505D"
+                           Foreground="{StaticResource Brush.Text.Primary}"
                            Text="{Binding BusyMessage}" />
             </StackPanel>
         </Border>
@@ -182,7 +136,7 @@
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                             <TextBlock Margin="0,0,7,0"
                                        VerticalAlignment="Center"
-                                       Foreground="#64737C"
+                                       Foreground="{StaticResource Brush.Text.Secondary}"
                                        Text="View" />
                             <ComboBox MinWidth="155"
                                       Margin="0,0,8,0"
@@ -203,10 +157,10 @@
                         <StackPanel>
                             <TextBlock FontSize="20"
                                        FontWeight="SemiBold"
-                                       Foreground="#26343D"
+                                       Foreground="{StaticResource Brush.Text.Primary}"
                                        Text="Persisted entities" />
                             <TextBlock Margin="0,3,0,0"
-                                       Foreground="#64737C"
+                                       Foreground="{StaticResource Brush.Text.Secondary}"
                                        Text="Ranked entities are ordered so dependencies appear before the entities that use them." />
                         </StackPanel>
                     </DockPanel>
@@ -223,15 +177,15 @@
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding SelectedOverviewFilter}"
                                                      Value="{x:Static viewModels:OverviewManagerFilter.AllActive}">
-                                            <Setter Property="Background" Value="#EAF4F7" />
-                                            <Setter Property="BorderBrush" Value="#176B87" />
+                                            <Setter Property="Background" Value="{StaticResource Brush.Surface.Selected}" />
+                                            <Setter Property="BorderBrush" Value="{StaticResource Brush.Brand.Green100}" />
                                             <Setter Property="BorderThickness" Value="2" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </Button.Style>
                             <StackPanel>
-                                <TextBlock Foreground="#6B7880" Text="Total" />
+                                <TextBlock Foreground="{StaticResource Brush.Text.Secondary}" Text="Total" />
                                 <TextBlock Margin="0,3,0,0"
                                            FontSize="22"
                                            FontWeight="SemiBold"
@@ -248,15 +202,15 @@
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding SelectedOverviewFilter}"
                                                      Value="{x:Static viewModels:OverviewManagerFilter.NotStarted}">
-                                            <Setter Property="Background" Value="#EAF4F7" />
-                                            <Setter Property="BorderBrush" Value="#176B87" />
+                                            <Setter Property="Background" Value="{StaticResource Brush.Surface.Selected}" />
+                                            <Setter Property="BorderBrush" Value="{StaticResource Brush.Brand.Green100}" />
                                             <Setter Property="BorderThickness" Value="2" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </Button.Style>
                             <StackPanel>
-                                <TextBlock Foreground="#6B7880" Text="Not started" />
+                                <TextBlock Foreground="{StaticResource Brush.Text.Secondary}" Text="Not started" />
                                 <TextBlock Margin="0,3,0,0"
                                            FontSize="22"
                                            FontWeight="SemiBold"
@@ -273,15 +227,15 @@
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding SelectedOverviewFilter}"
                                                      Value="{x:Static viewModels:OverviewManagerFilter.InProgress}">
-                                            <Setter Property="Background" Value="#EAF4F7" />
-                                            <Setter Property="BorderBrush" Value="#176B87" />
+                                            <Setter Property="Background" Value="{StaticResource Brush.Surface.Selected}" />
+                                            <Setter Property="BorderBrush" Value="{StaticResource Brush.Brand.Green100}" />
                                             <Setter Property="BorderThickness" Value="2" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </Button.Style>
                             <StackPanel>
-                                <TextBlock Foreground="#6B7880" Text="In progress" />
+                                <TextBlock Foreground="{StaticResource Brush.Text.Secondary}" Text="In progress" />
                                 <TextBlock Margin="0,3,0,0"
                                            FontSize="22"
                                            FontWeight="SemiBold"
@@ -295,22 +249,31 @@
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
                                        TargetType="Button">
+                                    <Setter Property="BorderBrush" Value="{StaticResource Brush.Accent}" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding SelectedOverviewFilter}"
                                                      Value="{x:Static viewModels:OverviewManagerFilter.ReworkNeeded}">
-                                            <Setter Property="Background" Value="#EAF4F7" />
-                                            <Setter Property="BorderBrush" Value="#176B87" />
+                                            <Setter Property="Background" Value="{StaticResource Brush.Surface.Selected}" />
+                                            <Setter Property="BorderBrush" Value="{StaticResource Brush.Accent}" />
                                             <Setter Property="BorderThickness" Value="2" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </Button.Style>
                             <StackPanel>
-                                <TextBlock Foreground="#6B7880" Text="Rework needed" />
+                                <StackPanel Orientation="Horizontal">
+                                    <Border Width="9"
+                                            Height="9"
+                                            Margin="0,0,6,0"
+                                            VerticalAlignment="Center"
+                                            Background="{StaticResource Brush.Status.ReworkNeeded}"
+                                            CornerRadius="5" />
+                                    <TextBlock Foreground="{StaticResource Brush.Text.Secondary}" Text="Rework needed" />
+                                </StackPanel>
                                 <TextBlock Margin="0,3,0,0"
                                            FontSize="22"
                                            FontWeight="SemiBold"
-                                           Foreground="#B45309"
+                                           Foreground="{StaticResource Brush.Text.Primary}"
                                            Text="{Binding ReworkNeededCount}" />
                             </StackPanel>
                         </Button>
@@ -325,15 +288,15 @@
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding SelectedOverviewFilter}"
                                                      Value="{x:Static viewModels:OverviewManagerFilter.DevelopmentCompleted}">
-                                            <Setter Property="Background" Value="#EAF4F7" />
-                                            <Setter Property="BorderBrush" Value="#176B87" />
+                                            <Setter Property="Background" Value="{StaticResource Brush.Surface.Selected}" />
+                                            <Setter Property="BorderBrush" Value="{StaticResource Brush.Brand.Green100}" />
                                             <Setter Property="BorderThickness" Value="2" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </Button.Style>
                             <StackPanel>
-                                <TextBlock Foreground="#6B7880" Text="Dev. completed" />
+                                <TextBlock Foreground="{StaticResource Brush.Text.Secondary}" Text="Dev. completed" />
                                 <TextBlock Margin="0,3,0,0"
                                            FontSize="22"
                                            FontWeight="SemiBold"
@@ -351,15 +314,15 @@
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding SelectedOverviewFilter}"
                                                      Value="{x:Static viewModels:OverviewManagerFilter.Reconciled}">
-                                            <Setter Property="Background" Value="#EAF4F7" />
-                                            <Setter Property="BorderBrush" Value="#176B87" />
+                                            <Setter Property="Background" Value="{StaticResource Brush.Surface.Selected}" />
+                                            <Setter Property="BorderBrush" Value="{StaticResource Brush.Brand.Green100}" />
                                             <Setter Property="BorderThickness" Value="2" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </Button.Style>
                             <StackPanel>
-                                <TextBlock Foreground="#6B7880" Text="Reconciled" />
+                                <TextBlock Foreground="{StaticResource Brush.Text.Secondary}" Text="Reconciled" />
                                 <TextBlock Margin="0,3,0,0"
                                            FontSize="22"
                                            FontWeight="SemiBold"
@@ -370,25 +333,56 @@
                         <Border Margin="0,0,0,8"
                                 Style="{StaticResource SummaryCardStyle}">
                             <StackPanel VerticalAlignment="Center">
-                                <TextBlock Foreground="#6B7880"
+                                <TextBlock Foreground="{StaticResource Brush.Text.Secondary}"
                                            Text="{Binding ImplementedPercentage, StringFormat={}{0:F0}% implemented}" />
                                 <Grid Height="10" Margin="0,9,0,0">
-                                    <ProgressBar Foreground="#2563EB"
+                                    <ProgressBar Foreground="{StaticResource Brush.Status.DevelopmentCompleted}"
                                                  Maximum="100"
                                                  Value="{Binding ImplementedPercentage, Mode=OneWay}" />
                                     <ProgressBar Background="Transparent"
-                                                 Foreground="#D97706"
+                                                 Foreground="{StaticResource Brush.Status.ReworkNeeded}"
                                                  Maximum="100"
                                                  Value="{Binding ReconciledAndReworkPercentage, Mode=OneWay}" />
                                     <ProgressBar Background="Transparent"
-                                                 Foreground="#2E8B57"
+                                                 Foreground="{StaticResource Brush.Status.Reconciled}"
                                                  Maximum="100"
                                                  Value="{Binding ReconciledPercentage, Mode=OneWay}" />
                                 </Grid>
-                                <TextBlock Margin="0,5,0,0"
-                                           FontSize="11"
-                                           Foreground="#52616A"
-                                           Text="Blue: dev. completed · Amber: rework · Green: reconciled" />
+                                <WrapPanel Margin="0,6,0,0">
+                                    <StackPanel Margin="0,0,10,0" Orientation="Horizontal">
+                                        <Border Width="8"
+                                                Height="8"
+                                                Margin="0,0,4,0"
+                                                VerticalAlignment="Center"
+                                                Background="{StaticResource Brush.Status.DevelopmentCompleted}"
+                                                CornerRadius="4" />
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{StaticResource Brush.Text.Secondary}"
+                                                   Text="Dev. completed" />
+                                    </StackPanel>
+                                    <StackPanel Margin="0,0,10,0" Orientation="Horizontal">
+                                        <Border Width="8"
+                                                Height="8"
+                                                Margin="0,0,4,0"
+                                                VerticalAlignment="Center"
+                                                Background="{StaticResource Brush.Status.ReworkNeeded}"
+                                                CornerRadius="4" />
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{StaticResource Brush.Text.Secondary}"
+                                                   Text="Rework needed" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Border Width="8"
+                                                Height="8"
+                                                Margin="0,0,4,0"
+                                                VerticalAlignment="Center"
+                                                Background="{StaticResource Brush.Status.Reconciled}"
+                                                CornerRadius="4" />
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{StaticResource Brush.Text.Secondary}"
+                                                   Text="Reconciled" />
+                                    </StackPanel>
+                                </WrapPanel>
                             </StackPanel>
                         </Border>
                     </WrapPanel>
@@ -396,8 +390,8 @@
                     <Border Grid.Row="2"
                             Margin="0,0,0,12"
                             Padding="12"
-                            Background="White"
-                            BorderBrush="#B7CAD3"
+                            Background="{StaticResource Brush.Surface.Card}"
+                            BorderBrush="{StaticResource Brush.Border.Medium}"
                             BorderThickness="1"
                             CornerRadius="4"
                             Visibility="{Binding IsOverviewSearchOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -439,7 +433,7 @@
                                        Grid.ColumnSpan="2"
                                        Margin="12,9,0,0"
                                        HorizontalAlignment="Right"
-                                       Foreground="#64737C"
+                                       Foreground="{StaticResource Brush.Text.Secondary}"
                                        Text="{Binding OverviewSearchResultSummary}" />
                         </Grid>
                     </Border>
@@ -447,12 +441,12 @@
                     <StackPanel Grid.Row="3">
                     <Border Margin="0,0,0,12"
                             Padding="12"
-                            Background="#EDF6EF"
-                            BorderBrush="#BFD8C4"
+                            Background="{StaticResource Brush.Surface.Subtle}"
+                            BorderBrush="{StaticResource Brush.Border.Strong}"
                             BorderThickness="1"
                             CornerRadius="4"
                             Visibility="{Binding HasOperationMessage, Converter={StaticResource BooleanToVisibilityConverter}}">
-                        <TextBlock Foreground="#365D3D"
+                        <TextBlock Foreground="{StaticResource Brush.Text.Primary}"
                                    Text="{Binding OperationMessage}"
                                    TextWrapping="Wrap" />
                     </Border>
@@ -461,14 +455,14 @@
                             Margin="0,0,0,12"
                             MaxHeight="120"
                             Padding="12"
-                            Background="#FDEAEA"
-                            BorderBrush="#E6A6A6"
+                            Background="{StaticResource Brush.Surface.Alert}"
+                            BorderBrush="{StaticResource Brush.Accent}"
                             BorderThickness="1"
                             CornerRadius="4"
                             Visibility="{Binding HasOverviewError, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
-                            <TextBlock Foreground="#8A2D2D"
+                            <TextBlock Foreground="{StaticResource Brush.Text.Primary}"
                                        Text="{Binding OverviewErrorMessage}"
                                        TextWrapping="Wrap" />
                         </ScrollViewer>
@@ -499,10 +493,10 @@
                                                         Click="OnContextMenuButtonClick">
                                                     <Button.Style>
                                                         <Style TargetType="Button">
-                                                            <Setter Property="Foreground" Value="#B45309" />
+                                                            <Setter Property="Foreground" Value="{StaticResource Brush.Accent}" />
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding IsDirectlyUnresolved}" Value="True">
-                                                                    <Setter Property="Foreground" Value="#C62828" />
+                                                                    <Setter Property="Foreground" Value="{StaticResource Brush.Accent}" />
                                                                 </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
@@ -541,15 +535,15 @@
                                                                     <StackPanel Width="320" Margin="12">
                                                                         <TextBlock FontSize="15"
                                                                                    FontWeight="SemiBold"
-                                                                                   Foreground="#263238"
+                                                                                   Foreground="{StaticResource Brush.Text.Primary}"
                                                                                    Text="{Binding GraphIssueTitle}" />
                                                                         <TextBlock Margin="0,8,0,0"
-                                                                                   Foreground="#455A64"
+                                                                                   Foreground="{StaticResource Brush.Text.Secondary}"
                                                                                    Text="{Binding GraphIssueDescription}"
                                                                                    TextWrapping="Wrap" />
                                                                         <TextBlock Margin="0,10,0,0"
                                                                                    FontWeight="SemiBold"
-                                                                                   Foreground="#263238"
+                                                                                   Foreground="{StaticResource Brush.Text.Primary}"
                                                                                    Text="{Binding GraphIssueNames}"
                                                                                    TextWrapping="Wrap" />
                                                                     </StackPanel>
@@ -598,34 +592,34 @@
                             </DataGrid.Columns>
                         </DataGrid>
 
-                        <Border Background="#F8FAFB"
-                                BorderBrush="#D7DEE2"
+                        <Border Background="{StaticResource Brush.Surface.Subtle}"
+                                BorderBrush="{StaticResource Brush.Border.Default}"
                                 BorderThickness="1"
                                 Visibility="{Binding ShowOverviewEmptyState, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <TextBlock HorizontalAlignment="Center"
                                            FontSize="18"
                                            FontWeight="SemiBold"
-                                           Foreground="#4E5E67"
+                                           Foreground="{StaticResource Brush.Text.Secondary}"
                                            Text="{Binding OverviewEmptyTitle}" />
                                 <TextBlock Margin="0,7,0,0"
-                                           Foreground="#74828A"
+                                           Foreground="{StaticResource Brush.Text.Secondary}"
                                            Text="{Binding OverviewEmptyDescription}" />
                             </StackPanel>
                         </Border>
 
-                        <Border Background="#F8FAFB"
-                                BorderBrush="#D7DEE2"
+                        <Border Background="{StaticResource Brush.Surface.Subtle}"
+                                BorderBrush="{StaticResource Brush.Border.Default}"
                                 BorderThickness="1"
                                 Visibility="{Binding ShowOverviewSearchEmptyState, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <TextBlock HorizontalAlignment="Center"
                                            FontSize="18"
                                            FontWeight="SemiBold"
-                                           Foreground="#4E5E67"
+                                           Foreground="{StaticResource Brush.Text.Secondary}"
                                            Text="No matching entities" />
                                 <TextBlock Margin="0,7,0,12"
-                                           Foreground="#74828A"
+                                           Foreground="{StaticResource Brush.Text.Secondary}"
                                            Text="Try another name, change the dependency toggle, or clear the search."
                                            TextWrapping="Wrap" />
                                 <Button Command="{Binding ClearOverviewSearchCommand}"
@@ -659,10 +653,10 @@
                         <StackPanel>
                             <TextBlock FontSize="20"
                                        FontWeight="SemiBold"
-                                       Foreground="#26343D"
+                                       Foreground="{StaticResource Brush.Text.Primary}"
                                        Text="Schema synchronization" />
                             <TextBlock Margin="0,3,0,0"
-                                       Foreground="#64737C"
+                                       Foreground="{StaticResource Brush.Text.Secondary}"
                                        Text="{Binding Review.SelectedFileName}" />
                         </StackPanel>
                     </DockPanel>
@@ -670,23 +664,23 @@
                     <Border Grid.Row="1"
                             Margin="0,0,0,12"
                             Padding="12"
-                            Background="White"
-                            BorderBrush="#D7DEE2"
+                            Background="{StaticResource Brush.Surface.Card}"
+                            BorderBrush="{StaticResource Brush.Border.Default}"
                             BorderThickness="1"
                             CornerRadius="4">
                         <StackPanel>
                             <Border Margin="0,0,0,12"
                                     Padding="10"
-                                    Background="#F8FAFB"
-                                    BorderBrush="#D7DEE2"
+                                    Background="{StaticResource Brush.Surface.Subtle}"
+                                    BorderBrush="{StaticResource Brush.Border.Default}"
                                     BorderThickness="1"
                                     CornerRadius="4">
                                 <StackPanel>
                                     <TextBlock FontWeight="SemiBold"
-                                               Foreground="#31505D"
+                                               Foreground="{StaticResource Brush.Text.Primary}"
                                                Text="{Binding LatestImportHeadline}" />
                                     <TextBlock Margin="0,3,0,0"
-                                               Foreground="#64737C"
+                                               Foreground="{StaticResource Brush.Text.Secondary}"
                                                Text="{Binding LatestImportDetails}"
                                                TextWrapping="Wrap" />
                                 </StackPanel>
@@ -698,7 +692,7 @@
                                          IsChecked="{Binding Review.IsCompleteImport}"
                                          Content="Complete database snapshot (default)" />
                             <TextBlock Margin="22,2,0,0"
-                                       Foreground="#64737C"
+                                       Foreground="{StaticResource Brush.Text.Secondary}"
                                        Text="The CSV contains the entire schema. Existing entities missing from the file will be archived." />
                             <RadioButton Margin="0,9,0,0"
                                          GroupName="ImportMode"
@@ -706,10 +700,10 @@
                                          IsChecked="{Binding Review.IsPartialImport}"
                                          Content="Partial database snapshot" />
                             <TextBlock Margin="22,2,0,0"
-                                       Foreground="#64737C"
+                                       Foreground="{StaticResource Brush.Text.Secondary}"
                                        Text="The CSV contains only part of the schema. Existing entities missing from the file will be left unchanged." />
                             <TextBlock Margin="0,10,0,0"
-                                       Foreground="#7A5A00"
+                                       Foreground="{StaticResource Brush.Text.Primary}"
                                        FontWeight="SemiBold"
                                        Text="Import type is locked for while reviewing. Cancel the review to choose a different type."
                                        TextWrapping="Wrap"
@@ -718,15 +712,16 @@
                     </Border>
 
                     <Grid Grid.Row="2">
-                        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                        <ScrollViewer x:Name="SchemaReviewScrollViewer"
+                                      HorizontalScrollBarVisibility="Disabled"
                                       PreviewMouseWheel="OnReviewPreviewMouseWheel"
                                       VerticalScrollBarVisibility="Auto">
                             <StackPanel>
                                 <Border Margin="0,0,0,8"
                                         MaxHeight="120"
                                         Padding="10"
-                                        Background="#FFF8DC"
-                                        BorderBrush="#E5D28B"
+                                        Background="{StaticResource Brush.Surface.Subtle}"
+                                        BorderBrush="{StaticResource Brush.Accent}"
                                         BorderThickness="1"
                                         CornerRadius="4"
                                         Visibility="{Binding Review.HasWarnings, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -738,8 +733,8 @@
                                 <Border Margin="0,0,0,8"
                                         MaxHeight="120"
                                         Padding="10"
-                                        Background="#FDEAEA"
-                                        BorderBrush="#E6A6A6"
+                                        Background="{StaticResource Brush.Surface.Alert}"
+                                        BorderBrush="{StaticResource Brush.Accent}"
                                         BorderThickness="1"
                                         CornerRadius="4"
                                         Visibility="{Binding Review.HasDiagnostics, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -755,11 +750,11 @@
 
                                     <StackPanel Margin="0,0,0,12"
                                                 Visibility="{Binding Review.HasNewEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                        <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="#176B87" Text="New entities" />
+                                        <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource Brush.Brand.Green100}" Text="New entities" />
                                         <ItemsControl ItemsSource="{Binding Review.NewEntities}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Margin="0,5,0,0" Padding="10" Background="White" BorderBrush="#D7DEE2" BorderThickness="1">
+                                                    <Border Margin="0,5,0,0" Padding="10" Background="{StaticResource Brush.Surface.Card}" BorderBrush="{StaticResource Brush.Border.Default}" BorderThickness="1">
                                                         <StackPanel>
                                                             <DockPanel>
                                                                 <Button DockPanel.Dock="Right"
@@ -784,7 +779,7 @@
                                                                 </Button>
                                                                 <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding SourceName, StringFormat=+ {0}}" />
                                                             </DockPanel>
-                                                            <TextBlock Margin="16,3,0,0" Foreground="#52616A" Text="{Binding Details}" TextWrapping="Wrap" />
+                                                            <TextBlock Margin="16,3,0,0" Foreground="{StaticResource Brush.Text.Secondary}" Text="{Binding Details}" TextWrapping="Wrap" />
                                                         </StackPanel>
                                                     </Border>
                                                 </DataTemplate>
@@ -794,11 +789,11 @@
 
                                     <StackPanel Margin="0,0,0,12"
                                                 Visibility="{Binding Review.HasChangedEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                        <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="#7A5A00" Text="Changed entities" />
+                                        <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text.Primary}" Text="Changed entities" />
                                         <ItemsControl ItemsSource="{Binding Review.ChangedEntities}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Margin="0,5,0,0" Padding="10" Background="White" BorderBrush="#D7DEE2" BorderThickness="1">
+                                                    <Border Margin="0,5,0,0" Padding="10" Background="{StaticResource Brush.Surface.Card}" BorderBrush="{StaticResource Brush.Border.Default}" BorderThickness="1">
                                                         <StackPanel>
                                                             <DockPanel>
                                                                 <Button DockPanel.Dock="Right"
@@ -823,7 +818,7 @@
                                                                 </Button>
                                                                 <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding SourceName, StringFormat=~ {0}}" />
                                                             </DockPanel>
-                                                            <TextBlock Margin="16,3,0,0" Foreground="#52616A" Text="{Binding Details}" TextWrapping="Wrap" />
+                                                            <TextBlock Margin="16,3,0,0" Foreground="{StaticResource Brush.Text.Secondary}" Text="{Binding Details}" TextWrapping="Wrap" />
                                                         </StackPanel>
                                                     </Border>
                                                 </DataTemplate>
@@ -831,16 +826,28 @@
                                         </ItemsControl>
                                     </StackPanel>
 
-                                    <StackPanel Margin="0,0,0,12"
+                                    <StackPanel x:Name="MissingReviewSection"
+                                                Margin="0,0,0,12"
                                                 Visibility="{Binding Review.HasMissingEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                        <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="#9A3030" Text="Missing / possibly removed" />
+                                        <Border Padding="8,5"
+                                                Background="{StaticResource Brush.Review.Missing.Header}"
+                                                CornerRadius="3">
+                                            <TextBlock FontSize="16"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{StaticResource Brush.Text.Primary}"
+                                                       Text="Missing / possibly removed" />
+                                        </Border>
                                         <ItemsControl ItemsSource="{Binding Review.MissingEntities}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Margin="0,5,0,0" Padding="10" Background="#FFF2F2" BorderBrush="#E6A6A6" BorderThickness="1">
+                                                    <Border Margin="0,5,0,0"
+                                                            Padding="10"
+                                                            Background="{StaticResource Brush.Review.Missing.Surface}"
+                                                            BorderBrush="{StaticResource Brush.Review.Missing.Border}"
+                                                            BorderThickness="1">
                                                         <StackPanel>
                                                             <TextBlock FontWeight="SemiBold" Text="{Binding SourceName, StringFormat=− {0}}" />
-                                                            <TextBlock Margin="16,3,0,0" Foreground="#7C4545" Text="{Binding Details}" TextWrapping="Wrap" />
+                                                            <TextBlock Margin="16,3,0,0" Foreground="{StaticResource Brush.Text.Primary}" Text="{Binding Details}" TextWrapping="Wrap" />
                                                         </StackPanel>
                                                     </Border>
                                                 </DataTemplate>
@@ -852,21 +859,21 @@
                                                 Visibility="{Binding Review.HasManualOnlyEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <TextBlock FontSize="16"
                                                    FontWeight="SemiBold"
-                                                   Foreground="#176B87"
+                                                   Foreground="{StaticResource Brush.Brand.Green100}"
                                                    Text="Manual entities not yet in CSV — kept active" />
                                         <ItemsControl ItemsSource="{Binding Review.ManualOnlyEntities}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
                                                     <Border Margin="0,5,0,0"
                                                             Padding="10"
-                                                            Background="#EAF5FA"
-                                                            BorderBrush="#A9CDD9"
+                                                            Background="{StaticResource Brush.Surface.Subtle}"
+                                                            BorderBrush="{StaticResource Brush.Border.Strong}"
                                                             BorderThickness="1">
                                                         <StackPanel>
                                                             <TextBlock FontWeight="SemiBold"
                                                                        Text="{Binding SourceName, StringFormat=• {0}}" />
                                                             <TextBlock Margin="16,3,0,0"
-                                                                       Foreground="#315B6B"
+                                                                       Foreground="{StaticResource Brush.Text.Primary}"
                                                                        Text="{Binding Details}"
                                                                        TextWrapping="Wrap" />
                                                         </StackPanel>
@@ -876,16 +883,27 @@
                                         </ItemsControl>
                                     </StackPanel>
 
-                                    <StackPanel Margin="0,0,0,12"
+                                    <StackPanel x:Name="UnresolvedReviewSection"
+                                                Margin="0,0,0,12"
                                                 Visibility="{Binding Review.HasUnresolvedEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                        <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="#9A5B1B" Text="Unresolved dependencies" />
+                                        <TextBlock FontSize="16"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{StaticResource Brush.Review.Warning.Header}"
+                                                   Text="Unresolved dependencies" />
                                         <ItemsControl ItemsSource="{Binding Review.UnresolvedEntities}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Margin="0,5,0,0" Padding="10" Background="#FFF8DC" BorderBrush="#E5D28B" BorderThickness="1">
+                                                    <Border Margin="0,5,0,0"
+                                                            Padding="10"
+                                                            Background="{StaticResource Brush.Review.Warning.Surface}"
+                                                            BorderBrush="{StaticResource Brush.Review.Warning.Border}"
+                                                            BorderThickness="1">
                                                         <StackPanel>
                                                             <TextBlock FontWeight="SemiBold" Text="{Binding SourceName, StringFormat=! {0}}" />
-                                                            <TextBlock Margin="16,3,0,0" Foreground="#6E5A18" Text="{Binding Details}" TextWrapping="Wrap" />
+                                                            <TextBlock Margin="16,3,0,0"
+                                                                       Foreground="{StaticResource Brush.Review.Warning.Text}"
+                                                                       Text="{Binding Details}"
+                                                                       TextWrapping="Wrap" />
                                                         </StackPanel>
                                                     </Border>
                                                 </DataTemplate>
@@ -897,10 +915,10 @@
                                                 Visibility="{Binding Review.HasProgressImpacts, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <TextBlock FontSize="16"
                                                    FontWeight="SemiBold"
-                                                   Foreground="#B45309"
+                                                   Foreground="{StaticResource Brush.Accent}"
                                                    Text="Completed entities with dependency changes" />
                                         <TextBlock Margin="0,3,0,4"
-                                                   Foreground="#64737C"
+                                                   Foreground="{StaticResource Brush.Text.Secondary}"
                                                    Text="Choose whether each entity keeps its current status or needs rework before applying."
                                                    TextWrapping="Wrap" />
                                         <ItemsControl ItemsSource="{Binding Review.ProgressImpacts}">
@@ -908,8 +926,8 @@
                                                 <DataTemplate>
                                                     <Border Margin="0,5,0,0"
                                                             Padding="10"
-                                                            Background="#FFF8DC"
-                                                            BorderBrush="#E5D28B"
+                                                            Background="{StaticResource Brush.Surface.Subtle}"
+                                                            BorderBrush="{StaticResource Brush.Accent}"
                                                             BorderThickness="1">
                                                         <Grid>
                                                             <Grid.ColumnDefinitions>
@@ -919,11 +937,11 @@
                                                             <StackPanel>
                                                                 <TextBlock FontWeight="SemiBold" Text="{Binding SourceName}" />
                                                                 <TextBlock Margin="0,3,0,0"
-                                                                           Foreground="#6E5A18"
+                                                                           Foreground="{StaticResource Brush.Text.Primary}"
                                                                            Text="{Binding CurrentStatus, StringFormat=Current: {0}}" />
                                                                 <TextBlock Margin="0,3,0,0"
                                                                            FontWeight="SemiBold"
-                                                                           Foreground="#8A4B08"
+                                                                           Foreground="{StaticResource Brush.Text.Primary}"
                                                                            Text="{Binding DecisionText}" />
                                                             </StackPanel>
                                                             <StackPanel Grid.Column="1"
@@ -947,24 +965,24 @@
                                         </ItemsControl>
                                     </StackPanel>
 
-                                    <Border Padding="10" Background="#EDF6EF" BorderBrush="#BFD8C4" BorderThickness="1">
-                                        <TextBlock Foreground="#365D3D"
+                                    <Border Padding="10" Background="{StaticResource Brush.Surface.Subtle}" BorderBrush="{StaticResource Brush.Border.Strong}" BorderThickness="1">
+                                        <TextBlock Foreground="{StaticResource Brush.Text.Primary}"
                                                    Text="{Binding Review.UnchangedEntityCount, StringFormat=✓ {0} imported entities unchanged}" />
                                     </Border>
                                 </StackPanel>
 
                                 <Border Padding="20"
-                                        Background="#F8FAFB"
-                                        BorderBrush="#D7DEE2"
+                                        Background="{StaticResource Brush.Surface.Subtle}"
+                                        BorderBrush="{StaticResource Brush.Border.Default}"
                                         BorderThickness="1"
                                         Visibility="{Binding Review.ShowEmptyState, Converter={StaticResource BooleanToVisibilityConverter}}">
                                     <StackPanel>
                                         <TextBlock HorizontalAlignment="Center"
-                                                   Foreground="#65747C"
+                                                   Foreground="{StaticResource Brush.Text.Secondary}"
                                                    Text="Choose an import type, then select a CSV to review. Nothing is saved until Apply Changes." />
                                         <TextBlock Margin="0,5,0,0"
                                                    HorizontalAlignment="Center"
-                                                   Foreground="#65747C"
+                                                   Foreground="{StaticResource Brush.Text.Secondary}"
                                                    Text="Need an export query? Get it separately with Get SQL Query." />
                                     </StackPanel>
                                 </Border>
@@ -999,10 +1017,10 @@
                     <StackPanel Margin="0,0,0,14">
                         <TextBlock FontSize="20"
                                    FontWeight="SemiBold"
-                                   Foreground="#26343D"
+                                   Foreground="{StaticResource Brush.Text.Primary}"
                                    Text="Create a tracked entity" />
                         <TextBlock Margin="0,3,0,0"
-                                   Foreground="#64737C"
+                                   Foreground="{StaticResource Brush.Text.Secondary}"
                                    Text="Add a new entity and its initial mandatory dependencies. Unknown names are kept as unresolved warnings."
                                    TextWrapping="Wrap" />
                     </StackPanel>
@@ -1020,7 +1038,7 @@
 
                             <TextBlock FontWeight="SemiBold" Text="Add dependencies" />
                             <TextBlock Margin="0,3,0,7"
-                                       Foreground="#64737C"
+                                       Foreground="{StaticResource Brush.Text.Secondary}"
                                        Text="Search active entities, or deliberately keep an unknown name as unresolved."
                                        TextWrapping="Wrap" />
                             <Grid>
@@ -1039,7 +1057,7 @@
                             </Grid>
 
                             <TextBlock Margin="0,7,0,0"
-                                       Foreground="#7A5A00"
+                                       Foreground="{StaticResource Brush.Text.Primary}"
                                        Text="{Binding ManualCreation.SearchMessage}"
                                        TextWrapping="Wrap"
                                        Visibility="{Binding ManualCreation.HasSearchMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
@@ -1051,8 +1069,8 @@
                                     <DataTemplate>
                                         <Border Margin="0,0,0,5"
                                                 Padding="8"
-                                                Background="White"
-                                                BorderBrush="#D7DEE2"
+                                                Background="{StaticResource Brush.Surface.Card}"
+                                                BorderBrush="{StaticResource Brush.Border.Default}"
                                                 BorderThickness="1">
                                             <DockPanel>
                                                 <Button DockPanel.Dock="Right"
@@ -1076,8 +1094,8 @@
                                     <DataTemplate>
                                         <Border Margin="0,0,0,6"
                                                 Padding="9"
-                                                Background="White"
-                                                BorderBrush="#D7DEE2"
+                                                Background="{StaticResource Brush.Surface.Card}"
+                                                BorderBrush="{StaticResource Brush.Border.Default}"
                                                 BorderThickness="1">
                                             <DockPanel>
                                                 <Button DockPanel.Dock="Right"
@@ -1089,7 +1107,7 @@
                                                 <StackPanel>
                                                     <TextBlock FontWeight="SemiBold" Text="{Binding SourceName}" />
                                                     <TextBlock Margin="0,2,0,0"
-                                                               Foreground="#64737C"
+                                                               Foreground="{StaticResource Brush.Text.Secondary}"
                                                                Text="{Binding ResolutionLabel}" />
                                                 </StackPanel>
                                             </DockPanel>
@@ -1101,8 +1119,8 @@
                             <Border Margin="0,12,0,0"
                                     MaxHeight="110"
                                     Padding="10"
-                                    Background="#FFF8DC"
-                                    BorderBrush="#E5D28B"
+                                    Background="{StaticResource Brush.Surface.Subtle}"
+                                    BorderBrush="{StaticResource Brush.Accent}"
                                     BorderThickness="1"
                                     Visibility="{Binding ManualCreation.HasWarnings, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -1112,8 +1130,8 @@
 
                             <Border Margin="0,12,0,0"
                                     Padding="10"
-                                    Background="#FFF4E5"
-                                    BorderBrush="#D99A4E"
+                                    Background="{StaticResource Brush.Surface.Subtle}"
+                                    BorderBrush="{StaticResource Brush.Accent}"
                                     BorderThickness="1"
                                     Visibility="{Binding ManualCreation.HasArchivedEntityMatch, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <DockPanel>
@@ -1123,7 +1141,7 @@
                                             Content="Restore existing entity"
                                             Style="{StaticResource SecondaryButtonStyle}" />
                                     <TextBlock VerticalAlignment="Center"
-                                               Foreground="#69420E"
+                                               Foreground="{StaticResource Brush.Text.Primary}"
                                                Text="{Binding ManualCreation.ArchivedEntityMessage}"
                                                TextWrapping="Wrap" />
                                 </DockPanel>
@@ -1132,8 +1150,8 @@
                             <Border Margin="0,12,0,0"
                                     MaxHeight="110"
                                     Padding="10"
-                                    Background="#FDEAEA"
-                                    BorderBrush="#E6A6A6"
+                                    Background="{StaticResource Brush.Surface.Alert}"
+                                    BorderBrush="{StaticResource Brush.Accent}"
                                     BorderThickness="1"
                                     Visibility="{Binding ManualCreation.HasErrors, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -1142,7 +1160,7 @@
                             </Border>
 
                             <TextBlock Margin="0,12,0,0"
-                                       Foreground="#31505D"
+                                       Foreground="{StaticResource Brush.Text.Primary}"
                                        Text="{Binding ManualCreation.OperationMessage}"
                                        Visibility="{Binding ManualCreation.HasOperationMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         </StackPanel>
@@ -1172,7 +1190,7 @@
                             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                                 <TextBlock Margin="0,0,7,0"
                                            VerticalAlignment="Center"
-                                           Foreground="#64737C"
+                                           Foreground="{StaticResource Brush.Text.Secondary}"
                                            Text="History" />
                                 <ComboBox MinWidth="145"
                                           DisplayMemberPath="DisplayName"
@@ -1183,18 +1201,18 @@
                             <StackPanel>
                                 <TextBlock FontSize="20"
                                            FontWeight="SemiBold"
-                                           Foreground="#26343D"
+                                           Foreground="{StaticResource Brush.Text.Primary}"
                                            Text="Progress history" />
                                 <TextBlock Margin="0,3,0,0"
-                                           Foreground="#64737C"
+                                           Foreground="{StaticResource Brush.Text.Secondary}"
                                            Text="Current work status and persisted implementation/readiness trends." />
                             </StackPanel>
                         </DockPanel>
 
                         <Border Margin="0,0,0,12"
                                 Padding="12"
-                                Background="White"
-                                BorderBrush="#D7DEE2"
+                                Background="{StaticResource Brush.Surface.Card}"
+                                BorderBrush="{StaticResource Brush.Border.Default}"
                                 BorderThickness="1"
                                 CornerRadius="4"
                                 Visibility="{Binding Progress.IsCustomRange, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -1210,7 +1228,7 @@
                                             Style="{StaticResource PrimaryButtonStyle}" />
                                 </StackPanel>
                                 <TextBlock Margin="0,7,0,0"
-                                           Foreground="#9A3030"
+                                           Foreground="{StaticResource Brush.Text.Primary}"
                                            Text="{Binding Progress.RangeValidationMessage}"
                                            Visibility="{Binding Progress.HasRangeValidationError, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             </StackPanel>
@@ -1219,12 +1237,12 @@
                         <Border Margin="0,0,0,12"
                                 MaxHeight="100"
                                 Padding="10"
-                                Background="#FDEAEA"
-                                BorderBrush="#E6A6A6"
+                                Background="{StaticResource Brush.Surface.Alert}"
+                                BorderBrush="{StaticResource Brush.Accent}"
                                 BorderThickness="1"
                                 Visibility="{Binding Progress.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <TextBlock Foreground="#8A2D2D"
+                                <TextBlock Foreground="{StaticResource Brush.Text.Primary}"
                                            Text="{Binding Progress.ErrorMessage}"
                                            TextWrapping="Wrap" />
                             </ScrollViewer>
@@ -1233,12 +1251,12 @@
                         <Border Margin="0,0,0,12"
                                 MaxHeight="100"
                                 Padding="10"
-                                Background="#EAF6EE"
-                                BorderBrush="#A9D5B8"
+                                Background="{StaticResource Brush.Surface.Subtle}"
+                                BorderBrush="{StaticResource Brush.Border.Strong}"
                                 BorderThickness="1"
                                 Visibility="{Binding Progress.HasExportMessage, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <TextBlock Foreground="#24613A"
+                                <TextBlock Foreground="{StaticResource Brush.Text.Primary}"
                                            Text="{Binding Progress.ExportMessage}"
                                            TextWrapping="Wrap" />
                             </ScrollViewer>
@@ -1246,8 +1264,8 @@
 
                         <Border Margin="0,0,0,12"
                                 Padding="14,12"
-                                Background="White"
-                                BorderBrush="#D7DEE2"
+                                Background="{StaticResource Brush.Surface.Card}"
+                                BorderBrush="{StaticResource Brush.Border.Default}"
                                 BorderThickness="1"
                                 CornerRadius="5"
                                 Visibility="{Binding Progress.HasReport, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -1255,7 +1273,7 @@
                                 <DockPanel Margin="0,0,0,10">
                                     <TextBlock DockPanel.Dock="Right"
                                                VerticalAlignment="Center"
-                                               Foreground="#64737C"
+                                               Foreground="{StaticResource Brush.Text.Secondary}"
                                                Text="{Binding Progress.ManagerDateSummary}" />
                                     <TextBlock FontSize="16"
                                                FontWeight="SemiBold"
@@ -1263,37 +1281,45 @@
                                 </DockPanel>
                                 <UniformGrid Columns="5">
                                     <StackPanel>
-                                        <TextBlock Foreground="#64737C" Text="Active" />
+                                        <TextBlock Foreground="{StaticResource Brush.Text.Secondary}" Text="Active" />
                                         <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Progress.ManagerSummary.ActiveEntityCount}" />
                                     </StackPanel>
                                     <StackPanel>
-                                        <TextBlock Foreground="#64737C" Text="Implemented" />
+                                        <TextBlock Foreground="{StaticResource Brush.Text.Secondary}" Text="Implemented" />
                                         <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Progress.ManagerSummary.ImplementedEntityCount}" />
                                     </StackPanel>
                                     <StackPanel>
-                                        <TextBlock Foreground="#64737C" Text="Reconciled" />
+                                        <TextBlock Foreground="{StaticResource Brush.Text.Secondary}" Text="Reconciled" />
                                         <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Progress.ManagerSummary.ReconciledEntityCount}" />
                                     </StackPanel>
                                     <StackPanel>
-                                        <TextBlock Foreground="#64737C" Text="Ready" />
+                                        <TextBlock Foreground="{StaticResource Brush.Text.Secondary}" Text="Ready" />
                                         <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Progress.ManagerSummary.ReadyEntityCount}" />
                                     </StackPanel>
-                                    <StackPanel>
-                                        <TextBlock Foreground="#64737C" Text="Blocked" />
-                                        <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="#B42318" Text="{Binding Progress.ManagerSummary.BlockedEntityCount}" />
-                                    </StackPanel>
+                                    <Border Margin="6,0,0,0"
+                                            Padding="8,4"
+                                            Background="{StaticResource Brush.Status.Blocked}"
+                                            CornerRadius="4">
+                                        <StackPanel>
+                                            <TextBlock Foreground="{StaticResource Brush.Text.Primary}" Text="Blocked" />
+                                            <TextBlock FontSize="22"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{StaticResource Brush.Text.Primary}"
+                                                       Text="{Binding Progress.ManagerSummary.BlockedEntityCount}" />
+                                        </StackPanel>
+                                    </Border>
                                 </UniformGrid>
                             </StackPanel>
                         </Border>
 
                         <TextBlock Margin="0,8"
                                    HorizontalAlignment="Center"
-                                   Foreground="#64737C"
+                                   Foreground="{StaticResource Brush.Text.Secondary}"
                                    Text="No persisted progress history is available in this range."
                                    Visibility="{Binding Progress.ShowNoHistoricalData, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
                         <UniformGrid Columns="2">
-                            <Border Height="290" Margin="0,0,6,12" Padding="12" Background="White" BorderBrush="#D7DEE2" BorderThickness="1" CornerRadius="5">
+                            <Border Height="290" Margin="0,0,6,12" Padding="12" Background="{StaticResource Brush.Surface.Card}" BorderBrush="{StaticResource Brush.Border.Default}" BorderThickness="1" CornerRadius="5">
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
@@ -1322,7 +1348,7 @@
                                                   Series="{Binding Progress.CurrentStatusSeries}" />
                                 </Grid>
                             </Border>
-                            <Border Height="290" Margin="6,0,0,12" Padding="12" Background="White" BorderBrush="#D7DEE2" BorderThickness="1" CornerRadius="5">
+                            <Border Height="290" Margin="6,0,0,12" Padding="12" Background="{StaticResource Brush.Surface.Card}" BorderBrush="{StaticResource Brush.Border.Default}" BorderThickness="1" CornerRadius="5">
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
@@ -1354,7 +1380,7 @@
                                                         YAxes="{Binding Progress.CountYAxes}" />
                                 </Grid>
                             </Border>
-                            <Border Height="290" Margin="0,0,6,0" Padding="12" Background="White" BorderBrush="#D7DEE2" BorderThickness="1" CornerRadius="5">
+                            <Border Height="290" Margin="0,0,6,0" Padding="12" Background="{StaticResource Brush.Surface.Card}" BorderBrush="{StaticResource Brush.Border.Default}" BorderThickness="1" CornerRadius="5">
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
@@ -1386,7 +1412,7 @@
                                                         YAxes="{Binding Progress.CountYAxes}" />
                                 </Grid>
                             </Border>
-                            <Border Height="290" Margin="6,0,0,0" Padding="12" Background="White" BorderBrush="#D7DEE2" BorderThickness="1" CornerRadius="5">
+                            <Border Height="290" Margin="6,0,0,0" Padding="12" Background="{StaticResource Brush.Surface.Card}" BorderBrush="{StaticResource Brush.Border.Default}" BorderThickness="1" CornerRadius="5">
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
@@ -1439,10 +1465,10 @@
                         <StackPanel>
                             <TextBlock FontSize="20"
                                        FontWeight="SemiBold"
-                                       Foreground="#26343D"
+                                       Foreground="{StaticResource Brush.Text.Primary}"
                                        Text="PostgreSQL schema export" />
                             <TextBlock Margin="0,3,0,0"
-                                       Foreground="#64737C"
+                                       Foreground="{StaticResource Brush.Text.Secondary}"
                                        Text="Run this query in PostgreSQL, export its result as a semicolon-delimited CSV, then import that CSV separately." />
                         </StackPanel>
                     </DockPanel>
@@ -1450,19 +1476,19 @@
                     <Border Grid.Row="1"
                             Margin="0,0,0,12"
                             Padding="12"
-                            Background="#EAF4F7"
-                            BorderBrush="#B7CAD3"
+                            Background="{StaticResource Brush.Surface.Selected}"
+                            BorderBrush="{StaticResource Brush.Border.Medium}"
                             BorderThickness="1"
                             CornerRadius="4">
                         <StackPanel>
                             <TextBlock FontWeight="SemiBold"
                                        Text="{Binding Help.CsvContractVersion, StringFormat=PostgreSQL · CSV contract v{0}}" />
                             <TextBlock Margin="0,4,0,0"
-                                       Foreground="#52616A"
+                                       Foreground="{StaticResource Brush.Text.Secondary}"
                                        Text="The query targets the public schema by default. Change target_schema in the settings section near the top when needed. Keep the six column headers unchanged."
                                        TextWrapping="Wrap" />
                             <TextBlock Margin="0,4,0,0"
-                                       Foreground="#52616A"
+                                       Foreground="{StaticResource Brush.Text.Secondary}"
                                        Text="Export as UTF-8 CSV with a semicolon (;) delimiter and include the header row." />
                         </StackPanel>
                     </Border>
@@ -1478,7 +1504,7 @@
                                     Content="Copy SQL"
                                     Style="{StaticResource PrimaryButtonStyle}" />
                             <TextBlock VerticalAlignment="Center"
-                                       Foreground="#365D3D"
+                                       Foreground="{StaticResource Brush.Text.Primary}"
                                        Text="{Binding Help.CopyMessage}"
                                        Visibility="{Binding Help.HasCopyMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         </DockPanel>
@@ -1504,24 +1530,24 @@
                                 HorizontalAlignment="Left">
                         <TextBlock FontSize="20"
                                    FontWeight="SemiBold"
-                                   Foreground="#26343D"
+                                   Foreground="{StaticResource Brush.Text.Primary}"
                                    Text="Storage connections" />
                         <TextBlock Margin="0,4,0,18"
-                                   Foreground="#64737C"
+                                   Foreground="{StaticResource Brush.Text.Secondary}"
                                    Text="Save non-secret SharePoint setup for a future approved connection. This version does not connect to SharePoint; SQLite stays active."
                                    TextWrapping="Wrap" />
 
                         <Border Padding="16"
-                                Background="#EAF4F7"
-                                BorderBrush="#B7CAD3"
+                                Background="{StaticResource Brush.Surface.Selected}"
+                                BorderBrush="{StaticResource Brush.Border.Medium}"
                                 BorderThickness="1"
                                 CornerRadius="5">
                             <StackPanel>
                                 <TextBlock FontWeight="SemiBold"
-                                           Foreground="#26343D"
+                                           Foreground="{StaticResource Brush.Text.Primary}"
                                            Text="Current storage: SQLite" />
                                 <TextBlock Margin="0,4,0,0"
-                                           Foreground="#52616A"
+                                           Foreground="{StaticResource Brush.Text.Secondary}"
                                            Text="A saved SharePoint setup is configuration only. It does not validate access, authenticate, synchronize, or switch storage providers."
                                            TextWrapping="Wrap" />
                             </StackPanel>
@@ -1534,7 +1560,7 @@
                                  MaxLength="100"
                                  Text="{Binding Connections.DisplayName, UpdateSourceTrigger=PropertyChanged}" />
                         <TextBlock Margin="0,4,0,0"
-                                   Foreground="#64737C"
+                                   Foreground="{StaticResource Brush.Text.Secondary}"
                                    Text="A friendly label, such as Production tracking site." />
 
                         <TextBlock Margin="0,16,0,5"
@@ -1543,22 +1569,22 @@
                         <TextBox Padding="9,7"
                                  Text="{Binding Connections.SiteUrl, UpdateSourceTrigger=PropertyChanged}" />
                         <TextBlock Margin="0,4,0,0"
-                                   Foreground="#64737C"
+                                   Foreground="{StaticResource Brush.Text.Secondary}"
                                    Text="Use the HTTPS site URL only. Do not enter credentials, tokens, query parameters, or a list URL."
                                    TextWrapping="Wrap" />
 
                         <TextBlock Margin="0,16,0,0"
-                                   Foreground="#365D3D"
+                                   Foreground="{StaticResource Brush.Text.Primary}"
                                    Text="{Binding Connections.Message}"
                                    TextWrapping="Wrap"
                                    Visibility="{Binding Connections.HasMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         <Border Margin="0,12,0,0"
                                 Padding="10"
-                                Background="#FDEAEA"
-                                BorderBrush="#E6A6A6"
+                                Background="{StaticResource Brush.Surface.Alert}"
+                                BorderBrush="{StaticResource Brush.Accent}"
                                 BorderThickness="1"
                                 Visibility="{Binding Connections.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
-                            <TextBlock Foreground="#8A2D2D"
+                            <TextBlock Foreground="{StaticResource Brush.Text.Primary}"
                                        Text="{Binding Connections.ErrorMessage}"
                                        TextWrapping="Wrap" />
                         </Border>
@@ -1575,17 +1601,17 @@
 
                         <Border Margin="0,16,0,0"
                                 Padding="14"
-                                Background="#FFF8DC"
-                                BorderBrush="#E5D28B"
+                                Background="{StaticResource Brush.Surface.Subtle}"
+                                BorderBrush="{StaticResource Brush.Accent}"
                                 BorderThickness="1"
                                 CornerRadius="4"
                                 Visibility="{Binding Connections.IsRemoveConfirmationOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <StackPanel>
                                 <TextBlock FontWeight="SemiBold"
-                                           Foreground="#7A4A00"
+                                           Foreground="{StaticResource Brush.Text.Primary}"
                                            Text="Remove this saved SharePoint setup?" />
                                 <TextBlock Margin="0,4,0,12"
-                                           Foreground="#665018"
+                                           Foreground="{StaticResource Brush.Text.Primary}"
                                            Text="This removes only the local non-secret configuration. Your SQLite data is not changed."
                                            TextWrapping="Wrap" />
                                 <StackPanel Orientation="Horizontal">
@@ -1601,7 +1627,7 @@
                         </Border>
 
                         <TextBlock Margin="0,20,0,0"
-                                   Foreground="#77858D"
+                                   Foreground="{StaticResource Brush.Text.Secondary}"
                                    FontSize="11"
                                    Text="{Binding Connections.SettingsPath, StringFormat=Settings file: {0}}"
                                    TextWrapping="Wrap" />
@@ -1613,7 +1639,7 @@
     </DockPanel>
 
         <Grid Panel.ZIndex="100"
-              Background="#99000000"
+              Background="{StaticResource Brush.Overlay}"
               Visibility="{Binding Editor.IsOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
             <Border MinWidth="700"
                     MaxWidth="900"
@@ -1622,8 +1648,8 @@
                     Padding="22"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
-                    Background="White"
-                    BorderBrush="#C7D0D6"
+                    Background="{StaticResource Brush.Surface.Card}"
+                    BorderBrush="{StaticResource Brush.Border.Medium}"
                     BorderThickness="1"
                     CornerRadius="7">
                 <Grid>
@@ -1636,10 +1662,10 @@
                     <StackPanel Margin="0,0,0,14">
                         <TextBlock FontSize="20"
                                    FontWeight="SemiBold"
-                                   Foreground="#26343D"
+                                   Foreground="{StaticResource Brush.Text.Primary}"
                                    Text="{Binding Editor.ContextTitle}" />
                         <TextBlock Margin="0,3,0,0"
-                                   Foreground="#64737C"
+                                   Foreground="{StaticResource Brush.Text.Secondary}"
                                    Text="{Binding Editor.ContextDescription}"
                                    TextWrapping="Wrap" />
                     </StackPanel>
@@ -1648,12 +1674,12 @@
                                   HorizontalScrollBarVisibility="Disabled"
                                   PreviewMouseWheel="OnReviewPreviewMouseWheel"
                                   VerticalScrollBarVisibility="Auto">
-                        <StackPanel MaxWidth="820" HorizontalAlignment="Left">
+                        <StackPanel MinWidth="650" MaxWidth="820" HorizontalAlignment="Left">
                             <TextBlock FontSize="17"
                                        FontWeight="SemiBold"
                                        Text="{Binding Editor.SelectedEntityName}" />
                             <TextBlock Margin="0,3,0,16"
-                                       Foreground="#64737C"
+                                       Foreground="{StaticResource Brush.Text.Secondary}"
                                        Text="{Binding Editor.EntityDetails}" />
                             <StackPanel Visibility="{Binding Editor.HasSelectedEntity, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <Grid Margin="0,0,0,12">
@@ -1685,7 +1711,7 @@
                                 <StackPanel Visibility="{Binding Editor.ShowDependencyEditor, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <TextBlock FontWeight="SemiBold" Text="Add a manual dependency" />
                                 <TextBlock Margin="0,3,0,7"
-                                           Foreground="#64737C"
+                                           Foreground="{StaticResource Brush.Text.Secondary}"
                                            Text="Search active entities, or deliberately retain an unknown name as unresolved."
                                            TextWrapping="Wrap" />
                                 <Grid>
@@ -1704,7 +1730,7 @@
                                 </Grid>
 
                                 <TextBlock Margin="0,7,0,0"
-                                           Foreground="#7A5A00"
+                                           Foreground="{StaticResource Brush.Text.Primary}"
                                            Text="{Binding Editor.SearchMessage}"
                                            TextWrapping="Wrap"
                                            Visibility="{Binding Editor.HasSearchMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
@@ -1714,7 +1740,7 @@
                                               Visibility="{Binding Editor.HasSuggestions, Converter={StaticResource BooleanToVisibilityConverter}}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Margin="0,0,0,5" Padding="8" Background="White" BorderBrush="#D7DEE2" BorderThickness="1">
+                                            <Border Margin="0,0,0,5" Padding="8" Background="{StaticResource Brush.Surface.Card}" BorderBrush="{StaticResource Brush.Border.Default}" BorderThickness="1">
                                                 <DockPanel>
                                                     <Button DockPanel.Dock="Right"
                                                             Command="{Binding DataContext.Editor.AddExistingCommand, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -1733,7 +1759,7 @@
                                 <ItemsControl ItemsSource="{Binding Editor.Dependencies}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Margin="0,0,0,6" Padding="9" Background="White" BorderBrush="#D7DEE2" BorderThickness="1">
+                                            <Border Margin="0,0,0,6" Padding="9" Background="{StaticResource Brush.Surface.Card}" BorderBrush="{StaticResource Brush.Border.Default}" BorderThickness="1">
                                                 <DockPanel>
                                                     <StackPanel DockPanel.Dock="Right"
                                                                 Orientation="Horizontal"
@@ -1759,8 +1785,8 @@
                                                     </StackPanel>
                                                     <StackPanel>
                                                         <TextBlock FontWeight="SemiBold" Text="{Binding SourceName}" />
-                                                        <TextBlock Margin="0,2,0,0" Foreground="#52616A" Text="{Binding Origin}" />
-                                                        <TextBlock Margin="0,2,0,0" Foreground="#64737C" Text="{Binding Resolution}" />
+                                                        <TextBlock Margin="0,2,0,0" Foreground="{StaticResource Brush.Text.Secondary}" Text="{Binding Origin}" />
+                                                        <TextBlock Margin="0,2,0,0" Foreground="{StaticResource Brush.Text.Secondary}" Text="{Binding Resolution}" />
                                                     </StackPanel>
                                                 </DockPanel>
                                             </Border>
@@ -1771,8 +1797,8 @@
                                 <Border Margin="0,12,0,0"
                                         MaxHeight="110"
                                         Padding="10"
-                                        Background="#FFF8DC"
-                                        BorderBrush="#E5D28B"
+                                        Background="{StaticResource Brush.Surface.Subtle}"
+                                        BorderBrush="{StaticResource Brush.Accent}"
                                         BorderThickness="1"
                                         Visibility="{Binding Editor.HasWarnings, Converter={StaticResource BooleanToVisibilityConverter}}">
                                     <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -1783,8 +1809,8 @@
                                 <Border Margin="0,12,0,0"
                                         MaxHeight="110"
                                         Padding="10"
-                                        Background="#FDEAEA"
-                                        BorderBrush="#E6A6A6"
+                                        Background="{StaticResource Brush.Surface.Alert}"
+                                        BorderBrush="{StaticResource Brush.Accent}"
                                         BorderThickness="1"
                                         Visibility="{Binding Editor.HasErrors, Converter={StaticResource BooleanToVisibilityConverter}}">
                                     <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -1822,7 +1848,7 @@
 
                     <Grid Grid.RowSpan="3"
                           Panel.ZIndex="10"
-                          Background="#99000000"
+                          Background="{StaticResource Brush.Overlay}"
                           FocusManager.IsFocusScope="True"
                           FocusManager.FocusedElement="{Binding ElementName=CancelArchiveButton}"
                           Visibility="{Binding Editor.IsArchiveConfirmationOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -1831,21 +1857,21 @@
                                 Padding="22"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                Background="White"
-                                BorderBrush="#D5A19D"
+                                Background="{StaticResource Brush.Surface.Card}"
+                                BorderBrush="{StaticResource Brush.Accent}"
                                 BorderThickness="1"
                                 CornerRadius="6">
                             <StackPanel>
                                 <TextBlock FontSize="20"
                                            FontWeight="SemiBold"
-                                           Foreground="#8F1D16"
+                                           Foreground="{StaticResource Brush.Text.Primary}"
                                            Text="Archive entity?" />
                                 <TextBlock Margin="0,10,0,0"
-                                           Foreground="#37464F"
+                                           Foreground="{StaticResource Brush.Text.Primary}"
                                            Text="{Binding Editor.ArchiveConfirmationMessage}"
                                            TextWrapping="Wrap" />
                                 <TextBlock Margin="0,10,0,0"
-                                           Foreground="#8A2D2D"
+                                           Foreground="{StaticResource Brush.Text.Primary}"
                                            Text="{Binding Editor.ArchiveErrorMessage}"
                                            TextWrapping="Wrap"
                                            Visibility="{Binding Editor.HasArchiveError, Converter={StaticResource BooleanToVisibilityConverter}}" />
