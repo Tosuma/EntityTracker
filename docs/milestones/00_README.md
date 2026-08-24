@@ -11,7 +11,7 @@ Build a Windows C#/.NET WPF application that imports database relationships from
 - Every milestone leaves a runnable/testable solution.
 - Add classes/abstractions only when they have a concrete responsibility.
 
-## Milestones
+## Product milestones
 1. Solution skeleton and domain
 2. CSV parsing
 3. Dependency graph and ranking
@@ -25,3 +25,10 @@ Build a Windows C#/.NET WPF application that imports database relationships from
 11. SQL-query utility and polish
 12. SharePoint-ready boundary and hardening
 13. Live SharePoint integration
+
+## Independent engineering milestones
+
+These milestones improve repository engineering and may be implemented independently of the
+numbered product roadmap:
+
+- [CI-01 — Continuous integration](ci_01_continuous_integration.md)
