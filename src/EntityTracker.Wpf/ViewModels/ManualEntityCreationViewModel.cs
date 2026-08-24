@@ -8,6 +8,9 @@ using EntityTracker.Application.ManualCreation;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
 
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace EntityTracker.Wpf.ViewModels;
 
 public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
@@ -19,6 +22,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     private readonly Func<EntityId, Task> _onRestoreArchived;
     private readonly Action _onCancelled;
     private readonly Func<bool> _canOperate;
+    private readonly ILogger<ManualEntityCreationViewModel> _logger;
     private readonly AsyncCommand _createCommand;
     private readonly AsyncCommand _restoreArchivedCommand;
     private readonly RelayCommand<ManualDependencySuggestion> _addExistingCommand;
@@ -43,7 +47,8 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         Func<Task> onCreated,
         Func<EntityId, Task> onRestoreArchived,
         Action onCancelled,
-        Func<bool>? canOperate = null)
+        Func<bool>? canOperate = null,
+        ILogger<ManualEntityCreationViewModel>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(service);
         ArgumentNullException.ThrowIfNull(onCreated);
@@ -55,6 +60,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         _onRestoreArchived = onRestoreArchived;
         _onCancelled = onCancelled;
         _canOperate = canOperate ?? (() => true);
+        _logger = logger ?? NullLogger<ManualEntityCreationViewModel>.Instance;
         SelectedDependencies = [];
         _addExistingCommand = new RelayCommand<ManualDependencySuggestion>(
             AddExisting,
@@ -283,6 +289,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "Manual dependency search failed.");
             if (version != _searchVersion)
             {
                 return;
@@ -326,6 +333,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "Manual entity creation failed.");
             Errors = [$"Entity could not be created: {exception.Message}"];
             OperationMessage = null;
             IsBusy = false;
@@ -359,6 +367,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "The overview could not be refreshed after manual creation.");
             Errors =
             [
                 $"The entity was created, but the overview could not be refreshed: {exception.Message}"
@@ -392,6 +401,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "An archived entity could not be opened from manual creation.");
             Errors = [$"The archived entity could not be opened: {exception.Message}"];
             OperationMessage = null;
         }

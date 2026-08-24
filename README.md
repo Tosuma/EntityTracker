@@ -29,7 +29,11 @@ The script creates a self-contained Windows x64 ZIP at `artifacts\EntityTracker-
 
 The query and CSV contract are independent: opening or copying the SQL is never required to import an existing CSV. The exact versioned contract is documented in [schema-csv-contract-v1.md](docs/importing/schema-csv-contract-v1.md).
 
-## Local data
+## Connections and local data
+
+The **Connections** page can save a friendly name and HTTPS SharePoint site URL for future approved
+integration. This build does not connect, authenticate, synchronize, or switch providers after that
+setup is saved. SQLite remains active. No credentials or tokens are stored in the settings file.
 
 EntityTracker stores its SQLite working database at:
 
@@ -37,4 +41,12 @@ EntityTracker stores its SQLite working database at:
 %LOCALAPPDATA%\EntityTracker\entity-tracker.db
 ```
 
-On the first Milestone 11 launch, if this destination does not exist and an older `entity-tracker.db` is beside the executable, EntityTracker copies that legacy database into the local-data folder. Later launches always use the local-data copy. Back up this file before replacing or resetting application data.
+If this destination does not exist and an older `entity-tracker.db` is beside the executable,
+EntityTracker copies that legacy database into the local-data folder once. Later launches always
+use the local-data copy.
+
+EntityTracker also keeps optional `settings.json`, daily logs, and automatic daily/pre-migration
+database backups under `%LOCALAPPDATA%\EntityTracker`. The newest 14 logs and 14 backups are
+retained. See [local recovery, backups, and logs](docs/operations/RECOVERY.md) before replacing or
+restoring application data. The future collaborative storage rules and replacement seams are in
+[the collaborative storage contract](docs/architecture/COLLABORATIVE_STORAGE.md).

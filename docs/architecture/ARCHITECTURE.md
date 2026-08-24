@@ -465,3 +465,20 @@ passes.
 The application should remain runnable at the end of every milestone.
 
 No milestone should leave deliberately broken intermediate architecture.
+
+---
+
+## 18. Provider startup and collaborative storage
+
+The WPF composition root selects the concrete storage implementation. Application exposes the
+small `IPersistenceInitializer` startup seam so the UI does not initialize `SqliteDatabase`
+directly. Existing persistence interfaces remain focused on real read and atomic store operations;
+do not replace them with a generic repository framework.
+
+SQLite is the active provider. The optional SharePoint setup is non-secret configuration only and
+does not activate a remote adapter. Approved future collaborative behavior, concurrency rules,
+cache authority, and replacement seams are defined in
+[COLLABORATIVE_STORAGE.md](COLLABORATIVE_STORAGE.md).
+
+Local backup, logging, retention, and restore procedures are defined in
+[RECOVERY.md](../operations/RECOVERY.md).

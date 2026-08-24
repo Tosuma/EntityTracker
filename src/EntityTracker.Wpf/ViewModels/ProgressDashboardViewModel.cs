@@ -11,6 +11,9 @@ using EntityTracker.Wpf.Services;
 using LiveChartsCore;
 using LiveChartsCore.SkiaSharpView;
 
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace EntityTracker.Wpf.ViewModels;
 
 public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
@@ -20,6 +23,7 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
     private readonly ProgressChartPngExporter _pngExporter;
     private readonly IProgressChartFilePicker _filePicker;
     private readonly IClipboardService _clipboard;
+    private readonly ILogger<ProgressDashboardViewModel> _logger;
     private readonly AsyncCommand _applyRangeCommand;
     private readonly AsyncCommand<ProgressChartKind> _saveChartCommand;
     private readonly AsyncCommand<ProgressChartKind> _copyChartCommand;
@@ -49,7 +53,8 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
         ProgressChartPresentationBuilder presentationBuilder,
         ProgressChartPngExporter pngExporter,
         IProgressChartFilePicker filePicker,
-        IClipboardService clipboard)
+        IClipboardService clipboard,
+        ILogger<ProgressDashboardViewModel>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(reportingService);
         ArgumentNullException.ThrowIfNull(presentationBuilder);
@@ -61,6 +66,7 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
         _pngExporter = pngExporter;
         _filePicker = filePicker;
         _clipboard = clipboard;
+        _logger = logger ?? NullLogger<ProgressDashboardViewModel>.Instance;
         _applyRangeCommand = new AsyncCommand(
             () => LoadAsync(),
             () => !IsBusy && IsCustomRangeValid);
@@ -289,6 +295,7 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "Progress history could not be loaded.");
             ErrorMessage = $"Progress history could not be loaded: {exception.Message}";
         }
         finally
@@ -360,6 +367,7 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "A progress chart could not be saved.");
             ErrorMessage = $"The chart could not be saved: {exception.Message}";
         }
         finally
@@ -386,6 +394,7 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "A progress chart could not be copied.");
             ErrorMessage = $"The chart could not be copied: {exception.Message}";
         }
         finally

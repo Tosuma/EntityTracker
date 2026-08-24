@@ -14,6 +14,9 @@ using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
 
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace EntityTracker.Wpf.ViewModels;
 
 public sealed class MainWindowViewModel : INotifyPropertyChanged
@@ -24,6 +27,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly SchemaSynchronizationService _synchronizationService;
     private readonly ICsvFilePicker _filePicker;
     private readonly ISchemaSynchronizationConfirmation _confirmationService;
+    private readonly ILogger<MainWindowViewModel> _logger;
     private readonly AsyncCommand _refreshCommand;
     private readonly AsyncCommand _importCsvCommand;
     private readonly AsyncCommand _applySynchronizationCommand;
@@ -68,7 +72,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ICsvFilePicker filePicker,
         ProgressDashboardViewModel progressDashboard,
         IClipboardService clipboard,
-        ISchemaSynchronizationConfirmation confirmationService)
+        ISchemaSynchronizationConfirmation confirmationService,
+        ConnectionsViewModel? connections = null,
+        ILoggerFactory? loggerFactory = null)
     {
         ArgumentNullException.ThrowIfNull(overviewService);
         ArgumentNullException.ThrowIfNull(synchronizationService);
@@ -83,15 +89,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _synchronizationService = synchronizationService;
         _filePicker = filePicker;
         _confirmationService = confirmationService;
+        ILoggerFactory effectiveLoggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
+        _logger = effectiveLoggerFactory.CreateLogger<MainWindowViewModel>();
         Progress = progressDashboard;
-        Help = new SqlQueryHelpViewModel(clipboard, () => SelectedTabIndex = 1);
+        Help = new SqlQueryHelpViewModel(
+            clipboard,
+            () => SelectedTabIndex = 1,
+            effectiveLoggerFactory.CreateLogger<SqlQueryHelpViewModel>());
+        Connections = connections;
         Review = new SchemaSynchronizationReviewViewModel();
         ManualCreation = new ManualEntityCreationViewModel(
             manualEntityCreationService,
             OnManualEntityCreatedAsync,
             OpenArchivedFromCreationAsync,
             () => SelectedTabIndex = 0,
-            () => !IsBusy);
+            () => !IsBusy,
+            effectiveLoggerFactory.CreateLogger<ManualEntityCreationViewModel>());
         ManualCreation.PropertyChanged += OnManualCreationPropertyChanged;
         Editor = new EntityDependencyEditorViewModel(
             entityDependencyEditorService,
@@ -101,7 +114,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             OnEntityArchivedAsync,
             OnEntityRestoredAsync,
             OnReviewDependencyEditsStaged,
-            () => !IsBusy && !ManualCreation.IsBusy);
+            () => !IsBusy && !ManualCreation.IsBusy,
+            effectiveLoggerFactory.CreateLogger<EntityDependencyEditorViewModel>());
         Editor.PropertyChanged += OnEditorPropertyChanged;
         _refreshCommand = new AsyncCommand(
             () => RefreshAsync(),
@@ -168,6 +182,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ProgressDashboardViewModel Progress { get; }
 
     public SqlQueryHelpViewModel Help { get; }
+
+    public ConnectionsViewModel? Connections { get; }
 
     public IReadOnlyList<OverviewManagerFilterOption> OverviewFilters { get; } =
     [
@@ -491,8 +507,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ICommand MarkSynchronizationReworkCommand => _markSynchronizationReworkCommand;
 
-    public Task InitializeAsync(CancellationToken cancellationToken = default) =>
-        RefreshAsync(cancellationToken);
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        if (Connections is not null)
+        {
+            await Connections.InitializeAsync(cancellationToken);
+        }
+
+        await RefreshAsync(cancellationToken);
+    }
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
@@ -513,6 +536,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "Persisted entities could not be loaded.");
             SetOverviewFailure($"Persisted entities could not be loaded: {exception.Message}");
         }
         finally
@@ -535,6 +559,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "A CSV file could not be selected.");
             Review.SetFailure($"A CSV file could not be selected: {exception.Message}");
             SelectedTabIndex = 1;
             NotifyCommandsChanged();
@@ -565,6 +590,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "A CSV synchronization review could not be prepared.");
             Review.SetFailure($"The CSV could not be compared: {exception.Message}");
         }
         finally
@@ -613,6 +639,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "Schema synchronization could not be applied.");
             Review.SetOperationFailure($"Synchronization could not be applied: {exception.Message}");
         }
         finally
@@ -878,6 +905,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "The overview could not be reloaded after entity creation.");
             SetOverviewFailure(
                 $"The entity was created, but persisted entities could not be reloaded: {exception.Message}");
         }
@@ -895,6 +923,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "The overview could not be reloaded after dependency edits.");
             SetOverviewFailure(
                 $"Dependency changes were saved, but persisted entities could not be reloaded: {exception.Message}");
         }
@@ -908,6 +937,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "The overview could not be reloaded after entity archival.");
             SetOverviewFailure(
                 $"The entity was archived, but persisted entities could not be reloaded: {exception.Message}");
         }
@@ -924,6 +954,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "The overview could not be reloaded after entity restoration.");
             SetOverviewFailure(
                 $"The entity was restored, but persisted entities could not be reloaded: {exception.Message}");
         }

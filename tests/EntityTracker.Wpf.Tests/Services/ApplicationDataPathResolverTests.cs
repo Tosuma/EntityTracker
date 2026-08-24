@@ -60,4 +60,36 @@ public sealed class ApplicationDataPathResolverTests
             }
         }
     }
+
+    [Fact]
+    public void ResolvePaths_UsesDedicatedSettingsBackupAndLogPaths()
+    {
+        string root = Path.Combine(
+            Path.GetTempPath(),
+            "EntityTracker.PathTests",
+            Guid.NewGuid().ToString("N"));
+        string localData = Path.Combine(root, "local");
+        string app = Path.Combine(root, "app");
+        Directory.CreateDirectory(app);
+
+        try
+        {
+            ApplicationDataPaths paths =
+                ApplicationDataPathResolver.ResolvePaths(localData, app);
+            string expectedRoot = Path.Combine(localData, "EntityTracker");
+
+            Assert.Equal(expectedRoot, paths.RootDirectory);
+            Assert.Equal(Path.Combine(expectedRoot, "entity-tracker.db"), paths.DatabasePath);
+            Assert.Equal(Path.Combine(expectedRoot, "settings.json"), paths.SettingsPath);
+            Assert.Equal(Path.Combine(expectedRoot, "backups"), paths.BackupsDirectory);
+            Assert.Equal(Path.Combine(expectedRoot, "logs"), paths.LogsDirectory);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
 }

@@ -10,6 +10,9 @@ using EntityTracker.Application.Synchronization;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
 
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace EntityTracker.Wpf.ViewModels;
 
 public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
@@ -22,6 +25,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private readonly Func<Task> _onRestored;
     private readonly Action<SchemaSynchronizationPlan> _onReviewStaged;
     private readonly Func<bool> _canOperate;
+    private readonly ILogger<EntityDependencyEditorViewModel> _logger;
     private readonly AsyncCommand _saveCommand;
     private readonly AsyncCommand _confirmArchiveCommand;
     private readonly AsyncCommand _restoreEntityCommand;
@@ -60,7 +64,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         Func<Task> onArchived,
         Func<Task> onRestored,
         Action<SchemaSynchronizationPlan> onReviewStaged,
-        Func<bool>? canOperate = null)
+        Func<bool>? canOperate = null,
+        ILogger<EntityDependencyEditorViewModel>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(editorService);
         ArgumentNullException.ThrowIfNull(lifecycleService);
@@ -78,6 +83,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _onRestored = onRestored;
         _onReviewStaged = onReviewStaged;
         _canOperate = canOperate ?? (() => true);
+        _logger = logger ?? NullLogger<EntityDependencyEditorViewModel>.Instance;
         _addExistingCommand = new RelayCommand<ManualDependencySuggestion>(
             suggestion => _ = AddManualDependencyAsync(suggestion.SourceName),
             _ => CanEdit);
@@ -461,6 +467,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "Entity dependencies could not be loaded.");
             Errors = [$"Entity dependencies could not be loaded: {exception.Message}"];
         }
         finally
@@ -495,6 +502,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "Review dependency edits could not be loaded.");
             Errors = [$"Entity dependencies could not be loaded: {exception.Message}"];
         }
 
@@ -537,6 +545,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "Archived entity details could not be loaded.");
             Errors = [$"Archived entity details could not be loaded: {exception.Message}"];
         }
         finally
@@ -587,6 +596,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "Entity dependency search failed.");
             if (searchVersion != _searchVersion)
             {
                 return;
@@ -659,6 +669,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "Dependency changes could not be evaluated.");
             Errors = [$"Dependency changes could not be evaluated: {exception.Message}"];
         }
     }
@@ -692,6 +703,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "Dependency or progress changes could not be saved.");
             Errors = [$"Dependency changes could not be saved: {exception.Message}"];
         }
         finally
@@ -747,6 +759,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "An entity could not be archived.");
             ArchiveErrorMessage = $"The entity could not be archived: {exception.Message}";
         }
         finally
@@ -779,6 +792,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "An entity could not be restored.");
             Errors = [$"The entity could not be restored: {exception.Message}"];
         }
         finally

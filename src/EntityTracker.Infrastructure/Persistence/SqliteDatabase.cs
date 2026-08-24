@@ -4,7 +4,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    private const int CurrentSchemaVersion = 8;
+    internal const int CurrentSchemaVersion = 8;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -304,6 +304,13 @@ public sealed class SqliteDatabase
     public string DatabasePath { get; }
 
     internal TimeProvider TimeProvider { get; }
+
+    internal async Task<int> GetStoredSchemaVersionAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = await OpenConnectionAsync(cancellationToken);
+        return await ReadSchemaVersionAsync(connection, cancellationToken);
+    }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {

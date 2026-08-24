@@ -6,19 +6,27 @@ using EntityTracker.Infrastructure.Importing;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
 
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace EntityTracker.Wpf.ViewModels;
 
 public sealed class SqlQueryHelpViewModel : INotifyPropertyChanged
 {
     private readonly IClipboardService _clipboard;
+    private readonly ILogger<SqlQueryHelpViewModel> _logger;
     private string? _copyMessage;
 
-    public SqlQueryHelpViewModel(IClipboardService clipboard, Action backToImport)
+    public SqlQueryHelpViewModel(
+        IClipboardService clipboard,
+        Action backToImport,
+        ILogger<SqlQueryHelpViewModel>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(clipboard);
         ArgumentNullException.ThrowIfNull(backToImport);
 
         _clipboard = clipboard;
+        _logger = logger ?? NullLogger<SqlQueryHelpViewModel>.Instance;
         CopyQueryCommand = new RelayCommand(CopyQuery);
         BackToImportCommand = new RelayCommand(backToImport);
     }
@@ -64,6 +72,7 @@ public sealed class SqlQueryHelpViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "The PostgreSQL extraction query could not be copied.");
             CopyMessage = $"The SQL query could not be copied: {exception.Message}";
         }
     }
