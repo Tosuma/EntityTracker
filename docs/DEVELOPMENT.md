@@ -61,8 +61,9 @@ Successful pushes to `main` also run:
 
 The resulting `artifacts\EntityTracker-win-x64.zip` is uploaded to that workflow run as the
 `EntityTracker-windows-x64-self-contained` artifact and retained for 14 days. Pull requests never
-run the packaging job. GitHub Releases and external deployment targets are not part of this
-workflow.
+run the packaging job, so it appears as skipped on a pull-request run. Merging to `main` starts a
+separate push run where packaging is enabled. GitHub Releases and external deployment targets are
+not part of this workflow.
 
 When CI fails, inspect the first failed step:
 

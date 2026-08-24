@@ -8,6 +8,7 @@
         xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels"
         mc:Ignorable="d"
         Title="EntityTracker"
+        Icon="Assets/EntityTracker.ico"
         Width="1120"
         Height="720"
         MinWidth="860"
