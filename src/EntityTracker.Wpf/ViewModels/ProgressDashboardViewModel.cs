@@ -1,23 +1,28 @@
 using System.ComponentModel;
+using System.Globalization;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 
 using EntityTracker.Reporting;
 using EntityTracker.Wpf.Commands;
+using EntityTracker.Wpf.Services;
 
 using LiveChartsCore;
 using LiveChartsCore.SkiaSharpView;
-using LiveChartsCore.SkiaSharpView.Painting;
-
-using SkiaSharp;
 
 namespace EntityTracker.Wpf.ViewModels;
 
 public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
 {
-    private static readonly SolidColorPaint TextPaint = new(new SKColor(82, 97, 106));
     private readonly ProgressReportingService _reportingService;
+    private readonly ProgressChartPresentationBuilder _presentationBuilder;
+    private readonly ProgressChartPngExporter _pngExporter;
+    private readonly IProgressChartFilePicker _filePicker;
+    private readonly IImageClipboard _clipboard;
     private readonly AsyncCommand _applyRangeCommand;
+    private readonly AsyncCommand<ProgressChartKind> _saveChartCommand;
+    private readonly AsyncCommand<ProgressChartKind> _copyChartCommand;
     private readonly SemaphoreSlim _loadGate = new(1, 1);
     private ProgressRangePreset _selectedRange = ProgressRangePreset.AllHistory;
     private DateTime? _customFrom = DateTime.Today.AddDays(-29);
@@ -29,17 +34,38 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
     private Axis[] _implementedXAxes = [];
     private Axis[] _readinessXAxes = [];
     private Axis[] _weeklyXAxes = [];
+    private Axis[] _countYAxes = [];
+    private Axis[] _signedYAxes = [];
+    private ProgressDashboardReport? _currentReport;
+    private ProgressManagerSummary _managerSummary = ProgressManagerSummary.Empty;
+    private string _managerDateSummary = "No progress data is available yet.";
+    private string? _exportMessage;
     private string? _errorMessage;
     private bool _isBusy;
     private bool _hasHistoricalData;
 
-    public ProgressDashboardViewModel(ProgressReportingService reportingService)
+    public ProgressDashboardViewModel(
+        ProgressReportingService reportingService,
+        ProgressChartPresentationBuilder presentationBuilder,
+        ProgressChartPngExporter pngExporter,
+        IProgressChartFilePicker filePicker,
+        IImageClipboard clipboard)
     {
         ArgumentNullException.ThrowIfNull(reportingService);
+        ArgumentNullException.ThrowIfNull(presentationBuilder);
+        ArgumentNullException.ThrowIfNull(pngExporter);
+        ArgumentNullException.ThrowIfNull(filePicker);
+        ArgumentNullException.ThrowIfNull(clipboard);
         _reportingService = reportingService;
+        _presentationBuilder = presentationBuilder;
+        _pngExporter = pngExporter;
+        _filePicker = filePicker;
+        _clipboard = clipboard;
         _applyRangeCommand = new AsyncCommand(
             () => LoadAsync(),
             () => !IsBusy && IsCustomRangeValid);
+        _saveChartCommand = new AsyncCommand<ProgressChartKind>(SaveChartAsync, _ => CanExportCharts);
+        _copyChartCommand = new AsyncCommand<ProgressChartKind>(CopyChartAsync, _ => CanExportCharts);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -150,15 +176,43 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
         private set => SetField(ref _weeklyXAxes, value);
     }
 
-    public Axis[] CountYAxes { get; } =
-    [
-        new Axis { MinLimit = 0, MinStep = 1, LabelsPaint = TextPaint }
-    ];
+    public Axis[] CountYAxes
+    {
+        get => _countYAxes;
+        private set => SetField(ref _countYAxes, value);
+    }
 
-    public Axis[] SignedYAxes { get; } =
-    [
-        new Axis { MinStep = 1, LabelsPaint = TextPaint }
-    ];
+    public Axis[] SignedYAxes
+    {
+        get => _signedYAxes;
+        private set => SetField(ref _signedYAxes, value);
+    }
+
+    public ProgressManagerSummary ManagerSummary
+    {
+        get => _managerSummary;
+        private set => SetField(ref _managerSummary, value);
+    }
+
+    public string ManagerDateSummary
+    {
+        get => _managerDateSummary;
+        private set => SetField(ref _managerDateSummary, value);
+    }
+
+    public string? ExportMessage
+    {
+        get => _exportMessage;
+        private set
+        {
+            if (SetField(ref _exportMessage, value))
+            {
+                OnPropertyChanged(nameof(HasExportMessage));
+            }
+        }
+    }
+
+    public bool HasExportMessage => !string.IsNullOrWhiteSpace(ExportMessage);
 
     public string? ErrorMessage
     {
@@ -182,6 +236,9 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
             if (SetField(ref _isBusy, value))
             {
                 _applyRangeCommand.NotifyCanExecuteChanged();
+                _saveChartCommand.NotifyCanExecuteChanged();
+                _copyChartCommand.NotifyCanExecuteChanged();
+                OnPropertyChanged(nameof(CanExportCharts));
             }
         }
     }
@@ -200,7 +257,15 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
 
     public bool ShowNoHistoricalData => !IsBusy && !HasHistoricalData && !HasError;
 
+    public bool HasReport => _currentReport is not null;
+
+    public bool CanExportCharts => !IsBusy && _currentReport?.HasHistoricalData == true;
+
     public ICommand ApplyRangeCommand => _applyRangeCommand;
+
+    public ICommand SaveChartCommand => _saveChartCommand;
+
+    public ICommand CopyChartCommand => _copyChartCommand;
 
     public async Task LoadAsync(CancellationToken cancellationToken = default)
     {
@@ -212,11 +277,10 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
         await _loadGate.WaitAsync(cancellationToken);
         IsBusy = true;
         ErrorMessage = null;
+        ExportMessage = null;
         try
         {
-            ProgressDashboardReport report = await _reportingService.GetReportAsync(
-                CreateRange(),
-                cancellationToken);
+            ProgressDashboardReport report = await _reportingService.GetReportAsync(CreateRange(), cancellationToken);
             ApplyReport(report);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -253,123 +317,103 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
 
     private void ApplyReport(ProgressDashboardReport report)
     {
-        Dictionary<ProgressStatusCategory, SKColor> statusColors = new()
-        {
-            [ProgressStatusCategory.NotStarted] = new SKColor(148, 163, 184),
-            [ProgressStatusCategory.InProgress] = new SKColor(23, 107, 135),
-            [ProgressStatusCategory.ReworkNeeded] = new SKColor(217, 119, 6),
-            [ProgressStatusCategory.DevelopmentCompleted] = new SKColor(37, 99, 235),
-            [ProgressStatusCategory.Reconciled] = new SKColor(46, 139, 87)
-        };
-        CurrentStatusSeries = report.CurrentStatusCounts
-            .Select(item => (ISeries)new PieSeries<int>
-            {
-                Name = FormatStatus(item.Status),
-                Values = [item.Count],
-                Fill = new SolidColorPaint(statusColors[item.Status])
-            })
-            .ToArray();
-
-        DateOnly[] implementedDates = report.ImplementedOverTime
-            .Select(static point => point.Date)
-            .ToArray();
-        ImplementedXAxes = CreateDateAxes(implementedDates);
-        ReadinessXAxes = CreateDateAxes(report.ReadyAndBlockedOverTime
-            .Select(static point => point.Date)
-            .ToArray());
-        ImplementedSeries =
-        [
-            new LineSeries<int>
-            {
-                Name = "Implemented",
-                Values = report.ImplementedOverTime.Select(static point => point.ImplementedCount).ToArray(),
-                Stroke = new SolidColorPaint(new SKColor(23, 107, 135), 3),
-                Fill = new SolidColorPaint(new SKColor(23, 107, 135, 35)),
-                GeometrySize = 5
-            }
-        ];
-        ReadinessSeries =
-        [
-            new LineSeries<int>
-            {
-                Name = "Ready",
-                Values = report.ReadyAndBlockedOverTime.Select(static point => point.ReadyCount).ToArray(),
-                Stroke = new SolidColorPaint(new SKColor(46, 139, 87), 3),
-                Fill = null,
-                GeometrySize = 5
-            },
-            new LineSeries<int>
-            {
-                Name = "Blocked",
-                Values = report.ReadyAndBlockedOverTime.Select(static point => point.BlockedCount).ToArray(),
-                Stroke = new SolidColorPaint(new SKColor(198, 40, 40), 3),
-                Fill = null,
-                GeometrySize = 5
-            }
-        ];
-
-        WeeklyXAxes = CreateDateAxes(report.WeeklyNetImplementedChange
-            .Select(static point => point.WeekStartingMonday)
-            .ToArray());
-        int?[] positive = report.WeeklyNetImplementedChange
-            .Select(static point => point.NetChange >= 0 ? point.NetChange : (int?)null)
-            .ToArray();
-        int?[] negative = report.WeeklyNetImplementedChange
-            .Select(static point => point.NetChange < 0 ? point.NetChange : (int?)null)
-            .ToArray();
-        WeeklySeries =
-        [
-            new ColumnSeries<int?>
-            {
-                Name = "Increase",
-                Values = positive,
-                Fill = new SolidColorPaint(new SKColor(46, 139, 87))
-            },
-            new ColumnSeries<int?>
-            {
-                Name = "Decrease",
-                Values = negative,
-                Fill = new SolidColorPaint(new SKColor(198, 40, 40))
-            }
-        ];
+        ProgressChartPresentation presentation = _presentationBuilder.Build(report);
+        CurrentStatusSeries = presentation.CurrentStatusSeries;
+        ImplementedSeries = presentation.ImplementedSeries;
+        ReadinessSeries = presentation.ReadinessSeries;
+        WeeklySeries = presentation.WeeklySeries;
+        ImplementedXAxes = presentation.ImplementedXAxes;
+        ReadinessXAxes = presentation.ReadinessXAxes;
+        WeeklyXAxes = presentation.WeeklyXAxes;
+        CountYAxes = presentation.CountYAxes;
+        SignedYAxes = presentation.SignedYAxes;
+        _currentReport = report;
+        ManagerSummary = report.ManagerSummary;
+        ManagerDateSummary = CreateManagerDateSummary(report);
         HasHistoricalData = report.HasHistoricalData;
+        OnPropertyChanged(nameof(HasReport));
+        OnPropertyChanged(nameof(CanExportCharts));
+        _saveChartCommand.NotifyCanExecuteChanged();
+        _copyChartCommand.NotifyCanExecuteChanged();
     }
 
-    private static Axis[] CreateDateAxes(DateOnly[] dates)
+    private async Task SaveChartAsync(ProgressChartKind kind)
     {
-        string format = dates.Select(static date => date.Year).Distinct().Take(2).Count() > 1
-            ? "dd MMM yy"
-            : "dd MMM";
-        return
-        [
-            new Axis
-            {
-                Labeler = value => FormatDateLabel(value, dates, format),
-                LabelsDensity = 1.25f,
-                LabelsRotation = 0,
-                LabelsPaint = TextPaint,
-                MinStep = 1
-            }
-        ];
+        if (_currentReport?.HasHistoricalData != true)
+        {
+            return;
+        }
+
+        string? path = _filePicker.SelectPngPath(CreateSuggestedFileName(kind, _currentReport));
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        IsBusy = true;
+        ErrorMessage = null;
+        ExportMessage = null;
+        try
+        {
+            await _pngExporter.SavePngAsync(_currentReport, kind, path);
+            ExportMessage = $"Saved {Path.GetFileName(path)}.";
+        }
+        catch (Exception exception)
+        {
+            ErrorMessage = $"The chart could not be saved: {exception.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
-    private static string FormatDateLabel(double value, IReadOnlyList<DateOnly> dates, string format)
+    private async Task CopyChartAsync(ProgressChartKind kind)
     {
-        int index = (int)Math.Round(value);
-        return Math.Abs(value - index) < 0.001 && index >= 0 && index < dates.Count
-            ? dates[index].ToString(format)
-            : string.Empty;
+        if (_currentReport?.HasHistoricalData != true)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        ErrorMessage = null;
+        ExportMessage = null;
+        try
+        {
+            byte[] png = await Task.Run(() => _pngExporter.RenderPng(_currentReport, kind));
+            _clipboard.SetPng(png);
+            ExportMessage = $"Copied {ProgressChartPresentationBuilder.GetTitle(kind)}.";
+        }
+        catch (Exception exception)
+        {
+            ErrorMessage = $"The chart could not be copied: {exception.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
-    private static string FormatStatus(ProgressStatusCategory status) => status switch
+    private static string CreateSuggestedFileName(ProgressChartKind kind, ProgressDashboardReport report)
     {
-        ProgressStatusCategory.NotStarted => "Not started",
-        ProgressStatusCategory.InProgress => "In progress",
-        ProgressStatusCategory.ReworkNeeded => "Rework needed",
-        ProgressStatusCategory.DevelopmentCompleted => "Dev. completed",
-        ProgressStatusCategory.Reconciled => "Reconciled",
-        _ => throw new ArgumentOutOfRangeException(nameof(status))
-    };
+        string date = report.ManagerSummary.DataAsOfDate?.ToString("yyyyMMdd", CultureInfo.InvariantCulture)
+            ?? DateOnly.FromDateTime(DateTime.Today).ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+        return $"entitytracker-{ProgressChartPresentationBuilder.GetFileNameSegment(kind)}-{date}.png";
+    }
+
+    private static string CreateManagerDateSummary(ProgressDashboardReport report)
+    {
+        string dataDate = report.ManagerSummary.DataAsOfDate?.ToString("dd MMM yyyy", CultureInfo.CurrentCulture)
+            ?? "not available";
+        if (report.EffectiveFrom is null || report.EffectiveTo is null)
+        {
+            return $"Data as of {dataDate} · No progress history in the selected range";
+        }
+
+        string historyFrom = report.EffectiveFrom.Value.ToString("dd MMM yyyy", CultureInfo.CurrentCulture);
+        string historyTo = report.EffectiveTo.Value.ToString("dd MMM yyyy", CultureInfo.CurrentCulture);
+        return $"Data as of {dataDate} · History shown {historyFrom}–{historyTo}";
+    }
 
     private void NotifyRangeValidationChanged()
     {

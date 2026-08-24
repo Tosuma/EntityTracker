@@ -28,6 +28,49 @@ public sealed class ProgressDashboardBuilderTests
     }
 
     [Fact]
+    public void Build_ManagerSummaryUsesLatestSnapshotAndLocalDataDateRegardlessOfRange()
+    {
+        TimeZoneInfo timeZone = TimeZoneInfo.CreateCustomTimeZone(
+            "TestPlusTwo",
+            TimeSpan.FromHours(2),
+            "TestPlusTwo",
+            "TestPlusTwo");
+        ProgressSnapshot[] snapshots =
+        [
+            Snapshot(2026, 1, 1, ready: 1),
+            new ProgressSnapshot(
+                new DateTimeOffset(2026, 2, 1, 23, 30, 0, TimeSpan.Zero),
+                new ProgressSnapshotState(2, 3, 4, 5, 6, 7))
+        ];
+
+        ProgressDashboardReport report = _builder.Build(
+            snapshots,
+            ProgressDateRange.Inclusive(new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 2)),
+            new DateOnly(2026, 2, 2),
+            timeZone);
+
+        Assert.Equal(27, report.ManagerSummary.ActiveEntityCount);
+        Assert.Equal(18, report.ManagerSummary.ImplementedEntityCount);
+        Assert.Equal(7, report.ManagerSummary.ReconciledEntityCount);
+        Assert.Equal(2, report.ManagerSummary.ReadyEntityCount);
+        Assert.Equal(3, report.ManagerSummary.BlockedEntityCount);
+        Assert.Equal(new DateOnly(2026, 2, 2), report.ManagerSummary.DataAsOfDate);
+    }
+
+    [Fact]
+    public void Build_EmptyHistoryReturnsEmptyManagerSummary()
+    {
+        ProgressDashboardReport report = _builder.Build(
+            [],
+            ProgressDateRange.AllHistory,
+            new DateOnly(2026, 1, 1),
+            Utc);
+
+        Assert.Equal(ProgressManagerSummary.Empty, report.ManagerSummary);
+        Assert.False(report.HasHistoricalData);
+    }
+
+    [Fact]
     public void Build_CarriesStateIntoInclusiveRange()
     {
         ProgressSnapshot[] snapshots =

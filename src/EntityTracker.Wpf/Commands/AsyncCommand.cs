@@ -38,7 +38,7 @@ public sealed class AsyncCommand : ICommand
     }
 }
 
-public sealed class AsyncCommand<T> : ICommand where T : class
+public sealed class AsyncCommand<T> : ICommand
 {
     private readonly Func<T, Task> _execute;
     private readonly Predicate<T>? _canExecute;

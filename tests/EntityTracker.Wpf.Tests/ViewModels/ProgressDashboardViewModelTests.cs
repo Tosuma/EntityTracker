@@ -1,7 +1,10 @@
+using System.IO;
+
 using EntityTracker.Application.History;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Domain;
 using EntityTracker.Reporting;
+using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels;
 
 namespace EntityTracker.Wpf.Tests.ViewModels;
@@ -14,7 +17,7 @@ public sealed class ProgressDashboardViewModelTests
         ProgressSnapshot snapshot = new(
             new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero),
             new ProgressSnapshotState(2, 1, 1, 1, 2, 1));
-        ProgressDashboardViewModel viewModel = new(new ProgressReportingService(
+        ProgressDashboardViewModel viewModel = CreateViewModel(new ProgressReportingService(
             new StubHistoryRepository([snapshot]),
             TimeZoneInfo.Utc,
             timeProvider: new FixedTimeProvider(
@@ -28,6 +31,11 @@ public sealed class ProgressDashboardViewModelTests
         Assert.Single(viewModel.ImplementedSeries);
         Assert.Equal(2, viewModel.ReadinessSeries.Length);
         Assert.Equal(2, viewModel.WeeklySeries.Length);
+        Assert.Equal(8, viewModel.ManagerSummary.ActiveEntityCount);
+        Assert.Equal(4, viewModel.ManagerSummary.ImplementedEntityCount);
+        Assert.Equal(1, viewModel.ManagerSummary.ReconciledEntityCount);
+        Assert.Equal(new DateOnly(2026, 8, 20), viewModel.ManagerSummary.DataAsOfDate);
+        Assert.True(viewModel.CopyChartCommand.CanExecute(ProgressChartKind.CurrentStatus));
     }
 
     [Theory]
@@ -38,7 +46,7 @@ public sealed class ProgressDashboardViewModelTests
     {
         DateTimeOffset today = new(2026, 8, 20, 12, 0, 0, TimeSpan.Zero);
         DateTimeOffset firstDay = today.AddDays(-(days - 1));
-        ProgressDashboardViewModel viewModel = new(new ProgressReportingService(
+        ProgressDashboardViewModel viewModel = CreateViewModel(new ProgressReportingService(
             new StubHistoryRepository(
             [new ProgressSnapshot(firstDay, new ProgressSnapshotState(2, 1, 1, 1, 2, 1))]),
             TimeZoneInfo.Utc,
@@ -82,7 +90,7 @@ public sealed class ProgressDashboardViewModelTests
     {
         DateTimeOffset firstDay = new(2025, 12, 30, 12, 0, 0, TimeSpan.Zero);
         DateTimeOffset today = new(2026, 1, 2, 12, 0, 0, TimeSpan.Zero);
-        ProgressDashboardViewModel viewModel = new(new ProgressReportingService(
+        ProgressDashboardViewModel viewModel = CreateViewModel(new ProgressReportingService(
             new StubHistoryRepository(
             [new ProgressSnapshot(firstDay, new ProgressSnapshotState(2, 1, 1, 1, 2, 1))]),
             TimeZoneInfo.Utc,
@@ -99,7 +107,7 @@ public sealed class ProgressDashboardViewModelTests
     [Fact]
     public void CustomRange_RequiresOrderedNonFutureDates()
     {
-        ProgressDashboardViewModel viewModel = new(new ProgressReportingService(
+        ProgressDashboardViewModel viewModel = CreateViewModel(new ProgressReportingService(
             new StubHistoryRepository([]),
             TimeZoneInfo.Local));
 
@@ -110,6 +118,124 @@ public sealed class ProgressDashboardViewModelTests
         Assert.False(viewModel.IsCustomRangeValid);
         Assert.True(viewModel.HasRangeValidationError);
         Assert.False(viewModel.ApplyRangeCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task CopyChartCommand_RendersPngThroughClipboardAdapter()
+    {
+        ProgressSnapshot snapshot = new(
+            new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero),
+            new ProgressSnapshotState(2, 1, 1, 1, 2, 1));
+        RecordingImageClipboard clipboard = new();
+        ProgressDashboardViewModel viewModel = CreateViewModel(
+            new ProgressReportingService(
+                new StubHistoryRepository([snapshot]),
+                TimeZoneInfo.Utc,
+                timeProvider: new FixedTimeProvider(
+                    new DateTimeOffset(2026, 8, 20, 14, 0, 0, TimeSpan.Zero))),
+            clipboard: clipboard);
+        await viewModel.LoadAsync();
+
+        viewModel.CopyChartCommand.Execute(ProgressChartKind.CurrentStatus);
+        await WaitUntilAsync(() => viewModel.HasExportMessage || viewModel.HasError);
+
+        Assert.False(viewModel.HasError, viewModel.ErrorMessage);
+        Assert.NotNull(clipboard.Png);
+        Assert.Equal([0x89, 0x50, 0x4E, 0x47], clipboard.Png[..4]);
+        Assert.Contains("Copied", viewModel.ExportMessage);
+    }
+
+    [Fact]
+    public async Task SaveChartCommand_WhenPickerIsCancelled_DoesNotReportAnExport()
+    {
+        ProgressSnapshot snapshot = new(
+            new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero),
+            new ProgressSnapshotState(2, 1, 1, 1, 2, 1));
+        StubFilePicker picker = new();
+        ProgressDashboardViewModel viewModel = CreateViewModel(
+            new ProgressReportingService(
+                new StubHistoryRepository([snapshot]),
+                TimeZoneInfo.Utc),
+            filePicker: picker);
+        await viewModel.LoadAsync();
+
+        viewModel.SaveChartCommand.Execute(ProgressChartKind.ImplementedOverTime);
+
+        Assert.Equal("entitytracker-implemented-over-time-20260820.png", picker.SuggestedFileName);
+        Assert.False(viewModel.HasExportMessage);
+        Assert.False(viewModel.HasError);
+    }
+
+    [Fact]
+    public async Task SaveChartCommand_WhenWritingFails_ShowsAnActionableError()
+    {
+        ProgressSnapshot snapshot = new(
+            new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero),
+            new ProgressSnapshotState(2, 1, 1, 1, 2, 1));
+        string unavailablePath = Path.Combine(
+            Path.GetTempPath(),
+            $"missing-{Guid.NewGuid():N}",
+            "chart.png");
+        ProgressDashboardViewModel viewModel = CreateViewModel(
+            new ProgressReportingService(
+                new StubHistoryRepository([snapshot]),
+                TimeZoneInfo.Utc),
+            filePicker: new StubFilePicker(unavailablePath));
+        await viewModel.LoadAsync();
+
+        viewModel.SaveChartCommand.Execute(ProgressChartKind.CurrentStatus);
+        await WaitUntilAsync(() => viewModel.HasError);
+
+        Assert.StartsWith("The chart could not be saved:", viewModel.ErrorMessage);
+        Assert.False(viewModel.HasExportMessage);
+    }
+
+    private static ProgressDashboardViewModel CreateViewModel(
+        ProgressReportingService reportingService,
+        IProgressChartFilePicker? filePicker = null,
+        IImageClipboard? clipboard = null)
+    {
+        ProgressChartPresentationBuilder presentationBuilder = new();
+        return new ProgressDashboardViewModel(
+            reportingService,
+            presentationBuilder,
+            new ProgressChartPngExporter(presentationBuilder),
+            filePicker ?? new StubFilePicker(),
+            clipboard ?? new StubImageClipboard());
+    }
+
+    private sealed class StubFilePicker(string? selectedPath = null) : IProgressChartFilePicker
+    {
+        public string? SuggestedFileName { get; private set; }
+
+        public string? SelectPngPath(string suggestedFileName)
+        {
+            SuggestedFileName = suggestedFileName;
+            return selectedPath;
+        }
+    }
+
+    private sealed class StubImageClipboard : IImageClipboard
+    {
+        public void SetPng(byte[] png)
+        {
+        }
+    }
+
+    private sealed class RecordingImageClipboard : IImageClipboard
+    {
+        public byte[]? Png { get; private set; }
+
+        public void SetPng(byte[] png) => Png = png;
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(5));
+        while (!condition())
+        {
+            await Task.Delay(10, timeout.Token);
+        }
     }
 
     private sealed class StubHistoryRepository(IReadOnlyList<ProgressSnapshot> snapshots)

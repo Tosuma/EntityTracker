@@ -9,6 +9,7 @@ public sealed record ReadinessProgressPoint(DateOnly Date, int ReadyCount, int B
 public sealed record WeeklyImplementedChange(DateOnly WeekStartingMonday, int NetChange);
 
 public sealed record ProgressDashboardReport(
+    ProgressManagerSummary ManagerSummary,
     IReadOnlyList<ProgressStatusCount> CurrentStatusCounts,
     IReadOnlyList<ImplementedProgressPoint> ImplementedOverTime,
     IReadOnlyList<ReadinessProgressPoint> ReadyAndBlockedOverTime,

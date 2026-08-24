@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
+        xmlns:reporting="clr-namespace:EntityTracker.Reporting;assembly=EntityTracker.Reporting"
         xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels"
         mc:Ignorable="d"
         Title="EntityTracker"
@@ -1187,6 +1188,62 @@
                             </ScrollViewer>
                         </Border>
 
+                        <Border Margin="0,0,0,12"
+                                MaxHeight="100"
+                                Padding="10"
+                                Background="#EAF6EE"
+                                BorderBrush="#A9D5B8"
+                                BorderThickness="1"
+                                Visibility="{Binding Progress.HasExportMessage, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <TextBlock Foreground="#24613A"
+                                           Text="{Binding Progress.ExportMessage}"
+                                           TextWrapping="Wrap" />
+                            </ScrollViewer>
+                        </Border>
+
+                        <Border Margin="0,0,0,12"
+                                Padding="14,12"
+                                Background="White"
+                                BorderBrush="#D7DEE2"
+                                BorderThickness="1"
+                                CornerRadius="5"
+                                Visibility="{Binding Progress.HasReport, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <StackPanel>
+                                <DockPanel Margin="0,0,0,10">
+                                    <TextBlock DockPanel.Dock="Right"
+                                               VerticalAlignment="Center"
+                                               Foreground="#64737C"
+                                               Text="{Binding Progress.ManagerDateSummary}" />
+                                    <TextBlock FontSize="16"
+                                               FontWeight="SemiBold"
+                                               Text="Manager summary" />
+                                </DockPanel>
+                                <UniformGrid Columns="5">
+                                    <StackPanel>
+                                        <TextBlock Foreground="#64737C" Text="Active" />
+                                        <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Progress.ManagerSummary.ActiveEntityCount}" />
+                                    </StackPanel>
+                                    <StackPanel>
+                                        <TextBlock Foreground="#64737C" Text="Implemented" />
+                                        <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Progress.ManagerSummary.ImplementedEntityCount}" />
+                                    </StackPanel>
+                                    <StackPanel>
+                                        <TextBlock Foreground="#64737C" Text="Reconciled" />
+                                        <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Progress.ManagerSummary.ReconciledEntityCount}" />
+                                    </StackPanel>
+                                    <StackPanel>
+                                        <TextBlock Foreground="#64737C" Text="Ready" />
+                                        <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Progress.ManagerSummary.ReadyEntityCount}" />
+                                    </StackPanel>
+                                    <StackPanel>
+                                        <TextBlock Foreground="#64737C" Text="Blocked" />
+                                        <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="#B42318" Text="{Binding Progress.ManagerSummary.BlockedEntityCount}" />
+                                    </StackPanel>
+                                </UniformGrid>
+                            </StackPanel>
+                        </Border>
+
                         <TextBlock Margin="0,8"
                                    HorizontalAlignment="Center"
                                    Foreground="#64737C"
@@ -1200,7 +1257,24 @@
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="*" />
                                     </Grid.RowDefinitions>
-                                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="Entities by current work status" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Text="Entities by current work status" />
+                                        <Button Grid.Column="1" Margin="8,0,5,0" Padding="10,5"
+                                                Command="{Binding Progress.SaveChartCommand}"
+                                                CommandParameter="{x:Static reporting:ProgressChartKind.CurrentStatus}"
+                                                Content="Save PNG" Style="{StaticResource SecondaryButtonStyle}"
+                                                ToolTip="Save a report-ready PNG" />
+                                        <Button Grid.Column="2" Padding="10,5"
+                                                Command="{Binding Progress.CopyChartCommand}"
+                                                CommandParameter="{x:Static reporting:ProgressChartKind.CurrentStatus}"
+                                                Content="Copy" Style="{StaticResource SecondaryButtonStyle}"
+                                                ToolTip="Copy a report-ready PNG to the clipboard" />
+                                    </Grid>
                                     <lvc:PieChart Grid.Row="1"
                                                   LegendPosition="Right"
                                                   Series="{Binding Progress.CurrentStatusSeries}" />
@@ -1212,7 +1286,24 @@
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="*" />
                                     </Grid.RowDefinitions>
-                                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="Implemented entities over time" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Text="Implemented entities over time" />
+                                        <Button Grid.Column="1" Margin="8,0,5,0" Padding="10,5"
+                                                Command="{Binding Progress.SaveChartCommand}"
+                                                CommandParameter="{x:Static reporting:ProgressChartKind.ImplementedOverTime}"
+                                                Content="Save PNG" Style="{StaticResource SecondaryButtonStyle}"
+                                                ToolTip="Save a report-ready PNG" />
+                                        <Button Grid.Column="2" Padding="10,5"
+                                                Command="{Binding Progress.CopyChartCommand}"
+                                                CommandParameter="{x:Static reporting:ProgressChartKind.ImplementedOverTime}"
+                                                Content="Copy" Style="{StaticResource SecondaryButtonStyle}"
+                                                ToolTip="Copy a report-ready PNG to the clipboard" />
+                                    </Grid>
                                     <lvc:CartesianChart Grid.Row="1"
                                                         LegendPosition="Top"
                                                         Series="{Binding Progress.ImplementedSeries}"
@@ -1227,7 +1318,24 @@
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="*" />
                                     </Grid.RowDefinitions>
-                                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="Ready vs blocked over time" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Text="Ready vs blocked over time" />
+                                        <Button Grid.Column="1" Margin="8,0,5,0" Padding="10,5"
+                                                Command="{Binding Progress.SaveChartCommand}"
+                                                CommandParameter="{x:Static reporting:ProgressChartKind.ReadyAndBlockedOverTime}"
+                                                Content="Save PNG" Style="{StaticResource SecondaryButtonStyle}"
+                                                ToolTip="Save a report-ready PNG" />
+                                        <Button Grid.Column="2" Padding="10,5"
+                                                Command="{Binding Progress.CopyChartCommand}"
+                                                CommandParameter="{x:Static reporting:ProgressChartKind.ReadyAndBlockedOverTime}"
+                                                Content="Copy" Style="{StaticResource SecondaryButtonStyle}"
+                                                ToolTip="Copy a report-ready PNG to the clipboard" />
+                                    </Grid>
                                     <lvc:CartesianChart Grid.Row="1"
                                                         LegendPosition="Top"
                                                         Series="{Binding Progress.ReadinessSeries}"
@@ -1242,7 +1350,24 @@
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="*" />
                                     </Grid.RowDefinitions>
-                                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="Weekly net implemented change" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Text="Weekly net implemented change" />
+                                        <Button Grid.Column="1" Margin="8,0,5,0" Padding="10,5"
+                                                Command="{Binding Progress.SaveChartCommand}"
+                                                CommandParameter="{x:Static reporting:ProgressChartKind.WeeklyNetImplementedChange}"
+                                                Content="Save PNG" Style="{StaticResource SecondaryButtonStyle}"
+                                                ToolTip="Save a report-ready PNG" />
+                                        <Button Grid.Column="2" Padding="10,5"
+                                                Command="{Binding Progress.CopyChartCommand}"
+                                                CommandParameter="{x:Static reporting:ProgressChartKind.WeeklyNetImplementedChange}"
+                                                Content="Copy" Style="{StaticResource SecondaryButtonStyle}"
+                                                ToolTip="Copy a report-ready PNG to the clipboard" />
+                                    </Grid>
                                     <lvc:CartesianChart Grid.Row="1"
                                                         LegendPosition="Top"
                                                         Series="{Binding Progress.WeeklySeries}"

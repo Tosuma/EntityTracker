@@ -899,9 +899,32 @@ public sealed class MainWindowViewModelTests
                 resolver,
                 ranker),
             picker,
-            new ProgressDashboardViewModel(new ProgressReportingService(
+            CreateProgressDashboardViewModel());
+    }
+
+    private static ProgressDashboardViewModel CreateProgressDashboardViewModel()
+    {
+        ProgressChartPresentationBuilder presentationBuilder = new();
+        return new ProgressDashboardViewModel(
+            new ProgressReportingService(
                 new EmptyProgressHistoryRepository(),
-                TimeZoneInfo.Utc)));
+                TimeZoneInfo.Utc),
+            presentationBuilder,
+            new ProgressChartPngExporter(presentationBuilder),
+            new CancelledProgressChartFilePicker(),
+            new NoOpImageClipboard());
+    }
+
+    private sealed class CancelledProgressChartFilePicker : IProgressChartFilePicker
+    {
+        public string? SelectPngPath(string suggestedFileName) => null;
+    }
+
+    private sealed class NoOpImageClipboard : IImageClipboard
+    {
+        public void SetPng(byte[] png)
+        {
+        }
     }
 
     private static SchemaImportResult FailureResult() => SchemaImportResult.Failure(

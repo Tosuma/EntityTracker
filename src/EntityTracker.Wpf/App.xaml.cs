@@ -54,6 +54,10 @@ public partial class App : System.Windows.Application
             serviceProvider.GetRequiredService<IProgressHistoryRepository>(),
             TimeZoneInfo.Local,
             serviceProvider.GetRequiredService<ProgressDashboardBuilder>()));
+        services.AddSingleton<ProgressChartPresentationBuilder>();
+        services.AddSingleton<ProgressChartPngExporter>();
+        services.AddSingleton<IProgressChartFilePicker, ProgressChartFilePicker>();
+        services.AddSingleton<IImageClipboard, WpfImageClipboard>();
         services.AddSingleton<ProgressDashboardViewModel>();
         services.AddSingleton<SchemaSynchronizationService>();
         services.AddSingleton<ManualEntityCreationService>();

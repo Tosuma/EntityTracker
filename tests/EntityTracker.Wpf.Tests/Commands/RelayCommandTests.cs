@@ -22,6 +22,28 @@ public sealed class RelayCommandTests
         Assert.Equal(Selection.Available, selected);
     }
 
+    [Fact]
+    public async Task GenericAsyncCommand_AcceptsStronglyTypedValueTypeParameters()
+    {
+        TaskCompletionSource<Selection> executed = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        AsyncCommand<Selection> command = new(
+            value =>
+            {
+                executed.SetResult(value);
+                return Task.CompletedTask;
+            },
+            value => value == Selection.Available);
+
+        Assert.False(command.CanExecute(null));
+        Assert.False(command.CanExecute(Selection.Unavailable));
+        Assert.True(command.CanExecute(Selection.Available));
+
+        command.Execute(Selection.Available);
+
+        Assert.Equal(Selection.Available, await executed.Task.WaitAsync(TimeSpan.FromSeconds(2)));
+    }
+
     private enum Selection
     {
         Unavailable,

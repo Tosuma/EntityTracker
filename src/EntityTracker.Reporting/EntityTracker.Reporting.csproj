@@ -1,6 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="LiveChartsCore.SkiaSharpView" Version="2.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\EntityTracker.Application\EntityTracker.Application.csproj" />
     <ProjectReference Include="..\EntityTracker.Domain\EntityTracker.Domain.csproj" />
   </ItemGroup>

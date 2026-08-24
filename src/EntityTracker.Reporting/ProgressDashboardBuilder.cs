@@ -32,10 +32,27 @@ public sealed class ProgressDashboardBuilder
             new(ProgressStatusCategory.DevelopmentCompleted, current.DevelopmentCompletedCount),
             new(ProgressStatusCategory.Reconciled, current.ReconciledCount)
         ];
+        ProgressManagerSummary managerSummary = ordered.Length == 0
+            ? ProgressManagerSummary.Empty
+            : new ProgressManagerSummary(
+                current.TotalActiveCount,
+                current.ImplementedCount,
+                current.ReconciledCount,
+                current.ReadyCount,
+                current.BlockedCount,
+                DateOnly.FromDateTime(
+                    TimeZoneInfo.ConvertTime(ordered[^1].RecordedAtUtc, timeZone).DateTime));
 
         if (ordered.Length == 0)
         {
-            return new ProgressDashboardReport(currentCounts, [], [], [], null, null);
+            return new ProgressDashboardReport(
+                managerSummary,
+                currentCounts,
+                [],
+                [],
+                [],
+                null,
+                null);
         }
 
         (DateOnly Date, ProgressSnapshotState State)[] dated = ordered
@@ -49,7 +66,14 @@ public sealed class ProgressDashboardBuilder
         DateOnly from = requestedFrom < dated[0].Date ? dated[0].Date : requestedFrom;
         if (from > to)
         {
-            return new ProgressDashboardReport(currentCounts, [], [], [], null, null);
+            return new ProgressDashboardReport(
+                managerSummary,
+                currentCounts,
+                [],
+                [],
+                [],
+                null,
+                null);
         }
 
         List<ImplementedProgressPoint> implemented = [];
@@ -88,6 +112,7 @@ public sealed class ProgressDashboardBuilder
             implemented,
             dated.Where(item => item.Date < from).Select(static item => item.State).LastOrDefault());
         return new ProgressDashboardReport(
+            managerSummary,
             currentCounts,
             implemented,
             readiness,
