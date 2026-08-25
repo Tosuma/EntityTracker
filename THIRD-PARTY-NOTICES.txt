@@ -1,0 +1,132 @@
+ENTITYTRACKER THIRD-PARTY SOFTWARE NOTICES AND INFORMATION
+
+EntityTracker incorporates third-party software. This notice identifies the
+runtime components included in the Windows self-contained distribution built
+from the package versions listed below.
+
+The corresponding license texts are distributed with EntityTracker in the
+licenses directory. The build also places the upstream .NET and
+SkiaSharp/HarfBuzzSharp third-party notice files in that directory so their
+component-specific notices are retained verbatim.
+
+CsvHelper is offered under "MS-PL OR Apache-2.0". EntityTracker elects to use
+and redistribute CsvHelper under the Apache License, Version 2.0 option.
+
+This file is informational and does not replace or modify any license terms.
+
+
+RUNTIME COMPONENT INVENTORY
+===========================
+
+CsvHelper 33.1.0
+Copyright (c) 2009-2024 Josh Close
+License: Apache-2.0 (selected from MS-PL OR Apache-2.0)
+Source: https://github.com/JoshClose/CsvHelper
+
+LiveChartsCore 2.0.5
+LiveChartsCore.SkiaSharpView 2.0.5
+LiveChartsCore.SkiaSharpView.WPF 2.0.5
+Copyright (c) 2021 Alberto Rodriguez Orozco
+License: MIT
+Source: https://github.com/beto-rodriguez/LiveCharts2
+
+Microsoft.Data.Sqlite 10.0.11
+Microsoft.Data.Sqlite.Core 10.0.11
+Copyright (c) .NET Foundation and Contributors
+License: MIT
+Source: https://github.com/dotnet/efcore
+
+Microsoft.Extensions.DependencyInjection 10.0.0
+Microsoft.Extensions.DependencyInjection.Abstractions 10.0.0
+Microsoft.Extensions.Logging 10.0.0
+Microsoft.Extensions.Logging.Abstractions 10.0.0
+Microsoft.Extensions.Options 10.0.0
+Microsoft.Extensions.Primitives 10.0.0
+Copyright (c) .NET Foundation and Contributors
+License: MIT
+Source: https://github.com/dotnet/runtime
+
+SQLitePCLRaw.bundle_e_sqlite3 2.1.12
+SQLitePCLRaw.core 2.1.12
+SQLitePCLRaw.lib.e_sqlite3 2.1.12
+SQLitePCLRaw.provider.e_sqlite3 2.1.12
+Copyright 2014-2024 SourceGear, LLC
+License: Apache-2.0
+Source: https://github.com/ericsink/SQLitePCL.raw
+
+SQLite
+SQLite is dedicated to the public domain. Anyone is free to copy, modify,
+publish, use, compile, sell, or distribute SQLite for any purpose.
+Source: https://www.sqlite.org/copyright.html
+
+OpenTK 3.3.1
+Copyright (c) 2006-2019 Stefanos Apostolopoulos for the Open Toolkit project
+License: MIT
+Source: https://github.com/opentk/opentk
+
+OpenTK.Half includes Half-to-Single and Single-to-Half conversions based on
+OpenEXR source code under the following notice:
+
+Copyright (c) 2002, Industrial Light & Magic, a division of Lucas Digital
+Ltd. LLC. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice,
+   this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+3. Neither the name of Industrial Light & Magic nor the names of its
+   contributors may be used to endorse or promote products derived from this
+   software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+
+OpenTK.GLWpfControl 3.3.0
+Copyright (c) 2019 varon
+License: MIT
+Source: https://github.com/opentk/GLWpfControl
+
+SkiaSharp 3.119.0
+SkiaSharp.HarfBuzz 3.119.0
+SkiaSharp.NativeAssets.Win32 3.119.0
+SkiaSharp.Views.Desktop.Common 3.119.0
+SkiaSharp.Views.WPF 3.119.0
+HarfBuzzSharp 8.3.1.1
+HarfBuzzSharp.NativeAssets.Win32 8.3.1.1
+Copyright (c) 2015-2016 Xamarin, Inc.
+Copyright (c) 2017-2018 Microsoft Corporation
+License: MIT, with incorporated third-party components under the licenses in
+         licenses/SkiaSharp-HarfBuzzSharp-THIRD-PARTY-NOTICES.txt
+Source: https://github.com/mono/SkiaSharp
+
+.NET 10.0.11 runtime and Windows Desktop runtime
+Copyright (c) .NET Foundation and Contributors
+License: See licenses/DotNet-LICENSE.txt and
+         licenses/DotNet-THIRD-PARTY-NOTICES.txt
+Source: https://github.com/dotnet/runtime and https://github.com/dotnet/wpf
+
+
+COMMON LICENSE TEXT LOCATIONS
+=============================
+
+MIT components:
+  licenses/MIT.txt
+
+Apache-2.0 components:
+  licenses/Apache-2.0.txt
+
+The EntityTracker application license is in LICENSE.txt at the root of the
+binary distribution.

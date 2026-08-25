@@ -65,6 +65,10 @@ run the packaging job, so it appears as skipped on a pull-request run. Merging t
 separate push run where packaging is enabled. GitHub Releases and external deployment targets are
 not part of this workflow.
 
+The ZIP includes EntityTracker's `LICENSE.txt`, the runtime dependency inventory in
+`THIRD-PARTY-NOTICES.txt`, common license texts, and the upstream .NET and native graphics
+third-party notices. Packaging fails if any required legal file cannot be collected.
+
 When CI fails, inspect the first failed step:
 
 - **Set up .NET** — confirm `global.json` selects an SDK available from Microsoft.
