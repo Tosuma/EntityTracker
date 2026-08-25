@@ -919,7 +919,7 @@
                                                    Text="Completed entities with dependency changes" />
                                         <TextBlock Margin="0,3,0,4"
                                                    Foreground="{StaticResource Brush.Text.Secondary}"
-                                                   Text="Choose whether each entity keeps its current status or needs rework before applying."
+                                                   Text="Choose whether each entity keeps its current status or needs rework before importing."
                                                    TextWrapping="Wrap" />
                                         <ItemsControl ItemsSource="{Binding Review.ProgressImpacts}">
                                             <ItemsControl.ItemTemplate>
@@ -979,7 +979,7 @@
                                     <StackPanel>
                                         <TextBlock HorizontalAlignment="Center"
                                                    Foreground="{StaticResource Brush.Text.Secondary}"
-                                                   Text="Choose an import type, then select a CSV to review. Nothing is saved until Apply Changes." />
+                                                   Text="Choose an import type, then select a CSV to review. Nothing is saved until Import Changes." />
                                         <TextBlock Margin="0,5,0,0"
                                                    HorizontalAlignment="Center"
                                                    Foreground="{StaticResource Brush.Text.Secondary}"
@@ -1000,7 +1000,7 @@
                                 Content="Cancel"
                                 Style="{StaticResource SecondaryButtonStyle}" />
                         <Button Command="{Binding ApplySynchronizationCommand}"
-                                Content="Apply Changes"
+                                Content="Import Changes"
                                 Style="{StaticResource PrimaryButtonStyle}" />
                     </StackPanel>
                 </Grid>
