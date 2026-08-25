@@ -8,6 +8,7 @@
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/EntityTracker.DemoData/EntityTracker.DemoData.csproj" />
+    <Project Path="tools/EntityTracker.Screenshots/EntityTracker.Screenshots.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/EntityTracker.Domain.Tests/EntityTracker.Domain.Tests.csproj" />
@@ -16,5 +17,6 @@
     <Project Path="tests/EntityTracker.Reporting.Tests/EntityTracker.Reporting.Tests.csproj" />
     <Project Path="tests/EntityTracker.Wpf.Tests/EntityTracker.Wpf.Tests.csproj" />
     <Project Path="tests/EntityTracker.DemoData.Tests/EntityTracker.DemoData.Tests.csproj" />
+    <Project Path="tests/EntityTracker.Screenshots.Tests/EntityTracker.Screenshots.Tests.csproj" />
   </Folder>
 </Solution>

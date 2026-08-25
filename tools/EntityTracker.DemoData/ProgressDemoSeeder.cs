@@ -10,7 +10,7 @@ using Microsoft.Data.Sqlite;
 
 namespace EntityTracker.DemoData;
 
-internal sealed record ProgressDemoOptions
+public sealed record ProgressDemoOptions
 {
     public ProgressDemoOptions(int days, int seed, DateOnly endDate, TimeZoneInfo timeZone)
     {
@@ -39,7 +39,7 @@ internal sealed record ProgressDemoOptions
     public DateOnly StartDate => EndDate.AddDays(-(Days - 1));
 }
 
-internal sealed record ProgressDemoResult(
+public sealed record ProgressDemoResult(
     string DatabasePath,
     DateOnly StartDate,
     DateOnly EndDate,
@@ -49,7 +49,7 @@ internal sealed record ProgressDemoResult(
     int SnapshotCount,
     IReadOnlyDictionary<DevelopmentStatus, int> FinalStatusCounts);
 
-internal sealed class ProgressDemoSeeder
+public sealed class ProgressDemoSeeder
 {
     public async Task<ProgressDemoResult> SeedAsync(
         string databasePath,

@@ -117,6 +117,39 @@ To publish a Debug package explicitly:
 The script replaces its existing publish directory and ZIP under `artifacts`. That directory is
 generated output and is ignored by Git.
 
+## Generate README screenshots
+
+EntityTracker includes a Windows-only WPF screenshot utility for keeping the README images
+repeatable. From the repository root, generate a preview set with:
+
+```powershell
+.\scripts\Generate-ReadmeScreenshots.ps1
+```
+
+The default preview is written to `artifacts\readme-screenshots`, which is ignored by Git. You can
+choose another preview directory without replacing unrelated files:
+
+```powershell
+.\scripts\Generate-ReadmeScreenshots.ps1 -Output C:\path\to\preview
+```
+
+Inspect every preview image before replacing the tracked README set. Once approved, run:
+
+```powershell
+.\scripts\Generate-ReadmeScreenshots.ps1 -UpdateReadme
+```
+
+The update command renders and validates the complete manifest before replacing the files owned
+by the generator under `images`; unrelated image assets are preserved. The utility imports the
+repository's 125-entity synthetic schema, creates fixed status and 90-day history data, and
+captures the overview, synchronization, entity, progress, archive, search, and SQL-query states.
+It uses a new SQLite database below the operating-system temporary directory for each run and
+never reads or changes `%LOCALAPPDATA%\EntityTracker`. The application may remain open while the
+screenshots are generated.
+
+CI restores, builds, and tests the screenshot project as part of the solution, but deliberately
+does not render or replace README images. Rendering remains an explicit local review workflow.
+
 ## Import a PostgreSQL schema
 
 1. Open **Schema Synchronization**.

@@ -14,12 +14,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Resource Include="Assets\EntityTracker.ico" />
+    <Resource Include="Assets\v2\EntityTracker.ico" />
   </ItemGroup>
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <ApplicationIcon>Assets\EntityTracker.ico</ApplicationIcon>
+    <ApplicationIcon>Assets\v2\EntityTracker.ico</ApplicationIcon>
     <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
