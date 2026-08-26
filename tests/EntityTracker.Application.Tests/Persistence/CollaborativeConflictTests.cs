@@ -6,18 +6,21 @@ namespace EntityTracker.Application.Tests.Persistence;
 
 public sealed class CollaborativeConflictTests
 {
-    [Fact]
-    public void Constructor_ScalarConflict_DoesNotRequireDependencyKey()
+    [Theory]
+    [InlineData(CollaborativeConflictField.Notes)]
+    [InlineData(CollaborativeConflictField.RequestedPriority)]
+    public void Constructor_ScalarConflict_DoesNotRequireDependencyKey(
+        CollaborativeConflictField field)
     {
         CollaborativeConflict conflict = new(
             EntitySourceKey.From("customer"),
             EntityId.New(),
-            CollaborativeConflictField.Notes,
+            field,
             "base",
             "local",
             "remote");
 
-        Assert.Equal(CollaborativeConflictField.Notes, conflict.Field);
+        Assert.Equal(field, conflict.Field);
         Assert.Null(conflict.DependencyKey);
     }
 

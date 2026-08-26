@@ -6,6 +6,7 @@ using EntityTracker.Application.Importing;
 using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.ManualOverrides;
+using EntityTracker.Application.Planning;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
@@ -55,6 +56,11 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private SchemaSynchronizationPlan? _reviewPlan;
     private DevelopmentStatus _selectedStatus;
     private string _editedNotes = string.Empty;
+    private int? _selectedRequestedPriority;
+    private string _effectivePriority = "—";
+    private IReadOnlyList<PriorityPlanningRow> _priorityPreviewRows = [];
+    private IReadOnlyList<string> _priorityUnresolvedDependencyNames = [];
+    private bool _hasPendingPriorityChange;
 
     public EntityDependencyEditorViewModel(
         EntityDependencyEditorService editorService,
@@ -230,6 +236,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(CanEdit));
                 OnPropertyChanged(nameof(CanArchive));
                 OnPropertyChanged(nameof(CanEditProgress));
+                OnPropertyChanged(nameof(CanEditPriority));
                 OnPropertyChanged(nameof(CanRestoreEntity));
             }
         }
@@ -245,6 +252,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(CanEdit));
                 OnPropertyChanged(nameof(CanArchive));
                 OnPropertyChanged(nameof(CanEditProgress));
+                OnPropertyChanged(nameof(CanEditPriority));
                 OnPropertyChanged(nameof(CanRestoreEntity));
                 NotifyCommandsChanged();
             }
@@ -266,6 +274,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(CanArchive));
                 OnPropertyChanged(nameof(CanEdit));
                 OnPropertyChanged(nameof(CanEditProgress));
+                OnPropertyChanged(nameof(CanEditPriority));
                 OnPropertyChanged(nameof(CanRestoreEntity));
                 OnPropertyChanged(nameof(ShowSave));
                 OnPropertyChanged(nameof(ShowDependencyEditor));
@@ -288,6 +297,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(CanEdit));
                 OnPropertyChanged(nameof(CanArchive));
                 OnPropertyChanged(nameof(CanEditProgress));
+                OnPropertyChanged(nameof(CanEditPriority));
                 NotifyCommandsChanged();
             }
         }
@@ -306,6 +316,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(ArchiveConfirmationMessage));
                 OnPropertyChanged(nameof(CanArchive));
                 OnPropertyChanged(nameof(CanEditProgress));
+                OnPropertyChanged(nameof(CanEditPriority));
                 NotifyCommandsChanged();
             }
         }
@@ -351,6 +362,54 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
     }
 
+    public int? SelectedRequestedPriority
+    {
+        get => _selectedRequestedPriority;
+        set
+        {
+            if (CanEditPriority && SetField(ref _selectedRequestedPriority, value))
+            {
+                RefreshPriorityPresentation();
+            }
+        }
+    }
+
+    public string EffectivePriority
+    {
+        get => _effectivePriority;
+        private set => SetField(ref _effectivePriority, value);
+    }
+
+    public IReadOnlyList<PriorityPlanningRow> PriorityPreviewRows
+    {
+        get => _priorityPreviewRows;
+        private set
+        {
+            if (SetField(ref _priorityPreviewRows, value))
+            {
+                OnPropertyChanged(nameof(HasPriorityPreview));
+            }
+        }
+    }
+
+    public IReadOnlyList<string> PriorityUnresolvedDependencyNames
+    {
+        get => _priorityUnresolvedDependencyNames;
+        private set
+        {
+            if (SetField(ref _priorityUnresolvedDependencyNames, value))
+            {
+                OnPropertyChanged(nameof(HasPriorityUnresolvedDependencies));
+            }
+        }
+    }
+
+    public bool HasPendingPriorityChange
+    {
+        get => _hasPendingPriorityChange;
+        private set => SetField(ref _hasPendingPriorityChange, value);
+    }
+
     public IReadOnlyList<DevelopmentStatusOption> StatusOptions { get; } =
     [
         new(DevelopmentStatus.NotStarted, "Not started"),
@@ -360,11 +419,23 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         new(DevelopmentStatus.Reconciled, "Reconciled")
     ];
 
+    public IReadOnlyList<RequestedPriorityOption> PriorityOptions { get; } =
+    [
+        new(null, "No requested priority"),
+        new(1, "1 — Highest"),
+        new(2, "2"),
+        new(3, "3"),
+        new(4, "4"),
+        new(5, "5")
+    ];
+
     public bool CanEdit =>
         IsOpen && !IsBusy && !IsArchiveConfirmationOpen &&
         _canOperate() && CurrentEditPlan is not null && !IsArchivedMode;
 
     public bool CanEditProgress => CanEdit && Mode == EntityEditorMode.Standalone;
+
+    public bool CanEditPriority => CanEditProgress;
 
     public bool CanArchive => CanEditProgress;
 
@@ -389,6 +460,11 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
     public bool HasArchiveError => !string.IsNullOrWhiteSpace(ArchiveErrorMessage);
 
+    public bool HasPriorityPreview => PriorityPreviewRows.Count > 0;
+
+    public bool HasPriorityUnresolvedDependencies =>
+        PriorityUnresolvedDependencyNames.Count > 0;
+
     public string SelectedEntityName => SelectedEntity?.SourceName ?? "Loading entity…";
 
     public string EntityDetails => SelectedEntity is null
@@ -409,7 +485,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             "Changes are staged with this synchronization and are saved only when the review is applied.",
         EntityEditorMode.ArchivedDetails =>
             "Archived entities are read-only until explicitly restored.",
-        _ => "Update progress and notes. Imported facts remain visible, while manual dependency corrections survive future imports."
+        _ => "Update priority, progress, notes, and manual dependency corrections. Imported facts remain visible."
     };
 
     public string SaveLabel => IsReviewMode ? "Stage Changes" : "Save Changes";
@@ -532,6 +608,9 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(SelectedStatus));
             _editedNotes = details.Entity.Notes;
             OnPropertyChanged(nameof(EditedNotes));
+            _selectedRequestedPriority = details.Entity.RequestedPriority;
+            OnPropertyChanged(nameof(SelectedRequestedPriority));
+            EffectivePriority = "—";
             Dependencies = details.Dependencies.Select(static item =>
                 new EntityDependencyEditRow(
                     item.DependencySourceName,
@@ -559,6 +638,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(CanEdit));
         OnPropertyChanged(nameof(CanArchive));
         OnPropertyChanged(nameof(CanEditProgress));
+        OnPropertyChanged(nameof(CanEditPriority));
         OnPropertyChanged(nameof(CanRestoreEntity));
         NotifyCommandsChanged();
     }
@@ -695,7 +775,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 await _editorService.SaveAsync(
                     CurrentEditPlan,
                     SelectedStatus,
-                    EditedNotes);
+                    EditedNotes,
+                    SelectedRequestedPriority);
                 await _onPersisted();
             }
 
@@ -810,6 +891,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(SelectedStatus));
             _editedNotes = plan.Entity.Notes;
             OnPropertyChanged(nameof(EditedNotes));
+            _selectedRequestedPriority = plan.Entity.RequestedPriority;
+            OnPropertyChanged(nameof(SelectedRequestedPriority));
         }
 
         Dependencies = plan.Dependencies.Select(static item => new EntityDependencyEditRow(
@@ -819,7 +902,39 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             item.Origin)).ToArray();
         Warnings = plan.Warnings;
         Errors = plan.Errors;
+        RefreshPriorityPresentation();
         NotifyCommandsChanged();
+    }
+
+    private void RefreshPriorityPresentation()
+    {
+        if (CurrentEditPlan?.IsValid != true)
+        {
+            EffectivePriority = "—";
+            HasPendingPriorityChange = false;
+            PriorityPreviewRows = [];
+            PriorityUnresolvedDependencyNames = [];
+            return;
+        }
+
+        PriorityPlanningPreview preview = _editorService.CreatePriorityPreview(
+            CurrentEditPlan,
+            SelectedRequestedPriority);
+        PriorityPlanningItem target = preview.Entities.Single(static item => item.IsTarget);
+        EffectivePriority = FormatPriority(target.EffectivePriority);
+        HasPendingPriorityChange =
+            SelectedRequestedPriority != CurrentEditPlan.Entity.RequestedPriority;
+        PriorityPreviewRows = HasPendingPriorityChange
+            ? preview.Entities.Select(static item => new PriorityPlanningRow(
+                item.EntityId,
+                item.SourceName,
+                item.IsTarget ? "Target" : "Prerequisite",
+                FormatPriority(item.RequestedPriority),
+                FormatPriority(item.EffectivePriority))).ToArray()
+            : [];
+        PriorityUnresolvedDependencyNames = HasPendingPriorityChange
+            ? preview.UnresolvedDependencyNames
+            : [];
     }
 
     private void CloseSession()
@@ -843,6 +958,12 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(SelectedStatus));
         _editedNotes = string.Empty;
         OnPropertyChanged(nameof(EditedNotes));
+        _selectedRequestedPriority = null;
+        OnPropertyChanged(nameof(SelectedRequestedPriority));
+        EffectivePriority = "—";
+        HasPendingPriorityChange = false;
+        PriorityPreviewRows = [];
+        PriorityUnresolvedDependencyNames = [];
         ClearSearch();
     }
 
@@ -907,6 +1028,9 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         EntityProvenance.ManualAndImported => "Manual + CSV",
         _ => throw new ArgumentOutOfRangeException(nameof(provenance), provenance, null)
     };
+
+    private static string FormatPriority(int? priority) =>
+        priority?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—";
 
     private TrackedEntity? SelectedEntity => CurrentEditPlan?.Entity ?? ArchivedDetails?.Entity;
 

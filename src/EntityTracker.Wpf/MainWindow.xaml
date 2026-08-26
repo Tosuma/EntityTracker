@@ -163,7 +163,7 @@
                                        Text="Persisted entities" />
                             <TextBlock Margin="0,3,0,0"
                                        Foreground="{StaticResource Brush.Text.Secondary}"
-                                       Text="Ranked entities are ordered so dependencies appear before the entities that use them." />
+                                       Text="Entities are grouped by priority while dependencies remain before the entities that use them." />
                         </StackPanel>
                     </DockPanel>
 
@@ -510,6 +510,7 @@
                                   SelectionMode="Extended"
                                   SelectionUnit="FullRow">
                             <DataGrid.Columns>
+                                <DataGridTextColumn Width="72" Binding="{Binding Priority}" Header="Priority" />
                                 <DataGridTextColumn Width="70" Binding="{Binding Rank}" Header="Rank" />
                                 <DataGridTemplateColumn Width="2.2*" Header="Entity">
                                     <DataGridTemplateColumn.CellTemplate>
@@ -1745,6 +1746,79 @@
                                                  TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Grid>
+
+                                <Grid Margin="0,0,0,12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,12,0">
+                                        <TextBlock FontWeight="SemiBold" Text="Requested priority" />
+                                        <ComboBox Margin="0,5,0,0"
+                                                  DisplayMemberPath="DisplayName"
+                                                  IsEnabled="{Binding Editor.CanEditPriority}"
+                                                  ItemsSource="{Binding Editor.PriorityOptions}"
+                                                  SelectedValue="{Binding Editor.SelectedRequestedPriority}"
+                                                  SelectedValuePath="Value" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock FontWeight="SemiBold" Text="Effective priority" />
+                                        <TextBlock Margin="0,8,0,0"
+                                                   FontSize="16"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding Editor.EffectivePriority}" />
+                                        <TextBlock Margin="0,2,0,0"
+                                                   Foreground="{StaticResource Brush.Text.Secondary}"
+                                                   Text="Inherited from this entity or an active dependent target."
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <Border Margin="0,0,0,14"
+                                        Padding="10"
+                                        Background="{StaticResource Brush.Surface.Subtle}"
+                                        BorderBrush="{StaticResource Brush.Border.Medium}"
+                                        BorderThickness="1"
+                                        Visibility="{Binding Editor.HasPendingPriorityChange, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <StackPanel>
+                                        <TextBlock FontWeight="SemiBold" Text="Priority impact preview" />
+                                        <TextBlock Margin="0,2,0,8"
+                                                   Foreground="{StaticResource Brush.Text.Secondary}"
+                                                   Text="This shows the target and resolved prerequisites affected when you save."
+                                                   TextWrapping="Wrap" />
+                                        <ItemsControl ItemsSource="{Binding Editor.PriorityPreviewRows}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="0,0,0,4">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="110" />
+                                                            <ColumnDefinition Width="100" />
+                                                            <ColumnDefinition Width="100" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock FontWeight="SemiBold" Text="{Binding SourceName}" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding Role}" />
+                                                        <TextBlock Grid.Column="2" Text="{Binding RequestedPriority, StringFormat=Requested: {0}}" />
+                                                        <TextBlock Grid.Column="3" Text="{Binding EffectivePriority, StringFormat=Effective: {0}}" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <Border Margin="0,7,0,0"
+                                                Padding="8"
+                                                Background="{StaticResource Brush.Surface.Card}"
+                                                BorderBrush="{StaticResource Brush.Accent}"
+                                                BorderThickness="1"
+                                                Visibility="{Binding Editor.HasPriorityUnresolvedDependencies, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <StackPanel>
+                                                <TextBlock FontWeight="SemiBold"
+                                                           Text="Unresolved dependencies cannot receive priority:" />
+                                                <ItemsControl Margin="0,3,0,0"
+                                                              ItemsSource="{Binding Editor.PriorityUnresolvedDependencyNames}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
 
                                 <StackPanel Visibility="{Binding Editor.ShowDependencyEditor, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <TextBlock FontWeight="SemiBold" Text="Add a manual dependency" />

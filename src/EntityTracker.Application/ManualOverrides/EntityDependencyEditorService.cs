@@ -3,6 +3,7 @@ using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Planning;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Domain;
 
@@ -17,17 +18,19 @@ public sealed class EntityDependencyEditorService
     private readonly IDependencyRepository _dependencyRepository;
     private readonly IManualDependencyOverrideRepository _overrideRepository;
     private readonly EffectiveDependencyResolver _effectiveDependencyResolver;
-    private readonly DependencyRanker _dependencyRanker;
+    private readonly IDependencyRankingService _dependencyRanker;
     private readonly ITrackedStateStore _store;
     private readonly ProgressSnapshotCalculator _snapshotCalculator;
+    private readonly PriorityPlanningService _priorityPlanningService;
 
     public EntityDependencyEditorService(
         IEntityRepository entityRepository,
         IDependencyRepository dependencyRepository,
         IManualDependencyOverrideRepository overrideRepository,
         EffectiveDependencyResolver effectiveDependencyResolver,
-        DependencyRanker dependencyRanker,
+        IDependencyRankingService dependencyRanker,
         ITrackedStateStore store,
+        PriorityPlanningService priorityPlanningService,
         ProgressSnapshotCalculator? snapshotCalculator = null)
     {
         ArgumentNullException.ThrowIfNull(entityRepository);
@@ -36,6 +39,7 @@ public sealed class EntityDependencyEditorService
         ArgumentNullException.ThrowIfNull(effectiveDependencyResolver);
         ArgumentNullException.ThrowIfNull(dependencyRanker);
         ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(priorityPlanningService);
 
         _entityRepository = entityRepository;
         _dependencyRepository = dependencyRepository;
@@ -43,6 +47,7 @@ public sealed class EntityDependencyEditorService
         _effectiveDependencyResolver = effectiveDependencyResolver;
         _dependencyRanker = dependencyRanker;
         _store = store;
+        _priorityPlanningService = priorityPlanningService;
         _snapshotCalculator = snapshotCalculator ?? new ProgressSnapshotCalculator();
     }
 
@@ -253,6 +258,7 @@ public sealed class EntityDependencyEditorService
         EntityDependencyEditPlan plan,
         DevelopmentStatus status,
         string notes,
+        int? requestedPriority,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(plan);
@@ -263,19 +269,23 @@ public sealed class EntityDependencyEditorService
                 "Dependency edits cannot be saved while validation errors remain.");
         }
 
-        TrackedEntity updatedProgress = new(
+        TrackedEntity updatedEntity = new(
             plan.Entity.Id,
             plan.Entity.SourceName,
             status,
             notes,
             plan.Entity.LifecycleState,
-            plan.Entity.Provenance);
+            plan.Entity.Provenance,
+            requestedPriority);
         TrackedEntity[] progressUpdates =
             status != plan.Entity.Status || !string.Equals(notes, plan.Entity.Notes, StringComparison.Ordinal)
-                ? [updatedProgress]
+                ? [updatedEntity]
                 : [];
+        TrackedEntity[] priorityUpdates = requestedPriority != plan.Entity.RequestedPriority
+            ? [updatedEntity]
+            : [];
         TrackedEntity[] candidateEntities = plan.CandidateEntities
-            .Select(entity => entity.Id == updatedProgress.Id ? updatedProgress : entity)
+            .Select(entity => entity.Id == updatedEntity.Id ? updatedEntity : entity)
             .ToArray();
 
         await _store.ApplyAsync(
@@ -291,8 +301,27 @@ public sealed class EntityDependencyEditorService
                 progressUpdates,
                 progressSnapshotAfterChanges: _snapshotCalculator.Calculate(
                     candidateEntities,
-                    plan.EffectiveState)),
+                    plan.EffectiveState),
+                entitiesWithRequestedPriorityToUpdate: priorityUpdates),
             cancellationToken);
+    }
+
+    public PriorityPlanningPreview CreatePriorityPreview(
+        EntityDependencyEditPlan plan,
+        int? candidateRequestedPriority)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        if (!plan.IsValid)
+        {
+            throw new InvalidOperationException(
+                "Priority cannot be previewed while dependency validation errors remain.");
+        }
+
+        return _priorityPlanningService.CreatePreview(
+            plan.Entity.Id,
+            candidateRequestedPriority,
+            plan.CandidateEntities,
+            plan.EffectiveState);
     }
 
     private async Task<Snapshot> LoadSnapshotAsync(CancellationToken cancellationToken)

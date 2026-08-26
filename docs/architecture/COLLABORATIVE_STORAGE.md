@@ -80,6 +80,7 @@ Non-overlapping edits merge automatically. Merge comparison is field-specific:
 - notes;
 - lifecycle state;
 - provenance;
+- requested priority;
 - each imported dependency key;
 - each manual dependency override key.
 

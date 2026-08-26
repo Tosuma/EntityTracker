@@ -5,7 +5,7 @@ namespace EntityTracker.Application.Ranking;
 /// <summary>
 /// Computes a complete dependency-safe ordering without retaining or mutating graph state.
 /// </summary>
-public sealed class DependencyRanker
+public sealed class DependencyRanker : IDependencyRankingService
 {
     public DependencyRankingResult Rank(
         IEnumerable<TrackedEntity> entities,

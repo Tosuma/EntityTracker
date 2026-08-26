@@ -5,6 +5,7 @@ using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Planning;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
@@ -17,7 +18,7 @@ namespace EntityTracker.Infrastructure.Tests.Persistence;
 public sealed class SqlitePersistenceTests
 {
     [Fact]
-    public async Task InitializeAsync_FreshDatabaseCreatesVersionEightSchemaAndIsIdempotent()
+    public async Task InitializeAsync_FreshDatabaseCreatesVersionNineSchemaAndIsIdempotent()
     {
         await using TemporarySqliteFile file = new();
         SqliteDatabase database = new(file.DatabasePath);
@@ -26,7 +27,7 @@ public sealed class SqlitePersistenceTests
         await database.InitializeAsync();
 
         await using SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(8L, await ExecuteScalarInt64Async(connection, "PRAGMA user_version;"));
+        Assert.Equal(9L, await ExecuteScalarInt64Async(connection, "PRAGMA user_version;"));
 
         string[] tableNames = await ReadStringsAsync(
             connection,
@@ -47,6 +48,7 @@ public sealed class SqlitePersistenceTests
         Assert.Contains("progress_updated_at_utc", entityColumns);
         Assert.Contains("lifecycle_state", entityColumns);
         Assert.Contains("provenance", entityColumns);
+        Assert.Contains("requested_priority", entityColumns);
         Assert.DoesNotContain("rank", entityColumns);
     }
 
@@ -57,7 +59,7 @@ public sealed class SqlitePersistenceTests
         await using (SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath))
         {
             using SqliteCommand command = connection.CreateCommand();
-            command.CommandText = "PRAGMA user_version = 9;";
+            command.CommandText = "PRAGMA user_version = 10;";
             await command.ExecuteNonQueryAsync();
         }
 
@@ -66,7 +68,7 @@ public sealed class SqlitePersistenceTests
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => database.InitializeAsync());
         Assert.Contains("newer", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("8", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("9", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -95,7 +97,85 @@ public sealed class SqlitePersistenceTests
         Assert.Equal("Keep notes", loaded.Notes);
         Assert.Null(await new SqliteTrackedStateStore(database).GetLatestImportAsync());
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(8L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal(9L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+    }
+
+    [Fact]
+    public async Task InitializeAsync_VersionEightAddsNullableRequestedPriority()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteEntityRepository repository = new(database);
+        TrackedEntity existing = new(EntityId.New(), "Existing");
+        Assert.True(await repository.TryAddAsync(existing));
+
+        await using (SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath))
+        {
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                ALTER TABLE tracked_entities DROP COLUMN requested_priority;
+                PRAGMA user_version = 8;
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await database.InitializeAsync();
+
+        TrackedEntity loaded = Assert.IsType<TrackedEntity>(await repository.GetAsync(existing.Id));
+        Assert.Null(loaded.RequestedPriority);
+        await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
+        Assert.Equal(9L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Contains(
+            "requested_priority",
+            await ReadStringsAsync(
+                migrated,
+                "SELECT name FROM pragma_table_info('tracked_entities') ORDER BY cid;"));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    public async Task EntityRepository_RoundTripsRequestedPriority(int? requestedPriority)
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteEntityRepository repository = new(database);
+        TrackedEntity entity = new(
+            EntityId.New(),
+            "Prioritized",
+            requestedPriority: requestedPriority);
+
+        Assert.True(await repository.TryAddAsync(entity));
+
+        TrackedEntity loaded = Assert.IsType<TrackedEntity>(await repository.GetAsync(entity.Id));
+        Assert.Equal(requestedPriority, loaded.RequestedPriority);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(6)]
+    public async Task RequestedPriority_DatabaseConstraintRejectsUnsupportedValues(int priority)
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteEntityRepository repository = new(database);
+        TrackedEntity entity = new(EntityId.New(), "Prioritized");
+        Assert.True(await repository.TryAddAsync(entity));
+        await using SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath);
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText =
+            "UPDATE tracked_entities SET requested_priority = $priority WHERE id = $id;";
+        command.Parameters.AddWithValue("$priority", priority);
+        command.Parameters.AddWithValue("$id", entity.Id.Value.ToString("D"));
+
+        await Assert.ThrowsAsync<SqliteException>(() => command.ExecuteNonQueryAsync());
     }
 
     [Fact]
@@ -159,7 +239,7 @@ public sealed class SqlitePersistenceTests
         await using SqliteConnection migratedConnection =
             await OpenConnectionAsync(file.DatabasePath);
         Assert.Equal(
-            8L,
+            9L,
             await ExecuteScalarInt64Async(migratedConnection, "PRAGMA user_version;"));
         Assert.All(
             await entityRepository.GetAllAsync(),
@@ -211,7 +291,7 @@ public sealed class SqlitePersistenceTests
         Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
         Assert.Equal("Keep notes", loaded.Notes);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(8L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal(9L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
         Assert.Equal(EntityProvenance.Imported, loaded.Provenance);
     }
 
@@ -256,7 +336,7 @@ public sealed class SqlitePersistenceTests
         Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
         Assert.Equal("Keep notes", loaded.Notes);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(8L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal(9L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
     }
 
     [Fact]
@@ -381,7 +461,7 @@ public sealed class SqlitePersistenceTests
         Assert.Equal(StatusHistoryEntryKind.Baseline, history[0].Kind);
         Assert.Equal(StatusHistoryEntryKind.Transition, history[1].Kind);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(8L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal(9L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
     }
 
     [Fact]
@@ -660,7 +740,8 @@ public sealed class SqlitePersistenceTests
             new SqliteManualDependencyOverrideRepository(restartedDatabase),
             new DependencyRanker(),
             new EffectiveDependencyResolver(),
-            new WorkflowReadinessEvaluator());
+            new WorkflowReadinessEvaluator(),
+            new PriorityPlanningService());
 
         EntityOverviewResult result = await overviewService.GetAsync();
 

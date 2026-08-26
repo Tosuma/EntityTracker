@@ -15,6 +15,7 @@ public sealed class TrackedEntityTests
         Assert.Equal(string.Empty, entity.Notes);
         Assert.Equal(EntityLifecycleState.Active, entity.LifecycleState);
         Assert.Equal(EntityProvenance.Imported, entity.Provenance);
+        Assert.Null(entity.RequestedPriority);
     }
 
     [Fact]
@@ -178,5 +179,44 @@ public sealed class TrackedEntityTests
         Assert.Throws<InvalidOperationException>(() =>
             imported.ChangeProvenance(EntityProvenance.ManualAndImported));
         Assert.Equal(EntityProvenance.Imported, imported.Provenance);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    public void RequestedPriority_AcceptsSupportedValuesAndCanBeCleared(int priority)
+    {
+        TrackedEntity entity = new(
+            EntityId.New(),
+            "sales.Customer",
+            requestedPriority: priority);
+
+        Assert.Equal(priority, entity.RequestedPriority);
+
+        entity.ChangeRequestedPriority(null);
+
+        Assert.Null(entity.RequestedPriority);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(6)]
+    public void RequestedPriority_RejectsUnsupportedValuesWithoutChangingCurrentValue(int priority)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TrackedEntity(
+            EntityId.New(),
+            "sales.Customer",
+            requestedPriority: priority));
+
+        TrackedEntity entity = new(
+            EntityId.New(),
+            "sales.Customer",
+            requestedPriority: 3);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            entity.ChangeRequestedPriority(priority));
+        Assert.Equal(3, entity.RequestedPriority);
     }
 }

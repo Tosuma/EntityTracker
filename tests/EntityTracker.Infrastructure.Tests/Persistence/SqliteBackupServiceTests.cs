@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 
 using EntityTracker.Application.Persistence;
+using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Persistence;
 
 namespace EntityTracker.Infrastructure.Tests.Persistence;
@@ -13,6 +14,11 @@ public sealed class SqliteBackupServiceTests
         await using TemporarySqliteFile file = new();
         SqliteDatabase database = new(file.DatabasePath);
         await database.InitializeAsync();
+        TrackedEntity prioritized = new(
+            EntityId.New(),
+            "Prioritized",
+            requestedPriority: 4);
+        Assert.True(await new SqliteEntityRepository(database).TryAddAsync(prioritized));
         string backupDirectory = Path.Combine(
             Path.GetDirectoryName(file.DatabasePath)!,
             "backups");
@@ -32,6 +38,9 @@ public sealed class SqliteBackupServiceTests
         Assert.Equal(
             SqliteDatabase.CurrentSchemaVersion,
             await ReadSchemaVersionAsync(first.CreatedBackupPaths[0]));
+        Assert.Equal(
+            4,
+            await ReadRequestedPriorityAsync(first.CreatedBackupPaths[0], prioritized.Id));
     }
 
     [Fact]
@@ -143,5 +152,19 @@ public sealed class SqliteBackupServiceTests
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = "SELECT value FROM marker;";
         return (string)(await command.ExecuteScalarAsync())!;
+    }
+
+    private static async Task<int?> ReadRequestedPriorityAsync(
+        string databasePath,
+        EntityId entityId)
+    {
+        await using SqliteConnection connection = new($"Data Source={databasePath};Mode=ReadOnly");
+        await connection.OpenAsync();
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT requested_priority FROM tracked_entities WHERE id = $id;";
+        command.Parameters.AddWithValue("$id", entityId.Value.ToString("D"));
+        object? value = await command.ExecuteScalarAsync();
+        return value is null or DBNull ? null : Convert.ToInt32(value);
     }
 }

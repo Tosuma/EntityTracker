@@ -8,7 +8,8 @@ public sealed class TrackedEntity
         DevelopmentStatus status = DevelopmentStatus.NotStarted,
         string notes = "",
         EntityLifecycleState lifecycleState = EntityLifecycleState.Active,
-        EntityProvenance provenance = EntityProvenance.Imported)
+        EntityProvenance provenance = EntityProvenance.Imported,
+        int? requestedPriority = null)
     {
         ArgumentNullException.ThrowIfNull(id);
         ValidateSourceName(sourceName);
@@ -17,6 +18,7 @@ public sealed class TrackedEntity
         EnsureDefinedStatus(status);
         EnsureDefinedLifecycleState(lifecycleState);
         EnsureDefinedProvenance(provenance);
+        EnsureValidRequestedPriority(requestedPriority);
 
         Id = id;
         SourceName = sourceName;
@@ -24,6 +26,7 @@ public sealed class TrackedEntity
         Notes = notes;
         LifecycleState = lifecycleState;
         Provenance = provenance;
+        RequestedPriority = requestedPriority;
     }
 
     public EntityId Id { get; }
@@ -37,6 +40,8 @@ public sealed class TrackedEntity
     public EntityLifecycleState LifecycleState { get; private set; }
 
     public EntityProvenance Provenance { get; private set; }
+
+    public int? RequestedPriority { get; private set; }
 
     public void ChangeSourceName(string sourceName)
     {
@@ -76,6 +81,12 @@ public sealed class TrackedEntity
         Provenance = provenance;
     }
 
+    public void ChangeRequestedPriority(int? requestedPriority)
+    {
+        EnsureValidRequestedPriority(requestedPriority);
+        RequestedPriority = requestedPriority;
+    }
+
     private static void ValidateSourceName(string sourceName)
     {
         ArgumentNullException.ThrowIfNull(sourceName);
@@ -113,6 +124,17 @@ public sealed class TrackedEntity
                 nameof(provenance),
                 provenance,
                 "The entity provenance is not defined.");
+        }
+    }
+
+    private static void EnsureValidRequestedPriority(int? requestedPriority)
+    {
+        if (requestedPriority is < 1 or > 5)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(requestedPriority),
+                requestedPriority,
+                "Requested priority must be between 1 and 5.");
         }
     }
 }

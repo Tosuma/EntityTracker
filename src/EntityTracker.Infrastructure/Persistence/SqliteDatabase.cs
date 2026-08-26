@@ -4,7 +4,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    internal const int CurrentSchemaVersion = 8;
+    internal const int CurrentSchemaVersion = 9;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -137,6 +137,12 @@ public sealed class SqliteDatabase
             unchanged_entity_count INTEGER NOT NULL CHECK (unchanged_entity_count >= 0),
             unresolved_entity_count INTEGER NOT NULL CHECK (unresolved_entity_count >= 0)
         );
+        """;
+
+    private const string RequestedPrioritySchemaSql = """
+        ALTER TABLE tracked_entities
+            ADD COLUMN requested_priority INTEGER NULL
+                CHECK (requested_priority IS NULL OR requested_priority BETWEEN 1 AND 5);
         """;
 
     private const string UnresolvedDependencySchemaSql = """
@@ -422,6 +428,20 @@ public sealed class SqliteDatabase
                     cancellationToken);
             }
 
+            if (schemaVersion < 9 && !await ColumnExistsAsync(
+                    connection,
+                    transaction,
+                    "tracked_entities",
+                    "requested_priority",
+                    cancellationToken))
+            {
+                await ExecuteAsync(
+                    connection,
+                    transaction,
+                    RequestedPrioritySchemaSql,
+                    cancellationToken);
+            }
+
             await ExecuteAsync(
                 connection,
                 transaction,
@@ -437,6 +457,28 @@ public sealed class SqliteDatabase
                 await ExecuteAsync(connection, "PRAGMA foreign_keys = ON;", CancellationToken.None);
             }
         }
+    }
+
+    private static async Task<bool> ColumnExistsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string tableName,
+        string columnName,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = $"PRAGMA table_info({tableName});";
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     internal async Task<SqliteConnection> OpenConnectionAsync(

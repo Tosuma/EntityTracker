@@ -10,6 +10,7 @@ public sealed record EntityOverviewRow(
     DevelopmentStatus DevelopmentStatus,
     EntityWorkflowState WorkflowState,
     DependencyResolutionState? DependencyState,
+    string Priority,
     string Rank,
     string SourceName,
     string Provenance,

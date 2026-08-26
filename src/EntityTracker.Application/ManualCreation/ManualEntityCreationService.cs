@@ -12,7 +12,7 @@ public sealed class ManualEntityCreationService
     private readonly IEntityRepository _entityRepository;
     private readonly IDependencyRepository _dependencyRepository;
     private readonly IManualDependencyOverrideRepository _overrideRepository;
-    private readonly DependencyRanker _dependencyRanker;
+    private readonly IDependencyRankingService _dependencyRanker;
     private readonly EffectiveDependencyResolver _effectiveDependencyResolver;
     private readonly ITrackedStateStore _store;
     private readonly ProgressSnapshotCalculator _snapshotCalculator;
@@ -21,7 +21,7 @@ public sealed class ManualEntityCreationService
         IEntityRepository entityRepository,
         IDependencyRepository dependencyRepository,
         IManualDependencyOverrideRepository overrideRepository,
-        DependencyRanker dependencyRanker,
+        IDependencyRankingService dependencyRanker,
         EffectiveDependencyResolver effectiveDependencyResolver,
         ITrackedStateStore store,
         ProgressSnapshotCalculator? snapshotCalculator = null)

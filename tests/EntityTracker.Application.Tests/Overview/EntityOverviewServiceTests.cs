@@ -2,6 +2,7 @@ using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Planning;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
@@ -190,6 +191,69 @@ public sealed class EntityOverviewServiceTests
             result.Items.Select(static item => item.WorkflowState));
     }
 
+    [Fact]
+    public async Task GetAsync_GroupsByEffectivePriorityWithoutChangingDisplayedRank()
+    {
+        TrackedEntity prerequisite = Entity(1, "ZuluPrerequisite");
+        TrackedEntity highestTarget = Entity(2, "AlphaTarget", requestedPriority: 1);
+        TrackedEntity lowerTarget = Entity(3, "LowerTarget", requestedPriority: 2);
+        TrackedEntity unprioritized = Entity(4, "Unprioritized");
+        EntityOverviewService service = CreateService(
+            [unprioritized, lowerTarget, highestTarget, prerequisite],
+            [Dependency(highestTarget, prerequisite, ImportedDependencyKind.Mandatory)]);
+
+        EntityOverviewResult result = await service.GetAsync();
+
+        Assert.Equal(
+            ["ZuluPrerequisite", "AlphaTarget", "LowerTarget", "Unprioritized"],
+            result.Items.Select(static item => item.SourceName));
+        Assert.Equal([1, 1, 2, null], result.Items.Select(static item => item.EffectivePriority));
+        Assert.Equal([1, 2, 3, 4], result.Items.Select(static item => item.Rank));
+    }
+
+    [Fact]
+    public async Task GetAsync_UnrankedPrioritySegmentKeepsKnownDependencyBeforeDependent()
+    {
+        TrackedEntity prerequisite = Entity(1, "ZuluPrerequisite");
+        TrackedEntity target = Entity(2, "AlphaTarget", requestedPriority: 1);
+        EntityOverviewService service = CreateService(
+            [target, prerequisite],
+            [Dependency(target, prerequisite, ImportedDependencyKind.Mandatory)],
+            [Unresolved(prerequisite, "Missing", ImportedDependencyKind.Mandatory)]);
+
+        EntityOverviewResult result = await service.GetAsync();
+
+        Assert.Equal(
+            ["ZuluPrerequisite", "AlphaTarget"],
+            result.Items.Select(static item => item.SourceName));
+        Assert.All(result.Items, static item => Assert.Equal(1, item.EffectivePriority));
+        Assert.All(result.Items, static item => Assert.Null(item.Rank));
+    }
+
+    [Fact]
+    public async Task GetAsync_UsesInjectedRankingService()
+    {
+        TrackedEntity dependency = Entity(1, "ZuluDependency");
+        TrackedEntity owner = Entity(2, "AlphaOwner");
+        RecordingRankingService rankingService = new();
+        EntityOverviewService service = new(
+            new StubEntityRepository([dependency, owner]),
+            new StubDependencyRepository(
+                [Dependency(owner, dependency, ImportedDependencyKind.Mandatory)],
+                []),
+            new StubManualDependencyOverrideRepository(),
+            rankingService,
+            new EffectiveDependencyResolver(),
+            new WorkflowReadinessEvaluator(),
+            new PriorityPlanningService());
+
+        EntityOverviewResult result = await service.GetAsync();
+
+        Assert.Equal(2, rankingService.CallCount);
+        Assert.Equal(["AlphaOwner", "ZuluDependency"], result.Items.Select(
+            static item => item.SourceName));
+    }
+
     private static EntityOverviewService CreateService(
         IEnumerable<TrackedEntity> entities,
         IEnumerable<PersistedDependency> dependencies,
@@ -204,20 +268,23 @@ public sealed class EntityOverviewServiceTests
             new StubManualDependencyOverrideRepository(overrides?.ToArray()),
             new DependencyRanker(),
             new EffectiveDependencyResolver(),
-            new WorkflowReadinessEvaluator());
+            new WorkflowReadinessEvaluator(),
+            new PriorityPlanningService());
     }
 
     private static TrackedEntity Entity(
         int id,
         string name,
         DevelopmentStatus status = DevelopmentStatus.NotStarted,
-        string notes = "")
+        string notes = "",
+        int? requestedPriority = null)
     {
         return new TrackedEntity(
             new EntityId(new Guid(id, 0, 0, new byte[8])),
             name,
             status,
-            notes);
+            notes,
+            requestedPriority: requestedPriority);
     }
 
     private static PersistedDependency Dependency(
@@ -265,5 +332,21 @@ public sealed class EntityOverviewServiceTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(unresolvedDependencies);
 
+    }
+
+    private sealed class RecordingRankingService : IDependencyRankingService
+    {
+        private readonly DependencyRanker _ranker = new();
+
+        public int CallCount { get; private set; }
+
+        public DependencyRankingResult Rank(
+            IEnumerable<TrackedEntity> entities,
+            IEnumerable<DependencyEdge> dependencyEdges,
+            IEnumerable<UnresolvedDependency> unresolvedDependencies)
+        {
+            CallCount++;
+            return _ranker.Rank(entities, [], unresolvedDependencies);
+        }
     }
 }

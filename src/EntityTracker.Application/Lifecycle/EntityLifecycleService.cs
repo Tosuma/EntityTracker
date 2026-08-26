@@ -16,7 +16,7 @@ public sealed class EntityLifecycleService
     private readonly IManualDependencyOverrideRepository _overrideRepository;
     private readonly ITrackedStateStore _store;
     private readonly EffectiveDependencyResolver _effectiveDependencyResolver;
-    private readonly DependencyRanker _dependencyRanker;
+    private readonly IDependencyRankingService _dependencyRanker;
     private readonly ProgressSnapshotCalculator _snapshotCalculator;
 
     public EntityLifecycleService(
@@ -25,7 +25,7 @@ public sealed class EntityLifecycleService
         IManualDependencyOverrideRepository overrideRepository,
         ITrackedStateStore store,
         EffectiveDependencyResolver effectiveDependencyResolver,
-        DependencyRanker dependencyRanker,
+        IDependencyRankingService dependencyRanker,
         ProgressSnapshotCalculator? snapshotCalculator = null)
     {
         ArgumentNullException.ThrowIfNull(entityRepository);
@@ -73,7 +73,8 @@ public sealed class EntityLifecycleService
             entity.Status,
             entity.Notes,
             EntityLifecycleState.Archived,
-            entity.Provenance);
+            entity.Provenance,
+            entity.RequestedPriority);
         TrackedEntity[] candidateEntities = entities
             .Select(item => item.Id == entityId ? archived : item)
             .ToArray();
@@ -126,7 +127,8 @@ public sealed class EntityLifecycleService
             archived.Status,
             archived.Notes,
             EntityLifecycleState.Active,
-            archived.Provenance);
+            archived.Provenance,
+            archived.RequestedPriority);
         TrackedEntity[] candidateEntities = currentEntities
             .Select(entity => entity.Id == entityId ? restored : entity)
             .ToArray();

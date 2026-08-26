@@ -26,7 +26,8 @@ public sealed class SqliteEntityRepository : IEntityRepository
             await _database.OpenConnectionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, source_name, development_status, notes, lifecycle_state, provenance
+            SELECT id, source_name, development_status, notes, lifecycle_state, provenance,
+                   requested_priority
             FROM tracked_entities
             WHERE id = $id;
             """;
@@ -45,7 +46,8 @@ public sealed class SqliteEntityRepository : IEntityRepository
             await _database.OpenConnectionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, source_name, development_status, notes, lifecycle_state, provenance
+            SELECT id, source_name, development_status, notes, lifecycle_state, provenance,
+                   requested_priority
             FROM tracked_entities
             ORDER BY source_name COLLATE NOCASE, id;
             """;
@@ -82,6 +84,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
                 notes,
                 lifecycle_state,
                 provenance,
+                requested_priority,
                 created_at_utc,
                 schema_updated_at_utc,
                 progress_updated_at_utc
@@ -95,6 +98,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
                 $notes,
                 $lifecycleState,
                 $provenance,
+                $requestedPriority,
                 $createdAtUtc,
                 $schemaUpdatedAtUtc,
                 $progressUpdatedAtUtc
@@ -157,6 +161,9 @@ public sealed class SqliteEntityRepository : IEntityRepository
         command.Parameters.AddWithValue("$notes", entity.Notes);
         command.Parameters.AddWithValue("$lifecycleState", entity.LifecycleState.ToString());
         command.Parameters.AddWithValue("$provenance", entity.Provenance.ToString());
+        command.Parameters.AddWithValue(
+            "$requestedPriority",
+            entity.RequestedPriority is null ? DBNull.Value : entity.RequestedPriority.Value);
     }
 
     private static TrackedEntity ReadEntity(SqliteDataReader reader)
@@ -174,7 +181,15 @@ public sealed class SqliteEntityRepository : IEntityRepository
         EntityProvenance provenance = SqlitePersistenceValues.ParseEnum<EntityProvenance>(
             reader.GetString(5),
             "entity provenance");
+        int? requestedPriority = reader.IsDBNull(6) ? null : reader.GetInt32(6);
 
-        return new TrackedEntity(id, sourceName, status, notes, lifecycleState, provenance);
+        return new TrackedEntity(
+            id,
+            sourceName,
+            status,
+            notes,
+            lifecycleState,
+            provenance,
+            requestedPriority);
     }
 }

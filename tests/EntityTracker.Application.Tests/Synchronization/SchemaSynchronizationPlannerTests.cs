@@ -278,7 +278,8 @@ public sealed class SchemaSynchronizationPlannerTests
             "Customer",
             DevelopmentStatus.InProgress,
             "Manager implemented",
-            EntityLifecycleState.Archived);
+            EntityLifecycleState.Archived,
+            requestedPriority: 2);
 
         SchemaSynchronizationPlan plan = Plan(
             Candidate(["Customer"], []),
@@ -292,6 +293,26 @@ public sealed class SchemaSynchronizationPlannerTests
         Assert.Equal(DevelopmentStatus.InProgress, change.Entity.Status);
         Assert.Equal("Manager implemented", change.Entity.Notes);
         Assert.Equal(EntityLifecycleState.Active, change.Entity.LifecycleState);
+        Assert.Equal(2, change.Entity.RequestedPriority);
+    }
+
+    [Theory]
+    [InlineData(SchemaImportMode.Complete)]
+    [InlineData(SchemaImportMode.Partial)]
+    public void MatchingImport_PreservesRequestedPriority(SchemaImportMode mode)
+    {
+        TrackedEntity existing = Entity(1, "Customer", requestedPriority: 4);
+
+        SchemaSynchronizationPlan plan = Plan(
+            Candidate(["customer"], []),
+            mode,
+            [existing],
+            []);
+
+        TrackedEntity candidate = Assert.Single(plan.CandidateEntities);
+        Assert.Equal(existing.Id, candidate.Id);
+        Assert.Equal(4, candidate.RequestedPriority);
+        Assert.Empty(plan.ChangeSet.EntitiesWithRequestedPriorityToUpdate);
     }
 
     [Fact]
@@ -472,14 +493,16 @@ public sealed class SchemaSynchronizationPlannerTests
         DevelopmentStatus status = DevelopmentStatus.NotStarted,
         string notes = "",
         EntityLifecycleState lifecycle = EntityLifecycleState.Active,
-        EntityProvenance provenance = EntityProvenance.Imported) =>
+        EntityProvenance provenance = EntityProvenance.Imported,
+        int? requestedPriority = null) =>
         new(
             new EntityId(new Guid(id, 0, 0, new byte[8])),
             name,
             status,
             notes,
             lifecycle,
-            provenance);
+            provenance,
+            requestedPriority);
 
     private static PersistedDependency Dependency(
         TrackedEntity owner,

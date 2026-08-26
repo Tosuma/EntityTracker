@@ -9,6 +9,7 @@ public sealed class EntityOverviewItem
     internal EntityOverviewItem(
         EntityId entityId,
         int? rank,
+        int? effectivePriority,
         string sourceName,
         EntityProvenance provenance,
         DevelopmentStatus status,
@@ -23,6 +24,7 @@ public sealed class EntityOverviewItem
     {
         EntityId = entityId;
         Rank = rank;
+        EffectivePriority = effectivePriority;
         SourceName = sourceName;
         Provenance = provenance;
         Status = status;
@@ -40,6 +42,8 @@ public sealed class EntityOverviewItem
     public EntityId EntityId { get; }
 
     public int? Rank { get; }
+
+    public int? EffectivePriority { get; }
 
     public string SourceName { get; }
 

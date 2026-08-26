@@ -9,5 +9,6 @@ public enum CollaborativeConflictField
     Provenance = 4,
     ImportedDependency = 5,
     ManualDependencyOverride = 6,
-    Identity = 7
+    Identity = 7,
+    RequestedPriority = 8
 }

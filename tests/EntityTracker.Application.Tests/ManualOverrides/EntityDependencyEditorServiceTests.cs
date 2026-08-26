@@ -3,6 +3,7 @@ using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Planning;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Domain;
 
@@ -132,7 +133,7 @@ public sealed class EntityDependencyEditorServiceTests
                 "Future",
                 ManualDependencyOverrideAction.Add)]);
 
-        await service.SaveAsync(plan, owner.Status, owner.Notes);
+        await service.SaveAsync(plan, owner.Status, owner.Notes, owner.RequestedPriority);
 
         TrackedStateChangeSet changeSet = Assert.IsType<TrackedStateChangeSet>(
             store.LastChangeSet);
@@ -164,7 +165,11 @@ public sealed class EntityDependencyEditorServiceTests
                 "Future",
                 ManualDependencyOverrideAction.Add)]);
 
-        await service.SaveAsync(plan, DevelopmentStatus.Reconciled, "Verified notes");
+        await service.SaveAsync(
+            plan,
+            DevelopmentStatus.Reconciled,
+            "Verified notes",
+            owner.RequestedPriority);
 
         TrackedStateChangeSet changeSet = Assert.IsType<TrackedStateChangeSet>(
             store.LastChangeSet);
@@ -229,6 +234,39 @@ public sealed class EntityDependencyEditorServiceTests
         Assert.DoesNotContain(result.Suggestions, item => item.EntityId == archived.Id);
     }
 
+    [Fact]
+    public async Task PriorityPreviewAndSave_UseCandidateGraphAndPersistOnlyRequestedValue()
+    {
+        TrackedEntity prerequisite = Entity(1, "Prerequisite");
+        TrackedEntity owner = Entity(2, "Owner");
+        PersistedDependency dependency = new(
+            new DependencyEdge(owner.Id, prerequisite.Id),
+            ImportedDependencyKind.Mandatory);
+        EntityDependencyEditorService service = Service(
+            [owner, prerequisite],
+            [dependency],
+            [],
+            [],
+            out StubStore store);
+        EntityDependencyEditPlan plan = await service.LoadAsync(owner.Id);
+
+        PriorityPlanningPreview preview = service.CreatePriorityPreview(plan, 2);
+
+        Assert.Equal(
+            ["Prerequisite", "Owner"],
+            preview.Entities.Select(static item => item.SourceName));
+        Assert.All(preview.Entities, static item => Assert.Equal(2, item.EffectivePriority));
+
+        await service.SaveAsync(plan, owner.Status, owner.Notes, 2);
+
+        TrackedStateChangeSet changeSet = Assert.IsType<TrackedStateChangeSet>(store.LastChangeSet);
+        TrackedEntity priorityUpdate = Assert.Single(
+            changeSet.EntitiesWithRequestedPriorityToUpdate);
+        Assert.Equal(owner.Id, priorityUpdate.Id);
+        Assert.Equal(2, priorityUpdate.RequestedPriority);
+        Assert.Empty(changeSet.EntitiesWithProgressToUpdate);
+    }
+
     private static EntityDependencyEditorService Service(
         IReadOnlyList<TrackedEntity> entities,
         IReadOnlyList<PersistedDependency> resolved,
@@ -243,7 +281,8 @@ public sealed class EntityDependencyEditorServiceTests
             new StubManualDependencyOverrideRepository(overrides),
             new EffectiveDependencyResolver(),
             new DependencyRanker(),
-            store);
+            store,
+            new PriorityPlanningService());
     }
 
     private static TrackedEntity Entity(int id, string name) => new(Id(id), name);

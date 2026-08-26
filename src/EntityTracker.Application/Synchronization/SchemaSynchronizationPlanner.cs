@@ -12,12 +12,12 @@ namespace EntityTracker.Application.Synchronization;
 /// </summary>
 public sealed class SchemaSynchronizationPlanner
 {
-    private readonly DependencyRanker _dependencyRanker;
+    private readonly IDependencyRankingService _dependencyRanker;
     private readonly EffectiveDependencyResolver _effectiveDependencyResolver;
     private readonly ProgressSnapshotCalculator _snapshotCalculator;
 
     public SchemaSynchronizationPlanner(
-        DependencyRanker dependencyRanker,
+        IDependencyRankingService dependencyRanker,
         EffectiveDependencyResolver? effectiveDependencyResolver = null,
         ProgressSnapshotCalculator? snapshotCalculator = null)
     {
@@ -178,7 +178,8 @@ public sealed class SchemaSynchronizationPlanner
                     EntityLifecycleState.Active,
                     existingEntity.Provenance == EntityProvenance.ManualOnly
                         ? EntityProvenance.ManualAndImported
-                        : existingEntity.Provenance)
+                        : existingEntity.Provenance,
+                    existingEntity.RequestedPriority)
                 : new TrackedEntity(
                     plannedNewEntityIds is not null &&
                     plannedNewEntityIds.TryGetValue(
@@ -423,7 +424,8 @@ public sealed class SchemaSynchronizationPlanner
                     DevelopmentStatus.ReworkNeeded,
                     entity.Notes,
                     entity.LifecycleState,
-                    entity.Provenance)
+                    entity.Provenance,
+                    entity.RequestedPriority)
                 : entity)
             .ToArray();
         TrackedEntity[] progressUpdates = finalCandidateEntities

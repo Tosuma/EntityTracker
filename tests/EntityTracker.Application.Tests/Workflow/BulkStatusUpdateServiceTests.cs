@@ -120,6 +120,21 @@ public sealed class BulkStatusUpdateServiceTests
     }
 
     [Fact]
+    public async Task ApplyAsync_StatusChangePreservesRequestedPriority()
+    {
+        TrackedEntity entity = Entity(1, "Prioritized", requestedPriority: 3);
+        RecordingStore store = new();
+        BulkStatusUpdateService service = CreateService([entity], [], store);
+
+        await service.ApplyAsync([entity.Id], DevelopmentStatus.InProgress);
+
+        TrackedEntity update = Assert.Single(
+            Assert.IsType<TrackedStateChangeSet>(store.LastChangeSet)
+                .EntitiesWithProgressToUpdate);
+        Assert.Equal(3, update.RequestedPriority);
+    }
+
+    [Fact]
     public async Task ApplyAsync_CompletingDependencies_CalculatesOneReadyFinalState()
     {
         TrackedEntity firstDependency = Entity(1, "First dependency");
@@ -196,8 +211,14 @@ public sealed class BulkStatusUpdateServiceTests
         int id,
         string name,
         DevelopmentStatus status = DevelopmentStatus.NotStarted,
-        EntityLifecycleState lifecycleState = EntityLifecycleState.Active) =>
-        new(Id(id), name, status, lifecycleState: lifecycleState);
+        EntityLifecycleState lifecycleState = EntityLifecycleState.Active,
+        int? requestedPriority = null) =>
+        new(
+            Id(id),
+            name,
+            status,
+            lifecycleState: lifecycleState,
+            requestedPriority: requestedPriority);
 
     private static EntityId Id(int id) => new(new Guid(id, 0, 0, new byte[8]));
 

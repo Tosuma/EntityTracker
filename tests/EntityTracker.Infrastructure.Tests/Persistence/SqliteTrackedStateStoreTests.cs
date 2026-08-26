@@ -5,6 +5,7 @@ using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Planning;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Workflow;
@@ -364,7 +365,8 @@ public sealed class SqliteTrackedStateStoreTests
             DevelopmentStatus.Reconciled,
             "Preserved notes",
             EntityLifecycleState.Archived,
-            EntityProvenance.ManualAndImported);
+            EntityProvenance.ManualAndImported,
+            requestedPriority: 3);
         TrackedEntity owner = new(EntityId.New(), "Owner");
         Assert.True(await entities.TryAddAsync(target));
         Assert.True(await entities.TryAddAsync(owner));
@@ -401,6 +403,7 @@ public sealed class SqliteTrackedStateStoreTests
         Assert.Equal(DevelopmentStatus.Reconciled, loaded.Status);
         Assert.Equal("Preserved notes", loaded.Notes);
         Assert.Equal(EntityProvenance.ManualAndImported, loaded.Provenance);
+        Assert.Equal(3, loaded.RequestedPriority);
         Assert.Equal(preservedOverride, Assert.Single(await overrides.GetAllAsync()));
         Assert.Single(await dependencies.GetAllUnresolvedAsync());
 
@@ -410,11 +413,72 @@ public sealed class SqliteTrackedStateStoreTests
             overrides,
             new DependencyRanker(),
             new EffectiveDependencyResolver(),
-            new WorkflowReadinessEvaluator()).GetAsync();
+            new WorkflowReadinessEvaluator(),
+            new PriorityPlanningService()).GetAsync();
         EntityOverviewItem ownerItem = overview.Items.Single(item => item.EntityId == owner.Id);
         Assert.Equal(DependencyResolutionState.Resolved, ownerItem.DependencyState);
         Assert.Equal(EntityWorkflowState.Ready, ownerItem.WorkflowState);
         Assert.Empty(ownerItem.MissingDependencyNames);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_PriorityOnlyUpdatePreservesProgressAndHistory()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteTrackedStateStore store = new(database);
+        SqliteEntityRepository entities = new(database);
+        SqliteProgressHistoryRepository history = new(database);
+        TrackedEntity entity = new(
+            EntityId.New(),
+            "Prioritized",
+            DevelopmentStatus.InProgress,
+            "Keep notes");
+        await store.ApplyAsync(new TrackedStateChangeSet([entity], [], [], [], [], []));
+        int historyCount = (await history.GetStatusHistoryAsync()).Count;
+        TrackedEntity prioritized = new(
+            entity.Id,
+            entity.SourceName,
+            entity.Status,
+            entity.Notes,
+            entity.LifecycleState,
+            entity.Provenance,
+            requestedPriority: 2);
+
+        await store.ApplyAsync(new TrackedStateChangeSet(
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            entitiesWithRequestedPriorityToUpdate: [prioritized]));
+
+        TrackedEntity loaded = Assert.IsType<TrackedEntity>(await entities.GetAsync(entity.Id));
+        Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
+        Assert.Equal("Keep notes", loaded.Notes);
+        Assert.Equal(2, loaded.RequestedPriority);
+        Assert.Equal(historyCount, (await history.GetStatusHistoryAsync()).Count);
+
+        TrackedEntity cleared = new(
+            entity.Id,
+            entity.SourceName,
+            entity.Status,
+            entity.Notes,
+            entity.LifecycleState,
+            entity.Provenance);
+        await store.ApplyAsync(new TrackedStateChangeSet(
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            entitiesWithRequestedPriorityToUpdate: [cleared]));
+
+        Assert.Null((await entities.GetAsync(entity.Id))!.RequestedPriority);
+        Assert.Equal(historyCount, (await history.GetStatusHistoryAsync()).Count);
     }
 
     [Fact]
@@ -543,7 +607,8 @@ public sealed class SqliteTrackedStateStoreTests
             new SqliteManualDependencyOverrideRepository(database),
             ranker,
             new EffectiveDependencyResolver(),
-            new WorkflowReadinessEvaluator()).GetAsync();
+            new WorkflowReadinessEvaluator(),
+            new PriorityPlanningService()).GetAsync();
         Assert.Equal(["Zulu", "Alpha"], overview.Items.Select(static item => item.SourceName));
         TrackedEntity loadedAlpha = (await entities.GetAsync(alpha.Id))!;
         TrackedEntity loadedZulu = (await entities.GetAsync(zulu.Id))!;
@@ -641,7 +706,8 @@ public sealed class SqliteTrackedStateStoreTests
             new SqliteManualDependencyOverrideRepository(database),
             ranker,
             new EffectiveDependencyResolver(),
-            new WorkflowReadinessEvaluator()).GetAsync();
+            new WorkflowReadinessEvaluator(),
+            new PriorityPlanningService()).GetAsync();
 
         Assert.True(result.IsSuccess);
         EntityOverviewItem item = Assert.Single(overview.Items);

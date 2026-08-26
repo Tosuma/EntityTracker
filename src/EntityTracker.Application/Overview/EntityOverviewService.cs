@@ -1,6 +1,7 @@
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Planning;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
@@ -12,17 +13,19 @@ public sealed class EntityOverviewService
     private readonly IEntityRepository _entityRepository;
     private readonly IDependencyRepository _dependencyRepository;
     private readonly IManualDependencyOverrideRepository _overrideRepository;
-    private readonly DependencyRanker _dependencyRanker;
+    private readonly IDependencyRankingService _dependencyRanker;
     private readonly EffectiveDependencyResolver _effectiveDependencyResolver;
     private readonly WorkflowReadinessEvaluator _readinessEvaluator;
+    private readonly PriorityPlanningService _priorityPlanningService;
 
     public EntityOverviewService(
         IEntityRepository entityRepository,
         IDependencyRepository dependencyRepository,
         IManualDependencyOverrideRepository overrideRepository,
-        DependencyRanker dependencyRanker,
+        IDependencyRankingService dependencyRanker,
         EffectiveDependencyResolver effectiveDependencyResolver,
-        WorkflowReadinessEvaluator readinessEvaluator)
+        WorkflowReadinessEvaluator readinessEvaluator,
+        PriorityPlanningService priorityPlanningService)
     {
         ArgumentNullException.ThrowIfNull(entityRepository);
         ArgumentNullException.ThrowIfNull(dependencyRepository);
@@ -30,6 +33,7 @@ public sealed class EntityOverviewService
         ArgumentNullException.ThrowIfNull(dependencyRanker);
         ArgumentNullException.ThrowIfNull(effectiveDependencyResolver);
         ArgumentNullException.ThrowIfNull(readinessEvaluator);
+        ArgumentNullException.ThrowIfNull(priorityPlanningService);
 
         _entityRepository = entityRepository;
         _dependencyRepository = dependencyRepository;
@@ -37,6 +41,7 @@ public sealed class EntityOverviewService
         _dependencyRanker = dependencyRanker;
         _effectiveDependencyResolver = effectiveDependencyResolver;
         _readinessEvaluator = readinessEvaluator;
+        _priorityPlanningService = priorityPlanningService;
     }
 
     public async Task<EntityOverviewResult> GetAsync(
@@ -78,6 +83,22 @@ public sealed class EntityOverviewService
         {
             return new EntityOverviewResult([], rankingResult.Diagnostics);
         }
+
+        DependencyRankingResult knownGraphOrdering = await Task.Run(
+            () => _dependencyRanker.Rank(
+                entities,
+                effectiveState.ResolvedDependencies.Select(static dependency => dependency.Edge),
+                []),
+            cancellationToken);
+        if (!knownGraphOrdering.IsSuccess)
+        {
+            return new EntityOverviewResult([], knownGraphOrdering.Diagnostics);
+        }
+
+        IReadOnlyDictionary<EntityId, int?> effectivePriorities =
+            _priorityPlanningService.CalculateEffectivePriorities(allEntities, effectiveState);
+        IReadOnlyDictionary<EntityId, int> knownGraphPositions = knownGraphOrdering.Rankings
+            .ToDictionary(static ranking => ranking.EntityId, static ranking => ranking.Rank);
 
         IReadOnlyDictionary<EntityId, TrackedEntity> entitiesById =
             entities.ToDictionary(static entity => entity.Id);
@@ -141,6 +162,7 @@ public sealed class EntityOverviewService
                 return new EntityOverviewItem(
                     entity.Id,
                     ranking.Rank,
+                    effectivePriorities[entity.Id],
                     entity.SourceName,
                     entity.Provenance,
                     entity.Status,
@@ -162,6 +184,7 @@ public sealed class EntityOverviewService
                 return new EntityOverviewItem(
                     entity.Id,
                     null,
+                    effectivePriorities[entity.Id],
                     entity.SourceName,
                     entity.Provenance,
                     entity.Status,
@@ -181,6 +204,7 @@ public sealed class EntityOverviewService
             .Select(entity => new EntityOverviewItem(
                 entity.Id,
                 null,
+                null,
                 entity.SourceName,
                 entity.Provenance,
                 entity.Status,
@@ -194,7 +218,14 @@ public sealed class EntityOverviewService
                 []));
 
         return new EntityOverviewResult(
-            rankedItems.Concat(unrankedItems),
+            rankedItems
+                .Concat(unrankedItems)
+                .OrderBy(static item => item.EffectivePriority ?? int.MaxValue)
+                .ThenBy(static item => item.Rank is null ? 1 : 0)
+                .ThenBy(item => item.Rank ?? knownGraphPositions[item.EntityId])
+                .ThenBy(static item => item.SourceName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static item => item.SourceName, StringComparer.Ordinal)
+                .ThenBy(static item => item.EntityId.Value),
             [],
             archivedItems);
     }

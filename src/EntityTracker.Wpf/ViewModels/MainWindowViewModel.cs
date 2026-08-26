@@ -1182,6 +1182,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             item.Status,
             item.WorkflowState,
             item.DependencyState,
+            FormatPriority(item.EffectivePriority),
             FormatRank(item.Rank),
             item.SourceName,
             FormatProvenance(item.Provenance),
@@ -1210,6 +1211,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         DevelopmentStatus.Reconciled => "Reconciled",
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
     };
+
+    private static string FormatPriority(int? priority) =>
+        priority?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—";
 
     private static string FormatWorkflowState(EntityWorkflowState state) => state switch
     {

@@ -3,6 +3,7 @@ using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Planning;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Domain;
@@ -242,7 +243,8 @@ public sealed class SchemaSynchronizationServiceTests
             overrideRepository,
             resolver,
             ranker,
-            store);
+            store,
+            new PriorityPlanningService());
         return new SchemaSynchronizationService(
             new StubParser(importResult),
             entityRepository,

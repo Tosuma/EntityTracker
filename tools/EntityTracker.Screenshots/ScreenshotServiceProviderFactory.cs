@@ -6,6 +6,7 @@ using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Planning;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Workflow;
@@ -56,8 +57,9 @@ internal static class ScreenshotServiceProviderFactory
 
         services.AddSingleton<ISchemaImportParser, CsvSchemaImportParser>();
         services.AddSingleton<ISchemaImportFileParser, CsvSchemaImportFileParser>();
-        services.AddSingleton<DependencyRanker>();
+        services.AddSingleton<IDependencyRankingService, DependencyRanker>();
         services.AddSingleton<EffectiveDependencyResolver>();
+        services.AddSingleton<PriorityPlanningService>();
         services.AddSingleton<WorkflowReadinessEvaluator>();
         services.AddSingleton<ProgressSnapshotCalculator>();
         services.AddSingleton<EntityOverviewService>();

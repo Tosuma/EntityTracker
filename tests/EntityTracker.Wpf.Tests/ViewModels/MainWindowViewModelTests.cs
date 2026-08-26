@@ -6,6 +6,7 @@ using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Planning;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Workflow;
@@ -440,6 +441,63 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task Overview_ShowsEffectivePriorityAndKeepsPrerequisiteBeforeTarget()
+    {
+        TrackedEntity prerequisite = Entity(1, "ZuluPrerequisite");
+        TrackedEntity target = Entity(2, "AlphaTarget", requestedPriority: 1);
+        TrackedEntity unrelated = Entity(3, "Unrelated");
+        MainWindowViewModel viewModel = CreateViewModel(
+            [unrelated, target, prerequisite],
+            [Dependency(target, prerequisite)],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal(
+            ["ZuluPrerequisite", "AlphaTarget", "Unrelated"],
+            viewModel.OverviewItems.Select(static item => item.SourceName));
+        Assert.Equal(["1", "1", "—"], viewModel.OverviewItems.Select(
+            static item => item.Priority));
+    }
+
+    [Fact]
+    public async Task StandaloneEditor_PreviewsAndSavesRequestedPriority()
+    {
+        TrackedEntity prerequisite = Entity(1, "Prerequisite");
+        TrackedEntity owner = Entity(2, "Owner");
+        MainWindowViewModel viewModel = CreateViewModel(
+            [owner, prerequisite],
+            [Dependency(owner, prerequisite)],
+            FailureResult(),
+            new StubFilePicker(),
+            out StubSynchronizationStore store,
+            [Unresolved(prerequisite, "Missing")]);
+        await viewModel.InitializeAsync();
+        EntityOverviewRow ownerRow = viewModel.OverviewItems.Single(item => item.EntityId == owner.Id);
+        viewModel.EditOverviewEntityCommand.Execute(ownerRow);
+        await WaitUntilAsync(() => viewModel.Editor.IsOpen && !viewModel.Editor.IsBusy);
+
+        viewModel.Editor.SelectedRequestedPriority = 2;
+
+        Assert.True(viewModel.Editor.HasPendingPriorityChange);
+        Assert.Equal("2", viewModel.Editor.EffectivePriority);
+        Assert.Equal(
+            ["Prerequisite", "Owner"],
+            viewModel.Editor.PriorityPreviewRows.Select(static item => item.SourceName));
+        Assert.Equal(["Missing"], viewModel.Editor.PriorityUnresolvedDependencyNames);
+
+        viewModel.Editor.SaveCommand.Execute(null);
+        await WaitUntilAsync(() => !viewModel.Editor.IsOpen);
+
+        TrackedEntity update = Assert.Single(
+            store.AppliedChangeSet!.EntitiesWithRequestedPriorityToUpdate);
+        Assert.Equal(2, update.RequestedPriority);
+        Assert.Equal(["2", "2"], viewModel.OverviewItems.Select(static item => item.Priority));
+    }
+
+    [Fact]
     public async Task ArchivedDetails_CancelDoesNothingAndRestoreReusesSameEntity()
     {
         TrackedEntity archived = Entity(
@@ -447,7 +505,8 @@ public sealed class MainWindowViewModelTests
             "Legacy",
             DevelopmentStatus.Reconciled,
             "Keep notes",
-            lifecycle: EntityLifecycleState.Archived);
+            lifecycle: EntityLifecycleState.Archived,
+            requestedPriority: 4);
         MainWindowViewModel viewModel = CreateViewModel(
             [archived],
             [],
@@ -461,6 +520,11 @@ public sealed class MainWindowViewModelTests
         await WaitUntilAsync(() => viewModel.Editor.IsOpen && !viewModel.Editor.IsBusy);
         Assert.True(viewModel.Editor.IsArchivedMode);
         Assert.False(viewModel.Editor.CanEditProgress);
+        Assert.False(viewModel.Editor.CanEditPriority);
+        Assert.Equal(4, viewModel.Editor.SelectedRequestedPriority);
+        Assert.Equal("—", viewModel.Editor.EffectivePriority);
+        viewModel.Editor.SelectedRequestedPriority = 1;
+        Assert.Equal(4, viewModel.Editor.SelectedRequestedPriority);
         Assert.False(viewModel.Editor.ShowSave);
         Assert.True(viewModel.Editor.CanRestoreEntity);
 
@@ -1004,7 +1068,8 @@ public sealed class MainWindowViewModelTests
             overrideRepository,
             resolver,
             ranker,
-            store);
+            store,
+            new PriorityPlanningService());
         SchemaSynchronizationService synchronizationService = new(
             new StubFileParser(importResult),
             entityRepository,
@@ -1020,7 +1085,8 @@ public sealed class MainWindowViewModelTests
                 overrideRepository,
                 ranker,
                 resolver,
-                new WorkflowReadinessEvaluator()),
+                new WorkflowReadinessEvaluator(),
+                new PriorityPlanningService()),
             synchronizationService,
             new BulkStatusUpdateService(
                 entityRepository,
@@ -1117,14 +1183,16 @@ public sealed class MainWindowViewModelTests
         DevelopmentStatus status = DevelopmentStatus.NotStarted,
         string notes = "",
         EntityProvenance provenance = EntityProvenance.Imported,
-        EntityLifecycleState lifecycle = EntityLifecycleState.Active) =>
+        EntityLifecycleState lifecycle = EntityLifecycleState.Active,
+        int? requestedPriority = null) =>
         new(
             new EntityId(new Guid(id, 0, 0, new byte[8])),
             name,
             status,
             notes,
             lifecycle,
-            provenance: provenance);
+            provenance,
+            requestedPriority);
 
     private static PersistedDependency Dependency(TrackedEntity owner, TrackedEntity target) =>
         new(new DependencyEdge(owner.Id, target.Id), ImportedDependencyKind.Mandatory);
@@ -1188,6 +1256,10 @@ public sealed class MainWindowViewModelTests
             entity.ChangeStatus(updated.Status);
             entity.ChangeNotes(updated.Notes);
         }
+
+        public void UpdateRequestedPriority(TrackedEntity updated) =>
+            _entities.Single(item => item.Id == updated.Id)
+                .ChangeRequestedPriority(updated.RequestedPriority);
 
     }
 
@@ -1270,6 +1342,11 @@ public sealed class MainWindowViewModelTests
             foreach (TrackedEntity entity in changeSet.EntitiesWithProgressToUpdate)
             {
                 entityRepository.UpdateProgress(entity);
+            }
+
+            foreach (TrackedEntity entity in changeSet.EntitiesWithRequestedPriorityToUpdate)
+            {
+                entityRepository.UpdateRequestedPriority(entity);
             }
 
             return Task.CompletedTask;

@@ -99,6 +99,15 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                     cancellationToken);
             }
 
+            foreach (TrackedEntity entity in changeSet.EntitiesWithRequestedPriorityToUpdate)
+            {
+                await UpdateRequestedPriorityAsync(
+                    connection,
+                    transaction,
+                    entity,
+                    cancellationToken);
+            }
+
             foreach (EntityId entityId in changeSet.EntityIdsToArchive)
             {
                 await ArchiveEntityAsync(
@@ -498,13 +507,15 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
             INSERT INTO tracked_entities
             (
                 id, source_key, source_name, development_status, notes,
-                lifecycle_state, provenance, created_at_utc, schema_updated_at_utc,
+                lifecycle_state, provenance, requested_priority,
+                created_at_utc, schema_updated_at_utc,
                 progress_updated_at_utc
             )
             VALUES
             (
                 $id, $sourceKey, $sourceName, $developmentStatus, $notes,
-                $lifecycleState, $provenance, $timestamp, $timestamp, $timestamp
+                $lifecycleState, $provenance, $requestedPriority,
+                $timestamp, $timestamp, $timestamp
             );
             """);
         AddEntityParameters(command, entity);
@@ -592,6 +603,25 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         command.Parameters.AddWithValue("$developmentStatus", entity.Status.ToString());
         command.Parameters.AddWithValue("$notes", entity.Notes);
         command.Parameters.AddWithValue("$timestamp", timestamp);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task UpdateRequestedPriorityAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        TrackedEntity entity,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = CreateCommand(connection, transaction, """
+            UPDATE tracked_entities
+            SET requested_priority = $requestedPriority
+            WHERE id = $id
+              AND requested_priority IS NOT $requestedPriority;
+            """);
+        command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
+        command.Parameters.AddWithValue(
+            "$requestedPriority",
+            entity.RequestedPriority is null ? DBNull.Value : entity.RequestedPriority.Value);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -765,6 +795,9 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         command.Parameters.AddWithValue("$notes", entity.Notes);
         command.Parameters.AddWithValue("$lifecycleState", entity.LifecycleState.ToString());
         command.Parameters.AddWithValue("$provenance", entity.Provenance.ToString());
+        command.Parameters.AddWithValue(
+            "$requestedPriority",
+            entity.RequestedPriority is null ? DBNull.Value : entity.RequestedPriority.Value);
     }
 
     private static string AddKeepParameters(
