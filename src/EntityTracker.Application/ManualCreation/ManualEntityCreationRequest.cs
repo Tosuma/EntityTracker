@@ -4,13 +4,15 @@ public sealed class ManualEntityCreationRequest
 {
     public ManualEntityCreationRequest(
         string entityName,
-        IEnumerable<ManualDependencySelection> dependencies)
+        IEnumerable<ManualDependencySelection> dependencies,
+        string? responsibleDeveloper = null)
     {
         ArgumentNullException.ThrowIfNull(entityName);
         ArgumentNullException.ThrowIfNull(dependencies);
 
         EntityName = entityName;
         Dependencies = dependencies.ToArray();
+        ResponsibleDeveloper = responsibleDeveloper;
 
         if (Dependencies.Any(static dependency => dependency is null))
         {
@@ -23,4 +25,6 @@ public sealed class ManualEntityCreationRequest
     public string EntityName { get; }
 
     public IReadOnlyList<ManualDependencySelection> Dependencies { get; }
+
+    public string? ResponsibleDeveloper { get; }
 }

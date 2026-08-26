@@ -595,6 +595,9 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
+                                <DataGridTextColumn Width="150"
+                                                    Binding="{Binding ResponsibleDeveloper}"
+                                                    Header="Responsible dev" />
                                 <DataGridTextColumn Width="125" Binding="{Binding Provenance}" Header="Source" />
                                 <DataGridTextColumn Width="130" Binding="{Binding Status}" Header="Status" />
                                 <DataGridTextColumn Width="130" Binding="{Binding WorkStatus}" Header="Work status" />
@@ -1070,10 +1073,16 @@
                                   VerticalScrollBarVisibility="Auto">
                         <StackPanel MaxWidth="760" HorizontalAlignment="Left">
                             <TextBlock FontWeight="SemiBold" Text="Entity name" />
-                            <TextBox Margin="0,6,0,18"
+                            <TextBox Margin="0,6,0,12"
                                      MinWidth="420"
                                      Padding="9,7"
                                      Text="{Binding ManualCreation.EntityName, UpdateSourceTrigger=PropertyChanged}" />
+
+                            <TextBlock FontWeight="SemiBold" Text="Responsible developer" />
+                            <TextBox Margin="0,6,0,18"
+                                     MinWidth="420"
+                                     Padding="9,7"
+                                     Text="{Binding ManualCreation.ResponsibleDeveloper, UpdateSourceTrigger=PropertyChanged}" />
 
                             <TextBlock FontWeight="SemiBold" Text="Add dependencies" />
                             <TextBlock Margin="0,3,0,7"
@@ -1746,6 +1755,14 @@
                                                  TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Grid>
+
+                                <StackPanel Margin="0,0,0,12">
+                                    <TextBlock FontWeight="SemiBold" Text="Responsible developer" />
+                                    <TextBox Margin="0,5,0,0"
+                                             Padding="8,6"
+                                             IsEnabled="{Binding Editor.CanEditProgress}"
+                                             Text="{Binding Editor.EditedResponsibleDeveloper, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
 
                                 <Grid Margin="0,0,0,12">
                                     <Grid.ColumnDefinitions>

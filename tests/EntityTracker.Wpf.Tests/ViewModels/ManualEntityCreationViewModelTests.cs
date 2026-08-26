@@ -85,12 +85,15 @@ public sealed class ManualEntityCreationViewModelTests
             out CallbackCounter created,
             out _);
         viewModel.EntityName = "NewEntity";
+        viewModel.ResponsibleDeveloper = "  Platform Team  ";
 
         await viewModel.CreateAsync();
 
-        Assert.Single(store.LastChangeSet!.EntitiesToAdd);
+        TrackedEntity added = Assert.Single(store.LastChangeSet!.EntitiesToAdd);
+        Assert.Equal("Platform Team", added.ResponsibleDeveloper);
         Assert.Equal(1, created.Count);
         Assert.Equal(string.Empty, viewModel.EntityName);
+        Assert.Equal(string.Empty, viewModel.ResponsibleDeveloper);
         Assert.Empty(viewModel.SelectedDependencies);
         Assert.False(viewModel.HasErrors);
     }
@@ -104,11 +107,13 @@ public sealed class ManualEntityCreationViewModelTests
             out _,
             out CallbackCounter cancelled);
         viewModel.EntityName = "Discarded";
+        viewModel.ResponsibleDeveloper = "Discarded Team";
 
         viewModel.CancelCommand.Execute(null);
 
         Assert.Equal(1, cancelled.Count);
         Assert.Equal(string.Empty, viewModel.EntityName);
+        Assert.Equal(string.Empty, viewModel.ResponsibleDeveloper);
         Assert.Null(store.LastChangeSet);
     }
 

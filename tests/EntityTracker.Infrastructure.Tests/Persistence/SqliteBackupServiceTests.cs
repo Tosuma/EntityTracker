@@ -17,7 +17,8 @@ public sealed class SqliteBackupServiceTests
         TrackedEntity prioritized = new(
             EntityId.New(),
             "Prioritized",
-            requestedPriority: 4);
+            requestedPriority: 4,
+            responsibleDeveloper: "Platform Team");
         Assert.True(await new SqliteEntityRepository(database).TryAddAsync(prioritized));
         string backupDirectory = Path.Combine(
             Path.GetDirectoryName(file.DatabasePath)!,
@@ -41,6 +42,9 @@ public sealed class SqliteBackupServiceTests
         Assert.Equal(
             4,
             await ReadRequestedPriorityAsync(first.CreatedBackupPaths[0], prioritized.Id));
+        Assert.Equal(
+            "Platform Team",
+            await ReadResponsibleDeveloperAsync(first.CreatedBackupPaths[0], prioritized.Id));
     }
 
     [Fact]
@@ -166,5 +170,18 @@ public sealed class SqliteBackupServiceTests
         command.Parameters.AddWithValue("$id", entityId.Value.ToString("D"));
         object? value = await command.ExecuteScalarAsync();
         return value is null or DBNull ? null : Convert.ToInt32(value);
+    }
+
+    private static async Task<string> ReadResponsibleDeveloperAsync(
+        string databasePath,
+        EntityId entityId)
+    {
+        await using SqliteConnection connection = new($"Data Source={databasePath};Mode=ReadOnly");
+        await connection.OpenAsync();
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT responsible_developer FROM tracked_entities WHERE id = $id;";
+        command.Parameters.AddWithValue("$id", entityId.Value.ToString("D"));
+        return (string)(await command.ExecuteScalarAsync())!;
     }
 }

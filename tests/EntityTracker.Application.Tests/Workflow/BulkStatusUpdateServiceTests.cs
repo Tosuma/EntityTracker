@@ -120,9 +120,13 @@ public sealed class BulkStatusUpdateServiceTests
     }
 
     [Fact]
-    public async Task ApplyAsync_StatusChangePreservesRequestedPriority()
+    public async Task ApplyAsync_StatusChangePreservesManualScalarValues()
     {
-        TrackedEntity entity = Entity(1, "Prioritized", requestedPriority: 3);
+        TrackedEntity entity = Entity(
+            1,
+            "Prioritized",
+            requestedPriority: 3,
+            responsibleDeveloper: "Core Team");
         RecordingStore store = new();
         BulkStatusUpdateService service = CreateService([entity], [], store);
 
@@ -132,6 +136,7 @@ public sealed class BulkStatusUpdateServiceTests
             Assert.IsType<TrackedStateChangeSet>(store.LastChangeSet)
                 .EntitiesWithProgressToUpdate);
         Assert.Equal(3, update.RequestedPriority);
+        Assert.Equal("Core Team", update.ResponsibleDeveloper);
     }
 
     [Fact]
@@ -212,13 +217,15 @@ public sealed class BulkStatusUpdateServiceTests
         string name,
         DevelopmentStatus status = DevelopmentStatus.NotStarted,
         EntityLifecycleState lifecycleState = EntityLifecycleState.Active,
-        int? requestedPriority = null) =>
+        int? requestedPriority = null,
+        string? responsibleDeveloper = null) =>
         new(
             Id(id),
             name,
             status,
             lifecycleState: lifecycleState,
-            requestedPriority: requestedPriority);
+            requestedPriority: requestedPriority,
+            responsibleDeveloper: responsibleDeveloper);
 
     private static EntityId Id(int id) => new(new Guid(id, 0, 0, new byte[8]));
 

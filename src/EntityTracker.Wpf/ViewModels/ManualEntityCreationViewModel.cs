@@ -32,6 +32,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     private CancellationTokenSource? _searchCancellation;
     private int _searchVersion;
     private string _entityName = string.Empty;
+    private string _responsibleDeveloper = string.Empty;
     private string _dependencyQuery = string.Empty;
     private IReadOnlyList<ManualDependencySuggestion> _suggestions = [];
     private IReadOnlyList<string> _errors = [];
@@ -94,6 +95,12 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
                 ScheduleSearch();
             }
         }
+    }
+
+    public string ResponsibleDeveloper
+    {
+        get => _responsibleDeveloper;
+        set => SetField(ref _responsibleDeveloper, value ?? string.Empty);
     }
 
     public string DependencyQuery
@@ -201,7 +208,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     public string ArchivedEntityMessage => ArchivedEntityMatch is null
         ? string.Empty
         : $"'{ArchivedEntityMatch.SourceName}' already exists and is archived. " +
-          "Restore it to keep its identity, progress, notes, and dependencies.";
+          "Restore it to keep its identity, assignment, progress, notes, and dependencies.";
 
     public bool IsBusy
     {
@@ -321,7 +328,8 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             result = await _service.CreateAsync(
                 new ManualEntityCreationRequest(
                     EntityName,
-                    SelectedDependencies.Select(static row => row.Selection)),
+                    SelectedDependencies.Select(static row => row.Selection),
+                    ResponsibleDeveloper),
                 cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -554,6 +562,8 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         CancelPendingSearch();
         _entityName = string.Empty;
         OnPropertyChanged(nameof(EntityName));
+        _responsibleDeveloper = string.Empty;
+        OnPropertyChanged(nameof(ResponsibleDeveloper));
         _dependencyQuery = string.Empty;
         OnPropertyChanged(nameof(DependencyQuery));
         SelectedDependencies.Clear();

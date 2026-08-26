@@ -426,6 +426,7 @@ public sealed class MainWindowViewModelTests
 
         viewModel.Editor.SelectedStatus = DevelopmentStatus.Reconciled;
         viewModel.Editor.EditedNotes = "Verified implementation";
+        viewModel.Editor.EditedResponsibleDeveloper = "  Platform Team  ";
         viewModel.Editor.SaveCommand.Execute(null);
         await WaitUntilAsync(() => !viewModel.Editor.IsOpen);
 
@@ -433,9 +434,13 @@ public sealed class MainWindowViewModelTests
             store.AppliedChangeSet!.EntitiesWithProgressToUpdate);
         Assert.Equal(DevelopmentStatus.Reconciled, progress.Status);
         Assert.Equal("Verified implementation", progress.Notes);
+        TrackedEntity assignment = Assert.Single(
+            store.AppliedChangeSet.EntitiesWithResponsibleDeveloperToUpdate);
+        Assert.Equal("Platform Team", assignment.ResponsibleDeveloper);
         EntityOverviewRow row = Assert.Single(viewModel.OverviewItems);
         Assert.Equal("Reconciled", row.Status);
         Assert.Equal("Verified implementation", row.Notes);
+        Assert.Equal("Platform Team", row.ResponsibleDeveloper);
         Assert.Equal(100, viewModel.ImplementedPercentage);
         Assert.Equal(100, viewModel.ReconciledPercentage);
     }
@@ -444,7 +449,11 @@ public sealed class MainWindowViewModelTests
     public async Task Overview_ShowsEffectivePriorityAndKeepsPrerequisiteBeforeTarget()
     {
         TrackedEntity prerequisite = Entity(1, "ZuluPrerequisite");
-        TrackedEntity target = Entity(2, "AlphaTarget", requestedPriority: 1);
+        TrackedEntity target = Entity(
+            2,
+            "AlphaTarget",
+            requestedPriority: 1,
+            responsibleDeveloper: "Core Team");
         TrackedEntity unrelated = Entity(3, "Unrelated");
         MainWindowViewModel viewModel = CreateViewModel(
             [unrelated, target, prerequisite],
@@ -460,6 +469,9 @@ public sealed class MainWindowViewModelTests
             viewModel.OverviewItems.Select(static item => item.SourceName));
         Assert.Equal(["1", "1", "—"], viewModel.OverviewItems.Select(
             static item => item.Priority));
+        Assert.Equal(
+            ["—", "Core Team", "—"],
+            viewModel.OverviewItems.Select(static item => item.ResponsibleDeveloper));
     }
 
     [Fact]
@@ -506,7 +518,8 @@ public sealed class MainWindowViewModelTests
             DevelopmentStatus.Reconciled,
             "Keep notes",
             lifecycle: EntityLifecycleState.Archived,
-            requestedPriority: 4);
+            requestedPriority: 4,
+            responsibleDeveloper: "Legacy Team");
         MainWindowViewModel viewModel = CreateViewModel(
             [archived],
             [],
@@ -516,15 +529,20 @@ public sealed class MainWindowViewModelTests
         await viewModel.InitializeAsync();
         viewModel.SelectedOverviewFilter = OverviewManagerFilter.Archived;
 
-        viewModel.EditOverviewEntityCommand.Execute(Assert.Single(viewModel.OverviewItems));
+        EntityOverviewRow archivedRow = Assert.Single(viewModel.OverviewItems);
+        Assert.Equal("Legacy Team", archivedRow.ResponsibleDeveloper);
+        viewModel.EditOverviewEntityCommand.Execute(archivedRow);
         await WaitUntilAsync(() => viewModel.Editor.IsOpen && !viewModel.Editor.IsBusy);
         Assert.True(viewModel.Editor.IsArchivedMode);
         Assert.False(viewModel.Editor.CanEditProgress);
         Assert.False(viewModel.Editor.CanEditPriority);
         Assert.Equal(4, viewModel.Editor.SelectedRequestedPriority);
+        Assert.Equal("Legacy Team", viewModel.Editor.EditedResponsibleDeveloper);
         Assert.Equal("—", viewModel.Editor.EffectivePriority);
         viewModel.Editor.SelectedRequestedPriority = 1;
+        viewModel.Editor.EditedResponsibleDeveloper = "Changed Team";
         Assert.Equal(4, viewModel.Editor.SelectedRequestedPriority);
+        Assert.Equal("Legacy Team", viewModel.Editor.EditedResponsibleDeveloper);
         Assert.False(viewModel.Editor.ShowSave);
         Assert.True(viewModel.Editor.CanRestoreEntity);
 
@@ -542,6 +560,7 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(archived.Id, restored.EntityId);
         Assert.Equal("Reconciled", restored.Status);
         Assert.Equal("Keep notes", restored.Notes);
+        Assert.Equal("Legacy Team", restored.ResponsibleDeveloper);
         Assert.Equal(archived.Id, Assert.Single(store.AppliedChangeSet!.EntityIdsToRestore));
     }
 
@@ -1184,7 +1203,8 @@ public sealed class MainWindowViewModelTests
         string notes = "",
         EntityProvenance provenance = EntityProvenance.Imported,
         EntityLifecycleState lifecycle = EntityLifecycleState.Active,
-        int? requestedPriority = null) =>
+        int? requestedPriority = null,
+        string? responsibleDeveloper = null) =>
         new(
             new EntityId(new Guid(id, 0, 0, new byte[8])),
             name,
@@ -1192,7 +1212,8 @@ public sealed class MainWindowViewModelTests
             notes,
             lifecycle,
             provenance,
-            requestedPriority);
+            requestedPriority,
+            responsibleDeveloper);
 
     private static PersistedDependency Dependency(TrackedEntity owner, TrackedEntity target) =>
         new(new DependencyEdge(owner.Id, target.Id), ImportedDependencyKind.Mandatory);
@@ -1260,6 +1281,10 @@ public sealed class MainWindowViewModelTests
         public void UpdateRequestedPriority(TrackedEntity updated) =>
             _entities.Single(item => item.Id == updated.Id)
                 .ChangeRequestedPriority(updated.RequestedPriority);
+
+        public void UpdateResponsibleDeveloper(TrackedEntity updated) =>
+            _entities.Single(item => item.Id == updated.Id)
+                .ChangeResponsibleDeveloper(updated.ResponsibleDeveloper);
 
     }
 
@@ -1347,6 +1372,11 @@ public sealed class MainWindowViewModelTests
             foreach (TrackedEntity entity in changeSet.EntitiesWithRequestedPriorityToUpdate)
             {
                 entityRepository.UpdateRequestedPriority(entity);
+            }
+
+            foreach (TrackedEntity entity in changeSet.EntitiesWithResponsibleDeveloperToUpdate)
+            {
+                entityRepository.UpdateResponsibleDeveloper(entity);
             }
 
             return Task.CompletedTask;

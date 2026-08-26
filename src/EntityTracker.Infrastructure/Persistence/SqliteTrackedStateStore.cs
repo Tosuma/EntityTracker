@@ -108,6 +108,15 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                     cancellationToken);
             }
 
+            foreach (TrackedEntity entity in changeSet.EntitiesWithResponsibleDeveloperToUpdate)
+            {
+                await UpdateResponsibleDeveloperAsync(
+                    connection,
+                    transaction,
+                    entity,
+                    cancellationToken);
+            }
+
             foreach (EntityId entityId in changeSet.EntityIdsToArchive)
             {
                 await ArchiveEntityAsync(
@@ -507,14 +516,14 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
             INSERT INTO tracked_entities
             (
                 id, source_key, source_name, development_status, notes,
-                lifecycle_state, provenance, requested_priority,
+                lifecycle_state, provenance, requested_priority, responsible_developer,
                 created_at_utc, schema_updated_at_utc,
                 progress_updated_at_utc
             )
             VALUES
             (
                 $id, $sourceKey, $sourceName, $developmentStatus, $notes,
-                $lifecycleState, $provenance, $requestedPriority,
+                $lifecycleState, $provenance, $requestedPriority, $responsibleDeveloper,
                 $timestamp, $timestamp, $timestamp
             );
             """);
@@ -622,6 +631,25 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         command.Parameters.AddWithValue(
             "$requestedPriority",
             entity.RequestedPriority is null ? DBNull.Value : entity.RequestedPriority.Value);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task UpdateResponsibleDeveloperAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        TrackedEntity entity,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = CreateCommand(connection, transaction, """
+            UPDATE tracked_entities
+            SET responsible_developer = $responsibleDeveloper
+            WHERE id = $id
+              AND responsible_developer <> $responsibleDeveloper;
+            """);
+        command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
+        command.Parameters.AddWithValue(
+            "$responsibleDeveloper",
+            entity.ResponsibleDeveloper);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -798,6 +826,9 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         command.Parameters.AddWithValue(
             "$requestedPriority",
             entity.RequestedPriority is null ? DBNull.Value : entity.RequestedPriority.Value);
+        command.Parameters.AddWithValue(
+            "$responsibleDeveloper",
+            entity.ResponsibleDeveloper);
     }
 
     private static string AddKeepParameters(

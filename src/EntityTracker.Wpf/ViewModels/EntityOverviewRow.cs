@@ -13,6 +13,7 @@ public sealed record EntityOverviewRow(
     string Priority,
     string Rank,
     string SourceName,
+    string ResponsibleDeveloper,
     string Provenance,
     string Status,
     string WorkStatus,

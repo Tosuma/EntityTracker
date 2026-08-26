@@ -56,6 +56,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private SchemaSynchronizationPlan? _reviewPlan;
     private DevelopmentStatus _selectedStatus;
     private string _editedNotes = string.Empty;
+    private string _editedResponsibleDeveloper = string.Empty;
     private int? _selectedRequestedPriority;
     private string _effectivePriority = "—";
     private IReadOnlyList<PriorityPlanningRow> _priorityPreviewRows = [];
@@ -362,6 +363,18 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
     }
 
+    public string EditedResponsibleDeveloper
+    {
+        get => _editedResponsibleDeveloper;
+        set
+        {
+            if (CanEditProgress)
+            {
+                SetField(ref _editedResponsibleDeveloper, value ?? string.Empty);
+            }
+        }
+    }
+
     public int? SelectedRequestedPriority
     {
         get => _selectedRequestedPriority;
@@ -493,7 +506,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     public string ArchiveConfirmationMessage => CurrentEditPlan is null
         ? string.Empty
         : $"Archive '{CurrentEditPlan.Entity.SourceName}'? It will disappear from active views and dependency searches. " +
-          "Identity, progress, notes, imported relationships, and manual overrides will be preserved. " +
+          "Identity, assignment, progress, notes, imported relationships, and manual overrides will be preserved. " +
           "Entities that depend on it may become unresolved. You can restore it later from the Archived view. " +
           "Unsaved edits will be discarded.";
 
@@ -608,6 +621,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(SelectedStatus));
             _editedNotes = details.Entity.Notes;
             OnPropertyChanged(nameof(EditedNotes));
+            _editedResponsibleDeveloper = details.Entity.ResponsibleDeveloper;
+            OnPropertyChanged(nameof(EditedResponsibleDeveloper));
             _selectedRequestedPriority = details.Entity.RequestedPriority;
             OnPropertyChanged(nameof(SelectedRequestedPriority));
             EffectivePriority = "—";
@@ -776,7 +791,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                     CurrentEditPlan,
                     SelectedStatus,
                     EditedNotes,
-                    SelectedRequestedPriority);
+                    SelectedRequestedPriority,
+                    EditedResponsibleDeveloper);
                 await _onPersisted();
             }
 
@@ -891,6 +907,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(SelectedStatus));
             _editedNotes = plan.Entity.Notes;
             OnPropertyChanged(nameof(EditedNotes));
+            _editedResponsibleDeveloper = plan.Entity.ResponsibleDeveloper;
+            OnPropertyChanged(nameof(EditedResponsibleDeveloper));
             _selectedRequestedPriority = plan.Entity.RequestedPriority;
             OnPropertyChanged(nameof(SelectedRequestedPriority));
         }
@@ -958,6 +976,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(SelectedStatus));
         _editedNotes = string.Empty;
         OnPropertyChanged(nameof(EditedNotes));
+        _editedResponsibleDeveloper = string.Empty;
+        OnPropertyChanged(nameof(EditedResponsibleDeveloper));
         _selectedRequestedPriority = null;
         OnPropertyChanged(nameof(SelectedRequestedPriority));
         EffectivePriority = "—";

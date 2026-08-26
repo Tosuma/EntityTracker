@@ -366,7 +366,8 @@ public sealed class SqliteTrackedStateStoreTests
             "Preserved notes",
             EntityLifecycleState.Archived,
             EntityProvenance.ManualAndImported,
-            requestedPriority: 3);
+            requestedPriority: 3,
+            responsibleDeveloper: "Legacy Team");
         TrackedEntity owner = new(EntityId.New(), "Owner");
         Assert.True(await entities.TryAddAsync(target));
         Assert.True(await entities.TryAddAsync(owner));
@@ -404,6 +405,7 @@ public sealed class SqliteTrackedStateStoreTests
         Assert.Equal("Preserved notes", loaded.Notes);
         Assert.Equal(EntityProvenance.ManualAndImported, loaded.Provenance);
         Assert.Equal(3, loaded.RequestedPriority);
+        Assert.Equal("Legacy Team", loaded.ResponsibleDeveloper);
         Assert.Equal(preservedOverride, Assert.Single(await overrides.GetAllAsync()));
         Assert.Single(await dependencies.GetAllUnresolvedAsync());
 
@@ -478,6 +480,73 @@ public sealed class SqliteTrackedStateStoreTests
             entitiesWithRequestedPriorityToUpdate: [cleared]));
 
         Assert.Null((await entities.GetAsync(entity.Id))!.RequestedPriority);
+        Assert.Equal(historyCount, (await history.GetStatusHistoryAsync()).Count);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_ResponsibleDeveloperOnlyUpdatePreservesProgressAndTimestamps()
+    {
+        await using TemporarySqliteFile file = new();
+        MutableTimeProvider time = new(
+            new DateTimeOffset(2026, 8, 25, 9, 0, 0, TimeSpan.Zero));
+        SqliteDatabase database = new(file.DatabasePath, time);
+        await database.InitializeAsync();
+        SqliteTrackedStateStore store = new(database);
+        SqliteEntityRepository entities = new(database);
+        SqliteProgressHistoryRepository history = new(database);
+        TrackedEntity entity = new(
+            EntityId.New(),
+            "Assigned",
+            DevelopmentStatus.InProgress,
+            "Keep notes",
+            requestedPriority: 4);
+        await store.ApplyAsync(new TrackedStateChangeSet([entity], [], [], [], [], []));
+        int historyCount = (await history.GetStatusHistoryAsync()).Count;
+        (string schemaTimestamp, string progressTimestamp) =
+            await ReadEntityTimestampsAsync(file.DatabasePath, entity.Id);
+        time.Advance(TimeSpan.FromHours(1));
+        TrackedEntity assigned = new(
+            entity.Id,
+            entity.SourceName,
+            entity.Status,
+            entity.Notes,
+            entity.LifecycleState,
+            entity.Provenance,
+            entity.RequestedPriority,
+            "  Platform Team  ");
+
+        await store.ApplyAsync(new TrackedStateChangeSet(
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            entitiesWithResponsibleDeveloperToUpdate: [assigned]));
+
+        TrackedEntity loaded = Assert.IsType<TrackedEntity>(await entities.GetAsync(entity.Id));
+        Assert.Equal("Platform Team", loaded.ResponsibleDeveloper);
+        Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
+        Assert.Equal("Keep notes", loaded.Notes);
+        Assert.Equal(4, loaded.RequestedPriority);
+        Assert.Equal(historyCount, (await history.GetStatusHistoryAsync()).Count);
+        Assert.Equal(
+            (schemaTimestamp, progressTimestamp),
+            await ReadEntityTimestampsAsync(file.DatabasePath, entity.Id));
+
+        assigned.ChangeResponsibleDeveloper(null);
+        await store.ApplyAsync(new TrackedStateChangeSet(
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            entitiesWithResponsibleDeveloperToUpdate: [assigned]));
+
+        Assert.Equal(
+            string.Empty,
+            (await entities.GetAsync(entity.Id))!.ResponsibleDeveloper);
         Assert.Equal(historyCount, (await history.GetStatusHistoryAsync()).Count);
     }
 
@@ -809,5 +878,29 @@ public sealed class SqliteTrackedStateStoreTests
             """;
         command.Parameters.AddWithValue("$id", entityId.Value.ToString("D"));
         return (string)(await command.ExecuteScalarAsync())!;
+    }
+
+    private static async Task<(string SchemaTimestamp, string ProgressTimestamp)>
+        ReadEntityTimestampsAsync(
+            string databasePath,
+            EntityId entityId)
+    {
+        SqliteConnectionStringBuilder builder = new()
+        {
+            DataSource = databasePath,
+            ForeignKeys = true
+        };
+        await using SqliteConnection connection = new(builder.ToString());
+        await connection.OpenAsync();
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT schema_updated_at_utc, progress_updated_at_utc
+            FROM tracked_entities
+            WHERE id = $id;
+            """;
+        command.Parameters.AddWithValue("$id", entityId.Value.ToString("D"));
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        return (reader.GetString(0), reader.GetString(1));
     }
 }

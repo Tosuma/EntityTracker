@@ -16,6 +16,7 @@ public sealed class TrackedEntityTests
         Assert.Equal(EntityLifecycleState.Active, entity.LifecycleState);
         Assert.Equal(EntityProvenance.Imported, entity.Provenance);
         Assert.Null(entity.RequestedPriority);
+        Assert.Equal(string.Empty, entity.ResponsibleDeveloper);
     }
 
     [Fact]
@@ -218,5 +219,37 @@ public sealed class TrackedEntityTests
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             entity.ChangeRequestedPriority(priority));
         Assert.Equal(3, entity.RequestedPriority);
+    }
+
+    [Theory]
+    [InlineData("  Ada Lovelace  ", "Ada Lovelace")]
+    [InlineData(" Platform Team ", "Platform Team")]
+    [InlineData("  dEv Enablement  ", "dEv Enablement")]
+    public void ResponsibleDeveloper_TrimsOuterWhitespaceAndPreservesText(
+        string value,
+        string expected)
+    {
+        TrackedEntity entity = new(
+            EntityId.New(),
+            "sales.Customer",
+            responsibleDeveloper: value);
+
+        Assert.Equal(expected, entity.ResponsibleDeveloper);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ResponsibleDeveloper_MissingValueClearsAssignment(string? value)
+    {
+        TrackedEntity entity = new(
+            EntityId.New(),
+            "sales.Customer",
+            responsibleDeveloper: "Existing Team");
+
+        entity.ChangeResponsibleDeveloper(value);
+
+        Assert.Equal(string.Empty, entity.ResponsibleDeveloper);
     }
 }

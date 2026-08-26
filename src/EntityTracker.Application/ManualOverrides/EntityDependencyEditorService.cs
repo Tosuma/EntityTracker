@@ -259,6 +259,7 @@ public sealed class EntityDependencyEditorService
         DevelopmentStatus status,
         string notes,
         int? requestedPriority,
+        string? responsibleDeveloper,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(plan);
@@ -276,12 +277,19 @@ public sealed class EntityDependencyEditorService
             notes,
             plan.Entity.LifecycleState,
             plan.Entity.Provenance,
-            requestedPriority);
+            requestedPriority,
+            responsibleDeveloper);
         TrackedEntity[] progressUpdates =
             status != plan.Entity.Status || !string.Equals(notes, plan.Entity.Notes, StringComparison.Ordinal)
                 ? [updatedEntity]
                 : [];
         TrackedEntity[] priorityUpdates = requestedPriority != plan.Entity.RequestedPriority
+            ? [updatedEntity]
+            : [];
+        TrackedEntity[] responsibleDeveloperUpdates = !string.Equals(
+                updatedEntity.ResponsibleDeveloper,
+                plan.Entity.ResponsibleDeveloper,
+                StringComparison.Ordinal)
             ? [updatedEntity]
             : [];
         TrackedEntity[] candidateEntities = plan.CandidateEntities
@@ -302,7 +310,8 @@ public sealed class EntityDependencyEditorService
                 progressSnapshotAfterChanges: _snapshotCalculator.Calculate(
                     candidateEntities,
                     plan.EffectiveState),
-                entitiesWithRequestedPriorityToUpdate: priorityUpdates),
+                entitiesWithRequestedPriorityToUpdate: priorityUpdates,
+                entitiesWithResponsibleDeveloperToUpdate: responsibleDeveloperUpdates),
             cancellationToken);
     }
 

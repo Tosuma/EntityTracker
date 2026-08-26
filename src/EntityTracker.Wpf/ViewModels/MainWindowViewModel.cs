@@ -1185,6 +1185,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             FormatPriority(item.EffectivePriority),
             FormatRank(item.Rank),
             item.SourceName,
+            string.IsNullOrEmpty(item.ResponsibleDeveloper)
+                ? "—"
+                : item.ResponsibleDeveloper,
             FormatProvenance(item.Provenance),
             FormatStatus(item.Status),
             FormatWorkflowState(item.WorkflowState),

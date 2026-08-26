@@ -279,7 +279,8 @@ public sealed class SchemaSynchronizationPlannerTests
             DevelopmentStatus.InProgress,
             "Manager implemented",
             EntityLifecycleState.Archived,
-            requestedPriority: 2);
+            requestedPriority: 2,
+            responsibleDeveloper: "Data Team");
 
         SchemaSynchronizationPlan plan = Plan(
             Candidate(["Customer"], []),
@@ -294,14 +295,19 @@ public sealed class SchemaSynchronizationPlannerTests
         Assert.Equal("Manager implemented", change.Entity.Notes);
         Assert.Equal(EntityLifecycleState.Active, change.Entity.LifecycleState);
         Assert.Equal(2, change.Entity.RequestedPriority);
+        Assert.Equal("Data Team", change.Entity.ResponsibleDeveloper);
     }
 
     [Theory]
     [InlineData(SchemaImportMode.Complete)]
     [InlineData(SchemaImportMode.Partial)]
-    public void MatchingImport_PreservesRequestedPriority(SchemaImportMode mode)
+    public void MatchingImport_PreservesManualScalarValues(SchemaImportMode mode)
     {
-        TrackedEntity existing = Entity(1, "Customer", requestedPriority: 4);
+        TrackedEntity existing = Entity(
+            1,
+            "Customer",
+            requestedPriority: 4,
+            responsibleDeveloper: "Platform Team");
 
         SchemaSynchronizationPlan plan = Plan(
             Candidate(["customer"], []),
@@ -312,7 +318,9 @@ public sealed class SchemaSynchronizationPlannerTests
         TrackedEntity candidate = Assert.Single(plan.CandidateEntities);
         Assert.Equal(existing.Id, candidate.Id);
         Assert.Equal(4, candidate.RequestedPriority);
+        Assert.Equal("Platform Team", candidate.ResponsibleDeveloper);
         Assert.Empty(plan.ChangeSet.EntitiesWithRequestedPriorityToUpdate);
+        Assert.Empty(plan.ChangeSet.EntitiesWithResponsibleDeveloperToUpdate);
     }
 
     [Fact]
@@ -494,7 +502,8 @@ public sealed class SchemaSynchronizationPlannerTests
         string notes = "",
         EntityLifecycleState lifecycle = EntityLifecycleState.Active,
         EntityProvenance provenance = EntityProvenance.Imported,
-        int? requestedPriority = null) =>
+        int? requestedPriority = null,
+        string? responsibleDeveloper = null) =>
         new(
             new EntityId(new Guid(id, 0, 0, new byte[8])),
             name,
@@ -502,7 +511,8 @@ public sealed class SchemaSynchronizationPlannerTests
             notes,
             lifecycle,
             provenance,
-            requestedPriority);
+            requestedPriority,
+            responsibleDeveloper);
 
     private static PersistedDependency Dependency(
         TrackedEntity owner,

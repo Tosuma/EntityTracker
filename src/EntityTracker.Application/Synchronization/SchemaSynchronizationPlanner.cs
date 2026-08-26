@@ -179,7 +179,8 @@ public sealed class SchemaSynchronizationPlanner
                     existingEntity.Provenance == EntityProvenance.ManualOnly
                         ? EntityProvenance.ManualAndImported
                         : existingEntity.Provenance,
-                    existingEntity.RequestedPriority)
+                    existingEntity.RequestedPriority,
+                    existingEntity.ResponsibleDeveloper)
                 : new TrackedEntity(
                     plannedNewEntityIds is not null &&
                     plannedNewEntityIds.TryGetValue(
@@ -425,7 +426,8 @@ public sealed class SchemaSynchronizationPlanner
                     entity.Notes,
                     entity.LifecycleState,
                     entity.Provenance,
-                    entity.RequestedPriority)
+                    entity.RequestedPriority,
+                    entity.ResponsibleDeveloper)
                 : entity)
             .ToArray();
         TrackedEntity[] progressUpdates = finalCandidateEntities

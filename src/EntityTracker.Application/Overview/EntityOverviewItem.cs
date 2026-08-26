@@ -14,6 +14,7 @@ public sealed class EntityOverviewItem
         EntityProvenance provenance,
         DevelopmentStatus status,
         string notes,
+        string responsibleDeveloper,
         EntityLifecycleState lifecycleState,
         int dependencyCount,
         IEnumerable<string> dependencyNames,
@@ -29,6 +30,7 @@ public sealed class EntityOverviewItem
         Provenance = provenance;
         Status = status;
         Notes = notes;
+        ResponsibleDeveloper = responsibleDeveloper;
         LifecycleState = lifecycleState;
         DependencyCount = dependencyCount;
         DependencyNames = Array.AsReadOnly(dependencyNames.ToArray());
@@ -52,6 +54,8 @@ public sealed class EntityOverviewItem
     public DevelopmentStatus Status { get; }
 
     public string Notes { get; }
+
+    public string ResponsibleDeveloper { get; }
 
     public EntityLifecycleState LifecycleState { get; }
 

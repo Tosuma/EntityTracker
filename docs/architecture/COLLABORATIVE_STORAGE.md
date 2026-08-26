@@ -81,6 +81,7 @@ Non-overlapping edits merge automatically. Merge comparison is field-specific:
 - lifecycle state;
 - provenance;
 - requested priority;
+- responsible developer;
 - each imported dependency key;
 - each manual dependency override key.
 

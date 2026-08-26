@@ -113,7 +113,8 @@ public sealed class ManualEntityCreationService
         TrackedEntity createdEntity = new(
             EntityId.New(),
             entityName,
-            provenance: EntityProvenance.ManualOnly);
+            provenance: EntityProvenance.ManualOnly,
+            responsibleDeveloper: request.ResponsibleDeveloper);
         Dictionary<EntitySourceKey, TrackedEntity> candidateActiveByKey = new(activeByKey)
         {
             [entityKey!] = createdEntity

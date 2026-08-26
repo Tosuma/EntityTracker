@@ -133,7 +133,12 @@ public sealed class EntityDependencyEditorServiceTests
                 "Future",
                 ManualDependencyOverrideAction.Add)]);
 
-        await service.SaveAsync(plan, owner.Status, owner.Notes, owner.RequestedPriority);
+        await service.SaveAsync(
+            plan,
+            owner.Status,
+            owner.Notes,
+            owner.RequestedPriority,
+            owner.ResponsibleDeveloper);
 
         TrackedStateChangeSet changeSet = Assert.IsType<TrackedStateChangeSet>(
             store.LastChangeSet);
@@ -152,7 +157,7 @@ public sealed class EntityDependencyEditorServiceTests
     [Fact]
     public async Task SaveAsync_StatusNotesAndOverridesShareOneChangeSet()
     {
-        TrackedEntity owner = Entity(1, "Owner");
+        TrackedEntity owner = Entity(1, "Owner", "Core Team");
         EntityDependencyEditorService service = Service([owner], [], [], [], out StubStore store);
         EntityDependencyEditPlan plan = service.CreatePlan(
             owner.Id,
@@ -169,7 +174,8 @@ public sealed class EntityDependencyEditorServiceTests
             plan,
             DevelopmentStatus.Reconciled,
             "Verified notes",
-            owner.RequestedPriority);
+            owner.RequestedPriority,
+            owner.ResponsibleDeveloper);
 
         TrackedStateChangeSet changeSet = Assert.IsType<TrackedStateChangeSet>(
             store.LastChangeSet);
@@ -181,8 +187,54 @@ public sealed class EntityDependencyEditorServiceTests
             Assert.IsType<ProgressSnapshotState>(changeSet.ProgressSnapshotAfterChanges)
                 .ReconciledCount);
         Assert.Equal("Verified notes", progress.Notes);
+        Assert.Equal("Core Team", progress.ResponsibleDeveloper);
         Assert.Equal(owner.Id, Assert.Single(changeSet.ReconciledOverrideOwnerIds));
         Assert.Single(changeSet.ManualDependencyOverrides);
+    }
+
+    [Theory]
+    [InlineData("", "  Ada Lovelace  ", "Ada Lovelace")]
+    [InlineData("Existing Team", "   ", "")]
+    public async Task SaveAsync_ResponsibleDeveloperChangeIsNormalizedAndIndependent(
+        string existing,
+        string entered,
+        string expected)
+    {
+        TrackedEntity owner = Entity(1, "Owner", existing);
+        EntityDependencyEditorService service = Service([owner], [], [], [], out StubStore store);
+        EntityDependencyEditPlan plan = await service.LoadAsync(owner.Id);
+
+        await service.SaveAsync(
+            plan,
+            owner.Status,
+            owner.Notes,
+            owner.RequestedPriority,
+            entered);
+
+        TrackedStateChangeSet changeSet = Assert.IsType<TrackedStateChangeSet>(store.LastChangeSet);
+        TrackedEntity update = Assert.Single(
+            changeSet.EntitiesWithResponsibleDeveloperToUpdate);
+        Assert.Equal(expected, update.ResponsibleDeveloper);
+        Assert.Empty(changeSet.EntitiesWithProgressToUpdate);
+        Assert.Empty(changeSet.EntitiesWithRequestedPriorityToUpdate);
+    }
+
+    [Fact]
+    public async Task SaveAsync_EquivalentNormalizedResponsibleDeveloperIsNotUpdated()
+    {
+        TrackedEntity owner = Entity(1, "Owner", "Platform Team");
+        EntityDependencyEditorService service = Service([owner], [], [], [], out StubStore store);
+        EntityDependencyEditPlan plan = await service.LoadAsync(owner.Id);
+
+        await service.SaveAsync(
+            plan,
+            owner.Status,
+            owner.Notes,
+            owner.RequestedPriority,
+            "  Platform Team  ");
+
+        Assert.Empty(Assert.IsType<TrackedStateChangeSet>(store.LastChangeSet)
+            .EntitiesWithResponsibleDeveloperToUpdate);
     }
 
     [Fact]
@@ -193,7 +245,8 @@ public sealed class EntityDependencyEditorServiceTests
             "Owner",
             DevelopmentStatus.Reconciled,
             "Verified",
-            EntityLifecycleState.Archived);
+            EntityLifecycleState.Archived,
+            responsibleDeveloper: "Legacy Team");
         TrackedEntity target = Entity(2, "Target");
         EntityDependencyEditorService service = Service(
             [owner, target],
@@ -210,6 +263,7 @@ public sealed class EntityDependencyEditorServiceTests
         Assert.Equal(owner.Id, details.Entity.Id);
         Assert.Equal(DevelopmentStatus.Reconciled, details.Entity.Status);
         Assert.Equal("Verified", details.Entity.Notes);
+        Assert.Equal("Legacy Team", details.Entity.ResponsibleDeveloper);
         Assert.Equal(
             ["ManualMissing", "Target"],
             details.Dependencies.Select(static dependency => dependency.DependencySourceName));
@@ -257,7 +311,7 @@ public sealed class EntityDependencyEditorServiceTests
             preview.Entities.Select(static item => item.SourceName));
         Assert.All(preview.Entities, static item => Assert.Equal(2, item.EffectivePriority));
 
-        await service.SaveAsync(plan, owner.Status, owner.Notes, 2);
+        await service.SaveAsync(plan, owner.Status, owner.Notes, 2, owner.ResponsibleDeveloper);
 
         TrackedStateChangeSet changeSet = Assert.IsType<TrackedStateChangeSet>(store.LastChangeSet);
         TrackedEntity priorityUpdate = Assert.Single(
@@ -285,7 +339,11 @@ public sealed class EntityDependencyEditorServiceTests
             new PriorityPlanningService());
     }
 
-    private static TrackedEntity Entity(int id, string name) => new(Id(id), name);
+    private static TrackedEntity Entity(
+        int id,
+        string name,
+        string? responsibleDeveloper = null) =>
+        new(Id(id), name, responsibleDeveloper: responsibleDeveloper);
 
     private static EntityId Id(int id) => new(new Guid(id, 0, 0, new byte[8]));
 

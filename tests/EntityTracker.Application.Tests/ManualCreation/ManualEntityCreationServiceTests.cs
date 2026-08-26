@@ -87,7 +87,10 @@ public sealed class ManualEntityCreationServiceTests
         ManualEntityCreationService service = Service([], [], [], out RecordingStore store);
 
         ManualEntityCreationResult result = await service.CreateAsync(
-            new ManualEntityCreationRequest(" NewEntity ", []));
+            new ManualEntityCreationRequest(
+                " NewEntity ",
+                [],
+                "  Platform Team  "));
 
         Assert.True(result.IsSuccess);
         Assert.Empty(result.Diagnostics);
@@ -96,6 +99,7 @@ public sealed class ManualEntityCreationServiceTests
         Assert.Equal(DevelopmentStatus.NotStarted, added.Status);
         Assert.Equal(EntityLifecycleState.Active, added.LifecycleState);
         Assert.Equal(EntityProvenance.ManualOnly, added.Provenance);
+        Assert.Equal("Platform Team", added.ResponsibleDeveloper);
         Assert.Equal(added.Id, result.CreatedEntityId);
         Assert.Empty(store.LastChangeSet.ResolvedDependencies);
         Assert.Empty(store.LastChangeSet.UnresolvedDependencies);

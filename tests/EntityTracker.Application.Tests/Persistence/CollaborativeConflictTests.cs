@@ -9,6 +9,7 @@ public sealed class CollaborativeConflictTests
     [Theory]
     [InlineData(CollaborativeConflictField.Notes)]
     [InlineData(CollaborativeConflictField.RequestedPriority)]
+    [InlineData(CollaborativeConflictField.ResponsibleDeveloper)]
     public void Constructor_ScalarConflict_DoesNotRequireDependencyKey(
         CollaborativeConflictField field)
     {

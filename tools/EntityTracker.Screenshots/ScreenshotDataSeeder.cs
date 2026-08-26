@@ -75,6 +75,7 @@ internal static class ScreenshotDataSeeder
                 noteEntity.Status,
                 "Coordinate rollout with the platform team.",
                 noteEntity.RequestedPriority,
+                noteEntity.ResponsibleDeveloper,
                 cancellationToken);
         }
 

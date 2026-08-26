@@ -9,7 +9,8 @@ public sealed class TrackedEntity
         string notes = "",
         EntityLifecycleState lifecycleState = EntityLifecycleState.Active,
         EntityProvenance provenance = EntityProvenance.Imported,
-        int? requestedPriority = null)
+        int? requestedPriority = null,
+        string? responsibleDeveloper = null)
     {
         ArgumentNullException.ThrowIfNull(id);
         ValidateSourceName(sourceName);
@@ -27,6 +28,7 @@ public sealed class TrackedEntity
         LifecycleState = lifecycleState;
         Provenance = provenance;
         RequestedPriority = requestedPriority;
+        ResponsibleDeveloper = NormalizeResponsibleDeveloper(responsibleDeveloper);
     }
 
     public EntityId Id { get; }
@@ -42,6 +44,8 @@ public sealed class TrackedEntity
     public EntityProvenance Provenance { get; private set; }
 
     public int? RequestedPriority { get; private set; }
+
+    public string ResponsibleDeveloper { get; private set; }
 
     public void ChangeSourceName(string sourceName)
     {
@@ -85,6 +89,11 @@ public sealed class TrackedEntity
     {
         EnsureValidRequestedPriority(requestedPriority);
         RequestedPriority = requestedPriority;
+    }
+
+    public void ChangeResponsibleDeveloper(string? responsibleDeveloper)
+    {
+        ResponsibleDeveloper = NormalizeResponsibleDeveloper(responsibleDeveloper);
     }
 
     private static void ValidateSourceName(string sourceName)
@@ -137,4 +146,7 @@ public sealed class TrackedEntity
                 "Requested priority must be between 1 and 5.");
         }
     }
+
+    private static string NormalizeResponsibleDeveloper(string? responsibleDeveloper) =>
+        responsibleDeveloper?.Trim() ?? string.Empty;
 }

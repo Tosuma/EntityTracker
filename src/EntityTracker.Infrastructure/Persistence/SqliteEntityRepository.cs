@@ -27,7 +27,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT id, source_name, development_status, notes, lifecycle_state, provenance,
-                   requested_priority
+                   requested_priority, responsible_developer
             FROM tracked_entities
             WHERE id = $id;
             """;
@@ -47,7 +47,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT id, source_name, development_status, notes, lifecycle_state, provenance,
-                   requested_priority
+                   requested_priority, responsible_developer
             FROM tracked_entities
             ORDER BY source_name COLLATE NOCASE, id;
             """;
@@ -85,6 +85,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
                 lifecycle_state,
                 provenance,
                 requested_priority,
+                responsible_developer,
                 created_at_utc,
                 schema_updated_at_utc,
                 progress_updated_at_utc
@@ -99,6 +100,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
                 $lifecycleState,
                 $provenance,
                 $requestedPriority,
+                $responsibleDeveloper,
                 $createdAtUtc,
                 $schemaUpdatedAtUtc,
                 $progressUpdatedAtUtc
@@ -164,6 +166,9 @@ public sealed class SqliteEntityRepository : IEntityRepository
         command.Parameters.AddWithValue(
             "$requestedPriority",
             entity.RequestedPriority is null ? DBNull.Value : entity.RequestedPriority.Value);
+        command.Parameters.AddWithValue(
+            "$responsibleDeveloper",
+            entity.ResponsibleDeveloper);
     }
 
     private static TrackedEntity ReadEntity(SqliteDataReader reader)
@@ -182,6 +187,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
             reader.GetString(5),
             "entity provenance");
         int? requestedPriority = reader.IsDBNull(6) ? null : reader.GetInt32(6);
+        string responsibleDeveloper = reader.GetString(7);
 
         return new TrackedEntity(
             id,
@@ -190,6 +196,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
             notes,
             lifecycleState,
             provenance,
-            requestedPriority);
+            requestedPriority,
+            responsibleDeveloper);
     }
 }
