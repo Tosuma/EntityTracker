@@ -15,6 +15,7 @@ public sealed class EntityOverviewItem
         DevelopmentStatus status,
         string notes,
         string responsibleDeveloper,
+        string groupName,
         EntityLifecycleState lifecycleState,
         int dependencyCount,
         IEnumerable<string> dependencyNames,
@@ -31,6 +32,7 @@ public sealed class EntityOverviewItem
         Status = status;
         Notes = notes;
         ResponsibleDeveloper = responsibleDeveloper;
+        GroupName = groupName;
         LifecycleState = lifecycleState;
         DependencyCount = dependencyCount;
         DependencyNames = Array.AsReadOnly(dependencyNames.ToArray());
@@ -56,6 +58,8 @@ public sealed class EntityOverviewItem
     public string Notes { get; }
 
     public string ResponsibleDeveloper { get; }
+
+    public string GroupName { get; }
 
     public EntityLifecycleState LifecycleState { get; }
 

@@ -126,7 +126,8 @@ public sealed class BulkStatusUpdateServiceTests
             1,
             "Prioritized",
             requestedPriority: 3,
-            responsibleDeveloper: "Core Team");
+            responsibleDeveloper: "Core Team",
+            groupName: "Core Data");
         RecordingStore store = new();
         BulkStatusUpdateService service = CreateService([entity], [], store);
 
@@ -137,6 +138,7 @@ public sealed class BulkStatusUpdateServiceTests
                 .EntitiesWithProgressToUpdate);
         Assert.Equal(3, update.RequestedPriority);
         Assert.Equal("Core Team", update.ResponsibleDeveloper);
+        Assert.Equal("Core Data", update.GroupName);
     }
 
     [Fact]
@@ -218,14 +220,16 @@ public sealed class BulkStatusUpdateServiceTests
         DevelopmentStatus status = DevelopmentStatus.NotStarted,
         EntityLifecycleState lifecycleState = EntityLifecycleState.Active,
         int? requestedPriority = null,
-        string? responsibleDeveloper = null) =>
+        string? responsibleDeveloper = null,
+        string? groupName = null) =>
         new(
             Id(id),
             name,
             status,
             lifecycleState: lifecycleState,
             requestedPriority: requestedPriority,
-            responsibleDeveloper: responsibleDeveloper);
+            responsibleDeveloper: responsibleDeveloper,
+            groupName: groupName);
 
     private static EntityId Id(int id) => new(new Guid(id, 0, 0, new byte[8]));
 

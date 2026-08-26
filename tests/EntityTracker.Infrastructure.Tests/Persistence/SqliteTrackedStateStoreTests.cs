@@ -334,7 +334,7 @@ public sealed class SqliteTrackedStateStoreTests
         await database.InitializeAsync();
         SqliteEntityRepository entities = new(database);
         SqliteDependencyRepository dependencies = new(database);
-        TrackedEntity owner = new(EntityId.New(), "Owner");
+        TrackedEntity owner = new(EntityId.New(), "Owner", groupName: "Core Data");
         TrackedEntity target = new(EntityId.New(), "Target");
         Assert.True(await entities.TryAddAsync(owner));
         Assert.True(await entities.TryAddAsync(target));
@@ -345,7 +345,9 @@ public sealed class SqliteTrackedStateStoreTests
         await new SqliteTrackedStateStore(database).ApplyAsync(
             new TrackedStateChangeSet([], [], [owner.Id], [], [], []));
 
-        Assert.Equal(EntityLifecycleState.Archived, (await entities.GetAsync(owner.Id))!.LifecycleState);
+        TrackedEntity archived = Assert.IsType<TrackedEntity>(await entities.GetAsync(owner.Id));
+        Assert.Equal(EntityLifecycleState.Archived, archived.LifecycleState);
+        Assert.Equal("Core Data", archived.GroupName);
         Assert.Single(await dependencies.GetAllAsync());
     }
 
@@ -367,7 +369,8 @@ public sealed class SqliteTrackedStateStoreTests
             EntityLifecycleState.Archived,
             EntityProvenance.ManualAndImported,
             requestedPriority: 3,
-            responsibleDeveloper: "Legacy Team");
+            responsibleDeveloper: "Legacy Team",
+            groupName: "Legacy Data");
         TrackedEntity owner = new(EntityId.New(), "Owner");
         Assert.True(await entities.TryAddAsync(target));
         Assert.True(await entities.TryAddAsync(owner));
@@ -406,6 +409,7 @@ public sealed class SqliteTrackedStateStoreTests
         Assert.Equal(EntityProvenance.ManualAndImported, loaded.Provenance);
         Assert.Equal(3, loaded.RequestedPriority);
         Assert.Equal("Legacy Team", loaded.ResponsibleDeveloper);
+        Assert.Equal("Legacy Data", loaded.GroupName);
         Assert.Equal(preservedOverride, Assert.Single(await overrides.GetAllAsync()));
         Assert.Single(await dependencies.GetAllUnresolvedAsync());
 
@@ -547,6 +551,65 @@ public sealed class SqliteTrackedStateStoreTests
         Assert.Equal(
             string.Empty,
             (await entities.GetAsync(entity.Id))!.ResponsibleDeveloper);
+        Assert.Equal(historyCount, (await history.GetStatusHistoryAsync()).Count);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_GroupNameOnlyUpdateCanSetAndClearWithoutChangingProgress()
+    {
+        await using TemporarySqliteFile file = new();
+        MutableTimeProvider time = new(
+            new DateTimeOffset(2026, 8, 26, 9, 0, 0, TimeSpan.Zero));
+        SqliteDatabase database = new(file.DatabasePath, time);
+        await database.InitializeAsync();
+        SqliteTrackedStateStore store = new(database);
+        SqliteEntityRepository entities = new(database);
+        SqliteProgressHistoryRepository history = new(database);
+        TrackedEntity entity = new(
+            EntityId.New(),
+            "Grouped",
+            DevelopmentStatus.InProgress,
+            "Keep notes",
+            requestedPriority: 3,
+            responsibleDeveloper: "Platform Team");
+        await store.ApplyAsync(new TrackedStateChangeSet([entity], [], [], [], [], []));
+        int historyCount = (await history.GetStatusHistoryAsync()).Count;
+        (string schemaTimestamp, string progressTimestamp) =
+            await ReadEntityTimestampsAsync(file.DatabasePath, entity.Id);
+        time.Advance(TimeSpan.FromHours(1));
+        entity.ChangeGroupName("  Core Data  ");
+
+        await store.ApplyAsync(new TrackedStateChangeSet(
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            entitiesWithGroupNameToUpdate: [entity]));
+
+        TrackedEntity loaded = Assert.IsType<TrackedEntity>(await entities.GetAsync(entity.Id));
+        Assert.Equal("Core Data", loaded.GroupName);
+        Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
+        Assert.Equal("Keep notes", loaded.Notes);
+        Assert.Equal(3, loaded.RequestedPriority);
+        Assert.Equal("Platform Team", loaded.ResponsibleDeveloper);
+        Assert.Equal(historyCount, (await history.GetStatusHistoryAsync()).Count);
+        Assert.Equal(
+            (schemaTimestamp, progressTimestamp),
+            await ReadEntityTimestampsAsync(file.DatabasePath, entity.Id));
+
+        entity.ChangeGroupName(null);
+        await store.ApplyAsync(new TrackedStateChangeSet(
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            entitiesWithGroupNameToUpdate: [entity]));
+
+        Assert.Equal(string.Empty, (await entities.GetAsync(entity.Id))!.GroupName);
         Assert.Equal(historyCount, (await history.GetStatusHistoryAsync()).Count);
     }
 

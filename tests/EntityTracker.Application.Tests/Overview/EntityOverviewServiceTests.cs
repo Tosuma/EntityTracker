@@ -19,7 +19,8 @@ public sealed class EntityOverviewServiceTests
             "Foundation",
             DevelopmentStatus.DevelopmentCompleted,
             "Stable",
-            responsibleDeveloper: "Data Team");
+            responsibleDeveloper: "Data Team",
+            groupName: "Core Data");
         TrackedEntity service = Entity(2, "Service", DevelopmentStatus.InProgress, "API underway");
         TrackedEntity screen = Entity(3, "Screen");
         PersistedDependency[] dependencies =
@@ -46,6 +47,7 @@ public sealed class EntityOverviewServiceTests
         Assert.Equal(DevelopmentStatus.DevelopmentCompleted, result.Items[0].Status);
         Assert.Equal("Stable", result.Items[0].Notes);
         Assert.Equal("Data Team", result.Items[0].ResponsibleDeveloper);
+        Assert.Equal("Core Data", result.Items[0].GroupName);
         Assert.Equal(DevelopmentStatus.InProgress, result.Items[1].Status);
         Assert.Equal("API underway", result.Items[1].Notes);
     }
@@ -103,7 +105,8 @@ public sealed class EntityOverviewServiceTests
             new EntityId(new Guid(2, 0, 0, new byte[8])),
             "Archived",
             lifecycleState: EntityLifecycleState.Archived,
-            responsibleDeveloper: "Legacy Team");
+            responsibleDeveloper: "Legacy Team",
+            groupName: "Legacy Data");
         EntityOverviewService service = CreateService([active, archived], []);
 
         EntityOverviewResult result = await service.GetAsync();
@@ -116,6 +119,7 @@ public sealed class EntityOverviewServiceTests
         Assert.Empty(archivedItem.DependencyResolutionIssueNames);
         Assert.Null(archivedItem.Rank);
         Assert.Equal("Legacy Team", archivedItem.ResponsibleDeveloper);
+        Assert.Equal("Legacy Data", archivedItem.GroupName);
     }
 
     [Fact]
@@ -286,7 +290,8 @@ public sealed class EntityOverviewServiceTests
         DevelopmentStatus status = DevelopmentStatus.NotStarted,
         string notes = "",
         int? requestedPriority = null,
-        string? responsibleDeveloper = null)
+        string? responsibleDeveloper = null,
+        string? groupName = null)
     {
         return new TrackedEntity(
             new EntityId(new Guid(id, 0, 0, new byte[8])),
@@ -294,7 +299,8 @@ public sealed class EntityOverviewServiceTests
             status,
             notes,
             requestedPriority: requestedPriority,
-            responsibleDeveloper: responsibleDeveloper);
+            responsibleDeveloper: responsibleDeveloper,
+            groupName: groupName);
     }
 
     private static PersistedDependency Dependency(

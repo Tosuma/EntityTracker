@@ -17,6 +17,7 @@ public sealed class TrackedEntityTests
         Assert.Equal(EntityProvenance.Imported, entity.Provenance);
         Assert.Null(entity.RequestedPriority);
         Assert.Equal(string.Empty, entity.ResponsibleDeveloper);
+        Assert.Equal(string.Empty, entity.GroupName);
     }
 
     [Fact]
@@ -251,5 +252,37 @@ public sealed class TrackedEntityTests
         entity.ChangeResponsibleDeveloper(value);
 
         Assert.Equal(string.Empty, entity.ResponsibleDeveloper);
+    }
+
+    [Theory]
+    [InlineData("  Finance  ", "Finance")]
+    [InlineData(" Platform Data ", "Platform Data")]
+    [InlineData("  cORE  ", "cORE")]
+    public void GroupName_TrimsOuterWhitespaceAndPreservesText(
+        string value,
+        string expected)
+    {
+        TrackedEntity entity = new(
+            EntityId.New(),
+            "sales.Customer",
+            groupName: value);
+
+        Assert.Equal(expected, entity.GroupName);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void GroupName_MissingValueClearsGroup(string? value)
+    {
+        TrackedEntity entity = new(
+            EntityId.New(),
+            "sales.Customer",
+            groupName: "Existing Group");
+
+        entity.ChangeGroupName(value);
+
+        Assert.Equal(string.Empty, entity.GroupName);
     }
 }

@@ -77,6 +77,28 @@ public sealed class ManualEntityCreationViewModelTests
     }
 
     [Fact]
+    public async Task GroupSearch_SelectingSuggestionUsesStoredCanonicalCasing()
+    {
+        ManualEntityCreationViewModel viewModel = ViewModel(
+            [Entity(
+                1,
+                "Archived",
+                EntityLifecycleState.Archived,
+                "Core Data")],
+            out _,
+            out _,
+            out _);
+        viewModel.GroupName = "core data";
+
+        await viewModel.SearchGroupNamesAsync();
+        string suggestion = Assert.Single(viewModel.GroupSuggestions);
+        viewModel.UseGroupSuggestionCommand.Execute(suggestion);
+
+        Assert.Equal("Core Data", viewModel.GroupName);
+        Assert.Empty(viewModel.GroupSuggestions);
+    }
+
+    [Fact]
     public async Task Create_SuccessResetsDraftAndInvokesRefreshCallback()
     {
         ManualEntityCreationViewModel viewModel = ViewModel(
@@ -86,14 +108,17 @@ public sealed class ManualEntityCreationViewModelTests
             out _);
         viewModel.EntityName = "NewEntity";
         viewModel.ResponsibleDeveloper = "  Platform Team  ";
+        viewModel.GroupName = "  New Group  ";
 
         await viewModel.CreateAsync();
 
         TrackedEntity added = Assert.Single(store.LastChangeSet!.EntitiesToAdd);
         Assert.Equal("Platform Team", added.ResponsibleDeveloper);
+        Assert.Equal("New Group", added.GroupName);
         Assert.Equal(1, created.Count);
         Assert.Equal(string.Empty, viewModel.EntityName);
         Assert.Equal(string.Empty, viewModel.ResponsibleDeveloper);
+        Assert.Equal(string.Empty, viewModel.GroupName);
         Assert.Empty(viewModel.SelectedDependencies);
         Assert.False(viewModel.HasErrors);
     }
@@ -108,12 +133,14 @@ public sealed class ManualEntityCreationViewModelTests
             out CallbackCounter cancelled);
         viewModel.EntityName = "Discarded";
         viewModel.ResponsibleDeveloper = "Discarded Team";
+        viewModel.GroupName = "Discarded Group";
 
         viewModel.CancelCommand.Execute(null);
 
         Assert.Equal(1, cancelled.Count);
         Assert.Equal(string.Empty, viewModel.EntityName);
         Assert.Equal(string.Empty, viewModel.ResponsibleDeveloper);
+        Assert.Equal(string.Empty, viewModel.GroupName);
         Assert.Null(store.LastChangeSet);
     }
 
@@ -187,11 +214,13 @@ public sealed class ManualEntityCreationViewModelTests
     private static TrackedEntity Entity(
         int id,
         string name,
-        EntityLifecycleState lifecycle = EntityLifecycleState.Active) =>
+        EntityLifecycleState lifecycle = EntityLifecycleState.Active,
+        string? groupName = null) =>
         new(
             new EntityId(new Guid(id, 0, 0, new byte[8])),
             name,
-            lifecycleState: lifecycle);
+            lifecycleState: lifecycle,
+            groupName: groupName);
 
     private sealed class CallbackCounter
     {

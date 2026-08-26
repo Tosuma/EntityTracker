@@ -598,6 +598,9 @@
                                 <DataGridTextColumn Width="150"
                                                     Binding="{Binding ResponsibleDeveloper}"
                                                     Header="Responsible dev" />
+                                <DataGridTextColumn Width="145"
+                                                    Binding="{Binding GroupName}"
+                                                    Header="Group" />
                                 <DataGridTextColumn Width="125" Binding="{Binding Provenance}" Header="Source" />
                                 <DataGridTextColumn Width="130" Binding="{Binding Status}" Header="Status" />
                                 <DataGridTextColumn Width="130" Binding="{Binding WorkStatus}" Header="Work status" />
@@ -1083,6 +1086,43 @@
                                      MinWidth="420"
                                      Padding="9,7"
                                      Text="{Binding ManualCreation.ResponsibleDeveloper, UpdateSourceTrigger=PropertyChanged}" />
+
+                            <TextBlock FontWeight="SemiBold" Text="Group" />
+                            <TextBlock Margin="0,3,0,7"
+                                       Foreground="{StaticResource Brush.Text.Secondary}"
+                                       Text="Type a new group or choose an existing group below."
+                                       TextWrapping="Wrap" />
+                            <TextBox MinWidth="420"
+                                     Padding="9,7"
+                                     Text="{Binding ManualCreation.GroupName, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBlock Margin="0,7,0,0"
+                                       Foreground="{StaticResource Brush.Text.Primary}"
+                                       Text="{Binding ManualCreation.GroupSearchMessage}"
+                                       TextWrapping="Wrap"
+                                       Visibility="{Binding ManualCreation.HasGroupSearchMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <ItemsControl Margin="0,6,0,18"
+                                          ItemsSource="{Binding ManualCreation.GroupSuggestions}"
+                                          Visibility="{Binding ManualCreation.HasGroupSuggestions, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,0,5"
+                                                Padding="8"
+                                                Background="{StaticResource Brush.Surface.Card}"
+                                                BorderBrush="{StaticResource Brush.Border.Default}"
+                                                BorderThickness="1">
+                                            <DockPanel>
+                                                <Button DockPanel.Dock="Right"
+                                                        Padding="12,5"
+                                                        Command="{Binding DataContext.ManualCreation.UseGroupSuggestionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        Content="Use"
+                                                        Style="{StaticResource SecondaryButtonStyle}" />
+                                                <TextBlock VerticalAlignment="Center" Text="{Binding}" />
+                                            </DockPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
 
                             <TextBlock FontWeight="SemiBold" Text="Add dependencies" />
                             <TextBlock Margin="0,3,0,7"
@@ -1762,6 +1802,42 @@
                                              Padding="8,6"
                                              IsEnabled="{Binding Editor.CanEditProgress}"
                                              Text="{Binding Editor.EditedResponsibleDeveloper, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+
+                                <StackPanel Margin="0,0,0,12">
+                                    <TextBlock FontWeight="SemiBold" Text="Group" />
+                                    <TextBox Margin="0,5,0,0"
+                                             Padding="8,6"
+                                             IsEnabled="{Binding Editor.CanEditProgress}"
+                                             Text="{Binding Editor.EditedGroupName, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Margin="0,7,0,0"
+                                               Foreground="{StaticResource Brush.Text.Primary}"
+                                               Text="{Binding Editor.GroupSearchMessage}"
+                                               TextWrapping="Wrap"
+                                               Visibility="{Binding Editor.HasGroupSearchMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                    <ItemsControl Margin="0,6,0,0"
+                                                  ItemsSource="{Binding Editor.GroupSuggestions}"
+                                                  Visibility="{Binding Editor.HasGroupSuggestions, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Margin="0,0,0,5"
+                                                        Padding="8"
+                                                        Background="{StaticResource Brush.Surface.Card}"
+                                                        BorderBrush="{StaticResource Brush.Border.Default}"
+                                                        BorderThickness="1">
+                                                    <DockPanel>
+                                                        <Button DockPanel.Dock="Right"
+                                                                Padding="12,5"
+                                                                Command="{Binding DataContext.Editor.UseGroupSuggestionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                CommandParameter="{Binding}"
+                                                                Content="Use"
+                                                                Style="{StaticResource SecondaryButtonStyle}" />
+                                                        <TextBlock VerticalAlignment="Center" Text="{Binding}" />
+                                                    </DockPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                 </StackPanel>
 
                                 <Grid Margin="0,0,0,12">

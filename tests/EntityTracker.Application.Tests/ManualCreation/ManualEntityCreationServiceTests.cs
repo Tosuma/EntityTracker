@@ -82,6 +82,51 @@ public sealed class ManualEntityCreationServiceTests
     }
 
     [Fact]
+    public async Task SearchGroupNamesAsync_MatchesOrdersAndDeduplicatesActiveAndArchivedGroups()
+    {
+        ManualEntityCreationService service = Service(
+            [
+                Entity(1, "One", groupName: "Data"),
+                Entity(2, "Two", groupName: "database"),
+                Entity(3, "Three", groupName: "Metadata"),
+                Entity(4, "Four", groupName: "data"),
+                Entity(
+                    5,
+                    "Archived",
+                    EntityLifecycleState.Archived,
+                    "Legacy Data")
+            ],
+            [],
+            [],
+            out _);
+
+        IReadOnlyList<string> suggestions = await service.SearchGroupNamesAsync(" DATA ");
+
+        Assert.Equal(["Data", "database", "Legacy Data", "Metadata"], suggestions);
+    }
+
+    [Fact]
+    public async Task SearchGroupNamesAsync_ReturnsArchivedOnlyGroupAndLimitsResultsToTen()
+    {
+        TrackedEntity[] entities = Enumerable.Range(1, 12)
+            .Select(index => Entity(index, $"Entity{index:00}", groupName: $"Team{index:00}"))
+            .Append(Entity(
+                20,
+                "Archived",
+                EntityLifecycleState.Archived,
+                "Team00"))
+            .ToArray();
+        ManualEntityCreationService service = Service(entities, [], [], out _);
+
+        IReadOnlyList<string> suggestions = await service.SearchGroupNamesAsync("team");
+
+        Assert.Equal(10, suggestions.Count);
+        Assert.Equal("Team00", suggestions[0]);
+        Assert.Equal("Team09", suggestions[9]);
+        Assert.Empty(await service.SearchGroupNamesAsync("   "));
+    }
+
+    [Fact]
     public async Task CreateAsync_WithoutDependencies_AddsManualOnlyEntity()
     {
         ManualEntityCreationService service = Service([], [], [], out RecordingStore store);
@@ -90,7 +135,8 @@ public sealed class ManualEntityCreationServiceTests
             new ManualEntityCreationRequest(
                 " NewEntity ",
                 [],
-                "  Platform Team  "));
+                "  Platform Team  ",
+                "  Core Data  "));
 
         Assert.True(result.IsSuccess);
         Assert.Empty(result.Diagnostics);
@@ -100,6 +146,7 @@ public sealed class ManualEntityCreationServiceTests
         Assert.Equal(EntityLifecycleState.Active, added.LifecycleState);
         Assert.Equal(EntityProvenance.ManualOnly, added.Provenance);
         Assert.Equal("Platform Team", added.ResponsibleDeveloper);
+        Assert.Equal("Core Data", added.GroupName);
         Assert.Equal(added.Id, result.CreatedEntityId);
         Assert.Empty(store.LastChangeSet.ResolvedDependencies);
         Assert.Empty(store.LastChangeSet.UnresolvedDependencies);
@@ -344,11 +391,13 @@ public sealed class ManualEntityCreationServiceTests
     private static TrackedEntity Entity(
         int id,
         string name,
-        EntityLifecycleState lifecycle = EntityLifecycleState.Active) =>
+        EntityLifecycleState lifecycle = EntityLifecycleState.Active,
+        string? groupName = null) =>
         new(
             new EntityId(new Guid(id, 0, 0, new byte[8])),
             name,
-            lifecycleState: lifecycle);
+            lifecycleState: lifecycle,
+            groupName: groupName);
 
     private sealed class StubEntityRepository(IReadOnlyList<TrackedEntity> entities)
         : IEntityRepository

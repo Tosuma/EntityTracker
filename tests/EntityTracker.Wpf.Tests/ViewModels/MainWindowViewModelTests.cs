@@ -427,6 +427,7 @@ public sealed class MainWindowViewModelTests
         viewModel.Editor.SelectedStatus = DevelopmentStatus.Reconciled;
         viewModel.Editor.EditedNotes = "Verified implementation";
         viewModel.Editor.EditedResponsibleDeveloper = "  Platform Team  ";
+        viewModel.Editor.EditedGroupName = "  Core Data  ";
         viewModel.Editor.SaveCommand.Execute(null);
         await WaitUntilAsync(() => !viewModel.Editor.IsOpen);
 
@@ -437,10 +438,14 @@ public sealed class MainWindowViewModelTests
         TrackedEntity assignment = Assert.Single(
             store.AppliedChangeSet.EntitiesWithResponsibleDeveloperToUpdate);
         Assert.Equal("Platform Team", assignment.ResponsibleDeveloper);
+        TrackedEntity groupUpdate = Assert.Single(
+            store.AppliedChangeSet.EntitiesWithGroupNameToUpdate);
+        Assert.Equal("Core Data", groupUpdate.GroupName);
         EntityOverviewRow row = Assert.Single(viewModel.OverviewItems);
         Assert.Equal("Reconciled", row.Status);
         Assert.Equal("Verified implementation", row.Notes);
         Assert.Equal("Platform Team", row.ResponsibleDeveloper);
+        Assert.Equal("Core Data", row.GroupName);
         Assert.Equal(100, viewModel.ImplementedPercentage);
         Assert.Equal(100, viewModel.ReconciledPercentage);
     }
@@ -472,6 +477,34 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(
             ["—", "Core Team", "—"],
             viewModel.OverviewItems.Select(static item => item.ResponsibleDeveloper));
+    }
+
+    [Fact]
+    public async Task StandaloneEditor_GroupSuggestionsIncludeArchivedGroupsAndUseCanonicalCasing()
+    {
+        TrackedEntity owner = Entity(1, "Owner");
+        TrackedEntity archived = Entity(
+            2,
+            "Archived",
+            lifecycle: EntityLifecycleState.Archived,
+            groupName: "Legacy Data");
+        MainWindowViewModel viewModel = CreateViewModel(
+            [owner, archived],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+        await viewModel.InitializeAsync();
+        viewModel.EditOverviewEntityCommand.Execute(Assert.Single(viewModel.OverviewItems));
+        await WaitUntilAsync(() => viewModel.Editor.IsOpen && !viewModel.Editor.IsBusy);
+
+        viewModel.Editor.EditedGroupName = "legacy";
+        await WaitUntilAsync(() => viewModel.Editor.HasGroupSuggestions);
+        string suggestion = Assert.Single(viewModel.Editor.GroupSuggestions);
+        viewModel.Editor.UseGroupSuggestionCommand.Execute(suggestion);
+
+        Assert.Equal("Legacy Data", viewModel.Editor.EditedGroupName);
+        Assert.Empty(viewModel.Editor.GroupSuggestions);
     }
 
     [Fact]
@@ -519,7 +552,8 @@ public sealed class MainWindowViewModelTests
             "Keep notes",
             lifecycle: EntityLifecycleState.Archived,
             requestedPriority: 4,
-            responsibleDeveloper: "Legacy Team");
+            responsibleDeveloper: "Legacy Team",
+            groupName: "Legacy Data");
         MainWindowViewModel viewModel = CreateViewModel(
             [archived],
             [],
@@ -531,6 +565,7 @@ public sealed class MainWindowViewModelTests
 
         EntityOverviewRow archivedRow = Assert.Single(viewModel.OverviewItems);
         Assert.Equal("Legacy Team", archivedRow.ResponsibleDeveloper);
+        Assert.Equal("Legacy Data", archivedRow.GroupName);
         viewModel.EditOverviewEntityCommand.Execute(archivedRow);
         await WaitUntilAsync(() => viewModel.Editor.IsOpen && !viewModel.Editor.IsBusy);
         Assert.True(viewModel.Editor.IsArchivedMode);
@@ -538,11 +573,14 @@ public sealed class MainWindowViewModelTests
         Assert.False(viewModel.Editor.CanEditPriority);
         Assert.Equal(4, viewModel.Editor.SelectedRequestedPriority);
         Assert.Equal("Legacy Team", viewModel.Editor.EditedResponsibleDeveloper);
+        Assert.Equal("Legacy Data", viewModel.Editor.EditedGroupName);
         Assert.Equal("—", viewModel.Editor.EffectivePriority);
         viewModel.Editor.SelectedRequestedPriority = 1;
         viewModel.Editor.EditedResponsibleDeveloper = "Changed Team";
+        viewModel.Editor.EditedGroupName = "Changed Group";
         Assert.Equal(4, viewModel.Editor.SelectedRequestedPriority);
         Assert.Equal("Legacy Team", viewModel.Editor.EditedResponsibleDeveloper);
+        Assert.Equal("Legacy Data", viewModel.Editor.EditedGroupName);
         Assert.False(viewModel.Editor.ShowSave);
         Assert.True(viewModel.Editor.CanRestoreEntity);
 
@@ -561,6 +599,7 @@ public sealed class MainWindowViewModelTests
         Assert.Equal("Reconciled", restored.Status);
         Assert.Equal("Keep notes", restored.Notes);
         Assert.Equal("Legacy Team", restored.ResponsibleDeveloper);
+        Assert.Equal("Legacy Data", restored.GroupName);
         Assert.Equal(archived.Id, Assert.Single(store.AppliedChangeSet!.EntityIdsToRestore));
     }
 
@@ -1204,7 +1243,8 @@ public sealed class MainWindowViewModelTests
         EntityProvenance provenance = EntityProvenance.Imported,
         EntityLifecycleState lifecycle = EntityLifecycleState.Active,
         int? requestedPriority = null,
-        string? responsibleDeveloper = null) =>
+        string? responsibleDeveloper = null,
+        string? groupName = null) =>
         new(
             new EntityId(new Guid(id, 0, 0, new byte[8])),
             name,
@@ -1213,7 +1253,8 @@ public sealed class MainWindowViewModelTests
             lifecycle,
             provenance,
             requestedPriority,
-            responsibleDeveloper);
+            responsibleDeveloper,
+            groupName);
 
     private static PersistedDependency Dependency(TrackedEntity owner, TrackedEntity target) =>
         new(new DependencyEdge(owner.Id, target.Id), ImportedDependencyKind.Mandatory);
@@ -1285,6 +1326,10 @@ public sealed class MainWindowViewModelTests
         public void UpdateResponsibleDeveloper(TrackedEntity updated) =>
             _entities.Single(item => item.Id == updated.Id)
                 .ChangeResponsibleDeveloper(updated.ResponsibleDeveloper);
+
+        public void UpdateGroupName(TrackedEntity updated) =>
+            _entities.Single(item => item.Id == updated.Id)
+                .ChangeGroupName(updated.GroupName);
 
     }
 
@@ -1377,6 +1422,11 @@ public sealed class MainWindowViewModelTests
             foreach (TrackedEntity entity in changeSet.EntitiesWithResponsibleDeveloperToUpdate)
             {
                 entityRepository.UpdateResponsibleDeveloper(entity);
+            }
+
+            foreach (TrackedEntity entity in changeSet.EntitiesWithGroupNameToUpdate)
+            {
+                entityRepository.UpdateGroupName(entity);
             }
 
             return Task.CompletedTask;

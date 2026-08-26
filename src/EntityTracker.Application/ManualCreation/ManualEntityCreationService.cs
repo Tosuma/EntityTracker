@@ -1,4 +1,5 @@
 using EntityTracker.Application.Dependencies;
+using EntityTracker.Application.Groups;
 using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
@@ -52,6 +53,17 @@ public sealed class ManualEntityCreationService
         IReadOnlyList<TrackedEntity> entities =
             await _entityRepository.GetAllAsync(cancellationToken);
         return DependencySearch.Search(query, proposedEntityName, entities);
+    }
+
+    public async Task<IReadOnlyList<string>> SearchGroupNamesAsync(
+        string query,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        IReadOnlyList<TrackedEntity> entities =
+            await _entityRepository.GetAllAsync(cancellationToken);
+        return GroupNameSuggestionSearch.Search(query, entities);
     }
 
     public async Task<ManualEntityCreationResult> CreateAsync(
@@ -114,7 +126,8 @@ public sealed class ManualEntityCreationService
             EntityId.New(),
             entityName,
             provenance: EntityProvenance.ManualOnly,
-            responsibleDeveloper: request.ResponsibleDeveloper);
+            responsibleDeveloper: request.ResponsibleDeveloper,
+            groupName: request.GroupName);
         Dictionary<EntitySourceKey, TrackedEntity> candidateActiveByKey = new(activeByKey)
         {
             [entityKey!] = createdEntity

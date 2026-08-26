@@ -1188,6 +1188,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             string.IsNullOrEmpty(item.ResponsibleDeveloper)
                 ? "—"
                 : item.ResponsibleDeveloper,
+            string.IsNullOrEmpty(item.GroupName)
+                ? "—"
+                : item.GroupName,
             FormatProvenance(item.Provenance),
             FormatStatus(item.Status),
             FormatWorkflowState(item.WorkflowState),

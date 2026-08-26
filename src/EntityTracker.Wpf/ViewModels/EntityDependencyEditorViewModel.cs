@@ -31,6 +31,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private readonly AsyncCommand _confirmArchiveCommand;
     private readonly AsyncCommand _restoreEntityCommand;
     private readonly RelayCommand<ManualDependencySuggestion> _addExistingCommand;
+    private readonly RelayCommand<string> _useGroupSuggestionCommand;
     private readonly RelayCommand<EntityDependencyEditRow> _suppressCommand;
     private readonly RelayCommand<EntityDependencyEditRow> _removeManualCommand;
     private readonly RelayCommand<EntityDependencyEditRow> _restoreDependencyCommand;
@@ -40,10 +41,12 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private readonly RelayCommand _cancelArchiveCommand;
     private IReadOnlyList<EntityDependencyEditRow> _dependencies = [];
     private IReadOnlyList<ManualDependencySuggestion> _suggestions = [];
+    private IReadOnlyList<string> _groupSuggestions = [];
     private IReadOnlyList<string> _warnings = [];
     private IReadOnlyList<string> _errors = [];
     private string _dependencyQuery = string.Empty;
     private string? _searchMessage;
+    private string? _groupSearchMessage;
     private string? _archiveErrorMessage;
     private bool _canAddAsUnresolved;
     private bool _isBusy;
@@ -51,12 +54,14 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private EntityEditorMode _mode;
     private bool _isArchiveConfirmationOpen;
     private int _searchVersion;
+    private int _groupSearchVersion;
     private EntityDependencyEditPlan? _currentEditPlan;
     private ArchivedEntityDetails? _archivedDetails;
     private SchemaSynchronizationPlan? _reviewPlan;
     private DevelopmentStatus _selectedStatus;
     private string _editedNotes = string.Empty;
     private string _editedResponsibleDeveloper = string.Empty;
+    private string _editedGroupName = string.Empty;
     private int? _selectedRequestedPriority;
     private string _effectivePriority = "—";
     private IReadOnlyList<PriorityPlanningRow> _priorityPreviewRows = [];
@@ -94,6 +99,9 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _addExistingCommand = new RelayCommand<ManualDependencySuggestion>(
             suggestion => _ = AddManualDependencyAsync(suggestion.SourceName),
             _ => CanEdit);
+        _useGroupSuggestionCommand = new RelayCommand<string>(
+            UseGroupSuggestion,
+            _ => CanEditProgress);
         _suppressCommand = new RelayCommand<EntityDependencyEditRow>(
             row => _ = SetOverrideAsync(
                 row.SourceName,
@@ -154,6 +162,18 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
     }
 
+    public IReadOnlyList<string> GroupSuggestions
+    {
+        get => _groupSuggestions;
+        private set
+        {
+            if (SetField(ref _groupSuggestions, value))
+            {
+                OnPropertyChanged(nameof(HasGroupSuggestions));
+            }
+        }
+    }
+
     public string DependencyQuery
     {
         get => _dependencyQuery;
@@ -198,6 +218,18 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             if (SetField(ref _searchMessage, value))
             {
                 OnPropertyChanged(nameof(HasSearchMessage));
+            }
+        }
+    }
+
+    public string? GroupSearchMessage
+    {
+        get => _groupSearchMessage;
+        private set
+        {
+            if (SetField(ref _groupSearchMessage, value))
+            {
+                OnPropertyChanged(nameof(HasGroupSearchMessage));
             }
         }
     }
@@ -375,6 +407,18 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
     }
 
+    public string EditedGroupName
+    {
+        get => _editedGroupName;
+        set
+        {
+            if (CanEditProgress && SetField(ref _editedGroupName, value ?? string.Empty))
+            {
+                _ = SearchGroupNamesAsync(++_groupSearchVersion);
+            }
+        }
+    }
+
     public int? SelectedRequestedPriority
     {
         get => _selectedRequestedPriority;
@@ -465,11 +509,15 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
     public bool HasSuggestions => Suggestions.Count > 0;
 
+    public bool HasGroupSuggestions => GroupSuggestions.Count > 0;
+
     public bool HasWarnings => Warnings.Count > 0;
 
     public bool HasErrors => Errors.Count > 0;
 
     public bool HasSearchMessage => !string.IsNullOrWhiteSpace(SearchMessage);
+
+    public bool HasGroupSearchMessage => !string.IsNullOrWhiteSpace(GroupSearchMessage);
 
     public bool HasArchiveError => !string.IsNullOrWhiteSpace(ArchiveErrorMessage);
 
@@ -498,7 +546,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             "Changes are staged with this synchronization and are saved only when the review is applied.",
         EntityEditorMode.ArchivedDetails =>
             "Archived entities are read-only until explicitly restored.",
-        _ => "Update priority, progress, notes, and manual dependency corrections. Imported facts remain visible."
+        _ => "Update group, assignment, priority, progress, notes, and manual dependency corrections. Imported facts remain visible."
     };
 
     public string SaveLabel => IsReviewMode ? "Stage Changes" : "Save Changes";
@@ -506,11 +554,13 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     public string ArchiveConfirmationMessage => CurrentEditPlan is null
         ? string.Empty
         : $"Archive '{CurrentEditPlan.Entity.SourceName}'? It will disappear from active views and dependency searches. " +
-          "Identity, assignment, progress, notes, imported relationships, and manual overrides will be preserved. " +
+          "Identity, group, assignment, progress, notes, imported relationships, and manual overrides will be preserved. " +
           "Entities that depend on it may become unresolved. You can restore it later from the Archived view. " +
           "Unsaved edits will be discarded.";
 
     public ICommand AddExistingCommand => _addExistingCommand;
+
+    public ICommand UseGroupSuggestionCommand => _useGroupSuggestionCommand;
 
     public ICommand AddUnresolvedCommand => _addUnresolvedCommand;
 
@@ -623,6 +673,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(EditedNotes));
             _editedResponsibleDeveloper = details.Entity.ResponsibleDeveloper;
             OnPropertyChanged(nameof(EditedResponsibleDeveloper));
+            _editedGroupName = details.Entity.GroupName;
+            OnPropertyChanged(nameof(EditedGroupName));
             _selectedRequestedPriority = details.Entity.RequestedPriority;
             OnPropertyChanged(nameof(SelectedRequestedPriority));
             EffectivePriority = "—";
@@ -701,6 +753,53 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             CanAddAsUnresolved = false;
             SearchMessage = $"Dependencies could not be searched: {exception.Message}";
         }
+    }
+
+    private async Task SearchGroupNamesAsync(int searchVersion)
+    {
+        if (!CanEditProgress)
+        {
+            ClearGroupSearch();
+            return;
+        }
+
+        try
+        {
+            IReadOnlyList<string> suggestions =
+                await _editorService.SearchGroupNamesAsync(EditedGroupName);
+            if (searchVersion != _groupSearchVersion)
+            {
+                return;
+            }
+
+            GroupSuggestions = suggestions;
+            GroupSearchMessage = null;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Group suggestions could not be searched.");
+            if (searchVersion != _groupSearchVersion)
+            {
+                return;
+            }
+
+            GroupSuggestions = [];
+            GroupSearchMessage = $"Groups could not be searched: {exception.Message}";
+        }
+    }
+
+    private void UseGroupSuggestion(string groupName)
+    {
+        if (!CanEditProgress)
+        {
+            return;
+        }
+
+        _groupSearchVersion++;
+        _editedGroupName = groupName;
+        OnPropertyChanged(nameof(EditedGroupName));
+        GroupSuggestions = [];
+        GroupSearchMessage = null;
     }
 
     private Task AddManualDependencyAsync(string sourceName)
@@ -792,7 +891,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                     SelectedStatus,
                     EditedNotes,
                     SelectedRequestedPriority,
-                    EditedResponsibleDeveloper);
+                    EditedResponsibleDeveloper,
+                    EditedGroupName);
                 await _onPersisted();
             }
 
@@ -909,6 +1009,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(EditedNotes));
             _editedResponsibleDeveloper = plan.Entity.ResponsibleDeveloper;
             OnPropertyChanged(nameof(EditedResponsibleDeveloper));
+            _editedGroupName = plan.Entity.GroupName;
+            OnPropertyChanged(nameof(EditedGroupName));
             _selectedRequestedPriority = plan.Entity.RequestedPriority;
             OnPropertyChanged(nameof(SelectedRequestedPriority));
         }
@@ -978,6 +1080,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(EditedNotes));
         _editedResponsibleDeveloper = string.Empty;
         OnPropertyChanged(nameof(EditedResponsibleDeveloper));
+        _editedGroupName = string.Empty;
+        OnPropertyChanged(nameof(EditedGroupName));
         _selectedRequestedPriority = null;
         OnPropertyChanged(nameof(SelectedRequestedPriority));
         EffectivePriority = "—";
@@ -985,6 +1089,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         PriorityPreviewRows = [];
         PriorityUnresolvedDependencyNames = [];
         ClearSearch();
+        ClearGroupSearch();
     }
 
     private void ClearSearch()
@@ -997,6 +1102,13 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         SearchMessage = null;
     }
 
+    private void ClearGroupSearch()
+    {
+        _groupSearchVersion++;
+        GroupSuggestions = [];
+        GroupSearchMessage = null;
+    }
+
     private bool ContainsDependency(EntitySourceKey? key) =>
         key is not null && CurrentEditPlan?.Dependencies.Any(item =>
             item.DependencySourceKey == key &&
@@ -1007,6 +1119,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     {
         _saveCommand.NotifyCanExecuteChanged();
         _addExistingCommand.NotifyCanExecuteChanged();
+        _useGroupSuggestionCommand.NotifyCanExecuteChanged();
         _addUnresolvedCommand.NotifyCanExecuteChanged();
         _suppressCommand.NotifyCanExecuteChanged();
         _removeManualCommand.NotifyCanExecuteChanged();

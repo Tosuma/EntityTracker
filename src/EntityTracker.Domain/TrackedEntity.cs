@@ -10,7 +10,8 @@ public sealed class TrackedEntity
         EntityLifecycleState lifecycleState = EntityLifecycleState.Active,
         EntityProvenance provenance = EntityProvenance.Imported,
         int? requestedPriority = null,
-        string? responsibleDeveloper = null)
+        string? responsibleDeveloper = null,
+        string? groupName = null)
     {
         ArgumentNullException.ThrowIfNull(id);
         ValidateSourceName(sourceName);
@@ -29,6 +30,7 @@ public sealed class TrackedEntity
         Provenance = provenance;
         RequestedPriority = requestedPriority;
         ResponsibleDeveloper = NormalizeResponsibleDeveloper(responsibleDeveloper);
+        GroupName = NormalizeGroupName(groupName);
     }
 
     public EntityId Id { get; }
@@ -46,6 +48,8 @@ public sealed class TrackedEntity
     public int? RequestedPriority { get; private set; }
 
     public string ResponsibleDeveloper { get; private set; }
+
+    public string GroupName { get; private set; }
 
     public void ChangeSourceName(string sourceName)
     {
@@ -94,6 +98,11 @@ public sealed class TrackedEntity
     public void ChangeResponsibleDeveloper(string? responsibleDeveloper)
     {
         ResponsibleDeveloper = NormalizeResponsibleDeveloper(responsibleDeveloper);
+    }
+
+    public void ChangeGroupName(string? groupName)
+    {
+        GroupName = NormalizeGroupName(groupName);
     }
 
     private static void ValidateSourceName(string sourceName)
@@ -149,4 +158,7 @@ public sealed class TrackedEntity
 
     private static string NormalizeResponsibleDeveloper(string? responsibleDeveloper) =>
         responsibleDeveloper?.Trim() ?? string.Empty;
+
+    private static string NormalizeGroupName(string? groupName) =>
+        groupName?.Trim() ?? string.Empty;
 }

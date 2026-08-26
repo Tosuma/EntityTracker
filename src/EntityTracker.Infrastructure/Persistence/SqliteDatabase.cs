@@ -4,7 +4,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    internal const int CurrentSchemaVersion = 10;
+    internal const int CurrentSchemaVersion = 11;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -148,6 +148,11 @@ public sealed class SqliteDatabase
     private const string ResponsibleDeveloperSchemaSql = """
         ALTER TABLE tracked_entities
             ADD COLUMN responsible_developer TEXT NOT NULL DEFAULT '';
+        """;
+
+    private const string GroupNameSchemaSql = """
+        ALTER TABLE tracked_entities
+            ADD COLUMN group_name TEXT NOT NULL DEFAULT '';
         """;
 
     private const string UnresolvedDependencySchemaSql = """
@@ -458,6 +463,20 @@ public sealed class SqliteDatabase
                     connection,
                     transaction,
                     ResponsibleDeveloperSchemaSql,
+                    cancellationToken);
+            }
+
+            if (schemaVersion < 11 && !await ColumnExistsAsync(
+                    connection,
+                    transaction,
+                    "tracked_entities",
+                    "group_name",
+                    cancellationToken))
+            {
+                await ExecuteAsync(
+                    connection,
+                    transaction,
+                    GroupNameSchemaSql,
                     cancellationToken);
             }
 

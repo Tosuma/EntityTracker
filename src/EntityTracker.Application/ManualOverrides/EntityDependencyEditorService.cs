@@ -1,4 +1,5 @@
 using EntityTracker.Application.Dependencies;
+using EntityTracker.Application.Groups;
 using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.ManualCreation;
@@ -66,6 +67,17 @@ public sealed class EntityDependencyEditorService
     {
         Snapshot snapshot = await LoadSnapshotAsync(cancellationToken);
         return SearchDependencies(ownerId, query, snapshot.Entities);
+    }
+
+    public async Task<IReadOnlyList<string>> SearchGroupNamesAsync(
+        string query,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        IReadOnlyList<TrackedEntity> entities =
+            await _entityRepository.GetAllAsync(cancellationToken);
+        return GroupNameSuggestionSearch.Search(query, entities);
     }
 
     public ManualDependencySearchResult SearchDependencies(
@@ -260,6 +272,7 @@ public sealed class EntityDependencyEditorService
         string notes,
         int? requestedPriority,
         string? responsibleDeveloper,
+        string? groupName,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(plan);
@@ -278,7 +291,8 @@ public sealed class EntityDependencyEditorService
             plan.Entity.LifecycleState,
             plan.Entity.Provenance,
             requestedPriority,
-            responsibleDeveloper);
+            responsibleDeveloper,
+            groupName);
         TrackedEntity[] progressUpdates =
             status != plan.Entity.Status || !string.Equals(notes, plan.Entity.Notes, StringComparison.Ordinal)
                 ? [updatedEntity]
@@ -289,6 +303,12 @@ public sealed class EntityDependencyEditorService
         TrackedEntity[] responsibleDeveloperUpdates = !string.Equals(
                 updatedEntity.ResponsibleDeveloper,
                 plan.Entity.ResponsibleDeveloper,
+                StringComparison.Ordinal)
+            ? [updatedEntity]
+            : [];
+        TrackedEntity[] groupNameUpdates = !string.Equals(
+                updatedEntity.GroupName,
+                plan.Entity.GroupName,
                 StringComparison.Ordinal)
             ? [updatedEntity]
             : [];
@@ -311,7 +331,8 @@ public sealed class EntityDependencyEditorService
                     candidateEntities,
                     plan.EffectiveState),
                 entitiesWithRequestedPriorityToUpdate: priorityUpdates,
-                entitiesWithResponsibleDeveloperToUpdate: responsibleDeveloperUpdates),
+                entitiesWithResponsibleDeveloperToUpdate: responsibleDeveloperUpdates,
+                entitiesWithGroupNameToUpdate: groupNameUpdates),
             cancellationToken);
     }
 

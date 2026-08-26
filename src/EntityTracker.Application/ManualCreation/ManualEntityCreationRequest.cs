@@ -5,7 +5,8 @@ public sealed class ManualEntityCreationRequest
     public ManualEntityCreationRequest(
         string entityName,
         IEnumerable<ManualDependencySelection> dependencies,
-        string? responsibleDeveloper = null)
+        string? responsibleDeveloper = null,
+        string? groupName = null)
     {
         ArgumentNullException.ThrowIfNull(entityName);
         ArgumentNullException.ThrowIfNull(dependencies);
@@ -13,6 +14,7 @@ public sealed class ManualEntityCreationRequest
         EntityName = entityName;
         Dependencies = dependencies.ToArray();
         ResponsibleDeveloper = responsibleDeveloper;
+        GroupName = groupName;
 
         if (Dependencies.Any(static dependency => dependency is null))
         {
@@ -27,4 +29,6 @@ public sealed class ManualEntityCreationRequest
     public IReadOnlyList<ManualDependencySelection> Dependencies { get; }
 
     public string? ResponsibleDeveloper { get; }
+
+    public string? GroupName { get; }
 }

@@ -11,5 +11,6 @@ public enum CollaborativeConflictField
     ManualDependencyOverride = 6,
     Identity = 7,
     RequestedPriority = 8,
-    ResponsibleDeveloper = 9
+    ResponsibleDeveloper = 9,
+    GroupName = 10
 }

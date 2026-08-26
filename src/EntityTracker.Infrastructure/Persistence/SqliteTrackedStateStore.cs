@@ -117,6 +117,15 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                     cancellationToken);
             }
 
+            foreach (TrackedEntity entity in changeSet.EntitiesWithGroupNameToUpdate)
+            {
+                await UpdateGroupNameAsync(
+                    connection,
+                    transaction,
+                    entity,
+                    cancellationToken);
+            }
+
             foreach (EntityId entityId in changeSet.EntityIdsToArchive)
             {
                 await ArchiveEntityAsync(
@@ -516,14 +525,14 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
             INSERT INTO tracked_entities
             (
                 id, source_key, source_name, development_status, notes,
-                lifecycle_state, provenance, requested_priority, responsible_developer,
+                lifecycle_state, provenance, requested_priority, responsible_developer, group_name,
                 created_at_utc, schema_updated_at_utc,
                 progress_updated_at_utc
             )
             VALUES
             (
                 $id, $sourceKey, $sourceName, $developmentStatus, $notes,
-                $lifecycleState, $provenance, $requestedPriority, $responsibleDeveloper,
+                $lifecycleState, $provenance, $requestedPriority, $responsibleDeveloper, $groupName,
                 $timestamp, $timestamp, $timestamp
             );
             """);
@@ -650,6 +659,23 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         command.Parameters.AddWithValue(
             "$responsibleDeveloper",
             entity.ResponsibleDeveloper);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task UpdateGroupNameAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        TrackedEntity entity,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = CreateCommand(connection, transaction, """
+            UPDATE tracked_entities
+            SET group_name = $groupName
+            WHERE id = $id
+              AND group_name <> $groupName;
+            """);
+        command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
+        command.Parameters.AddWithValue("$groupName", entity.GroupName);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -829,6 +855,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         command.Parameters.AddWithValue(
             "$responsibleDeveloper",
             entity.ResponsibleDeveloper);
+        command.Parameters.AddWithValue("$groupName", entity.GroupName);
     }
 
     private static string AddKeepParameters(

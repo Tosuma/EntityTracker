@@ -88,7 +88,8 @@ public sealed class PriorityPlanningService
             target.LifecycleState,
             target.Provenance,
             candidateRequestedPriority,
-            target.ResponsibleDeveloper);
+            target.ResponsibleDeveloper,
+            target.GroupName);
         TrackedEntity[] candidateEntities = entityArray
             .Select(entity => entity.Id == targetEntityId ? candidateTarget : entity)
             .ToArray();

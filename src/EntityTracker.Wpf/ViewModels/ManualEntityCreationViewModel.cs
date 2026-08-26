@@ -26,18 +26,24 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     private readonly AsyncCommand _createCommand;
     private readonly AsyncCommand _restoreArchivedCommand;
     private readonly RelayCommand<ManualDependencySuggestion> _addExistingCommand;
+    private readonly RelayCommand<string> _useGroupSuggestionCommand;
     private readonly RelayCommand<ManualDependencyRow> _removeDependencyCommand;
     private readonly RelayCommand _addUnresolvedCommand;
     private readonly RelayCommand _cancelCommand;
     private CancellationTokenSource? _searchCancellation;
+    private CancellationTokenSource? _groupSearchCancellation;
     private int _searchVersion;
+    private int _groupSearchVersion;
     private string _entityName = string.Empty;
     private string _responsibleDeveloper = string.Empty;
+    private string _groupName = string.Empty;
     private string _dependencyQuery = string.Empty;
     private IReadOnlyList<ManualDependencySuggestion> _suggestions = [];
+    private IReadOnlyList<string> _groupSuggestions = [];
     private IReadOnlyList<string> _errors = [];
     private IReadOnlyList<string> _warnings = [];
     private string? _searchMessage;
+    private string? _groupSearchMessage;
     private string? _operationMessage;
     private bool _canAddAsUnresolved;
     private bool _isBusy;
@@ -65,6 +71,9 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         SelectedDependencies = [];
         _addExistingCommand = new RelayCommand<ManualDependencySuggestion>(
             AddExisting,
+            _ => !IsBusy && _canOperate());
+        _useGroupSuggestionCommand = new RelayCommand<string>(
+            UseGroupSuggestion,
             _ => !IsBusy && _canOperate());
         _removeDependencyCommand = new RelayCommand<ManualDependencyRow>(
             RemoveDependency,
@@ -103,6 +112,18 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         set => SetField(ref _responsibleDeveloper, value ?? string.Empty);
     }
 
+    public string GroupName
+    {
+        get => _groupName;
+        set
+        {
+            if (SetField(ref _groupName, value ?? string.Empty))
+            {
+                ScheduleGroupSearch();
+            }
+        }
+    }
+
     public string DependencyQuery
     {
         get => _dependencyQuery;
@@ -123,6 +144,18 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             if (SetField(ref _suggestions, value))
             {
                 OnPropertyChanged(nameof(HasSuggestions));
+            }
+        }
+    }
+
+    public IReadOnlyList<string> GroupSuggestions
+    {
+        get => _groupSuggestions;
+        private set
+        {
+            if (SetField(ref _groupSuggestions, value))
+            {
+                OnPropertyChanged(nameof(HasGroupSuggestions));
             }
         }
     }
@@ -161,6 +194,18 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             if (SetField(ref _searchMessage, value))
             {
                 OnPropertyChanged(nameof(HasSearchMessage));
+            }
+        }
+    }
+
+    public string? GroupSearchMessage
+    {
+        get => _groupSearchMessage;
+        private set
+        {
+            if (SetField(ref _groupSearchMessage, value))
+            {
+                OnPropertyChanged(nameof(HasGroupSearchMessage));
             }
         }
     }
@@ -208,7 +253,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     public string ArchivedEntityMessage => ArchivedEntityMatch is null
         ? string.Empty
         : $"'{ArchivedEntityMatch.SourceName}' already exists and is archived. " +
-          "Restore it to keep its identity, assignment, progress, notes, and dependencies.";
+          "Restore it to keep its identity, group, assignment, progress, notes, and dependencies.";
 
     public bool IsBusy
     {
@@ -221,6 +266,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
                 _addUnresolvedCommand.NotifyCanExecuteChanged();
                 _cancelCommand.NotifyCanExecuteChanged();
                 _addExistingCommand.NotifyCanExecuteChanged();
+                _useGroupSuggestionCommand.NotifyCanExecuteChanged();
                 _removeDependencyCommand.NotifyCanExecuteChanged();
                 _restoreArchivedCommand.NotifyCanExecuteChanged();
             }
@@ -229,15 +275,21 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
 
     public bool HasSuggestions => Suggestions.Count > 0;
 
+    public bool HasGroupSuggestions => GroupSuggestions.Count > 0;
+
     public bool HasErrors => Errors.Count > 0;
 
     public bool HasWarnings => Warnings.Count > 0;
 
     public bool HasSearchMessage => !string.IsNullOrWhiteSpace(SearchMessage);
 
+    public bool HasGroupSearchMessage => !string.IsNullOrWhiteSpace(GroupSearchMessage);
+
     public bool HasOperationMessage => !string.IsNullOrWhiteSpace(OperationMessage);
 
     public ICommand AddExistingCommand => _addExistingCommand;
+
+    public ICommand UseGroupSuggestionCommand => _useGroupSuggestionCommand;
 
     public ICommand RemoveDependencyCommand => _removeDependencyCommand;
 
@@ -263,6 +315,51 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             EntityName,
             version,
             cancellationToken);
+    }
+
+    public async Task SearchGroupNamesAsync(CancellationToken cancellationToken = default)
+    {
+        if (IsBusy || !_canOperate())
+        {
+            return;
+        }
+
+        CancelPendingGroupSearch();
+        int version = ++_groupSearchVersion;
+        await SearchGroupNamesCoreAsync(GroupName, version, cancellationToken);
+    }
+
+    private async Task SearchGroupNamesCoreAsync(
+        string query,
+        int version,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            IReadOnlyList<string> suggestions =
+                await _service.SearchGroupNamesAsync(query, cancellationToken);
+            if (version != _groupSearchVersion)
+            {
+                return;
+            }
+
+            GroupSuggestions = suggestions;
+            GroupSearchMessage = null;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Group suggestions could not be searched.");
+            if (version != _groupSearchVersion)
+            {
+                return;
+            }
+
+            GroupSuggestions = [];
+            GroupSearchMessage = $"Groups could not be searched: {exception.Message}";
+        }
     }
 
     private async Task SearchDependenciesCoreAsync(
@@ -316,6 +413,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         }
 
         CancelPendingSearch();
+        CancelPendingGroupSearch();
         IsBusy = true;
         Errors = [];
         Warnings = [];
@@ -329,7 +427,8 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
                 new ManualEntityCreationRequest(
                     EntityName,
                     SelectedDependencies.Select(static row => row.Selection),
-                    ResponsibleDeveloper),
+                    ResponsibleDeveloper,
+                    GroupName),
                 cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -427,12 +526,14 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         if (!_canOperate())
         {
             CancelPendingSearch();
+            CancelPendingGroupSearch();
         }
 
         _createCommand.NotifyCanExecuteChanged();
         _addUnresolvedCommand.NotifyCanExecuteChanged();
         _cancelCommand.NotifyCanExecuteChanged();
         _addExistingCommand.NotifyCanExecuteChanged();
+        _useGroupSuggestionCommand.NotifyCanExecuteChanged();
         _removeDependencyCommand.NotifyCanExecuteChanged();
         _restoreArchivedCommand.NotifyCanExecuteChanged();
     }
@@ -443,6 +544,15 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             suggestion.EntityId,
             suggestion.SourceName);
         AddDependency(selection, false);
+    }
+
+    private void UseGroupSuggestion(string groupName)
+    {
+        CancelPendingGroupSearch();
+        _groupName = groupName;
+        OnPropertyChanged(nameof(GroupName));
+        GroupSuggestions = [];
+        GroupSearchMessage = null;
     }
 
     private void AddUnresolved()
@@ -499,6 +609,39 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             EntityName);
     }
 
+    private void ScheduleGroupSearch()
+    {
+        CancelPendingGroupSearch();
+        CancellationTokenSource cancellation = new();
+        _groupSearchCancellation = cancellation;
+        int version = ++_groupSearchVersion;
+        _ = SearchGroupNamesAfterDelayAsync(cancellation, version, GroupName);
+    }
+
+    private async Task SearchGroupNamesAfterDelayAsync(
+        CancellationTokenSource cancellation,
+        int version,
+        string query)
+    {
+        try
+        {
+            await Task.Delay(SearchDelay, cancellation.Token);
+            await SearchGroupNamesCoreAsync(query, version, cancellation.Token);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            if (ReferenceEquals(_groupSearchCancellation, cancellation))
+            {
+                _groupSearchCancellation = null;
+            }
+
+            cancellation.Dispose();
+        }
+    }
+
     private async Task SearchAfterDelayAsync(
         CancellationTokenSource cancellation,
         int version,
@@ -535,6 +678,13 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         _searchCancellation = null;
     }
 
+    private void CancelPendingGroupSearch()
+    {
+        _groupSearchVersion++;
+        _groupSearchCancellation?.Cancel();
+        _groupSearchCancellation = null;
+    }
+
     private void ClearDependencySearch()
     {
         CancelPendingSearch();
@@ -560,18 +710,23 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     private void ResetCore()
     {
         CancelPendingSearch();
+        CancelPendingGroupSearch();
         _entityName = string.Empty;
         OnPropertyChanged(nameof(EntityName));
         _responsibleDeveloper = string.Empty;
         OnPropertyChanged(nameof(ResponsibleDeveloper));
+        _groupName = string.Empty;
+        OnPropertyChanged(nameof(GroupName));
         _dependencyQuery = string.Empty;
         OnPropertyChanged(nameof(DependencyQuery));
         SelectedDependencies.Clear();
         Suggestions = [];
+        GroupSuggestions = [];
         Errors = [];
         Warnings = [];
         ArchivedEntityMatch = null;
         SearchMessage = null;
+        GroupSearchMessage = null;
         OperationMessage = null;
         CanAddAsUnresolved = false;
         _createCommand.NotifyCanExecuteChanged();

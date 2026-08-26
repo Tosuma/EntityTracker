@@ -14,6 +14,7 @@ public sealed record EntityOverviewRow(
     string Rank,
     string SourceName,
     string ResponsibleDeveloper,
+    string GroupName,
     string Provenance,
     string Status,
     string WorkStatus,

@@ -280,7 +280,8 @@ public sealed class SchemaSynchronizationPlannerTests
             "Manager implemented",
             EntityLifecycleState.Archived,
             requestedPriority: 2,
-            responsibleDeveloper: "Data Team");
+            responsibleDeveloper: "Data Team",
+            groupName: "Core Data");
 
         SchemaSynchronizationPlan plan = Plan(
             Candidate(["Customer"], []),
@@ -296,6 +297,7 @@ public sealed class SchemaSynchronizationPlannerTests
         Assert.Equal(EntityLifecycleState.Active, change.Entity.LifecycleState);
         Assert.Equal(2, change.Entity.RequestedPriority);
         Assert.Equal("Data Team", change.Entity.ResponsibleDeveloper);
+        Assert.Equal("Core Data", change.Entity.GroupName);
     }
 
     [Theory]
@@ -307,7 +309,8 @@ public sealed class SchemaSynchronizationPlannerTests
             1,
             "Customer",
             requestedPriority: 4,
-            responsibleDeveloper: "Platform Team");
+            responsibleDeveloper: "Platform Team",
+            groupName: "Customer Data");
 
         SchemaSynchronizationPlan plan = Plan(
             Candidate(["customer"], []),
@@ -319,8 +322,10 @@ public sealed class SchemaSynchronizationPlannerTests
         Assert.Equal(existing.Id, candidate.Id);
         Assert.Equal(4, candidate.RequestedPriority);
         Assert.Equal("Platform Team", candidate.ResponsibleDeveloper);
+        Assert.Equal("Customer Data", candidate.GroupName);
         Assert.Empty(plan.ChangeSet.EntitiesWithRequestedPriorityToUpdate);
         Assert.Empty(plan.ChangeSet.EntitiesWithResponsibleDeveloperToUpdate);
+        Assert.Empty(plan.ChangeSet.EntitiesWithGroupNameToUpdate);
     }
 
     [Fact]
@@ -503,7 +508,8 @@ public sealed class SchemaSynchronizationPlannerTests
         EntityLifecycleState lifecycle = EntityLifecycleState.Active,
         EntityProvenance provenance = EntityProvenance.Imported,
         int? requestedPriority = null,
-        string? responsibleDeveloper = null) =>
+        string? responsibleDeveloper = null,
+        string? groupName = null) =>
         new(
             new EntityId(new Guid(id, 0, 0, new byte[8])),
             name,
@@ -512,7 +518,8 @@ public sealed class SchemaSynchronizationPlannerTests
             lifecycle,
             provenance,
             requestedPriority,
-            responsibleDeveloper);
+            responsibleDeveloper,
+            groupName);
 
     private static PersistedDependency Dependency(
         TrackedEntity owner,
