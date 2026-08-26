@@ -35,7 +35,7 @@ roadmap. They do not continue the Milestone 1–13 sequence:
 - [PF-02 — Priority planning and replaceable ranking](pf_02_priority_planning.md)
 - [PF-03 — Responsible developer](pf_03_responsible_developer.md)
 - [PF-04 — Entity groups with suggestions](pf_04_entity_groups.md)
-- [PF-05 — Multi-status filtering](pf_05_multi_status_filtering.md)
+- [PF-05 — Column filtering and status sorting](pf_05_column_filtering.md)
 
 ## Independent engineering milestones
 

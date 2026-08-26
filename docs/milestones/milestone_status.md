@@ -26,4 +26,4 @@
 - PF-02 — Priority planning and replaceable ranking
 - PF-03 — Responsible developer
 - PF-04 — Entity groups with suggestions
-- PF-05 — Multi-status filtering
+- PF-05 — Column filtering and status sorting
