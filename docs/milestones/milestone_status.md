@@ -19,3 +19,11 @@
 ## Planned product milestones
 
 - 13 — Live SharePoint integration
+
+## Planned product feedback milestones
+
+- PF-01 — Bulk status updates
+- PF-02 — Priority planning and replaceable ranking
+- PF-03 — Responsible developer
+- PF-04 — Entity groups with suggestions
+- PF-05 — Multi-status filtering
