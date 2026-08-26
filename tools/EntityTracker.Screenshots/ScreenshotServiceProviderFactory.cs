@@ -61,6 +61,7 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<WorkflowReadinessEvaluator>();
         services.AddSingleton<ProgressSnapshotCalculator>();
         services.AddSingleton<EntityOverviewService>();
+        services.AddSingleton<BulkStatusUpdateService>();
         services.AddSingleton<SchemaSynchronizationPlanner>();
         services.AddSingleton<ProgressHistoryInitializer>();
         services.AddSingleton<ProgressDashboardBuilder>();

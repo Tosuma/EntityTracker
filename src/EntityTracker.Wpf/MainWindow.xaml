@@ -16,6 +16,7 @@
         Background="{StaticResource Brush.Surface.Page}"
         Foreground="{StaticResource Brush.Text.Primary}"
         PreviewKeyDown="OnWindowPreviewKeyDown"
+        PreviewMouseDown="OnWindowPreviewMouseDown"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
@@ -125,6 +126,7 @@
             <TabItem Header="Overview">
                 <Grid Margin="12">
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -438,7 +440,39 @@
                         </Grid>
                     </Border>
 
-                    <StackPanel Grid.Row="3">
+                    <Border x:Name="BulkStatusToolbar"
+                            Grid.Row="3"
+                            Margin="0,0,0,12"
+                            Padding="12"
+                            Background="{StaticResource Brush.Surface.Subtle}"
+                            BorderBrush="{StaticResource Brush.Border.Medium}"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                        <DockPanel LastChildFill="False">
+                            <TextBlock Margin="0,0,18,0"
+                                       VerticalAlignment="Center"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource Brush.Text.Primary}"
+                                       Text="{Binding BulkSelectionSummary}" />
+                            <TextBlock Margin="0,0,7,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource Brush.Text.Secondary}"
+                                       Text="Set status to" />
+                            <ComboBox MinWidth="155"
+                                      Margin="0,0,8,0"
+                                      AutomationProperties.Name="Bulk target status"
+                                      DisplayMemberPath="DisplayName"
+                                      ItemsSource="{Binding BulkStatusOptions}"
+                                      SelectedValue="{Binding SelectedBulkStatus}"
+                                      SelectedValuePath="Value" />
+                            <Button AutomationProperties.Name="Apply status to selected entities"
+                                    Command="{Binding ApplyBulkStatusCommand}"
+                                    Content="Apply status"
+                                    Style="{StaticResource PrimaryButtonStyle}" />
+                        </DockPanel>
+                    </Border>
+
+                    <StackPanel Grid.Row="4">
                     <Border Margin="0,0,0,12"
                             Padding="12"
                             Background="{StaticResource Brush.Surface.Subtle}"
@@ -469,8 +503,12 @@
                     </Border>
                     </StackPanel>
 
-                    <Grid Grid.Row="4">
-                        <DataGrid ItemsSource="{Binding OverviewItems}">
+                    <Grid Grid.Row="5">
+                        <DataGrid x:Name="OverviewDataGrid"
+                                  ItemsSource="{Binding OverviewItems}"
+                                  SelectionChanged="OnOverviewSelectionChanged"
+                                  SelectionMode="Extended"
+                                  SelectionUnit="FullRow">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Width="70" Binding="{Binding Rank}" Header="Rank" />
                                 <DataGridTemplateColumn Width="2.2*" Header="Entity">

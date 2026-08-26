@@ -22,13 +22,49 @@ public partial class MainWindow : Window
         InitializeComponent();
         _viewModel = viewModel;
         DataContext = viewModel;
+        _viewModel.OverviewSelectionClearRequested += OnOverviewSelectionClearRequested;
         Loaded += OnLoaded;
+        Closed += OnClosed;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         Loaded -= OnLoaded;
         await _viewModel.InitializeAsync();
+    }
+
+    private void OnClosed(object? sender, EventArgs e)
+    {
+        Closed -= OnClosed;
+        _viewModel.OverviewSelectionClearRequested -= OnOverviewSelectionClearRequested;
+    }
+
+    private void OnOverviewSelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        _viewModel.UpdateOverviewSelection(
+            OverviewDataGrid.SelectedItems.OfType<EntityOverviewRow>());
+
+    private void OnOverviewSelectionClearRequested(object? sender, EventArgs e)
+    {
+        if (OverviewDataGrid.SelectedItems.Count > 0)
+        {
+            OverviewDataGrid.UnselectAll();
+        }
+    }
+
+    private void OnWindowPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (_viewModel.SelectedTabIndex != 0 ||
+            OverviewDataGrid.SelectedItems.Count == 0 ||
+            _viewModel.Editor.IsOpen ||
+            e.OriginalSource is not DependencyObject source ||
+            !IsDescendantOrSelf(source, this) ||
+            IsDescendantOrSelf(source, OverviewDataGrid) ||
+            IsDescendantOrSelf(source, BulkStatusToolbar))
+        {
+            return;
+        }
+
+        _viewModel.ClearOverviewSelection();
     }
 
     private void OnContextMenuButtonClick(object sender, RoutedEventArgs e)
@@ -61,12 +97,23 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (e.Key == Key.Escape &&
-            _viewModel.SelectedTabIndex == 0 &&
-            !_viewModel.Editor.IsOpen &&
-            _viewModel.CloseOverviewSearchCommand.CanExecute(null))
+        if (e.Key != Key.Escape ||
+            _viewModel.SelectedTabIndex != 0 ||
+            _viewModel.Editor.IsOpen)
+        {
+            return;
+        }
+
+        if (_viewModel.CloseOverviewSearchCommand.CanExecute(null))
         {
             _viewModel.CloseOverviewSearchCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
+        if (OverviewDataGrid.SelectedItems.Count > 0)
+        {
+            _viewModel.ClearOverviewSelection();
             e.Handled = true;
         }
     }
@@ -172,6 +219,24 @@ public partial class MainWindow : Window
         return child is Visual or Visual3D
             ? VisualTreeHelper.GetParent(child)
             : LogicalTreeHelper.GetParent(child);
+    }
+
+    private static bool IsDescendantOrSelf(
+        DependencyObject source,
+        DependencyObject ancestor)
+    {
+        DependencyObject? current = source;
+        while (current is not null)
+        {
+            if (ReferenceEquals(current, ancestor))
+            {
+                return true;
+            }
+
+            current = GetParent(current);
+        }
+
+        return false;
     }
 
     private static T? FindVisualDescendant<T>(DependencyObject parent)

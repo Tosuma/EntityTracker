@@ -25,6 +25,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private readonly EntityOverviewService _overviewService;
     private readonly SchemaSynchronizationService _synchronizationService;
+    private readonly BulkStatusUpdateService _bulkStatusUpdateService;
     private readonly ICsvFilePicker _filePicker;
     private readonly ISchemaSynchronizationConfirmation _confirmationService;
     private readonly ILogger<MainWindowViewModel> _logger;
@@ -32,6 +33,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly AsyncCommand _importCsvCommand;
     private readonly AsyncCommand _applySynchronizationCommand;
     private readonly AsyncCommand _cancelSynchronizationCommand;
+    private readonly AsyncCommand _applyBulkStatusCommand;
     private readonly AsyncCommand<EntityOverviewRow> _editOverviewEntityCommand;
     private readonly AsyncCommand<SchemaSynchronizationReviewRow> _editReviewEntityCommand;
     private readonly RelayCommand _openOverviewSearchCommand;
@@ -45,6 +47,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private IReadOnlyList<EntityOverviewRow> _archivedOverviewItems = [];
     private IReadOnlyList<EntityOverviewRow> _currentViewItems = [];
     private IReadOnlyList<EntityOverviewRow> _overviewItems = [];
+    private IReadOnlyList<EntityId> _selectedOverviewEntityIds = [];
     private string? _overviewErrorMessage;
     private string _overviewSearchQuery = string.Empty;
     private string _busyMessage = string.Empty;
@@ -60,12 +63,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private int _reworkNeededCount;
     private int _developmentCompletedCount;
     private int _reconciledCount;
+    private DevelopmentStatus _selectedBulkStatus = DevelopmentStatus.InProgress;
     private CancellationTokenSource? _overviewSearchCancellation;
     private int _overviewSearchVersion;
 
     public MainWindowViewModel(
         EntityOverviewService overviewService,
         SchemaSynchronizationService synchronizationService,
+        BulkStatusUpdateService bulkStatusUpdateService,
         ManualEntityCreationService manualEntityCreationService,
         EntityDependencyEditorService entityDependencyEditorService,
         EntityLifecycleService entityLifecycleService,
@@ -78,6 +83,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         ArgumentNullException.ThrowIfNull(overviewService);
         ArgumentNullException.ThrowIfNull(synchronizationService);
+        ArgumentNullException.ThrowIfNull(bulkStatusUpdateService);
         ArgumentNullException.ThrowIfNull(manualEntityCreationService);
         ArgumentNullException.ThrowIfNull(entityDependencyEditorService);
         ArgumentNullException.ThrowIfNull(entityLifecycleService);
@@ -87,6 +93,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ArgumentNullException.ThrowIfNull(confirmationService);
         _overviewService = overviewService;
         _synchronizationService = synchronizationService;
+        _bulkStatusUpdateService = bulkStatusUpdateService;
         _filePicker = filePicker;
         _confirmationService = confirmationService;
         ILoggerFactory effectiveLoggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
@@ -132,6 +139,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                   !ManualCreation.IsBusy &&
                   !Editor.IsOpen &&
                   (Review.HasReview || Review.HasDiagnostics));
+        _applyBulkStatusCommand = new AsyncCommand(
+            () => ApplyBulkStatusAsync(),
+            CanApplyBulkStatus);
         _editOverviewEntityCommand = new AsyncCommand<EntityOverviewRow>(
             OpenOverviewEntityAsync,
             _ => !IsBusy &&
@@ -173,6 +183,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    public event EventHandler? OverviewSelectionClearRequested;
+
     public SchemaSynchronizationReviewViewModel Review { get; }
 
     public ManualEntityCreationViewModel ManualCreation { get; }
@@ -198,6 +210,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         new(OverviewManagerFilter.Archived, "Archived")
     ];
 
+    public IReadOnlyList<DevelopmentStatusOption> BulkStatusOptions { get; } =
+    [
+        new(DevelopmentStatus.NotStarted, "Not started"),
+        new(DevelopmentStatus.InProgress, "In progress"),
+        new(DevelopmentStatus.ReworkNeeded, "Rework needed"),
+        new(DevelopmentStatus.DevelopmentCompleted, "Dev. completed"),
+        new(DevelopmentStatus.Reconciled, "Reconciled")
+    ];
+
     public OverviewManagerFilter SelectedOverviewFilter
     {
         get => _selectedOverviewFilter;
@@ -205,6 +226,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _selectedOverviewFilter, value))
             {
+                ClearOverviewSelection();
                 if (!CanSearchOverviewDependencies && SearchOverviewDependencies)
                 {
                     _searchOverviewDependencies = false;
@@ -264,6 +286,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _overviewSearchQuery, value ?? string.Empty))
             {
+                ClearOverviewSelection();
                 OnPropertyChanged(nameof(HasOverviewSearchQuery));
                 _clearOverviewSearchCommand.NotifyCanExecuteChanged();
                 ScheduleOverviewSearch();
@@ -292,6 +315,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             if (CanSearchOverviewDependencies && SetField(ref _searchOverviewDependencies, value))
             {
+                ClearOverviewSelection();
                 CancelPendingOverviewSearch();
                 ApplyOverviewFilterAndSearch();
             }
@@ -385,10 +409,26 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _selectedTabIndex, value))
             {
+                ClearOverviewSelection();
                 _openOverviewSearchCommand.NotifyCanExecuteChanged();
             }
         }
     }
+
+    public DevelopmentStatus SelectedBulkStatus
+    {
+        get => _selectedBulkStatus;
+        set => SetField(ref _selectedBulkStatus, value);
+    }
+
+    public int SelectedActiveEntityCount => _selectedOverviewEntityIds.Count;
+
+    public string BulkSelectionSummary => SelectedActiveEntityCount switch
+    {
+        0 => "No active entities selected",
+        1 => "1 active entity selected",
+        _ => $"{SelectedActiveEntityCount} active entities selected"
+    };
 
     public int NotStartedCount
     {
@@ -489,6 +529,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ICommand CancelSynchronizationCommand => _cancelSynchronizationCommand;
 
+    public ICommand ApplyBulkStatusCommand => _applyBulkStatusCommand;
+
     public ICommand EditOverviewEntityCommand => _editOverviewEntityCommand;
 
     public ICommand EditReviewEntityCommand => _editReviewEntityCommand;
@@ -524,6 +566,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
+        ClearOverviewSelection();
         IsBusy = true;
         BusyMessage = "Loading persisted entities…";
         try
@@ -538,6 +581,72 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             _logger.LogError(exception, "Persisted entities could not be loaded.");
             SetOverviewFailure($"Persisted entities could not be loaded: {exception.Message}");
+        }
+        finally
+        {
+            EndBusyOperation();
+        }
+    }
+
+    public void UpdateOverviewSelection(IEnumerable<EntityOverviewRow> selectedRows)
+    {
+        ArgumentNullException.ThrowIfNull(selectedRows);
+
+        EntityId[] selectedIds = selectedRows
+            .Where(static row => row.LifecycleState == EntityLifecycleState.Active)
+            .Select(static row => row.EntityId)
+            .Distinct()
+            .ToArray();
+        if (_selectedOverviewEntityIds.SequenceEqual(selectedIds))
+        {
+            return;
+        }
+
+        _selectedOverviewEntityIds = selectedIds;
+        NotifyOverviewSelectionChanged();
+    }
+
+    public async Task ApplyBulkStatusAsync(CancellationToken cancellationToken = default)
+    {
+        if (!CanApplyBulkStatus())
+        {
+            return;
+        }
+
+        EntityId[] selectedIds = _selectedOverviewEntityIds.ToArray();
+        DevelopmentStatus targetStatus = SelectedBulkStatus;
+        IsBusy = true;
+        BusyMessage = $"Applying {FormatStatus(targetStatus).ToLowerInvariant()} status…";
+        OperationMessage = null;
+        OverviewErrorMessage = null;
+        bool operationCompleted = false;
+        try
+        {
+            BulkStatusUpdateResult result = await _bulkStatusUpdateService.ApplyAsync(
+                selectedIds,
+                targetStatus,
+                cancellationToken);
+            operationCompleted = true;
+            OperationMessage = FormatBulkStatusResult(result, targetStatus);
+            BusyMessage = "Recomputing workflow readiness and progress…";
+            await LoadOverviewAndProgressAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            ClearOverviewSelection();
+            OverviewErrorMessage = operationCompleted
+                ? "The statuses were updated, but refreshing the overview was cancelled. " +
+                  "Refresh to load the latest state."
+                : "The status update was cancelled; no partial changes were saved.";
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "The selected entity statuses could not be updated.");
+            ClearOverviewSelection();
+            OverviewErrorMessage = operationCompleted
+                ? "The statuses were updated, but the latest overview could not be loaded: " +
+                  exception.Message
+                : $"The status update was not applied: {exception.Message}";
         }
         finally
         {
@@ -697,6 +806,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         IReadOnlyList<EntityOverviewRow> items,
         IReadOnlyList<EntityOverviewRow> archivedItems)
     {
+        ClearOverviewSelection();
         _allOverviewItems = items;
         _archivedOverviewItems = archivedItems;
         ApplyOverviewFilterAndSearch();
@@ -719,6 +829,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void ClearOverviewSearch()
     {
+        ClearOverviewSelection();
         CancelPendingOverviewSearch();
         if (_overviewSearchQuery.Length > 0)
         {
@@ -885,6 +996,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _importCsvCommand.NotifyCanExecuteChanged();
         _applySynchronizationCommand.NotifyCanExecuteChanged();
         _cancelSynchronizationCommand.NotifyCanExecuteChanged();
+        _applyBulkStatusCommand.NotifyCanExecuteChanged();
         _editOverviewEntityCommand.NotifyCanExecuteChanged();
         _editReviewEntityCommand.NotifyCanExecuteChanged();
         _openOverviewSearchCommand.NotifyCanExecuteChanged();
@@ -892,6 +1004,46 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _selectOverviewFilterCommand.NotifyCanExecuteChanged();
         _keepSynchronizationStatusCommand.NotifyCanExecuteChanged();
         _markSynchronizationReworkCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool CanApplyBulkStatus() =>
+        SelectedActiveEntityCount > 0 &&
+        SelectedTabIndex == 0 &&
+        !IsBusy &&
+        !ManualCreation.IsBusy &&
+        !Editor.IsOpen &&
+        !Review.HasReview;
+
+    public void ClearOverviewSelection()
+    {
+        bool hadSelection = _selectedOverviewEntityIds.Count > 0;
+        _selectedOverviewEntityIds = [];
+        if (hadSelection)
+        {
+            NotifyOverviewSelectionChanged();
+        }
+
+        OverviewSelectionClearRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void NotifyOverviewSelectionChanged()
+    {
+        OnPropertyChanged(nameof(SelectedActiveEntityCount));
+        OnPropertyChanged(nameof(BulkSelectionSummary));
+        _applyBulkStatusCommand.NotifyCanExecuteChanged();
+    }
+
+    private static string FormatBulkStatusResult(
+        BulkStatusUpdateResult result,
+        DevelopmentStatus targetStatus)
+    {
+        string changed = result.ChangedCount == 1
+            ? "1 entity updated"
+            : $"{result.ChangedCount} entities updated";
+        string unchanged = result.UnchangedCount == 1
+            ? "1 already matched"
+            : $"{result.UnchangedCount} already matched";
+        return $"{changed} to {FormatStatus(targetStatus)}; {unchanged}.";
     }
 
     private async Task OnManualEntityCreatedAsync()

@@ -865,6 +865,122 @@ public sealed class MainWindowViewModelTests
         Assert.Equal("first.csv", viewModel.Review.SelectedFileName);
     }
 
+    [Fact]
+    public async Task ApplyBulkStatusAsync_UpdatesSelectedRowsAndRefreshesSummary()
+    {
+        TrackedEntity first = Entity(1, "First");
+        TrackedEntity second = Entity(
+            2,
+            "Second",
+            DevelopmentStatus.DevelopmentCompleted);
+        MainWindowViewModel viewModel = CreateViewModel(
+            [first, second],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out StubSynchronizationStore store);
+        await viewModel.InitializeAsync();
+        viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
+        viewModel.SelectedBulkStatus = DevelopmentStatus.DevelopmentCompleted;
+
+        Assert.Equal(2, viewModel.SelectedActiveEntityCount);
+        Assert.True(viewModel.ApplyBulkStatusCommand.CanExecute(null));
+
+        await viewModel.ApplyBulkStatusAsync();
+
+        Assert.Equal(1, store.ApplyCount);
+        Assert.Equal(0, viewModel.SelectedActiveEntityCount);
+        Assert.False(viewModel.ApplyBulkStatusCommand.CanExecute(null));
+        Assert.Equal(0, viewModel.NotStartedCount);
+        Assert.Equal(2, viewModel.DevelopmentCompletedCount);
+        Assert.All(
+            viewModel.OverviewItems,
+            row => Assert.Equal(DevelopmentStatus.DevelopmentCompleted, row.DevelopmentStatus));
+        Assert.Equal(
+            "1 entity updated to Dev. completed; 1 already matched.",
+            viewModel.OperationMessage);
+    }
+
+    [Fact]
+    public async Task OverviewSelection_ResultSetAndTabChanges_ClearSelection()
+    {
+        MainWindowViewModel viewModel = CreateViewModel(
+            [Entity(1, "Alpha"), Entity(2, "Beta")],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+        await viewModel.InitializeAsync();
+
+        viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
+        viewModel.OverviewSearchQuery = "Alpha";
+        Assert.Equal(0, viewModel.SelectedActiveEntityCount);
+
+        viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
+        viewModel.SelectedOverviewFilter = OverviewManagerFilter.NotStarted;
+        Assert.Equal(0, viewModel.SelectedActiveEntityCount);
+
+        viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
+        await viewModel.RefreshAsync();
+        Assert.Equal(0, viewModel.SelectedActiveEntityCount);
+
+        viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
+        viewModel.SelectedTabIndex = 1;
+        Assert.Equal(0, viewModel.SelectedActiveEntityCount);
+    }
+
+    [Fact]
+    public async Task ClearOverviewSelection_ClearsSelectionAndRequestsVisualReset()
+    {
+        MainWindowViewModel viewModel = CreateViewModel(
+            [Entity(1, "Alpha"), Entity(2, "Beta")],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+        await viewModel.InitializeAsync();
+        int clearRequestCount = 0;
+        viewModel.OverviewSelectionClearRequested += (_, _) => clearRequestCount++;
+        viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
+
+        viewModel.ClearOverviewSelection();
+
+        Assert.Equal(0, viewModel.SelectedActiveEntityCount);
+        Assert.Equal("No active entities selected", viewModel.BulkSelectionSummary);
+        Assert.False(viewModel.ApplyBulkStatusCommand.CanExecute(null));
+        Assert.Equal(1, clearRequestCount);
+    }
+
+    [Fact]
+    public async Task BulkStatusAction_IgnoresArchivedRowsAndDisablesWhileEditorIsOpen()
+    {
+        TrackedEntity active = Entity(1, "Active");
+        TrackedEntity archived = Entity(
+            2,
+            "Archived",
+            lifecycle: EntityLifecycleState.Archived);
+        MainWindowViewModel viewModel = CreateViewModel(
+            [active, archived],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+        await viewModel.InitializeAsync();
+
+        viewModel.SelectedOverviewFilter = OverviewManagerFilter.Archived;
+        viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
+        Assert.Equal(0, viewModel.SelectedActiveEntityCount);
+        Assert.False(viewModel.ApplyBulkStatusCommand.CanExecute(null));
+
+        viewModel.SelectedOverviewFilter = OverviewManagerFilter.AllActive;
+        EntityOverviewRow activeRow = Assert.Single(viewModel.OverviewItems);
+        viewModel.UpdateOverviewSelection([activeRow]);
+        viewModel.EditOverviewEntityCommand.Execute(activeRow);
+        await WaitUntilAsync(() => viewModel.Editor.IsOpen);
+
+        Assert.False(viewModel.ApplyBulkStatusCommand.CanExecute(null));
+    }
+
     private static MainWindowViewModel CreateViewModel(
         IReadOnlyList<TrackedEntity> entities,
         IReadOnlyList<PersistedDependency> dependencies,
@@ -906,6 +1022,12 @@ public sealed class MainWindowViewModelTests
                 resolver,
                 new WorkflowReadinessEvaluator()),
             synchronizationService,
+            new BulkStatusUpdateService(
+                entityRepository,
+                dependencyRepository,
+                overrideRepository,
+                resolver,
+                store),
             new ManualEntityCreationService(
                 entityRepository,
                 dependencyRepository,

@@ -148,6 +148,71 @@ public sealed class SqliteTrackedStateStoreTests
     }
 
     [Fact]
+    public async Task ApplyAsync_BulkProgressChange_UsesOneTimestampAndOneFinalSnapshot()
+    {
+        await using TemporarySqliteFile file = new();
+        MutableTimeProvider time = new(
+            new DateTimeOffset(2026, 8, 26, 8, 0, 0, TimeSpan.Zero));
+        SqliteDatabase database = new(file.DatabasePath, time);
+        await database.InitializeAsync();
+        SqliteEntityRepository repository = new(database);
+        SqliteTrackedStateStore store = new(database);
+        TrackedEntity[] entities =
+        [
+            new(EntityId.New(), "Not started"),
+            new(EntityId.New(), "In progress", DevelopmentStatus.InProgress),
+            new(EntityId.New(), "Rework", DevelopmentStatus.ReworkNeeded),
+            new(EntityId.New(), "Completed", DevelopmentStatus.DevelopmentCompleted),
+            new(EntityId.New(), "Reconciled", DevelopmentStatus.Reconciled)
+        ];
+        foreach (TrackedEntity entity in entities)
+        {
+            Assert.True(await repository.TryAddAsync(entity));
+        }
+
+        await store.EnsureHistoryBaselineAsync(
+            entities,
+            new ProgressSnapshotState(1, 0, 1, 1, 1, 1));
+        time.Advance(TimeSpan.FromHours(3));
+        DateTimeOffset operationTime = time.GetUtcNow();
+        TrackedEntity[] changed = entities
+            .Where(static entity => entity.Status != DevelopmentStatus.InProgress)
+            .Select(entity => new TrackedEntity(
+                entity.Id,
+                entity.SourceName,
+                DevelopmentStatus.InProgress,
+                entity.Notes,
+                entity.LifecycleState,
+                entity.Provenance))
+            .ToArray();
+
+        await store.ApplyAsync(new TrackedStateChangeSet(
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            entitiesWithProgressToUpdate: changed,
+            progressSnapshotAfterChanges: new ProgressSnapshotState(0, 0, 5, 0, 0, 0)));
+
+        Assert.All(
+            await repository.GetAllAsync(),
+            entity => Assert.Equal(DevelopmentStatus.InProgress, entity.Status));
+        SqliteProgressHistoryRepository history = new(database);
+        EntityStatusHistoryEntry[] transitions = (await history.GetStatusHistoryAsync())
+            .Where(static entry => entry.Kind == StatusHistoryEntryKind.Transition)
+            .ToArray();
+        Assert.Equal(4, transitions.Length);
+        Assert.All(transitions, entry => Assert.Equal(operationTime, entry.OccurredAtUtc));
+        Assert.Equal(4, transitions.Select(static entry => entry.EntityId).Distinct().Count());
+        ProgressSnapshot[] snapshots = (await history.GetProgressSnapshotsAsync()).ToArray();
+        Assert.Equal(2, snapshots.Length);
+        Assert.Equal(operationTime, snapshots[^1].RecordedAtUtc);
+        Assert.Equal(new ProgressSnapshotState(0, 0, 5, 0, 0, 0), snapshots[^1].State);
+    }
+
+    [Fact]
     public async Task ApplyAsync_ArchivesAndReconcilesDependenciesWithoutLosingProgress()
     {
         await using TemporarySqliteFile file = new();
