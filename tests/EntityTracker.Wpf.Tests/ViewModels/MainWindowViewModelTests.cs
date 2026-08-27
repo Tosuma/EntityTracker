@@ -63,7 +63,7 @@ public sealed class MainWindowViewModelTests
         EntityOverviewRow row = Assert.Single(viewModel.OverviewItems);
         Assert.Equal("Rework needed", row.Status);
         Assert.Equal("Rework needed", row.WorkStatus);
-        viewModel.SelectedOverviewFilter = OverviewManagerFilter.ReworkNeeded;
+        viewModel.ActiveTable.SetSingleStatusFilter(DevelopmentStatus.ReworkNeeded);
         Assert.Single(viewModel.OverviewItems);
         Assert.Contains(
             viewModel.Editor.StatusOptions,
@@ -106,7 +106,7 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task ManagerFilters_AreExclusiveAndArchivedEntitiesStayOutsideActiveProgress()
+    public async Task ColumnFilters_ComposeAndArchivedEntitiesStayOutsideActiveProgress()
     {
         TrackedEntity ready = Entity(1, "Ready");
         TrackedEntity blocked = Entity(2, "Blocked");
@@ -136,25 +136,24 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(40, viewModel.ImplementedPercentage);
         Assert.Equal(20, viewModel.ReconciledPercentage);
 
-        viewModel.SelectedOverviewFilter = OverviewManagerFilter.Ready;
+        ApplySingleFilter(viewModel.ActiveTable.WorkStatusFilter!, "Ready");
         Assert.Equal("Ready", Assert.Single(viewModel.OverviewItems).SourceName);
-        viewModel.SelectedOverviewFilter = OverviewManagerFilter.Blocked;
+        ApplySingleFilter(viewModel.ActiveTable.WorkStatusFilter!, "Blocked");
         Assert.Equal("Blocked", Assert.Single(viewModel.OverviewItems).SourceName);
-        viewModel.SelectedOverviewFilter = OverviewManagerFilter.InProgress;
+        viewModel.ActiveTable.ClearAllFiltersAndSort();
+        viewModel.ActiveTable.SetSingleStatusFilter(DevelopmentStatus.InProgress);
         Assert.Equal("InProgress", Assert.Single(viewModel.OverviewItems).SourceName);
-        viewModel.SelectedOverviewFilter = OverviewManagerFilter.DevelopmentCompleted;
+        viewModel.ActiveTable.SetSingleStatusFilter(DevelopmentStatus.DevelopmentCompleted);
         Assert.Equal("DevelopmentCompleted", Assert.Single(viewModel.OverviewItems).SourceName);
-        viewModel.SelectedOverviewFilter = OverviewManagerFilter.Reconciled;
+        viewModel.ActiveTable.SetSingleStatusFilter(DevelopmentStatus.Reconciled);
         Assert.Equal("Reconciled", Assert.Single(viewModel.OverviewItems).SourceName);
 
-        viewModel.SearchOverviewDependencies = true;
-        viewModel.SelectedOverviewFilter = OverviewManagerFilter.Archived;
-        EntityOverviewRow archivedRow = Assert.Single(viewModel.OverviewItems);
+        EntityOverviewRow archivedRow = Assert.Single(viewModel.ArchivedItems);
         Assert.Equal("Archived", archivedRow.SourceName);
         Assert.False(archivedRow.HasGraphIssue);
         Assert.Empty(archivedRow.GraphIssueTitle);
         Assert.False(viewModel.SearchOverviewDependencies);
-        Assert.False(viewModel.CanSearchOverviewDependencies);
+        Assert.False(viewModel.ArchivedTable.CanSearchDependencies);
     }
 
     [Fact]
@@ -183,32 +182,32 @@ public sealed class MainWindowViewModelTests
 
         await viewModel.InitializeAsync();
 
-        viewModel.SelectOverviewFilterCommand.Execute(OverviewManagerFilter.NotStarted);
+        viewModel.SelectOverviewStatusCommand.Execute(DevelopmentStatus.NotStarted);
 
-        Assert.Equal(OverviewManagerFilter.NotStarted, viewModel.SelectedOverviewFilter);
+        Assert.True(viewModel.IsNotStartedSummarySelected);
         Assert.Equal(
             ["Blocked", "Ready"],
             viewModel.OverviewItems
                 .Select(static row => row.SourceName)
                 .OrderBy(static name => name));
 
-        AssertStatusFilter(viewModel, OverviewManagerFilter.InProgress, "InProgress");
-        AssertStatusFilter(viewModel, OverviewManagerFilter.ReworkNeeded, "Rework");
+        AssertStatusFilter(viewModel, DevelopmentStatus.InProgress, "InProgress");
+        AssertStatusFilter(viewModel, DevelopmentStatus.ReworkNeeded, "Rework");
         AssertStatusFilter(
             viewModel,
-            OverviewManagerFilter.DevelopmentCompleted,
+            DevelopmentStatus.DevelopmentCompleted,
             "DevelopmentCompleted");
-        AssertStatusFilter(viewModel, OverviewManagerFilter.Reconciled, "Reconciled");
+        AssertStatusFilter(viewModel, DevelopmentStatus.Reconciled, "Reconciled");
 
-        viewModel.SelectOverviewFilterCommand.Execute(OverviewManagerFilter.AllActive);
+        viewModel.ActiveTable.ClearAllFiltersCommand.Execute(null);
 
-        Assert.Equal(OverviewManagerFilter.AllActive, viewModel.SelectedOverviewFilter);
+        Assert.True(viewModel.IsTotalSummarySelected);
         Assert.Equal(6, viewModel.OverviewItems.Count);
         Assert.DoesNotContain(viewModel.OverviewItems, row => row.SourceName == "Archived");
     }
 
     [Fact]
-    public async Task StatusSummaryFilterCommand_DisablesEmptyStatusesAndKeepsActiveSearch()
+    public async Task StatusSummaryFilterCommand_CanShowEmptyStatusAndTotalKeepsActiveSearch()
     {
         MainWindowViewModel viewModel = CreateViewModel(
             [Entity(1, "Matching entity"), Entity(2, "Other entity")],
@@ -218,23 +217,24 @@ public sealed class MainWindowViewModelTests
             out _);
         await viewModel.InitializeAsync();
 
-        Assert.True(viewModel.SelectOverviewFilterCommand.CanExecute(
-            OverviewManagerFilter.NotStarted));
-        Assert.False(viewModel.SelectOverviewFilterCommand.CanExecute(
-            OverviewManagerFilter.Reconciled));
+        Assert.True(viewModel.SelectOverviewStatusCommand.CanExecute(
+            DevelopmentStatus.NotStarted));
+        Assert.True(viewModel.SelectOverviewStatusCommand.CanExecute(
+            DevelopmentStatus.Reconciled));
 
-        viewModel.SelectOverviewFilterCommand.Execute(OverviewManagerFilter.Reconciled);
-        Assert.Equal(OverviewManagerFilter.AllActive, viewModel.SelectedOverviewFilter);
+        viewModel.SelectOverviewStatusCommand.Execute(DevelopmentStatus.Reconciled);
+        Assert.Empty(viewModel.OverviewItems);
 
+        viewModel.ActiveTable.ClearAllFiltersAndSort();
         viewModel.OverviewSearchQuery = "Matching";
         await WaitUntilAsync(() => viewModel.OverviewItems.Count == 1);
-        viewModel.SelectOverviewFilterCommand.Execute(OverviewManagerFilter.NotStarted);
-        viewModel.SelectOverviewFilterCommand.Execute(OverviewManagerFilter.NotStarted);
+        viewModel.SelectOverviewStatusCommand.Execute(DevelopmentStatus.NotStarted);
+        viewModel.SelectOverviewStatusCommand.Execute(DevelopmentStatus.NotStarted);
 
-        Assert.Equal(OverviewManagerFilter.NotStarted, viewModel.SelectedOverviewFilter);
+        Assert.True(viewModel.IsNotStartedSummarySelected);
         Assert.Equal("Matching entity", Assert.Single(viewModel.OverviewItems).SourceName);
 
-        viewModel.SelectOverviewFilterCommand.Execute(OverviewManagerFilter.AllActive);
+        viewModel.ActiveTable.ClearAllFiltersCommand.Execute(null);
 
         Assert.Equal("Matching", viewModel.OverviewSearchQuery);
         Assert.Equal("Matching entity", Assert.Single(viewModel.OverviewItems).SourceName);
@@ -314,7 +314,7 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(3, viewModel.TotalEntityCount);
         Assert.Equal(1, viewModel.DevelopmentCompletedCount);
         Assert.Equal(1, viewModel.InProgressCount);
-        Assert.Equal("Showing 2 of 3 in All active", viewModel.OverviewSearchResultSummary);
+        Assert.Equal("Showing 2 of 3", viewModel.OverviewSearchResultSummary);
     }
 
     [Fact]
@@ -376,17 +376,20 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public void OpenOverviewSearchCommand_IsAvailableOnlyOnOverview()
+    public void ActiveAndArchivedTables_HaveIndependentSearchState()
     {
         MainWindowViewModel viewModel = CreateViewModel(
             [], [], FailureResult(), new StubFilePicker(), out _);
 
-        Assert.True(viewModel.OpenOverviewSearchCommand.CanExecute(null));
-        viewModel.SelectedTabIndex = 1;
-        Assert.False(viewModel.OpenOverviewSearchCommand.CanExecute(null));
-        viewModel.SelectedTabIndex = 0;
         viewModel.OpenOverviewSearchCommand.Execute(null);
         Assert.True(viewModel.IsOverviewSearchOpen);
+        Assert.False(viewModel.ArchivedTable.IsSearchOpen);
+
+        viewModel.SelectedTab = MainWindowTab.Archived;
+        viewModel.ArchivedTable.OpenSearchCommand.Execute(null);
+
+        Assert.True(viewModel.IsOverviewSearchOpen);
+        Assert.True(viewModel.ArchivedTable.IsSearchOpen);
     }
 
     [Fact]
@@ -407,7 +410,7 @@ public sealed class MainWindowViewModelTests
         Assert.False(viewModel.Editor.IsReviewMode);
         Assert.True(viewModel.Editor.CanArchive);
         Assert.Equal("Customer", viewModel.Editor.SelectedEntityName);
-        Assert.Equal(0, viewModel.SelectedTabIndex);
+        Assert.Equal(MainWindowTab.Overview, viewModel.SelectedTab);
     }
 
     [Fact]
@@ -476,7 +479,7 @@ public sealed class MainWindowViewModelTests
             static item => item.Priority));
         Assert.Equal(
             ["—", "Core Team", "—"],
-            viewModel.OverviewItems.Select(static item => item.ResponsibleDeveloper));
+            viewModel.OverviewItems.Select(static item => item.ResponsibleDeveloperDisplay));
     }
 
     [Fact]
@@ -561,9 +564,9 @@ public sealed class MainWindowViewModelTests
             new StubFilePicker(),
             out StubSynchronizationStore store);
         await viewModel.InitializeAsync();
-        viewModel.SelectedOverviewFilter = OverviewManagerFilter.Archived;
+        viewModel.SelectedTab = MainWindowTab.Archived;
 
-        EntityOverviewRow archivedRow = Assert.Single(viewModel.OverviewItems);
+        EntityOverviewRow archivedRow = Assert.Single(viewModel.ArchivedItems);
         Assert.Equal("Legacy Team", archivedRow.ResponsibleDeveloper);
         Assert.Equal("Legacy Data", archivedRow.GroupName);
         viewModel.EditOverviewEntityCommand.Execute(archivedRow);
@@ -588,12 +591,17 @@ public sealed class MainWindowViewModelTests
         Assert.False(viewModel.Editor.IsOpen);
         Assert.Equal(0, store.ApplyCount);
 
-        viewModel.EditOverviewEntityCommand.Execute(Assert.Single(viewModel.OverviewItems));
+        viewModel.ActiveTable.SetSingleStatusFilter(DevelopmentStatus.NotStarted);
+        viewModel.OverviewSearchQuery = "does not match restored entity";
+        viewModel.EditOverviewEntityCommand.Execute(Assert.Single(viewModel.ArchivedItems));
         await WaitUntilAsync(() => viewModel.Editor.CanRestoreEntity);
         viewModel.Editor.RestoreEntityCommand.Execute(null);
         await WaitUntilAsync(() => !viewModel.Editor.IsOpen);
 
-        Assert.Equal(OverviewManagerFilter.AllActive, viewModel.SelectedOverviewFilter);
+        Assert.Equal(MainWindowTab.Overview, viewModel.SelectedTab);
+        Assert.Empty(viewModel.ArchivedItems);
+        Assert.False(viewModel.ActiveTable.HasFiltersOrSort);
+        Assert.Empty(viewModel.OverviewSearchQuery);
         EntityOverviewRow restored = Assert.Single(viewModel.OverviewItems);
         Assert.Equal(archived.Id, restored.EntityId);
         Assert.Equal("Reconciled", restored.Status);
@@ -718,16 +726,42 @@ public sealed class MainWindowViewModelTests
             FailureResult(),
             new StubFilePicker(),
             out _);
-        viewModel.SelectedTabIndex = 2;
+        viewModel.SelectedTab = MainWindowTab.AddEntity;
         viewModel.ManualCreation.EntityName = "NewManualEntity";
 
         await viewModel.ManualCreation.CreateAsync();
 
-        Assert.Equal(0, viewModel.SelectedTabIndex);
+        Assert.Equal(MainWindowTab.Overview, viewModel.SelectedTab);
         EntityOverviewRow row = Assert.Single(viewModel.OverviewItems);
         Assert.Equal("NewManualEntity", row.SourceName);
         Assert.Equal("Manual only", row.Provenance);
         Assert.Equal("Not started", row.Status);
+    }
+
+    [Fact]
+    public async Task ManualCreation_ArchivedDuplicateNavigatesToArchivedDetails()
+    {
+        TrackedEntity archived = Entity(
+            1,
+            "Legacy",
+            lifecycle: EntityLifecycleState.Archived);
+        MainWindowViewModel viewModel = CreateViewModel(
+            [archived],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+        await viewModel.InitializeAsync();
+        viewModel.SelectedTab = MainWindowTab.AddEntity;
+        viewModel.ManualCreation.EntityName = " legacy ";
+
+        await viewModel.ManualCreation.CreateAsync();
+        viewModel.ManualCreation.RestoreArchivedCommand.Execute(null);
+        await WaitUntilAsync(() => viewModel.Editor.IsOpen);
+
+        Assert.Equal(MainWindowTab.Archived, viewModel.SelectedTab);
+        Assert.True(viewModel.Editor.IsArchivedMode);
+        Assert.Equal("Legacy", viewModel.Editor.SelectedEntityName);
     }
 
     [Fact]
@@ -761,7 +795,7 @@ public sealed class MainWindowViewModelTests
 
         await viewModel.ImportCsvAsync();
 
-        Assert.Equal(1, viewModel.SelectedTabIndex);
+        Assert.Equal(MainWindowTab.SchemaSynchronization, viewModel.SelectedTab);
         Assert.Equal("current.csv", viewModel.Review.SelectedFileName);
         Assert.Equal("NewEntity", Assert.Single(viewModel.Review.NewEntities).SourceName);
         Assert.Equal("Removed", Assert.Single(viewModel.Review.MissingEntities).SourceName);
@@ -879,7 +913,7 @@ public sealed class MainWindowViewModelTests
 
         Assert.Equal(1, store.ApplyCount);
         Assert.NotNull(store.AppliedChangeSet);
-        Assert.Equal(0, viewModel.SelectedTabIndex);
+        Assert.Equal(MainWindowTab.Overview, viewModel.SelectedTab);
         Assert.False(viewModel.Review.HasReview);
         Assert.Equal(SchemaImportMode.Complete, viewModel.Review.Mode);
         Assert.True(viewModel.HasLatestImport);
@@ -903,7 +937,7 @@ public sealed class MainWindowViewModelTests
 
         Assert.Equal(0, store.ApplyCount);
         Assert.True(viewModel.Review.HasReview);
-        Assert.Equal(1, viewModel.SelectedTabIndex);
+        Assert.Equal(MainWindowTab.SchemaSynchronization, viewModel.SelectedTab);
     }
 
     [Fact]
@@ -944,7 +978,7 @@ public sealed class MainWindowViewModelTests
 
         viewModel.EditReviewEntityCommand.Execute(b);
 
-        Assert.Equal(1, viewModel.SelectedTabIndex);
+        Assert.Equal(MainWindowTab.SchemaSynchronization, viewModel.SelectedTab);
         Assert.True(viewModel.Editor.IsOpen);
         Assert.True(viewModel.Editor.IsReviewMode);
         Assert.False(viewModel.Editor.CanArchive);
@@ -957,7 +991,7 @@ public sealed class MainWindowViewModelTests
 
         viewModel.Editor.SaveCommand.Execute(null);
 
-        Assert.Equal(1, viewModel.SelectedTabIndex);
+        Assert.Equal(MainWindowTab.SchemaSynchronization, viewModel.SelectedTab);
         Assert.True(viewModel.Review.CanApply);
         Assert.Equal(0, store.ApplyCount);
 
@@ -1039,7 +1073,11 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(0, viewModel.SelectedActiveEntityCount);
 
         viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
-        viewModel.SelectedOverviewFilter = OverviewManagerFilter.NotStarted;
+        viewModel.ActiveTable.SetSingleStatusFilter(DevelopmentStatus.NotStarted);
+        Assert.Equal(0, viewModel.SelectedActiveEntityCount);
+
+        viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
+        viewModel.ActiveTable.StatusFilter.SortDescendingCommand.Execute(null);
         Assert.Equal(0, viewModel.SelectedActiveEntityCount);
 
         viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
@@ -1047,7 +1085,7 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(0, viewModel.SelectedActiveEntityCount);
 
         viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
-        viewModel.SelectedTabIndex = 1;
+        viewModel.SelectedTab = MainWindowTab.SchemaSynchronization;
         Assert.Equal(0, viewModel.SelectedActiveEntityCount);
     }
 
@@ -1089,12 +1127,12 @@ public sealed class MainWindowViewModelTests
             out _);
         await viewModel.InitializeAsync();
 
-        viewModel.SelectedOverviewFilter = OverviewManagerFilter.Archived;
-        viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
+        viewModel.SelectedTab = MainWindowTab.Archived;
+        viewModel.UpdateOverviewSelection(viewModel.ArchivedItems);
         Assert.Equal(0, viewModel.SelectedActiveEntityCount);
         Assert.False(viewModel.ApplyBulkStatusCommand.CanExecute(null));
 
-        viewModel.SelectedOverviewFilter = OverviewManagerFilter.AllActive;
+        viewModel.SelectedTab = MainWindowTab.Overview;
         EntityOverviewRow activeRow = Assert.Single(viewModel.OverviewItems);
         viewModel.UpdateOverviewSelection([activeRow]);
         viewModel.EditOverviewEntityCommand.Execute(activeRow);
@@ -1226,13 +1264,26 @@ public sealed class MainWindowViewModelTests
 
     private static void AssertStatusFilter(
         MainWindowViewModel viewModel,
-        OverviewManagerFilter filter,
+        DevelopmentStatus status,
         string expectedEntityName)
     {
-        Assert.True(viewModel.SelectOverviewFilterCommand.CanExecute(filter));
-        viewModel.SelectOverviewFilterCommand.Execute(filter);
-        Assert.Equal(filter, viewModel.SelectedOverviewFilter);
+        Assert.True(viewModel.SelectOverviewStatusCommand.CanExecute(status));
+        viewModel.SelectOverviewStatusCommand.Execute(status);
+        Assert.True(viewModel.ActiveTable.IncludesStatus(status));
         Assert.Equal(expectedEntityName, Assert.Single(viewModel.OverviewItems).SourceName);
+    }
+
+    private static void ApplySingleFilter(
+        OverviewColumnFilterState filter,
+        string selectedDisplayName)
+    {
+        filter.OpenCommand.Execute(null);
+        foreach (OverviewFilterOption option in filter.Options)
+        {
+            option.IsSelected = option.DisplayName == selectedDisplayName;
+        }
+
+        filter.ApplyCommand.Execute(null);
     }
 
     private static TrackedEntity Entity(

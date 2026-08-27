@@ -53,7 +53,7 @@ public partial class MainWindow : Window
 
     private void OnWindowPreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (_viewModel.SelectedTabIndex != 0 ||
+        if (_viewModel.SelectedTab != MainWindowTab.Overview ||
             OverviewDataGrid.SelectedItems.Count == 0 ||
             _viewModel.Editor.IsOpen ||
             e.OriginalSource is not DependencyObject source ||
@@ -80,55 +80,76 @@ public partial class MainWindow : Window
     }
 
     private void OnOpenOverviewSearchClick(object sender, RoutedEventArgs e) =>
-        QueueOverviewSearchFocus();
+        QueueCurrentSearchFocus();
 
     private void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.F &&
             (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
         {
-            if (_viewModel.OpenOverviewSearchCommand.CanExecute(null))
+            EntityTableViewModel? table = GetCurrentEntityTable();
+            if (table is not null &&
+                !_viewModel.IsBusy &&
+                !_viewModel.ManualCreation.IsBusy &&
+                !_viewModel.Editor.IsOpen)
             {
-                _viewModel.OpenOverviewSearchCommand.Execute(null);
-                QueueOverviewSearchFocus();
+                table.OpenSearchCommand.Execute(null);
+                QueueCurrentSearchFocus();
                 e.Handled = true;
             }
 
             return;
         }
 
-        if (e.Key != Key.Escape ||
-            _viewModel.SelectedTabIndex != 0 ||
-            _viewModel.Editor.IsOpen)
+        if (e.Key != Key.Escape || _viewModel.Editor.IsOpen)
         {
             return;
         }
 
-        if (_viewModel.CloseOverviewSearchCommand.CanExecute(null))
+        EntityTableViewModel? currentTable = GetCurrentEntityTable();
+        if (currentTable?.CloseOpenFilter() == true)
         {
-            _viewModel.CloseOverviewSearchCommand.Execute(null);
             e.Handled = true;
             return;
         }
 
-        if (OverviewDataGrid.SelectedItems.Count > 0)
+        if (currentTable?.IsSearchOpen == true)
+        {
+            currentTable.CloseSearchCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
+        if (_viewModel.SelectedTab == MainWindowTab.Overview &&
+            OverviewDataGrid.SelectedItems.Count > 0)
         {
             _viewModel.ClearOverviewSelection();
             e.Handled = true;
         }
     }
 
-    private void QueueOverviewSearchFocus()
+    private EntityTableViewModel? GetCurrentEntityTable() => _viewModel.SelectedTab switch
+    {
+        MainWindowTab.Overview => _viewModel.ActiveTable,
+        MainWindowTab.Archived => _viewModel.ArchivedTable,
+        _ => null
+    };
+
+    private void QueueCurrentSearchFocus()
     {
         Dispatcher.BeginInvoke(new Action(() =>
         {
-            if (!_viewModel.IsOverviewSearchOpen)
+            EntityTableViewModel? table = GetCurrentEntityTable();
+            if (table?.IsSearchOpen != true)
             {
                 return;
             }
 
-            OverviewSearchTextBox.Focus();
-            OverviewSearchTextBox.SelectAll();
+            TextBox searchBox = _viewModel.SelectedTab == MainWindowTab.Archived
+                ? ArchivedSearchTextBox
+                : OverviewSearchTextBox;
+            searchBox.Focus();
+            searchBox.SelectAll();
         }));
     }
 

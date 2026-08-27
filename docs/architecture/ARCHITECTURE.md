@@ -217,13 +217,25 @@ The ranking should be recomputed whenever the effective dependency graph changes
 
 Do not try to manually move or insert individual ranks.
 
-The following invariant must always hold:
+The default implementation work order must always satisfy this invariant:
 
 > No entity may appear before any entity it depends on.
 
 Topological ordering is therefore the hard constraint.
 
 Additional importance scoring may only influence ordering among entities that are simultaneously eligible.
+
+Presentation-only analytical views are an explicit exception to the visual ordering statement.
+For example, a user may temporarily sort the Overview by Status or Work status to inspect a
+workflow segment. Such a sort:
+
+- does not change or recompute Rank;
+- does not become the implementation work order;
+- may visually place an entity before one of its dependencies; and
+- must restore the dependency-safe effective-priority-then-rank order when cleared.
+
+Dependency safety therefore remains mandatory for computed Rank and the default planning order,
+while an explicitly selected analytical display sort is clearly indicated as a temporary view.
 
 ---
 

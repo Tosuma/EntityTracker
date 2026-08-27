@@ -59,7 +59,7 @@ internal sealed class ReadmeScreenshotGenerator
             await CaptureOverviewAsync(viewModel, renderer, cancellationToken);
 
             viewModel.Review.Clear();
-            viewModel.SelectedTabIndex = 1;
+            viewModel.SelectedTab = MainWindowTab.SchemaSynchronization;
             await renderer.CaptureAsync("schema-synchronization.png");
 
             await CaptureMissingReviewAsync(
@@ -78,12 +78,12 @@ internal sealed class ReadmeScreenshotGenerator
                 cancellationToken);
 
             viewModel.Review.Clear();
-            viewModel.SelectedTabIndex = 2;
+            viewModel.SelectedTab = MainWindowTab.AddEntity;
             await renderer.CaptureAsync("add-entity.png");
 
             await CaptureEditorAsync(viewModel, renderer, cancellationToken);
 
-            viewModel.SelectedTabIndex = 3;
+            viewModel.SelectedTab = MainWindowTab.Progress;
             await renderer.CaptureAsync("progress.png", settleMilliseconds: 900);
 
             await CaptureArchivedEntityAsync(
@@ -92,7 +92,7 @@ internal sealed class ReadmeScreenshotGenerator
                 renderer,
                 cancellationToken);
 
-            viewModel.SelectedTabIndex = 4;
+            viewModel.SelectedTab = MainWindowTab.SqlHelp;
             await renderer.CaptureAsync("sql-query.png");
         }
         finally
@@ -110,8 +110,8 @@ internal sealed class ReadmeScreenshotGenerator
         WpfScreenshotRenderer renderer,
         CancellationToken cancellationToken)
     {
-        viewModel.SelectedTabIndex = 0;
-        viewModel.SelectedOverviewFilter = OverviewManagerFilter.AllActive;
+        viewModel.SelectedTab = MainWindowTab.Overview;
+        viewModel.ActiveTable.ClearAllFiltersAndSort();
         await renderer.CaptureAsync("overview.png");
 
         viewModel.OpenOverviewSearchCommand.Execute(null);
@@ -124,10 +124,17 @@ internal sealed class ReadmeScreenshotGenerator
         await renderer.CaptureAsync("overview-search.png");
 
         viewModel.CloseOverviewSearchCommand.Execute(null);
-        viewModel.SelectedOverviewFilter = OverviewManagerFilter.Blocked;
+        OverviewColumnFilterState workStatusFilter = viewModel.ActiveTable.WorkStatusFilter!;
+        workStatusFilter.OpenCommand.Execute(null);
+        foreach (OverviewFilterOption option in workStatusFilter.Options)
+        {
+            option.IsSelected = option.DisplayName == "Blocked";
+        }
+
+        workStatusFilter.ApplyCommand.Execute(null);
         await renderer.CaptureGraphIssueAsync(
             "overview-missing-entities-as-dependencies.png");
-        viewModel.SelectedOverviewFilter = OverviewManagerFilter.AllActive;
+        viewModel.ActiveTable.ClearAllFiltersAndSort();
     }
 
     private static async Task CaptureMissingReviewAsync(
@@ -180,8 +187,8 @@ internal sealed class ReadmeScreenshotGenerator
         CancellationToken cancellationToken)
     {
         viewModel.Review.Clear();
-        viewModel.SelectedTabIndex = 0;
-        viewModel.SelectedOverviewFilter = OverviewManagerFilter.AllActive;
+        viewModel.SelectedTab = MainWindowTab.Overview;
+        viewModel.ActiveTable.ClearAllFiltersAndSort();
         EntityOverviewRow row = viewModel.OverviewItems.Single(static item =>
             item.SourceName == "time_zone");
         await viewModel.Editor.BeginStandaloneAsync(row.EntityId, cancellationToken);
@@ -215,9 +222,8 @@ internal sealed class ReadmeScreenshotGenerator
         }
 
         await viewModel.RefreshAsync(cancellationToken);
-        viewModel.SelectedTabIndex = 0;
-        viewModel.SelectedOverviewFilter = OverviewManagerFilter.Archived;
-        EntityOverviewRow archivedRow = viewModel.OverviewItems.Single(item => item.EntityId == leaf.Id);
+        viewModel.SelectedTab = MainWindowTab.Archived;
+        EntityOverviewRow archivedRow = viewModel.ArchivedItems.Single(item => item.EntityId == leaf.Id);
         await viewModel.Editor.BeginArchivedAsync(archivedRow.EntityId, cancellationToken);
         await renderer.CaptureAsync("archived-entity.png");
         viewModel.Editor.CancelCommand.Execute(null);

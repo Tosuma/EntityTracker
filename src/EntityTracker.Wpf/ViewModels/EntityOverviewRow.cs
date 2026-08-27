@@ -28,6 +28,12 @@ public sealed record EntityOverviewRow(
     string Notes,
     string ActionLabel)
 {
+    public string ResponsibleDeveloperDisplay =>
+        string.IsNullOrWhiteSpace(ResponsibleDeveloper) ? "—" : ResponsibleDeveloper;
+
+    public string GroupNameDisplay =>
+        string.IsNullOrWhiteSpace(GroupName) ? "—" : GroupName;
+
     public bool HasGraphIssue =>
         DependencyState is DependencyResolutionState.Unresolved or
             DependencyResolutionState.Blocked;

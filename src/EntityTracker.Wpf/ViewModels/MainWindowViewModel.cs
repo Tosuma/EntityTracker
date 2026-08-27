@@ -21,8 +21,6 @@ namespace EntityTracker.Wpf.ViewModels;
 
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
-    private static readonly TimeSpan OverviewSearchDelay = TimeSpan.FromMilliseconds(200);
-
     private readonly EntityOverviewService _overviewService;
     private readonly SchemaSynchronizationService _synchronizationService;
     private readonly BulkStatusUpdateService _bulkStatusUpdateService;
@@ -36,36 +34,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly AsyncCommand _applyBulkStatusCommand;
     private readonly AsyncCommand<EntityOverviewRow> _editOverviewEntityCommand;
     private readonly AsyncCommand<SchemaSynchronizationReviewRow> _editReviewEntityCommand;
-    private readonly RelayCommand _openOverviewSearchCommand;
-    private readonly RelayCommand _clearOverviewSearchCommand;
-    private readonly RelayCommand _closeOverviewSearchCommand;
     private readonly RelayCommand _openSqlQueryCommand;
-    private readonly RelayCommand<OverviewManagerFilter> _selectOverviewFilterCommand;
+    private readonly RelayCommand<DevelopmentStatus> _selectOverviewStatusCommand;
     private readonly RelayCommand<SynchronizationProgressImpactRow> _keepSynchronizationStatusCommand;
     private readonly RelayCommand<SynchronizationProgressImpactRow> _markSynchronizationReworkCommand;
-    private IReadOnlyList<EntityOverviewRow> _allOverviewItems = [];
-    private IReadOnlyList<EntityOverviewRow> _archivedOverviewItems = [];
-    private IReadOnlyList<EntityOverviewRow> _currentViewItems = [];
-    private IReadOnlyList<EntityOverviewRow> _overviewItems = [];
     private IReadOnlyList<EntityId> _selectedOverviewEntityIds = [];
     private string? _overviewErrorMessage;
-    private string _overviewSearchQuery = string.Empty;
     private string _busyMessage = string.Empty;
     private string? _operationMessage;
     private SchemaImportSummary? _latestImportSummary;
     private bool _isBusy;
-    private bool _isOverviewSearchOpen;
-    private bool _searchOverviewDependencies;
-    private OverviewManagerFilter _selectedOverviewFilter;
-    private int _selectedTabIndex;
+    private MainWindowTab _selectedTab = MainWindowTab.Overview;
     private int _notStartedCount;
     private int _inProgressCount;
     private int _reworkNeededCount;
     private int _developmentCompletedCount;
     private int _reconciledCount;
     private DevelopmentStatus _selectedBulkStatus = DevelopmentStatus.InProgress;
-    private CancellationTokenSource? _overviewSearchCancellation;
-    private int _overviewSearchVersion;
 
     public MainWindowViewModel(
         EntityOverviewService overviewService,
@@ -98,10 +83,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _confirmationService = confirmationService;
         ILoggerFactory effectiveLoggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
         _logger = effectiveLoggerFactory.CreateLogger<MainWindowViewModel>();
+        ActiveTable = EntityTableViewModel.CreateActive();
+        ArchivedTable = EntityTableViewModel.CreateArchived();
+        ActiveTable.ProjectionChanging += (_, _) => ClearOverviewSelection();
+        ActiveTable.PropertyChanged += OnActiveTablePropertyChanged;
+        ArchivedTable.PropertyChanged += OnArchivedTablePropertyChanged;
         Progress = progressDashboard;
         Help = new SqlQueryHelpViewModel(
             clipboard,
-            () => SelectedTabIndex = 1,
+            () => SelectedTab = MainWindowTab.SchemaSynchronization,
             effectiveLoggerFactory.CreateLogger<SqlQueryHelpViewModel>());
         Connections = connections;
         Review = new SchemaSynchronizationReviewViewModel();
@@ -109,7 +99,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             manualEntityCreationService,
             OnManualEntityCreatedAsync,
             OpenArchivedFromCreationAsync,
-            () => SelectedTabIndex = 0,
+            () => SelectedTab = MainWindowTab.Overview,
             () => !IsBusy,
             effectiveLoggerFactory.CreateLogger<ManualEntityCreationViewModel>());
         ManualCreation.PropertyChanged += OnManualCreationPropertyChanged;
@@ -151,24 +141,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _editReviewEntityCommand = new AsyncCommand<SchemaSynchronizationReviewRow>(
             row => EditReviewEntityAsync(row),
             _ => !IsBusy && !ManualCreation.IsBusy && !Editor.IsOpen && Review.HasReview);
-        _openOverviewSearchCommand = new RelayCommand(
-            OpenOverviewSearch,
-            () => SelectedTabIndex == 0 &&
-                  !IsBusy &&
-                  !ManualCreation.IsBusy &&
-                  !Editor.IsOpen);
-        _clearOverviewSearchCommand = new RelayCommand(
-            ClearOverviewSearch,
-            () => IsOverviewSearchOpen && OverviewSearchQuery.Length > 0);
-        _closeOverviewSearchCommand = new RelayCommand(
-            CloseOverviewSearch,
-            () => IsOverviewSearchOpen);
         _openSqlQueryCommand = new RelayCommand(
-            () => SelectedTabIndex = 4,
+            () => SelectedTab = MainWindowTab.SqlHelp,
             () => !IsBusy && !ManualCreation.IsBusy && !Editor.IsOpen);
-        _selectOverviewFilterCommand = new RelayCommand<OverviewManagerFilter>(
-            SelectOverviewFilter,
-            CanSelectOverviewFilter);
+        _selectOverviewStatusCommand = new RelayCommand<DevelopmentStatus>(
+            status => ActiveTable.SetSingleStatusFilter(status));
         _keepSynchronizationStatusCommand = new RelayCommand<SynchronizationProgressImpactRow>(
             row => StageSynchronizationProgressDecision(
                 row,
@@ -197,18 +174,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ConnectionsViewModel? Connections { get; }
 
-    public IReadOnlyList<OverviewManagerFilterOption> OverviewFilters { get; } =
-    [
-        new(OverviewManagerFilter.AllActive, "All active"),
-        new(OverviewManagerFilter.NotStarted, "Not started"),
-        new(OverviewManagerFilter.Ready, "Ready"),
-        new(OverviewManagerFilter.Blocked, "Blocked"),
-        new(OverviewManagerFilter.InProgress, "In progress"),
-        new(OverviewManagerFilter.ReworkNeeded, "Rework needed"),
-        new(OverviewManagerFilter.DevelopmentCompleted, "Dev. completed"),
-        new(OverviewManagerFilter.Reconciled, "Reconciled"),
-        new(OverviewManagerFilter.Archived, "Archived")
-    ];
+    public EntityTableViewModel ActiveTable { get; }
+
+    public EntityTableViewModel ArchivedTable { get; }
 
     public IReadOnlyList<DevelopmentStatusOption> BulkStatusOptions { get; } =
     [
@@ -219,107 +187,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         new(DevelopmentStatus.Reconciled, "Reconciled")
     ];
 
-    public OverviewManagerFilter SelectedOverviewFilter
-    {
-        get => _selectedOverviewFilter;
-        set
-        {
-            if (SetField(ref _selectedOverviewFilter, value))
-            {
-                ClearOverviewSelection();
-                if (!CanSearchOverviewDependencies && SearchOverviewDependencies)
-                {
-                    _searchOverviewDependencies = false;
-                    OnPropertyChanged(nameof(SearchOverviewDependencies));
-                }
+    public IReadOnlyList<EntityOverviewRow> OverviewItems => ActiveTable.Items;
 
-                OnPropertyChanged(nameof(CanSearchOverviewDependencies));
-                OnPropertyChanged(nameof(SelectedOverviewFilterName));
-                OnPropertyChanged(nameof(OverviewEmptyTitle));
-                OnPropertyChanged(nameof(OverviewEmptyDescription));
-                CancelPendingOverviewSearch();
-                ApplyOverviewFilterAndSearch();
-            }
-        }
-    }
-
-    public bool CanSearchOverviewDependencies =>
-        SelectedOverviewFilter != OverviewManagerFilter.Archived;
-
-    public string SelectedOverviewFilterName => OverviewFilters
-        .Single(option => option.Value == SelectedOverviewFilter)
-        .DisplayName;
-
-    public string OverviewEmptyTitle => SelectedOverviewFilter switch
-    {
-        OverviewManagerFilter.AllActive => "No active entities",
-        OverviewManagerFilter.Archived => "No archived entities",
-        _ => $"No {SelectedOverviewFilterName.ToLowerInvariant()} entities"
-    };
-
-    public string OverviewEmptyDescription => SelectedOverviewFilter switch
-    {
-        OverviewManagerFilter.AllActive =>
-            "Add an entity manually or open Schema Synchronization to import a CSV.",
-        OverviewManagerFilter.Archived =>
-            "Archived entities will appear here and can be inspected or restored.",
-        _ => "Choose another manager view or update entity progress."
-    };
-
-    public IReadOnlyList<EntityOverviewRow> OverviewItems
-    {
-        get => _overviewItems;
-        private set
-        {
-            if (SetField(ref _overviewItems, value))
-            {
-                OnPropertyChanged(nameof(OverviewSearchResultSummary));
-                OnPropertyChanged(nameof(ShowOverviewSearchEmptyState));
-            }
-        }
-    }
+    public IReadOnlyList<EntityOverviewRow> ArchivedItems => ArchivedTable.Items;
 
     public string OverviewSearchQuery
     {
-        get => _overviewSearchQuery;
-        set
-        {
-            if (SetField(ref _overviewSearchQuery, value ?? string.Empty))
-            {
-                ClearOverviewSelection();
-                OnPropertyChanged(nameof(HasOverviewSearchQuery));
-                _clearOverviewSearchCommand.NotifyCanExecuteChanged();
-                ScheduleOverviewSearch();
-            }
-        }
+        get => ActiveTable.SearchQuery;
+        set => ActiveTable.SearchQuery = value;
     }
 
-    public bool IsOverviewSearchOpen
-    {
-        get => _isOverviewSearchOpen;
-        private set
-        {
-            if (SetField(ref _isOverviewSearchOpen, value))
-            {
-                OnPropertyChanged(nameof(ShowOverviewSearchEmptyState));
-                _clearOverviewSearchCommand.NotifyCanExecuteChanged();
-                _closeOverviewSearchCommand.NotifyCanExecuteChanged();
-            }
-        }
-    }
+    public bool IsOverviewSearchOpen => ActiveTable.IsSearchOpen;
 
     public bool SearchOverviewDependencies
     {
-        get => _searchOverviewDependencies;
-        set
-        {
-            if (CanSearchOverviewDependencies && SetField(ref _searchOverviewDependencies, value))
-            {
-                ClearOverviewSelection();
-                CancelPendingOverviewSearch();
-                ApplyOverviewFilterAndSearch();
-            }
-        }
+        get => ActiveTable.SearchDependenciesInstead;
+        set => ActiveTable.SearchDependenciesInstead = value;
     }
 
     public string? OverviewErrorMessage
@@ -332,6 +215,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(HasOverviewError));
                 OnPropertyChanged(nameof(ShowOverviewEmptyState));
                 OnPropertyChanged(nameof(ShowOverviewSearchEmptyState));
+                OnPropertyChanged(nameof(ShowArchivedEmptyState));
+                OnPropertyChanged(nameof(ShowArchivedSearchEmptyState));
             }
         }
     }
@@ -402,15 +287,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    public int SelectedTabIndex
+    public MainWindowTab SelectedTab
     {
-        get => _selectedTabIndex;
+        get => _selectedTab;
         set
         {
-            if (SetField(ref _selectedTabIndex, value))
+            if (SetField(ref _selectedTab, value))
             {
+                ActiveTable.CloseOpenFilter();
+                ArchivedTable.CloseOpenFilter();
                 ClearOverviewSelection();
-                _openOverviewSearchCommand.NotifyCanExecuteChanged();
+                _applyBulkStatusCommand.NotifyCanExecuteChanged();
             }
         }
     }
@@ -482,9 +369,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    public int TotalEntityCount => _allOverviewItems.Count;
+    public int TotalEntityCount => ActiveTable.SourceItems.Count;
 
-    public int ArchivedEntityCount => _archivedOverviewItems.Count;
+    public int ArchivedEntityCount => ArchivedTable.SourceItems.Count;
 
     public double ImplementedPercentage => TotalEntityCount == 0
         ? 0
@@ -502,24 +389,47 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ? 0
         : ReconciledCount * 100.0 / TotalEntityCount;
 
-    public bool HasOverviewItems => _currentViewItems.Count > 0;
+    public bool HasOverviewItems => ActiveTable.HasSourceItems;
+
+    public bool HasArchivedItems => ArchivedTable.HasSourceItems;
 
     public bool HasOverviewSearchQuery => !string.IsNullOrWhiteSpace(OverviewSearchQuery);
 
-    public string OverviewSearchResultSummary =>
-        $"Showing {OverviewItems.Count} of {_currentViewItems.Count} in {SelectedOverviewFilterName}";
+    public string OverviewSearchResultSummary => ActiveTable.ResultSummary;
+
+    public string ArchivedSearchResultSummary => ArchivedTable.ResultSummary;
 
     public bool HasOverviewError => !string.IsNullOrWhiteSpace(OverviewErrorMessage);
 
     public bool ShowOverviewEmptyState => !IsBusy && !HasOverviewItems && !HasOverviewError;
 
+    public bool ShowArchivedEmptyState => !IsBusy && !HasArchivedItems && !HasOverviewError;
+
     public bool ShowOverviewSearchEmptyState =>
         !IsBusy &&
-        IsOverviewSearchOpen &&
-        HasOverviewSearchQuery &&
         HasOverviewItems &&
-        OverviewItems.Count == 0 &&
+        ActiveTable.ShowFilteredEmptyState &&
         !HasOverviewError;
+
+    public bool ShowArchivedSearchEmptyState =>
+        !IsBusy && ArchivedTable.ShowFilteredEmptyState && !HasOverviewError;
+
+    public bool IsTotalSummarySelected => !ActiveTable.HasFiltersOrSort;
+
+    public bool IsNotStartedSummarySelected =>
+        ActiveTable.IncludesStatus(DevelopmentStatus.NotStarted);
+
+    public bool IsInProgressSummarySelected =>
+        ActiveTable.IncludesStatus(DevelopmentStatus.InProgress);
+
+    public bool IsReworkNeededSummarySelected =>
+        ActiveTable.IncludesStatus(DevelopmentStatus.ReworkNeeded);
+
+    public bool IsDevelopmentCompletedSummarySelected =>
+        ActiveTable.IncludesStatus(DevelopmentStatus.DevelopmentCompleted);
+
+    public bool IsReconciledSummarySelected =>
+        ActiveTable.IncludesStatus(DevelopmentStatus.Reconciled);
 
     public ICommand RefreshCommand => _refreshCommand;
 
@@ -535,15 +445,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ICommand EditReviewEntityCommand => _editReviewEntityCommand;
 
-    public ICommand OpenOverviewSearchCommand => _openOverviewSearchCommand;
+    public ICommand OpenOverviewSearchCommand => ActiveTable.OpenSearchCommand;
 
-    public ICommand ClearOverviewSearchCommand => _clearOverviewSearchCommand;
+    public ICommand ClearOverviewSearchCommand => ActiveTable.ClearSearchCommand;
 
-    public ICommand CloseOverviewSearchCommand => _closeOverviewSearchCommand;
+    public ICommand CloseOverviewSearchCommand => ActiveTable.CloseSearchCommand;
 
     public ICommand OpenSqlQueryCommand => _openSqlQueryCommand;
 
-    public ICommand SelectOverviewFilterCommand => _selectOverviewFilterCommand;
+    public ICommand SelectOverviewStatusCommand => _selectOverviewStatusCommand;
 
     public ICommand KeepSynchronizationStatusCommand => _keepSynchronizationStatusCommand;
 
@@ -670,7 +580,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             _logger.LogError(exception, "A CSV file could not be selected.");
             Review.SetFailure($"A CSV file could not be selected: {exception.Message}");
-            SelectedTabIndex = 1;
+            SelectedTab = MainWindowTab.SchemaSynchronization;
             NotifyCommandsChanged();
             return;
         }
@@ -682,7 +592,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         Review.BeginImport(Path.GetFileName(filePath));
         SchemaImportMode mode = Review.Mode;
-        SelectedTabIndex = 1;
+        SelectedTab = MainWindowTab.SchemaSynchronization;
         IsBusy = true;
         BusyMessage = $"Comparing {Review.SelectedFileName} with persisted state…";
         try
@@ -737,7 +647,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 $"{summary.ChangedEntityCount} changed, {summary.ArchivedEntityCount} archived, " +
                 $"{summary.UnresolvedEntityCount} unresolved.";
             Review.Clear();
-            SelectedTabIndex = 0;
+            SelectedTab = MainWindowTab.Overview;
             BusyMessage = "Recomputing dependency ranking…";
             await LoadOverviewAndProgressAsync(cancellationToken);
         }
@@ -807,12 +717,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         IReadOnlyList<EntityOverviewRow> archivedItems)
     {
         ClearOverviewSelection();
-        _allOverviewItems = items;
-        _archivedOverviewItems = archivedItems;
-        ApplyOverviewFilterAndSearch();
+        ActiveTable.ReplaceSourceItems(items);
+        ArchivedTable.ReplaceSourceItems(archivedItems);
         OnPropertyChanged(nameof(HasOverviewItems));
+        OnPropertyChanged(nameof(HasArchivedItems));
         OnPropertyChanged(nameof(ShowOverviewEmptyState));
+        OnPropertyChanged(nameof(ShowArchivedEmptyState));
         OnPropertyChanged(nameof(ShowOverviewSearchEmptyState));
+        OnPropertyChanged(nameof(ShowArchivedSearchEmptyState));
         OnPropertyChanged(nameof(TotalEntityCount));
         OnPropertyChanged(nameof(ArchivedEntityCount));
         OnPropertyChanged(nameof(ImplementedPercentage));
@@ -820,149 +732,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ReconciledAndReworkPercentage));
         OnPropertyChanged(nameof(ReconciledPercentage));
         OnPropertyChanged(nameof(OverviewSearchResultSummary));
-    }
-
-    private void OpenOverviewSearch()
-    {
-        IsOverviewSearchOpen = true;
-    }
-
-    private void ClearOverviewSearch()
-    {
-        ClearOverviewSelection();
-        CancelPendingOverviewSearch();
-        if (_overviewSearchQuery.Length > 0)
-        {
-            _overviewSearchQuery = string.Empty;
-            OnPropertyChanged(nameof(OverviewSearchQuery));
-            OnPropertyChanged(nameof(HasOverviewSearchQuery));
-        }
-
-        ApplyOverviewFilterAndSearch();
-        _clearOverviewSearchCommand.NotifyCanExecuteChanged();
-    }
-
-    private void CloseOverviewSearch()
-    {
-        ClearOverviewSearch();
-        IsOverviewSearchOpen = false;
-    }
-
-    private void SelectOverviewFilter(OverviewManagerFilter filter) =>
-        SelectedOverviewFilter = filter;
-
-    private bool CanSelectOverviewFilter(OverviewManagerFilter filter) => filter switch
-    {
-        OverviewManagerFilter.AllActive => true,
-        OverviewManagerFilter.NotStarted => NotStartedCount > 0,
-        OverviewManagerFilter.InProgress => InProgressCount > 0,
-        OverviewManagerFilter.ReworkNeeded => ReworkNeededCount > 0,
-        OverviewManagerFilter.DevelopmentCompleted => DevelopmentCompletedCount > 0,
-        OverviewManagerFilter.Reconciled => ReconciledCount > 0,
-        _ => false
-    };
-
-    private void ScheduleOverviewSearch()
-    {
-        CancelPendingOverviewSearch();
-        if (!HasOverviewSearchQuery)
-        {
-            ApplyOverviewFilterAndSearch();
-            return;
-        }
-
-        CancellationTokenSource cancellation = new();
-        _overviewSearchCancellation = cancellation;
-        int version = ++_overviewSearchVersion;
-        _ = ApplyOverviewSearchAfterDelayAsync(cancellation, version);
-    }
-
-    private async Task ApplyOverviewSearchAfterDelayAsync(
-        CancellationTokenSource cancellation,
-        int version)
-    {
-        try
-        {
-            await Task.Delay(OverviewSearchDelay, cancellation.Token);
-            if (version == _overviewSearchVersion)
-            {
-                ApplyOverviewFilterAndSearch();
-            }
-        }
-        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-        {
-        }
-        finally
-        {
-            if (ReferenceEquals(_overviewSearchCancellation, cancellation))
-            {
-                _overviewSearchCancellation = null;
-            }
-
-            cancellation.Dispose();
-        }
-    }
-
-    private void CancelPendingOverviewSearch()
-    {
-        _overviewSearchVersion++;
-        _overviewSearchCancellation?.Cancel();
-        _overviewSearchCancellation = null;
-    }
-
-    private void ApplyOverviewFilterAndSearch()
-    {
-        _currentViewItems = SelectedOverviewFilter switch
-        {
-            OverviewManagerFilter.AllActive => _allOverviewItems,
-            OverviewManagerFilter.Archived => _archivedOverviewItems,
-            OverviewManagerFilter.NotStarted =>
-                FilterByDevelopmentStatus(DevelopmentStatus.NotStarted),
-            OverviewManagerFilter.Ready => FilterByWorkflow(EntityWorkflowState.Ready),
-            OverviewManagerFilter.Blocked => FilterByWorkflow(EntityWorkflowState.Blocked),
-            OverviewManagerFilter.InProgress =>
-                FilterByDevelopmentStatus(DevelopmentStatus.InProgress),
-            OverviewManagerFilter.ReworkNeeded =>
-                FilterByDevelopmentStatus(DevelopmentStatus.ReworkNeeded),
-            OverviewManagerFilter.DevelopmentCompleted =>
-                FilterByDevelopmentStatus(DevelopmentStatus.DevelopmentCompleted),
-            OverviewManagerFilter.Reconciled =>
-                FilterByDevelopmentStatus(DevelopmentStatus.Reconciled),
-            _ => throw new ArgumentOutOfRangeException(
-                nameof(SelectedOverviewFilter),
-                SelectedOverviewFilter,
-                null)
-        };
-
-        string query = OverviewSearchQuery.Trim();
-        if (query.Length == 0)
-        {
-            OverviewItems = _currentViewItems;
-            NotifyOverviewViewChanged();
-            return;
-        }
-
-        OverviewItems = _currentViewItems
-            .Where(row => SearchOverviewDependencies
-                ? row.DependencyNames.Any(name =>
-                    name.Contains(query, StringComparison.OrdinalIgnoreCase))
-                : row.SourceName.Contains(query, StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        NotifyOverviewViewChanged();
-    }
-
-    private IReadOnlyList<EntityOverviewRow> FilterByWorkflow(EntityWorkflowState workflowState) =>
-        _allOverviewItems.Where(row => row.WorkflowState == workflowState).ToArray();
-
-    private IReadOnlyList<EntityOverviewRow> FilterByDevelopmentStatus(DevelopmentStatus status) =>
-        _allOverviewItems.Where(row => row.DevelopmentStatus == status).ToArray();
-
-    private void NotifyOverviewViewChanged()
-    {
-        OnPropertyChanged(nameof(HasOverviewItems));
-        OnPropertyChanged(nameof(ShowOverviewEmptyState));
-        OnPropertyChanged(nameof(ShowOverviewSearchEmptyState));
-        OnPropertyChanged(nameof(OverviewSearchResultSummary));
+        OnPropertyChanged(nameof(ArchivedSearchResultSummary));
     }
 
     private void UpdateProgressCounts(IEnumerable<EntityOverviewItem> items)
@@ -980,7 +750,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ReworkNeededPercentage));
         OnPropertyChanged(nameof(ReconciledAndReworkPercentage));
         OnPropertyChanged(nameof(ReconciledPercentage));
-        _selectOverviewFilterCommand.NotifyCanExecuteChanged();
     }
 
     private void EndBusyOperation()
@@ -999,16 +768,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _applyBulkStatusCommand.NotifyCanExecuteChanged();
         _editOverviewEntityCommand.NotifyCanExecuteChanged();
         _editReviewEntityCommand.NotifyCanExecuteChanged();
-        _openOverviewSearchCommand.NotifyCanExecuteChanged();
         _openSqlQueryCommand.NotifyCanExecuteChanged();
-        _selectOverviewFilterCommand.NotifyCanExecuteChanged();
         _keepSynchronizationStatusCommand.NotifyCanExecuteChanged();
         _markSynchronizationReworkCommand.NotifyCanExecuteChanged();
     }
 
     private bool CanApplyBulkStatus() =>
         SelectedActiveEntityCount > 0 &&
-        SelectedTabIndex == 0 &&
+        SelectedTab == MainWindowTab.Overview &&
         !IsBusy &&
         !ManualCreation.IsBusy &&
         !Editor.IsOpen &&
@@ -1048,7 +815,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task OnManualEntityCreatedAsync()
     {
-        SelectedTabIndex = 0;
+        SelectedTab = MainWindowTab.Overview;
         IsBusy = true;
         BusyMessage = "Recomputing dependency ranking…";
         try
@@ -1083,6 +850,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task OnEntityArchivedAsync()
     {
+        SelectedTab = MainWindowTab.Overview;
         try
         {
             await LoadOverviewAndProgressAsync(CancellationToken.None);
@@ -1098,8 +866,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private async Task OnEntityRestoredAsync()
     {
         ManualCreation.Reset();
-        SelectedTabIndex = 0;
-        SelectedOverviewFilter = OverviewManagerFilter.AllActive;
+        ActiveTable.ClearAllFiltersAndSort();
+        ActiveTable.ClearSearchCommand.Execute(null);
+        SelectedTab = MainWindowTab.Overview;
         try
         {
             await LoadOverviewAndProgressAsync(CancellationToken.None);
@@ -1117,13 +886,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ? Editor.BeginArchivedAsync(row.EntityId)
             : Editor.BeginStandaloneAsync(row.EntityId);
 
-    private Task OpenArchivedFromCreationAsync(EntityId entityId) =>
-        Editor.BeginArchivedAsync(entityId);
+    private async Task OpenArchivedFromCreationAsync(EntityId entityId)
+    {
+        SelectedTab = MainWindowTab.Archived;
+        await Editor.BeginArchivedAsync(entityId);
+    }
 
     private void OnReviewDependencyEditsStaged(SchemaSynchronizationPlan plan)
     {
         Review.ReplacePlan(plan);
-        SelectedTabIndex = 1;
+        SelectedTab = MainWindowTab.SchemaSynchronization;
         NotifyCommandsChanged();
     }
 
@@ -1173,6 +945,50 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    private void OnActiveTablePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(EntityTableViewModel.Items):
+                OnPropertyChanged(nameof(OverviewItems));
+                OnPropertyChanged(nameof(OverviewSearchResultSummary));
+                OnPropertyChanged(nameof(ShowOverviewSearchEmptyState));
+                break;
+            case nameof(EntityTableViewModel.SearchQuery):
+                OnPropertyChanged(nameof(OverviewSearchQuery));
+                OnPropertyChanged(nameof(HasOverviewSearchQuery));
+                break;
+            case nameof(EntityTableViewModel.IsSearchOpen):
+                OnPropertyChanged(nameof(IsOverviewSearchOpen));
+                break;
+            case nameof(EntityTableViewModel.HasFilters):
+            case nameof(EntityTableViewModel.HasSort):
+            case nameof(EntityTableViewModel.HasFiltersOrSort):
+                NotifySummarySelectionChanged();
+                break;
+        }
+    }
+
+    private void OnArchivedTablePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(EntityTableViewModel.Items))
+        {
+            OnPropertyChanged(nameof(ArchivedItems));
+            OnPropertyChanged(nameof(ArchivedSearchResultSummary));
+            OnPropertyChanged(nameof(ShowArchivedSearchEmptyState));
+        }
+    }
+
+    private void NotifySummarySelectionChanged()
+    {
+        OnPropertyChanged(nameof(IsTotalSummarySelected));
+        OnPropertyChanged(nameof(IsNotStartedSummarySelected));
+        OnPropertyChanged(nameof(IsInProgressSummarySelected));
+        OnPropertyChanged(nameof(IsReworkNeededSummarySelected));
+        OnPropertyChanged(nameof(IsDevelopmentCompletedSummarySelected));
+        OnPropertyChanged(nameof(IsReconciledSummarySelected));
+    }
+
     private static EntityOverviewRow CreateOverviewRow(EntityOverviewItem item)
     {
         bool isArchived = item.LifecycleState == EntityLifecycleState.Archived;
@@ -1185,12 +1001,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             FormatPriority(item.EffectivePriority),
             FormatRank(item.Rank),
             item.SourceName,
-            string.IsNullOrEmpty(item.ResponsibleDeveloper)
-                ? "—"
-                : item.ResponsibleDeveloper,
-            string.IsNullOrEmpty(item.GroupName)
-                ? "—"
-                : item.GroupName,
+            item.ResponsibleDeveloper,
+            item.GroupName,
             FormatProvenance(item.Provenance),
             FormatStatus(item.Status),
             FormatWorkflowState(item.WorkflowState),

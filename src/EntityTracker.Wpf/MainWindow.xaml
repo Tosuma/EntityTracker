@@ -4,6 +4,8 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
+        xmlns:controls="clr-namespace:EntityTracker.Wpf.Controls"
+        xmlns:domain="clr-namespace:EntityTracker.Domain;assembly=EntityTracker.Domain"
         xmlns:reporting="clr-namespace:EntityTracker.Reporting;assembly=EntityTracker.Reporting"
         xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels"
         mc:Ignorable="d"
@@ -122,8 +124,9 @@
         </Border>
 
         <TabControl Margin="18"
-                    SelectedIndex="{Binding SelectedTabIndex}">
-            <TabItem Header="Overview">
+                    SelectedValue="{Binding SelectedTab}"
+                    SelectedValuePath="Tag">
+            <TabItem Header="Overview" Tag="{x:Static viewModels:MainWindowTab.Overview}">
                 <Grid Margin="12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -136,16 +139,14 @@
 
                     <DockPanel Margin="0,0,0,14">
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                            <TextBlock Margin="0,0,7,0"
+                            <TextBlock Margin="0,0,12,0"
                                        VerticalAlignment="Center"
                                        Foreground="{StaticResource Brush.Text.Secondary}"
-                                       Text="View" />
-                            <ComboBox MinWidth="155"
-                                      Margin="0,0,8,0"
-                                      DisplayMemberPath="DisplayName"
-                                      ItemsSource="{Binding OverviewFilters}"
-                                      SelectedValue="{Binding SelectedOverviewFilter}"
-                                      SelectedValuePath="Value" />
+                                       Text="{Binding OverviewSearchResultSummary}" />
+                            <Button Margin="0,0,8,0"
+                                    Command="{Binding ActiveTable.ClearAllFiltersCommand}"
+                                    Content="Clear filters &amp; sort"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
                             <Button Margin="0,0,8,0"
                                     Command="{Binding OpenOverviewSearchCommand}"
                                     Click="OnOpenOverviewSearchClick"
@@ -170,15 +171,13 @@
                     <WrapPanel Grid.Row="1" Margin="0,0,0,6">
 
                         <Button AutomationProperties.Name="Show all active entities"
-                                Command="{Binding SelectOverviewFilterCommand}"
-                                CommandParameter="{x:Static viewModels:OverviewManagerFilter.AllActive}"
+                                Command="{Binding ActiveTable.ClearAllFiltersCommand}"
                                 ToolTip="Show all active entities">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
                                        TargetType="Button">
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding SelectedOverviewFilter}"
-                                                     Value="{x:Static viewModels:OverviewManagerFilter.AllActive}">
+                                        <DataTrigger Binding="{Binding IsTotalSummarySelected}" Value="True">
                                             <Setter Property="Background" Value="{StaticResource Brush.Surface.Selected}" />
                                             <Setter Property="BorderBrush" Value="{StaticResource Brush.Brand.Green100}" />
                                             <Setter Property="BorderThickness" Value="2" />
@@ -195,15 +194,14 @@
                             </StackPanel>
                         </Button>
                         <Button AutomationProperties.Name="Show not started entities"
-                                Command="{Binding SelectOverviewFilterCommand}"
-                                CommandParameter="{x:Static viewModels:OverviewManagerFilter.NotStarted}"
+                                Command="{Binding SelectOverviewStatusCommand}"
+                                CommandParameter="{x:Static domain:DevelopmentStatus.NotStarted}"
                                 ToolTip="Show not started entities">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
                                        TargetType="Button">
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding SelectedOverviewFilter}"
-                                                     Value="{x:Static viewModels:OverviewManagerFilter.NotStarted}">
+                                        <DataTrigger Binding="{Binding IsNotStartedSummarySelected}" Value="True">
                                             <Setter Property="Background" Value="{StaticResource Brush.Surface.Selected}" />
                                             <Setter Property="BorderBrush" Value="{StaticResource Brush.Brand.Green100}" />
                                             <Setter Property="BorderThickness" Value="2" />
@@ -220,15 +218,14 @@
                             </StackPanel>
                         </Button>
                         <Button AutomationProperties.Name="Show in progress entities"
-                                Command="{Binding SelectOverviewFilterCommand}"
-                                CommandParameter="{x:Static viewModels:OverviewManagerFilter.InProgress}"
+                                Command="{Binding SelectOverviewStatusCommand}"
+                                CommandParameter="{x:Static domain:DevelopmentStatus.InProgress}"
                                 ToolTip="Show in progress entities">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
                                        TargetType="Button">
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding SelectedOverviewFilter}"
-                                                     Value="{x:Static viewModels:OverviewManagerFilter.InProgress}">
+                                        <DataTrigger Binding="{Binding IsInProgressSummarySelected}" Value="True">
                                             <Setter Property="Background" Value="{StaticResource Brush.Surface.Selected}" />
                                             <Setter Property="BorderBrush" Value="{StaticResource Brush.Brand.Green100}" />
                                             <Setter Property="BorderThickness" Value="2" />
@@ -245,16 +242,15 @@
                             </StackPanel>
                         </Button>
                         <Button AutomationProperties.Name="Show rework needed entities"
-                                Command="{Binding SelectOverviewFilterCommand}"
-                                CommandParameter="{x:Static viewModels:OverviewManagerFilter.ReworkNeeded}"
+                                Command="{Binding SelectOverviewStatusCommand}"
+                                CommandParameter="{x:Static domain:DevelopmentStatus.ReworkNeeded}"
                                 ToolTip="Show rework needed entities">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
                                        TargetType="Button">
                                     <Setter Property="BorderBrush" Value="{StaticResource Brush.Accent}" />
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding SelectedOverviewFilter}"
-                                                     Value="{x:Static viewModels:OverviewManagerFilter.ReworkNeeded}">
+                                        <DataTrigger Binding="{Binding IsReworkNeededSummarySelected}" Value="True">
                                             <Setter Property="Background" Value="{StaticResource Brush.Surface.Selected}" />
                                             <Setter Property="BorderBrush" Value="{StaticResource Brush.Accent}" />
                                             <Setter Property="BorderThickness" Value="2" />
@@ -281,15 +277,14 @@
                         </Button>
 
                         <Button AutomationProperties.Name="Show development completed entities"
-                                Command="{Binding SelectOverviewFilterCommand}"
-                                CommandParameter="{x:Static viewModels:OverviewManagerFilter.DevelopmentCompleted}"
+                                Command="{Binding SelectOverviewStatusCommand}"
+                                CommandParameter="{x:Static domain:DevelopmentStatus.DevelopmentCompleted}"
                                 ToolTip="Show development completed entities">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
                                        TargetType="Button">
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding SelectedOverviewFilter}"
-                                                     Value="{x:Static viewModels:OverviewManagerFilter.DevelopmentCompleted}">
+                                        <DataTrigger Binding="{Binding IsDevelopmentCompletedSummarySelected}" Value="True">
                                             <Setter Property="Background" Value="{StaticResource Brush.Surface.Selected}" />
                                             <Setter Property="BorderBrush" Value="{StaticResource Brush.Brand.Green100}" />
                                             <Setter Property="BorderThickness" Value="2" />
@@ -307,15 +302,14 @@
                         </Button>
 
                         <Button AutomationProperties.Name="Show reconciled entities"
-                                Command="{Binding SelectOverviewFilterCommand}"
-                                CommandParameter="{x:Static viewModels:OverviewManagerFilter.Reconciled}"
+                                Command="{Binding SelectOverviewStatusCommand}"
+                                CommandParameter="{x:Static domain:DevelopmentStatus.Reconciled}"
                                 ToolTip="Show reconciled entities">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
                                        TargetType="Button">
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding SelectedOverviewFilter}"
-                                                     Value="{x:Static viewModels:OverviewManagerFilter.Reconciled}">
+                                        <DataTrigger Binding="{Binding IsReconciledSummarySelected}" Value="True">
                                             <Setter Property="Background" Value="{StaticResource Brush.Surface.Selected}" />
                                             <Setter Property="BorderBrush" Value="{StaticResource Brush.Brand.Green100}" />
                                             <Setter Property="BorderThickness" Value="2" />
@@ -428,15 +422,8 @@
                                       Margin="0,9,0,0"
                                       VerticalAlignment="Center"
                                       Content="Search dependency names"
-                                      IsEnabled="{Binding CanSearchOverviewDependencies}"
+                                      IsEnabled="{Binding ActiveTable.CanSearchDependencies}"
                                       IsChecked="{Binding SearchOverviewDependencies}" />
-                            <TextBlock Grid.Row="1"
-                                       Grid.Column="1"
-                                       Grid.ColumnSpan="2"
-                                       Margin="12,9,0,0"
-                                       HorizontalAlignment="Right"
-                                       Foreground="{StaticResource Brush.Text.Secondary}"
-                                       Text="{Binding OverviewSearchResultSummary}" />
                         </Grid>
                     </Border>
 
@@ -596,14 +583,28 @@
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
                                 <DataGridTextColumn Width="150"
-                                                    Binding="{Binding ResponsibleDeveloper}"
-                                                    Header="Responsible dev" />
+                                                    Binding="{Binding ResponsibleDeveloperDisplay}">
+                                    <DataGridTextColumn.Header>
+                                        <controls:FilterableColumnHeader Filter="{Binding DataContext.ActiveTable.ResponsibleDeveloperFilter, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                    </DataGridTextColumn.Header>
+                                </DataGridTextColumn>
                                 <DataGridTextColumn Width="145"
-                                                    Binding="{Binding GroupName}"
-                                                    Header="Group" />
+                                                    Binding="{Binding GroupNameDisplay}">
+                                    <DataGridTextColumn.Header>
+                                        <controls:FilterableColumnHeader Filter="{Binding DataContext.ActiveTable.GroupFilter, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                    </DataGridTextColumn.Header>
+                                </DataGridTextColumn>
                                 <DataGridTextColumn Width="125" Binding="{Binding Provenance}" Header="Source" />
-                                <DataGridTextColumn Width="130" Binding="{Binding Status}" Header="Status" />
-                                <DataGridTextColumn Width="130" Binding="{Binding WorkStatus}" Header="Work status" />
+                                <DataGridTextColumn Width="130" Binding="{Binding Status}">
+                                    <DataGridTextColumn.Header>
+                                        <controls:FilterableColumnHeader Filter="{Binding DataContext.ActiveTable.StatusFilter, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                    </DataGridTextColumn.Header>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Width="130" Binding="{Binding WorkStatus}">
+                                    <DataGridTextColumn.Header>
+                                        <controls:FilterableColumnHeader Filter="{Binding DataContext.ActiveTable.WorkStatusFilter, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                    </DataGridTextColumn.Header>
+                                </DataGridTextColumn>
                                 <DataGridTextColumn Width="105" Binding="{Binding DependencyCount}" Header="Dependencies" />
                                 <DataGridTextColumn Width="2.2*" Binding="{Binding MissingDependencies}" Header="Missing Dependencies" />
                                 <DataGridTextColumn Width="2*" Binding="{Binding Notes}" Header="Notes" />
@@ -646,10 +647,10 @@
                                            FontSize="18"
                                            FontWeight="SemiBold"
                                            Foreground="{StaticResource Brush.Text.Secondary}"
-                                           Text="{Binding OverviewEmptyTitle}" />
+                                           Text="No active entities" />
                                 <TextBlock Margin="0,7,0,0"
                                            Foreground="{StaticResource Brush.Text.Secondary}"
-                                           Text="{Binding OverviewEmptyDescription}" />
+                                           Text="Add an entity manually or open Schema Synchronization to import a CSV." />
                             </StackPanel>
                         </Border>
 
@@ -665,18 +666,212 @@
                                            Text="No matching entities" />
                                 <TextBlock Margin="0,7,0,12"
                                            Foreground="{StaticResource Brush.Text.Secondary}"
-                                           Text="Try another name, change the dependency toggle, or clear the search."
+                                           Text="Try another search or clear one of the active column filters."
                                            TextWrapping="Wrap" />
-                                <Button Command="{Binding ClearOverviewSearchCommand}"
-                                        Content="Clear search"
-                                        Style="{StaticResource SecondaryButtonStyle}" />
+                                <WrapPanel HorizontalAlignment="Center">
+                                    <Button Margin="0,0,8,0"
+                                            Command="{Binding ClearOverviewSearchCommand}"
+                                            Content="Clear search"
+                                            Style="{StaticResource SecondaryButtonStyle}" />
+                                    <Button Command="{Binding ActiveTable.ClearAllFiltersCommand}"
+                                            Content="Clear filters &amp; sort"
+                                            Style="{StaticResource SecondaryButtonStyle}" />
+                                </WrapPanel>
                             </StackPanel>
                         </Border>
                     </Grid>
                 </Grid>
             </TabItem>
 
-            <TabItem Header="Schema Synchronization">
+            <TabItem Header="Archived" Tag="{x:Static viewModels:MainWindowTab.Archived}">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <DockPanel Margin="0,0,0,14">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <Button Margin="0,0,8,0"
+                                    Command="{Binding ArchivedTable.ClearAllFiltersCommand}"
+                                    Content="Clear filters &amp; sort"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Margin="0,0,8,0"
+                                    Command="{Binding ArchivedTable.OpenSearchCommand}"
+                                    Click="OnOpenOverviewSearchClick"
+                                    Content="Search"
+                                    ToolTip="Search archived entities (Ctrl+F)"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Command="{Binding RefreshCommand}"
+                                    Content="Refresh"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock FontSize="20"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource Brush.Text.Primary}"
+                                       Text="Archived entities" />
+                            <TextBlock Margin="0,3,0,0"
+                                       Foreground="{StaticResource Brush.Text.Secondary}"
+                                       Text="Inspect archived metadata or restore an entity to the active dependency graph." />
+                        </StackPanel>
+                    </DockPanel>
+
+                    <Border Grid.Row="1"
+                            Margin="0,0,0,12"
+                            Padding="12"
+                            Background="{StaticResource Brush.Surface.Card}"
+                            BorderBrush="{StaticResource Brush.Border.Medium}"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Visibility="{Binding ArchivedTable.IsSearchOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="ArchivedSearchTextBox"
+                                     MinWidth="280"
+                                     Padding="9,7"
+                                     ToolTip="Search archived entities"
+                                     Text="{Binding ArchivedTable.SearchQuery, UpdateSourceTrigger=PropertyChanged}" />
+                            <Button Grid.Column="1"
+                                    Margin="8,0,0,0"
+                                    Command="{Binding ArchivedTable.ClearSearchCommand}"
+                                    Content="Clear"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Grid.Column="2"
+                                    Margin="8,0,0,0"
+                                    Command="{Binding ArchivedTable.CloseSearchCommand}"
+                                    Content="Close search"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                        </Grid>
+                    </Border>
+
+                    <StackPanel Grid.Row="2">
+                        <TextBlock Margin="0,0,0,8"
+                                   HorizontalAlignment="Right"
+                                   Foreground="{StaticResource Brush.Text.Secondary}"
+                                   Text="{Binding ArchivedSearchResultSummary}" />
+                        <Border Margin="0,0,0,12"
+                                MaxHeight="120"
+                                Padding="12"
+                                Background="{StaticResource Brush.Surface.Alert}"
+                                BorderBrush="{StaticResource Brush.Accent}"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Visibility="{Binding HasOverviewError, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto">
+                                <TextBlock Foreground="{StaticResource Brush.Text.Primary}"
+                                           Text="{Binding OverviewErrorMessage}"
+                                           TextWrapping="Wrap" />
+                            </ScrollViewer>
+                        </Border>
+                    </StackPanel>
+
+                    <Grid Grid.Row="3">
+                        <DataGrid x:Name="ArchivedDataGrid"
+                                  ItemsSource="{Binding ArchivedItems}"
+                                  SelectionMode="Single"
+                                  SelectionUnit="FullRow">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Width="2.2*" Binding="{Binding SourceName}" Header="Entity" />
+                                <DataGridTextColumn Width="150" Binding="{Binding ResponsibleDeveloperDisplay}">
+                                    <DataGridTextColumn.Header>
+                                        <controls:FilterableColumnHeader Filter="{Binding DataContext.ArchivedTable.ResponsibleDeveloperFilter, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                    </DataGridTextColumn.Header>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Width="145" Binding="{Binding GroupNameDisplay}">
+                                    <DataGridTextColumn.Header>
+                                        <controls:FilterableColumnHeader Filter="{Binding DataContext.ArchivedTable.GroupFilter, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                    </DataGridTextColumn.Header>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Width="125" Binding="{Binding Provenance}" Header="Source" />
+                                <DataGridTextColumn Width="130" Binding="{Binding Status}">
+                                    <DataGridTextColumn.Header>
+                                        <controls:FilterableColumnHeader Filter="{Binding DataContext.ArchivedTable.StatusFilter, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                    </DataGridTextColumn.Header>
+                                </DataGridTextColumn>
+                                <DataGridTextColumn Width="2*" Binding="{Binding Notes}" Header="Notes" />
+                                <DataGridTemplateColumn Width="52" Header="">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button Width="30"
+                                                    Height="28"
+                                                    Padding="0"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Background="Transparent"
+                                                    BorderThickness="0"
+                                                    Content="⋮"
+                                                    Cursor="Hand"
+                                                    FontSize="19"
+                                                    ToolTip="Archived entity actions"
+                                                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    Click="OnContextMenuButtonClick">
+                                                <Button.ContextMenu>
+                                                    <ContextMenu>
+                                                        <MenuItem Header="{Binding PlacementTarget.DataContext.ActionLabel, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                  Command="{Binding PlacementTarget.Tag.EditOverviewEntityCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                    </ContextMenu>
+                                                </Button.ContextMenu>
+                                            </Button>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <Border Background="{StaticResource Brush.Surface.Subtle}"
+                                BorderBrush="{StaticResource Brush.Border.Default}"
+                                BorderThickness="1"
+                                Visibility="{Binding ShowArchivedEmptyState, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock HorizontalAlignment="Center"
+                                           FontSize="18"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource Brush.Text.Secondary}"
+                                           Text="No archived entities" />
+                                <TextBlock Margin="0,7,0,0"
+                                           Foreground="{StaticResource Brush.Text.Secondary}"
+                                           Text="Archived entities will appear here and can be inspected or restored." />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="{StaticResource Brush.Surface.Subtle}"
+                                BorderBrush="{StaticResource Brush.Border.Default}"
+                                BorderThickness="1"
+                                Visibility="{Binding ShowArchivedSearchEmptyState, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock HorizontalAlignment="Center"
+                                           FontSize="18"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource Brush.Text.Secondary}"
+                                           Text="No matching archived entities" />
+                                <TextBlock Margin="0,7,0,12"
+                                           Foreground="{StaticResource Brush.Text.Secondary}"
+                                           Text="Try another search or clear one of the active column filters." />
+                                <WrapPanel HorizontalAlignment="Center">
+                                    <Button Margin="0,0,8,0"
+                                            Command="{Binding ArchivedTable.ClearSearchCommand}"
+                                            Content="Clear search"
+                                            Style="{StaticResource SecondaryButtonStyle}" />
+                                    <Button Command="{Binding ArchivedTable.ClearAllFiltersCommand}"
+                                            Content="Clear filters &amp; sort"
+                                            Style="{StaticResource SecondaryButtonStyle}" />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Schema Synchronization" Tag="{x:Static viewModels:MainWindowTab.SchemaSynchronization}">
                 <Grid Margin="12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -1051,7 +1246,7 @@
                 </Grid>
             </TabItem>
 
-            <TabItem Header="Add Entity">
+            <TabItem Header="Add Entity" Tag="{x:Static viewModels:MainWindowTab.AddEntity}">
                 <Grid Margin="12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -1269,7 +1464,7 @@
                 </Grid>
             </TabItem>
 
-            <TabItem Header="Progress">
+            <TabItem Header="Progress" Tag="{x:Static viewModels:MainWindowTab.Progress}">
                 <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                               PreviewMouseWheel="OnReviewPreviewMouseWheel"
                               VerticalScrollBarVisibility="Auto">
@@ -1537,7 +1732,7 @@
                 </ScrollViewer>
             </TabItem>
 
-            <TabItem Header="Help &amp; SQL">
+            <TabItem Header="Help &amp; SQL" Tag="{x:Static viewModels:MainWindowTab.SqlHelp}">
                 <Grid Margin="12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -1610,7 +1805,7 @@
                 </Grid>
             </TabItem>
 
-            <TabItem Header="Connections">
+            <TabItem Header="Connections" Tag="{x:Static viewModels:MainWindowTab.Connections}">
                 <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                               VerticalScrollBarVisibility="Auto">
                     <StackPanel Width="720"

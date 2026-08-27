@@ -56,11 +56,11 @@ accented filter indicator. The table also provides a visible `Clear all filters`
 
 Only `Status` and `Work status` support sorting. Responsible developer and Group remain filter-only.
 
-- Status forward order is `Not started`, `In progress`, `Rework needed`, `Dev. completed`, and
+- Status ascending order is `Not started`, `In progress`, `Rework needed`, `Dev. completed`, and
   `Reconciled`.
-- Work-status forward order is `Ready`, `Blocked`, `In progress`, `Rework needed`,
+- Work-status ascending order is `Ready`, `Blocked`, `In progress`, `Rework needed`,
   `Dev. completed`, and `Reconciled`.
-- Each applicable menu offers forward and reverse status order using these defined sequences, not
+- Each applicable menu offers ascending and descending status order using these defined sequences, not
   alphabetical label order.
 - Only one custom sort may be active. Choosing a sort from another column replaces the previous one.
 - Show the active sort direction in the column header and provide `Clear sort`.
@@ -97,7 +97,7 @@ Only `Status` and `Work status` support sorting. Responsible developer and Group
   Work status.
 - Give each active or archived column filter its own staged selections, applied selections,
   available options, active-filter indicator, and commands for Apply and Clear.
-- Represent the optional custom sort with its typed column and forward/reverse direction.
+- Represent the optional custom sort with its typed column and ascending/descending direction.
 - Keep filtering and sorting in testable presentation logic over the already loaded overview rows;
   do not move it into Domain, persistence, or SQL queries.
 - Keep active and archived source collections separate from their filtered/sorted projections.
@@ -115,7 +115,7 @@ Only `Status` and `Work status` support sorting. Responsible developer and Group
   and editing while filters are active.
 - Verify summary-card shortcuts preserve other column filters, while Total clears column filters and
   custom sorting but retains text search.
-- Verify forward and reverse Status and Work-status ordering, single-sort replacement, sort
+- Verify ascending and descending Status and Work-status ordering, single-sort replacement, sort
   indicators, and restoration of default priority/rank ordering.
 - Verify Responsible developer and Group do not expose sort commands.
 - Verify applying a filter or sort clears the bulk-status row selection.

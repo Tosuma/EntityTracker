@@ -35,8 +35,9 @@ EntityTracker keeps those concerns separate:
   use them, while preserving unknown references as unresolved dependencies.
 - **Manual tracking and correction** — create entities, add or suppress dependencies, update notes
   and progress, and archive or restore entities.
-- **Workflow visibility** — filter and search by status, readiness, blocked state, entity name, or
-  dependency name.
+- **Workflow visibility** — combine Excel-style filters on Responsible dev, Group, Status, and
+  Work status; sort workflow statuses in their defined order; and search by entity or dependency
+  name.
 - **Progress reporting** — inspect current status, implementation history, ready-versus-blocked
   trends, and weekly change; copy or export charts as PNG files.
 - **Local-first reliability** — SQLite persistence, automatic daily and pre-migration backups,
@@ -85,13 +86,17 @@ EntityTracker keeps those concerns separate:
 
 ### Find and maintain tracked entities
 
-Search entity names and, when needed, dependency names from the overview. The same search opens
-with <kbd>Ctrl</kbd>+<kbd>F</kbd>.
+Use the dropdown on a supported column header to select any combination of responsible developers,
+groups, statuses, or work statuses. Selections within a column are alternatives, while filters on
+different columns work together. Status summary cards remain useful one-click shortcuts. Search
+entity names and, when needed, dependency names from the overview; the same search opens with
+<kbd>Ctrl</kbd>+<kbd>F</kbd>.
 
 ![EntityTracker overview filtered by the dependency name unit](images/overview-search.png)
 
-Archived entities remain available as read-only records with their progress, notes, and
-dependencies intact. They can be deliberately restored from the archived view.
+Archived entities have their own tab and independent search, filters, and Status sort. They remain
+available as read-only records with their progress, notes, and dependencies intact and can be
+deliberately restored from the archived view.
 
 ![Archived EntityTracker entity with its preserved details and Restore entity action](images/archived-entity.png)
 
