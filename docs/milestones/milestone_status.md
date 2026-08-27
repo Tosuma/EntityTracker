@@ -16,7 +16,7 @@
 - 12
 - CI-01
 
-## Planned product milestones
+## Retired product milestones
 
 - 13 — Live SharePoint integration
 
@@ -27,3 +27,17 @@
 - PF-03 — Responsible developer
 - PF-04 — Entity groups with suggestions
 - PF-05 — Column filtering and status sorting
+
+## Planned UI/UX modernization milestones
+
+- UX-01 — Projects and Trackers Foundation
+- UX-02 — Fluent Foundation and Theme
+- UX-03 — Application Shell and Portfolio
+- UX-04 — Overview and Entity Details
+- UX-05 — Schema Synchronization Experience
+- UX-06 — Entity Creation and Editing
+- UX-07 — Reporting and Tracker Comparison
+- UX-08 — Accessibility and Consistency
+
+Future Project-level Git synchronization will be planned separately after its data format, merge,
+authentication, and recovery requirements are decided.
