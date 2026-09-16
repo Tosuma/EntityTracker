@@ -8,5 +8,6 @@ namespace EntityTracker.Application.Persistence;
 public interface IManualDependencyOverrideRepository
 {
     Task<IReadOnlyList<ManualDependencyOverride>> GetAllAsync(
+        TrackerId trackerId,
         CancellationToken cancellationToken = default);
 }

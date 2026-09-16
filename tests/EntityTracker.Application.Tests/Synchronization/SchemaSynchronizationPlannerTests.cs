@@ -443,6 +443,57 @@ public sealed class SchemaSynchronizationPlannerTests
         Assert.Equal(tracked.Id, Assert.Single(plan.MissingEntities).Entity.Id);
     }
 
+    [Theory]
+    [InlineData(SchemaImportMode.Complete)]
+    [InlineData(SchemaImportMode.Partial)]
+    public void CsvConfirmationOfCopiedEntity_PreservesIdentityAndExecutionData(
+        SchemaImportMode mode)
+    {
+        TrackedEntity copied = Entity(
+            1,
+            "CopiedTable",
+            DevelopmentStatus.InProgress,
+            "Keep progress",
+            provenance: EntityProvenance.Copied,
+            requestedPriority: 4,
+            responsibleDeveloper: "Ada",
+            groupName: "Core");
+
+        SchemaSynchronizationPlan plan = Plan(
+            Candidate(["copiedtable"], []),
+            mode,
+            [copied],
+            []);
+
+        EntitySynchronizationChange change = Assert.Single(plan.ChangedEntities);
+        Assert.Equal(copied.Id, change.Entity.Id);
+        Assert.Equal(EntityProvenance.CopiedAndImported, change.Entity.Provenance);
+        Assert.Equal(DevelopmentStatus.InProgress, change.Entity.Status);
+        Assert.Equal("Keep progress", change.Entity.Notes);
+        Assert.Equal(4, change.Entity.RequestedPriority);
+        Assert.Equal("Ada", change.Entity.ResponsibleDeveloper);
+        Assert.Equal("Core", change.Entity.GroupName);
+        Assert.True(change.WasFirstObservedInImport);
+    }
+
+    [Fact]
+    public void CompleteImport_AbsentCopiedEntity_IsArchivedNormally()
+    {
+        TrackedEntity copied = Entity(
+            1,
+            "CopiedTable",
+            provenance: EntityProvenance.Copied);
+
+        SchemaSynchronizationPlan plan = Plan(
+            Candidate([], []),
+            SchemaImportMode.Complete,
+            [copied],
+            []);
+
+        Assert.Equal(copied.Id, Assert.Single(plan.ChangeSet.EntityIdsToArchive));
+        Assert.Equal(copied.Id, Assert.Single(plan.MissingEntities).Entity.Id);
+    }
+
     [Fact]
     public void FirstImportOfManualEntity_KeepsManualAdditionBesideImportedDependency()
     {
@@ -493,6 +544,7 @@ public sealed class SchemaSynchronizationPlannerTests
         IEnumerable<PersistedUnresolvedDependency>? unresolved = null,
         IEnumerable<ManualDependencyOverride>? manualOverrides = null) =>
         _planner.CreatePlan(
+            TestTrackerId,
             candidate,
             mode,
             entities,
@@ -512,6 +564,7 @@ public sealed class SchemaSynchronizationPlannerTests
         string? groupName = null) =>
         new(
             new EntityId(new Guid(id, 0, 0, new byte[8])),
+            TestTrackerId,
             name,
             status,
             notes,

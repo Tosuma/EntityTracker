@@ -9,9 +9,12 @@ using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Planning;
+using EntityTracker.Application.Projects;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
+using EntityTracker.Application.Tracking;
 using EntityTracker.Application.Workflow;
+using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Infrastructure.Importing;
 using EntityTracker.Infrastructure.Persistence;
@@ -79,15 +82,16 @@ public partial class App : System.Windows.Application
             services.AddSingleton<IClipboardService, WpfClipboardService>();
             services.AddSingleton<ISchemaSynchronizationConfirmation,
                 WpfSchemaSynchronizationConfirmation>();
-            services.AddSingleton<ProgressDashboardViewModel>();
             services.AddSingleton<ConnectionsViewModel>();
             services.AddSingleton<SchemaSynchronizationService>();
             services.AddSingleton<ManualEntityCreationService>();
             services.AddSingleton<EntityDependencyEditorService>();
             services.AddSingleton<EntityLifecycleService>();
+            services.AddSingleton<ProjectManagementService>();
+            services.AddSingleton<TrackerManagementService>();
+            services.AddSingleton<TrackerCsvCreationService>();
+            services.AddSingleton<CompatibilityTrackerResolver>();
             services.AddSingleton<ICsvFilePicker, CsvFilePicker>();
-            services.AddSingleton<MainWindowViewModel>();
-            services.AddSingleton<MainWindow>();
 
             _serviceProvider = services.BuildServiceProvider(new ServiceProviderOptions
             {
@@ -104,7 +108,10 @@ public partial class App : System.Windows.Application
                 await persistenceInitializer.InitializeAsync();
             ProgressHistoryInitializer historyInitializer =
                 _serviceProvider.GetRequiredService<ProgressHistoryInitializer>();
-            await historyInitializer.EnsureInitializedAsync();
+            Tracker tracker = await _serviceProvider
+                .GetRequiredService<CompatibilityTrackerResolver>()
+                .ResolveAsync();
+            await historyInitializer.EnsureInitializedAsync(tracker.Id);
 
             string[] startupWarnings = settings.Warnings
                 .Concat(initialization.Warnings)
@@ -114,7 +121,16 @@ public partial class App : System.Windows.Application
                 _logger.LogWarning("Startup warning: {Warning}", warning);
             }
 
-            MainWindow mainWindow = _serviceProvider.GetRequiredService<MainWindow>();
+            ProgressDashboardViewModel progressDashboard =
+                ActivatorUtilities.CreateInstance<ProgressDashboardViewModel>(
+                    _serviceProvider,
+                    tracker.Id);
+            MainWindowViewModel mainWindowViewModel =
+                ActivatorUtilities.CreateInstance<MainWindowViewModel>(
+                    _serviceProvider,
+                    tracker.Id,
+                    progressDashboard);
+            MainWindow mainWindow = new(mainWindowViewModel);
             MainWindow = mainWindow;
             mainWindow.Show();
 
@@ -170,6 +186,9 @@ public partial class App : System.Windows.Application
                     provider.GetRequiredService<SqliteTrackedStateStore>());
                 services.AddSingleton<IProgressHistoryRepository,
                     SqliteProgressHistoryRepository>();
+                services.AddSingleton<IProjectRepository, SqliteProjectRepository>();
+                services.AddSingleton<ITrackerRepository, SqliteTrackerRepository>();
+                services.AddSingleton<IProjectTrackerStore, SqliteProjectTrackerStore>();
                 break;
             default:
                 throw new InvalidOperationException(

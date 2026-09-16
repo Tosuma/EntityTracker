@@ -2,6 +2,7 @@ using EntityTracker.Application.History;
 using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Synchronization;
+using EntityTracker.Application.Tracking;
 using EntityTracker.DemoData;
 using EntityTracker.Domain;
 
@@ -38,10 +39,14 @@ internal static class ScreenshotDataSeeder
         {
             await provider.GetRequiredService<IPersistenceInitializer>()
                 .InitializeAsync(cancellationToken);
+            Tracker tracker = await provider
+                .GetRequiredService<CompatibilityTrackerResolver>()
+                .ResolveAsync(cancellationToken);
 
             SchemaSynchronizationService synchronization =
                 provider.GetRequiredService<SchemaSynchronizationService>();
             SchemaSynchronizationResult result = await synchronization.PlanAsync(
+                tracker.Id,
                 schemaPath,
                 SchemaImportMode.Complete,
                 cancellationToken);
@@ -56,21 +61,24 @@ internal static class ScreenshotDataSeeder
             }
 
             await synchronization.ApplyAsync(
+                tracker.Id,
                 result.Plan,
                 Path.GetFileName(schemaPath),
                 cancellationToken);
             await provider.GetRequiredService<ProgressHistoryInitializer>()
-                .EnsureInitializedAsync(cancellationToken);
+                .EnsureInitializedAsync(tracker.Id, cancellationToken);
 
             IEntityRepository repository = provider.GetRequiredService<IEntityRepository>();
-            TrackedEntity noteEntity = (await repository.GetAllAsync(cancellationToken))
+            TrackedEntity noteEntity = (await repository.GetAllAsync(tracker.Id, cancellationToken))
                 .Single(static entity => entity.SourceName == "time_zone");
             EntityDependencyEditorService editor =
                 provider.GetRequiredService<EntityDependencyEditorService>();
             EntityDependencyEditPlan editPlan = await editor.LoadAsync(
+                tracker.Id,
                 noteEntity.Id,
                 cancellationToken);
             await editor.SaveAsync(
+                tracker.Id,
                 editPlan,
                 noteEntity.Status,
                 "Coordinate rollout with the platform team.",

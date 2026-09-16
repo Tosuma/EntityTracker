@@ -16,17 +16,24 @@ public sealed class SqliteDependencyRepository : IDependencyRepository
         _database = database;
     }
 
+    internal SqliteDatabase Database => _database;
+
     public async Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
+        TrackerId trackerId,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         await using SqliteConnection connection =
             await _database.OpenConnectionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT dependent_entity_id, dependency_entity_id, dependency_kind
-            FROM schema_dependencies
+            FROM schema_dependencies dependency
+            INNER JOIN tracked_entities owner ON owner.id = dependency.dependent_entity_id
+            WHERE owner.tracker_id = $trackerId
             ORDER BY dependent_entity_id, dependency_entity_id;
             """;
+        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
 
         List<PersistedDependency> dependencies = [];
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -48,16 +55,21 @@ public sealed class SqliteDependencyRepository : IDependencyRepository
     }
 
     public async Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
+        TrackerId trackerId,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         await using SqliteConnection connection =
             await _database.OpenConnectionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT dependent_entity_id, dependency_source_name, dependency_kind
-            FROM unresolved_schema_dependencies
+            FROM unresolved_schema_dependencies dependency
+            INNER JOIN tracked_entities owner ON owner.id = dependency.dependent_entity_id
+            WHERE owner.tracker_id = $trackerId
             ORDER BY dependent_entity_id, dependency_source_key;
             """;
+        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
 
         List<PersistedUnresolvedDependency> dependencies = [];
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -79,15 +91,22 @@ public sealed class SqliteDependencyRepository : IDependencyRepository
     }
 
     internal async Task SaveAsync(
+        TrackerId trackerId,
         PersistedDependency dependency,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(dependency);
 
         string timestamp = SqlitePersistenceValues.FormatTimestamp(
             _database.TimeProvider.GetUtcNow());
         await using SqliteConnection connection =
             await _database.OpenConnectionAsync(cancellationToken);
+        await EnsureOwnedAsync(
+            connection,
+            trackerId,
+            [dependency.Edge.DependentEntityId, dependency.Edge.DependencyEntityId],
+            cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             INSERT INTO schema_dependencies
@@ -134,15 +153,22 @@ public sealed class SqliteDependencyRepository : IDependencyRepository
     }
 
     internal async Task SaveUnresolvedAsync(
+        TrackerId trackerId,
         PersistedUnresolvedDependency dependency,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(dependency);
 
         string timestamp = SqlitePersistenceValues.FormatTimestamp(
             _database.TimeProvider.GetUtcNow());
         await using SqliteConnection connection =
             await _database.OpenConnectionAsync(cancellationToken);
+        await EnsureOwnedAsync(
+            connection,
+            trackerId,
+            [dependency.Dependency.DependentEntityId],
+            cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             INSERT INTO unresolved_schema_dependencies
@@ -191,6 +217,38 @@ public sealed class SqliteDependencyRepository : IDependencyRepository
             throw new InvalidOperationException(
                 "The unresolved dependency cannot be stored because its dependent entity is invalid.",
                 exception);
+        }
+    }
+
+    private static async Task EnsureOwnedAsync(
+        SqliteConnection connection,
+        TrackerId trackerId,
+        IReadOnlyCollection<EntityId> entityIds,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = $"""
+            SELECT COUNT(*)
+            FROM tracked_entities
+            WHERE tracker_id = $trackerId
+              AND id IN ({string.Join(", ", entityIds.Select((_, index) => $"$entityId{index}"))});
+            """;
+        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
+        int parameterIndex = 0;
+        foreach (EntityId entityId in entityIds)
+        {
+            command.Parameters.AddWithValue(
+                $"$entityId{parameterIndex++}",
+                SqlitePersistenceValues.Format(entityId));
+        }
+
+        long ownedCount = Convert.ToInt64(
+            await command.ExecuteScalarAsync(cancellationToken),
+            System.Globalization.CultureInfo.InvariantCulture);
+        if (ownedCount != entityIds.Distinct().Count())
+        {
+            throw new InvalidOperationException(
+                "The dependency references an entity outside the selected tracker.");
         }
     }
 }

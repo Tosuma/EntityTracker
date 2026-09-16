@@ -3,6 +3,7 @@ using System.Globalization;
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Persistence;
 
@@ -137,9 +138,14 @@ public sealed class ProgressDemoSeeder
         SqliteDatabase database = new(workingPath, timeProvider);
         await database.InitializeAsync(cancellationToken);
 
+        Tracker tracker = await new CompatibilityTrackerResolver(
+                new SqliteProjectRepository(database),
+                new SqliteTrackerRepository(database))
+            .ResolveAsync(cancellationToken);
+
         SqliteEntityRepository entityRepository = new(database);
         TrackedEntity[] originalEntities =
-            (await entityRepository.GetAllAsync(cancellationToken)).ToArray();
+            (await entityRepository.GetAllAsync(tracker.Id, cancellationToken)).ToArray();
         TrackedEntity[] originalActive = originalEntities
             .Where(static entity => entity.LifecycleState == EntityLifecycleState.Active)
             .ToArray();
@@ -157,6 +163,7 @@ public sealed class ProgressDemoSeeder
             options.Seed);
         await ResetProgressAsync(
             workingPath,
+            tracker.Id,
             timeline.BaselineAtUtc,
             cancellationToken);
 
@@ -167,13 +174,13 @@ public sealed class ProgressDemoSeeder
         ProgressSnapshotCalculator snapshotCalculator = new();
 
         Task<IReadOnlyList<TrackedEntity>> entitiesTask =
-            entityRepository.GetAllAsync(cancellationToken);
+            entityRepository.GetAllAsync(tracker.Id, cancellationToken);
         Task<IReadOnlyList<PersistedDependency>> resolvedTask =
-            dependencyRepository.GetAllAsync(cancellationToken);
+            dependencyRepository.GetAllAsync(tracker.Id, cancellationToken);
         Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
-            dependencyRepository.GetAllUnresolvedAsync(cancellationToken);
+            dependencyRepository.GetAllUnresolvedAsync(tracker.Id, cancellationToken);
         Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
-            overrideRepository.GetAllAsync(cancellationToken);
+            overrideRepository.GetAllAsync(tracker.Id, cancellationToken);
         await Task.WhenAll(entitiesTask, resolvedTask, unresolvedTask, overridesTask);
 
         TrackedEntity[] entities = (await entitiesTask).ToArray();
@@ -184,6 +191,7 @@ public sealed class ProgressDemoSeeder
             await overridesTask);
         timeProvider.SetUtcNow(timeline.BaselineAtUtc);
         await store.EnsureHistoryBaselineAsync(
+            tracker.Id,
             entities,
             snapshotCalculator.Calculate(entities, effectiveDependencies),
             cancellationToken);
@@ -203,6 +211,7 @@ public sealed class ProgressDemoSeeder
             }
 
             await store.ApplyAsync(
+                tracker.Id,
                 new TrackedStateChangeSet(
                     [],
                     [],
@@ -219,6 +228,7 @@ public sealed class ProgressDemoSeeder
 
         return await ValidateAndCreateResultAsync(
             database,
+            tracker.Id,
             destinationPath,
             options,
             timeline,
@@ -229,6 +239,7 @@ public sealed class ProgressDemoSeeder
 
     private static async Task ResetProgressAsync(
         string databasePath,
+        TrackerId trackerId,
         DateTimeOffset baselineAtUtc,
         CancellationToken cancellationToken)
     {
@@ -245,14 +256,21 @@ public sealed class ProgressDemoSeeder
         using SqliteCommand command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            DELETE FROM entity_status_history;
-            DELETE FROM progress_snapshots;
+            DELETE FROM entity_status_history
+            WHERE entity_id IN (
+                SELECT id FROM tracked_entities WHERE tracker_id = $trackerId);
+            DELETE FROM progress_snapshots
+            WHERE tracker_id = $trackerId;
 
             UPDATE tracked_entities
             SET development_status = 'NotStarted',
                 progress_updated_at_utc = $baselineTimestamp
-            WHERE lifecycle_state = 'Active';
+            WHERE tracker_id = $trackerId
+              AND lifecycle_state = 'Active';
             """;
+        command.Parameters.AddWithValue(
+            "$trackerId",
+            trackerId.Value.ToString("D", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue(
             "$baselineTimestamp",
             baselineAtUtc.ToString("O", CultureInfo.InvariantCulture));
@@ -262,6 +280,7 @@ public sealed class ProgressDemoSeeder
 
     private static async Task<ProgressDemoResult> ValidateAndCreateResultAsync(
         SqliteDatabase database,
+        TrackerId trackerId,
         string destinationPath,
         ProgressDemoOptions options,
         SyntheticProgressTimeline timeline,
@@ -271,7 +290,7 @@ public sealed class ProgressDemoSeeder
     {
         SqliteEntityRepository entityRepository = new(database);
         TrackedEntity[] entities =
-            (await entityRepository.GetAllAsync(cancellationToken)).ToArray();
+            (await entityRepository.GetAllAsync(trackerId, cancellationToken)).ToArray();
         TrackedEntity[] active = entities
             .Where(static entity => entity.LifecycleState == EntityLifecycleState.Active)
             .ToArray();
@@ -287,9 +306,9 @@ public sealed class ProgressDemoSeeder
 
         SqliteProgressHistoryRepository historyRepository = new(database);
         EntityStatusHistoryEntry[] history =
-            (await historyRepository.GetStatusHistoryAsync(cancellationToken)).ToArray();
+            (await historyRepository.GetStatusHistoryAsync(trackerId, cancellationToken)).ToArray();
         ProgressSnapshot[] snapshots =
-            (await historyRepository.GetProgressSnapshotsAsync(cancellationToken)).ToArray();
+            (await historyRepository.GetProgressSnapshotsAsync(trackerId, cancellationToken)).ToArray();
         if (history.Length != entities.Length + timeline.Changes.Count ||
             history.Count(static entry => entry.Kind == StatusHistoryEntryKind.Baseline) !=
             entities.Length ||

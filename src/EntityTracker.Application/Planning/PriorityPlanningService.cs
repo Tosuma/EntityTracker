@@ -82,6 +82,7 @@ public sealed class PriorityPlanningService
 
         TrackedEntity candidateTarget = new(
             target.Id,
+            target.TrackerId,
             target.SourceName,
             target.Status,
             target.Notes,

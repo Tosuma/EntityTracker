@@ -1,5 +1,6 @@
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
 
 namespace EntityTracker.Application.History;
@@ -35,25 +36,35 @@ public sealed class ProgressHistoryInitializer
         _snapshotCalculator = snapshotCalculator;
     }
 
-    public async Task EnsureInitializedAsync(CancellationToken cancellationToken = default)
+    public async Task EnsureInitializedAsync(
+        TrackerId trackerId,
+        CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         Task<IReadOnlyList<TrackedEntity>> entitiesTask =
-            _entityRepository.GetAllAsync(cancellationToken);
+            _entityRepository.GetAllAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<PersistedDependency>> resolvedTask =
-            _dependencyRepository.GetAllAsync(cancellationToken);
+            _dependencyRepository.GetAllAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
-            _dependencyRepository.GetAllUnresolvedAsync(cancellationToken);
+            _dependencyRepository.GetAllUnresolvedAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
-            _overrideRepository.GetAllAsync(cancellationToken);
+            _overrideRepository.GetAllAsync(trackerId, cancellationToken);
         await Task.WhenAll(entitiesTask, resolvedTask, unresolvedTask, overridesTask);
 
         IReadOnlyList<TrackedEntity> entities = await entitiesTask;
+        TrackerStateValidator.EnsureOwned(
+            trackerId,
+            entities,
+            await resolvedTask,
+            await unresolvedTask,
+            await overridesTask);
         EffectiveDependencyState effective = _effectiveDependencyResolver.Resolve(
             entities,
             await resolvedTask,
             await unresolvedTask,
             await overridesTask);
         await _store.EnsureHistoryBaselineAsync(
+            trackerId,
             entities,
             _snapshotCalculator.Calculate(entities, effective),
             cancellationToken);

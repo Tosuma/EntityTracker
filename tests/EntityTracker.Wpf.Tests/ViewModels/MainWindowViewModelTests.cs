@@ -1175,6 +1175,7 @@ public sealed class MainWindowViewModelTests
             editorService,
             store);
         return new MainWindowViewModel(
+            TestTrackerId,
             new EntityOverviewService(
                 entityRepository,
                 dependencyRepository,
@@ -1215,6 +1216,7 @@ public sealed class MainWindowViewModelTests
     {
         ProgressChartPresentationBuilder presentationBuilder = new();
         return new ProgressDashboardViewModel(
+            TestTrackerId,
             new ProgressReportingService(
                 new EmptyProgressHistoryRepository(),
                 TimeZoneInfo.Utc),
@@ -1298,6 +1300,7 @@ public sealed class MainWindowViewModelTests
         string? groupName = null) =>
         new(
             new EntityId(new Guid(id, 0, 0, new byte[8])),
+            TestTrackerId,
             name,
             status,
             notes,
@@ -1346,10 +1349,11 @@ public sealed class MainWindowViewModelTests
             _entities = entities.ToList();
         }
 
-        public Task<TrackedEntity?> GetAsync(EntityId id, CancellationToken cancellationToken = default) =>
+        public Task<TrackedEntity?> GetAsync(TrackerId trackerId, EntityId id, CancellationToken cancellationToken = default) =>
             Task.FromResult(_entities.SingleOrDefault(entity => entity.Id == id));
 
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<TrackedEntity>>(_entities.ToArray());
 
@@ -1387,10 +1391,12 @@ public sealed class MainWindowViewModelTests
     private sealed class EmptyProgressHistoryRepository : IProgressHistoryRepository
     {
         public Task<IReadOnlyList<EntityStatusHistoryEntry>> GetStatusHistoryAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<EntityStatusHistoryEntry>>([]);
 
         public Task<IReadOnlyList<ProgressSnapshot>> GetProgressSnapshotsAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ProgressSnapshot>>([]);
     }
@@ -1401,9 +1407,11 @@ public sealed class MainWindowViewModelTests
         : IDependencyRepository
     {
         public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(dependencies);
 
         public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(unresolvedDependencies);
 
@@ -1435,6 +1443,7 @@ public sealed class MainWindowViewModelTests
         public SchemaImportSummary? LatestSummary { get; private set; }
 
         public Task ApplyAsync(
+            TrackerId trackerId,
             TrackedStateChangeSet changeSet,
             CancellationToken cancellationToken = default)
         {
@@ -1484,16 +1493,18 @@ public sealed class MainWindowViewModelTests
         }
 
         public Task EnsureHistoryBaselineAsync(
+            TrackerId trackerId,
             IEnumerable<TrackedEntity> entities,
             ProgressSnapshotState snapshot,
             CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public async Task<SchemaImportSummary> ApplyAsync(
+            TrackerId trackerId,
             TrackedStateChangeSet changeSet,
             SchemaImportCompletion completion,
             CancellationToken cancellationToken = default)
         {
-            await ApplyAsync(changeSet, cancellationToken);
+            await ApplyAsync(trackerId, changeSet, cancellationToken);
             LatestSummary = new SchemaImportSummary(
                 new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero),
                 completion);
@@ -1501,6 +1512,7 @@ public sealed class MainWindowViewModelTests
         }
 
         public Task<SchemaImportSummary?> GetLatestImportAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(LatestSummary);
     }
 }

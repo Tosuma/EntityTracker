@@ -259,7 +259,7 @@ public sealed class SchemaSynchronizationServiceTests
         int id,
         string name,
         DevelopmentStatus status = DevelopmentStatus.NotStarted) =>
-        new(new EntityId(new Guid(id, 0, 0, new byte[8])), name, status);
+        new(new EntityId(new Guid(id, 0, 0, new byte[8])), TestTrackerId, name, status);
 
     private static SchemaImportCandidate Candidate(
         IEnumerable<string> names,
@@ -291,9 +291,9 @@ public sealed class SchemaSynchronizationServiceTests
     private sealed class StubEntityRepository(IReadOnlyList<TrackedEntity> entities)
         : IEntityRepository
     {
-        public Task<TrackedEntity?> GetAsync(EntityId id, CancellationToken cancellationToken = default) =>
+        public Task<TrackedEntity?> GetAsync(TrackerId trackerId, EntityId id, CancellationToken cancellationToken = default) =>
             Task.FromResult(entities.SingleOrDefault(entity => entity.Id == id));
-        public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(CancellationToken cancellationToken = default) =>
+        public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(TrackerId trackerId, CancellationToken cancellationToken = default) =>
             Task.FromResult(entities);
     }
 
@@ -301,9 +301,9 @@ public sealed class SchemaSynchronizationServiceTests
         IReadOnlyList<PersistedDependency> dependencies,
         IReadOnlyList<PersistedUnresolvedDependency> unresolved) : IDependencyRepository
     {
-        public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(CancellationToken cancellationToken = default) =>
+        public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(TrackerId trackerId, CancellationToken cancellationToken = default) =>
             Task.FromResult(dependencies);
-        public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(CancellationToken cancellationToken = default) =>
+        public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(TrackerId trackerId, CancellationToken cancellationToken = default) =>
             Task.FromResult(unresolved);
     }
 
@@ -315,6 +315,7 @@ public sealed class SchemaSynchronizationServiceTests
         public SchemaImportSummary? LatestImport { get; set; }
 
         public Task ApplyAsync(
+            TrackerId trackerId,
             TrackedStateChangeSet changeSet,
             CancellationToken cancellationToken = default)
         {
@@ -324,11 +325,13 @@ public sealed class SchemaSynchronizationServiceTests
         }
 
         public Task EnsureHistoryBaselineAsync(
+            TrackerId trackerId,
             IEnumerable<TrackedEntity> entities,
             EntityTracker.Application.History.ProgressSnapshotState snapshot,
             CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task<SchemaImportSummary> ApplyAsync(
+            TrackerId trackerId,
             TrackedStateChangeSet changeSet,
             SchemaImportCompletion completion,
             CancellationToken cancellationToken = default)
@@ -343,6 +346,7 @@ public sealed class SchemaSynchronizationServiceTests
         }
 
         public Task<SchemaImportSummary?> GetLatestImportAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(LatestImport);
     }
 }

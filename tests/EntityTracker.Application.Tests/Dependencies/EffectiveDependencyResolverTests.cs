@@ -96,6 +96,7 @@ public sealed class EffectiveDependencyResolverTests
         TrackedEntity owner = Entity(1, "Owner");
         TrackedEntity archived = new(
             Id(2),
+            TestTrackerId,
             "Archived",
             lifecycleState: EntityLifecycleState.Archived);
 
@@ -114,7 +115,8 @@ public sealed class EffectiveDependencyResolverTests
             Assert.Single(effective.UnresolvedDependencies).Dependency.DependencySourceName);
     }
 
-    private static TrackedEntity Entity(int id, string name) => new(Id(id), name);
+    private static TrackedEntity Entity(int id, string name) =>
+        new(Id(id), TestTrackerId, name);
 
     private static EntityId Id(int id) => new(new Guid(id, 0, 0, new byte[8]));
 

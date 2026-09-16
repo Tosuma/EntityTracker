@@ -4,12 +4,16 @@ namespace EntityTracker.DemoData.Tests;
 
 public sealed class SyntheticProgressTimelineTests
 {
+    private static readonly TrackerId TrackerId =
+        new(new Guid("30000000-0000-0000-0000-000000000001"));
+
     [Fact]
     public void Create_IsDeterministicSpansRangeAndIncludesEveryStatus()
     {
         TrackedEntity[] entities = Enumerable.Range(1, 12)
             .Select(index => new TrackedEntity(
                 new EntityId(Guid.Parse($"00000000-0000-0000-0000-{index:D12}")),
+                TrackerId,
                 $"Entity {index:D2}"))
             .ToArray();
         DateOnly start = new(2026, 1, 1);
@@ -61,6 +65,7 @@ public sealed class SyntheticProgressTimelineTests
     {
         TrackedEntity archived = new(
             EntityId.New(),
+            TrackerId,
             "Archived",
             lifecycleState: EntityLifecycleState.Archived);
 
@@ -71,7 +76,7 @@ public sealed class SyntheticProgressTimelineTests
             TimeZoneInfo.Utc,
             seed: 1));
         Assert.Throws<ArgumentOutOfRangeException>(() => SyntheticProgressTimeline.Create(
-            [new TrackedEntity(EntityId.New(), "Active")],
+            [new TrackedEntity(EntityId.New(), TrackerId, "Active")],
             new DateOnly(2026, 1, 1),
             new DateOnly(2026, 1, 6),
             TimeZoneInfo.Utc,

@@ -22,6 +22,7 @@ namespace EntityTracker.Wpf.ViewModels;
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     private readonly EntityOverviewService _overviewService;
+    private readonly TrackerId _trackerId;
     private readonly SchemaSynchronizationService _synchronizationService;
     private readonly BulkStatusUpdateService _bulkStatusUpdateService;
     private readonly ICsvFilePicker _filePicker;
@@ -53,6 +54,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private DevelopmentStatus _selectedBulkStatus = DevelopmentStatus.InProgress;
 
     public MainWindowViewModel(
+        TrackerId trackerId,
         EntityOverviewService overviewService,
         SchemaSynchronizationService synchronizationService,
         BulkStatusUpdateService bulkStatusUpdateService,
@@ -76,6 +78,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ArgumentNullException.ThrowIfNull(progressDashboard);
         ArgumentNullException.ThrowIfNull(clipboard);
         ArgumentNullException.ThrowIfNull(confirmationService);
+        _trackerId = trackerId;
         _overviewService = overviewService;
         _synchronizationService = synchronizationService;
         _bulkStatusUpdateService = bulkStatusUpdateService;
@@ -96,6 +99,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Connections = connections;
         Review = new SchemaSynchronizationReviewViewModel();
         ManualCreation = new ManualEntityCreationViewModel(
+            trackerId,
             manualEntityCreationService,
             OnManualEntityCreatedAsync,
             OpenArchivedFromCreationAsync,
@@ -104,6 +108,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             effectiveLoggerFactory.CreateLogger<ManualEntityCreationViewModel>());
         ManualCreation.PropertyChanged += OnManualCreationPropertyChanged;
         Editor = new EntityDependencyEditorViewModel(
+            trackerId,
             entityDependencyEditorService,
             entityLifecycleService,
             synchronizationService,
@@ -533,6 +538,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             BulkStatusUpdateResult result = await _bulkStatusUpdateService.ApplyAsync(
+                _trackerId,
                 selectedIds,
                 targetStatus,
                 cancellationToken);
@@ -598,6 +604,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             SchemaSynchronizationResult result = await _synchronizationService.PlanAsync(
+                _trackerId,
                 filePath,
                 mode,
                 cancellationToken);
@@ -638,6 +645,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             SchemaImportSummary summary = await _synchronizationService.ApplyAsync(
+                _trackerId,
                 plan,
                 Review.SelectedFileName,
                 cancellationToken);
@@ -680,7 +688,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task LoadOverviewAsync(CancellationToken cancellationToken)
     {
-        EntityOverviewResult result = await _overviewService.GetAsync(cancellationToken);
+        EntityOverviewResult result = await _overviewService.GetAsync(_trackerId, cancellationToken);
         if (!result.IsSuccess)
         {
             SetOverviewFailure(string.Join(
@@ -702,7 +710,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         await LoadOverviewAsync(cancellationToken);
         await Progress.LoadAsync(cancellationToken);
-        LatestImportSummary = await _synchronizationService.GetLatestImportAsync(cancellationToken);
+        LatestImportSummary = await _synchronizationService.GetLatestImportAsync(
+            _trackerId,
+            cancellationToken);
     }
 
     private void SetOverviewFailure(string message)
@@ -909,6 +919,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         SchemaSynchronizationPlan revised = _synchronizationService.StageProgressDecision(
+            _trackerId,
             Review.CurrentPlan,
             row.EntityId,
             decision);

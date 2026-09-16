@@ -103,6 +103,7 @@ public sealed class EntityOverviewServiceTests
         TrackedEntity active = Entity(1, "Active");
         TrackedEntity archived = new(
             new EntityId(new Guid(2, 0, 0, new byte[8])),
+            TestTrackerId,
             "Archived",
             lifecycleState: EntityLifecycleState.Archived,
             responsibleDeveloper: "Legacy Team",
@@ -295,6 +296,7 @@ public sealed class EntityOverviewServiceTests
     {
         return new TrackedEntity(
             new EntityId(new Guid(id, 0, 0, new byte[8])),
+            TestTrackerId,
             name,
             status,
             notes,
@@ -327,11 +329,13 @@ public sealed class EntityOverviewServiceTests
         : IEntityRepository
     {
         public Task<TrackedEntity?> GetAsync(
+            TrackerId trackerId,
             EntityId id,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(entities.SingleOrDefault(entity => entity.Id == id));
 
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(entities);
 
     }
@@ -342,9 +346,11 @@ public sealed class EntityOverviewServiceTests
         : IDependencyRepository
     {
         public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(dependencies);
 
         public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(unresolvedDependencies);
 

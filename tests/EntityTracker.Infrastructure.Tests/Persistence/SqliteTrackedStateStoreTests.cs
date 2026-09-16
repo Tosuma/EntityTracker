@@ -56,7 +56,7 @@ public sealed class SqliteTrackedStateStoreTests
         SqliteDatabase database = new(file.DatabasePath);
         await database.InitializeAsync();
         SqliteTrackedStateStore store = new(database);
-        TrackedEntity existing = new(EntityId.New(), "Existing");
+        TrackedEntity existing = new(EntityId.New(), database.GetTrackerId(), "Existing");
         await store.ApplyAsync(new TrackedStateChangeSet([existing], [], [], [], [], []));
         await store.ApplyAsync(
             new TrackedStateChangeSet([], [], [], [], [], []),
@@ -81,6 +81,7 @@ public sealed class SqliteTrackedStateStoreTests
         await database.InitializeAsync();
         TrackedEntity entity = new(
             EntityId.New(),
+            database.GetTrackerId(),
             "Existing",
             DevelopmentStatus.ReworkNeeded);
         Assert.True(await new SqliteEntityRepository(database).TryAddAsync(entity));
@@ -109,7 +110,7 @@ public sealed class SqliteTrackedStateStoreTests
         SqliteDatabase database = new(file.DatabasePath, time);
         await database.InitializeAsync();
         SqliteTrackedStateStore store = new(database);
-        TrackedEntity entity = new(EntityId.New(), "New");
+        TrackedEntity entity = new(EntityId.New(), database.GetTrackerId(), "New");
 
         await store.ApplyAsync(new TrackedStateChangeSet(
             [entity], [], [], [], [], [],
@@ -118,7 +119,12 @@ public sealed class SqliteTrackedStateStoreTests
         await store.ApplyAsync(new TrackedStateChangeSet(
             [], [], [], [], [], [],
             entitiesWithProgressToUpdate:
-            [new TrackedEntity(entity.Id, entity.SourceName, entity.Status, "Notes only")],
+            [new TrackedEntity(
+                entity.Id,
+                database.GetTrackerId(),
+                entity.SourceName,
+                entity.Status,
+                "Notes only")],
             progressSnapshotAfterChanges: new ProgressSnapshotState(1, 0, 0, 0, 0, 0)));
         time.Advance(TimeSpan.FromHours(1));
         await store.ApplyAsync(new TrackedStateChangeSet(
@@ -126,6 +132,7 @@ public sealed class SqliteTrackedStateStoreTests
             entitiesWithProgressToUpdate:
             [new TrackedEntity(
                 entity.Id,
+                database.GetTrackerId(),
                 entity.SourceName,
                 DevelopmentStatus.InProgress,
                 "Notes only")],
@@ -160,11 +167,11 @@ public sealed class SqliteTrackedStateStoreTests
         SqliteTrackedStateStore store = new(database);
         TrackedEntity[] entities =
         [
-            new(EntityId.New(), "Not started"),
-            new(EntityId.New(), "In progress", DevelopmentStatus.InProgress),
-            new(EntityId.New(), "Rework", DevelopmentStatus.ReworkNeeded),
-            new(EntityId.New(), "Completed", DevelopmentStatus.DevelopmentCompleted),
-            new(EntityId.New(), "Reconciled", DevelopmentStatus.Reconciled)
+            new(EntityId.New(), database.GetTrackerId(), "Not started"),
+            new(EntityId.New(), database.GetTrackerId(), "In progress", DevelopmentStatus.InProgress),
+            new(EntityId.New(), database.GetTrackerId(), "Rework", DevelopmentStatus.ReworkNeeded),
+            new(EntityId.New(), database.GetTrackerId(), "Completed", DevelopmentStatus.DevelopmentCompleted),
+            new(EntityId.New(), database.GetTrackerId(), "Reconciled", DevelopmentStatus.Reconciled)
         ];
         foreach (TrackedEntity entity in entities)
         {
@@ -180,6 +187,7 @@ public sealed class SqliteTrackedStateStoreTests
             .Where(static entity => entity.Status != DevelopmentStatus.InProgress)
             .Select(entity => new TrackedEntity(
                 entity.Id,
+                database.GetTrackerId(),
                 entity.SourceName,
                 DevelopmentStatus.InProgress,
                 entity.Notes,
@@ -222,8 +230,18 @@ public sealed class SqliteTrackedStateStoreTests
         SqliteEntityRepository entities = new(database);
         SqliteDependencyRepository dependencies = new(database);
         SqliteTrackedStateStore store = new(database);
-        TrackedEntity target = new(EntityId.New(), "Target", DevelopmentStatus.DevelopmentCompleted, "Keep target");
-        TrackedEntity owner = new(EntityId.New(), "Owner", DevelopmentStatus.InProgress, "Keep owner");
+        TrackedEntity target = new(
+            EntityId.New(),
+            database.GetTrackerId(),
+            "Target",
+            DevelopmentStatus.DevelopmentCompleted,
+            "Keep target");
+        TrackedEntity owner = new(
+            EntityId.New(),
+            database.GetTrackerId(),
+            "Owner",
+            DevelopmentStatus.InProgress,
+            "Keep owner");
         Assert.True(await entities.TryAddAsync(target));
         Assert.True(await entities.TryAddAsync(owner));
         await dependencies.SaveAsync(new PersistedDependency(
@@ -263,13 +281,14 @@ public sealed class SqliteTrackedStateStoreTests
         await database.InitializeAsync();
         SqliteEntityRepository entities = new(database);
         SqliteTrackedStateStore store = new(database);
-        TrackedEntity existing = new(EntityId.New(), "Existing");
+        TrackedEntity existing = new(EntityId.New(), database.GetTrackerId(), "Existing");
         TrackedEntity changedProgress = new(
             existing.Id,
+            database.GetTrackerId(),
             existing.SourceName,
             DevelopmentStatus.Reconciled,
             "Must roll back");
-        TrackedEntity added = new(EntityId.New(), "Added");
+        TrackedEntity added = new(EntityId.New(), database.GetTrackerId(), "Added");
         Assert.True(await entities.TryAddAsync(existing));
         PersistedDependency invalidDependency = new(
             new DependencyEdge(added.Id, EntityId.New()),
@@ -305,6 +324,7 @@ public sealed class SqliteTrackedStateStoreTests
         SqliteEntityRepository entities = new(database);
         TrackedEntity entity = new(
             EntityId.New(),
+            database.GetTrackerId(),
             "Entity",
             DevelopmentStatus.InProgress,
             "Same notes");
@@ -334,8 +354,12 @@ public sealed class SqliteTrackedStateStoreTests
         await database.InitializeAsync();
         SqliteEntityRepository entities = new(database);
         SqliteDependencyRepository dependencies = new(database);
-        TrackedEntity owner = new(EntityId.New(), "Owner", groupName: "Core Data");
-        TrackedEntity target = new(EntityId.New(), "Target");
+        TrackedEntity owner = new(
+            EntityId.New(),
+            database.GetTrackerId(),
+            "Owner",
+            groupName: "Core Data");
+        TrackedEntity target = new(EntityId.New(), database.GetTrackerId(), "Target");
         Assert.True(await entities.TryAddAsync(owner));
         Assert.True(await entities.TryAddAsync(target));
         await dependencies.SaveAsync(new PersistedDependency(
@@ -363,6 +387,7 @@ public sealed class SqliteTrackedStateStoreTests
         SqliteTrackedStateStore store = new(database);
         TrackedEntity target = new(
             EntityId.New(),
+            database.GetTrackerId(),
             "Target",
             DevelopmentStatus.Reconciled,
             "Preserved notes",
@@ -371,7 +396,7 @@ public sealed class SqliteTrackedStateStoreTests
             requestedPriority: 3,
             responsibleDeveloper: "Legacy Team",
             groupName: "Legacy Data");
-        TrackedEntity owner = new(EntityId.New(), "Owner");
+        TrackedEntity owner = new(EntityId.New(), database.GetTrackerId(), "Owner");
         Assert.True(await entities.TryAddAsync(target));
         Assert.True(await entities.TryAddAsync(owner));
         await dependencies.SaveUnresolvedAsync(new PersistedUnresolvedDependency(
@@ -398,7 +423,9 @@ public sealed class SqliteTrackedStateStoreTests
             new EffectiveDependencyResolver(),
             new DependencyRanker());
 
-        EntityRestorationResult restoration = await lifecycle.RestoreAsync(target.Id);
+        EntityRestorationResult restoration = await lifecycle.RestoreAsync(
+            database.GetTrackerId(),
+            target.Id);
 
         Assert.True(restoration.IsSuccess);
         TrackedEntity loaded = (await entities.GetAsync(target.Id))!;
@@ -420,7 +447,7 @@ public sealed class SqliteTrackedStateStoreTests
             new DependencyRanker(),
             new EffectiveDependencyResolver(),
             new WorkflowReadinessEvaluator(),
-            new PriorityPlanningService()).GetAsync();
+            new PriorityPlanningService()).GetAsync(database.GetTrackerId());
         EntityOverviewItem ownerItem = overview.Items.Single(item => item.EntityId == owner.Id);
         Assert.Equal(DependencyResolutionState.Resolved, ownerItem.DependencyState);
         Assert.Equal(EntityWorkflowState.Ready, ownerItem.WorkflowState);
@@ -438,6 +465,7 @@ public sealed class SqliteTrackedStateStoreTests
         SqliteProgressHistoryRepository history = new(database);
         TrackedEntity entity = new(
             EntityId.New(),
+            database.GetTrackerId(),
             "Prioritized",
             DevelopmentStatus.InProgress,
             "Keep notes");
@@ -445,6 +473,7 @@ public sealed class SqliteTrackedStateStoreTests
         int historyCount = (await history.GetStatusHistoryAsync()).Count;
         TrackedEntity prioritized = new(
             entity.Id,
+            database.GetTrackerId(),
             entity.SourceName,
             entity.Status,
             entity.Notes,
@@ -469,6 +498,7 @@ public sealed class SqliteTrackedStateStoreTests
 
         TrackedEntity cleared = new(
             entity.Id,
+            database.GetTrackerId(),
             entity.SourceName,
             entity.Status,
             entity.Notes,
@@ -500,6 +530,7 @@ public sealed class SqliteTrackedStateStoreTests
         SqliteProgressHistoryRepository history = new(database);
         TrackedEntity entity = new(
             EntityId.New(),
+            database.GetTrackerId(),
             "Assigned",
             DevelopmentStatus.InProgress,
             "Keep notes",
@@ -511,6 +542,7 @@ public sealed class SqliteTrackedStateStoreTests
         time.Advance(TimeSpan.FromHours(1));
         TrackedEntity assigned = new(
             entity.Id,
+            database.GetTrackerId(),
             entity.SourceName,
             entity.Status,
             entity.Notes,
@@ -567,6 +599,7 @@ public sealed class SqliteTrackedStateStoreTests
         SqliteProgressHistoryRepository history = new(database);
         TrackedEntity entity = new(
             EntityId.New(),
+            database.GetTrackerId(),
             "Grouped",
             DevelopmentStatus.InProgress,
             "Keep notes",
@@ -624,9 +657,9 @@ public sealed class SqliteTrackedStateStoreTests
         SqliteEntityRepository entities = new(database);
         SqliteDependencyRepository dependencies = new(database);
         SqliteTrackedStateStore store = new(database);
-        TrackedEntity owner = new(EntityId.New(), "Owner");
-        TrackedEntity a = new(EntityId.New(), "A");
-        TrackedEntity b = new(EntityId.New(), "B");
+        TrackedEntity owner = new(EntityId.New(), database.GetTrackerId(), "Owner");
+        TrackedEntity a = new(EntityId.New(), database.GetTrackerId(), "A");
+        TrackedEntity b = new(EntityId.New(), database.GetTrackerId(), "B");
         Assert.True(await entities.TryAddAsync(owner));
         Assert.True(await entities.TryAddAsync(a));
         Assert.True(await entities.TryAddAsync(b));
@@ -665,8 +698,8 @@ public sealed class SqliteTrackedStateStoreTests
         SqliteEntityRepository entities = new(database);
         SqliteDependencyRepository dependencies = new(database);
         SqliteManualDependencyOverrideRepository overrides = new(database);
-        TrackedEntity owner = new(EntityId.New(), "Owner");
-        TrackedEntity target = new(EntityId.New(), "Target");
+        TrackedEntity owner = new(EntityId.New(), database.GetTrackerId(), "Owner");
+        TrackedEntity target = new(EntityId.New(), database.GetTrackerId(), "Target");
         Assert.True(await entities.TryAddAsync(owner));
         Assert.True(await entities.TryAddAsync(target));
         PersistedDependency imported = new(
@@ -704,11 +737,13 @@ public sealed class SqliteTrackedStateStoreTests
         SqliteDependencyRepository dependencies = new(database);
         TrackedEntity alpha = new(
             EntityId.New(),
+            database.GetTrackerId(),
             "Alpha",
             DevelopmentStatus.DevelopmentCompleted,
             "Alpha progress");
         TrackedEntity zulu = new(
             EntityId.New(),
+            database.GetTrackerId(),
             "Zulu",
             DevelopmentStatus.InProgress,
             "Zulu progress");
@@ -725,6 +760,7 @@ public sealed class SqliteTrackedStateStoreTests
                 ImportedDependencyKind.Mandatory)]);
         DependencyRanker ranker = new();
         SchemaSynchronizationPlan plan = new SchemaSynchronizationPlanner(ranker).CreatePlan(
+            database.GetTrackerId(),
             candidate,
             SchemaImportMode.Complete,
             await entities.GetAllAsync(),
@@ -740,7 +776,7 @@ public sealed class SqliteTrackedStateStoreTests
             ranker,
             new EffectiveDependencyResolver(),
             new WorkflowReadinessEvaluator(),
-            new PriorityPlanningService()).GetAsync();
+            new PriorityPlanningService()).GetAsync(database.GetTrackerId());
         Assert.Equal(["Zulu", "Alpha"], overview.Items.Select(static item => item.SourceName));
         TrackedEntity loadedAlpha = (await entities.GetAsync(alpha.Id))!;
         TrackedEntity loadedZulu = (await entities.GetAsync(zulu.Id))!;
@@ -767,6 +803,7 @@ public sealed class SqliteTrackedStateStoreTests
             []);
         SchemaSynchronizationPlan plan = new SchemaSynchronizationPlanner(
             new DependencyRanker()).CreatePlan(
+                database.GetTrackerId(),
                 candidate,
                 SchemaImportMode.Complete,
                 [],
@@ -786,7 +823,7 @@ public sealed class SqliteTrackedStateStoreTests
         await database.InitializeAsync();
         SqliteEntityRepository entities = new(database);
         SqliteDependencyRepository dependencies = new(database);
-        TrackedEntity owner = new(EntityId.New(), "Owner");
+        TrackedEntity owner = new(EntityId.New(), database.GetTrackerId(), "Owner");
         Assert.True(await entities.TryAddAsync(owner));
         await dependencies.SaveUnresolvedAsync(new PersistedUnresolvedDependency(
             new UnresolvedDependency(owner.Id, "Future"),
@@ -800,6 +837,7 @@ public sealed class SqliteTrackedStateStoreTests
             new SqliteTrackedStateStore(database));
 
         ManualEntityCreationResult result = await service.CreateAsync(
+            database.GetTrackerId(),
             new ManualEntityCreationRequest("future", []));
 
         Assert.True(result.IsSuccess);
@@ -829,6 +867,7 @@ public sealed class SqliteTrackedStateStoreTests
             new SqliteTrackedStateStore(database));
 
         ManualEntityCreationResult result = await service.CreateAsync(
+            database.GetTrackerId(),
             new ManualEntityCreationRequest(
                 "Owner",
                 [ManualDependencySelection.Unresolved("Missing")]));
@@ -839,7 +878,7 @@ public sealed class SqliteTrackedStateStoreTests
             ranker,
             new EffectiveDependencyResolver(),
             new WorkflowReadinessEvaluator(),
-            new PriorityPlanningService()).GetAsync();
+            new PriorityPlanningService()).GetAsync(database.GetTrackerId());
 
         Assert.True(result.IsSuccess);
         EntityOverviewItem item = Assert.Single(overview.Items);
@@ -864,9 +903,12 @@ public sealed class SqliteTrackedStateStoreTests
             new SqliteManualDependencyOverrideRepository(database),
             ranker,
             new EffectiveDependencyResolver(),
-            store).CreateAsync(new ManualEntityCreationRequest("Future", []));
+            store).CreateAsync(
+                database.GetTrackerId(),
+                new ManualEntityCreationRequest("Future", []));
         TrackedEntity withProgress = new(
             creation.CreatedEntityId!,
+            database.GetTrackerId(),
             "Future",
             DevelopmentStatus.InProgress,
             "Keep manual progress",
@@ -883,6 +925,7 @@ public sealed class SqliteTrackedStateStoreTests
             [new ImportedEntity(EntitySourceKey.From("future"), "future")],
             []);
         SchemaSynchronizationPlan plan = new SchemaSynchronizationPlanner(ranker).CreatePlan(
+            database.GetTrackerId(),
             candidate,
             SchemaImportMode.Partial,
             await entities.GetAllAsync(),

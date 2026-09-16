@@ -8,6 +8,7 @@ namespace EntityTracker.Application.Synchronization;
 public sealed class SchemaSynchronizationPlan
 {
     public SchemaSynchronizationPlan(
+        TrackerId trackerId,
         SchemaImportMode mode,
         IEnumerable<EntitySynchronizationChange> newEntities,
         IEnumerable<EntitySynchronizationChange> changedEntities,
@@ -29,6 +30,8 @@ public sealed class SchemaSynchronizationPlan
         IReadOnlyDictionary<EntitySourceKey, EntityId> plannedNewEntityIds,
         IEnumerable<SynchronizationProgressImpact>? progressImpacts = null)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
+        TrackerId = trackerId;
         Mode = mode;
         NewEntities = newEntities.ToArray();
         ChangedEntities = changedEntities.ToArray();
@@ -50,6 +53,8 @@ public sealed class SchemaSynchronizationPlan
         PlannedNewEntityIds = plannedNewEntityIds;
         ProgressImpacts = (progressImpacts ?? []).ToArray();
     }
+
+    public TrackerId TrackerId { get; }
 
     public SchemaImportMode Mode { get; }
 

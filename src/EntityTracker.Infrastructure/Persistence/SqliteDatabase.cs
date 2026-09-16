@@ -1,10 +1,11 @@
 using Microsoft.Data.Sqlite;
+using EntityTracker.Domain;
 
 namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    internal const int CurrentSchemaVersion = 11;
+    internal const int CurrentSchemaVersion = 12;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -139,6 +140,22 @@ public sealed class SqliteDatabase
         );
         """;
 
+    private const string TrackerSchemaImportSummarySql = """
+        CREATE TABLE schema_import_summary
+        (
+            tracker_id TEXT NOT NULL PRIMARY KEY,
+            applied_at_utc TEXT NOT NULL,
+            source_file_name TEXT NOT NULL CHECK (length(trim(source_file_name)) > 0),
+            import_mode TEXT NOT NULL CHECK (import_mode IN ('Complete', 'Partial')),
+            new_entity_count INTEGER NOT NULL CHECK (new_entity_count >= 0),
+            changed_entity_count INTEGER NOT NULL CHECK (changed_entity_count >= 0),
+            archived_entity_count INTEGER NOT NULL CHECK (archived_entity_count >= 0),
+            unchanged_entity_count INTEGER NOT NULL CHECK (unchanged_entity_count >= 0),
+            unresolved_entity_count INTEGER NOT NULL CHECK (unresolved_entity_count >= 0),
+            FOREIGN KEY (tracker_id) REFERENCES trackers (id) ON DELETE CASCADE
+        );
+        """;
+
     private const string RequestedPrioritySchemaSql = """
         ALTER TABLE tracked_entities
             ADD COLUMN requested_priority INTEGER NULL
@@ -153,6 +170,167 @@ public sealed class SqliteDatabase
     private const string GroupNameSchemaSql = """
         ALTER TABLE tracked_entities
             ADD COLUMN group_name TEXT NOT NULL DEFAULT '';
+        """;
+
+    private const string ProjectTrackerSchemaSql = """
+        CREATE TABLE projects
+        (
+            id TEXT NOT NULL PRIMARY KEY,
+            name_key TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+            lifecycle_state TEXT NOT NULL
+                CHECK (lifecycle_state IN ('Active', 'Recycled')),
+            created_at_utc TEXT NOT NULL,
+            updated_at_utc TEXT NOT NULL,
+            recycled_at_utc TEXT NULL,
+            CHECK ((lifecycle_state = 'Recycled') = (recycled_at_utc IS NOT NULL))
+        );
+
+        CREATE TABLE trackers
+        (
+            id TEXT NOT NULL PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            name_key TEXT NOT NULL,
+            name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+            lifecycle_state TEXT NOT NULL
+                CHECK (lifecycle_state IN ('Active', 'Recycled')),
+            created_at_utc TEXT NOT NULL,
+            updated_at_utc TEXT NOT NULL,
+            recycled_at_utc TEXT NULL,
+            copied_from_tracker_id TEXT NULL,
+            UNIQUE (project_id, name_key),
+            CHECK ((lifecycle_state = 'Recycled') = (recycled_at_utc IS NOT NULL)),
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE RESTRICT,
+            FOREIGN KEY (copied_from_tracker_id) REFERENCES trackers (id) ON DELETE SET NULL
+        );
+
+        CREATE INDEX ix_trackers_project_lifecycle
+            ON trackers (project_id, lifecycle_state, name_key);
+
+        INSERT INTO projects
+        (
+            id, name_key, name, lifecycle_state,
+            created_at_utc, updated_at_utc, recycled_at_utc
+        )
+        VALUES
+        (
+            $defaultProjectId, $defaultProjectNameKey, $defaultProjectName, 'Active',
+            $migrationTimestamp, $migrationTimestamp, NULL
+        );
+
+        INSERT INTO trackers
+        (
+            id, project_id, name_key, name, lifecycle_state,
+            created_at_utc, updated_at_utc, recycled_at_utc, copied_from_tracker_id
+        )
+        VALUES
+        (
+            $defaultTrackerId, $defaultProjectId, $defaultTrackerNameKey,
+            $defaultTrackerName, 'Active',
+            $migrationTimestamp, $migrationTimestamp, NULL, NULL
+        );
+
+        CREATE TABLE tracked_entities_v12
+        (
+            id TEXT NOT NULL PRIMARY KEY,
+            tracker_id TEXT NOT NULL,
+            source_key TEXT NOT NULL,
+            source_name TEXT NOT NULL,
+            development_status TEXT NOT NULL
+                CHECK (development_status IN
+                    ('NotStarted', 'InProgress', 'ReworkNeeded', 'DevelopmentCompleted', 'Reconciled')),
+            notes TEXT NOT NULL,
+            created_at_utc TEXT NOT NULL,
+            schema_updated_at_utc TEXT NOT NULL,
+            progress_updated_at_utc TEXT NOT NULL,
+            lifecycle_state TEXT NOT NULL
+                CHECK (lifecycle_state IN ('Active', 'Archived')),
+            provenance TEXT NOT NULL
+                CHECK (provenance IN
+                    ('Imported', 'ManualOnly', 'ManualAndImported', 'Copied', 'CopiedAndImported')),
+            requested_priority INTEGER NULL
+                CHECK (requested_priority IS NULL OR requested_priority BETWEEN 1 AND 5),
+            responsible_developer TEXT NOT NULL,
+            group_name TEXT NOT NULL,
+            UNIQUE (tracker_id, source_key),
+            FOREIGN KEY (tracker_id) REFERENCES trackers (id) ON DELETE RESTRICT
+        );
+
+        INSERT INTO tracked_entities_v12
+        (
+            id, tracker_id, source_key, source_name, development_status, notes,
+            created_at_utc, schema_updated_at_utc, progress_updated_at_utc,
+            lifecycle_state, provenance, requested_priority,
+            responsible_developer, group_name
+        )
+        SELECT id, $defaultTrackerId, source_key, source_name, development_status, notes,
+               created_at_utc, schema_updated_at_utc, progress_updated_at_utc,
+               lifecycle_state, provenance, requested_priority,
+               responsible_developer, group_name
+        FROM tracked_entities;
+
+        DROP TABLE tracked_entities;
+        ALTER TABLE tracked_entities_v12 RENAME TO tracked_entities;
+        CREATE INDEX ix_tracked_entities_tracker_lifecycle
+            ON tracked_entities (tracker_id, lifecycle_state, source_key);
+
+        CREATE TABLE progress_snapshots_v12
+        (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            tracker_id TEXT NOT NULL,
+            recorded_at_utc TEXT NOT NULL,
+            ready_count INTEGER NOT NULL CHECK (ready_count >= 0),
+            blocked_count INTEGER NOT NULL CHECK (blocked_count >= 0),
+            in_progress_count INTEGER NOT NULL CHECK (in_progress_count >= 0),
+            rework_needed_count INTEGER NOT NULL CHECK (rework_needed_count >= 0),
+            development_completed_count INTEGER NOT NULL CHECK (development_completed_count >= 0),
+            reconciled_count INTEGER NOT NULL CHECK (reconciled_count >= 0),
+            FOREIGN KEY (tracker_id) REFERENCES trackers (id) ON DELETE CASCADE
+        );
+
+        INSERT INTO progress_snapshots_v12
+        (
+            id, tracker_id, recorded_at_utc, ready_count, blocked_count,
+            in_progress_count, rework_needed_count, development_completed_count,
+            reconciled_count
+        )
+        SELECT id, $defaultTrackerId, recorded_at_utc, ready_count, blocked_count,
+               in_progress_count, rework_needed_count, development_completed_count,
+               reconciled_count
+        FROM progress_snapshots;
+
+        DROP TABLE progress_snapshots;
+        ALTER TABLE progress_snapshots_v12 RENAME TO progress_snapshots;
+        CREATE INDEX ix_progress_snapshots_tracker_time
+            ON progress_snapshots (tracker_id, recorded_at_utc, id);
+
+        CREATE TABLE schema_import_summary_v12
+        (
+            tracker_id TEXT NOT NULL PRIMARY KEY,
+            applied_at_utc TEXT NOT NULL,
+            source_file_name TEXT NOT NULL CHECK (length(trim(source_file_name)) > 0),
+            import_mode TEXT NOT NULL CHECK (import_mode IN ('Complete', 'Partial')),
+            new_entity_count INTEGER NOT NULL CHECK (new_entity_count >= 0),
+            changed_entity_count INTEGER NOT NULL CHECK (changed_entity_count >= 0),
+            archived_entity_count INTEGER NOT NULL CHECK (archived_entity_count >= 0),
+            unchanged_entity_count INTEGER NOT NULL CHECK (unchanged_entity_count >= 0),
+            unresolved_entity_count INTEGER NOT NULL CHECK (unresolved_entity_count >= 0),
+            FOREIGN KEY (tracker_id) REFERENCES trackers (id) ON DELETE CASCADE
+        );
+
+        INSERT INTO schema_import_summary_v12
+        (
+            tracker_id, applied_at_utc, source_file_name, import_mode,
+            new_entity_count, changed_entity_count, archived_entity_count,
+            unchanged_entity_count, unresolved_entity_count
+        )
+        SELECT $defaultTrackerId, applied_at_utc, source_file_name, import_mode,
+               new_entity_count, changed_entity_count, archived_entity_count,
+               unchanged_entity_count, unresolved_entity_count
+        FROM schema_import_summary;
+
+        DROP TABLE schema_import_summary;
+        ALTER TABLE schema_import_summary_v12 RENAME TO schema_import_summary;
         """;
 
     private const string UnresolvedDependencySchemaSql = """
@@ -351,8 +529,9 @@ public sealed class SqliteDatabase
             return;
         }
 
-        bool rebuildTrackedEntities = schemaVersion is > 0 and < 7;
-        if (rebuildTrackedEntities)
+        bool requiresForeignKeyRebuild = schemaVersion < 12;
+        bool rebuildWorkflowTrackedEntities = schemaVersion is > 0 and < 7;
+        if (requiresForeignKeyRebuild)
         {
             await ExecuteAsync(connection, "PRAGMA foreign_keys = OFF;", cancellationToken);
         }
@@ -361,6 +540,17 @@ public sealed class SqliteDatabase
         {
             await using SqliteTransaction transaction =
                 (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+            bool catalogExisted = await TableExistsAsync(
+                connection,
+                transaction,
+                "projects",
+                cancellationToken);
+            bool trackerOwnershipExisted = await ColumnExistsAsync(
+                connection,
+                transaction,
+                "tracked_entities",
+                "tracker_id",
+                cancellationToken);
 
             if (schemaVersion < 1)
             {
@@ -407,7 +597,7 @@ public sealed class SqliteDatabase
                     cancellationToken);
             }
 
-            if (rebuildTrackedEntities)
+            if (rebuildWorkflowTrackedEntities && !trackerOwnershipExisted)
             {
                 await ExecuteAsync(
                     connection,
@@ -434,7 +624,9 @@ public sealed class SqliteDatabase
                 await ExecuteAsync(
                     connection,
                     transaction,
-                    SchemaImportSummarySql,
+                    catalogExisted
+                        ? TrackerSchemaImportSummarySql
+                        : SchemaImportSummarySql,
                     cancellationToken);
             }
 
@@ -480,6 +672,40 @@ public sealed class SqliteDatabase
                     cancellationToken);
             }
 
+            if (schemaVersion < 12 && catalogExisted != trackerOwnershipExisted)
+            {
+                throw new InvalidDataException(
+                    "The Project/Tracker catalog migration is incomplete or inconsistent.");
+            }
+
+            if (schemaVersion < 12 && !catalogExisted)
+            {
+                using SqliteCommand command = connection.CreateCommand();
+                command.Transaction = transaction;
+                command.CommandText = ProjectTrackerSchemaSql;
+                DateTimeOffset migrationTime = TimeProvider.GetUtcNow().ToUniversalTime();
+                ProjectId defaultProjectId = ProjectId.New();
+                TrackerId defaultTrackerId = TrackerId.New();
+                command.Parameters.AddWithValue(
+                    "$defaultProjectId",
+                    SqlitePersistenceValues.Format(defaultProjectId));
+                command.Parameters.AddWithValue(
+                    "$defaultTrackerId",
+                    SqlitePersistenceValues.Format(defaultTrackerId));
+                command.Parameters.AddWithValue("$defaultProjectName", "Default project");
+                command.Parameters.AddWithValue("$defaultProjectNameKey", "DEFAULT PROJECT");
+                command.Parameters.AddWithValue("$defaultTrackerName", "Default tracker");
+                command.Parameters.AddWithValue("$defaultTrackerNameKey", "DEFAULT TRACKER");
+                command.Parameters.AddWithValue(
+                    "$migrationTimestamp",
+                    SqlitePersistenceValues.FormatTimestamp(migrationTime));
+                await command.ExecuteNonQueryAsync(cancellationToken);
+                await EnsureNoForeignKeyViolationsAsync(
+                    connection,
+                    transaction,
+                    cancellationToken);
+            }
+
             await ExecuteAsync(
                 connection,
                 transaction,
@@ -490,7 +716,7 @@ public sealed class SqliteDatabase
         }
         finally
         {
-            if (rebuildTrackedEntities)
+            if (requiresForeignKeyRebuild)
             {
                 await ExecuteAsync(connection, "PRAGMA foreign_keys = ON;", CancellationToken.None);
             }
@@ -517,6 +743,24 @@ public sealed class SqliteDatabase
         }
 
         return false;
+    }
+
+    private static async Task<bool> TableExistsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string tableName,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM sqlite_master
+            WHERE type = 'table' AND name = $tableName;
+            """;
+        command.Parameters.AddWithValue("$tableName", tableName);
+        object? value = await command.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt64(value, System.Globalization.CultureInfo.InvariantCulture) > 0;
     }
 
     internal async Task<SqliteConnection> OpenConnectionAsync(

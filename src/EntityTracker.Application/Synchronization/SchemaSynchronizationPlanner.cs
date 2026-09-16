@@ -4,6 +4,7 @@ using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Domain;
+using EntityTracker.Application.Tracking;
 
 namespace EntityTracker.Application.Synchronization;
 
@@ -28,6 +29,7 @@ public sealed class SchemaSynchronizationPlanner
     }
 
     public SchemaSynchronizationPlan CreatePlan(
+        TrackerId trackerId,
         SchemaImportCandidate importCandidate,
         SchemaImportMode mode,
         IEnumerable<TrackedEntity> persistedEntities,
@@ -35,6 +37,7 @@ public sealed class SchemaSynchronizationPlanner
         IEnumerable<PersistedUnresolvedDependency> persistedUnresolvedDependencies,
         IEnumerable<ManualDependencyOverride>? manualDependencyOverrides = null) =>
         CreatePlanCore(
+            trackerId,
             importCandidate,
             mode,
             persistedEntities,
@@ -59,6 +62,7 @@ public sealed class SchemaSynchronizationPlanner
             .Concat(desiredOwnerOverrides)
             .ToArray();
         return CreatePlanCore(
+            plan.TrackerId,
             plan.ImportCandidate,
             plan.Mode,
             plan.PersistedEntities,
@@ -100,6 +104,7 @@ public sealed class SchemaSynchronizationPlanner
         decisions[entityId] = decision;
 
         return CreatePlanCore(
+            plan.TrackerId,
             plan.ImportCandidate,
             plan.Mode,
             plan.PersistedEntities,
@@ -112,6 +117,7 @@ public sealed class SchemaSynchronizationPlanner
     }
 
     private SchemaSynchronizationPlan CreatePlanCore(
+        TrackerId trackerId,
         SchemaImportCandidate importCandidate,
         SchemaImportMode mode,
         IEnumerable<TrackedEntity> persistedEntities,
@@ -122,6 +128,7 @@ public sealed class SchemaSynchronizationPlanner
         IReadOnlyDictionary<EntitySourceKey, EntityId>? plannedNewEntityIds,
         IReadOnlyDictionary<EntityId, SynchronizationProgressDecision> progressDecisions)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(importCandidate);
         ArgumentNullException.ThrowIfNull(persistedEntities);
         ArgumentNullException.ThrowIfNull(persistedDependencies);
@@ -137,6 +144,12 @@ public sealed class SchemaSynchronizationPlanner
             persistedUnresolvedDependencies.ToArray();
         ManualDependencyOverride[] persistedOverrides = persistedManualOverrides.ToArray();
         ManualDependencyOverride[] candidateOverrides = candidateManualOverrides.ToArray();
+        TrackerStateValidator.EnsureOwned(
+            trackerId,
+            currentEntities,
+            currentResolved,
+            currentUnresolved,
+            persistedOverrides);
         Dictionary<EntityId, TrackedEntity> currentById = currentEntities.ToDictionary(
             static entity => entity.Id);
         Dictionary<EntitySourceKey, TrackedEntity> currentByKey = currentEntities.ToDictionary(
@@ -172,13 +185,17 @@ public sealed class SchemaSynchronizationPlanner
                 out TrackedEntity? existingEntity)
                 ? new TrackedEntity(
                     existingEntity.Id,
+                    trackerId,
                     importedEntity.SourceName,
                     existingEntity.Status,
                     existingEntity.Notes,
                     EntityLifecycleState.Active,
-                    existingEntity.Provenance == EntityProvenance.ManualOnly
-                        ? EntityProvenance.ManualAndImported
-                        : existingEntity.Provenance,
+                    existingEntity.Provenance switch
+                    {
+                        EntityProvenance.ManualOnly => EntityProvenance.ManualAndImported,
+                        EntityProvenance.Copied => EntityProvenance.CopiedAndImported,
+                        _ => existingEntity.Provenance
+                    },
                     existingEntity.RequestedPriority,
                     existingEntity.ResponsibleDeveloper,
                     existingEntity.GroupName)
@@ -189,6 +206,7 @@ public sealed class SchemaSynchronizationPlanner
                         out EntityId? plannedId)
                         ? plannedId
                         : EntityId.New(),
+                    trackerId,
                     importedEntity.SourceName,
                     provenance: EntityProvenance.Imported);
             candidateActiveByKey[importedEntity.SourceKey] = candidateEntity;
@@ -334,7 +352,9 @@ public sealed class SchemaSynchronizationPlanner
                 currentEntity.LifecycleState == EntityLifecycleState.Archived;
             bool wasFirstObservedInImport =
                 currentEntity.Provenance == EntityProvenance.ManualOnly &&
-                candidateEntity.Provenance == EntityProvenance.ManualAndImported;
+                candidateEntity.Provenance == EntityProvenance.ManualAndImported ||
+                currentEntity.Provenance == EntityProvenance.Copied &&
+                candidateEntity.Provenance == EntityProvenance.CopiedAndImported;
             bool isProtectedManualOnly =
                 mode == SchemaImportMode.Complete &&
                 currentEntity.Provenance == EntityProvenance.ManualOnly &&
@@ -422,6 +442,7 @@ public sealed class SchemaSynchronizationPlanner
             .Select(entity => markReworkIds.Contains(entity.Id)
                 ? new TrackedEntity(
                     entity.Id,
+                    trackerId,
                     entity.SourceName,
                     DevelopmentStatus.ReworkNeeded,
                     entity.Notes,
@@ -468,6 +489,7 @@ public sealed class SchemaSynchronizationPlanner
                 .ToArray();
 
         return new SchemaSynchronizationPlan(
+            trackerId,
             mode,
             Sort(newChanges),
             Sort(changedChanges),

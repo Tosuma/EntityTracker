@@ -7,8 +7,10 @@ using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Planning;
+using EntityTracker.Application.Projects;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
+using EntityTracker.Application.Tracking;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Infrastructure.Importing;
@@ -54,6 +56,9 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<ISchemaSynchronizationStore>(static provider =>
             provider.GetRequiredService<SqliteTrackedStateStore>());
         services.AddSingleton<IProgressHistoryRepository, SqliteProgressHistoryRepository>();
+        services.AddSingleton<IProjectRepository, SqliteProjectRepository>();
+        services.AddSingleton<ITrackerRepository, SqliteTrackerRepository>();
+        services.AddSingleton<IProjectTrackerStore, SqliteProjectTrackerStore>();
 
         services.AddSingleton<ISchemaImportParser, CsvSchemaImportParser>();
         services.AddSingleton<ISchemaImportFileParser, CsvSchemaImportFileParser>();
@@ -78,14 +83,15 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<ISchemaSynchronizationConfirmation,
             ScreenshotSynchronizationConfirmation>();
         services.AddSingleton<ICsvFilePicker>(csvFilePicker);
-        services.AddSingleton<ProgressDashboardViewModel>();
         services.AddSingleton<ConnectionsViewModel>();
         services.AddSingleton<SchemaSynchronizationService>();
         services.AddSingleton<ManualEntityCreationService>();
         services.AddSingleton<EntityDependencyEditorService>();
         services.AddSingleton<EntityLifecycleService>();
-        services.AddSingleton<MainWindowViewModel>();
-        services.AddSingleton<MainWindow>();
+        services.AddSingleton<ProjectManagementService>();
+        services.AddSingleton<TrackerManagementService>();
+        services.AddSingleton<TrackerCsvCreationService>();
+        services.AddSingleton<CompatibilityTrackerResolver>();
 
         return services.BuildServiceProvider(new ServiceProviderOptions
         {

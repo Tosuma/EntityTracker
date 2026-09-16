@@ -18,6 +18,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     private static readonly TimeSpan SearchDelay = TimeSpan.FromMilliseconds(200);
 
     private readonly ManualEntityCreationService _service;
+    private readonly TrackerId _trackerId;
     private readonly Func<Task> _onCreated;
     private readonly Func<EntityId, Task> _onRestoreArchived;
     private readonly Action _onCancelled;
@@ -50,6 +51,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     private ArchivedEntityMatch? _archivedEntityMatch;
 
     public ManualEntityCreationViewModel(
+        TrackerId trackerId,
         ManualEntityCreationService service,
         Func<Task> onCreated,
         Func<EntityId, Task> onRestoreArchived,
@@ -62,6 +64,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         ArgumentNullException.ThrowIfNull(onRestoreArchived);
         ArgumentNullException.ThrowIfNull(onCancelled);
 
+        _trackerId = trackerId;
         _service = service;
         _onCreated = onCreated;
         _onRestoreArchived = onRestoreArchived;
@@ -337,7 +340,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         try
         {
             IReadOnlyList<string> suggestions =
-                await _service.SearchGroupNamesAsync(query, cancellationToken);
+                await _service.SearchGroupNamesAsync(_trackerId, query, cancellationToken);
             if (version != _groupSearchVersion)
             {
                 return;
@@ -371,6 +374,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         try
         {
             ManualDependencySearchResult result = await _service.SearchDependenciesAsync(
+                _trackerId,
                 dependencyQuery,
                 entityName,
                 cancellationToken);
@@ -424,6 +428,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         try
         {
             result = await _service.CreateAsync(
+                _trackerId,
                 new ManualEntityCreationRequest(
                     EntityName,
                     SelectedDependencies.Select(static row => row.Selection),

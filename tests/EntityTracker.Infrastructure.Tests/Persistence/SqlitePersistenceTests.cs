@@ -18,7 +18,7 @@ namespace EntityTracker.Infrastructure.Tests.Persistence;
 public sealed class SqlitePersistenceTests
 {
     [Fact]
-    public async Task InitializeAsync_FreshDatabaseCreatesVersionElevenSchemaAndIsIdempotent()
+    public async Task InitializeAsync_FreshDatabaseCreatesVersionTwelveSchemaAndIsIdempotent()
     {
         await using TemporarySqliteFile file = new();
         SqliteDatabase database = new(file.DatabasePath);
@@ -27,7 +27,7 @@ public sealed class SqlitePersistenceTests
         await database.InitializeAsync();
 
         await using SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(11L, await ExecuteScalarInt64Async(connection, "PRAGMA user_version;"));
+        Assert.Equal(12L, await ExecuteScalarInt64Async(connection, "PRAGMA user_version;"));
 
         string[] tableNames = await ReadStringsAsync(
             connection,
@@ -61,7 +61,7 @@ public sealed class SqlitePersistenceTests
         await using (SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath))
         {
             using SqliteCommand command = connection.CreateCommand();
-            command.CommandText = "PRAGMA user_version = 12;";
+            command.CommandText = "PRAGMA user_version = 13;";
             await command.ExecuteNonQueryAsync();
         }
 
@@ -70,7 +70,7 @@ public sealed class SqlitePersistenceTests
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => database.InitializeAsync());
         Assert.Contains("newer", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("11", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("12", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -80,7 +80,11 @@ public sealed class SqlitePersistenceTests
         SqliteDatabase database = new(file.DatabasePath);
         await database.InitializeAsync();
         SqliteEntityRepository repository = new(database);
-        TrackedEntity existing = new(EntityId.New(), "Existing", notes: "Keep notes");
+        TrackedEntity existing = new(
+            EntityId.New(),
+            database.GetTrackerId(),
+            "Existing",
+            notes: "Keep notes");
         Assert.True(await repository.TryAddAsync(existing));
 
         await using (SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath))
@@ -99,7 +103,7 @@ public sealed class SqlitePersistenceTests
         Assert.Equal("Keep notes", loaded.Notes);
         Assert.Null(await new SqliteTrackedStateStore(database).GetLatestImportAsync());
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(11L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal(12L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
     }
 
     [Fact]
@@ -109,7 +113,7 @@ public sealed class SqlitePersistenceTests
         SqliteDatabase database = new(file.DatabasePath);
         await database.InitializeAsync();
         SqliteEntityRepository repository = new(database);
-        TrackedEntity existing = new(EntityId.New(), "Existing");
+        TrackedEntity existing = new(EntityId.New(), database.GetTrackerId(), "Existing");
         Assert.True(await repository.TryAddAsync(existing));
 
         await using (SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath))
@@ -127,7 +131,7 @@ public sealed class SqlitePersistenceTests
         TrackedEntity loaded = Assert.IsType<TrackedEntity>(await repository.GetAsync(existing.Id));
         Assert.Null(loaded.RequestedPriority);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(11L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal(12L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
         Assert.Contains(
             "requested_priority",
             await ReadStringsAsync(
@@ -142,7 +146,7 @@ public sealed class SqlitePersistenceTests
         SqliteDatabase database = new(file.DatabasePath);
         await database.InitializeAsync();
         SqliteEntityRepository repository = new(database);
-        TrackedEntity existing = new(EntityId.New(), "Existing");
+        TrackedEntity existing = new(EntityId.New(), database.GetTrackerId(), "Existing");
         Assert.True(await repository.TryAddAsync(existing));
 
         await using (SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath))
@@ -160,7 +164,7 @@ public sealed class SqlitePersistenceTests
         TrackedEntity loaded = Assert.IsType<TrackedEntity>(await repository.GetAsync(existing.Id));
         Assert.Equal(string.Empty, loaded.ResponsibleDeveloper);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(11L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal(12L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
         Assert.Contains(
             "responsible_developer",
             await ReadStringsAsync(
@@ -175,7 +179,7 @@ public sealed class SqlitePersistenceTests
         SqliteDatabase database = new(file.DatabasePath);
         await database.InitializeAsync();
         SqliteEntityRepository repository = new(database);
-        TrackedEntity existing = new(EntityId.New(), "Existing");
+        TrackedEntity existing = new(EntityId.New(), database.GetTrackerId(), "Existing");
         Assert.True(await repository.TryAddAsync(existing));
 
         await using (SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath))
@@ -193,7 +197,7 @@ public sealed class SqlitePersistenceTests
         TrackedEntity loaded = Assert.IsType<TrackedEntity>(await repository.GetAsync(existing.Id));
         Assert.Equal(string.Empty, loaded.GroupName);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(11L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal(12L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
         Assert.Contains(
             "group_name",
             await ReadStringsAsync(
@@ -216,6 +220,7 @@ public sealed class SqlitePersistenceTests
         SqliteEntityRepository repository = new(database);
         TrackedEntity entity = new(
             EntityId.New(),
+            database.GetTrackerId(),
             "Prioritized",
             requestedPriority: requestedPriority);
 
@@ -239,6 +244,7 @@ public sealed class SqlitePersistenceTests
         SqliteEntityRepository repository = new(database);
         TrackedEntity entity = new(
             EntityId.New(),
+            database.GetTrackerId(),
             "Assigned",
             responsibleDeveloper: responsibleDeveloper);
 
@@ -260,6 +266,7 @@ public sealed class SqlitePersistenceTests
         SqliteEntityRepository repository = new(database);
         TrackedEntity entity = new(
             EntityId.New(),
+            database.GetTrackerId(),
             "Grouped",
             groupName: groupName);
 
@@ -278,7 +285,7 @@ public sealed class SqlitePersistenceTests
         SqliteDatabase database = new(file.DatabasePath);
         await database.InitializeAsync();
         SqliteEntityRepository repository = new(database);
-        TrackedEntity entity = new(EntityId.New(), "Prioritized");
+        TrackedEntity entity = new(EntityId.New(), database.GetTrackerId(), "Prioritized");
         Assert.True(await repository.TryAddAsync(entity));
         await using SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath);
         using SqliteCommand command = connection.CreateCommand();
@@ -351,7 +358,7 @@ public sealed class SqlitePersistenceTests
         await using SqliteConnection migratedConnection =
             await OpenConnectionAsync(file.DatabasePath);
         Assert.Equal(
-            11L,
+            12L,
             await ExecuteScalarInt64Async(migratedConnection, "PRAGMA user_version;"));
         Assert.All(
             await entityRepository.GetAllAsync(),
@@ -403,7 +410,7 @@ public sealed class SqlitePersistenceTests
         Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
         Assert.Equal("Keep notes", loaded.Notes);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(11L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal(12L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
         Assert.Equal(EntityProvenance.Imported, loaded.Provenance);
     }
 
@@ -448,7 +455,7 @@ public sealed class SqlitePersistenceTests
         Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
         Assert.Equal("Keep notes", loaded.Notes);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(11L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal(12L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
     }
 
     [Fact]
@@ -461,10 +468,14 @@ public sealed class SqlitePersistenceTests
         SqliteDependencyRepository dependencies = new(database);
         TrackedEntity manualOwner = new(
             EntityId.New(),
+            database.GetTrackerId(),
             "ManualOwner",
             provenance: EntityProvenance.ManualOnly);
-        TrackedEntity importedOwner = new(EntityId.New(), "ImportedOwner");
-        TrackedEntity target = new(EntityId.New(), "Target");
+        TrackedEntity importedOwner = new(
+            EntityId.New(),
+            database.GetTrackerId(),
+            "ImportedOwner");
+        TrackedEntity target = new(EntityId.New(), database.GetTrackerId(), "Target");
         Assert.True(await entities.TryAddAsync(manualOwner));
         Assert.True(await entities.TryAddAsync(importedOwner));
         Assert.True(await entities.TryAddAsync(target));
@@ -559,6 +570,7 @@ public sealed class SqlitePersistenceTests
 
         TrackedEntity rework = new(
             id,
+            database.GetTrackerId(),
             loaded.SourceName,
             DevelopmentStatus.ReworkNeeded,
             loaded.Notes);
@@ -573,7 +585,7 @@ public sealed class SqlitePersistenceTests
         Assert.Equal(StatusHistoryEntryKind.Baseline, history[0].Kind);
         Assert.Equal(StatusHistoryEntryKind.Transition, history[1].Kind);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(11L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal(12L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
     }
 
     [Fact]
@@ -585,6 +597,7 @@ public sealed class SqlitePersistenceTests
         SqliteEntityRepository firstRepository = new(firstDatabase);
         TrackedEntity entity = new(
             EntityId.New(),
+            firstDatabase.GetTrackerId(),
             "sales.Customer",
             DevelopmentStatus.InProgress,
             "Manual implementation notes",
@@ -614,6 +627,7 @@ public sealed class SqlitePersistenceTests
         SqliteEntityRepository repository = new(database);
         TrackedEntity reconciled = new(
             EntityId.New(),
+            database.GetTrackerId(),
             "VerifiedEntity",
             DevelopmentStatus.Reconciled,
             "Verified against the implementation");
@@ -637,6 +651,7 @@ public sealed class SqlitePersistenceTests
         EntityId id = EntityId.New();
         TrackedEntity original = new(
             id,
+            database.GetTrackerId(),
             "OriginalName",
             DevelopmentStatus.DevelopmentCompleted,
             "Keep this manual progress",
@@ -647,6 +662,7 @@ public sealed class SqlitePersistenceTests
         timeProvider.Advance(TimeSpan.FromHours(1));
         TrackedEntity importedMetadata = new(
             id,
+            database.GetTrackerId(),
             "RenamedEntity",
             provenance: EntityProvenance.ManualAndImported);
         Assert.True(await repository.UpdateSchemaMetadataAsync(importedMetadata));
@@ -666,6 +682,7 @@ public sealed class SqlitePersistenceTests
         timeProvider.Advance(TimeSpan.FromHours(1));
         TrackedEntity changedProgress = new(
             id,
+            database.GetTrackerId(),
             "This name must be ignored",
             DevelopmentStatus.InProgress,
             "Updated manual notes");
@@ -699,7 +716,7 @@ public sealed class SqlitePersistenceTests
         SqliteDatabase database = new(file.DatabasePath);
         await database.InitializeAsync();
         SqliteEntityRepository repository = new(database);
-        TrackedEntity missing = new(EntityId.New(), "Missing");
+        TrackedEntity missing = new(EntityId.New(), database.GetTrackerId(), "Missing");
 
         Assert.False(await repository.UpdateSchemaMetadataAsync(missing));
     }
@@ -713,9 +730,9 @@ public sealed class SqlitePersistenceTests
         SqliteEntityRepository repository = new(database);
 
         Assert.True(await repository.TryAddAsync(
-            new TrackedEntity(EntityId.New(), "Customer")));
+            new TrackedEntity(EntityId.New(), database.GetTrackerId(), "Customer")));
         Assert.False(await repository.TryAddAsync(
-            new TrackedEntity(EntityId.New(), " customer ")));
+            new TrackedEntity(EntityId.New(), database.GetTrackerId(), " customer ")));
         Assert.Equal(1L, await CountRowsAsync(file.DatabasePath, "tracked_entities"));
     }
 
@@ -729,8 +746,8 @@ public sealed class SqlitePersistenceTests
         await database.InitializeAsync();
         SqliteEntityRepository entityRepository = new(database);
         SqliteDependencyRepository dependencyRepository = new(database);
-        TrackedEntity dependent = new(EntityId.New(), "Dependent");
-        TrackedEntity dependency = new(EntityId.New(), "Dependency");
+        TrackedEntity dependent = new(EntityId.New(), database.GetTrackerId(), "Dependent");
+        TrackedEntity dependency = new(EntityId.New(), database.GetTrackerId(), "Dependency");
         Assert.True(await entityRepository.TryAddAsync(dependent));
         Assert.True(await entityRepository.TryAddAsync(dependency));
         DependencyEdge edge = new(dependent.Id, dependency.Id);
@@ -782,7 +799,7 @@ public sealed class SqlitePersistenceTests
         await database.InitializeAsync();
         SqliteEntityRepository entityRepository = new(database);
         SqliteDependencyRepository dependencyRepository = new(database);
-        TrackedEntity dependent = new(EntityId.New(), "Dependent");
+        TrackedEntity dependent = new(EntityId.New(), database.GetTrackerId(), "Dependent");
         Assert.True(await entityRepository.TryAddAsync(dependent));
 
         await dependencyRepository.SaveUnresolvedAsync(
@@ -837,7 +854,10 @@ public sealed class SqlitePersistenceTests
         await database.InitializeAsync();
         SqliteEntityRepository entityRepository = new(database);
         SqliteDependencyRepository dependencyRepository = new(database);
-        TrackedEntity entity = new(EntityId.New(), "WarehouseAssignment");
+        TrackedEntity entity = new(
+            EntityId.New(),
+            database.GetTrackerId(),
+            "WarehouseAssignment");
         Assert.True(await entityRepository.TryAddAsync(entity));
         await dependencyRepository.SaveUnresolvedAsync(
             new PersistedUnresolvedDependency(
@@ -855,7 +875,8 @@ public sealed class SqlitePersistenceTests
             new WorkflowReadinessEvaluator(),
             new PriorityPlanningService());
 
-        EntityOverviewResult result = await overviewService.GetAsync();
+        EntityOverviewResult result = await overviewService.GetAsync(
+            restartedDatabase.GetTrackerId());
 
         Assert.True(result.IsSuccess);
         EntityOverviewItem item = Assert.Single(result.Items);
@@ -875,11 +896,13 @@ public sealed class SqlitePersistenceTests
         SqliteDependencyRepository dependencyRepository = new(database);
         TrackedEntity alpha = new(
             EntityId.New(),
+            database.GetTrackerId(),
             "Alpha",
             DevelopmentStatus.DevelopmentCompleted,
             "Alpha progress");
         TrackedEntity zulu = new(
             EntityId.New(),
+            database.GetTrackerId(),
             "Zulu",
             DevelopmentStatus.InProgress,
             "Zulu progress");

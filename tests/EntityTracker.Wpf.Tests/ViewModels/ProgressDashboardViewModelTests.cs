@@ -197,6 +197,7 @@ public sealed class ProgressDashboardViewModelTests
     {
         ProgressChartPresentationBuilder presentationBuilder = new();
         return new ProgressDashboardViewModel(
+            TestTrackerId,
             reportingService,
             presentationBuilder,
             new ProgressChartPngExporter(presentationBuilder),
@@ -246,10 +247,12 @@ public sealed class ProgressDashboardViewModelTests
         : IProgressHistoryRepository
     {
         public Task<IReadOnlyList<EntityStatusHistoryEntry>> GetStatusHistoryAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<EntityStatusHistoryEntry>>([]);
 
         public Task<IReadOnlyList<ProgressSnapshot>> GetProgressSnapshotsAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(snapshots);
     }
 

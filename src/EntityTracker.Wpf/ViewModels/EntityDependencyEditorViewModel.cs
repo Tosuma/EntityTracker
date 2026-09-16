@@ -19,6 +19,7 @@ namespace EntityTracker.Wpf.ViewModels;
 public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 {
     private readonly EntityDependencyEditorService _editorService;
+    private readonly TrackerId _trackerId;
     private readonly EntityLifecycleService _lifecycleService;
     private readonly SchemaSynchronizationService _synchronizationService;
     private readonly Func<Task> _onPersisted;
@@ -69,6 +70,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private bool _hasPendingPriorityChange;
 
     public EntityDependencyEditorViewModel(
+        TrackerId trackerId,
         EntityDependencyEditorService editorService,
         EntityLifecycleService lifecycleService,
         SchemaSynchronizationService synchronizationService,
@@ -87,6 +89,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         ArgumentNullException.ThrowIfNull(onRestored);
         ArgumentNullException.ThrowIfNull(onReviewStaged);
 
+        _trackerId = trackerId;
         _editorService = editorService;
         _lifecycleService = lifecycleService;
         _synchronizationService = synchronizationService;
@@ -598,7 +601,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         IsBusy = true;
         try
         {
-            LoadPlan(await _editorService.LoadAsync(entityId, cancellationToken), true);
+            LoadPlan(await _editorService.LoadAsync(_trackerId, entityId, cancellationToken), true);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -636,7 +639,11 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 .Where(item => item.DependentEntityId == ownerId)
                 .ToArray();
             LoadPlan(
-                _synchronizationService.PreviewDependencyEdit(plan, ownerId, desired),
+                _synchronizationService.PreviewDependencyEdit(
+                    _trackerId,
+                    plan,
+                    ownerId,
+                    desired),
                 true);
         }
         catch (Exception exception)
@@ -665,7 +672,10 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         try
         {
             ArchivedEntityDetails details =
-                await _editorService.LoadArchivedDetailsAsync(entityId, cancellationToken);
+                await _editorService.LoadArchivedDetailsAsync(
+                    _trackerId,
+                    entityId,
+                    cancellationToken);
             ArchivedDetails = details;
             _selectedStatus = details.Entity.Status;
             OnPropertyChanged(nameof(SelectedStatus));
@@ -722,10 +732,12 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         {
             ManualDependencySearchResult result = IsReviewMode
                 ? _editorService.SearchDependencies(
+                    _trackerId,
                     CurrentEditPlan.Entity.Id,
                     DependencyQuery,
                     _reviewPlan!.CandidateEntities)
                 : await _editorService.SearchDependenciesAsync(
+                    _trackerId,
                     CurrentEditPlan.Entity.Id,
                     DependencyQuery);
             if (searchVersion != _searchVersion)
@@ -766,7 +778,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         try
         {
             IReadOnlyList<string> suggestions =
-                await _editorService.SearchGroupNamesAsync(EditedGroupName);
+                await _editorService.SearchGroupNamesAsync(_trackerId, EditedGroupName);
             if (searchVersion != _groupSearchVersion)
             {
                 return;
@@ -854,10 +866,14 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         {
             EntityDependencyEditPlan plan = IsReviewMode
                 ? _synchronizationService.PreviewDependencyEdit(
+                    _trackerId,
                     _reviewPlan!,
                     CurrentEditPlan.Entity.Id,
                     desired)
-                : await _editorService.PreviewAsync(CurrentEditPlan.Entity.Id, desired);
+                : await _editorService.PreviewAsync(
+                    _trackerId,
+                    CurrentEditPlan.Entity.Id,
+                    desired);
             LoadPlan(plan, false);
             ClearSearch();
         }
@@ -881,12 +897,16 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             if (IsReviewMode)
             {
                 SchemaSynchronizationPlan revised =
-                    _synchronizationService.StageDependencyEdit(_reviewPlan!, CurrentEditPlan);
+                    _synchronizationService.StageDependencyEdit(
+                        _trackerId,
+                        _reviewPlan!,
+                        CurrentEditPlan);
                 _onReviewStaged(revised);
             }
             else
             {
                 await _editorService.SaveAsync(
+                    _trackerId,
                     CurrentEditPlan,
                     SelectedStatus,
                     EditedNotes,
@@ -943,7 +963,9 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         ArchiveErrorMessage = null;
         try
         {
-            bool archived = await _lifecycleService.TryArchiveAsync(CurrentEditPlan.Entity.Id);
+            bool archived = await _lifecycleService.TryArchiveAsync(
+                _trackerId,
+                CurrentEditPlan.Entity.Id);
             if (!archived)
             {
                 ArchiveErrorMessage =
@@ -977,7 +999,9 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         try
         {
             EntityRestorationResult result =
-                await _lifecycleService.RestoreAsync(ArchivedDetails.Entity.Id);
+                await _lifecycleService.RestoreAsync(
+                    _trackerId,
+                    ArchivedDetails.Entity.Id);
             if (!result.IsSuccess)
             {
                 Errors = result.Errors;
@@ -1038,6 +1062,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
 
         PriorityPlanningPreview preview = _editorService.CreatePriorityPreview(
+            _trackerId,
             CurrentEditPlan,
             SelectedRequestedPriority);
         PriorityPlanningItem target = preview.Entities.Single(static item => item.IsTarget);

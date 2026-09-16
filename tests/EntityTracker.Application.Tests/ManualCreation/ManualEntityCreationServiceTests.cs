@@ -395,6 +395,7 @@ public sealed class ManualEntityCreationServiceTests
         string? groupName = null) =>
         new(
             new EntityId(new Guid(id, 0, 0, new byte[8])),
+            TestTrackerId,
             name,
             lifecycleState: lifecycle,
             groupName: groupName);
@@ -403,11 +404,13 @@ public sealed class ManualEntityCreationServiceTests
         : IEntityRepository
     {
         public Task<TrackedEntity?> GetAsync(
+            TrackerId trackerId,
             EntityId id,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(entities.SingleOrDefault(entity => entity.Id == id));
 
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(entities);
 
     }
@@ -417,9 +420,11 @@ public sealed class ManualEntityCreationServiceTests
         IReadOnlyList<PersistedUnresolvedDependency> unresolved) : IDependencyRepository
     {
         public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(dependencies);
 
         public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(unresolved);
 
     }
@@ -429,6 +434,7 @@ public sealed class ManualEntityCreationServiceTests
         public TrackedStateChangeSet? LastChangeSet { get; private set; }
 
         public Task ApplyAsync(
+            TrackerId trackerId,
             TrackedStateChangeSet changeSet,
             CancellationToken cancellationToken = default)
         {
@@ -437,6 +443,7 @@ public sealed class ManualEntityCreationServiceTests
         }
 
         public Task EnsureHistoryBaselineAsync(
+            TrackerId trackerId,
             IEnumerable<TrackedEntity> entities,
             EntityTracker.Application.History.ProgressSnapshotState snapshot,
             CancellationToken cancellationToken = default) => Task.CompletedTask;

@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 
+using EntityTracker.Domain;
 using EntityTracker.Reporting;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
@@ -19,6 +20,7 @@ namespace EntityTracker.Wpf.ViewModels;
 public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
 {
     private readonly ProgressReportingService _reportingService;
+    private readonly TrackerId _trackerId;
     private readonly ProgressChartPresentationBuilder _presentationBuilder;
     private readonly ProgressChartPngExporter _pngExporter;
     private readonly IProgressChartFilePicker _filePicker;
@@ -49,6 +51,7 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
     private bool _hasHistoricalData;
 
     public ProgressDashboardViewModel(
+        TrackerId trackerId,
         ProgressReportingService reportingService,
         ProgressChartPresentationBuilder presentationBuilder,
         ProgressChartPngExporter pngExporter,
@@ -61,6 +64,7 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
         ArgumentNullException.ThrowIfNull(pngExporter);
         ArgumentNullException.ThrowIfNull(filePicker);
         ArgumentNullException.ThrowIfNull(clipboard);
+        _trackerId = trackerId;
         _reportingService = reportingService;
         _presentationBuilder = presentationBuilder;
         _pngExporter = pngExporter;
@@ -286,7 +290,10 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
         ExportMessage = null;
         try
         {
-            ProgressDashboardReport report = await _reportingService.GetReportAsync(CreateRange(), cancellationToken);
+            ProgressDashboardReport report = await _reportingService.GetReportAsync(
+                _trackerId,
+                CreateRange(),
+                cancellationToken);
             ApplyReport(report);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

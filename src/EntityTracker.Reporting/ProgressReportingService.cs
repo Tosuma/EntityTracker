@@ -1,5 +1,6 @@
 using EntityTracker.Application.History;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Domain;
 
 namespace EntityTracker.Reporting;
 
@@ -25,12 +26,14 @@ public sealed class ProgressReportingService
     }
 
     public async Task<ProgressDashboardReport> GetReportAsync(
+        TrackerId trackerId,
         ProgressDateRange range,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(range);
         IReadOnlyList<ProgressSnapshot> snapshots =
-            await _repository.GetProgressSnapshotsAsync(cancellationToken);
+            await _repository.GetProgressSnapshotsAsync(trackerId, cancellationToken);
         DateOnly today = DateOnly.FromDateTime(
             TimeZoneInfo.ConvertTime(_timeProvider.GetUtcNow(), _timeZone).DateTime);
         return _builder.Build(snapshots, range, today, _timeZone);

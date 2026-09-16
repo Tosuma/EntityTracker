@@ -4,6 +4,7 @@ using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Planning;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Workflow;
+using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
 
 namespace EntityTracker.Application.Overview;
@@ -45,20 +46,28 @@ public sealed class EntityOverviewService
     }
 
     public async Task<EntityOverviewResult> GetAsync(
+        TrackerId trackerId,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         Task<IReadOnlyList<TrackedEntity>> entityTask =
-            _entityRepository.GetAllAsync(cancellationToken);
+            _entityRepository.GetAllAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<PersistedDependency>> dependencyTask =
-            _dependencyRepository.GetAllAsync(cancellationToken);
+            _dependencyRepository.GetAllAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedDependencyTask =
-            _dependencyRepository.GetAllUnresolvedAsync(cancellationToken);
+            _dependencyRepository.GetAllUnresolvedAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<ManualDependencyOverride>> overrideTask =
-            _overrideRepository.GetAllAsync(cancellationToken);
+            _overrideRepository.GetAllAsync(trackerId, cancellationToken);
 
         await Task.WhenAll(entityTask, dependencyTask, unresolvedDependencyTask, overrideTask);
 
         IReadOnlyList<TrackedEntity> allEntities = await entityTask;
+        TrackerStateValidator.EnsureOwned(
+            trackerId,
+            allEntities,
+            await dependencyTask,
+            await unresolvedDependencyTask,
+            await overrideTask);
         IReadOnlyList<TrackedEntity> entities = allEntities
             .Where(static entity => entity.LifecycleState == EntityLifecycleState.Active)
             .ToArray();

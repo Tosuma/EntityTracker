@@ -6,6 +6,7 @@ using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Planning;
 using EntityTracker.Application.Ranking;
+using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
 
 namespace EntityTracker.Application.ManualOverrides;
@@ -53,52 +54,63 @@ public sealed class EntityDependencyEditorService
     }
 
     public async Task<IReadOnlyList<TrackedEntity>> GetEditableEntitiesAsync(
+        TrackerId trackerId,
         CancellationToken cancellationToken = default) =>
-        (await _entityRepository.GetAllAsync(cancellationToken))
+        (await _entityRepository.GetAllAsync(trackerId, cancellationToken))
         .Where(static entity => entity.LifecycleState == EntityLifecycleState.Active)
         .OrderBy(static entity => entity.SourceName, StringComparer.OrdinalIgnoreCase)
         .ThenBy(static entity => entity.SourceName, StringComparer.Ordinal)
         .ToArray();
 
     public async Task<ManualDependencySearchResult> SearchDependenciesAsync(
+        TrackerId trackerId,
         EntityId ownerId,
         string query,
         CancellationToken cancellationToken = default)
     {
-        Snapshot snapshot = await LoadSnapshotAsync(cancellationToken);
-        return SearchDependencies(ownerId, query, snapshot.Entities);
+        Snapshot snapshot = await LoadSnapshotAsync(trackerId, cancellationToken);
+        return SearchDependencies(trackerId, ownerId, query, snapshot.Entities);
     }
 
     public async Task<IReadOnlyList<string>> SearchGroupNamesAsync(
+        TrackerId trackerId,
         string query,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
 
         IReadOnlyList<TrackedEntity> entities =
-            await _entityRepository.GetAllAsync(cancellationToken);
+            await _entityRepository.GetAllAsync(trackerId, cancellationToken);
         return GroupNameSuggestionSearch.Search(query, entities);
     }
 
     public ManualDependencySearchResult SearchDependencies(
+        TrackerId trackerId,
         EntityId ownerId,
         string query,
         IEnumerable<TrackedEntity> entities)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         TrackedEntity[] entityArray = entities.ToArray();
+        if (entityArray.Any(entity => entity.TrackerId != trackerId))
+        {
+            throw new InvalidDataException("Dependency search received entities from another tracker.");
+        }
         TrackedEntity owner = RequireActiveOwner(ownerId, entityArray);
         return DependencySearch.Search(query, owner.SourceName, entityArray);
     }
 
     public async Task<EntityDependencyEditPlan> LoadAsync(
+        TrackerId trackerId,
         EntityId ownerId,
         CancellationToken cancellationToken = default)
     {
-        Snapshot snapshot = await LoadSnapshotAsync(cancellationToken);
+        Snapshot snapshot = await LoadSnapshotAsync(trackerId, cancellationToken);
         ManualDependencyOverride[] ownerOverrides = snapshot.Overrides
             .Where(item => item.DependentEntityId == ownerId)
             .ToArray();
         return CreatePlan(
+            trackerId,
             ownerId,
             snapshot.Entities,
             snapshot.ResolvedDependencies,
@@ -108,12 +120,14 @@ public sealed class EntityDependencyEditorService
     }
 
     public async Task<EntityDependencyEditPlan> PreviewAsync(
+        TrackerId trackerId,
         EntityId ownerId,
         IEnumerable<ManualDependencyOverride> desiredOwnerOverrides,
         CancellationToken cancellationToken = default)
     {
-        Snapshot snapshot = await LoadSnapshotAsync(cancellationToken);
+        Snapshot snapshot = await LoadSnapshotAsync(trackerId, cancellationToken);
         return CreatePlan(
+            trackerId,
             ownerId,
             snapshot.Entities,
             snapshot.ResolvedDependencies,
@@ -123,10 +137,11 @@ public sealed class EntityDependencyEditorService
     }
 
     public async Task<ArchivedEntityDetails> LoadArchivedDetailsAsync(
+        TrackerId trackerId,
         EntityId ownerId,
         CancellationToken cancellationToken = default)
     {
-        Snapshot snapshot = await LoadSnapshotAsync(cancellationToken);
+        Snapshot snapshot = await LoadSnapshotAsync(trackerId, cancellationToken);
         TrackedEntity owner = snapshot.Entities.SingleOrDefault(entity => entity.Id == ownerId)
             ?? throw new InvalidOperationException("The selected entity no longer exists.");
         if (owner.LifecycleState != EntityLifecycleState.Archived)
@@ -158,6 +173,7 @@ public sealed class EntityDependencyEditorService
     }
 
     public EntityDependencyEditPlan CreatePlan(
+        TrackerId trackerId,
         EntityId ownerId,
         IEnumerable<TrackedEntity> entities,
         IEnumerable<PersistedDependency> importedResolvedDependencies,
@@ -165,12 +181,19 @@ public sealed class EntityDependencyEditorService
         IEnumerable<ManualDependencyOverride> allOverrides,
         IEnumerable<ManualDependencyOverride> desiredOwnerOverrides)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(ownerId);
         TrackedEntity[] entityArray = entities.ToArray();
         PersistedDependency[] resolvedArray = importedResolvedDependencies.ToArray();
         PersistedUnresolvedDependency[] unresolvedArray = importedUnresolvedDependencies.ToArray();
         ManualDependencyOverride[] currentOverrides = allOverrides.ToArray();
         ManualDependencyOverride[] desiredOverrides = desiredOwnerOverrides.ToArray();
+        TrackerStateValidator.EnsureOwned(
+            trackerId,
+            entityArray,
+            resolvedArray,
+            unresolvedArray,
+            currentOverrides);
         TrackedEntity owner = RequireActiveOwner(ownerId, entityArray);
         Dictionary<EntityId, TrackedEntity> entitiesById = entityArray.ToDictionary(
             static entity => entity.Id);
@@ -267,6 +290,7 @@ public sealed class EntityDependencyEditorService
     }
 
     public async Task SaveAsync(
+        TrackerId trackerId,
         EntityDependencyEditPlan plan,
         DevelopmentStatus status,
         string notes,
@@ -275,6 +299,7 @@ public sealed class EntityDependencyEditorService
         string? groupName,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(notes);
         if (!plan.IsValid)
@@ -282,9 +307,14 @@ public sealed class EntityDependencyEditorService
             throw new InvalidOperationException(
                 "Dependency edits cannot be saved while validation errors remain.");
         }
+        if (plan.Entity.TrackerId != trackerId)
+        {
+            throw new InvalidOperationException("The edit plan belongs to another tracker.");
+        }
 
         TrackedEntity updatedEntity = new(
             plan.Entity.Id,
+            trackerId,
             plan.Entity.SourceName,
             status,
             notes,
@@ -317,6 +347,7 @@ public sealed class EntityDependencyEditorService
             .ToArray();
 
         await _store.ApplyAsync(
+            trackerId,
             new TrackedStateChangeSet(
                 [],
                 [],
@@ -337,10 +368,16 @@ public sealed class EntityDependencyEditorService
     }
 
     public PriorityPlanningPreview CreatePriorityPreview(
+        TrackerId trackerId,
         EntityDependencyEditPlan plan,
         int? candidateRequestedPriority)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(plan);
+        if (plan.Entity.TrackerId != trackerId)
+        {
+            throw new InvalidOperationException("The edit plan belongs to another tracker.");
+        }
         if (!plan.IsValid)
         {
             throw new InvalidOperationException(
@@ -354,17 +391,26 @@ public sealed class EntityDependencyEditorService
             plan.EffectiveState);
     }
 
-    private async Task<Snapshot> LoadSnapshotAsync(CancellationToken cancellationToken)
+    private async Task<Snapshot> LoadSnapshotAsync(
+        TrackerId trackerId,
+        CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         Task<IReadOnlyList<TrackedEntity>> entitiesTask =
-            _entityRepository.GetAllAsync(cancellationToken);
+            _entityRepository.GetAllAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<PersistedDependency>> resolvedTask =
-            _dependencyRepository.GetAllAsync(cancellationToken);
+            _dependencyRepository.GetAllAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
-            _dependencyRepository.GetAllUnresolvedAsync(cancellationToken);
+            _dependencyRepository.GetAllUnresolvedAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
-            _overrideRepository.GetAllAsync(cancellationToken);
+            _overrideRepository.GetAllAsync(trackerId, cancellationToken);
         await Task.WhenAll(entitiesTask, resolvedTask, unresolvedTask, overridesTask);
+        TrackerStateValidator.EnsureOwned(
+            trackerId,
+            await entitiesTask,
+            await resolvedTask,
+            await unresolvedTask,
+            await overridesTask);
         return new Snapshot(
             await entitiesTask,
             await resolvedTask,

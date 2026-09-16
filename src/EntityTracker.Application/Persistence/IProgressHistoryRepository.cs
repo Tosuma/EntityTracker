@@ -6,8 +6,10 @@ namespace EntityTracker.Application.Persistence;
 public interface IProgressHistoryRepository
 {
     Task<IReadOnlyList<EntityStatusHistoryEntry>> GetStatusHistoryAsync(
+        TrackerId trackerId,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<ProgressSnapshot>> GetProgressSnapshotsAsync(
+        TrackerId trackerId,
         CancellationToken cancellationToken = default);
 }

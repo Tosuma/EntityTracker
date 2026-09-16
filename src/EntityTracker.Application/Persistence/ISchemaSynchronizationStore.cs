@@ -1,4 +1,5 @@
 using EntityTracker.Application.Synchronization;
+using EntityTracker.Domain;
 
 namespace EntityTracker.Application.Persistence;
 
@@ -8,10 +9,12 @@ namespace EntityTracker.Application.Persistence;
 public interface ISchemaSynchronizationStore
 {
     Task<SchemaImportSummary> ApplyAsync(
+        TrackerId trackerId,
         TrackedStateChangeSet changeSet,
         SchemaImportCompletion completion,
         CancellationToken cancellationToken = default);
 
     Task<SchemaImportSummary?> GetLatestImportAsync(
+        TrackerId trackerId,
         CancellationToken cancellationToken = default);
 }

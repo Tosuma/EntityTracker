@@ -85,6 +85,7 @@ public sealed class PriorityPlanningServiceTests
 
         TrackedEntity archivedOwner = new(
             owner.Id,
+            TestTrackerId,
             owner.SourceName,
             lifecycleState: EntityLifecycleState.Archived,
             requestedPriority: owner.RequestedPriority);
@@ -98,6 +99,7 @@ public sealed class PriorityPlanningServiceTests
 
         TrackedEntity restoredOwner = new(
             owner.Id,
+            TestTrackerId,
             owner.SourceName,
             requestedPriority: archivedOwner.RequestedPriority);
         TrackedEntity[] restoredState = [importedTarget, manualTarget, restoredOwner];
@@ -178,7 +180,7 @@ public sealed class PriorityPlanningServiceTests
             ImportedDependencyKind.Mandatory);
 
     private static TrackedEntity Entity(int id, string name, int? priority = null) =>
-        new(Id(id), name, requestedPriority: priority);
+        new(Id(id), TestTrackerId, name, requestedPriority: priority);
 
     private static EntityId Id(int id) => new(new Guid(id, 0, 0, new byte[8]));
 }

@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using EntityTracker.Application.History;
 using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
 using EntityTracker.Wpf;
 using EntityTracker.Wpf.ViewModels;
@@ -37,11 +38,21 @@ internal sealed class ReadmeScreenshotGenerator
             new FixedTimeProvider(ScreenshotDataSeeder.FixedNow));
         await provider.GetRequiredService<IPersistenceInitializer>()
             .InitializeAsync(cancellationToken);
+        Tracker tracker = await provider
+            .GetRequiredService<CompatibilityTrackerResolver>()
+            .ResolveAsync(cancellationToken);
         await provider.GetRequiredService<ProgressHistoryInitializer>()
-            .EnsureInitializedAsync(cancellationToken);
+            .EnsureInitializedAsync(tracker.Id, cancellationToken);
 
-        MainWindow window = provider.GetRequiredService<MainWindow>();
-        MainWindowViewModel viewModel = provider.GetRequiredService<MainWindowViewModel>();
+        ProgressDashboardViewModel progressDashboard =
+            ActivatorUtilities.CreateInstance<ProgressDashboardViewModel>(
+                provider,
+                tracker.Id);
+        MainWindowViewModel viewModel = ActivatorUtilities.CreateInstance<MainWindowViewModel>(
+            provider,
+            tracker.Id,
+            progressDashboard);
+        MainWindow window = new(viewModel);
         ConfigureWindow(window);
         System.Windows.Application.Current.MainWindow = window;
         window.Show();
@@ -202,10 +213,17 @@ internal sealed class ReadmeScreenshotGenerator
         WpfScreenshotRenderer renderer,
         CancellationToken cancellationToken)
     {
+        Tracker tracker = await provider
+            .GetRequiredService<CompatibilityTrackerResolver>()
+            .ResolveAsync(cancellationToken);
         IEntityRepository entityRepository = provider.GetRequiredService<IEntityRepository>();
         IDependencyRepository dependencyRepository = provider.GetRequiredService<IDependencyRepository>();
-        IReadOnlyList<TrackedEntity> entities = await entityRepository.GetAllAsync(cancellationToken);
-        HashSet<EntityId> dependencyTargets = (await dependencyRepository.GetAllAsync(cancellationToken))
+        IReadOnlyList<TrackedEntity> entities = await entityRepository.GetAllAsync(
+            tracker.Id,
+            cancellationToken);
+        HashSet<EntityId> dependencyTargets = (await dependencyRepository.GetAllAsync(
+                tracker.Id,
+                cancellationToken))
             .Select(static dependency => dependency.Edge.DependencyEntityId)
             .ToHashSet();
         TrackedEntity leaf = entities
@@ -215,7 +233,7 @@ internal sealed class ReadmeScreenshotGenerator
             .First();
 
         bool archived = await provider.GetRequiredService<EntityLifecycleService>()
-            .TryArchiveAsync(leaf.Id, cancellationToken);
+            .TryArchiveAsync(tracker.Id, leaf.Id, cancellationToken);
         if (!archived)
         {
             throw new InvalidDataException("The deterministic archived entity could not be created.");
