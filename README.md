@@ -11,7 +11,7 @@ dependency-safe order. It imports PostgreSQL schema relationships, keeps progres
 stable entities, highlights blockers, and turns implementation history into useful progress
 reports.
 
-![EntityTracker overview showing ranked entities, work status, blockers, and progress](images/overview.png)
+![EntityTracker overview showing ranked entities, work status, blockers, and progress](images/light/overview.png)
 
 ## Why EntityTracker?
 
@@ -57,29 +57,33 @@ EntityTracker keeps those concerns separate:
 
 <!-- Generated with scripts/Generate-ReadmeScreenshots.ps1. See docs/DEVELOPMENT.md. -->
 
+The deterministic screenshot suite contains matching [`images/light`](images/light) and
+[`images/dark`](images/dark) captures for every state shown below. The README uses the light set
+for consistency.
+
 <table>
   <tr>
     <td width="50%">
       <strong>Review schema synchronization</strong><br />
       Compare a complete or partial PostgreSQL snapshot before changing tracked state.<br /><br />
-      <img src="images/schema-synchronization.png" alt="Schema Synchronization page with Complete and Partial import choices" />
+      <img src="images/light/schema-synchronization.png" alt="Schema Synchronization page with Complete and Partial import choices" />
     </td>
     <td width="50%">
       <strong>Track progress over time</strong><br />
       See manager summaries, status distribution, implementation history, and blockers.<br /><br />
-      <img src="images/progress.png" alt="Progress page with status pie chart and implementation history charts" />
+      <img src="images/light/progress.png" alt="Progress page with status pie chart and implementation history charts" />
     </td>
   </tr>
   <tr>
     <td width="50%">
       <strong>Create tracked entities</strong><br />
       Add manual entities with resolved or deliberately unresolved dependencies.<br /><br />
-      <img src="images/add-entity.png" alt="Add Entity page for creating a tracked entity and selecting dependencies" />
+      <img src="images/light/add-entity.png" alt="Add Entity page for creating a tracked entity and selecting dependencies" />
     </td>
     <td width="50%">
       <strong>Edit without losing imported facts</strong><br />
       Update work status, notes, lifecycle, and manual dependency corrections.<br /><br />
-      <img src="images/edit-entity.png" alt="Edit Entity modal with status, notes, dependencies, and archive controls" />
+      <img src="images/light/edit-entity.png" alt="Edit Entity modal with status, notes, dependencies, and archive controls" />
     </td>
   </tr>
 </table>
@@ -92,13 +96,13 @@ different columns work together. Status summary cards remain useful one-click sh
 entity names and, when needed, dependency names from the overview; the same search opens with
 <kbd>Ctrl</kbd>+<kbd>F</kbd>.
 
-![EntityTracker overview filtered by the dependency name unit](images/overview-search.png)
+![EntityTracker overview filtered by the dependency name unit](images/light/overview-search.png)
 
 Archived entities have their own tab and independent search, filters, and Status sort. They remain
 available as read-only records with their progress, notes, and dependencies intact and can be
 deliberately restored from the archived view.
 
-![Archived EntityTracker entity with its preserved details and Restore entity action](images/archived-entity.png)
+![Archived EntityTracker entity with its preserved details and Restore entity action](images/light/archived-entity.png)
 
 ### Understand dependency blockers
 
@@ -107,7 +111,7 @@ directly in the overview. Selecting the warning icon explains the graph state an
 unresolved names affecting that entity, while the Missing Dependencies column shows outstanding
 implementation work.
 
-![EntityTracker overview showing dependency warning icons, missing dependencies, and details for an upstream-unresolved entity](images/overview-missing-entities-as-dependencies.png)
+![EntityTracker overview showing dependency warning icons, missing dependencies, and details for an upstream-unresolved entity](images/light/overview-missing-entities-as-dependencies.png)
 
 ### Import review details
 
@@ -115,20 +119,20 @@ Complete imports make potentially removed entities explicit before anything is s
 missing from the new snapshot are proposed for soft-archiving, while their progress and notes are
 preserved.
 
-![Schema synchronization review showing entities missing from a Complete snapshot and proposed for soft-archiving](images/schema-synchronization-import-csv-with-missing-entities.png)
+![Schema synchronization review showing entities missing from a Complete snapshot and proposed for soft-archiving](images/light/schema-synchronization-import-csv-with-missing-entities.png)
 
 Unknown dependency references do not make an otherwise valid import fail. EntityTracker retains
 them as unresolved dependencies, shows exactly which entities are affected, and keeps them blocked
 until matching entities become available.
 
-![Schema synchronization review showing retained unresolved dependencies and their missing entity names](images/schema-synchronization-unresolved-dependencies.png)
+![Schema synchronization review showing retained unresolved dependencies and their missing entity names](images/light/schema-synchronization-unresolved-dependencies.png)
 
 ### Extract a PostgreSQL schema
 
 The built-in helper provides the versioned PostgreSQL query used to produce a compatible schema
 CSV without requiring a live database connection inside EntityTracker.
 
-![EntityTracker PostgreSQL schema extraction query helper](images/sql-query.png)
+![EntityTracker PostgreSQL schema extraction query helper](images/light/sql-query.png)
 
 ## Project status
 

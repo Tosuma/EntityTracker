@@ -31,7 +31,8 @@ internal static class ScreenshotServiceProviderFactory
     internal static ServiceProvider Create(
         ApplicationDataPaths paths,
         ScreenshotCsvFilePicker csvFilePicker,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ApplicationAppearance appearance = ApplicationAppearance.Light)
     {
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(csvFilePicker);
@@ -40,7 +41,15 @@ internal static class ScreenshotServiceProviderFactory
         ServiceCollection services = new();
         services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
         services.AddSingleton(paths);
-        services.AddSingleton(new EntityTrackerSettingsStore(paths.SettingsPath));
+        EntityTrackerSettingsStore settingsStore = new(paths.SettingsPath);
+        ApplicationThemeService themeService = new();
+        themeService.Apply(appearance);
+        services.AddSingleton(settingsStore);
+        services.AddSingleton<IApplicationThemeService>(themeService);
+        services.AddSingleton(provider => new AppearanceViewModel(
+            settingsStore,
+            themeService,
+            appearance));
         services.AddSingleton(new SqliteDatabase(paths.DatabasePath, timeProvider));
         services.AddSingleton(provider => new SqliteBackupService(
             provider.GetRequiredService<SqliteDatabase>(),

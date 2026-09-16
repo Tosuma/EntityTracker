@@ -24,6 +24,7 @@ using EntityTracker.Wpf.ViewModels;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Win32;
 
 namespace EntityTracker.Wpf;
 
@@ -31,6 +32,7 @@ public partial class App : System.Windows.Application
 {
     private ServiceProvider? _serviceProvider;
     private ILogger<App>? _logger;
+    private IApplicationThemeService? _themeService;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -45,6 +47,10 @@ public partial class App : System.Windows.Application
         try
         {
             SettingsLoadResult settings = await settingsStore.LoadAsync();
+            ApplicationThemeService themeService = new();
+            themeService.Apply(settings.Settings.Appearance);
+            _themeService = themeService;
+            SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
             bootstrapLogger.LogInformation(
                 "Starting EntityTracker with {StorageProvider} storage.",
                 settings.EffectiveStorage);
@@ -59,6 +65,12 @@ public partial class App : System.Windows.Application
             services.AddSingleton(dataPathResolver);
             services.AddSingleton(dataPaths);
             services.AddSingleton(settingsStore);
+            services.AddSingleton<IApplicationThemeService>(themeService);
+            services.AddSingleton(provider => new AppearanceViewModel(
+                settingsStore,
+                themeService,
+                settings.Settings.Appearance,
+                provider.GetRequiredService<ILogger<AppearanceViewModel>>()));
             ConfigurePersistence(services, settings.EffectiveStorage, dataPaths);
             services.AddSingleton<ISchemaImportParser, CsvSchemaImportParser>();
             services.AddSingleton<ISchemaImportFileParser, CsvSchemaImportFileParser>();
@@ -211,8 +223,22 @@ public partial class App : System.Windows.Application
         Shutdown(-1);
     }
 
+    private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+    {
+        if (_themeService?.CurrentAppearance != ApplicationAppearance.System ||
+            Dispatcher.HasShutdownStarted)
+        {
+            return;
+        }
+
+        _ = Dispatcher.BeginInvoke(
+            () => _themeService.Apply(ApplicationAppearance.System),
+            System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
+        SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         DispatcherUnhandledException -= OnDispatcherUnhandledException;
         _logger?.LogInformation("EntityTracker stopped.");
         _serviceProvider?.Dispose();

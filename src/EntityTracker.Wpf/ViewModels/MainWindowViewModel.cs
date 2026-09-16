@@ -66,6 +66,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         IClipboardService clipboard,
         ISchemaSynchronizationConfirmation confirmationService,
         ConnectionsViewModel? connections = null,
+        AppearanceViewModel? appearance = null,
         ILoggerFactory? loggerFactory = null)
     {
         ArgumentNullException.ThrowIfNull(overviewService);
@@ -97,6 +98,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             () => SelectedTab = MainWindowTab.SchemaSynchronization,
             effectiveLoggerFactory.CreateLogger<SqlQueryHelpViewModel>());
         Connections = connections;
+        Appearance = appearance;
         Review = new SchemaSynchronizationReviewViewModel();
         ManualCreation = new ManualEntityCreationViewModel(
             trackerId,
@@ -178,6 +180,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public SqlQueryHelpViewModel Help { get; }
 
     public ConnectionsViewModel? Connections { get; }
+
+    public AppearanceViewModel? Appearance { get; }
 
     public EntityTableViewModel ActiveTable { get; }
 

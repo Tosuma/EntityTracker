@@ -23,4 +23,14 @@ public partial class FilterableColumnHeader : UserControl
         get => (OverviewColumnFilterState?)GetValue(FilterProperty);
         set => SetValue(FilterProperty, value);
     }
+
+    private void OnPopupOpened(object? sender, EventArgs e) =>
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            FilterSearchTextBox.Focus();
+            FilterSearchTextBox.SelectAll();
+        }));
+
+    private void OnPopupClosed(object? sender, EventArgs e) =>
+        Dispatcher.BeginInvoke(new Action(() => MenuButton.Focus()));
 }

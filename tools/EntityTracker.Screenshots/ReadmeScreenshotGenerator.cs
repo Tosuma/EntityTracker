@@ -8,7 +8,9 @@ using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
+using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Wpf;
+using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels;
 
 using Microsoft.Extensions.DependencyInjection;
@@ -20,10 +22,15 @@ internal sealed class ReadmeScreenshotGenerator
     internal async Task GenerateAsync(
         string repositoryRoot,
         ScreenshotWorkspace workspace,
+        ApplicationAppearance appearance,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
         ArgumentNullException.ThrowIfNull(workspace);
+        if (appearance is not (ApplicationAppearance.Light or ApplicationAppearance.Dark))
+        {
+            throw new ArgumentOutOfRangeException(nameof(appearance));
+        }
 
         CultureInfo english = CultureInfo.GetCultureInfo("en-US");
         CultureInfo.CurrentCulture = english;
@@ -35,7 +42,8 @@ internal sealed class ReadmeScreenshotGenerator
         await using ServiceProvider provider = ScreenshotServiceProviderFactory.Create(
             workspace.Paths,
             picker,
-            new FixedTimeProvider(ScreenshotDataSeeder.FixedNow));
+            new FixedTimeProvider(ScreenshotDataSeeder.FixedNow),
+            appearance);
         await provider.GetRequiredService<IPersistenceInitializer>()
             .InitializeAsync(cancellationToken);
         Tracker tracker = await provider
@@ -65,6 +73,7 @@ internal sealed class ReadmeScreenshotGenerator
                       viewModel.Progress.HasReport,
                 "The screenshot window did not finish loading.",
                 cancellationToken);
+            await ExerciseLiveThemeSwitchAsync(provider, appearance, cancellationToken);
 
             WpfScreenshotRenderer renderer = new(window, workspace.StagingDirectory);
             await CaptureOverviewAsync(viewModel, renderer, cancellationToken);
@@ -105,6 +114,9 @@ internal sealed class ReadmeScreenshotGenerator
 
             viewModel.SelectedTab = MainWindowTab.SqlHelp;
             await renderer.CaptureAsync("sql-query.png");
+
+            viewModel.SelectedTab = MainWindowTab.Connections;
+            await renderer.CaptureAsync("connections.png");
         }
         finally
         {
@@ -257,6 +269,24 @@ internal sealed class ReadmeScreenshotGenerator
         window.Top = -32000;
         window.Width = 1920;
         window.Height = 1080;
+    }
+
+    private static async Task ExerciseLiveThemeSwitchAsync(
+        IServiceProvider provider,
+        ApplicationAppearance appearance,
+        CancellationToken cancellationToken)
+    {
+        IApplicationThemeService themeService =
+            provider.GetRequiredService<IApplicationThemeService>();
+        ApplicationAppearance opposite = appearance == ApplicationAppearance.Dark
+            ? ApplicationAppearance.Light
+            : ApplicationAppearance.Dark;
+
+        themeService.Apply(opposite);
+        await Dispatcher.Yield(DispatcherPriority.Render);
+        themeService.Apply(appearance);
+        await Dispatcher.Yield(DispatcherPriority.Render);
+        await Task.Delay(100, cancellationToken);
     }
 
     private static async Task WaitUntilAsync(

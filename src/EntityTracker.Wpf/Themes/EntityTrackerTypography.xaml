@@ -1,0 +1,24 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:system="clr-namespace:System;assembly=System.Runtime">
+    <system:Double x:Key="Spacing.4">4</system:Double>
+    <system:Double x:Key="Spacing.8">8</system:Double>
+    <system:Double x:Key="Spacing.12">12</system:Double>
+    <system:Double x:Key="Spacing.16">16</system:Double>
+    <system:Double x:Key="Spacing.24">24</system:Double>
+    <CornerRadius x:Key="CornerRadius.Card">6</CornerRadius>
+    <system:Double x:Key="Height.Control">32</system:Double>
+    <system:Double x:Key="Height.Row">36</system:Double>
+    <system:Double x:Key="Height.Header">40</system:Double>
+
+    <Style x:Key="PageHeadingTextStyle" TargetType="{x:Type TextBlock}">
+        <Setter Property="FontSize" Value="20" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+    </Style>
+    <Style x:Key="SectionHeadingTextStyle" TargetType="{x:Type TextBlock}">
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+    </Style>
+</ResourceDictionary>

@@ -26,14 +26,14 @@
                            Text="▼">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="{StaticResource Brush.Text.Secondary}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Secondary}" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding Filter.IsApplied, ElementName=Root}" Value="True">
-                                    <Setter Property="Foreground" Value="{StaticResource Brush.Brand.Green100}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Brand.Green100}" />
                                     <Setter Property="FontWeight" Value="Bold" />
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding Filter.IsSorted, ElementName=Root}" Value="True">
-                                    <Setter Property="Foreground" Value="{StaticResource Brush.Brand.Green100}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Brand.Green100}" />
                                     <Setter Property="FontWeight" Value="Bold" />
                                 </DataTrigger>
                             </Style.Triggers>
@@ -44,19 +44,19 @@
                            Margin="5,0,0,0"
                            VerticalAlignment="Center"
                            FontWeight="Bold"
-                           Foreground="{StaticResource Brush.Brand.Green100}"
+                           Foreground="{DynamicResource Brush.Brand.Green100}"
                            Text="↑"
                            Visibility="{Binding Filter.IsSortAscending, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 <TextBlock DockPanel.Dock="Right"
                            Margin="5,0,0,0"
                            VerticalAlignment="Center"
                            FontWeight="Bold"
-                           Foreground="{StaticResource Brush.Brand.Green100}"
+                           Foreground="{DynamicResource Brush.Brand.Green100}"
                            Text="↓"
                            Visibility="{Binding Filter.IsSortDescending, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 <TextBlock VerticalAlignment="Center"
                            FontWeight="SemiBold"
-                           Foreground="{StaticResource Brush.Text.Primary}"
+                           Foreground="{DynamicResource Brush.Text.Primary}"
                            Text="{Binding Filter.Title, ElementName=Root}" />
             </DockPanel>
         </Button>
@@ -66,13 +66,15 @@
                StaysOpen="False"
                AllowsTransparency="True"
                DataContext="{Binding Filter, ElementName=Root}"
-               IsOpen="{Binding IsOpen, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+               IsOpen="{Binding IsOpen, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+               Opened="OnPopupOpened"
+               Closed="OnPopupClosed">
             <Border Width="270"
                     MaxHeight="430"
                     Margin="0,3,0,0"
                     Padding="12"
-                    Background="{StaticResource Brush.Surface.Card}"
-                    BorderBrush="{StaticResource Brush.Border.Strong}"
+                    Background="{DynamicResource Brush.Surface.Card}"
+                    BorderBrush="{DynamicResource Brush.Border.Strong}"
                     BorderThickness="1"
                     CornerRadius="4">
                 <Border.Effect>
@@ -90,7 +92,7 @@
                     <StackPanel Visibility="{Binding CanSort, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <TextBlock Margin="0,0,0,6"
                                    FontWeight="SemiBold"
-                                   Foreground="{StaticResource Brush.Text.Primary}"
+                                   Foreground="{DynamicResource Brush.Text.Primary}"
                                    Text="Sort" />
                         <WrapPanel Margin="0,0,0,10">
                             <Button Margin="0,0,6,6"
@@ -108,7 +110,8 @@
                         </WrapPanel>
                     </StackPanel>
 
-                    <TextBox Grid.Row="1"
+                    <TextBox x:Name="FilterSearchTextBox"
+                             Grid.Row="1"
                              Margin="0,0,0,8"
                              Padding="7,5"
                              AutomationProperties.Name="Search filter values"
@@ -135,7 +138,7 @@
                             </ItemsControl>
                             <TextBlock Margin="0,8"
                                        HorizontalAlignment="Center"
-                                       Foreground="{StaticResource Brush.Text.Secondary}"
+                                       Foreground="{DynamicResource Brush.Text.Secondary}"
                                        Text="No available values">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">

@@ -1,7 +1,15 @@
+using EntityTracker.Infrastructure.Configuration;
+
 namespace EntityTracker.Screenshots;
 
 internal static class ScreenshotManifest
 {
+    internal static IReadOnlyList<ApplicationAppearance> Appearances { get; } =
+    [
+        ApplicationAppearance.Dark,
+        ApplicationAppearance.Light
+    ];
+
     internal static IReadOnlyList<string> FileNames { get; } =
     [
         "overview.png",
@@ -14,6 +22,15 @@ internal static class ScreenshotManifest
         "edit-entity.png",
         "progress.png",
         "archived-entity.png",
-        "sql-query.png"
+        "sql-query.png",
+        "connections.png"
     ];
+
+    internal static string GetAppearanceDirectoryName(ApplicationAppearance appearance) =>
+        appearance switch
+        {
+            ApplicationAppearance.Dark => "dark",
+            ApplicationAppearance.Light => "light",
+            _ => throw new ArgumentOutOfRangeException(nameof(appearance))
+        };
 }

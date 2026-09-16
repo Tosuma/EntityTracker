@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -14,6 +15,7 @@ public partial class MainWindow : Window
     private const double ScrollPixelsPerNotch = 10;
 
     private readonly MainWindowViewModel _viewModel;
+    private IInputElement? _focusBeforeEditor;
 
     public MainWindow(MainWindowViewModel viewModel)
     {
@@ -23,6 +25,7 @@ public partial class MainWindow : Window
         _viewModel = viewModel;
         DataContext = viewModel;
         _viewModel.OverviewSelectionClearRequested += OnOverviewSelectionClearRequested;
+        _viewModel.Editor.PropertyChanged += OnEditorPropertyChanged;
         Loaded += OnLoaded;
         Closed += OnClosed;
     }
@@ -37,6 +40,35 @@ public partial class MainWindow : Window
     {
         Closed -= OnClosed;
         _viewModel.OverviewSelectionClearRequested -= OnOverviewSelectionClearRequested;
+        _viewModel.Editor.PropertyChanged -= OnEditorPropertyChanged;
+    }
+
+    private void OnEditorPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(EntityDependencyEditorViewModel.IsOpen))
+        {
+            return;
+        }
+
+        if (_viewModel.Editor.IsOpen)
+        {
+            _focusBeforeEditor = Keyboard.FocusedElement;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (!EditorStatusComboBox.Focus())
+                {
+                    EditorSurface.Focus();
+                }
+            }));
+            return;
+        }
+
+        IInputElement? restoreTarget = _focusBeforeEditor;
+        _focusBeforeEditor = null;
+        if (restoreTarget is not null)
+        {
+            Dispatcher.BeginInvoke(new Action(() => Keyboard.Focus(restoreTarget)));
+        }
     }
 
     private void OnOverviewSelectionChanged(object sender, SelectionChangedEventArgs e) =>

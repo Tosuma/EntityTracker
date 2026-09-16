@@ -1,9 +1,12 @@
+using EntityTracker.Infrastructure.Configuration;
+
 namespace EntityTracker.Screenshots;
 
 internal sealed record ScreenshotCommandLine(
     string? OutputDirectory,
     bool UpdateReadme,
-    bool ShowHelp)
+    bool ShowHelp,
+    ApplicationAppearance? Appearance)
 {
     internal static ScreenshotCommandLine Parse(IReadOnlyList<string> arguments)
     {
@@ -12,6 +15,7 @@ internal sealed record ScreenshotCommandLine(
         string? outputDirectory = null;
         bool updateReadme = false;
         bool showHelp = false;
+        ApplicationAppearance? appearance = null;
         for (int index = 0; index < arguments.Count; index++)
         {
             switch (arguments[index])
@@ -27,6 +31,17 @@ internal sealed record ScreenshotCommandLine(
                 case "--update-readme":
                     updateReadme = true;
                     break;
+                case "--appearance":
+                    if (++index >= arguments.Count ||
+                        !Enum.TryParse(arguments[index], ignoreCase: true, out ApplicationAppearance parsed) ||
+                        parsed is not (ApplicationAppearance.Light or ApplicationAppearance.Dark))
+                    {
+                        throw new ArgumentException(
+                            "The --appearance argument must be either light or dark.");
+                    }
+
+                    appearance = parsed;
+                    break;
                 case "--help":
                 case "-h":
                     showHelp = true;
@@ -41,6 +56,6 @@ internal sealed record ScreenshotCommandLine(
             throw new ArgumentException("Use either --output or --update-readme, not both.");
         }
 
-        return new ScreenshotCommandLine(outputDirectory, updateReadme, showHelp);
+        return new ScreenshotCommandLine(outputDirectory, updateReadme, showHelp, appearance);
     }
 }

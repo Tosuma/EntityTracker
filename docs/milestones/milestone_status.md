@@ -28,10 +28,13 @@
 - PF-04 — Entity groups with suggestions
 - PF-05 — Column filtering and status sorting
 
-## Planned UI/UX modernization milestones
+## Completed UI/UX modernization milestones
 
 - UX-01 — Projects and Trackers Foundation
 - UX-02 — Fluent Foundation and Theme
+
+## Planned UI/UX modernization milestones
+
 - UX-03 — Application Shell and Portfolio
 - UX-04 — Overview and Entity Details
 - UX-05 — Schema Synchronization Experience

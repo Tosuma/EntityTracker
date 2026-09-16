@@ -126,8 +126,9 @@ repeatable. From the repository root, generate a preview set with:
 .\scripts\Generate-ReadmeScreenshots.ps1
 ```
 
-The default preview is written to `artifacts\readme-screenshots`, which is ignored by Git. You can
-choose another preview directory without replacing unrelated files:
+The default preview is written to `artifacts\readme-screenshots`, with complete `dark` and `light`
+subdirectories, and is ignored by Git. You can choose another preview directory without replacing
+unrelated files:
 
 ```powershell
 .\scripts\Generate-ReadmeScreenshots.ps1 -Output C:\path\to\preview
@@ -139,13 +140,16 @@ Inspect every preview image before replacing the tracked README set. Once approv
 .\scripts\Generate-ReadmeScreenshots.ps1 -UpdateReadme
 ```
 
-The update command renders and validates the complete manifest before replacing the files owned
-by the generator under `images`; unrelated image assets are preserved. The utility imports the
-repository's 125-entity synthetic schema, creates fixed status and 90-day history data, and
-captures the overview, synchronization, entity, progress, archive, search, and SQL-query states.
-It uses a new SQLite database below the operating-system temporary directory for each run and
-never reads or changes `%LOCALAPPDATA%\EntityTracker`. The application may remain open while the
-screenshots are generated.
+The update command renders and validates the complete manifest in Dark mode and then Light mode
+before replacing the files owned by the generator under `images\dark` and `images\light`;
+unrelated image assets are preserved. Each open screenshot window switches to the opposite
+appearance and back before capture, exercising live Light-to-Dark and Dark-to-Light transitions.
+The utility imports the repository's 125-entity synthetic schema,
+creates fixed status and 90-day history data, and captures the overview, synchronization, entity,
+progress, archive, search, SQL-query, and Connections/Appearance states. It uses a new SQLite database below the
+operating-system temporary directory for each appearance and never reads or changes
+`%LOCALAPPDATA%\EntityTracker`. The application may remain open while the screenshots are
+generated.
 
 CI restores, builds, and tests the screenshot project as part of the solution, but deliberately
 does not render or replace README images. Rendering remains an explicit local review workflow.
@@ -189,7 +193,7 @@ The active files and directories are:
 
 ```text
 entity-tracker.db    SQLite database
-settings.json        optional non-secret connection setup
+settings.json        optional local appearance and non-secret connection setup
 backups\             automatic SQLite backups
 logs\                daily application logs
 ```
