@@ -70,6 +70,11 @@
 
         <Style TargetType="DataGrid" BasedOn="{StaticResource EntityTrackerDataGridStyle}">
             <EventSetter Event="PreviewMouseWheel" Handler="OnDataGridPreviewMouseWheel" />
+            <EventSetter Event="PreviewMouseMove" Handler="OnDataGridPreviewMouseMove" />
+            <EventSetter Event="PreviewMouseLeftButtonDown" Handler="OnDataGridPreviewMouseLeftButtonDown" />
+            <EventSetter Event="PreviewMouseLeftButtonUp" Handler="OnDataGridPreviewMouseLeftButtonUp" />
+            <EventSetter Event="MouseLeave" Handler="OnDataGridMouseLeave" />
+            <EventSetter Event="LostMouseCapture" Handler="OnDataGridLostMouseCapture" />
         </Style>
         <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
             <Setter Property="Height" Value="0" />
@@ -496,6 +501,7 @@
                     <Grid Grid.Row="5">
                         <DataGrid x:Name="OverviewDataGrid"
                                   ItemsSource="{Binding OverviewItems}"
+                                  MouseDoubleClick="OnEntityDataGridMouseDoubleClick"
                                   SelectionChanged="OnOverviewSelectionChanged"
                                   SelectionMode="Extended"
                                   SelectionUnit="FullRow">
@@ -780,6 +786,7 @@
                     <Grid Grid.Row="3">
                         <DataGrid x:Name="ArchivedDataGrid"
                                   ItemsSource="{Binding ArchivedItems}"
+                                  MouseDoubleClick="OnEntityDataGridMouseDoubleClick"
                                   SelectionMode="Single"
                                   SelectionUnit="FullRow">
                             <DataGrid.Columns>

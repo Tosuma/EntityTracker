@@ -73,7 +73,7 @@
                     MaxHeight="430"
                     Margin="0,3,0,0"
                     Padding="12"
-                    Background="{DynamicResource Brush.Surface.Card}"
+                    Background="{DynamicResource Brush.Surface.Page}"
                     BorderBrush="{DynamicResource Brush.Border.Strong}"
                     BorderThickness="1"
                     CornerRadius="4">

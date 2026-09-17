@@ -11,7 +11,15 @@
             </StackPanel>
         </DockPanel>
         <TextBlock Grid.Row="1" Margin="0,12" Text="{Binding Help.CopyMessage}" />
-        <TextBox Grid.Row="2" FontFamily="Consolas" IsReadOnly="True" Text="{Binding Help.Query, Mode=OneWay}" TextWrapping="NoWrap"
-                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
+        <TextBox x:Name="QueryTextBox"
+                 Grid.Row="2"
+                 FontFamily="Consolas"
+                 IsReadOnly="True"
+                 PreviewMouseWheel="OnQueryPreviewMouseWheel"
+                 ScrollViewer.CanContentScroll="False"
+                 Text="{Binding Help.Query, Mode=OneWay}"
+                 TextWrapping="NoWrap"
+                 VerticalScrollBarVisibility="Auto"
+                 HorizontalScrollBarVisibility="Auto" />
     </Grid>
 </UserControl>

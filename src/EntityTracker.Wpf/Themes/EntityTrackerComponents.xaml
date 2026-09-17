@@ -105,6 +105,8 @@
         <Setter Property="BorderThickness" Value="0,0,1,1" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Padding" Value="8,6" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
     <Style x:Key="EntityTrackerDataGridCellStyle"
            TargetType="{x:Type DataGridCell}"

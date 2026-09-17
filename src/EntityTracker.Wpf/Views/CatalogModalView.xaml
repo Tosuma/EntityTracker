@@ -1,7 +1,7 @@
 <UserControl x:Class="EntityTracker.Wpf.Views.CatalogModalView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <Grid Background="{DynamicResource Brush.Overlay}"
+    <Grid Background="{DynamicResource Brush.Overlay.Strong}"
           FocusManager.IsFocusScope="True"
           FocusManager.FocusedElement="{Binding ElementName=CancelButton}"
           KeyboardNavigation.TabNavigation="Cycle"
@@ -11,20 +11,22 @@
                 Padding="24"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
+                Background="{DynamicResource Brush.Surface.Page}"
                 Style="{StaticResource EntityTrackerCardStyle}">
             <Grid>
                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                 <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding DialogTitle}" />
 
                 <ScrollViewer Grid.Row="1" Margin="0,18" VerticalScrollBarVisibility="Auto">
-                    <Grid>
-                        <StackPanel Visibility="{Binding IsNameDialog, Converter={StaticResource BooleanToVisibilityConverter}}">
-                            <Label x:Name="CatalogNameLabel" Content="Name" />
-                            <TextBox AutomationProperties.LabeledBy="{Binding ElementName=CatalogNameLabel}"
-                                     Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
-                        </StackPanel>
+                    <StackPanel>
+                        <Grid>
+                            <StackPanel Visibility="{Binding IsNameDialog, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <Label x:Name="CatalogNameLabel" Content="Name" />
+                                <TextBox AutomationProperties.LabeledBy="{Binding ElementName=CatalogNameLabel}"
+                                         Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
 
-                        <StackPanel Visibility="{Binding IsTrackerCreation, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <StackPanel Visibility="{Binding IsTrackerCreation, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <Label x:Name="TrackerNameLabel" Content="Tracker name" />
                             <TextBox AutomationProperties.LabeledBy="{Binding ElementName=TrackerNameLabel}"
                                      Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
@@ -54,9 +56,9 @@
                                 </StackPanel>
                             </Border>
                             <TextBlock Margin="0,12,0,0" Text="{Binding OperationMessage}" TextWrapping="Wrap" />
-                        </StackPanel>
+                            </StackPanel>
 
-                        <StackPanel Visibility="{Binding IsRecycleBin, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <StackPanel Visibility="{Binding IsRecycleBin, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="Recycled projects" />
                             <ItemsControl Margin="0,8,0,18" ItemsSource="{Binding RecycledProjects}">
                                 <ItemsControl.ItemTemplate><DataTemplate>
@@ -77,28 +79,29 @@
                                     </DockPanel>
                                 </DataTemplate></ItemsControl.ItemTemplate>
                             </ItemsControl>
-                        </StackPanel>
+                            </StackPanel>
 
-                        <StackPanel Visibility="{Binding IsRecycleConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <StackPanel Visibility="{Binding IsRecycleConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <TextBlock Text="{Binding PendingItemName, StringFormat=Recycle {0}?}" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
                             <TextBlock Margin="0,10,0,0" Text="This is reversible. The item will disappear from active selectors and metrics immediately." TextWrapping="Wrap" />
-                        </StackPanel>
+                            </StackPanel>
 
-                        <StackPanel Visibility="{Binding IsPurgeConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <StackPanel Visibility="{Binding IsPurgeConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <TextBlock Foreground="{DynamicResource Brush.Accent}" FontWeight="SemiBold"
                                        Text="This action cannot be undone." />
                             <TextBlock Margin="0,10,0,0" Text="{Binding PurgeImpactSummary}" TextWrapping="Wrap" />
                             <TextBlock Margin="0,14,0,4" Text="{Binding PendingItemName, StringFormat=Type the exact name {0} to continue:}" TextWrapping="Wrap" />
                             <TextBox AutomationProperties.Name="Exact name confirmation"
                                      Text="{Binding TypedConfirmation, UpdateSourceTrigger=PropertyChanged}" />
-                        </StackPanel>
+                            </StackPanel>
+                        </Grid>
 
                         <TextBlock Margin="0,12,0,0"
-                                   VerticalAlignment="Bottom"
                                    Foreground="{DynamicResource Brush.Accent}"
                                    Text="{Binding ErrorMessage}"
-                                   TextWrapping="Wrap" />
-                    </Grid>
+                                   TextWrapping="Wrap"
+                                   Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </StackPanel>
                 </ScrollViewer>
 
                 <StackPanel Grid.Row="2" HorizontalAlignment="Right" Orientation="Horizontal">

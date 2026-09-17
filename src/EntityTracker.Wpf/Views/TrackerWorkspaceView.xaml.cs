@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
@@ -13,9 +14,14 @@ public partial class TrackerWorkspaceView : UserControl
 {
     private const double MouseWheelDeltaPerNotch = 120;
     private const double ScrollPixelsPerNotch = 10;
+    private const double ColumnResizeHitArea = 8;
 
     private MainWindowViewModel? _viewModel;
     private IInputElement? _focusBeforeEditor;
+    private DataGrid? _resizingDataGrid;
+    private DataGridColumn? _resizingColumn;
+    private double _resizeStartX;
+    private double _resizeStartWidth;
 
     public TrackerWorkspaceView()
     {
@@ -103,6 +109,22 @@ public partial class TrackerWorkspaceView : UserControl
     private void OnOverviewSelectionChanged(object sender, SelectionChangedEventArgs e) =>
         _viewModel?.UpdateOverviewSelection(
             OverviewDataGrid.SelectedItems.OfType<EntityOverviewRow>());
+
+    private void OnEntityDataGridMouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (_viewModel is null ||
+            e.ChangedButton != MouseButton.Left ||
+            e.OriginalSource is not DependencyObject source ||
+            FindVisualAncestor<ButtonBase>(source) is not null ||
+            FindVisualAncestor<DataGridRow>(source)?.Item is not EntityOverviewRow row ||
+            !_viewModel.EditOverviewEntityCommand.CanExecute(row))
+        {
+            return;
+        }
+
+        _viewModel.EditOverviewEntityCommand.Execute(row);
+        e.Handled = true;
+    }
 
     private void OnOverviewSelectionClearRequested(object? sender, EventArgs e)
     {
@@ -249,6 +271,118 @@ public partial class TrackerWorkspaceView : UserControl
         }
     }
 
+    private void OnDataGridPreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (sender is not DataGrid dataGrid)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(_resizingDataGrid, dataGrid) && _resizingColumn is not null)
+        {
+            double requestedWidth = _resizeStartWidth +
+                (e.GetPosition(dataGrid).X - _resizeStartX);
+            double maximum = double.IsInfinity(_resizingColumn.MaxWidth)
+                ? double.MaxValue
+                : _resizingColumn.MaxWidth;
+            _resizingColumn.Width = new DataGridLength(Math.Clamp(
+                requestedWidth,
+                _resizingColumn.MinWidth,
+                maximum));
+            e.Handled = true;
+            return;
+        }
+
+        dataGrid.Cursor = TryGetResizeColumn(dataGrid, e, out _)
+            ? Cursors.SizeWE
+            : null;
+    }
+
+    private void OnDataGridPreviewMouseLeftButtonDown(
+        object sender,
+        MouseButtonEventArgs e)
+    {
+        if (sender is not DataGrid dataGrid ||
+            !TryGetResizeColumn(dataGrid, e, out DataGridColumn? column) ||
+            column is null)
+        {
+            return;
+        }
+
+        _resizingDataGrid = dataGrid;
+        _resizingColumn = column;
+        _resizeStartX = e.GetPosition(dataGrid).X;
+        _resizeStartWidth = column.ActualWidth;
+        column.Width = new DataGridLength(column.ActualWidth);
+        dataGrid.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void OnDataGridPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is DataGrid dataGrid && ReferenceEquals(_resizingDataGrid, dataGrid))
+        {
+            EndColumnResize(dataGrid);
+            e.Handled = true;
+        }
+    }
+
+    private void OnDataGridMouseLeave(object sender, MouseEventArgs e)
+    {
+        if (sender is DataGrid dataGrid && !ReferenceEquals(_resizingDataGrid, dataGrid))
+        {
+            dataGrid.Cursor = null;
+        }
+    }
+
+    private void OnDataGridLostMouseCapture(object sender, MouseEventArgs e)
+    {
+        if (sender is DataGrid dataGrid && ReferenceEquals(_resizingDataGrid, dataGrid))
+        {
+            EndColumnResize(dataGrid);
+        }
+    }
+
+    private static bool TryGetResizeColumn(
+        DataGrid dataGrid,
+        MouseEventArgs e,
+        out DataGridColumn? column)
+    {
+        column = null;
+        if (!dataGrid.CanUserResizeColumns ||
+            e.OriginalSource is not DependencyObject source ||
+            FindVisualAncestor<DataGridColumnHeader>(source) is not { Column: { } headerColumn } header)
+        {
+            return false;
+        }
+
+        double x = e.GetPosition(header).X;
+        if (x >= header.ActualWidth - ColumnResizeHitArea)
+        {
+            column = headerColumn;
+        }
+        else if (x <= ColumnResizeHitArea)
+        {
+            column = dataGrid.Columns.FirstOrDefault(candidate =>
+                candidate.Visibility == Visibility.Visible &&
+                candidate.DisplayIndex == headerColumn.DisplayIndex - 1);
+        }
+
+        return column?.CanUserResize == true;
+    }
+
+    private void EndColumnResize(DataGrid dataGrid)
+    {
+        _resizingDataGrid = null;
+        _resizingColumn = null;
+        if (dataGrid.IsMouseCaptured)
+        {
+            dataGrid.ReleaseMouseCapture();
+        }
+
+        dataGrid.Cursor = null;
+    }
+
     private void OnReviewPreviewMouseWheel(
         object sender,
         MouseWheelEventArgs e)
@@ -351,6 +485,23 @@ public partial class TrackerWorkspaceView : UserControl
             {
                 return descendant;
             }
+        }
+
+        return null;
+    }
+
+    private static T? FindVisualAncestor<T>(DependencyObject child)
+        where T : DependencyObject
+    {
+        DependencyObject? current = child;
+        while (current is not null)
+        {
+            if (current is T match)
+            {
+                return match;
+            }
+
+            current = GetParent(current);
         }
 
         return null;

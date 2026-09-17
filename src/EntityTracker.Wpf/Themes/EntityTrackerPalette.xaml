@@ -50,6 +50,7 @@
     <SolidColorBrush x:Key="Brush.Focus" Color="{DynamicResource FocusStrokeColorOuter}" />
     <SolidColorBrush x:Key="Brush.Accent" Color="{StaticResource Color.Brand.Coral}" />
     <SolidColorBrush x:Key="Brush.Overlay" Color="{StaticResource Color.Brand.DarkGreen}" Opacity="0.60" />
+    <SolidColorBrush x:Key="Brush.Overlay.Strong" Color="{StaticResource Color.Brand.DarkGreen}" Opacity="0.84" />
 
     <SolidColorBrush x:Key="Brush.Review.Missing.Header" Color="{StaticResource Color.Brand.Coral}" />
     <SolidColorBrush x:Key="Brush.Review.Missing.Surface" Color="{StaticResource Color.Brand.Coral}" Opacity="0.10" />

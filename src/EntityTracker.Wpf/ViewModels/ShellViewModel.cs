@@ -345,16 +345,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             return false;
         }
 
-        if (destination == ShellDestination.Portfolio)
-        {
-            return await ApplyContextAsync(
-                null,
-                null,
-                ShellDestination.Portfolio,
-                true,
-                cancellationToken);
-        }
-
         CurrentWorkspace?.PrepareForDeactivation();
         SetDestination(destination);
         if (destination is ShellDestination.Portfolio or ShellDestination.ProjectDashboard)
@@ -368,9 +358,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public async Task OpenProjectAsync(ProjectId projectId)
     {
         Project? project = Projects.FirstOrDefault(item => item.Id == projectId);
-        if (project is not null)
+        if (project is not null && await SelectProjectAsync(project))
         {
-            await SelectProjectAsync(project);
+            await NavigateAsync(ShellDestination.ProjectDashboard);
         }
     }
 

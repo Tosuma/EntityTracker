@@ -85,7 +85,8 @@ Destructive actions require confirmation where the workflow already calls for it
   40 pixels. Layout spacing follows a 4/8/12/16/24 scale; normal cards use a 6-pixel radius.
 - Keyboard focus must remain visibly distinct in every appearance. Popups and editor overlays move
   focus into their first useful field and restore it to the invoker when closed.
-- Informational overlays use a translucent Dark Green scrim.
+- Informational overlays use a translucent Dark Green scrim. Focused catalog-management dialogs
+  use the stronger scrim semantic so background content cannot compete with the active form.
 - Missing/removal and error states use Coral with Dark Green explanatory text. Synchronization
   review uses a pale Coral fill for possibly removed entities and the dedicated yellow warning
   palette for retained unresolved dependencies.

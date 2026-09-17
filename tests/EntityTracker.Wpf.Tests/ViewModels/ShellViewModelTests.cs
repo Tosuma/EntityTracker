@@ -56,9 +56,15 @@ public sealed class ShellViewModelTests
         Assert.Equal(harness.DefaultTracker.Id, shell.SelectedTracker?.Id);
 
         Assert.True(await shell.NavigateAsync(ShellDestination.Portfolio));
-        Assert.Null(shell.SelectedProject);
-        Assert.Null(shell.SelectedTracker);
-        Assert.False(shell.NavigateCommand.CanExecute(ShellDestination.Overview));
+        Assert.Equal(harness.DefaultProject.Id, shell.SelectedProject?.Id);
+        Assert.Equal(harness.DefaultTracker.Id, shell.SelectedTracker?.Id);
+        Assert.True(shell.NavigateCommand.CanExecute(ShellDestination.Overview));
+
+        await shell.OpenProjectAsync(harness.DefaultProject.Id);
+        Assert.Equal(ShellDestination.ProjectDashboard, shell.SelectedDestination);
+        Assert.Equal(harness.DefaultTracker.Id, shell.SelectedTracker?.Id);
+        await shell.OpenTrackerAsync(harness.DefaultTracker.Id);
+        Assert.Equal(ShellDestination.Overview, shell.SelectedDestination);
     }
 
     [Fact]

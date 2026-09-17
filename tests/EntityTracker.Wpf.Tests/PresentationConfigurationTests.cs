@@ -164,6 +164,53 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void InteractionCorrections_UseOpaquePopupsReliableHitAreasAndRowActivation()
+    {
+        XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XDocument filterHeader = LoadWpfXaml("Controls", "FilterableColumnHeader.xaml");
+        XDocument help = LoadWpfXaml("Views", "HelpSqlView.xaml");
+        XDocument catalog = LoadWpfXaml("Views", "CatalogModalView.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        XElement overviewGrid = Assert.Single(workspace.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "OverviewDataGrid");
+        Assert.Equal(
+            "OnEntityDataGridMouseDoubleClick",
+            (string?)overviewGrid.Attribute("MouseDoubleClick"));
+        Assert.Contains(workspace.Descendants(), element =>
+            element.Name.LocalName == "EventSetter" &&
+            (string?)element.Attribute("Event") == "PreviewMouseMove" &&
+            (string?)element.Attribute("Handler") == "OnDataGridPreviewMouseMove");
+
+        XElement popupSurface = Assert.Single(filterHeader.Descendants(), element =>
+            element.Name.LocalName == "Border" &&
+            (string?)element.Attribute("Width") == "270");
+        Assert.Equal(
+            "{DynamicResource Brush.Surface.Page}",
+            (string?)popupSurface.Attribute("Background"));
+
+        XElement query = Assert.Single(help.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "QueryTextBox");
+        Assert.Equal(
+            "OnQueryPreviewMouseWheel",
+            (string?)query.Attribute("PreviewMouseWheel"));
+
+        XElement modalRoot = Assert.Single(catalog.Root!.Elements(), element =>
+            element.Name.LocalName == "Grid");
+        Assert.Equal(
+            "{DynamicResource Brush.Overlay.Strong}",
+            (string?)modalRoot.Attribute("Background"));
+        XElement modalSurface = Assert.Single(modalRoot.Elements(), element =>
+            element.Name.LocalName == "Border");
+        Assert.Equal(
+            "{DynamicResource Brush.Surface.Page}",
+            (string?)modalSurface.Attribute("Background"));
+        XElement error = Assert.Single(catalog.Descendants(), element =>
+            (string?)element.Attribute("Text") == "{Binding ErrorMessage}");
+        Assert.Equal("StackPanel", error.Parent?.Name.LocalName);
+    }
+
+    [Fact]
     public void TrackerWorkspace_SummaryFilterButtonsUseThemeAwarePrimaryText()
     {
         XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
