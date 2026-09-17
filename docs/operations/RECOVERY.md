@@ -12,14 +12,15 @@ The relevant paths are:
 
 ```text
 entity-tracker.db              active SQLite database
-settings.json                  optional local appearance and non-secret connection setup
+settings.json                  optional local appearance and last active Project/Tracker context
 backups\                       automatic SQLite backups
 logs\                          daily application logs
 ```
 
-The settings file is created when a non-default appearance or connection setup is saved. It must
+The settings file is created when appearance or active context is saved. It must
 never contain a password, client secret, access token, certificate, or other authentication
-material. Appearance is installation-local and is not part of Project or Tracker data.
+material. Appearance and the remembered selection are installation-local; Project and Tracker
+records remain in SQLite.
 
 ## Automatic backups
 
@@ -63,6 +64,7 @@ messages can still contain local file paths.
 
 Malformed, unsupported-version, or unknown-field settings never replace the working file.
 EntityTracker shows a warning and continues with SQLite. Correct or move the existing
-`settings.json`, then save the appearance or connection setup again from **Connections**. Removing
-a valid SharePoint setup preserves a non-default appearance in the file; the file is deleted only
-when no non-default local setting remains. Neither action changes the SQLite database.
+`settings.json`, then save appearance again from **Settings / Appearance** or choose a Project and
+Tracker. Moving the file resets only local appearance and the remembered selection; it does not
+change Projects, Trackers, or entity data in SQLite. Legacy non-secret SharePoint fields can remain
+in an older settings file for compatibility, but no Connections UI or remote behavior is exposed.

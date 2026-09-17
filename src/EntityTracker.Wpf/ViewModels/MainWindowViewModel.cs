@@ -19,7 +19,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace EntityTracker.Wpf.ViewModels;
 
-public sealed class MainWindowViewModel : INotifyPropertyChanged
+public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly EntityOverviewService _overviewService;
     private readonly TrackerId _trackerId;
@@ -65,8 +65,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ProgressDashboardViewModel progressDashboard,
         IClipboardService clipboard,
         ISchemaSynchronizationConfirmation confirmationService,
-        ConnectionsViewModel? connections = null,
-        AppearanceViewModel? appearance = null,
         ILoggerFactory? loggerFactory = null)
     {
         ArgumentNullException.ThrowIfNull(overviewService);
@@ -97,8 +95,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             clipboard,
             () => SelectedTab = MainWindowTab.SchemaSynchronization,
             effectiveLoggerFactory.CreateLogger<SqlQueryHelpViewModel>());
-        Connections = connections;
-        Appearance = appearance;
         Review = new SchemaSynchronizationReviewViewModel();
         ManualCreation = new ManualEntityCreationViewModel(
             trackerId,
@@ -169,6 +165,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public event EventHandler? OverviewSelectionClearRequested;
 
+    public event EventHandler? PersistedStateChanged;
+
+    public TrackerId TrackerId => _trackerId;
+
+    public bool HasUnsavedWork =>
+        Review.HasReview || ManualCreation.IsDirty || Editor.IsDirty;
+
     public SchemaSynchronizationReviewViewModel Review { get; }
 
     public ManualEntityCreationViewModel ManualCreation { get; }
@@ -178,10 +181,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ProgressDashboardViewModel Progress { get; }
 
     public SqlQueryHelpViewModel Help { get; }
-
-    public ConnectionsViewModel? Connections { get; }
-
-    public AppearanceViewModel? Appearance { get; }
 
     public EntityTableViewModel ActiveTable { get; }
 
@@ -470,12 +469,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        if (Connections is not null)
-        {
-            await Connections.InitializeAsync(cancellationToken);
-        }
-
         await RefreshAsync(cancellationToken);
+    }
+
+    public void PrepareForDeactivation()
+    {
+        ActiveTable.CloseOpenFilter();
+        ArchivedTable.CloseOpenFilter();
+        ClearOverviewSelection();
+    }
+
+    public void DiscardTransientWork()
+    {
+        Review.Clear();
+        ManualCreation.Reset();
+        Editor.DiscardAndClose();
+        PrepareForDeactivation();
+        NotifyCommandsChanged();
     }
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
@@ -550,6 +560,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             OperationMessage = FormatBulkStatusResult(result, targetStatus);
             BusyMessage = "Recomputing workflow readiness and progress…";
             await LoadOverviewAndProgressAsync(cancellationToken);
+            PersistedStateChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -662,6 +673,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             SelectedTab = MainWindowTab.Overview;
             BusyMessage = "Recomputing dependency ranking…";
             await LoadOverviewAndProgressAsync(cancellationToken);
+            PersistedStateChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -835,6 +847,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             await LoadOverviewAndProgressAsync(CancellationToken.None);
+            PersistedStateChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception exception)
         {
@@ -853,6 +866,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             await LoadOverviewAndProgressAsync(CancellationToken.None);
+            PersistedStateChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception exception)
         {
@@ -868,6 +882,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             await LoadOverviewAndProgressAsync(CancellationToken.None);
+            PersistedStateChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception exception)
         {
@@ -886,6 +901,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             await LoadOverviewAndProgressAsync(CancellationToken.None);
+            PersistedStateChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception exception)
         {
@@ -1117,4 +1133,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+
+    public void Dispose()
+    {
+        ActiveTable.PropertyChanged -= OnActiveTablePropertyChanged;
+        ArchivedTable.PropertyChanged -= OnArchivedTablePropertyChanged;
+        ManualCreation.PropertyChanged -= OnManualCreationPropertyChanged;
+        Editor.PropertyChanged -= OnEditorPropertyChanged;
+    }
 }

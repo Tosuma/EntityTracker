@@ -65,6 +65,7 @@ public partial class App : System.Windows.Application
             services.AddSingleton(dataPathResolver);
             services.AddSingleton(dataPaths);
             services.AddSingleton(settingsStore);
+            services.AddSingleton(settings.Settings);
             services.AddSingleton<IApplicationThemeService>(themeService);
             services.AddSingleton(provider => new AppearanceViewModel(
                 settingsStore,
@@ -94,7 +95,7 @@ public partial class App : System.Windows.Application
             services.AddSingleton<IClipboardService, WpfClipboardService>();
             services.AddSingleton<ISchemaSynchronizationConfirmation,
                 WpfSchemaSynchronizationConfirmation>();
-            services.AddSingleton<ConnectionsViewModel>();
+            services.AddSingleton<IContextDiscardConfirmation, WpfContextDiscardConfirmation>();
             services.AddSingleton<SchemaSynchronizationService>();
             services.AddSingleton<ManualEntityCreationService>();
             services.AddSingleton<EntityDependencyEditorService>();
@@ -102,8 +103,13 @@ public partial class App : System.Windows.Application
             services.AddSingleton<ProjectManagementService>();
             services.AddSingleton<TrackerManagementService>();
             services.AddSingleton<TrackerCsvCreationService>();
-            services.AddSingleton<CompatibilityTrackerResolver>();
+            services.AddSingleton<CatalogNameValidationService>();
+            services.AddSingleton<PortfolioQueryService>();
+            services.AddSingleton<CatalogPurgeImpactService>();
             services.AddSingleton<ICsvFilePicker, CsvFilePicker>();
+            services.AddSingleton<TrackerWorkspaceViewModelFactory>();
+            services.AddSingleton<CatalogManagementViewModel>();
+            services.AddSingleton<ShellViewModel>();
 
             _serviceProvider = services.BuildServiceProvider(new ServiceProviderOptions
             {
@@ -118,13 +124,6 @@ public partial class App : System.Windows.Application
                 _serviceProvider.GetRequiredService<IPersistenceInitializer>();
             PersistenceInitializationResult initialization =
                 await persistenceInitializer.InitializeAsync();
-            ProgressHistoryInitializer historyInitializer =
-                _serviceProvider.GetRequiredService<ProgressHistoryInitializer>();
-            Tracker tracker = await _serviceProvider
-                .GetRequiredService<CompatibilityTrackerResolver>()
-                .ResolveAsync();
-            await historyInitializer.EnsureInitializedAsync(tracker.Id);
-
             string[] startupWarnings = settings.Warnings
                 .Concat(initialization.Warnings)
                 .ToArray();
@@ -133,16 +132,9 @@ public partial class App : System.Windows.Application
                 _logger.LogWarning("Startup warning: {Warning}", warning);
             }
 
-            ProgressDashboardViewModel progressDashboard =
-                ActivatorUtilities.CreateInstance<ProgressDashboardViewModel>(
-                    _serviceProvider,
-                    tracker.Id);
-            MainWindowViewModel mainWindowViewModel =
-                ActivatorUtilities.CreateInstance<MainWindowViewModel>(
-                    _serviceProvider,
-                    tracker.Id,
-                    progressDashboard);
-            MainWindow mainWindow = new(mainWindowViewModel);
+            ShellViewModel shellViewModel =
+                _serviceProvider.GetRequiredService<ShellViewModel>();
+            MainWindow mainWindow = new(shellViewModel);
             MainWindow = mainWindow;
             mainWindow.Show();
 

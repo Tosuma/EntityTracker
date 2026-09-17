@@ -11,4 +11,10 @@ public interface ITrackerRepository
     Task<IReadOnlyList<Tracker>> GetByProjectAsync(
         ProjectId projectId,
         CancellationToken cancellationToken = default);
+
+    Task<bool> IsNameReservedAsync(
+        ProjectId projectId,
+        string name,
+        TrackerId? excludingTrackerId = null,
+        CancellationToken cancellationToken = default);
 }

@@ -144,9 +144,10 @@ The update command renders and validates the complete manifest in Dark mode and 
 before replacing the files owned by the generator under `images\dark` and `images\light`;
 unrelated image assets are preserved. Each open screenshot window switches to the opposite
 appearance and back before capture, exercising live Light-to-Dark and Dark-to-Light transitions.
-The utility imports the repository's 125-entity synthetic schema,
-creates fixed status and 90-day history data, and captures the overview, synchronization, entity,
-progress, archive, search, SQL-query, and Connections/Appearance states. It uses a new SQLite database below the
+The utility imports the repository's 125-entity synthetic schema, creates two Projects and three
+related Trackers, creates fixed status and 90-day history data, and captures the portfolio, Project
+dashboard, Tracker copy review, overview, synchronization, entity, progress, archive, search,
+SQL-query, and Settings/Appearance states. It uses a new SQLite database below the
 operating-system temporary directory for each appearance and never reads or changes
 `%LOCALAPPDATA%\EntityTracker`. The application may remain open while the screenshots are
 generated.
@@ -172,14 +173,14 @@ The query helper and CSV import are independent: opening or copying the SQL is n
 import an existing compatible file. The exact versioned input format is documented in the
 [schema CSV contract](importing/schema-csv-contract-v1.md).
 
-## Connections and current storage behavior
+## Settings and current storage behavior
 
-The **Connections** page can save a friendly display name and an HTTPS SharePoint site URL for
-future approved integration. The current application does not authenticate, validate remote
-access, connect, synchronize, or switch providers after saving that setup. SQLite remains active.
+The **Settings / Appearance** destination controls System, Light, or Dark appearance. The local
+settings file also remembers the last valid active Project/Tracker context. SQLite remains the only
+active provider; the application does not expose a remote connection or synchronization control.
 
-The settings file stores no credentials or tokens. Live SharePoint behavior belongs to
-[Milestone 13](milestones/13_sharepoint_integration.md).
+Older settings files that contain non-secret SharePoint setup are still read and preserved during
+the settings migration, but UX-03 provides no SharePoint configuration or runtime behavior.
 
 ## Local application data
 
@@ -193,7 +194,7 @@ The active files and directories are:
 
 ```text
 entity-tracker.db    SQLite database
-settings.json        optional local appearance and non-secret connection setup
+settings.json        optional local appearance and last active Project/Tracker context
 backups\             automatic SQLite backups
 logs\                daily application logs
 ```

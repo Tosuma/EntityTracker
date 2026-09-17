@@ -11,7 +11,7 @@ dependency-safe order. It imports PostgreSQL schema relationships, keeps progres
 stable entities, highlights blockers, and turns implementation history into useful progress
 reports.
 
-![EntityTracker overview showing ranked entities, work status, blockers, and progress](images/light/overview.png)
+![EntityTracker portfolio showing projects and implementation progress](images/light/portfolio.png)
 
 ## Why EntityTracker?
 
@@ -40,10 +40,14 @@ EntityTracker keeps those concerns separate:
   name.
 - **Progress reporting** — inspect current status, implementation history, ready-versus-blocked
   trends, and weekly change; copy or export charts as PNG files.
+- **Project portfolio** — group Trackers into Projects, compare basic progress and attention
+  summaries, and switch tracker context without opening another window or database.
+- **Safe catalog management** — create blank, CSV-backed, or copied Trackers and rename, recycle,
+  restore, or guardedly purge Projects and Trackers.
 - **Local-first reliability** — SQLite persistence, automatic daily and pre-migration backups,
   rolling logs, and documented recovery procedures.
 - **Replaceable core** — Domain, Application, and Reporting remain independent of WPF, SQLite,
-  CSV libraries, and future SharePoint infrastructure.
+  CSV libraries, and future synchronization infrastructure.
 
 ## How it works
 
@@ -62,6 +66,18 @@ The deterministic screenshot suite contains matching [`images/light`](images/lig
 for consistency.
 
 <table>
+  <tr>
+    <td width="50%">
+      <strong>Manage the implementation portfolio</strong><br />
+      Compare active Projects using entity-weighted progress summaries.<br /><br />
+      <img src="images/light/portfolio.png" alt="EntityTracker portfolio with active project summary cards" />
+    </td>
+    <td width="50%">
+      <strong>Switch between related Trackers</strong><br />
+      Review basic progress and attention summaries within the selected Project.<br /><br />
+      <img src="images/light/project-dashboard.png" alt="EntityTracker project dashboard with tracker summary cards" />
+    </td>
+  </tr>
   <tr>
     <td width="50%">
       <strong>Review schema synchronization</strong><br />
@@ -136,12 +152,11 @@ CSV without requiring a live database connection inside EntityTracker.
 
 ## Project status
 
-Product Milestones 1–12 are complete. EntityTracker currently uses SQLite as its active store. The
-Connections page can save non-secret SharePoint setup, but this release does not authenticate,
-connect, or synchronize with SharePoint.
+Product Milestones 1–12 and UX Milestones UX-01 through UX-03 are complete. EntityTracker uses
+SQLite as its local catalog and working store. The former SharePoint Connections workflow has been
+removed, and the application exposes no remote synchronization control.
 
-Live SharePoint integration is planned in
-[Milestone 13](docs/milestones/13_sharepoint_integration.md). A separate
+A separate
 [PF-01–PF-05 product feedback milestone group](docs/milestones/00_README.md#product-feedback-milestones)
 plans bulk status updates, customer priority, responsible-developer and group metadata, and
 column filtering with status-order sorting without extending the numbered roadmap. The independent
@@ -170,8 +185,9 @@ Domain model
 
 Business rules do not depend on WPF or infrastructure technologies. Read the
 [architecture rules](docs/architecture/ARCHITECTURE.md) and
-[collaborative storage contract](docs/architecture/COLLABORATIVE_STORAGE.md) for the boundaries and
-future SharePoint semantics.
+[collaborative storage contract](docs/architecture/COLLABORATIVE_STORAGE.md) for the historical
+storage boundary. Any future Project-level Git synchronization requires a separately approved
+design and is not exposed by this release.
 
 ## Getting started
 

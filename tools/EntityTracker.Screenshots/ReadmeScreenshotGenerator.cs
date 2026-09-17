@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
 
@@ -46,21 +47,17 @@ internal sealed class ReadmeScreenshotGenerator
             appearance);
         await provider.GetRequiredService<IPersistenceInitializer>()
             .InitializeAsync(cancellationToken);
-        Tracker tracker = await provider
-            .GetRequiredService<CompatibilityTrackerResolver>()
-            .ResolveAsync(cancellationToken);
+        Project project = (await provider.GetRequiredService<IProjectRepository>()
+                .GetAllAsync(cancellationToken))
+            .Single(static item => item.Name == "Default project");
+        Tracker tracker = (await provider.GetRequiredService<ITrackerRepository>()
+                .GetAllAsync(cancellationToken))
+            .Single(static item => item.Name == "Default tracker");
         await provider.GetRequiredService<ProgressHistoryInitializer>()
             .EnsureInitializedAsync(tracker.Id, cancellationToken);
 
-        ProgressDashboardViewModel progressDashboard =
-            ActivatorUtilities.CreateInstance<ProgressDashboardViewModel>(
-                provider,
-                tracker.Id);
-        MainWindowViewModel viewModel = ActivatorUtilities.CreateInstance<MainWindowViewModel>(
-            provider,
-            tracker.Id,
-            progressDashboard);
-        MainWindow window = new(viewModel);
+        ShellViewModel shell = provider.GetRequiredService<ShellViewModel>();
+        MainWindow window = new(shell);
         ConfigureWindow(window);
         System.Windows.Application.Current.MainWindow = window;
         window.Show();
@@ -68,18 +65,50 @@ internal sealed class ReadmeScreenshotGenerator
         try
         {
             await WaitUntilAsync(
-                () => !viewModel.IsBusy &&
-                      viewModel.TotalEntityCount == 125 &&
-                      viewModel.Progress.HasReport,
+                () => !shell.IsBusy && shell.Portfolio?.Projects.Count == 2,
                 "The screenshot window did not finish loading.",
                 cancellationToken);
             await ExerciseLiveThemeSwitchAsync(provider, appearance, cancellationToken);
 
             WpfScreenshotRenderer renderer = new(window, workspace.StagingDirectory);
+            await renderer.CaptureAsync("portfolio.png");
+
+            await shell.OpenProjectAsync(project.Id);
+            await WaitUntilAsync(
+                () => shell.ProjectDashboard?.Trackers.Count == 2,
+                "The project dashboard did not finish loading.",
+                cancellationToken);
+            await renderer.CaptureAsync("project-dashboard.png");
+
+            shell.Catalog.OpenCreateTracker(project);
+            shell.Catalog.CreationMode = TrackerCreationMode.Copy;
+            await WaitUntilAsync(
+                () => shell.Catalog.CopySources.Count == 3,
+                "The tracker copy sources did not finish loading.",
+                cancellationToken);
+            shell.Catalog.Name = "Pre-production readiness";
+            shell.Catalog.SelectedCopySource = shell.Catalog.CopySources.Single(
+                item => item.Tracker.Id == tracker.Id);
+            await WaitUntilAsync(
+                () => !string.IsNullOrWhiteSpace(shell.Catalog.CopyPreview),
+                "The tracker copy preview did not finish loading.",
+                cancellationToken);
+            await renderer.CaptureAsync("create-tracker-copy.png");
+            shell.Catalog.CancelCommand.Execute(null);
+
+            await shell.OpenTrackerAsync(tracker.Id);
+            MainWindowViewModel viewModel = shell.CurrentWorkspace
+                ?? throw new InvalidOperationException("The tracker workspace was not created.");
+            await WaitUntilAsync(
+                () => !viewModel.IsBusy &&
+                      viewModel.TotalEntityCount == 125 &&
+                      viewModel.Progress.HasReport,
+                "The tracker workspace did not finish loading.",
+                cancellationToken);
             await CaptureOverviewAsync(viewModel, renderer, cancellationToken);
 
             viewModel.Review.Clear();
-            viewModel.SelectedTab = MainWindowTab.SchemaSynchronization;
+            await shell.NavigateAsync(ShellDestination.SchemaSynchronization, cancellationToken);
             await renderer.CaptureAsync("schema-synchronization.png");
 
             await CaptureMissingReviewAsync(
@@ -98,25 +127,26 @@ internal sealed class ReadmeScreenshotGenerator
                 cancellationToken);
 
             viewModel.Review.Clear();
-            viewModel.SelectedTab = MainWindowTab.AddEntity;
+            await shell.NavigateAsync(ShellDestination.AddEntity, cancellationToken);
             await renderer.CaptureAsync("add-entity.png");
 
-            await CaptureEditorAsync(viewModel, renderer, cancellationToken);
+            await CaptureEditorAsync(shell, viewModel, renderer, cancellationToken);
 
-            viewModel.SelectedTab = MainWindowTab.Progress;
+            await shell.NavigateAsync(ShellDestination.Reports, cancellationToken);
             await renderer.CaptureAsync("progress.png", settleMilliseconds: 900);
 
             await CaptureArchivedEntityAsync(
                 provider,
+                shell,
                 viewModel,
                 renderer,
                 cancellationToken);
 
-            viewModel.SelectedTab = MainWindowTab.SqlHelp;
+            await shell.NavigateAsync(ShellDestination.HelpSql, cancellationToken);
             await renderer.CaptureAsync("sql-query.png");
 
-            viewModel.SelectedTab = MainWindowTab.Connections;
-            await renderer.CaptureAsync("connections.png");
+            await shell.NavigateAsync(ShellDestination.Settings, cancellationToken);
+            await renderer.CaptureAsync("settings.png");
         }
         finally
         {
@@ -178,7 +208,10 @@ internal sealed class ReadmeScreenshotGenerator
         }
 
         await renderer.CaptureReviewSectionAsync(
-            (FrameworkElement)window.FindName("MissingReviewSection"),
+            window.FindWorkspaceElement("MissingReviewSection")
+                ?? throw new InvalidOperationException("Missing review section not found."),
+            (ScrollViewer)(window.FindWorkspaceElement("SchemaReviewScrollViewer")
+                ?? throw new InvalidOperationException("Schema review scroll viewer not found.")),
             "schema-synchronization-import-csv-with-missing-entities.png");
     }
 
@@ -200,17 +233,21 @@ internal sealed class ReadmeScreenshotGenerator
         }
 
         await renderer.CaptureReviewSectionAsync(
-            (FrameworkElement)window.FindName("UnresolvedReviewSection"),
+            window.FindWorkspaceElement("UnresolvedReviewSection")
+                ?? throw new InvalidOperationException("Unresolved review section not found."),
+            (ScrollViewer)(window.FindWorkspaceElement("SchemaReviewScrollViewer")
+                ?? throw new InvalidOperationException("Schema review scroll viewer not found.")),
             "schema-synchronization-unresolved-dependencies.png");
     }
 
     private static async Task CaptureEditorAsync(
+        ShellViewModel shell,
         MainWindowViewModel viewModel,
         WpfScreenshotRenderer renderer,
         CancellationToken cancellationToken)
     {
         viewModel.Review.Clear();
-        viewModel.SelectedTab = MainWindowTab.Overview;
+        await shell.NavigateAsync(ShellDestination.Overview, cancellationToken);
         viewModel.ActiveTable.ClearAllFiltersAndSort();
         EntityOverviewRow row = viewModel.OverviewItems.Single(static item =>
             item.SourceName == "time_zone");
@@ -221,13 +258,14 @@ internal sealed class ReadmeScreenshotGenerator
 
     private static async Task CaptureArchivedEntityAsync(
         IServiceProvider provider,
+        ShellViewModel shell,
         MainWindowViewModel viewModel,
         WpfScreenshotRenderer renderer,
         CancellationToken cancellationToken)
     {
-        Tracker tracker = await provider
-            .GetRequiredService<CompatibilityTrackerResolver>()
-            .ResolveAsync(cancellationToken);
+        Tracker tracker = (await provider.GetRequiredService<ITrackerRepository>()
+                .GetAllAsync(cancellationToken))
+            .Single(static item => item.Name == "Default tracker");
         IEntityRepository entityRepository = provider.GetRequiredService<IEntityRepository>();
         IDependencyRepository dependencyRepository = provider.GetRequiredService<IDependencyRepository>();
         IReadOnlyList<TrackedEntity> entities = await entityRepository.GetAllAsync(
@@ -252,7 +290,7 @@ internal sealed class ReadmeScreenshotGenerator
         }
 
         await viewModel.RefreshAsync(cancellationToken);
-        viewModel.SelectedTab = MainWindowTab.Archived;
+        await shell.NavigateAsync(ShellDestination.Archived, cancellationToken);
         EntityOverviewRow archivedRow = viewModel.ArchivedItems.Single(item => item.EntityId == leaf.Id);
         await viewModel.Editor.BeginArchivedAsync(archivedRow.EntityId, cancellationToken);
         await renderer.CaptureAsync("archived-entity.png");

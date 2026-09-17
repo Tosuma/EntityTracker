@@ -45,6 +45,9 @@ internal static class ScreenshotServiceProviderFactory
         ApplicationThemeService themeService = new();
         themeService.Apply(appearance);
         services.AddSingleton(settingsStore);
+        services.AddSingleton(new EntityTrackerSettings(
+            StorageProviderKind.Sqlite,
+            appearance: appearance));
         services.AddSingleton<IApplicationThemeService>(themeService);
         services.AddSingleton(provider => new AppearanceViewModel(
             settingsStore,
@@ -91,8 +94,9 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<IClipboardService, ScreenshotClipboard>();
         services.AddSingleton<ISchemaSynchronizationConfirmation,
             ScreenshotSynchronizationConfirmation>();
+        services.AddSingleton<IContextDiscardConfirmation,
+            ScreenshotContextDiscardConfirmation>();
         services.AddSingleton<ICsvFilePicker>(csvFilePicker);
-        services.AddSingleton<ConnectionsViewModel>();
         services.AddSingleton<SchemaSynchronizationService>();
         services.AddSingleton<ManualEntityCreationService>();
         services.AddSingleton<EntityDependencyEditorService>();
@@ -100,7 +104,12 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<ProjectManagementService>();
         services.AddSingleton<TrackerManagementService>();
         services.AddSingleton<TrackerCsvCreationService>();
-        services.AddSingleton<CompatibilityTrackerResolver>();
+        services.AddSingleton<CatalogNameValidationService>();
+        services.AddSingleton<PortfolioQueryService>();
+        services.AddSingleton<CatalogPurgeImpactService>();
+        services.AddSingleton<TrackerWorkspaceViewModelFactory>();
+        services.AddSingleton<CatalogManagementViewModel>();
+        services.AddSingleton<ShellViewModel>();
 
         return services.BuildServiceProvider(new ServiceProviderOptions
         {

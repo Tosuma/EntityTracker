@@ -44,6 +44,39 @@ public sealed class SqliteProjectRepository(SqliteDatabase database) : IProjectR
         return projects;
     }
 
+    public async Task<bool> IsNameReservedAsync(
+        string name,
+        ProjectId? excludingProjectId = null,
+        CancellationToken cancellationToken = default)
+    {
+        string normalized = NormalizeName(name);
+        await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT EXISTS(
+                SELECT 1
+                FROM projects
+                WHERE name_key = $nameKey
+                  AND ($excludedId IS NULL OR id <> $excludedId));
+            """;
+        command.Parameters.AddWithValue("$nameKey", normalized.ToUpperInvariant());
+        command.Parameters.AddWithValue(
+            "$excludedId",
+            excludingProjectId is null
+                ? DBNull.Value
+                : SqlitePersistenceValues.Format(excludingProjectId));
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) != 0;
+    }
+
+    private static string NormalizeName(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        string normalized = name.Trim();
+        return normalized.Length == 0
+            ? throw new ArgumentException("A project name is required.", nameof(name))
+            : normalized;
+    }
+
     private static Project Read(SqliteDataReader reader) => new(
         SqlitePersistenceValues.ParseProjectId(reader.GetString(0)),
         reader.GetString(1),

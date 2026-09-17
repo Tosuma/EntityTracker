@@ -32,6 +32,43 @@ public sealed class SqliteTrackerRepository(SqliteDatabase database) : ITrackerR
         return QueryAsync(projectId, cancellationToken);
     }
 
+    public async Task<bool> IsNameReservedAsync(
+        ProjectId projectId,
+        string name,
+        TrackerId? excludingTrackerId = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(projectId);
+        string normalized = NormalizeName(name);
+        await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT EXISTS(
+                SELECT 1
+                FROM trackers
+                WHERE project_id = $projectId
+                  AND name_key = $nameKey
+                  AND ($excludedId IS NULL OR id <> $excludedId));
+            """;
+        command.Parameters.AddWithValue("$projectId", SqlitePersistenceValues.Format(projectId));
+        command.Parameters.AddWithValue("$nameKey", normalized.ToUpperInvariant());
+        command.Parameters.AddWithValue(
+            "$excludedId",
+            excludingTrackerId is null
+                ? DBNull.Value
+                : SqlitePersistenceValues.Format(excludingTrackerId));
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) != 0;
+    }
+
+    private static string NormalizeName(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        string normalized = name.Trim();
+        return normalized.Length == 0
+            ? throw new ArgumentException("A tracker name is required.", nameof(name))
+            : normalized;
+    }
+
     private async Task<IReadOnlyList<Tracker>> QueryAsync(
         ProjectId? projectId,
         CancellationToken cancellationToken)

@@ -138,10 +138,16 @@ public sealed class ProgressDemoSeeder
         SqliteDatabase database = new(workingPath, timeProvider);
         await database.InitializeAsync(cancellationToken);
 
-        Tracker tracker = await new CompatibilityTrackerResolver(
-                new SqliteProjectRepository(database),
-                new SqliteTrackerRepository(database))
-            .ResolveAsync(cancellationToken);
+        SqliteProjectRepository projectRepository = new(database);
+        SqliteTrackerRepository trackerRepository = new(database);
+        HashSet<ProjectId> activeProjectIds = (await projectRepository
+                .GetAllAsync(cancellationToken))
+            .Where(static project => project.LifecycleState == CatalogLifecycleState.Active)
+            .Select(static project => project.Id)
+            .ToHashSet();
+        Tracker tracker = (await trackerRepository.GetAllAsync(cancellationToken))
+            .Single(item => item.LifecycleState == CatalogLifecycleState.Active &&
+                            activeProjectIds.Contains(item.ProjectId));
 
         SqliteEntityRepository entityRepository = new(database);
         TrackedEntity[] originalEntities =

@@ -28,9 +28,13 @@ public sealed class ScreenshotDataSeederTests
             picker,
             new FixedTimeProvider(ScreenshotDataSeeder.FixedNow));
         await provider.GetRequiredService<IPersistenceInitializer>().InitializeAsync();
-        Tracker tracker = await provider
-            .GetRequiredService<CompatibilityTrackerResolver>()
-            .ResolveAsync();
+        Tracker[] trackers = (await provider
+                .GetRequiredService<ITrackerRepository>()
+                .GetAllAsync())
+            .Where(static item => item.LifecycleState == CatalogLifecycleState.Active)
+            .ToArray();
+        Assert.Equal(3, trackers.Length);
+        Tracker tracker = trackers.Single(static item => item.Name == "Default tracker");
 
         IReadOnlyList<TrackedEntity> entities =
             await provider.GetRequiredService<IEntityRepository>().GetAllAsync(tracker.Id);

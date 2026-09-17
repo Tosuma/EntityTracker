@@ -290,6 +290,12 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
 
     public bool HasOperationMessage => !string.IsNullOrWhiteSpace(OperationMessage);
 
+    public bool IsDirty =>
+        !string.IsNullOrWhiteSpace(EntityName) ||
+        !string.IsNullOrWhiteSpace(ResponsibleDeveloper) ||
+        !string.IsNullOrWhiteSpace(GroupName) ||
+        SelectedDependencies.Count > 0;
+
     public ICommand AddExistingCommand => _addExistingCommand;
 
     public ICommand UseGroupSuggestionCommand => _useGroupSuggestionCommand;
@@ -556,6 +562,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         CancelPendingGroupSearch();
         _groupName = groupName;
         OnPropertyChanged(nameof(GroupName));
+        OnPropertyChanged(nameof(IsDirty));
         GroupSuggestions = [];
         GroupSearchMessage = null;
     }
@@ -586,12 +593,14 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             isUnresolved));
         ClearDependencySearch();
         UpdateDraftWarnings();
+        OnPropertyChanged(nameof(IsDirty));
     }
 
     private void RemoveDependency(ManualDependencyRow row)
     {
         SelectedDependencies.Remove(row);
         UpdateDraftWarnings();
+        OnPropertyChanged(nameof(IsDirty));
         ScheduleSearch();
     }
 
@@ -735,6 +744,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         OperationMessage = null;
         CanAddAsUnresolved = false;
         _createCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(IsDirty));
     }
 
     private bool SetField<T>(
@@ -749,6 +759,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
 
         field = value;
         OnPropertyChanged(propertyName);
+        OnPropertyChanged(nameof(IsDirty));
         return true;
     }
 

@@ -51,6 +51,13 @@
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
     </Style>
 
+    <Style x:Key="EntityTrackerCardStyle" TargetType="{x:Type Border}">
+        <Setter Property="Background" Value="{DynamicResource Brush.Surface.Card}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource CornerRadius.Card}" />
+    </Style>
+
     <Style TargetType="{x:Type TextBox}"
            BasedOn="{StaticResource {x:Type TextBox}}">
         <Setter Property="MinHeight" Value="{DynamicResource Height.Control}" />

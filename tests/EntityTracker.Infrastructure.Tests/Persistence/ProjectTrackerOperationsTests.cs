@@ -209,6 +209,40 @@ public sealed class ProjectTrackerOperationsTests
     }
 
     [Fact]
+    public async Task RenameAsync_PreservesIdentityAndRejectsReservedNames()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteProjectRepository projects = new(database);
+        SqliteTrackerRepository trackers = new(database);
+        ProjectManagementService projectService = new(
+            projects,
+            new SqliteProjectTrackerStore(database));
+        TrackerManagementService trackerService = CreateTrackerService(database);
+        Tracker defaultTracker = Assert.Single(await trackers.GetAllAsync());
+        Project defaultProject = Assert.IsType<Project>(
+            await projects.GetAsync(defaultTracker.ProjectId));
+        Project project = await projectService.CreateAsync("Alpha");
+        Tracker tracker = await trackerService.CreateBlankAsync(project.Id, "Release");
+        Tracker other = await trackerService.CreateBlankAsync(project.Id, "Other");
+
+        await projectService.RenameAsync(project.Id, "Renamed project");
+        await trackerService.RenameAsync(tracker.Id, "Renamed tracker");
+
+        Project renamedProject = Assert.IsType<Project>(await projects.GetAsync(project.Id));
+        Tracker renamedTracker = Assert.IsType<Tracker>(await trackers.GetAsync(tracker.Id));
+        Assert.Equal(project.Id, renamedProject.Id);
+        Assert.Equal("Renamed project", renamedProject.Name);
+        Assert.Equal(tracker.Id, renamedTracker.Id);
+        Assert.Equal("Renamed tracker", renamedTracker.Name);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            projectService.RenameAsync(project.Id, defaultProject.Name.ToUpperInvariant()));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            trackerService.RenameAsync(other.Id, renamedTracker.Name.ToUpperInvariant()));
+    }
+
+    [Fact]
     public async Task CatalogLifecycle_ReservesNames_CascadesVisibility_AndPurgesHierarchy()
     {
         await using TemporarySqliteFile file = new();
@@ -220,8 +254,7 @@ public sealed class ProjectTrackerOperationsTests
         SqliteTrackedStateStore stateStore = new(database);
         ProjectManagementService projectService = new(projects, new SqliteProjectTrackerStore(database));
         TrackerManagementService trackerService = CreateTrackerService(database);
-        CompatibilityTrackerResolver compatibility = new(projects, trackers);
-        Tracker defaultTracker = await compatibility.ResolveAsync();
+        Tracker defaultTracker = Assert.Single(await trackers.GetAllAsync());
         Project project = await projectService.CreateAsync("Alpha");
         Tracker tracker = await trackerService.CreateBlankAsync(project.Id, "Release");
         TrackedEntity entity = new(EntityId.New(), tracker.Id, "Owned");
@@ -231,10 +264,12 @@ public sealed class ProjectTrackerOperationsTests
             projectService.CreateAsync(" alpha "));
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             trackerService.CreateBlankAsync(project.Id, " release "));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => compatibility.ResolveAsync());
+        Assert.Equal(2, (await trackers.GetAllAsync()).Count);
 
         await projectService.RecycleAsync(project.Id);
-        Assert.Equal(defaultTracker.Id, (await compatibility.ResolveAsync()).Id);
+        Assert.Equal(
+            [defaultTracker.Id],
+            await GetVisibleTrackerIdsAsync(projects, trackers));
         Assert.Equal(
             CatalogLifecycleState.Active,
             Assert.IsType<Tracker>(await trackers.GetAsync(tracker.Id)).LifecycleState);
@@ -242,9 +277,11 @@ public sealed class ProjectTrackerOperationsTests
             projectService.CreateAsync("ALPHA"));
 
         await projectService.RestoreAsync(project.Id);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => compatibility.ResolveAsync());
+        Assert.Equal(2, (await GetVisibleTrackerIdsAsync(projects, trackers)).Count);
         await trackerService.RecycleAsync(tracker.Id);
-        Assert.Equal(defaultTracker.Id, (await compatibility.ResolveAsync()).Id);
+        Assert.Equal(
+            [defaultTracker.Id],
+            await GetVisibleTrackerIdsAsync(projects, trackers));
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             trackerService.CreateBlankAsync(project.Id, "RELEASE"));
         await trackerService.RestoreAsync(tracker.Id);
@@ -261,6 +298,21 @@ public sealed class ProjectTrackerOperationsTests
         Assert.Null(await trackers.GetAsync(replacement.Id));
         Project reused = await projectService.CreateAsync("ALPHA");
         Assert.NotEqual(project.Id, reused.Id);
+    }
+
+    private static async Task<IReadOnlyList<TrackerId>> GetVisibleTrackerIdsAsync(
+        IProjectRepository projects,
+        ITrackerRepository trackers)
+    {
+        HashSet<ProjectId> activeProjects = (await projects.GetAllAsync())
+            .Where(static project => project.LifecycleState == CatalogLifecycleState.Active)
+            .Select(static project => project.Id)
+            .ToHashSet();
+        return (await trackers.GetAllAsync())
+            .Where(tracker => tracker.LifecycleState == CatalogLifecycleState.Active &&
+                              activeProjects.Contains(tracker.ProjectId))
+            .Select(static tracker => tracker.Id)
+            .ToArray();
     }
 
     [Fact]

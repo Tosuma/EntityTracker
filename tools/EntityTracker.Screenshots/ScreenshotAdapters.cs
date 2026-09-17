@@ -30,6 +30,11 @@ internal sealed class ScreenshotSynchronizationConfirmation : ISchemaSynchroniza
     public bool ConfirmArchiveMissingEntities(int entityCount) => true;
 }
 
+internal sealed class ScreenshotContextDiscardConfirmation : IContextDiscardConfirmation
+{
+    public bool ConfirmDiscard(string description) => true;
+}
+
 internal sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
 {
     public override DateTimeOffset GetUtcNow() => utcNow;

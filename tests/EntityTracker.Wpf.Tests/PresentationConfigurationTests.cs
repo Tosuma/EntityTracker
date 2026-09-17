@@ -96,9 +96,9 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
-    public void MainWindow_ProvidesNamesForIconOnlyEntityActionButtons()
+    public void TrackerWorkspace_ProvidesNamesForIconOnlyEntityActionButtons()
     {
-        XDocument document = LoadWpfXaml("MainWindow.xaml");
+        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
         XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
 
         XElement[] actionButtons = document
@@ -115,9 +115,58 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
-    public void MainWindow_SummaryFilterButtonsUseThemeAwarePrimaryText()
+    public void MainWindow_ComposesTypedPersistentShellWithoutLegacyDestinations()
     {
         XDocument document = LoadWpfXaml("MainWindow.xaml");
+        string text = document.ToString(SaveOptions.DisableFormatting);
+        string[] destinations =
+        [
+            "Portfolio",
+            "ProjectDashboard",
+            "Overview",
+            "Archived",
+            "Reports",
+            "SchemaSynchronization",
+            "AddEntity",
+            "HelpSql",
+            "Settings"
+        ];
+
+        Assert.All(destinations, destination => Assert.Contains(
+            $"ShellDestination.{destination}",
+            text,
+            StringComparison.Ordinal));
+        Assert.DoesNotContain("Connections", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Git", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(document.Descendants(), element =>
+            element.Name.LocalName == "TabControl");
+        Assert.Contains(document.Descendants(), element =>
+            element.Name.LocalName == "TrackerWorkspaceView");
+        Assert.Contains(document.Descendants(), element =>
+            element.Name.LocalName == "ComboBox" &&
+            (string?)element.Attribute("AutomationProperties.LabeledBy") is not null);
+    }
+
+    [Fact]
+    public void CatalogModal_TrapsKeyboardFocusAndExposesSafeCancelAction()
+    {
+        XDocument document = LoadWpfXaml("Views", "CatalogModalView.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement rootGrid = Assert.Single(document.Root!.Elements(), element =>
+            element.Name.LocalName == "Grid");
+
+        Assert.Equal("True", (string?)rootGrid.Attribute("FocusManager.IsFocusScope"));
+        Assert.Equal("Cycle", (string?)rootGrid.Attribute("KeyboardNavigation.TabNavigation"));
+        Assert.Equal("Cycle", (string?)rootGrid.Attribute("KeyboardNavigation.ControlTabNavigation"));
+        XElement cancel = Assert.Single(document.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "CancelButton");
+        Assert.Equal("True", (string?)cancel.Attribute("IsCancel"));
+    }
+
+    [Fact]
+    public void TrackerWorkspace_SummaryFilterButtonsUseThemeAwarePrimaryText()
+    {
+        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
 
         XElement style = Assert.Single(document.Descendants(), element =>
@@ -133,9 +182,9 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
-    public void MainWindow_EditorSurfacesFollowTheLiveWindowBackground()
+    public void TrackerWorkspace_EditorSurfacesUseThemeAwarePageBackground()
     {
-        XDocument document = LoadWpfXaml("MainWindow.xaml");
+        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
         string[] surfaceNames = ["EditorSurface", "ArchiveConfirmationSurface"];
 
@@ -144,7 +193,7 @@ public sealed class PresentationConfigurationTests
             XElement surface = Assert.Single(document.Descendants(), element =>
                 (string?)element.Attribute(x + "Name") == surfaceName);
             Assert.Equal(
-                "{Binding Background, RelativeSource={RelativeSource AncestorType=Window}}",
+                "{DynamicResource Brush.Surface.Page}",
                 (string?)surface.Attribute("Background"));
         }
 
@@ -157,9 +206,9 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
-    public void MainWindow_EditorOverlayBlocksPointerInputWithoutDisablingFluentContent()
+    public void TrackerWorkspace_EditorOverlayBlocksPointerInputWithoutDisablingFluentContent()
     {
-        XDocument document = LoadWpfXaml("MainWindow.xaml");
+        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
 
         XElement applicationContent = Assert.Single(document.Descendants(), element =>
@@ -228,9 +277,9 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
-    public void MainWindow_DeclaresOnlyTheSupportedFilterableColumns()
+    public void TrackerWorkspace_DeclaresOnlyTheSupportedFilterableColumns()
     {
-        XDocument document = LoadWpfXaml("MainWindow.xaml");
+        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
 
         string[] configuredFilters = document
             .Descendants()
@@ -241,13 +290,13 @@ public sealed class PresentationConfigurationTests
 
         Assert.Equal(
         [
-            "{Binding DataContext.ActiveTable.ResponsibleDeveloperFilter, RelativeSource={RelativeSource AncestorType=Window}}",
-            "{Binding DataContext.ActiveTable.GroupFilter, RelativeSource={RelativeSource AncestorType=Window}}",
-            "{Binding DataContext.ActiveTable.StatusFilter, RelativeSource={RelativeSource AncestorType=Window}}",
-            "{Binding DataContext.ActiveTable.WorkStatusFilter, RelativeSource={RelativeSource AncestorType=Window}}",
-            "{Binding DataContext.ArchivedTable.ResponsibleDeveloperFilter, RelativeSource={RelativeSource AncestorType=Window}}",
-            "{Binding DataContext.ArchivedTable.GroupFilter, RelativeSource={RelativeSource AncestorType=Window}}",
-            "{Binding DataContext.ArchivedTable.StatusFilter, RelativeSource={RelativeSource AncestorType=Window}}"
+            "{Binding DataContext.ActiveTable.ResponsibleDeveloperFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
+            "{Binding DataContext.ActiveTable.GroupFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
+            "{Binding DataContext.ActiveTable.StatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
+            "{Binding DataContext.ActiveTable.WorkStatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
+            "{Binding DataContext.ArchivedTable.ResponsibleDeveloperFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
+            "{Binding DataContext.ArchivedTable.GroupFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
+            "{Binding DataContext.ArchivedTable.StatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}"
         ],
             configuredFilters);
     }

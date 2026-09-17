@@ -1,315 +1,101 @@
-using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Media3D;
 
+using EntityTracker.Domain;
 using EntityTracker.Wpf.ViewModels;
 
 namespace EntityTracker.Wpf;
 
 public partial class MainWindow : Window
 {
-    private const double MouseWheelDeltaPerNotch = 120;
-    private const double ScrollPixelsPerNotch = 10;
+    private readonly ShellViewModel _viewModel;
+    private bool _updatingSelectors;
 
-    private readonly MainWindowViewModel _viewModel;
-    private IInputElement? _focusBeforeEditor;
-
-    public MainWindow(MainWindowViewModel viewModel)
+    public MainWindow(ShellViewModel viewModel)
     {
-        ArgumentNullException.ThrowIfNull(viewModel);
-
         InitializeComponent();
         _viewModel = viewModel;
         DataContext = viewModel;
-        _viewModel.OverviewSelectionClearRequested += OnOverviewSelectionClearRequested;
-        _viewModel.Editor.PropertyChanged += OnEditorPropertyChanged;
         Loaded += OnLoaded;
         Closed += OnClosed;
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         Loaded -= OnLoaded;
         await _viewModel.InitializeAsync();
+        SynchronizeSelectors();
     }
 
     private void OnClosed(object? sender, EventArgs e)
     {
-        Closed -= OnClosed;
-        _viewModel.OverviewSelectionClearRequested -= OnOverviewSelectionClearRequested;
-        _viewModel.Editor.PropertyChanged -= OnEditorPropertyChanged;
+        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        _viewModel.Dispose();
     }
 
-    private void OnEditorPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(EntityDependencyEditorViewModel.IsOpen))
+        if (e.PropertyName is nameof(ShellViewModel.SelectedProject) or
+            nameof(ShellViewModel.SelectedTracker))
+        {
+            SynchronizeSelectors();
+        }
+    }
+
+    private void SynchronizeSelectors()
+    {
+        _updatingSelectors = true;
+        ProjectSelector.SelectedItem = _viewModel.SelectedProject;
+        TrackerSelector.SelectedItem = _viewModel.SelectedTracker;
+        _updatingSelectors = false;
+    }
+
+    private async void OnProjectSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingSelectors || !IsLoaded || _viewModel.IsBusy)
         {
             return;
         }
 
-        if (_viewModel.Editor.IsOpen)
+        if (!await _viewModel.SelectProjectAsync(ProjectSelector.SelectedItem as Project))
         {
-            _focusBeforeEditor = Keyboard.FocusedElement;
-            Dispatcher.BeginInvoke(new Action(() =>
-            {
-                if (!EditorStatusComboBox.Focus())
-                {
-                    EditorSurface.Focus();
-                }
-            }));
-            return;
-        }
-
-        IInputElement? restoreTarget = _focusBeforeEditor;
-        _focusBeforeEditor = null;
-        if (restoreTarget is not null)
-        {
-            Dispatcher.BeginInvoke(new Action(() => Keyboard.Focus(restoreTarget)));
+            SynchronizeSelectors();
         }
     }
 
-    private void OnOverviewSelectionChanged(object sender, SelectionChangedEventArgs e) =>
-        _viewModel.UpdateOverviewSelection(
-            OverviewDataGrid.SelectedItems.OfType<EntityOverviewRow>());
-
-    private void OnOverviewSelectionClearRequested(object? sender, EventArgs e)
+    private async void OnTrackerSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (OverviewDataGrid.SelectedItems.Count > 0)
-        {
-            OverviewDataGrid.UnselectAll();
-        }
-    }
-
-    private void OnWindowPreviewMouseDown(object sender, MouseButtonEventArgs e)
-    {
-        if (_viewModel.SelectedTab != MainWindowTab.Overview ||
-            OverviewDataGrid.SelectedItems.Count == 0 ||
-            _viewModel.Editor.IsOpen ||
-            e.OriginalSource is not DependencyObject source ||
-            !IsDescendantOrSelf(source, this) ||
-            IsDescendantOrSelf(source, OverviewDataGrid) ||
-            IsDescendantOrSelf(source, BulkStatusToolbar))
+        if (_updatingSelectors || !IsLoaded || _viewModel.IsBusy)
         {
             return;
         }
 
-        _viewModel.ClearOverviewSelection();
-    }
-
-    private void OnContextMenuButtonClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { ContextMenu: not null } button)
+        if (!await _viewModel.SelectTrackerAsync(TrackerSelector.SelectedItem as Tracker))
         {
-            return;
-        }
-
-        button.ContextMenu.PlacementTarget = button;
-        button.ContextMenu.IsOpen = true;
-        e.Handled = true;
-    }
-
-    private void OnOpenOverviewSearchClick(object sender, RoutedEventArgs e) =>
-        QueueCurrentSearchFocus();
-
-    private void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.F &&
-            (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
-        {
-            EntityTableViewModel? table = GetCurrentEntityTable();
-            if (table is not null &&
-                !_viewModel.IsBusy &&
-                !_viewModel.ManualCreation.IsBusy &&
-                !_viewModel.Editor.IsOpen)
-            {
-                table.OpenSearchCommand.Execute(null);
-                QueueCurrentSearchFocus();
-                e.Handled = true;
-            }
-
-            return;
-        }
-
-        if (e.Key != Key.Escape || _viewModel.Editor.IsOpen)
-        {
-            return;
-        }
-
-        EntityTableViewModel? currentTable = GetCurrentEntityTable();
-        if (currentTable?.CloseOpenFilter() == true)
-        {
-            e.Handled = true;
-            return;
-        }
-
-        if (currentTable?.IsSearchOpen == true)
-        {
-            currentTable.CloseSearchCommand.Execute(null);
-            e.Handled = true;
-            return;
-        }
-
-        if (_viewModel.SelectedTab == MainWindowTab.Overview &&
-            OverviewDataGrid.SelectedItems.Count > 0)
-        {
-            _viewModel.ClearOverviewSelection();
-            e.Handled = true;
+            SynchronizeSelectors();
         }
     }
 
-    private EntityTableViewModel? GetCurrentEntityTable() => _viewModel.SelectedTab switch
-    {
-        MainWindowTab.Overview => _viewModel.ActiveTable,
-        MainWindowTab.Archived => _viewModel.ArchivedTable,
-        _ => null
-    };
+    private void OnDismissDefaultNamePrompt(object sender, RoutedEventArgs e) =>
+        _viewModel.DismissDefaultNamePrompt();
 
-    private void QueueCurrentSearchFocus()
+    private void OnDismissNotification(object sender, RoutedEventArgs e) =>
+        _viewModel.DismissNotification();
+
+    private void OnRenameDefaultName(object sender, RoutedEventArgs e)
     {
-        Dispatcher.BeginInvoke(new Action(() =>
+        if (_viewModel.SelectedTracker is not null &&
+            _viewModel.SelectedTracker.Name == "Default tracker")
         {
-            EntityTableViewModel? table = GetCurrentEntityTable();
-            if (table?.IsSearchOpen != true)
-            {
-                return;
-            }
-
-            TextBox searchBox = _viewModel.SelectedTab == MainWindowTab.Archived
-                ? ArchivedSearchTextBox
-                : OverviewSearchTextBox;
-            searchBox.Focus();
-            searchBox.SelectAll();
-        }));
-    }
-
-    private void OnDataGridPreviewMouseWheel(
-        object sender,
-        MouseWheelEventArgs e)
-    {
-        if (sender is not DataGrid dataGrid || e.Delta == 0)
-        {
-            return;
+            _viewModel.Catalog.OpenRenameTracker(_viewModel.SelectedTracker);
         }
-
-        ScrollViewer? scrollViewer = FindVisualDescendant<ScrollViewer>(dataGrid);
-        if (scrollViewer is null || scrollViewer.ScrollableHeight <= 0)
+        else if (_viewModel.SelectedProject is not null)
         {
-            return;
-        }
-
-        if (TryScroll(scrollViewer, e.Delta))
-        {
-            e.Handled = true;
+            _viewModel.Catalog.OpenRenameProject(_viewModel.SelectedProject);
         }
     }
 
-    private void OnReviewPreviewMouseWheel(
-        object sender,
-        MouseWheelEventArgs e)
-    {
-        if (sender is not ScrollViewer reviewScrollViewer ||
-            e.OriginalSource is not DependencyObject originalSource ||
-            e.Delta == 0)
-        {
-            return;
-        }
-
-        DependencyObject? current = originalSource;
-        while (current is not null)
-        {
-            if (current is ScrollViewer scrollViewer && TryScroll(scrollViewer, e.Delta))
-            {
-                e.Handled = true;
-                return;
-            }
-
-            if (ReferenceEquals(current, reviewScrollViewer))
-            {
-                return;
-            }
-
-            current = GetParent(current);
-        }
-    }
-
-    private static bool TryScroll(ScrollViewer scrollViewer, int wheelDelta)
-    {
-        if (scrollViewer.ScrollableHeight <= 0)
-        {
-            return false;
-        }
-
-        double scrollDelta = wheelDelta / MouseWheelDeltaPerNotch * ScrollPixelsPerNotch;
-        double targetOffset = Math.Clamp(
-            scrollViewer.VerticalOffset - scrollDelta,
-            0,
-            scrollViewer.ScrollableHeight);
-
-        if (targetOffset == scrollViewer.VerticalOffset)
-        {
-            return false;
-        }
-
-        scrollViewer.ScrollToVerticalOffset(targetOffset);
-        return true;
-    }
-
-    private static DependencyObject? GetParent(DependencyObject child)
-    {
-        if (child is FrameworkContentElement frameworkContentElement)
-        {
-            return frameworkContentElement.Parent;
-        }
-
-        if (child is ContentElement contentElement)
-        {
-            return ContentOperations.GetParent(contentElement);
-        }
-
-        return child is Visual or Visual3D
-            ? VisualTreeHelper.GetParent(child)
-            : LogicalTreeHelper.GetParent(child);
-    }
-
-    private static bool IsDescendantOrSelf(
-        DependencyObject source,
-        DependencyObject ancestor)
-    {
-        DependencyObject? current = source;
-        while (current is not null)
-        {
-            if (ReferenceEquals(current, ancestor))
-            {
-                return true;
-            }
-
-            current = GetParent(current);
-        }
-
-        return false;
-    }
-
-    private static T? FindVisualDescendant<T>(DependencyObject parent)
-        where T : DependencyObject
-    {
-        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
-        {
-            DependencyObject child = VisualTreeHelper.GetChild(parent, index);
-            if (child is T match)
-            {
-                return match;
-            }
-
-            T? descendant = FindVisualDescendant<T>(child);
-            if (descendant is not null)
-            {
-                return descendant;
-            }
-        }
-
-        return null;
-    }
+    public FrameworkElement? FindWorkspaceElement(string name) =>
+        WorkspaceView.FindWorkspaceElement(name);
 }

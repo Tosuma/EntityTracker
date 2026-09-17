@@ -1,6 +1,7 @@
 using EntityTracker.Application.History;
 using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Projects;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Tracking;
 using EntityTracker.DemoData;
@@ -39,9 +40,10 @@ internal static class ScreenshotDataSeeder
         {
             await provider.GetRequiredService<IPersistenceInitializer>()
                 .InitializeAsync(cancellationToken);
-            Tracker tracker = await provider
-                .GetRequiredService<CompatibilityTrackerResolver>()
-                .ResolveAsync(cancellationToken);
+            Tracker tracker = (await provider
+                    .GetRequiredService<ITrackerRepository>()
+                    .GetAllAsync(cancellationToken))
+                .Single(static item => item.Name == "Default tracker");
 
             SchemaSynchronizationService synchronization =
                 provider.GetRequiredService<SchemaSynchronizationService>();
@@ -96,6 +98,36 @@ internal static class ScreenshotDataSeeder
         await new ProgressDemoSeeder().SeedAsync(
             workspace.Paths.DatabasePath,
             options,
+            cancellationToken);
+
+        await using ServiceProvider catalogProvider = ScreenshotServiceProviderFactory.Create(
+            workspace.Paths,
+            new ScreenshotCsvFilePicker(),
+            new FixedTimeProvider(FixedNow));
+        await catalogProvider.GetRequiredService<IPersistenceInitializer>()
+            .InitializeAsync(cancellationToken);
+        Project defaultProject = (await catalogProvider
+                .GetRequiredService<IProjectRepository>()
+                .GetAllAsync(cancellationToken))
+            .Single(static item => item.Name == "Default project");
+        Tracker defaultTracker = (await catalogProvider
+                .GetRequiredService<ITrackerRepository>()
+                .GetAllAsync(cancellationToken))
+            .Single(static item => item.Name == "Default tracker");
+        Project customerPlatform = await catalogProvider
+            .GetRequiredService<ProjectManagementService>()
+            .CreateAsync("Customer platform", cancellationToken);
+        TrackerManagementService trackerManagement = catalogProvider
+            .GetRequiredService<TrackerManagementService>();
+        await trackerManagement.CopyAsync(
+            defaultTracker.Id,
+            defaultProject.Id,
+            "Release readiness",
+            cancellationToken);
+        await trackerManagement.CopyAsync(
+            defaultTracker.Id,
+            customerPlatform.Id,
+            "Data contracts",
             cancellationToken);
     }
 }

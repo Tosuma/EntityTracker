@@ -1141,6 +1141,24 @@ public sealed class MainWindowViewModelTests
         Assert.False(viewModel.ApplyBulkStatusCommand.CanExecute(null));
     }
 
+    [Fact]
+    public void DirtyCreationFlow_IsReportedAndCanBeExplicitlyDiscarded()
+    {
+        MainWindowViewModel viewModel = CreateViewModel(
+            [],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+
+        viewModel.ManualCreation.EntityName = "Pending entity";
+
+        Assert.True(viewModel.HasUnsavedWork);
+        viewModel.DiscardTransientWork();
+        Assert.False(viewModel.HasUnsavedWork);
+        Assert.Equal(string.Empty, viewModel.ManualCreation.EntityName);
+    }
+
     private static MainWindowViewModel CreateViewModel(
         IReadOnlyList<TrackedEntity> entities,
         IReadOnlyList<PersistedDependency> dependencies,

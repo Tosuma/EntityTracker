@@ -12,6 +12,9 @@ internal static class ScreenshotManifest
 
     internal static IReadOnlyList<string> FileNames { get; } =
     [
+        "portfolio.png",
+        "project-dashboard.png",
+        "create-tracker-copy.png",
         "overview.png",
         "overview-search.png",
         "overview-missing-entities-as-dependencies.png",
@@ -23,7 +26,7 @@ internal static class ScreenshotManifest
         "progress.png",
         "archived-entity.png",
         "sql-query.png",
-        "connections.png"
+        "settings.png"
     ];
 
     internal static string GetAppearanceDirectoryName(ApplicationAppearance appearance) =>

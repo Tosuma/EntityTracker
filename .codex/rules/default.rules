@@ -1,4 +1,14 @@
 prefix_rule(
-    pattern = ["dotnet", ["build", "test", "restore"]],
+    pattern = ["dotnet", "build"],
+    decision = "allow",
+)
+
+prefix_rule(
+    pattern = ["dotnet", "test"],
+    decision = "allow",
+)
+
+prefix_rule(
+    pattern = ["dotnet", "restore"],
     decision = "allow",
 )

@@ -68,6 +68,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private IReadOnlyList<PriorityPlanningRow> _priorityPreviewRows = [];
     private IReadOnlyList<string> _priorityUnresolvedDependencyNames = [];
     private bool _hasPendingPriorityChange;
+    private string? _initialOverrideSignature;
 
     public EntityDependencyEditorViewModel(
         TrackerId trackerId,
@@ -529,6 +530,25 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     public bool HasPriorityUnresolvedDependencies =>
         PriorityUnresolvedDependencyNames.Count > 0;
 
+    public bool IsDirty
+    {
+        get
+        {
+            if (!IsOpen || IsArchivedMode || CurrentEditPlan is null)
+            {
+                return false;
+            }
+
+            TrackedEntity entity = CurrentEditPlan.Entity;
+            return SelectedStatus != entity.Status ||
+                   EditedNotes != entity.Notes ||
+                   EditedResponsibleDeveloper != entity.ResponsibleDeveloper ||
+                   EditedGroupName != entity.GroupName ||
+                   SelectedRequestedPriority != entity.RequestedPriority ||
+                   OverrideSignature(CurrentEditPlan.DesiredOverrides) != _initialOverrideSignature;
+        }
+    }
+
     public string SelectedEntityName => SelectedEntity?.SourceName ?? "Loading entity…";
 
     public string EntityDetails => SelectedEntity is null
@@ -718,6 +738,14 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(CanEditPriority));
         OnPropertyChanged(nameof(CanRestoreEntity));
         NotifyCommandsChanged();
+    }
+
+    public void DiscardAndClose()
+    {
+        if (IsOpen && !IsBusy)
+        {
+            CloseSession();
+        }
     }
 
     private async Task SearchAsync(int searchVersion)
@@ -1024,6 +1052,11 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
     private void LoadPlan(EntityDependencyEditPlan plan, bool initializeProgress)
     {
+        if (initializeProgress)
+        {
+            _initialOverrideSignature = OverrideSignature(plan.DesiredOverrides);
+        }
+
         CurrentEditPlan = plan;
         if (initializeProgress)
         {
@@ -1048,6 +1081,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         Errors = plan.Errors;
         RefreshPriorityPresentation();
         NotifyCommandsChanged();
+        OnPropertyChanged(nameof(IsDirty));
     }
 
     private void RefreshPriorityPresentation()
@@ -1098,6 +1132,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         Errors = [];
         ArchiveErrorMessage = null;
         _reviewPlan = null;
+        _initialOverrideSignature = null;
         Mode = EntityEditorMode.Standalone;
         _selectedStatus = DevelopmentStatus.NotStarted;
         OnPropertyChanged(nameof(SelectedStatus));
@@ -1204,8 +1239,17 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
         field = value;
         OnPropertyChanged(propertyName);
+        OnPropertyChanged(nameof(IsDirty));
         return true;
     }
+
+    private static string OverrideSignature(IEnumerable<ManualDependencyOverride> overrides) =>
+        string.Join(
+            "|",
+            overrides
+                .OrderBy(static item => item.DependencySourceName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static item => item.Action)
+                .Select(static item => $"{item.Action}:{item.DependencySourceName.Trim().ToUpperInvariant()}"));
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));

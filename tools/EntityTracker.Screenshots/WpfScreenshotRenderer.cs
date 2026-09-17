@@ -76,11 +76,11 @@ internal sealed class WpfScreenshotRenderer(MainWindow window, string outputDire
 
     internal async Task CaptureReviewSectionAsync(
         FrameworkElement section,
+        ScrollViewer scrollViewer,
         string fileName)
     {
         ArgumentNullException.ThrowIfNull(section);
         await SettleAsync();
-        ScrollViewer scrollViewer = (ScrollViewer)_window.FindName("SchemaReviewScrollViewer");
         Point currentPosition = section.TransformToAncestor(scrollViewer).Transform(new Point());
         scrollViewer.ScrollToVerticalOffset(
             Math.Max(0, scrollViewer.VerticalOffset + currentPosition.Y - 4));
