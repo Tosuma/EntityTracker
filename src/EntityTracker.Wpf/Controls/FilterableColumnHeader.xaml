@@ -61,18 +61,21 @@
             </DockPanel>
         </Button>
 
-        <Popup Placement="Bottom"
+        <Popup x:Name="FilterPopup"
+               Placement="Bottom"
                PlacementTarget="{Binding ElementName=MenuButton}"
                StaysOpen="False"
                AllowsTransparency="True"
                DataContext="{Binding Filter, ElementName=Root}"
                IsOpen="{Binding IsOpen, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                Opened="OnPopupOpened"
-               Closed="OnPopupClosed">
-            <Border Width="270"
+               Closed="OnPopupClosed"
+               PreviewKeyDown="OnPopupPreviewKeyDown">
+            <Border Width="300"
                     MaxHeight="430"
                     Margin="0,3,0,0"
-                    Padding="12"
+                    Padding="16"
+                    AutomationProperties.Name="{Binding Title, StringFormat=Filter options for {0}}"
                     Background="{DynamicResource Brush.Surface.Page}"
                     BorderBrush="{DynamicResource Brush.Border.Strong}"
                     BorderThickness="1"
@@ -84,12 +87,24 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <StackPanel Visibility="{Binding CanSort, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <DockPanel Margin="0,0,0,12">
+                        <TextBlock DockPanel.Dock="Right"
+                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Text="Staged until Apply" />
+                        <TextBlock FontSize="15"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.Text.Primary}"
+                                   Text="{Binding Title}" />
+                    </DockPanel>
+
+                    <StackPanel Grid.Row="1"
+                                Visibility="{Binding CanSort, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <TextBlock Margin="0,0,0,6"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource Brush.Text.Primary}"
@@ -111,14 +126,14 @@
                     </StackPanel>
 
                     <TextBox x:Name="FilterSearchTextBox"
-                             Grid.Row="1"
+                             Grid.Row="2"
                              Margin="0,0,0,8"
                              Padding="7,5"
                              AutomationProperties.Name="Search filter values"
                              Text="{Binding OptionSearchQuery, UpdateSourceTrigger=PropertyChanged}"
                              ToolTip="Search values" />
 
-                    <ScrollViewer Grid.Row="2"
+                    <ScrollViewer Grid.Row="3"
                                   MaxHeight="220"
                                   VerticalScrollBarVisibility="Auto">
                         <StackPanel>
@@ -154,9 +169,9 @@
                         </StackPanel>
                     </ScrollViewer>
 
-                    <Separator Grid.Row="3" Margin="0,9" />
+                    <Separator Grid.Row="4" Margin="0,9" />
 
-                    <DockPanel Grid.Row="4">
+                    <DockPanel Grid.Row="5">
                         <Button DockPanel.Dock="Left"
                                 Command="{Binding ClearFilterCommand}"
                                 Content="Clear filter"

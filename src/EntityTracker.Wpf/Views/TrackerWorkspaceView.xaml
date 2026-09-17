@@ -7,6 +7,7 @@
         xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
         xmlns:controls="clr-namespace:EntityTracker.Wpf.Controls"
         xmlns:domain="clr-namespace:EntityTracker.Domain;assembly=EntityTracker.Domain"
+        xmlns:workflow="clr-namespace:EntityTracker.Application.Workflow;assembly=EntityTracker.Application"
         xmlns:reporting="clr-namespace:EntityTracker.Reporting;assembly=EntityTracker.Reporting"
         xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels"
         mc:Ignorable="d"
@@ -67,6 +68,106 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <Style x:Key="EntityNameButtonStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="Padding" Value="3,1" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+
+        <DataTemplate x:Key="DevelopmentStatusBadgeTemplate">
+            <Border x:Name="Badge"
+                    Padding="8,3"
+                    HorizontalAlignment="Left"
+                    Background="{DynamicResource Brush.Status.NotStarted}"
+                    CornerRadius="10">
+                <TextBlock x:Name="BadgeText"
+                           FontSize="12"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource Brush.Brand.DarkGreen}"
+                           Text="Not started" />
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.InProgress}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.InProgress}" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="In progress" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.ReworkNeeded}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.ReworkNeeded}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Rework needed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.DevelopmentCompleted}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.DevelopmentCompleted}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Dev. completed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.Reconciled}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Reconciled}" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Reconciled" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate x:Key="WorkStatusBadgeTemplate">
+            <Border x:Name="Badge"
+                    Padding="8,3"
+                    HorizontalAlignment="Left"
+                    Background="{DynamicResource Brush.Surface.Subtle}"
+                    BorderBrush="{DynamicResource Brush.Border.Medium}"
+                    BorderThickness="1"
+                    CornerRadius="10">
+                <TextBlock x:Name="BadgeText"
+                           FontSize="12"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource Brush.Text.Primary}"
+                           Text="Archived" />
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.Ready}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Ready}" />
+                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Ready" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.Blocked}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Blocked}" />
+                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Blocked" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.InProgress}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.InProgress}" />
+                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="In progress" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.ReworkNeeded}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.ReworkNeeded}" />
+                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Rework needed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.DevelopmentCompleted}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.DevelopmentCompleted}" />
+                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Dev. completed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.Reconciled}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Reconciled}" />
+                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Reconciled" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
 
         <Style TargetType="DataGrid" BasedOn="{StaticResource EntityTrackerDataGridStyle}">
             <EventSetter Event="PreviewMouseWheel" Handler="OnDataGridPreviewMouseWheel" />
@@ -512,14 +613,21 @@
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
                                             <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
-                                                <TextBlock VerticalAlignment="Center"
-                                                           Text="{Binding SourceName}" />
+                                                <Button AutomationProperties.Name="{Binding SourceName, StringFormat=View details for {0}}"
+                                                        Command="{Binding DataContext.OpenEntityDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        PreviewMouseLeftButtonDown="OnEntityNamePreviewMouseLeftButtonDown"
+                                                        Style="{StaticResource EntityNameButtonStyle}">
+                                                    <TextBlock Text="{Binding SourceName}"
+                                                               TextDecorations="Underline" />
+                                                </Button>
                                                 <Button Width="24"
                                                         Height="24"
                                                         Margin="6,0,0,0"
                                                         Padding="2"
                                                         VerticalAlignment="Center"
                                                         AutomationProperties.Name="{Binding GraphIssueTitle}"
+                                                        AutomationProperties.HelpText="{Binding GraphIssueDescription}"
                                                         Background="Transparent"
                                                         BorderThickness="0"
                                                         Cursor="Hand"
@@ -591,6 +699,30 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Width="140">
+                                    <DataGridTemplateColumn.Header>
+                                        <controls:FilterableColumnHeader Filter="{Binding DataContext.ActiveTable.WorkStatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                    </DataGridTemplateColumn.Header>
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <ContentControl AutomationProperties.Name="{Binding WorkStatus, StringFormat=Work status: {0}}"
+                                                            Content="{Binding WorkflowState}"
+                                                            ContentTemplate="{StaticResource WorkStatusBadgeTemplate}" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Width="180">
+                                    <DataGridTemplateColumn.Header>
+                                        <controls:FilterableColumnHeader Filter="{Binding DataContext.ActiveTable.StatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                    </DataGridTemplateColumn.Header>
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <ContentControl AutomationProperties.Name="{Binding Status, StringFormat=Development status: {0}}"
+                                                            Content="{Binding DevelopmentStatus}"
+                                                            ContentTemplate="{StaticResource DevelopmentStatusBadgeTemplate}" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                                 <DataGridTextColumn Width="150"
                                                     Binding="{Binding ResponsibleDeveloperDisplay}">
                                     <DataGridTextColumn.Header>
@@ -603,21 +735,15 @@
                                         <controls:FilterableColumnHeader Filter="{Binding DataContext.ActiveTable.GroupFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                                     </DataGridTextColumn.Header>
                                 </DataGridTextColumn>
-                                <DataGridTextColumn Width="125" Binding="{Binding Provenance}" Header="Source" />
-                                <DataGridTextColumn Width="130" Binding="{Binding Status}">
+                                <DataGridTextColumn Width="2.2*"
+                                                    Binding="{Binding BlockersDisplay}">
                                     <DataGridTextColumn.Header>
-                                        <controls:FilterableColumnHeader Filter="{Binding DataContext.ActiveTable.StatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                        <TextBlock AutomationProperties.HelpText="Unresolved or not-yet-implemented direct dependencies"
+                                                   Text="Blockers"
+                                                   ToolTip="Unresolved or not-yet-implemented direct dependencies" />
                                     </DataGridTextColumn.Header>
                                 </DataGridTextColumn>
-                                <DataGridTextColumn Width="130" Binding="{Binding WorkStatus}">
-                                    <DataGridTextColumn.Header>
-                                        <controls:FilterableColumnHeader Filter="{Binding DataContext.ActiveTable.WorkStatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                    </DataGridTextColumn.Header>
-                                </DataGridTextColumn>
-                                <DataGridTextColumn Width="105" Binding="{Binding DependencyCount}" Header="Dependencies" />
-                                <DataGridTextColumn Width="2.2*" Binding="{Binding MissingDependencies}" Header="Missing Dependencies" />
-                                <DataGridTextColumn Width="2*" Binding="{Binding Notes}" Header="Notes" />
-                                <DataGridTemplateColumn Width="52" Header="">
+                                <DataGridTemplateColumn Width="76" Header="Actions">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
                                             <Button Width="30"
@@ -636,6 +762,9 @@
                                                     Click="OnContextMenuButtonClick">
                                                 <Button.ContextMenu>
                                                     <ContextMenu>
+                                                        <MenuItem Header="View details"
+                                                                  Command="{Binding PlacementTarget.Tag.OpenEntityDetailsCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                                         <MenuItem Header="{Binding PlacementTarget.DataContext.ActionLabel, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                                   Command="{Binding PlacementTarget.Tag.EditOverviewEntityCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                                   CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
@@ -790,7 +919,32 @@
                                   SelectionMode="Single"
                                   SelectionUnit="FullRow">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Width="2.2*" Binding="{Binding SourceName}" Header="Entity" />
+                                <DataGridTemplateColumn Width="2.2*" Header="Entity">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button AutomationProperties.Name="{Binding SourceName, StringFormat=View details for {0}}"
+                                                    Command="{Binding DataContext.OpenEntityDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    PreviewMouseLeftButtonDown="OnEntityNamePreviewMouseLeftButtonDown"
+                                                    Style="{StaticResource EntityNameButtonStyle}">
+                                                <TextBlock Text="{Binding SourceName}"
+                                                           TextDecorations="Underline" />
+                                            </Button>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Width="180">
+                                    <DataGridTemplateColumn.Header>
+                                        <controls:FilterableColumnHeader Filter="{Binding DataContext.ArchivedTable.StatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                    </DataGridTemplateColumn.Header>
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <ContentControl AutomationProperties.Name="{Binding Status, StringFormat=Development status: {0}}"
+                                                            Content="{Binding DevelopmentStatus}"
+                                                            ContentTemplate="{StaticResource DevelopmentStatusBadgeTemplate}" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                                 <DataGridTextColumn Width="150" Binding="{Binding ResponsibleDeveloperDisplay}">
                                     <DataGridTextColumn.Header>
                                         <controls:FilterableColumnHeader Filter="{Binding DataContext.ArchivedTable.ResponsibleDeveloperFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
@@ -801,14 +955,7 @@
                                         <controls:FilterableColumnHeader Filter="{Binding DataContext.ArchivedTable.GroupFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                                     </DataGridTextColumn.Header>
                                 </DataGridTextColumn>
-                                <DataGridTextColumn Width="125" Binding="{Binding Provenance}" Header="Source" />
-                                <DataGridTextColumn Width="130" Binding="{Binding Status}">
-                                    <DataGridTextColumn.Header>
-                                        <controls:FilterableColumnHeader Filter="{Binding DataContext.ArchivedTable.StatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                    </DataGridTextColumn.Header>
-                                </DataGridTextColumn>
-                                <DataGridTextColumn Width="2*" Binding="{Binding Notes}" Header="Notes" />
-                                <DataGridTemplateColumn Width="52" Header="">
+                                <DataGridTemplateColumn Width="76" Header="Actions">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
                                             <Button Width="30"
@@ -827,6 +974,9 @@
                                                     Click="OnContextMenuButtonClick">
                                                 <Button.ContextMenu>
                                                     <ContextMenu>
+                                                        <MenuItem Header="View details"
+                                                                  Command="{Binding PlacementTarget.Tag.OpenEntityDetailsCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                                         <MenuItem Header="{Binding PlacementTarget.DataContext.ActionLabel, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                                   Command="{Binding PlacementTarget.Tag.EditOverviewEntityCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                                   CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
@@ -1826,6 +1976,221 @@
 
         </TabControl>
     </DockPanel>
+
+        <Border x:Name="EntityDetailsPane"
+                Width="420"
+                MaxWidth="420"
+                Margin="18"
+                Padding="20"
+                Panel.ZIndex="50"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Stretch"
+                AutomationProperties.LiveSetting="Polite"
+                Background="{DynamicResource Brush.Surface.Page}"
+                BorderBrush="{DynamicResource Brush.Border.Strong}"
+                BorderThickness="1"
+                CornerRadius="6"
+                DataContext="{Binding SelectedEntityDetails}"
+                Visibility="{Binding DataContext.IsEntityDetailsOpen, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <DockPanel Margin="0,0,0,14">
+                    <Button x:Name="CloseEntityDetailsButton"
+                            DockPanel.Dock="Right"
+                            Width="34"
+                            Height="34"
+                            Padding="0"
+                            AutomationProperties.Name="Close entity details"
+                            Command="{Binding DataContext.CloseEntityDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            Content="✕"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            ToolTip="Close details (Esc)" />
+                    <StackPanel>
+                        <TextBlock AutomationProperties.HeadingLevel="Level2"
+                                   FontSize="20"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.Text.Primary}"
+                                   Text="{Binding SourceName}"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Margin="0,3,0,0"
+                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Text="{Binding Lifecycle}" />
+                    </StackPanel>
+                </DockPanel>
+
+                <ScrollViewer Grid.Row="1"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Status" />
+                        <WrapPanel Margin="0,7,0,16">
+                            <ContentControl Margin="0,0,8,6"
+                                            AutomationProperties.Name="{Binding WorkStatus, StringFormat=Work status: {0}}"
+                                            Content="{Binding WorkflowStateValue}"
+                                            ContentTemplate="{StaticResource WorkStatusBadgeTemplate}" />
+                            <ContentControl Margin="0,0,0,6"
+                                            AutomationProperties.Name="{Binding DevelopmentStatus, StringFormat=Development status: {0}}"
+                                            Content="{Binding DevelopmentStatusValue}"
+                                            ContentTemplate="{StaticResource DevelopmentStatusBadgeTemplate}" />
+                        </WrapPanel>
+
+                        <Grid Margin="0,0,0,16">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock FontWeight="SemiBold" Text="Requested priority" />
+                                <TextBlock Margin="0,3,0,0" Text="{Binding RequestedPriority}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock FontWeight="SemiBold" Text="Effective priority" />
+                                <TextBlock Margin="0,3,0,0" Text="{Binding EffectivePriority}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <StackPanel Grid.Row="1" Margin="0,12,12,0">
+                                <TextBlock FontWeight="SemiBold" Text="Rank" />
+                                <TextBlock Margin="0,3,0,0" Text="{Binding Rank}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,12,0,0">
+                                <TextBlock FontWeight="SemiBold" Text="Provenance" />
+                                <TextBlock Margin="0,3,0,0" Text="{Binding Provenance}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,12,0">
+                                <TextBlock FontWeight="SemiBold" Text="Responsible developer" />
+                                <TextBlock Margin="0,3,0,0" Text="{Binding ResponsibleDeveloper}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock FontWeight="SemiBold" Text="Group" />
+                                <TextBlock Margin="0,3,0,0" Text="{Binding GroupName}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock FontWeight="SemiBold" Text="Notes" />
+                        <TextBlock Margin="0,4,0,18"
+                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Text="{Binding Notes}"
+                                   TextWrapping="Wrap" />
+
+                        <Border Margin="0,0,0,16"
+                                Padding="10"
+                                Background="{DynamicResource Brush.Surface.Alert}"
+                                BorderBrush="{DynamicResource Brush.Accent}"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Visibility="{Binding HasGraphIssue, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <StackPanel>
+                                <TextBlock FontWeight="SemiBold" Text="{Binding GraphIssueTitle}" />
+                                <TextBlock Margin="0,4,0,0"
+                                           Text="{Binding GraphIssueDescription}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Margin="0,5,0,0"
+                                           FontWeight="SemiBold"
+                                           Text="{Binding GraphIssueNames}"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <DockPanel Margin="0,0,0,6">
+                            <TextBlock DockPanel.Dock="Right"
+                                       Foreground="{DynamicResource Brush.Text.Secondary}"
+                                       Text="{Binding DependencyCount, StringFormat=Count: {0}}" />
+                            <TextBlock FontWeight="SemiBold" Text="{Binding DependencySectionTitle}" />
+                        </DockPanel>
+                        <ItemsControl Margin="0,0,0,16"
+                                      ItemsSource="{Binding Dependencies}"
+                                      Visibility="{Binding HasDependencies, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Margin="0,2" Text="{Binding Name, StringFormat=• {0}}" TextWrapping="Wrap" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Margin="0,0,0,16"
+                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Text="None">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasDependencies}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <TextBlock AutomationProperties.HelpText="Unresolved or not-yet-implemented direct dependencies"
+                                   FontWeight="SemiBold"
+                                   Text="Blockers" />
+                        <ItemsControl Margin="0,6,0,16"
+                                      ItemsSource="{Binding Blockers}"
+                                      Visibility="{Binding HasBlockers, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,7">
+                                        <TextBlock FontWeight="SemiBold" Text="{Binding Name}" TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,2,0,0"
+                                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                   Text="{Binding Description}"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Margin="0,6,0,16"
+                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Text="{Binding BlockersEmptyMessage}"
+                                   TextWrapping="Wrap">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasBlockers}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <TextBlock FontWeight="SemiBold" Text="Audit timestamps" />
+                        <Grid Margin="0,6,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Created" />
+                            <TextBlock Grid.Column="1" Text="{Binding CreatedAt}" TextWrapping="Wrap" />
+                            <TextBlock Grid.Row="1" Margin="0,5,0,0" Text="Schema/lifecycle updated" TextWrapping="Wrap" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,5,0,0" Text="{Binding SchemaUpdatedAt}" TextWrapping="Wrap" />
+                            <TextBlock Grid.Row="2" Margin="0,5,0,0" Text="Status/notes updated" TextWrapping="Wrap" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,5,0,0" Text="{Binding ProgressUpdatedAt}" TextWrapping="Wrap" />
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Border>
 
         <Grid x:Name="EditorOverlay"
               Panel.ZIndex="100"

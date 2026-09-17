@@ -1,4 +1,5 @@
 using EntityTracker.Application.Ranking;
+using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 
@@ -9,6 +10,7 @@ public sealed class EntityOverviewItem
     internal EntityOverviewItem(
         EntityId entityId,
         int? rank,
+        int? requestedPriority,
         int? effectivePriority,
         string sourceName,
         EntityProvenance provenance,
@@ -22,10 +24,12 @@ public sealed class EntityOverviewItem
         DependencyResolutionState? dependencyState,
         IEnumerable<string> dependencyResolutionIssueNames,
         EntityWorkflowState workflowState,
-        IEnumerable<DependencyBlocker> blockers)
+        IEnumerable<DependencyBlocker> blockers,
+        EntityAuditTimestamps auditTimestamps)
     {
         EntityId = entityId;
         Rank = rank;
+        RequestedPriority = requestedPriority;
         EffectivePriority = effectivePriority;
         SourceName = sourceName;
         Provenance = provenance;
@@ -41,11 +45,14 @@ public sealed class EntityOverviewItem
             dependencyResolutionIssueNames.ToArray());
         WorkflowState = workflowState;
         Blockers = Array.AsReadOnly(blockers.ToArray());
+        AuditTimestamps = auditTimestamps;
     }
 
     public EntityId EntityId { get; }
 
     public int? Rank { get; }
+
+    public int? RequestedPriority { get; }
 
     public int? EffectivePriority { get; }
 
@@ -78,6 +85,8 @@ public sealed class EntityOverviewItem
     public EntityWorkflowState WorkflowState { get; }
 
     public IReadOnlyList<DependencyBlocker> Blockers { get; }
+
+    public EntityAuditTimestamps AuditTimestamps { get; }
 
     public IReadOnlyList<string> MissingDependencyNames =>
         Blockers.Select(static blocker => blocker.SourceName).ToArray();

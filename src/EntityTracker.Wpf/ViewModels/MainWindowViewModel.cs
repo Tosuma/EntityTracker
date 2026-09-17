@@ -33,6 +33,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private readonly AsyncCommand _applySynchronizationCommand;
     private readonly AsyncCommand _cancelSynchronizationCommand;
     private readonly AsyncCommand _applyBulkStatusCommand;
+    private readonly RelayCommand<EntityOverviewRow> _openEntityDetailsCommand;
+    private readonly RelayCommand _closeEntityDetailsCommand;
     private readonly AsyncCommand<EntityOverviewRow> _editOverviewEntityCommand;
     private readonly AsyncCommand<SchemaSynchronizationReviewRow> _editReviewEntityCommand;
     private readonly RelayCommand _openSqlQueryCommand;
@@ -52,6 +54,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private int _developmentCompletedCount;
     private int _reconciledCount;
     private DevelopmentStatus _selectedBulkStatus = DevelopmentStatus.InProgress;
+    private EntityDetailsViewModel? _selectedEntityDetails;
 
     public MainWindowViewModel(
         TrackerId trackerId,
@@ -87,7 +90,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         _logger = effectiveLoggerFactory.CreateLogger<MainWindowViewModel>();
         ActiveTable = EntityTableViewModel.CreateActive();
         ArchivedTable = EntityTableViewModel.CreateArchived();
-        ActiveTable.ProjectionChanging += (_, _) => ClearOverviewSelection();
+        ActiveTable.ProjectionChanging += OnActiveTableProjectionChanging;
+        ArchivedTable.ProjectionChanging += OnArchivedTableProjectionChanging;
         ActiveTable.PropertyChanged += OnActiveTablePropertyChanged;
         ArchivedTable.PropertyChanged += OnArchivedTablePropertyChanged;
         Progress = progressDashboard;
@@ -135,6 +139,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         _applyBulkStatusCommand = new AsyncCommand(
             () => ApplyBulkStatusAsync(),
             CanApplyBulkStatus);
+        _openEntityDetailsCommand = new RelayCommand<EntityOverviewRow>(
+            OpenEntityDetails,
+            _ => !IsBusy && !ManualCreation.IsBusy && !Editor.IsOpen && !Review.HasReview);
+        _closeEntityDetailsCommand = new RelayCommand(
+            CloseEntityDetails,
+            () => IsEntityDetailsOpen);
         _editOverviewEntityCommand = new AsyncCommand<EntityOverviewRow>(
             OpenOverviewEntityAsync,
             _ => !IsBusy &&
@@ -185,6 +195,21 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public EntityTableViewModel ActiveTable { get; }
 
     public EntityTableViewModel ArchivedTable { get; }
+
+    public EntityDetailsViewModel? SelectedEntityDetails
+    {
+        get => _selectedEntityDetails;
+        private set
+        {
+            if (SetField(ref _selectedEntityDetails, value))
+            {
+                OnPropertyChanged(nameof(IsEntityDetailsOpen));
+                _closeEntityDetailsCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    public bool IsEntityDetailsOpen => SelectedEntityDetails is not null;
 
     public IReadOnlyList<DevelopmentStatusOption> BulkStatusOptions { get; } =
     [
@@ -304,6 +329,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             {
                 ActiveTable.CloseOpenFilter();
                 ArchivedTable.CloseOpenFilter();
+                CloseEntityDetails();
                 ClearOverviewSelection();
                 _applyBulkStatusCommand.NotifyCanExecuteChanged();
             }
@@ -449,6 +475,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public ICommand ApplyBulkStatusCommand => _applyBulkStatusCommand;
 
+    public ICommand OpenEntityDetailsCommand => _openEntityDetailsCommand;
+
+    public ICommand CloseEntityDetailsCommand => _closeEntityDetailsCommand;
+
     public ICommand EditOverviewEntityCommand => _editOverviewEntityCommand;
 
     public ICommand EditReviewEntityCommand => _editReviewEntityCommand;
@@ -476,6 +506,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     {
         ActiveTable.CloseOpenFilter();
         ArchivedTable.CloseOpenFilter();
+        CloseEntityDetails();
         ClearOverviewSelection();
     }
 
@@ -495,6 +526,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
+        CloseEntityDetails();
         ClearOverviewSelection();
         IsBusy = true;
         BusyMessage = "Loading persisted entities…";
@@ -742,6 +774,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         IReadOnlyList<EntityOverviewRow> items,
         IReadOnlyList<EntityOverviewRow> archivedItems)
     {
+        CloseEntityDetails();
         ClearOverviewSelection();
         ActiveTable.ReplaceSourceItems(items);
         ArchivedTable.ReplaceSourceItems(archivedItems);
@@ -792,6 +825,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         _applySynchronizationCommand.NotifyCanExecuteChanged();
         _cancelSynchronizationCommand.NotifyCanExecuteChanged();
         _applyBulkStatusCommand.NotifyCanExecuteChanged();
+        _openEntityDetailsCommand.NotifyCanExecuteChanged();
         _editOverviewEntityCommand.NotifyCanExecuteChanged();
         _editReviewEntityCommand.NotifyCanExecuteChanged();
         _openSqlQueryCommand.NotifyCanExecuteChanged();
@@ -911,10 +945,26 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    private Task OpenOverviewEntityAsync(EntityOverviewRow row) =>
-        row.LifecycleState == EntityLifecycleState.Archived
-            ? Editor.BeginArchivedAsync(row.EntityId)
-            : Editor.BeginStandaloneAsync(row.EntityId);
+    private async Task OpenOverviewEntityAsync(EntityOverviewRow row)
+    {
+        CloseEntityDetails();
+        if (row.LifecycleState == EntityLifecycleState.Archived)
+        {
+            await Editor.BeginArchivedAsync(row.EntityId);
+        }
+        else
+        {
+            await Editor.BeginStandaloneAsync(row.EntityId);
+        }
+    }
+
+    private void OpenEntityDetails(EntityOverviewRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        SelectedEntityDetails = new EntityDetailsViewModel(row);
+    }
+
+    public void CloseEntityDetails() => SelectedEntityDetails = null;
 
     private async Task OpenArchivedFromCreationAsync(EntityId entityId)
     {
@@ -1037,10 +1087,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             FormatProvenance(item.Provenance),
             FormatStatus(item.Status),
             FormatWorkflowState(item.WorkflowState),
-            isArchived
-                ? "—"
-                : item.DependencyCount.ToString(
-                    System.Globalization.CultureInfo.InvariantCulture),
+            item.DependencyCount.ToString(
+                System.Globalization.CultureInfo.InvariantCulture),
             item.DependencyNames,
             item.DependencyResolutionIssueNames,
             FormatGraphIssueTitle(item.DependencyState),
@@ -1048,7 +1096,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             FormatGraphIssueNames(item.DependencyResolutionIssueNames),
             isArchived ? "—" : FormatMissingDependencies(item.MissingDependencyNames),
             item.Notes,
-            isArchived ? "View and restore" : "Edit entity");
+            isArchived ? "View and restore" : "Edit entity",
+            item.RequestedPriority,
+            item.Blockers,
+            item.AuditTimestamps.CreatedAtUtc,
+            item.AuditTimestamps.SchemaUpdatedAtUtc,
+            item.AuditTimestamps.ProgressUpdatedAtUtc);
     }
 
     private static string FormatStatus(DevelopmentStatus status) => status switch
@@ -1081,6 +1134,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         EntityProvenance.Imported => "CSV",
         EntityProvenance.ManualOnly => "Manual only",
         EntityProvenance.ManualAndImported => "Manual + CSV",
+        EntityProvenance.Copied => "Copied",
+        EntityProvenance.CopiedAndImported => "Copied + CSV",
         _ => throw new ArgumentOutOfRangeException(nameof(provenance), provenance, null)
     };
 
@@ -1136,9 +1191,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public void Dispose()
     {
+        ActiveTable.ProjectionChanging -= OnActiveTableProjectionChanging;
+        ArchivedTable.ProjectionChanging -= OnArchivedTableProjectionChanging;
         ActiveTable.PropertyChanged -= OnActiveTablePropertyChanged;
         ArchivedTable.PropertyChanged -= OnArchivedTablePropertyChanged;
         ManualCreation.PropertyChanged -= OnManualCreationPropertyChanged;
         Editor.PropertyChanged -= OnEditorPropertyChanged;
     }
+
+    private void OnActiveTableProjectionChanging(object? sender, EventArgs e)
+    {
+        CloseEntityDetails();
+        ClearOverviewSelection();
+    }
+
+    private void OnArchivedTableProjectionChanging(object? sender, EventArgs e) =>
+        CloseEntityDetails();
 }

@@ -19,6 +19,7 @@ public sealed class EntityOverviewServiceTests
             "Foundation",
             DevelopmentStatus.DevelopmentCompleted,
             "Stable",
+            requestedPriority: 2,
             responsibleDeveloper: "Data Team",
             groupName: "Core Data");
         TrackedEntity service = Entity(2, "Service", DevelopmentStatus.InProgress, "API underway");
@@ -48,6 +49,10 @@ public sealed class EntityOverviewServiceTests
         Assert.Equal("Stable", result.Items[0].Notes);
         Assert.Equal("Data Team", result.Items[0].ResponsibleDeveloper);
         Assert.Equal("Core Data", result.Items[0].GroupName);
+        Assert.Equal(2, result.Items[0].RequestedPriority);
+        Assert.Equal(
+            new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero),
+            result.Items[0].AuditTimestamps.CreatedAtUtc);
         Assert.Equal(DevelopmentStatus.InProgress, result.Items[1].Status);
         Assert.Equal("API underway", result.Items[1].Notes);
     }
@@ -106,9 +111,23 @@ public sealed class EntityOverviewServiceTests
             TestTrackerId,
             "Archived",
             lifecycleState: EntityLifecycleState.Archived,
+            requestedPriority: 4,
             responsibleDeveloper: "Legacy Team",
             groupName: "Legacy Data");
-        EntityOverviewService service = CreateService([active, archived], []);
+        EntityOverviewService service = CreateService(
+            [active, archived],
+            [Dependency(archived, active, ImportedDependencyKind.Optional)],
+            [Unresolved(archived, "Missing Legacy", ImportedDependencyKind.Mandatory)],
+            [
+                new ManualDependencyOverride(
+                    archived.Id,
+                    active.SourceName,
+                    ManualDependencyOverrideAction.Suppress),
+                new ManualDependencyOverride(
+                    archived.Id,
+                    "Manual Legacy",
+                    ManualDependencyOverrideAction.Add)
+            ]);
 
         EntityOverviewResult result = await service.GetAsync();
 
@@ -119,6 +138,9 @@ public sealed class EntityOverviewServiceTests
         Assert.Null(archivedItem.DependencyState);
         Assert.Empty(archivedItem.DependencyResolutionIssueNames);
         Assert.Null(archivedItem.Rank);
+        Assert.Equal(4, archivedItem.RequestedPriority);
+        Assert.Equal(2, archivedItem.DependencyCount);
+        Assert.Equal(["Manual Legacy", "Missing Legacy"], archivedItem.DependencyNames);
         Assert.Equal("Legacy Team", archivedItem.ResponsibleDeveloper);
         Assert.Equal("Legacy Data", archivedItem.GroupName);
     }
@@ -251,6 +273,7 @@ public sealed class EntityOverviewServiceTests
         RecordingRankingService rankingService = new();
         EntityOverviewService service = new(
             new StubEntityRepository([dependency, owner]),
+            new StubEntityAuditReader([dependency, owner]),
             new StubDependencyRepository(
                 [Dependency(owner, dependency, ImportedDependencyKind.Mandatory)],
                 []),
@@ -275,6 +298,7 @@ public sealed class EntityOverviewServiceTests
     {
         return new EntityOverviewService(
             new StubEntityRepository(entities.ToArray()),
+            new StubEntityAuditReader(entities.ToArray()),
             new StubDependencyRepository(
                 dependencies.ToArray(),
                 unresolvedDependencies?.ToArray() ?? []),
@@ -338,6 +362,24 @@ public sealed class EntityOverviewServiceTests
             TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(entities);
 
+    }
+
+    private sealed class StubEntityAuditReader(IReadOnlyList<TrackedEntity> entities)
+        : IEntityAuditReader
+    {
+        private static readonly DateTimeOffset Timestamp =
+            new(2026, 8, 24, 12, 0, 0, TimeSpan.Zero);
+
+        public Task<IReadOnlyList<EntityAuditTimestamps>> GetAllAsync(
+            TrackerId trackerId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<EntityAuditTimestamps>>(entities
+                .Select(static entity => new EntityAuditTimestamps(
+                    entity.Id,
+                    Timestamp,
+                    Timestamp,
+                    Timestamp))
+                .ToArray());
     }
 
     private sealed class StubDependencyRepository(

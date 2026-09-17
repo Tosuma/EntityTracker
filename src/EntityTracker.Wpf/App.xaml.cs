@@ -180,6 +180,7 @@ public partial class App : System.Windows.Application
                     dataPaths.BackupsDirectory));
                 services.AddSingleton<IPersistenceInitializer, SqlitePersistenceInitializer>();
                 services.AddSingleton<IEntityRepository, SqliteEntityRepository>();
+                services.AddSingleton<IEntityAuditReader, SqliteEntityAuditReader>();
                 services.AddSingleton<IDependencyRepository, SqliteDependencyRepository>();
                 services.AddSingleton<IManualDependencyOverrideRepository,
                     SqliteManualDependencyOverrideRepository>();

@@ -112,20 +112,31 @@ different columns work together. Status summary cards remain useful one-click sh
 entity names and, when needed, dependency names from the overview; the same search opens with
 <kbd>Ctrl</kbd>+<kbd>F</kbd>.
 
+![EntityTracker Work status column filter with staged choices and typed sorting](images/light/overview-filter-flyout.png)
+
 ![EntityTracker overview filtered by the dependency name unit](images/light/overview-search.png)
 
 Archived entities have their own tab and independent search, filters, and Status sort. They remain
 available as read-only records with their progress, notes, and dependencies intact and can be
 deliberately restored from the archived view.
 
+Entity names and each row's **View details** action open a read-only side pane with priorities,
+rank, provenance, assignment, full notes, effective dependencies, blockers, and audit timestamps.
+Opening or closing this pane does not disturb bulk row selection; editing remains in the row action
+menu.
+
+![EntityTracker read-only entity details pane](images/light/overview-details.png)
+
 ![Archived EntityTracker entity with its preserved details and Restore entity action](images/light/archived-entity.png)
+
+![EntityTracker read-only archived entity details pane with preserved dependencies](images/light/archived-details.png)
 
 ### Understand dependency blockers
 
 Entities with unresolved references—or dependencies that are themselves unresolved—are marked
 directly in the overview. Selecting the warning icon explains the graph state and lists the
-unresolved names affecting that entity, while the Missing Dependencies column shows outstanding
-implementation work.
+unresolved names affecting that entity, while the Blockers column shows unresolved or not-yet-
+implemented direct dependencies.
 
 ![EntityTracker overview showing dependency warning icons, missing dependencies, and details for an upstream-unresolved entity](images/light/overview-missing-entities-as-dependencies.png)
 
@@ -152,7 +163,7 @@ CSV without requiring a live database connection inside EntityTracker.
 
 ## Project status
 
-Product Milestones 1–12 and UX Milestones UX-01 through UX-03 are complete. EntityTracker uses
+Product Milestones 1–12 and UX Milestones UX-01 through UX-04 are complete. EntityTracker uses
 SQLite as its local catalog and working store. The former SharePoint Connections workflow has been
 removed, and the application exposes no remote synchronization control.
 

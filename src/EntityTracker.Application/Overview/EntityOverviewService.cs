@@ -12,6 +12,7 @@ namespace EntityTracker.Application.Overview;
 public sealed class EntityOverviewService
 {
     private readonly IEntityRepository _entityRepository;
+    private readonly IEntityAuditReader _entityAuditReader;
     private readonly IDependencyRepository _dependencyRepository;
     private readonly IManualDependencyOverrideRepository _overrideRepository;
     private readonly IDependencyRankingService _dependencyRanker;
@@ -21,6 +22,7 @@ public sealed class EntityOverviewService
 
     public EntityOverviewService(
         IEntityRepository entityRepository,
+        IEntityAuditReader entityAuditReader,
         IDependencyRepository dependencyRepository,
         IManualDependencyOverrideRepository overrideRepository,
         IDependencyRankingService dependencyRanker,
@@ -29,6 +31,7 @@ public sealed class EntityOverviewService
         PriorityPlanningService priorityPlanningService)
     {
         ArgumentNullException.ThrowIfNull(entityRepository);
+        ArgumentNullException.ThrowIfNull(entityAuditReader);
         ArgumentNullException.ThrowIfNull(dependencyRepository);
         ArgumentNullException.ThrowIfNull(overrideRepository);
         ArgumentNullException.ThrowIfNull(dependencyRanker);
@@ -37,6 +40,7 @@ public sealed class EntityOverviewService
         ArgumentNullException.ThrowIfNull(priorityPlanningService);
 
         _entityRepository = entityRepository;
+        _entityAuditReader = entityAuditReader;
         _dependencyRepository = dependencyRepository;
         _overrideRepository = overrideRepository;
         _dependencyRanker = dependencyRanker;
@@ -52,6 +56,8 @@ public sealed class EntityOverviewService
         ArgumentNullException.ThrowIfNull(trackerId);
         Task<IReadOnlyList<TrackedEntity>> entityTask =
             _entityRepository.GetAllAsync(trackerId, cancellationToken);
+        Task<IReadOnlyList<EntityAuditTimestamps>> auditTask =
+            _entityAuditReader.GetAllAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<PersistedDependency>> dependencyTask =
             _dependencyRepository.GetAllAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedDependencyTask =
@@ -59,15 +65,34 @@ public sealed class EntityOverviewService
         Task<IReadOnlyList<ManualDependencyOverride>> overrideTask =
             _overrideRepository.GetAllAsync(trackerId, cancellationToken);
 
-        await Task.WhenAll(entityTask, dependencyTask, unresolvedDependencyTask, overrideTask);
+        await Task.WhenAll(
+            entityTask,
+            auditTask,
+            dependencyTask,
+            unresolvedDependencyTask,
+            overrideTask);
 
         IReadOnlyList<TrackedEntity> allEntities = await entityTask;
+        IReadOnlyList<PersistedDependency> persistedDependencies = await dependencyTask;
+        IReadOnlyList<PersistedUnresolvedDependency> persistedUnresolvedDependencies =
+            await unresolvedDependencyTask;
+        IReadOnlyList<ManualDependencyOverride> persistedOverrides = await overrideTask;
         TrackerStateValidator.EnsureOwned(
             trackerId,
             allEntities,
-            await dependencyTask,
-            await unresolvedDependencyTask,
-            await overrideTask);
+            persistedDependencies,
+            persistedUnresolvedDependencies,
+            persistedOverrides);
+        IReadOnlyDictionary<EntityId, EntityAuditTimestamps> auditByEntityId =
+            (await auditTask).ToDictionary(static audit => audit.EntityId);
+        foreach (TrackedEntity entity in allEntities)
+        {
+            if (!auditByEntityId.ContainsKey(entity.Id))
+            {
+                throw new InvalidDataException(
+                    $"Persisted audit timestamps are missing for entity '{entity.SourceName}'.");
+            }
+        }
         IReadOnlyList<TrackedEntity> entities = allEntities
             .Where(static entity => entity.LifecycleState == EntityLifecycleState.Active)
             .ToArray();
@@ -76,9 +101,9 @@ public sealed class EntityOverviewService
             .ToArray();
         EffectiveDependencyState effectiveState = _effectiveDependencyResolver.Resolve(
             allEntities,
-            await dependencyTask,
-            await unresolvedDependencyTask,
-            await overrideTask);
+            persistedDependencies,
+            persistedUnresolvedDependencies,
+            persistedOverrides);
 
         DependencyRankingResult rankingResult = await Task.Run(
             () => _dependencyRanker.Rank(
@@ -171,6 +196,7 @@ public sealed class EntityOverviewService
                 return new EntityOverviewItem(
                     entity.Id,
                     ranking.Rank,
+                    entity.RequestedPriority,
                     effectivePriorities[entity.Id],
                     entity.SourceName,
                     entity.Provenance,
@@ -184,7 +210,8 @@ public sealed class EntityOverviewService
                     DependencyResolutionState.Resolved,
                     [],
                     _readinessEvaluator.Classify(entity, readiness),
-                    readiness.Blockers);
+                    readiness.Blockers,
+                    auditByEntityId[entity.Id]);
             });
 
         IEnumerable<EntityOverviewItem> unrankedItems = rankingResult.UnrankedEntities
@@ -195,6 +222,7 @@ public sealed class EntityOverviewService
                 return new EntityOverviewItem(
                     entity.Id,
                     null,
+                    entity.RequestedPriority,
                     effectivePriorities[entity.Id],
                     entity.SourceName,
                     entity.Provenance,
@@ -208,8 +236,17 @@ public sealed class EntityOverviewService
                     unrankedEntity.State,
                     unrankedEntity.MissingDependencyNames,
                     _readinessEvaluator.Classify(entity, readiness),
-                    readiness.Blockers);
+                    readiness.Blockers,
+                    auditByEntityId[entity.Id]);
             });
+
+        IReadOnlyDictionary<EntityId, string[]> archivedDependencyNames =
+            BuildArchivedDependencyNames(
+                allEntities,
+                archivedEntities,
+                persistedDependencies,
+                persistedUnresolvedDependencies,
+                persistedOverrides);
 
         IEnumerable<EntityOverviewItem> archivedItems = archivedEntities
             .OrderBy(static entity => entity.SourceName, StringComparer.OrdinalIgnoreCase)
@@ -217,6 +254,7 @@ public sealed class EntityOverviewService
             .Select(entity => new EntityOverviewItem(
                 entity.Id,
                 null,
+                entity.RequestedPriority,
                 null,
                 entity.SourceName,
                 entity.Provenance,
@@ -225,12 +263,13 @@ public sealed class EntityOverviewService
                 entity.ResponsibleDeveloper,
                 entity.GroupName,
                 entity.LifecycleState,
-                0,
-                [],
+                archivedDependencyNames[entity.Id].Length,
+                archivedDependencyNames[entity.Id],
                 null,
                 [],
                 _readinessEvaluator.Classify(entity),
-                []));
+                [],
+                auditByEntityId[entity.Id]));
 
         return new EntityOverviewResult(
             rankedItems
@@ -243,5 +282,62 @@ public sealed class EntityOverviewService
                 .ThenBy(static item => item.EntityId.Value),
             [],
             archivedItems);
+    }
+
+    private static IReadOnlyDictionary<EntityId, string[]> BuildArchivedDependencyNames(
+        IReadOnlyList<TrackedEntity> allEntities,
+        IReadOnlyList<TrackedEntity> archivedEntities,
+        IReadOnlyList<PersistedDependency> dependencies,
+        IReadOnlyList<PersistedUnresolvedDependency> unresolvedDependencies,
+        IReadOnlyList<ManualDependencyOverride> overrides)
+    {
+        Dictionary<EntityId, TrackedEntity> entitiesById = allEntities.ToDictionary(
+            static entity => entity.Id);
+        Dictionary<EntityId, Dictionary<EntitySourceKey, DependencyDeclaration>> declarations =
+            DependencyStateResolver.BuildCurrentDeclarations(
+                dependencies,
+                unresolvedDependencies,
+                entitiesById);
+        HashSet<EntityId> archivedIds = archivedEntities
+            .Select(static entity => entity.Id)
+            .ToHashSet();
+
+        foreach (ManualDependencyOverride dependencyOverride in overrides
+                     .Where(item => archivedIds.Contains(item.DependentEntityId)))
+        {
+            EntitySourceKey key = EntitySourceKey.From(dependencyOverride.DependencySourceName);
+            if (dependencyOverride.Action == ManualDependencyOverrideAction.Suppress)
+            {
+                if (declarations.TryGetValue(
+                        dependencyOverride.DependentEntityId,
+                        out Dictionary<EntitySourceKey, DependencyDeclaration>? ownerDeclarations))
+                {
+                    ownerDeclarations.Remove(key);
+                }
+
+                continue;
+            }
+
+            DependencyStateResolver.AddDeclaration(
+                declarations,
+                dependencyOverride.DependentEntityId,
+                new DependencyDeclaration(
+                    key,
+                    dependencyOverride.DependencySourceName,
+                    ImportedDependencyKind.Mandatory,
+                    null));
+        }
+
+        return archivedEntities.ToDictionary(
+            static entity => entity.Id,
+            entity => declarations.TryGetValue(
+                    entity.Id,
+                    out Dictionary<EntitySourceKey, DependencyDeclaration>? ownerDeclarations)
+                ? ownerDeclarations.Values
+                    .Select(static declaration => declaration.TargetName)
+                    .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(static name => name, StringComparer.Ordinal)
+                    .ToArray()
+                : []);
     }
 }

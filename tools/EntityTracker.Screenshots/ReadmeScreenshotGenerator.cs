@@ -167,6 +167,12 @@ internal sealed class ReadmeScreenshotGenerator
         viewModel.ActiveTable.ClearAllFiltersAndSort();
         await renderer.CaptureAsync("overview.png");
 
+        EntityOverviewRow detailsRow = viewModel.OverviewItems.Single(static item =>
+            item.SourceName == "customer_preference");
+        viewModel.OpenEntityDetailsCommand.Execute(detailsRow);
+        await renderer.CaptureAsync("overview-details.png");
+        viewModel.CloseEntityDetails();
+
         viewModel.OpenOverviewSearchCommand.Execute(null);
         viewModel.SearchOverviewDependencies = true;
         viewModel.OverviewSearchQuery = "unit";
@@ -179,6 +185,7 @@ internal sealed class ReadmeScreenshotGenerator
         viewModel.CloseOverviewSearchCommand.Execute(null);
         OverviewColumnFilterState workStatusFilter = viewModel.ActiveTable.WorkStatusFilter!;
         workStatusFilter.OpenCommand.Execute(null);
+        await renderer.CaptureOpenPopupAsync("overview-filter-flyout.png");
         foreach (OverviewFilterOption option in workStatusFilter.Options)
         {
             option.IsSelected = option.DisplayName == "Blocked";
@@ -292,6 +299,9 @@ internal sealed class ReadmeScreenshotGenerator
         await viewModel.RefreshAsync(cancellationToken);
         await shell.NavigateAsync(ShellDestination.Archived, cancellationToken);
         EntityOverviewRow archivedRow = viewModel.ArchivedItems.Single(item => item.EntityId == leaf.Id);
+        viewModel.OpenEntityDetailsCommand.Execute(archivedRow);
+        await renderer.CaptureAsync("archived-details.png");
+        viewModel.CloseEntityDetails();
         await viewModel.Editor.BeginArchivedAsync(archivedRow.EntityId, cancellationToken);
         await renderer.CaptureAsync("archived-entity.png");
         viewModel.Editor.CancelCommand.Execute(null);

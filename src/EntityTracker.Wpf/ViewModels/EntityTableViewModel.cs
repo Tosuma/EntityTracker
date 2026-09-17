@@ -56,7 +56,7 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
         StatusFilter = new OverviewColumnFilterState<DevelopmentStatus>(
             this,
             OverviewColumnKey.Status,
-            "Status",
+            "Development status",
             canSort: true,
             row => row.DevelopmentStatus,
             FormatDevelopmentStatus,

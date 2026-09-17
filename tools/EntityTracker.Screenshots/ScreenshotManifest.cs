@@ -16,6 +16,8 @@ internal static class ScreenshotManifest
         "project-dashboard.png",
         "create-tracker-copy.png",
         "overview.png",
+        "overview-details.png",
+        "overview-filter-flyout.png",
         "overview-search.png",
         "overview-missing-entities-as-dependencies.png",
         "schema-synchronization.png",
@@ -25,6 +27,7 @@ internal static class ScreenshotManifest
         "edit-entity.png",
         "progress.png",
         "archived-entity.png",
+        "archived-details.png",
         "sql-query.png",
         "settings.png"
     ];

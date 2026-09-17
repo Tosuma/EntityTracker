@@ -442,6 +442,7 @@ public sealed class SqliteTrackedStateStoreTests
 
         EntityOverviewResult overview = await new EntityOverviewService(
             entities,
+            new SqliteEntityAuditReader(database),
             dependencies,
             overrides,
             new DependencyRanker(),
@@ -771,6 +772,7 @@ public sealed class SqliteTrackedStateStoreTests
 
         EntityOverviewResult overview = await new EntityOverviewService(
             entities,
+            new SqliteEntityAuditReader(database),
             dependencies,
             new SqliteManualDependencyOverrideRepository(database),
             ranker,
@@ -873,6 +875,7 @@ public sealed class SqliteTrackedStateStoreTests
                 [ManualDependencySelection.Unresolved("Missing")]));
         EntityOverviewResult overview = await new EntityOverviewService(
             entities,
+            new SqliteEntityAuditReader(database),
             dependencies,
             new SqliteManualDependencyOverrideRepository(database),
             ranker,

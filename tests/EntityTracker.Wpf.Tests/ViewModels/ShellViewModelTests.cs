@@ -270,6 +270,7 @@ public sealed class ShellViewModelTests
                 stateStore);
             EntityOverviewService overview = new(
                 entities,
+                new SqliteEntityAuditReader(database),
                 dependencies,
                 overrides,
                 ranker,

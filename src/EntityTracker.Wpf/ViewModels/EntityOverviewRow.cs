@@ -26,7 +26,12 @@ public sealed record EntityOverviewRow(
     string GraphIssueNames,
     string MissingDependencies,
     string Notes,
-    string ActionLabel)
+    string ActionLabel,
+    int? RequestedPriorityValue = null,
+    IReadOnlyList<DependencyBlocker>? Blockers = null,
+    DateTimeOffset? CreatedAtUtc = null,
+    DateTimeOffset? SchemaUpdatedAtUtc = null,
+    DateTimeOffset? ProgressUpdatedAtUtc = null)
 {
     public string ResponsibleDeveloperDisplay =>
         string.IsNullOrWhiteSpace(ResponsibleDeveloper) ? "—" : ResponsibleDeveloper;
@@ -40,4 +45,8 @@ public sealed record EntityOverviewRow(
 
     public bool IsDirectlyUnresolved =>
         DependencyState == DependencyResolutionState.Unresolved;
+
+    public string BlockersDisplay => MissingDependencies;
+
+    public IReadOnlyList<DependencyBlocker> ReadinessBlockers => Blockers ?? [];
 }

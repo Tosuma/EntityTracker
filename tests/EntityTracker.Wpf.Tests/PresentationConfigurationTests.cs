@@ -184,7 +184,7 @@ public sealed class PresentationConfigurationTests
 
         XElement popupSurface = Assert.Single(filterHeader.Descendants(), element =>
             element.Name.LocalName == "Border" &&
-            (string?)element.Attribute("Width") == "270");
+            (string?)element.Attribute("Width") == "300");
         Assert.Equal(
             "{DynamicResource Brush.Surface.Page}",
             (string?)popupSurface.Attribute("Background"));
@@ -337,15 +337,57 @@ public sealed class PresentationConfigurationTests
 
         Assert.Equal(
         [
+            "{Binding DataContext.ActiveTable.WorkStatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
+            "{Binding DataContext.ActiveTable.StatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
             "{Binding DataContext.ActiveTable.ResponsibleDeveloperFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
             "{Binding DataContext.ActiveTable.GroupFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
-            "{Binding DataContext.ActiveTable.StatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
-            "{Binding DataContext.ActiveTable.WorkStatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
+            "{Binding DataContext.ArchivedTable.StatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
             "{Binding DataContext.ArchivedTable.ResponsibleDeveloperFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
-            "{Binding DataContext.ArchivedTable.GroupFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
-            "{Binding DataContext.ArchivedTable.StatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}"
+            "{Binding DataContext.ArchivedTable.GroupFilter, RelativeSource={RelativeSource AncestorType=UserControl}}"
         ],
             configuredFilters);
+    }
+
+    [Fact]
+    public void TrackerWorkspace_UsesManagerColumnsBadgesAndReadOnlyDetailsPane()
+    {
+        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement overviewGrid = Assert.Single(document.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "OverviewDataGrid");
+        XElement columns = Assert.Single(overviewGrid.Elements(), element =>
+            element.Name.LocalName == "DataGrid.Columns");
+        XElement[] configuredColumns = columns.Elements().ToArray();
+
+        Assert.Equal(9, configuredColumns.Length);
+        Assert.Equal("Priority", (string?)configuredColumns[0].Attribute("Header"));
+        Assert.Equal("Rank", (string?)configuredColumns[1].Attribute("Header"));
+        Assert.Equal("Entity", (string?)configuredColumns[2].Attribute("Header"));
+        Assert.Contains(configuredColumns[7].Descendants(), element =>
+            (string?)element.Attribute("Text") == "Blockers");
+        Assert.Equal("Actions", (string?)configuredColumns[8].Attribute("Header"));
+        Assert.DoesNotContain(columns.DescendantsAndSelf(), element =>
+            ((string?)element.Attribute("Binding"))?.Contains("Provenance", StringComparison.Ordinal) == true ||
+            ((string?)element.Attribute("Binding"))?.Contains("Notes", StringComparison.Ordinal) == true ||
+            ((string?)element.Attribute("Binding"))?.Contains("DependencyCount", StringComparison.Ordinal) == true);
+
+        Assert.Contains(document.Descendants(), element =>
+            (string?)element.Attribute(x + "Key") == "DevelopmentStatusBadgeTemplate");
+        Assert.Contains(document.Descendants(), element =>
+            (string?)element.Attribute(x + "Key") == "WorkStatusBadgeTemplate");
+
+        XElement detailsPane = Assert.Single(document.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "EntityDetailsPane");
+        Assert.Equal(
+            "{DynamicResource Brush.Surface.Page}",
+            (string?)detailsPane.Attribute("Background"));
+        Assert.DoesNotContain(detailsPane.Descendants(), element =>
+            element.Name.LocalName is "TextBox" or "ComboBox" or "CheckBox");
+        Assert.Contains(detailsPane.Descendants(), element =>
+            (string?)element.Attribute("AutomationProperties.Name") == "Close entity details");
+        Assert.Contains(document.Descendants(), element =>
+            (string?)element.Attribute("Command") ==
+            "{Binding DataContext.OpenEntityDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}");
     }
 
     private static XDocument LoadWpfXaml(params string[] relativePath)

@@ -414,6 +414,87 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task EntityDetails_AreReadOnlyPreserveSelectionAndCloseOnProjectionChange()
+    {
+        TrackedEntity dependency = Entity(1, "Foundation");
+        TrackedEntity owner = Entity(
+            2,
+            "Customer",
+            notes: "Full implementation notes",
+            requestedPriority: 2,
+            responsibleDeveloper: "Alice",
+            groupName: "Billing");
+        MainWindowViewModel viewModel = CreateViewModel(
+            [owner, dependency],
+            [Dependency(owner, dependency)],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+        await viewModel.InitializeAsync();
+        EntityOverviewRow row = viewModel.OverviewItems.Single(item => item.EntityId == owner.Id);
+        viewModel.UpdateOverviewSelection([row]);
+
+        viewModel.OpenEntityDetailsCommand.Execute(row);
+
+        EntityDetailsViewModel details = Assert.IsType<EntityDetailsViewModel>(
+            viewModel.SelectedEntityDetails);
+        Assert.True(viewModel.IsEntityDetailsOpen);
+        Assert.Equal(1, viewModel.SelectedActiveEntityCount);
+        Assert.Equal("Customer", details.SourceName);
+        Assert.Equal("2", details.RequestedPriority);
+        Assert.Equal("Full implementation notes", details.Notes);
+        Assert.Equal("Alice", details.ResponsibleDeveloper);
+        Assert.Equal("Billing", details.GroupName);
+        Assert.Equal("Foundation", Assert.Single(details.Dependencies).Name);
+        Assert.Equal("Foundation", Assert.Single(details.Blockers).Name);
+
+        viewModel.CloseEntityDetailsCommand.Execute(null);
+        Assert.False(viewModel.IsEntityDetailsOpen);
+        Assert.Equal(1, viewModel.SelectedActiveEntityCount);
+
+        viewModel.OpenEntityDetailsCommand.Execute(row);
+        viewModel.OverviewSearchQuery = "Customer";
+        Assert.False(viewModel.IsEntityDetailsOpen);
+        Assert.Equal(0, viewModel.SelectedActiveEntityCount);
+    }
+
+    [Fact]
+    public async Task ArchivedDetails_UsePreservedContextAndRestoreRemainsInExistingEditor()
+    {
+        TrackedEntity target = Entity(1, "Legacy target");
+        TrackedEntity archived = Entity(
+            2,
+            "Legacy owner",
+            notes: "Preserved notes",
+            lifecycle: EntityLifecycleState.Archived,
+            requestedPriority: 4);
+        MainWindowViewModel viewModel = CreateViewModel(
+            [target, archived],
+            [Dependency(archived, target)],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+        await viewModel.InitializeAsync();
+        viewModel.SelectedTab = MainWindowTab.Archived;
+        EntityOverviewRow row = Assert.Single(viewModel.ArchivedItems);
+
+        viewModel.OpenEntityDetailsCommand.Execute(row);
+
+        EntityDetailsViewModel details = Assert.IsType<EntityDetailsViewModel>(
+            viewModel.SelectedEntityDetails);
+        Assert.True(details.IsArchived);
+        Assert.Equal("4", details.RequestedPriority);
+        Assert.Equal("Not applicable while archived", details.EffectivePriority);
+        Assert.Equal("Legacy target", Assert.Single(details.Dependencies).Name);
+        Assert.False(viewModel.Editor.IsOpen);
+
+        viewModel.EditOverviewEntityCommand.Execute(row);
+        await WaitUntilAsync(() => viewModel.Editor.IsOpen);
+        Assert.False(viewModel.IsEntityDetailsOpen);
+        Assert.True(viewModel.Editor.CanRestoreEntity);
+    }
+
+    [Fact]
     public async Task StandaloneEditor_SavesStatusNotesAndDependenciesAsOneRefresh()
     {
         TrackedEntity entity = Entity(1, "Customer");
@@ -1196,6 +1277,7 @@ public sealed class MainWindowViewModelTests
             TestTrackerId,
             new EntityOverviewService(
                 entityRepository,
+                entityRepository,
                 dependencyRepository,
                 overrideRepository,
                 ranker,
@@ -1358,7 +1440,7 @@ public sealed class MainWindowViewModelTests
                 item.Kind)));
     }
 
-    private sealed class StubEntityRepository : IEntityRepository
+    private sealed class StubEntityRepository : IEntityRepository, IEntityAuditReader
     {
         private readonly List<TrackedEntity> _entities;
 
@@ -1374,6 +1456,17 @@ public sealed class MainWindowViewModelTests
             TrackerId trackerId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<TrackedEntity>>(_entities.ToArray());
+
+        Task<IReadOnlyList<EntityAuditTimestamps>> IEntityAuditReader.GetAllAsync(
+            TrackerId trackerId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<EntityAuditTimestamps>>(_entities
+                .Select(static entity => new EntityAuditTimestamps(
+                    entity.Id,
+                    new DateTimeOffset(2026, 8, 24, 10, 0, 0, TimeSpan.Zero),
+                    new DateTimeOffset(2026, 8, 24, 11, 0, 0, TimeSpan.Zero),
+                    new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero)))
+                .ToArray());
 
         public void Add(TrackedEntity entity) => _entities.Add(entity);
 

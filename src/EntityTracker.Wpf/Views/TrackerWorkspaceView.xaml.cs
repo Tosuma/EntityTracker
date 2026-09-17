@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 
+using EntityTracker.Domain;
 using EntityTracker.Wpf.ViewModels;
 
 namespace EntityTracker.Wpf.Views;
@@ -18,6 +19,8 @@ public partial class TrackerWorkspaceView : UserControl
 
     private MainWindowViewModel? _viewModel;
     private IInputElement? _focusBeforeEditor;
+    private IInputElement? _focusBeforeDetails;
+    private IReadOnlyList<EntityId> _selectionBeforeRowClick = [];
     private DataGrid? _resizingDataGrid;
     private DataGridColumn? _resizingColumn;
     private double _resizeStartX;
@@ -63,6 +66,7 @@ public partial class TrackerWorkspaceView : UserControl
 
         _viewModel = viewModel;
         viewModel.OverviewSelectionClearRequested += OnOverviewSelectionClearRequested;
+        viewModel.PropertyChanged += OnViewModelPropertyChanged;
         viewModel.Editor.PropertyChanged += OnEditorPropertyChanged;
     }
 
@@ -74,6 +78,7 @@ public partial class TrackerWorkspaceView : UserControl
         }
 
         _viewModel.OverviewSelectionClearRequested -= OnOverviewSelectionClearRequested;
+        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         _viewModel.Editor.PropertyChanged -= OnEditorPropertyChanged;
         _viewModel = null;
     }
@@ -106,6 +111,40 @@ public partial class TrackerWorkspaceView : UserControl
         }
     }
 
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(MainWindowViewModel.IsEntityDetailsOpen))
+        {
+            return;
+        }
+
+        if (_viewModel?.IsEntityDetailsOpen == true)
+        {
+            _focusBeforeDetails = Keyboard.FocusedElement;
+            Dispatcher.BeginInvoke(new Action(() => CloseEntityDetailsButton.Focus()));
+            return;
+        }
+
+        IInputElement? restoreTarget = _focusBeforeDetails;
+        _focusBeforeDetails = null;
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (restoreTarget is not null && Keyboard.Focus(restoreTarget) is not null)
+            {
+                return;
+            }
+
+            if (_viewModel?.SelectedTab == MainWindowTab.Archived)
+            {
+                ArchivedDataGrid.Focus();
+            }
+            else
+            {
+                OverviewDataGrid.Focus();
+            }
+        }));
+    }
+
     private void OnOverviewSelectionChanged(object sender, SelectionChangedEventArgs e) =>
         _viewModel?.UpdateOverviewSelection(
             OverviewDataGrid.SelectedItems.OfType<EntityOverviewRow>());
@@ -117,13 +156,46 @@ public partial class TrackerWorkspaceView : UserControl
             e.OriginalSource is not DependencyObject source ||
             FindVisualAncestor<ButtonBase>(source) is not null ||
             FindVisualAncestor<DataGridRow>(source)?.Item is not EntityOverviewRow row ||
-            !_viewModel.EditOverviewEntityCommand.CanExecute(row))
+            !_viewModel.OpenEntityDetailsCommand.CanExecute(row))
         {
             return;
         }
 
-        _viewModel.EditOverviewEntityCommand.Execute(row);
+        _viewModel.OpenEntityDetailsCommand.Execute(row);
+        if (ReferenceEquals(sender, OverviewDataGrid))
+        {
+            EntityId[] selectedIds = _selectionBeforeRowClick.ToArray();
+            Dispatcher.BeginInvoke(new Action(() => RestoreOverviewSelection(selectedIds)));
+        }
+
         e.Handled = true;
+    }
+
+    private void OnEntityNamePreviewMouseLeftButtonDown(
+        object sender,
+        MouseButtonEventArgs e)
+    {
+        if (_viewModel is null ||
+            e.ChangedButton != MouseButton.Left ||
+            sender is not Button { DataContext: EntityOverviewRow row } ||
+            !_viewModel.OpenEntityDetailsCommand.CanExecute(row))
+        {
+            return;
+        }
+
+        _viewModel.OpenEntityDetailsCommand.Execute(row);
+        e.Handled = true;
+    }
+
+    private void RestoreOverviewSelection(IReadOnlyCollection<EntityId> selectedIds)
+    {
+        HashSet<EntityId> selected = selectedIds.ToHashSet();
+        OverviewDataGrid.UnselectAll();
+        foreach (EntityOverviewRow row in OverviewDataGrid.Items.OfType<EntityOverviewRow>()
+                     .Where(row => selected.Contains(row.EntityId)))
+        {
+            OverviewDataGrid.SelectedItems.Add(row);
+        }
     }
 
     private void OnOverviewSelectionClearRequested(object? sender, EventArgs e)
@@ -143,7 +215,8 @@ public partial class TrackerWorkspaceView : UserControl
             e.OriginalSource is not DependencyObject source ||
             !IsDescendantOrSelf(source, this) ||
             IsDescendantOrSelf(source, OverviewDataGrid) ||
-            IsDescendantOrSelf(source, BulkStatusToolbar))
+            IsDescendantOrSelf(source, BulkStatusToolbar) ||
+            IsDescendantOrSelf(source, EntityDetailsPane))
         {
             return;
         }
@@ -205,6 +278,13 @@ public partial class TrackerWorkspaceView : UserControl
         if (currentTable?.IsSearchOpen == true)
         {
             currentTable.CloseSearchCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
+        if (_viewModel.IsEntityDetailsOpen)
+        {
+            _viewModel.CloseEntityDetails();
             e.Handled = true;
             return;
         }
@@ -302,6 +382,18 @@ public partial class TrackerWorkspaceView : UserControl
         object sender,
         MouseButtonEventArgs e)
     {
+        if (ReferenceEquals(sender, OverviewDataGrid) &&
+            e.ClickCount == 1 &&
+            e.OriginalSource is DependencyObject source &&
+            FindVisualAncestor<ButtonBase>(source) is null &&
+            FindVisualAncestor<DataGridRow>(source) is not null)
+        {
+            _selectionBeforeRowClick = OverviewDataGrid.SelectedItems
+                .OfType<EntityOverviewRow>()
+                .Select(static row => row.EntityId)
+                .ToArray();
+        }
+
         if (sender is not DataGrid dataGrid ||
             !TryGetResizeColumn(dataGrid, e, out DataGridColumn? column) ||
             column is null)

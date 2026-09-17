@@ -55,6 +55,27 @@ public sealed class SqlitePersistenceTests
     }
 
     [Fact]
+    public async Task EntityAuditReader_ReturnsUtcTimestampsForOnlyTheRequestedTracker()
+    {
+        await using TemporarySqliteFile file = new();
+        DateTimeOffset now = new(2026, 8, 24, 10, 30, 0, TimeSpan.Zero);
+        SqliteDatabase database = new(file.DatabasePath, new MutableTimeProvider(now));
+        await database.InitializeAsync();
+        TrackedEntity entity = new(EntityId.New(), database.GetTrackerId(), "Audit target");
+        Assert.True(await new SqliteEntityRepository(database).TryAddAsync(entity));
+        SqliteEntityAuditReader reader = new(database);
+
+        EntityAuditTimestamps audit = Assert.Single(await reader.GetAllAsync(
+            database.GetTrackerId()));
+
+        Assert.Equal(entity.Id, audit.EntityId);
+        Assert.Equal(now, audit.CreatedAtUtc);
+        Assert.Equal(now, audit.SchemaUpdatedAtUtc);
+        Assert.Equal(now, audit.ProgressUpdatedAtUtc);
+        Assert.Empty(await reader.GetAllAsync(TrackerId.New()));
+    }
+
+    [Fact]
     public async Task InitializeAsync_NewerSchemaVersion_ThrowsClearException()
     {
         await using TemporarySqliteFile file = new();
@@ -868,6 +889,7 @@ public sealed class SqlitePersistenceTests
         await restartedDatabase.InitializeAsync();
         EntityOverviewService overviewService = new(
             new SqliteEntityRepository(restartedDatabase),
+            new SqliteEntityAuditReader(restartedDatabase),
             new SqliteDependencyRepository(restartedDatabase),
             new SqliteManualDependencyOverrideRepository(restartedDatabase),
             new DependencyRanker(),
