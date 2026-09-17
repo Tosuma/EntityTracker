@@ -13,6 +13,9 @@ namespace EntityTracker.Screenshots;
 
 internal static class ScreenshotDataSeeder
 {
+    internal const string PrimaryProjectName = "Commerce modernization";
+    internal const string PrimaryTrackerName = "Core schema";
+
     internal static readonly DateTimeOffset FixedNow =
         new(2026, 8, 24, 12, 0, 0, TimeSpan.Zero);
 
@@ -119,6 +122,12 @@ internal static class ScreenshotDataSeeder
             .CreateAsync("Customer platform", cancellationToken);
         TrackerManagementService trackerManagement = catalogProvider
             .GetRequiredService<TrackerManagementService>();
+        await catalogProvider.GetRequiredService<ProjectManagementService>()
+            .RenameAsync(defaultProject.Id, PrimaryProjectName, cancellationToken);
+        await trackerManagement.RenameAsync(
+            defaultTracker.Id,
+            PrimaryTrackerName,
+            cancellationToken);
         await trackerManagement.CopyAsync(
             defaultTracker.Id,
             defaultProject.Id,

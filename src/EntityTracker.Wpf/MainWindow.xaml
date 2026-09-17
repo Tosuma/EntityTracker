@@ -198,10 +198,10 @@
                                 Style="{StaticResource SecondaryButtonStyle}" />
                         <Button DockPanel.Dock="Right"
                                 Click="OnRenameDefaultName"
-                                Content="Rename"
+                                Content="{Binding DefaultNamePromptActionLabel}"
                                 Style="{StaticResource PrimaryButtonStyle}" />
                         <TextBlock VerticalAlignment="Center"
-                                   Text="Give the migrated default Project or Tracker a name your team will recognize."
+                                   Text="{Binding DefaultNamePromptMessage}"
                                    TextWrapping="Wrap" />
                     </DockPanel>
                 </Border>

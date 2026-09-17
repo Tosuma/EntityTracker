@@ -165,7 +165,10 @@ public partial class TrackerWorkspaceView : UserControl
         if (ReferenceEquals(sender, OverviewDataGrid))
         {
             EntityId[] selectedIds = _selectionBeforeRowClick.ToArray();
-            Dispatcher.BeginInvoke(new Action(() => RestoreOverviewSelection(selectedIds)));
+            if (selectedIds.Length > 1)
+            {
+                Dispatcher.BeginInvoke(new Action(() => RestoreOverviewSelection(selectedIds)));
+            }
         }
 
         e.Handled = true;

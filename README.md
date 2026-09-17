@@ -104,6 +104,16 @@ for consistency.
   </tr>
 </table>
 
+### Manage Tracker lifecycle
+
+Recycling a Tracker is reversible and returns to its owning Project dashboard. The Project-scoped
+recycle bin keeps the removed Tracker available for restore without losing its entities or history;
+restoring it also returns to that Project dashboard.
+
+| Recycle confirmation | Project recycle bin | Restored Project dashboard |
+| --- | --- | --- |
+| ![Confirm recycling a Tracker](images/light/tracker-recycle-confirmation.png) | ![Project recycle bin with a Tracker available to restore](images/light/tracker-recycle-bin.png) | ![Project dashboard after restoring its Tracker](images/light/project-dashboard-tracker-restored.png) |
+
 ### Find and maintain tracked entities
 
 Use the dropdown on a supported column header to select any combination of responsible developers,

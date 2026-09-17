@@ -49,10 +49,10 @@ internal sealed class ReadmeScreenshotGenerator
             .InitializeAsync(cancellationToken);
         Project project = (await provider.GetRequiredService<IProjectRepository>()
                 .GetAllAsync(cancellationToken))
-            .Single(static item => item.Name == "Default project");
+            .Single(static item => item.Name == ScreenshotDataSeeder.PrimaryProjectName);
         Tracker tracker = (await provider.GetRequiredService<ITrackerRepository>()
                 .GetAllAsync(cancellationToken))
-            .Single(static item => item.Name == "Default tracker");
+            .Single(static item => item.Name == ScreenshotDataSeeder.PrimaryTrackerName);
         await provider.GetRequiredService<ProgressHistoryInitializer>()
             .EnsureInitializedAsync(tracker.Id, cancellationToken);
 
@@ -79,6 +79,8 @@ internal sealed class ReadmeScreenshotGenerator
                 "The project dashboard did not finish loading.",
                 cancellationToken);
             await renderer.CaptureAsync("project-dashboard.png");
+
+            await CaptureTrackerLifecycleAsync(shell, renderer, cancellationToken);
 
             shell.Catalog.OpenCreateTracker(project);
             shell.Catalog.CreationMode = TrackerCreationMode.Copy;
@@ -156,6 +158,43 @@ internal sealed class ReadmeScreenshotGenerator
                 System.Windows.Application.Current.MainWindow = null;
             }
         }
+    }
+
+    private static async Task CaptureTrackerLifecycleAsync(
+        ShellViewModel shell,
+        WpfScreenshotRenderer renderer,
+        CancellationToken cancellationToken)
+    {
+        Tracker tracker = shell.Trackers.Single(static item => item.Name == "Release readiness");
+        shell.Catalog.RequestRecycle(tracker);
+        await renderer.CaptureAsync("tracker-recycle-confirmation.png");
+
+        shell.Catalog.ConfirmRecycleCommand.Execute(null);
+        await WaitUntilAsync(
+            () => !shell.Catalog.IsOpen &&
+                  !shell.IsBusy &&
+                  shell.SelectedDestination == ShellDestination.ProjectDashboard &&
+                  shell.ProjectDashboard?.Trackers.Count == 1,
+            "The Tracker recycle did not return to the Project dashboard.",
+            cancellationToken);
+
+        await shell.Catalog.OpenRecycleBinAsync(shell.SelectedProject);
+        await WaitUntilAsync(
+            () => shell.Catalog.RecycledTrackers.Any(item => item.Id == tracker.Id),
+            "The recycled Tracker did not appear in its Project recycle bin.",
+            cancellationToken);
+        await renderer.CaptureAsync("tracker-recycle-bin.png");
+
+        Tracker recycled = shell.Catalog.RecycledTrackers.Single(item => item.Id == tracker.Id);
+        await shell.Catalog.RestoreAsync(recycled);
+        await WaitUntilAsync(
+            () => !shell.Catalog.IsOpen &&
+                  !shell.IsBusy &&
+                  shell.SelectedDestination == ShellDestination.ProjectDashboard &&
+                  shell.ProjectDashboard?.Trackers.Count == 2,
+            "The Tracker restore did not return to the Project dashboard.",
+            cancellationToken);
+        await renderer.CaptureAsync("project-dashboard-tracker-restored.png");
     }
 
     private static async Task CaptureOverviewAsync(
@@ -272,7 +311,7 @@ internal sealed class ReadmeScreenshotGenerator
     {
         Tracker tracker = (await provider.GetRequiredService<ITrackerRepository>()
                 .GetAllAsync(cancellationToken))
-            .Single(static item => item.Name == "Default tracker");
+            .Single(static item => item.Name == ScreenshotDataSeeder.PrimaryTrackerName);
         IEntityRepository entityRepository = provider.GetRequiredService<IEntityRepository>();
         IDependencyRepository dependencyRepository = provider.GetRequiredService<IDependencyRepository>();
         IReadOnlyList<TrackedEntity> entities = await entityRepository.GetAllAsync(

@@ -139,6 +139,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(HasProject));
                 OnPropertyChanged(nameof(ProjectContextName));
                 OnPropertyChanged(nameof(ContextSummary));
+                OnPropertyChanged(nameof(DefaultNamePromptMessage));
+                OnPropertyChanged(nameof(DefaultNamePromptActionLabel));
             }
         }
     }
@@ -153,6 +155,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(HasTracker));
                 OnPropertyChanged(nameof(TrackerContextName));
                 OnPropertyChanged(nameof(ContextSummary));
+                OnPropertyChanged(nameof(DefaultNamePromptMessage));
+                OnPropertyChanged(nameof(DefaultNamePromptActionLabel));
             }
         }
     }
@@ -226,6 +230,16 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         get => _showDefaultNamePrompt;
         private set => SetField(ref _showDefaultNamePrompt, value);
     }
+
+    public string DefaultNamePromptMessage =>
+        SelectedTracker?.Name == "Default tracker"
+            ? "Give the migrated default Tracker a name your team will recognize."
+            : SelectedProject?.Name == "Default project"
+                ? "Give the migrated default Project a name your team will recognize."
+                : string.Empty;
+
+    public string DefaultNamePromptActionLabel =>
+        SelectedTracker?.Name == "Default tracker" ? "Rename tracker" : "Rename project";
 
     public bool HasProject => SelectedProject is not null;
     public bool HasTracker => SelectedTracker is not null;

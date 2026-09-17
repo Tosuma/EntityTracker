@@ -169,6 +169,84 @@ public sealed class ShellViewModelTests
         Assert.Equal(initialProjectCount, await harness.GetProjectCountAsync());
     }
 
+    [Fact]
+    public async Task DefaultNamePrompt_IdentifiesEachRemainingDefaultAndClearsAfterBothRenames()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        using ShellViewModel shell = harness.CreateShell(
+            new EntityTrackerSettings(
+                StorageProviderKind.Sqlite,
+                lastProjectId: harness.DefaultProject.Id,
+                lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+
+        Assert.True(shell.ShowDefaultNamePrompt);
+        Assert.Contains("Tracker", shell.DefaultNamePromptMessage, StringComparison.Ordinal);
+        Assert.Equal("Rename tracker", shell.DefaultNamePromptActionLabel);
+
+        shell.Catalog.OpenRenameTracker(shell.SelectedTracker!);
+        shell.Catalog.Name = "Named tracker";
+        shell.Catalog.SubmitNameCommand.Execute(null);
+        await WaitUntilAsync(() =>
+            shell.SelectedTracker?.Name == "Named tracker" &&
+            !shell.IsBusy &&
+            !shell.Catalog.IsBusy);
+
+        Assert.True(shell.ShowDefaultNamePrompt);
+        Assert.Contains("Project", shell.DefaultNamePromptMessage, StringComparison.Ordinal);
+        Assert.Equal("Rename project", shell.DefaultNamePromptActionLabel);
+
+        shell.Catalog.OpenRenameProject(shell.SelectedProject!);
+        shell.Catalog.Name = "Named project";
+        shell.Catalog.SubmitNameCommand.Execute(null);
+        await WaitUntilAsync(() =>
+            shell.SelectedProject?.Name == "Named project" &&
+            !shell.IsBusy &&
+            !shell.Catalog.IsBusy);
+
+        Assert.False(shell.ShowDefaultNamePrompt);
+        Assert.Equal(string.Empty, shell.DefaultNamePromptMessage);
+    }
+
+    [Fact]
+    public async Task TrackerRecycleAndRestore_ReturnToOwningProjectDashboard()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.TrackerManagement.CreateBlankAsync(
+            harness.DefaultProject.Id,
+            "Second tracker");
+        using ShellViewModel shell = harness.CreateShell(
+            new EntityTrackerSettings(
+                StorageProviderKind.Sqlite,
+                lastProjectId: harness.DefaultProject.Id,
+                lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        await shell.NavigateAsync(ShellDestination.ProjectDashboard);
+
+        shell.Catalog.RequestRecycle(shell.SelectedTracker!);
+        shell.Catalog.ConfirmRecycleCommand.Execute(null);
+        await WaitUntilAsync(() =>
+            !shell.Catalog.IsOpen &&
+            shell.SelectedDestination == ShellDestination.ProjectDashboard &&
+            shell.SelectedTracker is null &&
+            shell.ProjectDashboard?.Trackers.Count == 1);
+
+        Assert.Equal(harness.DefaultProject.Id, shell.SelectedProject?.Id);
+
+        await shell.Catalog.OpenRecycleBinAsync(shell.SelectedProject);
+        Tracker recycled = Assert.Single(shell.Catalog.RecycledTrackers);
+        await shell.Catalog.RestoreAsync(recycled);
+        await WaitUntilAsync(() =>
+            !shell.Catalog.IsOpen &&
+            shell.SelectedDestination == ShellDestination.ProjectDashboard &&
+            shell.ProjectDashboard?.Trackers.Count == 2);
+
+        Assert.Equal(harness.DefaultProject.Id, shell.SelectedProject?.Id);
+        Assert.Null(shell.SelectedTracker);
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
         using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));

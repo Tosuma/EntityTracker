@@ -370,8 +370,10 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         await RunAsync(async () =>
         {
             await _trackerService.RestoreAsync(tracker.Id);
-            await LoadRecycleBinsAsync();
-            Changed?.Invoke(this, EventArgs.Empty);
+            Close();
+            SelectionRequested?.Invoke(
+                this,
+                new CatalogSelectionRequestedEventArgs(tracker.ProjectId, null));
         });
     }
 
@@ -567,7 +569,13 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
             }
             else if (_pendingTracker is not null)
             {
+                ProjectId projectId = _pendingTracker.ProjectId;
                 await _trackerService.RecycleAsync(_pendingTracker.Id);
+                Close();
+                SelectionRequested?.Invoke(
+                    this,
+                    new CatalogSelectionRequestedEventArgs(projectId, null));
+                return;
             }
 
             Close();

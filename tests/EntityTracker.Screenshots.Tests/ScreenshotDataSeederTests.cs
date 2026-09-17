@@ -34,7 +34,11 @@ public sealed class ScreenshotDataSeederTests
             .Where(static item => item.LifecycleState == CatalogLifecycleState.Active)
             .ToArray();
         Assert.Equal(3, trackers.Length);
-        Tracker tracker = trackers.Single(static item => item.Name == "Default tracker");
+        Assert.Contains(
+            await provider.GetRequiredService<IProjectRepository>().GetAllAsync(),
+            static item => item.Name == ScreenshotDataSeeder.PrimaryProjectName);
+        Tracker tracker = trackers.Single(static item =>
+            item.Name == ScreenshotDataSeeder.PrimaryTrackerName);
 
         IReadOnlyList<TrackedEntity> entities =
             await provider.GetRequiredService<IEntityRepository>().GetAllAsync(tracker.Id);
