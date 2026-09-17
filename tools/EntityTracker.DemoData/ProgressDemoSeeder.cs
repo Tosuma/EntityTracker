@@ -13,7 +13,13 @@ namespace EntityTracker.DemoData;
 
 public sealed record ProgressDemoOptions
 {
-    public ProgressDemoOptions(int days, int seed, DateOnly endDate, TimeZoneInfo timeZone)
+    public ProgressDemoOptions(
+        int days,
+        int seed,
+        DateOnly endDate,
+        TimeZoneInfo timeZone,
+        string? projectName = null,
+        string? trackerName = null)
     {
         if (days < 7)
         {
@@ -27,6 +33,14 @@ public sealed record ProgressDemoOptions
         Seed = seed;
         EndDate = endDate;
         TimeZone = timeZone;
+        if (string.IsNullOrWhiteSpace(projectName) != string.IsNullOrWhiteSpace(trackerName))
+        {
+            throw new ArgumentException(
+                "ProjectName and TrackerName must be provided together.");
+        }
+
+        ProjectName = string.IsNullOrWhiteSpace(projectName) ? null : projectName.Trim();
+        TrackerName = string.IsNullOrWhiteSpace(trackerName) ? null : trackerName.Trim();
     }
 
     public int Days { get; }
@@ -36,6 +50,10 @@ public sealed record ProgressDemoOptions
     public DateOnly EndDate { get; }
 
     public TimeZoneInfo TimeZone { get; }
+
+    public string? ProjectName { get; }
+
+    public string? TrackerName { get; }
 
     public DateOnly StartDate => EndDate.AddDays(-(Days - 1));
 }
@@ -140,14 +158,15 @@ public sealed class ProgressDemoSeeder
 
         SqliteProjectRepository projectRepository = new(database);
         SqliteTrackerRepository trackerRepository = new(database);
-        HashSet<ProjectId> activeProjectIds = (await projectRepository
-                .GetAllAsync(cancellationToken))
+        Project[] activeProjects = (await projectRepository.GetAllAsync(cancellationToken))
             .Where(static project => project.LifecycleState == CatalogLifecycleState.Active)
-            .Select(static project => project.Id)
-            .ToHashSet();
-        Tracker tracker = (await trackerRepository.GetAllAsync(cancellationToken))
-            .Single(item => item.LifecycleState == CatalogLifecycleState.Active &&
-                            activeProjectIds.Contains(item.ProjectId));
+            .ToArray();
+        Project? selectedProject = SelectProject(activeProjects, options.ProjectName);
+        Tracker[] activeTrackers = (await trackerRepository.GetAllAsync(cancellationToken))
+            .Where(item => item.LifecycleState == CatalogLifecycleState.Active &&
+                          (selectedProject is null || item.ProjectId == selectedProject.Id))
+            .ToArray();
+        Tracker tracker = SelectTracker(activeTrackers, options.TrackerName, selectedProject);
 
         SqliteEntityRepository entityRepository = new(database);
         TrackedEntity[] originalEntities =
@@ -241,6 +260,57 @@ public sealed class ProgressDemoSeeder
             snapshotCalculator,
             effectiveDependencies,
             cancellationToken);
+    }
+
+    private static Project? SelectProject(
+        IReadOnlyList<Project> activeProjects,
+        string? projectName)
+    {
+        if (projectName is null)
+        {
+            return null;
+        }
+
+        Project[] matches = activeProjects
+            .Where(project => string.Equals(project.Name, projectName, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        return matches.Length switch
+        {
+            1 => matches[0],
+            0 => throw new InvalidOperationException(
+                $"No active Project named '{projectName}' was found."),
+            _ => throw new InvalidOperationException(
+                $"More than one active Project is named '{projectName}'. Select it by ID or rename the duplicate.")
+        };
+    }
+
+    private static Tracker SelectTracker(
+        IReadOnlyList<Tracker> activeTrackers,
+        string? trackerName,
+        Project? selectedProject)
+    {
+        Tracker[] matches = trackerName is null
+            ? activeTrackers.ToArray()
+            : activeTrackers
+                .Where(tracker => string.Equals(
+                    tracker.Name,
+                    trackerName,
+                    StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+        if (matches.Length == 1)
+        {
+            return matches[0];
+        }
+
+        string scope = selectedProject is null
+            ? "the active Projects"
+            : $"Project '{selectedProject.Name}'";
+        throw new InvalidOperationException(
+            trackerName is null
+                ? $"Expected exactly one active Tracker across {scope}; provide --project-name and --tracker-name to select one."
+                : matches.Length == 0
+                    ? $"No active Tracker named '{trackerName}' was found in {scope}."
+                    : $"More than one active Tracker is named '{trackerName}' in {scope}. Select a unique Project/Tracker pair.");
     }
 
     private static async Task ResetProgressAsync(

@@ -155,6 +155,20 @@ generated.
 CI restores, builds, and tests the screenshot project as part of the solution, but deliberately
 does not render or replace README images. Rendering remains an explicit local review workflow.
 
+To create synthetic development statuses and progress history in an existing database, close
+EntityTracker and run:
+
+```powershell
+.\scripts\Seed-ProgressDemo.ps1 -ConfirmReset `
+  -DatabasePath "$env:LOCALAPPDATA\EntityTracker\entity-tracker.db" `
+  -ProjectName "Production" -TrackerName "Schema" `
+  -Days 90 -Seed 42
+```
+
+The Project/Tracker pair is matched case-insensitively, so same-named Trackers in different
+Projects remain unambiguous. The command replaces statuses and progress history for that Tracker
+only, without a backup; names, notes, dependencies, provenance, and archive state are preserved.
+
 ## Import a PostgreSQL schema
 
 1. Open **Schema Synchronization**.

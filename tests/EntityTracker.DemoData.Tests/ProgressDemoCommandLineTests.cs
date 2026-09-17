@@ -29,5 +29,32 @@ public sealed class ProgressDemoCommandLineTests
         Assert.Equal(120, customized.Days);
         Assert.Equal(42, customized.Seed);
         Assert.Equal("custom.db", customized.DatabasePath);
+        Assert.Null(defaults.ProjectName);
+        Assert.Null(defaults.TrackerName);
+    }
+
+    [Fact]
+    public void Parse_AcceptsProjectAndTrackerSelectionAsAPair()
+    {
+        ProgressDemoCommandLine commandLine = ProgressDemoCommandLine.Parse(
+        [
+            "--database", "custom.db",
+            "--project-name", "Production",
+            "--tracker-name", "Schema",
+            "--confirm-reset"
+        ]);
+
+        Assert.Equal("Production", commandLine.ProjectName);
+        Assert.Equal("Schema", commandLine.TrackerName);
+    }
+
+    [Fact]
+    public void Parse_RejectsOnlyOneCatalogSelectionName()
+    {
+        ArgumentException exception = Assert.Throws<ArgumentException>(() =>
+            ProgressDemoCommandLine.Parse(
+                ["--database", "custom.db", "--project-name", "Production", "--confirm-reset"]));
+
+        Assert.Contains("provided together", exception.Message, StringComparison.Ordinal);
     }
 }
