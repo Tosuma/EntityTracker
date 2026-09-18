@@ -138,6 +138,20 @@ internal sealed class WpfScreenshotRenderer(MainWindow window, string outputDire
         Save(new CroppedBitmap(full, crop), Path.Combine(_outputDirectory, fileName));
     }
 
+    internal async Task ScrollSectionIntoViewAndCaptureAsync(
+        FrameworkElement section,
+        ScrollViewer scrollViewer,
+        string fileName)
+    {
+        ArgumentNullException.ThrowIfNull(section);
+        ArgumentNullException.ThrowIfNull(scrollViewer);
+        await SettleAsync();
+        Point currentPosition = section.TransformToAncestor(scrollViewer).Transform(new Point());
+        scrollViewer.ScrollToVerticalOffset(
+            Math.Max(0, scrollViewer.VerticalOffset + currentPosition.Y - 4));
+        await CaptureAsync(fileName);
+    }
+
     internal async Task SettleAsync(int milliseconds = 150)
     {
         await _window.Dispatcher.InvokeAsync(

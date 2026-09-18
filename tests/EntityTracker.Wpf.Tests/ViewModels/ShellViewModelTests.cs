@@ -68,6 +68,27 @@ public sealed class ShellViewModelTests
     }
 
     [Fact]
+    public async Task WorkspaceInitiatedTabChangesKeepShellDestinationInSync()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        using ShellViewModel shell = harness.CreateShell(
+            new EntityTrackerSettings(
+                StorageProviderKind.Sqlite,
+                lastProjectId: harness.DefaultProject.Id,
+                lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        MainWindowViewModel workspace = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
+
+        workspace.SelectedTab = MainWindowTab.AddEntity;
+        Assert.Equal(ShellDestination.AddEntity, shell.SelectedDestination);
+
+        workspace.ManualCreation.CancelCommand.Execute(null);
+        Assert.Equal(MainWindowTab.Overview, workspace.SelectedTab);
+        Assert.Equal(ShellDestination.Overview, shell.SelectedDestination);
+    }
+
+    [Fact]
     public async Task InitializeAsync_InvalidSavedContextFallsBackToPortfolioAndClearsIt()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();

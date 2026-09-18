@@ -460,6 +460,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 {
                     workspace = _workspaceFactory.Create(selectedTracker.Id);
                     workspace.PersistedStateChanged += OnWorkspacePersistedStateChanged;
+                    workspace.PropertyChanged += OnWorkspacePropertyChanged;
                     try
                     {
                         await workspace.InitializeAsync(cancellationToken);
@@ -468,6 +469,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                     catch
                     {
                         workspace.PersistedStateChanged -= OnWorkspacePersistedStateChanged;
+                        workspace.PropertyChanged -= OnWorkspacePropertyChanged;
                         workspace.Dispose();
                         throw;
                     }
@@ -557,6 +559,31 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    private void OnWorkspacePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(MainWindowViewModel.SelectedTab) ||
+            sender is not MainWindowViewModel workspace ||
+            !ReferenceEquals(workspace, CurrentWorkspace))
+        {
+            return;
+        }
+
+        ShellDestination destination = workspace.SelectedTab switch
+        {
+            MainWindowTab.Overview => ShellDestination.Overview,
+            MainWindowTab.Archived => ShellDestination.Archived,
+            MainWindowTab.Progress => ShellDestination.Reports,
+            MainWindowTab.SchemaSynchronization => ShellDestination.SchemaSynchronization,
+            MainWindowTab.AddEntity => ShellDestination.AddEntity,
+            _ => SelectedDestination
+        };
+
+        if (IsTrackerDestination(destination))
+        {
+            SelectedDestination = destination;
+        }
+    }
+
     private async void OnCatalogChanged(object? sender, EventArgs e)
     {
         await ReloadAfterCatalogChangeAsync();
@@ -643,6 +670,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         foreach (MainWindowViewModel workspace in _workspaces.Values)
         {
             workspace.PersistedStateChanged -= OnWorkspacePersistedStateChanged;
+            workspace.PropertyChanged -= OnWorkspacePropertyChanged;
             workspace.Dispose();
         }
     }

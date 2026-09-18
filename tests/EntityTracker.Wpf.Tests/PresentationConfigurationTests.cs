@@ -313,6 +313,50 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void TrackerWorkspace_CreationAndEditorUseFluentSuggestionControlsAndResponsiveSections()
+    {
+        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        string[] editableSuggestionControls =
+        [
+            "ManualGroupComboBox",
+            "ManualDependencyComboBox",
+            "EditorGroupComboBox",
+            "EditorDependencyComboBox"
+        ];
+        foreach (string name in editableSuggestionControls)
+        {
+            XElement comboBox = Assert.Single(document.Descendants(), element =>
+                (string?)element.Attribute(x + "Name") == name);
+            Assert.Equal("ComboBox", comboBox.Name.LocalName);
+            Assert.Equal("True", (string?)comboBox.Attribute("IsEditable"));
+            Assert.Equal("False", (string?)comboBox.Attribute("IsTextSearchEnabled"));
+        }
+
+        XElement editorSurface = Assert.Single(document.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "EditorSurface");
+        Assert.Null(editorSurface.Attribute("MinWidth"));
+        Assert.Equal("Stretch", (string?)editorSurface.Attribute("HorizontalAlignment"));
+        Assert.Equal("Stretch", (string?)editorSurface.Attribute("VerticalAlignment"));
+        Assert.Contains(editorSurface.Descendants(), element =>
+            (string?)element.Attribute("Visibility") ==
+            "{Binding Editor.ShowStandaloneSections, Converter={StaticResource BooleanToVisibilityConverter}}");
+        Assert.Contains(editorSurface.Descendants(), element =>
+            (string?)element.Attribute("Visibility") ==
+            "{Binding Editor.ShowArchivedSections, Converter={StaticResource BooleanToVisibilityConverter}}");
+
+        XElement identityCard = Assert.Single(document.Descendants(), element =>
+            (string?)element.Attribute("Style") == "{StaticResource EntityTrackerCardStyle}" &&
+            element.Descendants().Any(descendant =>
+                (string?)descendant.Attribute("Text") == "Identity and planning"));
+        XElement dependencyCard = Assert.Single(document.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "ManualDependenciesSection");
+        Assert.Equal("16", (string?)identityCard.Attribute("Padding"));
+        Assert.Equal("16", (string?)dependencyCard.Attribute("Padding"));
+    }
+
+    [Fact]
     public void FeatureXaml_ContainsNoRawColorsOutsideThePalette()
     {
         string wpfRoot = Path.Combine(

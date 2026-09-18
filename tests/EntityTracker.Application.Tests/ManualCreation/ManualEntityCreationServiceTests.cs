@@ -147,6 +147,7 @@ public sealed class ManualEntityCreationServiceTests
         Assert.Equal(EntityProvenance.ManualOnly, added.Provenance);
         Assert.Equal("Platform Team", added.ResponsibleDeveloper);
         Assert.Equal("Core Data", added.GroupName);
+        Assert.Null(added.RequestedPriority);
         Assert.Equal(added.Id, result.CreatedEntityId);
         Assert.Empty(store.LastChangeSet.ResolvedDependencies);
         Assert.Empty(store.LastChangeSet.UnresolvedDependencies);
@@ -154,6 +155,42 @@ public sealed class ManualEntityCreationServiceTests
             store.LastChangeSet.ProgressSnapshotAfterChanges);
         Assert.Equal(1, snapshot.ReadyCount);
         Assert.Equal(1, snapshot.TotalActiveCount);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithRequestedPriority_PersistsPriorityOnCreatedEntity()
+    {
+        ManualEntityCreationService service = Service([], [], [], out RecordingStore store);
+
+        ManualEntityCreationResult result = await service.CreateAsync(
+            new ManualEntityCreationRequest(
+                "PlannedEntity",
+                [],
+                requestedPriority: 2));
+
+        Assert.True(result.IsSuccess);
+        TrackedEntity added = Assert.Single(store.LastChangeSet!.EntitiesToAdd);
+        Assert.Equal(2, added.RequestedPriority);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(6)]
+    public async Task CreateAsync_InvalidRequestedPriorityIsRejectedWithoutWrite(
+        int requestedPriority)
+    {
+        ManualEntityCreationService service = Service([], [], [], out RecordingStore store);
+
+        ManualEntityCreationResult result = await service.CreateAsync(
+            new ManualEntityCreationRequest(
+                "InvalidPriority",
+                [],
+                requestedPriority: requestedPriority));
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Diagnostics, diagnostic =>
+            diagnostic.Code == ManualEntityCreationDiagnosticCode.InvalidRequestedPriority);
+        Assert.Null(store.LastChangeSet);
     }
 
     [Fact]

@@ -167,6 +167,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public event EventHandler? PersistedStateChanged;
 
+    public event Action<EntityId>? EntityRevealRequested;
+
     public TrackerId TrackerId => _trackerId;
 
     public bool HasUnsavedWork =>
@@ -858,7 +860,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         return $"{changed} to {FormatStatus(targetStatus)}; {unchanged}.";
     }
 
-    private async Task OnManualEntityCreatedAsync()
+    private async Task OnManualEntityCreatedAsync(EntityId createdEntityId)
     {
         SelectedTab = MainWindowTab.Overview;
         IsBusy = true;
@@ -866,6 +868,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         try
         {
             await LoadOverviewAndProgressAsync(CancellationToken.None);
+            EntityOverviewRow? createdRow = ActiveTable.Items.FirstOrDefault(
+                row => row.EntityId == createdEntityId);
+            if (createdRow is null)
+            {
+                ActiveTable.ClearAllFiltersAndSort();
+                ActiveTable.ClearSearchCommand.Execute(null);
+                createdRow = ActiveTable.Items.FirstOrDefault(
+                    row => row.EntityId == createdEntityId);
+            }
+
+            if (createdRow is not null)
+            {
+                SelectedEntityDetails = new EntityDetailsViewModel(createdRow);
+                EntityRevealRequested?.Invoke(createdEntityId);
+            }
+
             PersistedStateChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception exception)

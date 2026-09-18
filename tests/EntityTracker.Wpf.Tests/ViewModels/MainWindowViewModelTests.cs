@@ -812,6 +812,8 @@ public sealed class MainWindowViewModelTests
             new StubFilePicker(),
             out _);
         viewModel.SelectedTab = MainWindowTab.AddEntity;
+        EntityId? revealedEntityId = null;
+        viewModel.EntityRevealRequested += id => revealedEntityId = id;
         viewModel.ManualCreation.EntityName = "NewManualEntity";
 
         await viewModel.ManualCreation.CreateAsync();
@@ -821,6 +823,8 @@ public sealed class MainWindowViewModelTests
         Assert.Equal("NewManualEntity", row.SourceName);
         Assert.Equal("Manual only", row.Provenance);
         Assert.Equal("Not started", row.Status);
+        Assert.Equal(row.EntityId, revealedEntityId);
+        Assert.Equal(row.EntityId, viewModel.SelectedEntityDetails?.EntityId);
     }
 
     [Fact]

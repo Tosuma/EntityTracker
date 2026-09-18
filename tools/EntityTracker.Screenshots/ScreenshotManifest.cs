@@ -29,6 +29,8 @@ internal static class ScreenshotManifest
         "schema-synchronization-unresolved-dependencies.png",
         "add-entity.png",
         "edit-entity.png",
+        "edit-entity-dependencies.png",
+        "archive-entity-confirmation.png",
         "progress.png",
         "archived-entity.png",
         "archived-details.png",

@@ -6,6 +6,7 @@ using System.Windows.Threading;
 
 using EntityTracker.Application.History;
 using EntityTracker.Application.Lifecycle;
+using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
@@ -136,9 +137,11 @@ internal sealed class ReadmeScreenshotGenerator
 
             viewModel.Review.Clear();
             await shell.NavigateAsync(ShellDestination.AddEntity, cancellationToken);
+            await PopulateManualCreationAsync(viewModel, cancellationToken);
             await renderer.CaptureAsync("add-entity.png");
 
-            await CaptureEditorAsync(shell, viewModel, renderer, cancellationToken);
+            viewModel.ManualCreation.CancelCommand.Execute(null);
+            await CaptureEditorAsync(shell, viewModel, window, renderer, cancellationToken);
 
             await shell.NavigateAsync(ShellDestination.Reports, cancellationToken);
             await renderer.CaptureAsync("progress.png", settleMilliseconds: 900);
@@ -347,6 +350,7 @@ internal sealed class ReadmeScreenshotGenerator
     private static async Task CaptureEditorAsync(
         ShellViewModel shell,
         MainWindowViewModel viewModel,
+        MainWindow window,
         WpfScreenshotRenderer renderer,
         CancellationToken cancellationToken)
     {
@@ -354,10 +358,54 @@ internal sealed class ReadmeScreenshotGenerator
         await shell.NavigateAsync(ShellDestination.Overview, cancellationToken);
         viewModel.ActiveTable.ClearAllFiltersAndSort();
         EntityOverviewRow row = viewModel.OverviewItems.Single(static item =>
-            item.SourceName == "time_zone");
+            item.SourceName == "customer_preference");
         await viewModel.Editor.BeginStandaloneAsync(row.EntityId, cancellationToken);
+        viewModel.Editor.SelectedRequestedPriority = 2;
         await renderer.CaptureAsync("edit-entity.png");
+
+        viewModel.Editor.DependencyQuery = "future_customer_profile";
+        await WaitUntilAsync(
+            () => viewModel.Editor.CanAddAsUnresolved,
+            "The editor unresolved dependency action did not become available.",
+            cancellationToken);
+        viewModel.Editor.AddUnresolvedCommand.Execute(null);
+        await renderer.ScrollSectionIntoViewAndCaptureAsync(
+            window.FindWorkspaceElement("EditorDependenciesSection")
+                ?? throw new InvalidOperationException("Editor dependencies section not found."),
+            (ScrollViewer)(window.FindWorkspaceElement("EditorScrollViewer")
+                ?? throw new InvalidOperationException("Editor scroll viewer not found.")),
+            "edit-entity-dependencies.png");
+
+        viewModel.Editor.RequestArchiveCommand.Execute(null);
+        await renderer.CaptureAsync("archive-entity-confirmation.png");
+        viewModel.Editor.CancelArchiveCommand.Execute(null);
         viewModel.Editor.CancelCommand.Execute(null);
+    }
+
+    private static async Task PopulateManualCreationAsync(
+        MainWindowViewModel viewModel,
+        CancellationToken cancellationToken)
+    {
+        viewModel.ManualCreation.EntityName = "shipment_schedule";
+        viewModel.ManualCreation.ResponsibleDeveloper = "Platform Team";
+        viewModel.ManualCreation.GroupName = "Operations";
+        viewModel.ManualCreation.SelectedRequestedPriority = 2;
+
+        viewModel.ManualCreation.DependencyQuery = "time_zone";
+        await viewModel.ManualCreation.SearchDependenciesAsync(cancellationToken);
+        ManualDependencySuggestion existing = viewModel.ManualCreation.Suggestions
+            .Single(static suggestion => suggestion.SourceName == "time_zone");
+        viewModel.ManualCreation.AddExistingCommand.Execute(existing);
+
+        viewModel.ManualCreation.DependencyQuery = "future_carrier_feed";
+        await viewModel.ManualCreation.SearchDependenciesAsync(cancellationToken);
+        if (!viewModel.ManualCreation.CanAddAsUnresolved)
+        {
+            throw new InvalidDataException(
+                "The deterministic Add Entity screenshot could not stage an unresolved dependency.");
+        }
+
+        viewModel.ManualCreation.AddUnresolvedCommand.Execute(null);
     }
 
     private static async Task CaptureArchivedEntityAsync(

@@ -20,6 +20,7 @@ public partial class TrackerWorkspaceView : UserControl
     private MainWindowViewModel? _viewModel;
     private IInputElement? _focusBeforeEditor;
     private IInputElement? _focusBeforeDetails;
+    private Button? _lastEntityActionButton;
     private IReadOnlyList<EntityId> _selectionBeforeRowClick = [];
     private DataGrid? _resizingDataGrid;
     private DataGridColumn? _resizingColumn;
@@ -66,6 +67,7 @@ public partial class TrackerWorkspaceView : UserControl
 
         _viewModel = viewModel;
         viewModel.OverviewSelectionClearRequested += OnOverviewSelectionClearRequested;
+        viewModel.EntityRevealRequested += OnEntityRevealRequested;
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
         viewModel.Editor.PropertyChanged += OnEditorPropertyChanged;
         viewModel.Review.PropertyChanged += OnSynchronizationReviewPropertyChanged;
@@ -79,6 +81,7 @@ public partial class TrackerWorkspaceView : UserControl
         }
 
         _viewModel.OverviewSelectionClearRequested -= OnOverviewSelectionClearRequested;
+        _viewModel.EntityRevealRequested -= OnEntityRevealRequested;
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         _viewModel.Editor.PropertyChanged -= OnEditorPropertyChanged;
         _viewModel.Review.PropertyChanged -= OnSynchronizationReviewPropertyChanged;
@@ -122,10 +125,18 @@ public partial class TrackerWorkspaceView : UserControl
 
         if (_viewModel?.Editor.IsOpen == true)
         {
-            _focusBeforeEditor = Keyboard.FocusedElement;
+            _focusBeforeEditor = _lastEntityActionButton?.IsVisible == true
+                ? _lastEntityActionButton
+                : Keyboard.FocusedElement;
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                if (!EditorStatusComboBox.Focus())
+                FrameworkElement preferred = _viewModel.Editor.Mode switch
+                {
+                    EntityEditorMode.ArchivedDetails => RestoreEntityButton,
+                    EntityEditorMode.SynchronizationReview => EditorDependencyComboBox,
+                    _ => EditorStatusComboBox
+                };
+                if (!preferred.Focus())
                 {
                     EditorSurface.Focus();
                 }
@@ -143,6 +154,17 @@ public partial class TrackerWorkspaceView : UserControl
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(MainWindowViewModel.SelectedTab) &&
+            _viewModel?.SelectedTab == MainWindowTab.AddEntity)
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                AddEntityScrollViewer.ScrollToTop();
+                ManualEntityNameTextBox.Focus();
+            }));
+            return;
+        }
+
         if (e.PropertyName != nameof(MainWindowViewModel.IsEntityDetailsOpen))
         {
             return;
@@ -265,6 +287,10 @@ public partial class TrackerWorkspaceView : UserControl
         }
 
         button.ContextMenu.PlacementTarget = button;
+        if (button.DataContext is EntityOverviewRow)
+        {
+            _lastEntityActionButton = button;
+        }
         button.ContextMenu.IsOpen = true;
         e.Handled = true;
     }
@@ -296,8 +322,30 @@ public partial class TrackerWorkspaceView : UserControl
             return;
         }
 
-        if (e.Key != Key.Escape || _viewModel.Editor.IsOpen)
+        if (e.Key != Key.Escape)
         {
+            return;
+        }
+
+        if (_viewModel.Editor.DismissOpenSuggestions() ||
+            (_viewModel.SelectedTab == MainWindowTab.AddEntity &&
+             _viewModel.ManualCreation.DismissOpenSuggestions()))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (_viewModel.Editor.IsArchiveConfirmationOpen)
+        {
+            _viewModel.Editor.CancelArchiveCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
+        if (_viewModel.Editor.IsOpen)
+        {
+            _viewModel.Editor.CancelCommand.Execute(null);
+            e.Handled = true;
             return;
         }
 
@@ -362,6 +410,23 @@ public partial class TrackerWorkspaceView : UserControl
 
     public FrameworkElement? FindWorkspaceElement(string name) =>
         FindName(name) as FrameworkElement;
+
+    private void OnEntityRevealRequested(EntityId entityId)
+    {
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            EntityOverviewRow? row = OverviewDataGrid.Items
+                .OfType<EntityOverviewRow>()
+                .FirstOrDefault(item => item.EntityId == entityId);
+            if (row is null)
+            {
+                return;
+            }
+
+            OverviewDataGrid.UpdateLayout();
+            OverviewDataGrid.ScrollIntoView(row);
+        }));
+    }
 
     private void OnDataGridPreviewMouseWheel(
         object sender,

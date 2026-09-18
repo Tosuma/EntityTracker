@@ -6,7 +6,8 @@ public sealed class ManualEntityCreationRequest
         string entityName,
         IEnumerable<ManualDependencySelection> dependencies,
         string? responsibleDeveloper = null,
-        string? groupName = null)
+        string? groupName = null,
+        int? requestedPriority = null)
     {
         ArgumentNullException.ThrowIfNull(entityName);
         ArgumentNullException.ThrowIfNull(dependencies);
@@ -15,6 +16,7 @@ public sealed class ManualEntityCreationRequest
         Dependencies = dependencies.ToArray();
         ResponsibleDeveloper = responsibleDeveloper;
         GroupName = groupName;
+        RequestedPriority = requestedPriority;
 
         if (Dependencies.Any(static dependency => dependency is null))
         {
@@ -31,4 +33,6 @@ public sealed class ManualEntityCreationRequest
     public string? ResponsibleDeveloper { get; }
 
     public string? GroupName { get; }
+
+    public int? RequestedPriority { get; }
 }

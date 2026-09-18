@@ -135,7 +135,15 @@ rank, provenance, assignment, full notes, effective dependencies, blockers, and 
 Opening or closing this pane does not disturb bulk row selection; editing remains in the row action
 menu.
 
+The Add Entity and edit workflows use searchable Fluent suggestion controls. Unknown dependency
+names are added only through the explicit **Add as unresolved** action, while archive remains a
+separate reversible action with confirmation.
+
 ![EntityTracker read-only entity details pane](images/light/overview-details.png)
+
+![EntityTracker edit modal focused on dependencies and explicit unresolved additions](images/light/edit-entity-dependencies.png)
+
+![EntityTracker reversible archive confirmation naming the selected entity](images/light/archive-entity-confirmation.png)
 
 ![Archived EntityTracker entity with its preserved details and Restore entity action](images/light/archived-entity.png)
 

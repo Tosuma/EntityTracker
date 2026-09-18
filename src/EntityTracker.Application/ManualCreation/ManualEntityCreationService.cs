@@ -102,6 +102,7 @@ public sealed class ManualEntityCreationService
 
         List<ManualEntityCreationDiagnostic> diagnostics = [];
         string entityName = request.EntityName.Trim();
+        ValidateRequestedPriority(request.RequestedPriority, diagnostics);
         EntitySourceKey? entityKey = ValidateEntityName(
             entityName,
             currentByKey,
@@ -134,6 +135,7 @@ public sealed class ManualEntityCreationService
             trackerId,
             entityName,
             provenance: EntityProvenance.ManualOnly,
+            requestedPriority: request.RequestedPriority,
             responsibleDeveloper: request.ResponsibleDeveloper,
             groupName: request.GroupName);
         Dictionary<EntitySourceKey, TrackedEntity> candidateActiveByKey = new(activeByKey)
@@ -402,6 +404,18 @@ public sealed class ManualEntityCreationService
 
     private static bool IsSupportedSourceName(string sourceName) =>
         !sourceName.Contains(',', StringComparison.Ordinal);
+
+    private static void ValidateRequestedPriority(
+        int? requestedPriority,
+        ICollection<ManualEntityCreationDiagnostic> diagnostics)
+    {
+        if (requestedPriority is not null and (< 1 or > 5))
+        {
+            diagnostics.Add(new ManualEntityCreationDiagnostic(
+                ManualEntityCreationDiagnosticCode.InvalidRequestedPriority,
+                "Requested priority must be between 1 and 5."));
+        }
+    }
 
     private static bool HasErrors(IEnumerable<ManualEntityCreationDiagnostic> diagnostics) =>
         diagnostics.Any(static diagnostic =>

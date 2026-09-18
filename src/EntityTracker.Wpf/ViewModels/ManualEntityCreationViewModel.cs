@@ -19,7 +19,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
 
     private readonly ManualEntityCreationService _service;
     private readonly TrackerId _trackerId;
-    private readonly Func<Task> _onCreated;
+    private readonly Func<EntityId, Task> _onCreated;
     private readonly Func<EntityId, Task> _onRestoreArchived;
     private readonly Action _onCancelled;
     private readonly Func<bool> _canOperate;
@@ -38,7 +38,10 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     private string _entityName = string.Empty;
     private string _responsibleDeveloper = string.Empty;
     private string _groupName = string.Empty;
+    private int? _selectedRequestedPriority;
     private string _dependencyQuery = string.Empty;
+    private ManualDependencySuggestion? _selectedDependencySuggestion;
+    private string? _selectedGroupSuggestion;
     private IReadOnlyList<ManualDependencySuggestion> _suggestions = [];
     private IReadOnlyList<string> _groupSuggestions = [];
     private IReadOnlyList<string> _errors = [];
@@ -47,13 +50,16 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     private string? _groupSearchMessage;
     private string? _operationMessage;
     private bool _canAddAsUnresolved;
+    private bool _hasFatalValidation;
+    private bool _isDependencySuggestionsOpen;
+    private bool _isGroupSuggestionsOpen;
     private bool _isBusy;
     private ArchivedEntityMatch? _archivedEntityMatch;
 
     public ManualEntityCreationViewModel(
         TrackerId trackerId,
         ManualEntityCreationService service,
-        Func<Task> onCreated,
+        Func<EntityId, Task> onCreated,
         Func<EntityId, Task> onRestoreArchived,
         Action onCancelled,
         Func<bool>? canOperate = null,
@@ -86,7 +92,10 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             () => !IsBusy && _canOperate() && CanAddAsUnresolved);
         _createCommand = new AsyncCommand(
             () => CreateAsync(),
-            () => !IsBusy && _canOperate() && !string.IsNullOrWhiteSpace(EntityName));
+            () => !IsBusy &&
+                  _canOperate() &&
+                  !HasFatalValidation &&
+                  !string.IsNullOrWhiteSpace(EntityName));
         _restoreArchivedCommand = new AsyncCommand(
             RestoreArchivedAsync,
             () => !IsBusy && _canOperate() && ArchivedEntityMatch is not null);
@@ -102,7 +111,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _entityName, value ?? string.Empty))
             {
-                ArchivedEntityMatch = null;
+                ClearFatalValidation();
                 _createCommand.NotifyCanExecuteChanged();
                 ScheduleSearch();
             }
@@ -112,7 +121,13 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     public string ResponsibleDeveloper
     {
         get => _responsibleDeveloper;
-        set => SetField(ref _responsibleDeveloper, value ?? string.Empty);
+        set
+        {
+            if (SetField(ref _responsibleDeveloper, value ?? string.Empty))
+            {
+                ClearFatalValidation();
+            }
+        }
     }
 
     public string GroupName
@@ -122,10 +137,34 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _groupName, value ?? string.Empty))
             {
+                ClearFatalValidation();
+                IsGroupSuggestionsOpen = false;
                 ScheduleGroupSearch();
             }
         }
     }
+
+    public int? SelectedRequestedPriority
+    {
+        get => _selectedRequestedPriority;
+        set
+        {
+            if (SetField(ref _selectedRequestedPriority, value))
+            {
+                ClearFatalValidation();
+            }
+        }
+    }
+
+    public IReadOnlyList<RequestedPriorityOption> PriorityOptions { get; } =
+    [
+        new(null, "No requested priority"),
+        new(1, "1 — Highest"),
+        new(2, "2"),
+        new(3, "3"),
+        new(4, "4"),
+        new(5, "5")
+    ];
 
     public string DependencyQuery
     {
@@ -134,9 +173,56 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _dependencyQuery, value ?? string.Empty))
             {
+                ClearFatalValidation();
+                IsDependencySuggestionsOpen = false;
                 ScheduleSearch();
             }
         }
+    }
+
+    public ManualDependencySuggestion? SelectedDependencySuggestion
+    {
+        get => _selectedDependencySuggestion;
+        set
+        {
+            if (!SetField(ref _selectedDependencySuggestion, value) || value is null)
+            {
+                return;
+            }
+
+            AddExisting(value);
+            _selectedDependencySuggestion = null;
+            OnPropertyChanged();
+        }
+    }
+
+    public string? SelectedGroupSuggestion
+    {
+        get => _selectedGroupSuggestion;
+        set
+        {
+            if (!SetField(ref _selectedGroupSuggestion, value) ||
+                string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            UseGroupSuggestion(value);
+            _selectedGroupSuggestion = null;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool IsDependencySuggestionsOpen
+    {
+        get => _isDependencySuggestionsOpen;
+        set => SetField(ref _isDependencySuggestionsOpen, value);
+    }
+
+    public bool IsGroupSuggestionsOpen
+    {
+        get => _isGroupSuggestionsOpen;
+        set => SetField(ref _isGroupSuggestionsOpen, value);
     }
 
     public IReadOnlyList<ManualDependencySuggestion> Suggestions
@@ -164,6 +250,10 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     }
 
     public ObservableCollection<ManualDependencyRow> SelectedDependencies { get; }
+
+    public bool HasSelectedDependencies => SelectedDependencies.Count > 0;
+
+    public bool HasNoSelectedDependencies => SelectedDependencies.Count == 0;
 
     public IReadOnlyList<string> Errors
     {
@@ -237,6 +327,18 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         }
     }
 
+    public bool HasFatalValidation
+    {
+        get => _hasFatalValidation;
+        private set
+        {
+            if (SetField(ref _hasFatalValidation, value))
+            {
+                _createCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
     public ArchivedEntityMatch? ArchivedEntityMatch
     {
         get => _archivedEntityMatch;
@@ -247,6 +349,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(HasArchivedEntityMatch));
                 OnPropertyChanged(nameof(ArchivedEntityMessage));
                 _restoreArchivedCommand.NotifyCanExecuteChanged();
+                _createCommand.NotifyCanExecuteChanged();
             }
         }
     }
@@ -294,6 +397,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         !string.IsNullOrWhiteSpace(EntityName) ||
         !string.IsNullOrWhiteSpace(ResponsibleDeveloper) ||
         !string.IsNullOrWhiteSpace(GroupName) ||
+        SelectedRequestedPriority is not null ||
         SelectedDependencies.Count > 0;
 
     public ICommand AddExistingCommand => _addExistingCommand;
@@ -353,6 +457,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             }
 
             GroupSuggestions = suggestions;
+            IsGroupSuggestionsOpen = suggestions.Count > 0;
             GroupSearchMessage = null;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -367,6 +472,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             }
 
             GroupSuggestions = [];
+            IsGroupSuggestionsOpen = false;
             GroupSearchMessage = $"Groups could not be searched: {exception.Message}";
         }
     }
@@ -390,6 +496,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             }
 
             Suggestions = result.Suggestions;
+            IsDependencySuggestionsOpen = result.Suggestions.Count > 0;
             CanAddAsUnresolved = result.CanAddAsUnresolved &&
                                  (result.EnteredKey is null ||
                                   !ContainsDependency(result.EnteredKey));
@@ -410,6 +517,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             }
 
             Suggestions = [];
+            IsDependencySuggestionsOpen = false;
             CanAddAsUnresolved = false;
             SearchMessage = $"Dependencies could not be searched: {exception.Message}";
         }
@@ -439,12 +547,14 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
                     EntityName,
                     SelectedDependencies.Select(static row => row.Selection),
                     ResponsibleDeveloper,
-                    GroupName),
+                    GroupName,
+                    SelectedRequestedPriority),
                 cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             Errors = ["Entity creation was cancelled; no partial changes were saved."];
+            HasFatalValidation = false;
             OperationMessage = null;
             IsBusy = false;
             return;
@@ -453,6 +563,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         {
             _logger.LogError(exception, "Manual entity creation failed.");
             Errors = [$"Entity could not be created: {exception.Message}"];
+            HasFatalValidation = false;
             OperationMessage = null;
             IsBusy = false;
             return;
@@ -469,6 +580,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             .Select(static diagnostic => diagnostic.Message)
             .ToArray();
         ArchivedEntityMatch = result.ArchivedEntityMatch;
+        HasFatalValidation = Errors.Count > 0;
 
         if (!result.IsSuccess)
         {
@@ -477,11 +589,12 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             return;
         }
 
+        EntityId createdEntityId = result.CreatedEntityId!;
         ResetCore();
         IsBusy = false;
         try
         {
-            await _onCreated();
+            await _onCreated(createdEntityId);
         }
         catch (Exception exception)
         {
@@ -549,6 +662,23 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         _restoreArchivedCommand.NotifyCanExecuteChanged();
     }
 
+    public bool DismissOpenSuggestions()
+    {
+        if (IsDependencySuggestionsOpen)
+        {
+            IsDependencySuggestionsOpen = false;
+            return true;
+        }
+
+        if (IsGroupSuggestionsOpen)
+        {
+            IsGroupSuggestionsOpen = false;
+            return true;
+        }
+
+        return false;
+    }
+
     private void AddExisting(ManualDependencySuggestion suggestion)
     {
         ManualDependencySelection selection = ManualDependencySelection.Existing(
@@ -564,7 +694,9 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(GroupName));
         OnPropertyChanged(nameof(IsDirty));
         GroupSuggestions = [];
+        IsGroupSuggestionsOpen = false;
         GroupSearchMessage = null;
+        ClearFatalValidation();
     }
 
     private void AddUnresolved()
@@ -592,15 +724,21 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             isUnresolved ? "⚠ Missing" : "Resolved",
             isUnresolved));
         ClearDependencySearch();
+        ClearFatalValidation();
         UpdateDraftWarnings();
         OnPropertyChanged(nameof(IsDirty));
+        OnPropertyChanged(nameof(HasSelectedDependencies));
+        OnPropertyChanged(nameof(HasNoSelectedDependencies));
     }
 
     private void RemoveDependency(ManualDependencyRow row)
     {
         SelectedDependencies.Remove(row);
+        ClearFatalValidation();
         UpdateDraftWarnings();
         OnPropertyChanged(nameof(IsDirty));
+        OnPropertyChanged(nameof(HasSelectedDependencies));
+        OnPropertyChanged(nameof(HasNoSelectedDependencies));
         ScheduleSearch();
     }
 
@@ -705,8 +843,17 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         _dependencyQuery = string.Empty;
         OnPropertyChanged(nameof(DependencyQuery));
         Suggestions = [];
+        IsDependencySuggestionsOpen = false;
         SearchMessage = null;
         CanAddAsUnresolved = false;
+    }
+
+    private void ClearFatalValidation()
+    {
+        Errors = [];
+        ArchivedEntityMatch = null;
+        OperationMessage = null;
+        HasFatalValidation = false;
     }
 
     private void UpdateDraftWarnings()
@@ -731,11 +878,21 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ResponsibleDeveloper));
         _groupName = string.Empty;
         OnPropertyChanged(nameof(GroupName));
+        _selectedRequestedPriority = null;
+        OnPropertyChanged(nameof(SelectedRequestedPriority));
         _dependencyQuery = string.Empty;
         OnPropertyChanged(nameof(DependencyQuery));
         SelectedDependencies.Clear();
+        OnPropertyChanged(nameof(HasSelectedDependencies));
+        OnPropertyChanged(nameof(HasNoSelectedDependencies));
         Suggestions = [];
         GroupSuggestions = [];
+        _selectedDependencySuggestion = null;
+        OnPropertyChanged(nameof(SelectedDependencySuggestion));
+        _selectedGroupSuggestion = null;
+        OnPropertyChanged(nameof(SelectedGroupSuggestion));
+        IsDependencySuggestionsOpen = false;
+        IsGroupSuggestionsOpen = false;
         Errors = [];
         Warnings = [];
         ArchivedEntityMatch = null;
@@ -743,6 +900,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         GroupSearchMessage = null;
         OperationMessage = null;
         CanAddAsUnresolved = false;
+        HasFatalValidation = false;
         _createCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(IsDirty));
     }

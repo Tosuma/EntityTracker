@@ -35,10 +35,10 @@
 - UX-03 — Application Shell and Portfolio
 - UX-04 — Overview and Entity Details
 - UX-05 — Schema Synchronization Experience
+- UX-06 — Entity Creation and Editing
 
 ## Planned UI/UX modernization milestones
 
-- UX-06 — Entity Creation and Editing
 - UX-07 — Reporting and Tracker Comparison
 - UX-08 — Accessibility and Consistency
 

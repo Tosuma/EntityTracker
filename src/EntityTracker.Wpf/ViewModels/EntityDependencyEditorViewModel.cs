@@ -46,10 +46,14 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private IReadOnlyList<string> _warnings = [];
     private IReadOnlyList<string> _errors = [];
     private string _dependencyQuery = string.Empty;
+    private ManualDependencySuggestion? _selectedDependencySuggestion;
+    private string? _selectedGroupSuggestion;
     private string? _searchMessage;
     private string? _groupSearchMessage;
     private string? _archiveErrorMessage;
     private bool _canAddAsUnresolved;
+    private bool _isDependencySuggestionsOpen;
+    private bool _isGroupSuggestionsOpen;
     private bool _isBusy;
     private bool _isOpen;
     private EntityEditorMode _mode;
@@ -185,9 +189,55 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _dependencyQuery, value ?? string.Empty))
             {
+                IsDependencySuggestionsOpen = false;
                 _ = SearchAsync(++_searchVersion);
             }
         }
+    }
+
+    public ManualDependencySuggestion? SelectedDependencySuggestion
+    {
+        get => _selectedDependencySuggestion;
+        set
+        {
+            if (!SetField(ref _selectedDependencySuggestion, value) || value is null)
+            {
+                return;
+            }
+
+            _ = AddManualDependencyAsync(value.SourceName);
+            _selectedDependencySuggestion = null;
+            OnPropertyChanged();
+        }
+    }
+
+    public string? SelectedGroupSuggestion
+    {
+        get => _selectedGroupSuggestion;
+        set
+        {
+            if (!SetField(ref _selectedGroupSuggestion, value) ||
+                string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            UseGroupSuggestion(value);
+            _selectedGroupSuggestion = null;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool IsDependencySuggestionsOpen
+    {
+        get => _isDependencySuggestionsOpen;
+        set => SetField(ref _isDependencySuggestionsOpen, value);
+    }
+
+    public bool IsGroupSuggestionsOpen
+    {
+        get => _isGroupSuggestionsOpen;
+        set => SetField(ref _isGroupSuggestionsOpen, value);
     }
 
     public IReadOnlyList<string> Warnings
@@ -305,6 +355,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             {
                 OnPropertyChanged(nameof(IsReviewMode));
                 OnPropertyChanged(nameof(IsArchivedMode));
+                OnPropertyChanged(nameof(ShowStandaloneSections));
+                OnPropertyChanged(nameof(ShowArchivedSections));
                 OnPropertyChanged(nameof(ContextTitle));
                 OnPropertyChanged(nameof(ContextDescription));
                 OnPropertyChanged(nameof(SaveLabel));
@@ -323,6 +375,10 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     public bool IsReviewMode => Mode == EntityEditorMode.SynchronizationReview;
 
     public bool IsArchivedMode => Mode == EntityEditorMode.ArchivedDetails;
+
+    public bool ShowStandaloneSections => Mode == EntityEditorMode.Standalone;
+
+    public bool ShowArchivedSections => Mode == EntityEditorMode.ArchivedDetails;
 
     public bool IsArchiveConfirmationOpen
     {
@@ -380,12 +436,16 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         get => _selectedStatus;
         set
         {
-            if (CanEditProgress)
+            if (CanEditProgress && SetField(ref _selectedStatus, value))
             {
-                SetField(ref _selectedStatus, value);
+                OnPropertyChanged(nameof(SelectedStatusDisplay));
             }
         }
     }
+
+    public string SelectedStatusDisplay => StatusOptions
+        .Single(option => option.Value == SelectedStatus)
+        .DisplayName;
 
     public string EditedNotes
     {
@@ -699,6 +759,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             ArchivedDetails = details;
             _selectedStatus = details.Entity.Status;
             OnPropertyChanged(nameof(SelectedStatus));
+            OnPropertyChanged(nameof(SelectedStatusDisplay));
             _editedNotes = details.Entity.Notes;
             OnPropertyChanged(nameof(EditedNotes));
             _editedResponsibleDeveloper = details.Entity.ResponsibleDeveloper;
@@ -740,6 +801,23 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         NotifyCommandsChanged();
     }
 
+    public bool DismissOpenSuggestions()
+    {
+        if (IsDependencySuggestionsOpen)
+        {
+            IsDependencySuggestionsOpen = false;
+            return true;
+        }
+
+        if (IsGroupSuggestionsOpen)
+        {
+            IsGroupSuggestionsOpen = false;
+            return true;
+        }
+
+        return false;
+    }
+
     public void DiscardAndClose()
     {
         if (IsOpen && !IsBusy)
@@ -774,6 +852,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             }
 
             Suggestions = result.Suggestions;
+            IsDependencySuggestionsOpen = result.Suggestions.Count > 0;
             CanAddAsUnresolved = result.CanAddAsUnresolved &&
                                  !ContainsDependency(result.EnteredKey);
             SearchMessage = result.BlockingMessage ??
@@ -790,6 +869,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             }
 
             Suggestions = [];
+            IsDependencySuggestionsOpen = false;
             CanAddAsUnresolved = false;
             SearchMessage = $"Dependencies could not be searched: {exception.Message}";
         }
@@ -813,6 +893,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             }
 
             GroupSuggestions = suggestions;
+            IsGroupSuggestionsOpen = suggestions.Count > 0;
             GroupSearchMessage = null;
         }
         catch (Exception exception)
@@ -824,6 +905,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             }
 
             GroupSuggestions = [];
+            IsGroupSuggestionsOpen = false;
             GroupSearchMessage = $"Groups could not be searched: {exception.Message}";
         }
     }
@@ -839,6 +921,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _editedGroupName = groupName;
         OnPropertyChanged(nameof(EditedGroupName));
         GroupSuggestions = [];
+        IsGroupSuggestionsOpen = false;
         GroupSearchMessage = null;
     }
 
@@ -1062,6 +1145,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         {
             _selectedStatus = plan.Entity.Status;
             OnPropertyChanged(nameof(SelectedStatus));
+            OnPropertyChanged(nameof(SelectedStatusDisplay));
             _editedNotes = plan.Entity.Notes;
             OnPropertyChanged(nameof(EditedNotes));
             _editedResponsibleDeveloper = plan.Entity.ResponsibleDeveloper;
@@ -1136,6 +1220,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         Mode = EntityEditorMode.Standalone;
         _selectedStatus = DevelopmentStatus.NotStarted;
         OnPropertyChanged(nameof(SelectedStatus));
+        OnPropertyChanged(nameof(SelectedStatusDisplay));
         _editedNotes = string.Empty;
         OnPropertyChanged(nameof(EditedNotes));
         _editedResponsibleDeveloper = string.Empty;
@@ -1157,7 +1242,10 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _searchVersion++;
         _dependencyQuery = string.Empty;
         OnPropertyChanged(nameof(DependencyQuery));
+        _selectedDependencySuggestion = null;
+        OnPropertyChanged(nameof(SelectedDependencySuggestion));
         Suggestions = [];
+        IsDependencySuggestionsOpen = false;
         CanAddAsUnresolved = false;
         SearchMessage = null;
     }
@@ -1165,7 +1253,10 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private void ClearGroupSearch()
     {
         _groupSearchVersion++;
+        _selectedGroupSuggestion = null;
+        OnPropertyChanged(nameof(SelectedGroupSuggestion));
         GroupSuggestions = [];
+        IsGroupSuggestionsOpen = false;
         GroupSearchMessage = null;
     }
 
