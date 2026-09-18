@@ -12,3 +12,21 @@ prefix_rule(
     pattern = ["dotnet", "restore"],
     decision = "allow",
 )
+
+prefix_rule(
+    pattern = ["dotnet"],
+    decision = "allow",
+    justification = "Allow .NET commands for this repository without repeated approval prompts.",
+)
+
+prefix_rule(
+    pattern = ["git", "add"],
+    decision = "allow",
+    justification = "Allow staging explicitly reviewed changes in this repository.",
+)
+
+prefix_rule(
+    pattern = ["git", "commit"],
+    decision = "allow",
+    justification = "Allow commits in this repository when explicitly requested or authorized.",
+)
