@@ -525,7 +525,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 ShellDestination.Reports => MainWindowTab.Progress,
                 ShellDestination.SchemaSynchronization => MainWindowTab.SchemaSynchronization,
                 ShellDestination.AddEntity => MainWindowTab.AddEntity,
-                ShellDestination.HelpSql => MainWindowTab.SqlHelp,
                 _ => CurrentWorkspace.SelectedTab
             };
         }

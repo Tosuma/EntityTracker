@@ -135,6 +135,38 @@ public sealed class ShellViewModelTests
     }
 
     [Fact]
+    public async Task HelpSqlNavigation_GuardsAndDiscardsUnappliedSynchronizationReview()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "Existing");
+        harness.SetCsvPath(
+            "table_name;mandatory_dependencies;mandatory_dependency_count;optional_dependencies;optional_dependency_count;total_dependency_count",
+            "Existing;;0;;0;0");
+        RecordingDiscardConfirmation confirmation = new(false);
+        using ShellViewModel shell = harness.CreateShell(
+            new EntityTrackerSettings(
+                StorageProviderKind.Sqlite,
+                lastProjectId: harness.DefaultProject.Id,
+                lastTrackerId: harness.DefaultTracker.Id),
+            confirmation);
+        await shell.InitializeAsync();
+        Assert.True(await shell.NavigateAsync(ShellDestination.SchemaSynchronization));
+        MainWindowViewModel workspace = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
+        await workspace.ImportCsvAsync();
+        Assert.True(workspace.Review.HasReview);
+
+        Assert.False(await shell.NavigateAsync(ShellDestination.HelpSql));
+        Assert.Equal(ShellDestination.SchemaSynchronization, shell.SelectedDestination);
+        Assert.True(workspace.Review.HasReview);
+
+        confirmation.Result = true;
+        Assert.True(await shell.NavigateAsync(ShellDestination.HelpSql));
+        Assert.Equal(ShellDestination.HelpSql, shell.SelectedDestination);
+        Assert.False(workspace.Review.HasReview);
+        Assert.Equal(2, confirmation.CallCount);
+    }
+
+    [Fact]
     public async Task CatalogDialogs_ValidateReservedNamesCancelSafelyAndRequireExactPurgeName()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
@@ -267,6 +299,7 @@ public sealed class ShellViewModelTests
         private readonly TrackerWorkspaceViewModelFactory _workspaceFactory;
         private readonly CatalogManagementViewModel _catalog;
         private readonly AppearanceViewModel _appearance;
+        private readonly TestAdapters _adapters;
         private readonly TestClipboard _clipboard = new();
 
         private ShellHarness(
@@ -282,7 +315,8 @@ public sealed class ShellViewModelTests
             TrackerWorkspaceViewModelFactory workspaceFactory,
             CatalogManagementViewModel catalog,
             EntityTrackerSettingsStore settingsStore,
-            AppearanceViewModel appearance)
+            AppearanceViewModel appearance,
+            TestAdapters adapters)
         {
             _directory = directory;
             _stateStore = stateStore;
@@ -297,6 +331,7 @@ public sealed class ShellViewModelTests
             _catalog = catalog;
             SettingsStore = settingsStore;
             _appearance = appearance;
+            _adapters = adapters;
         }
 
         public Project DefaultProject { get; }
@@ -448,7 +483,8 @@ public sealed class ShellViewModelTests
                 workspaceFactory,
                 catalog,
                 settings,
-                appearance);
+                appearance,
+                adapters);
         }
 
         public ShellViewModel CreateShell(
@@ -474,6 +510,13 @@ public sealed class ShellViewModelTests
                     [], [], [], [], [],
                     progressSnapshotAfterChanges:
                         new ProgressSnapshotState(1, 0, 0, 0, 0, 0)));
+
+        public void SetCsvPath(params string[] lines)
+        {
+            string path = Path.Combine(_directory, "schema.csv");
+            File.WriteAllLines(path, lines);
+            _adapters.CsvPath = path;
+        }
 
         public ValueTask DisposeAsync()
         {
@@ -505,7 +548,9 @@ public sealed class ShellViewModelTests
         IClipboardService,
         ISchemaSynchronizationConfirmation
     {
-        public string? SelectCsvFile() => null;
+        public string? CsvPath { get; set; }
+
+        public string? SelectCsvFile() => CsvPath;
         public string? SelectPngPath(string suggestedFileName) => null;
         public void SetPng(byte[] png) { }
         public void SetText(string text) { }

@@ -68,6 +68,7 @@ public partial class TrackerWorkspaceView : UserControl
         viewModel.OverviewSelectionClearRequested += OnOverviewSelectionClearRequested;
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
         viewModel.Editor.PropertyChanged += OnEditorPropertyChanged;
+        viewModel.Review.PropertyChanged += OnSynchronizationReviewPropertyChanged;
     }
 
     private void Detach()
@@ -80,7 +81,36 @@ public partial class TrackerWorkspaceView : UserControl
         _viewModel.OverviewSelectionClearRequested -= OnOverviewSelectionClearRequested;
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         _viewModel.Editor.PropertyChanged -= OnEditorPropertyChanged;
+        _viewModel.Review.PropertyChanged -= OnSynchronizationReviewPropertyChanged;
         _viewModel = null;
+    }
+
+    private void OnSynchronizationReviewPropertyChanged(
+        object? sender,
+        PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(SchemaSynchronizationReviewViewModel.CurrentPlan) ||
+            _viewModel?.SelectedTab != MainWindowTab.SchemaSynchronization)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (_viewModel?.SelectedTab != MainWindowTab.SchemaSynchronization)
+            {
+                return;
+            }
+
+            if (_viewModel.Review.HasReview)
+            {
+                SchemaReviewHeading.Focus();
+            }
+            else
+            {
+                ChooseCsvButton.Focus();
+            }
+        }));
     }
 
     private void OnEditorPropertyChanged(object? sender, PropertyChangedEventArgs e)

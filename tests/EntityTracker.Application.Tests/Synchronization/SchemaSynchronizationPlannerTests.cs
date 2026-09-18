@@ -25,6 +25,8 @@ public sealed class SchemaSynchronizationPlannerTests
         Assert.False(plan.HasActionableChanges);
         Assert.False(plan.ChangeSet.HasChanges);
         Assert.Equal(2, plan.UnchangedEntityCount);
+        Assert.Equal(["A", "B"], plan.UnchangedEntities.Select(static entity => entity.SourceName));
+        Assert.Equal(2, plan.PreSynchronizationActiveEntityCount);
         Assert.Empty(plan.NewEntities);
         Assert.Empty(plan.ChangedEntities);
         Assert.Empty(plan.MissingEntities);
@@ -59,6 +61,8 @@ public sealed class SchemaSynchronizationPlannerTests
         Assert.Equal("B", Assert.Single(plan.MissingEntities).Entity.SourceName);
         Assert.Equal(b.Id, Assert.Single(plan.ChangeSet.EntityIdsToArchive));
         Assert.Equal(1, plan.UnchangedEntityCount);
+        Assert.Equal("A", Assert.Single(plan.UnchangedEntities).SourceName);
+        Assert.Equal(2, plan.PreSynchronizationActiveEntityCount);
     }
 
     [Fact]
@@ -78,6 +82,44 @@ public sealed class SchemaSynchronizationPlannerTests
         Assert.Empty(plan.ChangeSet.EntityIdsToArchive);
         Assert.Equal(1, plan.UnchangedEntityCount);
         Assert.False(plan.ChangeSet.HasChanges);
+    }
+
+    [Fact]
+    public void ReviewResolutionEffects_DistinguishDirectlyUnresolvedFromUpstreamBlocked()
+    {
+        SchemaSynchronizationPlan plan = Plan(
+            Candidate(
+                ["Direct", "Upstream"],
+                [("Upstream", "Direct", ImportedDependencyKind.Mandatory)],
+                [("Direct", "MissingRoot", ImportedDependencyKind.Mandatory)]),
+            SchemaImportMode.Complete,
+            [],
+            []);
+
+        SynchronizationResolutionEffect direct = plan.ReviewResolutionEffects.Single(
+            static effect => effect.SourceName == "Direct");
+        SynchronizationResolutionEffect upstream = plan.ReviewResolutionEffects.Single(
+            static effect => effect.SourceName == "Upstream");
+        Assert.Equal(DependencyResolutionState.Unresolved, direct.State);
+        Assert.Equal(DependencyResolutionState.Blocked, upstream.State);
+        Assert.Equal(["MissingRoot"], direct.MissingDependencyNames);
+        Assert.Equal(["MissingRoot"], upstream.MissingDependencyNames);
+    }
+
+    [Fact]
+    public void PartialReview_OmitsUnchangedUnresolvedEntityOutsideImportedSubset()
+    {
+        TrackedEntity existing = Entity(1, "Existing");
+
+        SchemaSynchronizationPlan plan = Plan(
+            Candidate(["Imported"], []),
+            SchemaImportMode.Partial,
+            [existing],
+            [],
+            [Unresolved(existing, "StillMissing")]);
+
+        Assert.Empty(plan.ReviewResolutionEffects);
+        Assert.Equal("Existing", Assert.Single(plan.UnresolvedEntities).Entity.SourceName);
     }
 
     [Fact]

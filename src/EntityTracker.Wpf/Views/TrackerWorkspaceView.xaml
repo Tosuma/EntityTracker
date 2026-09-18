@@ -7,6 +7,7 @@
         xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
         xmlns:controls="clr-namespace:EntityTracker.Wpf.Controls"
         xmlns:domain="clr-namespace:EntityTracker.Domain;assembly=EntityTracker.Domain"
+        xmlns:synchronization="clr-namespace:EntityTracker.Application.Synchronization;assembly=EntityTracker.Application"
         xmlns:workflow="clr-namespace:EntityTracker.Application.Workflow;assembly=EntityTracker.Application"
         xmlns:reporting="clr-namespace:EntityTracker.Reporting;assembly=EntityTracker.Reporting"
         xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels"
@@ -17,6 +18,128 @@
         PreviewMouseDown="OnWindowPreviewMouseDown">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+
+        <DataTemplate x:Key="SynchronizationDependencyChangeTemplate">
+            <Border x:Name="DependencyChangeCard"
+                    Margin="16,4,0,0"
+                    Padding="8,5"
+                    Background="{DynamicResource Brush.Surface.Subtle}"
+                    BorderBrush="{DynamicResource Brush.Border.Default}"
+                    BorderThickness="1"
+                    CornerRadius="3"
+                    AutomationProperties.Name="{Binding AccessibleText}">
+                <TextBlock Foreground="{DynamicResource Brush.Text.Primary}" TextWrapping="Wrap">
+                    <Run FontWeight="SemiBold" Text="{Binding Action, Mode=OneWay}" />
+                    <Run Text=": " />
+                    <Run Text="{Binding DependencySourceName, Mode=OneWay}" />
+                    <Run Foreground="{DynamicResource Brush.Text.Secondary}"
+                         Text="{Binding DetailText, Mode=OneWay}" />
+                </TextBlock>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Kind}" Value="{x:Static synchronization:DependencySynchronizationChangeKind.Removed}">
+                    <Setter TargetName="DependencyChangeCard" Property="Background" Value="{DynamicResource Brush.Review.Missing.Surface}" />
+                    <Setter TargetName="DependencyChangeCard" Property="BorderBrush" Value="{DynamicResource Brush.Review.Missing.Border}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="{x:Static synchronization:DependencySynchronizationChangeKind.BecameUnresolved}">
+                    <Setter TargetName="DependencyChangeCard" Property="Background" Value="{DynamicResource Brush.Review.Warning.Surface}" />
+                    <Setter TargetName="DependencyChangeCard" Property="BorderBrush" Value="{DynamicResource Brush.Review.Warning.Border}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate x:Key="SynchronizationProgressImpactTemplate">
+            <Border Margin="16,8,0,0"
+                    Padding="10"
+                    Background="{DynamicResource Brush.Surface.Selected}"
+                    BorderBrush="{DynamicResource Brush.Border.Strong}"
+                    BorderThickness="1"
+                    CornerRadius="4">
+                <StackPanel>
+                    <TextBlock FontWeight="SemiBold"
+                               Foreground="{DynamicResource Brush.Text.Primary}"
+                               Text="Progress impact" />
+                    <TextBlock Margin="0,3,0,0"
+                               Foreground="{DynamicResource Brush.Text.Secondary}"
+                               Text="{Binding CurrentStatus, StringFormat=Current status: {0}}" />
+                    <TextBlock Margin="0,3,0,6"
+                               FontWeight="SemiBold"
+                               Text="{Binding DecisionText}" />
+                    <WrapPanel>
+                        <Button Margin="0,0,8,4"
+                                Command="{Binding DataContext.KeepSynchronizationStatusCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding}"
+                                Content="Keep current status"
+                                Style="{StaticResource SecondaryButtonStyle}" />
+                        <Button Margin="0,0,0,4"
+                                Command="{Binding DataContext.MarkSynchronizationReworkCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding}"
+                                Content="Mark Rework needed"
+                                Style="{StaticResource SecondaryButtonStyle}" />
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <Style x:Key="SynchronizationReviewFilterToggleStyle" TargetType="ToggleButton">
+            <Setter Property="Margin" Value="0,0,8,6" />
+            <Setter Property="Padding" Value="10,7" />
+            <Setter Property="MinWidth" Value="94" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Surface.Card}" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Card"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Brush.Border.Strong}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green100}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Card" Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
+                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green100}" />
+                                <Setter TargetName="Card" Property="BorderThickness" Value="2" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Cursor" Value="Arrow" />
+                                <Setter TargetName="Card" Property="Opacity" Value="0.44" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SynchronizationMissingFilterToggleStyle"
+               BasedOn="{StaticResource SynchronizationReviewFilterToggleStyle}"
+               TargetType="ToggleButton">
+            <Setter Property="Background" Value="{DynamicResource Brush.Review.Missing.Surface}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Review.Missing.Border}" />
+        </Style>
+
+        <Style x:Key="SynchronizationUnresolvedFilterToggleStyle"
+               BasedOn="{StaticResource SynchronizationReviewFilterToggleStyle}"
+               TargetType="ToggleButton">
+            <Setter Property="Background" Value="{DynamicResource Brush.Review.Warning.Surface}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Review.Warning.Border}" />
+        </Style>
 
         <Style x:Key="SummaryCardStyle" TargetType="Border">
             <Setter Property="Margin" Value="0,0,10,8" />
@@ -1045,10 +1168,12 @@
                     <DockPanel Margin="0,0,0,12">
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                             <Button Margin="0,0,8,0"
-                                    Command="{Binding OpenSqlQueryCommand}"
+                                    Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    CommandParameter="{x:Static viewModels:ShellDestination.HelpSql}"
                                     Content="Get SQL Query"
                                     Style="{StaticResource SecondaryButtonStyle}" />
-                            <Button Command="{Binding ImportCsvCommand}"
+                            <Button x:Name="ChooseCsvButton"
+                                    Command="{Binding ImportCsvCommand}"
                                     Content="Choose CSV and Review"
                                     Style="{StaticResource PrimaryButtonStyle}" />
                         </StackPanel>
@@ -1069,7 +1194,8 @@
                             Background="{DynamicResource Brush.Surface.Card}"
                             BorderBrush="{DynamicResource Brush.Border.Default}"
                             BorderThickness="1"
-                            CornerRadius="4">
+                            CornerRadius="4"
+                            Visibility="{Binding Review.ShowImportConfiguration, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <StackPanel>
                             <Border Margin="0,0,0,12"
                                     Padding="10"
@@ -1095,7 +1221,8 @@
                                          Content="Complete database snapshot (default)" />
                             <TextBlock Margin="22,2,0,0"
                                        Foreground="{DynamicResource Brush.Text.Secondary}"
-                                       Text="The CSV contains the entire schema. Existing entities missing from the file will be archived." />
+                                       Text="Absent existing entities will be proposed for archive."
+                                       TextWrapping="Wrap" />
                             <RadioButton Margin="0,9,0,0"
                                          GroupName="ImportMode"
                                          IsEnabled="{Binding Review.CanSelectImportMode}"
@@ -1103,18 +1230,101 @@
                                          Content="Partial database snapshot" />
                             <TextBlock Margin="22,2,0,0"
                                        Foreground="{DynamicResource Brush.Text.Secondary}"
-                                       Text="The CSV contains only part of the schema. Existing entities missing from the file will be left unchanged." />
-                            <TextBlock Margin="0,10,0,0"
-                                       Foreground="{DynamicResource Brush.Text.Primary}"
-                                       FontWeight="SemiBold"
-                                       Text="Import type is locked for while reviewing. Cancel the review to choose a different type."
-                                       TextWrapping="Wrap"
-                                       Visibility="{Binding Review.HasReview, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                       Text="Absent existing entities are left unchanged."
+                                       TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
 
                     <Grid Grid.Row="2">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <StackPanel x:Name="SchemaReviewSummary"
+                                    Margin="0,0,0,6"
+                                    Visibility="{Binding Review.HasReview, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock x:Name="SchemaReviewHeading"
+                                       Margin="0,0,0,10"
+                                       Focusable="True"
+                                       FontWeight="SemiBold"
+                                       AutomationProperties.Name="Schema synchronization review"
+                                       Text="{Binding Review.ImportModeLabel, StringFormat=Import mode: {0}}" />
+
+                            <WrapPanel>
+                                <ToggleButton AutomationProperties.HelpText="Select again to show every review category."
+                                              AutomationProperties.Name="Filter review to new entities"
+                                              Command="{Binding Review.ToggleFilterCommand}"
+                                              CommandParameter="{x:Static viewModels:SchemaSynchronizationReviewFilter.New}"
+                                              IsChecked="{Binding Review.IsNewFilterSelected, Mode=OneWay}"
+                                              Style="{StaticResource SynchronizationReviewFilterToggleStyle}"
+                                              ToolTip="Show only new entities">
+                                    <StackPanel>
+                                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="New" />
+                                        <TextBlock Margin="0,2,0,0" FontSize="16" FontWeight="SemiBold" Text="{Binding Review.NewEntities.Count}" />
+                                    </StackPanel>
+                                </ToggleButton>
+                                <ToggleButton AutomationProperties.HelpText="Select again to show every review category."
+                                              AutomationProperties.Name="Filter review to changed entities"
+                                              Command="{Binding Review.ToggleFilterCommand}"
+                                              CommandParameter="{x:Static viewModels:SchemaSynchronizationReviewFilter.Changed}"
+                                              IsChecked="{Binding Review.IsChangedFilterSelected, Mode=OneWay}"
+                                              Style="{StaticResource SynchronizationReviewFilterToggleStyle}"
+                                              ToolTip="Show only changed entities">
+                                    <StackPanel>
+                                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Changed" />
+                                        <TextBlock Margin="0,2,0,0" FontSize="16" FontWeight="SemiBold" Text="{Binding Review.ChangedEntities.Count}" />
+                                    </StackPanel>
+                                </ToggleButton>
+                                <ToggleButton AutomationProperties.HelpText="Select again to show every review category."
+                                              AutomationProperties.Name="Filter review to missing entities"
+                                              Command="{Binding Review.ToggleFilterCommand}"
+                                              CommandParameter="{x:Static viewModels:SchemaSynchronizationReviewFilter.Missing}"
+                                              IsChecked="{Binding Review.IsMissingFilterSelected, Mode=OneWay}"
+                                              Style="{StaticResource SynchronizationMissingFilterToggleStyle}"
+                                              ToolTip="Show only missing or possibly removed entities">
+                                    <StackPanel>
+                                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Missing" />
+                                        <TextBlock Margin="0,2,0,0" FontSize="16" FontWeight="SemiBold" Text="{Binding Review.MissingEntities.Count}" />
+                                    </StackPanel>
+                                </ToggleButton>
+                                <ToggleButton AutomationProperties.HelpText="Select again to show every review category."
+                                              AutomationProperties.Name="Filter review to unresolved entities"
+                                              Command="{Binding Review.ToggleFilterCommand}"
+                                              CommandParameter="{x:Static viewModels:SchemaSynchronizationReviewFilter.Unresolved}"
+                                              IsChecked="{Binding Review.IsUnresolvedFilterSelected, Mode=OneWay}"
+                                              Style="{StaticResource SynchronizationUnresolvedFilterToggleStyle}"
+                                              ToolTip="Show directly unresolved and upstream-blocked entities">
+                                    <StackPanel>
+                                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Unresolved" />
+                                        <TextBlock Margin="0,2,0,0" FontSize="16" FontWeight="SemiBold" Text="{Binding Review.UnresolvedEntities.Count}" />
+                                    </StackPanel>
+                                </ToggleButton>
+                                <ToggleButton AutomationProperties.HelpText="Select again to show every review category."
+                                              AutomationProperties.Name="Filter review to unchanged entities"
+                                              Command="{Binding Review.ToggleFilterCommand}"
+                                              CommandParameter="{x:Static viewModels:SchemaSynchronizationReviewFilter.Unchanged}"
+                                              IsChecked="{Binding Review.IsUnchangedFilterSelected, Mode=OneWay}"
+                                              Style="{StaticResource SynchronizationReviewFilterToggleStyle}"
+                                              ToolTip="Show only unchanged entities">
+                                    <StackPanel>
+                                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Unchanged" />
+                                        <TextBlock Margin="0,2,0,0" FontSize="16" FontWeight="SemiBold" Text="{Binding Review.UnchangedEntityCount}" />
+                                    </StackPanel>
+                                </ToggleButton>
+                                <Button AutomationProperties.Name="Reset synchronization review filter"
+                                        Command="{Binding Review.ClearFilterCommand}"
+                                        Content="Reset filter"
+                                        Margin="0,0,0,6"
+                                        Padding="10,7"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        VerticalAlignment="Center"
+                                        Visibility="{Binding Review.HasActiveFilter, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            </WrapPanel>
+                        </StackPanel>
+
                         <ScrollViewer x:Name="SchemaReviewScrollViewer"
+                                      Grid.Row="1"
                                       HorizontalScrollBarVisibility="Disabled"
                                       PreviewMouseWheel="OnReviewPreviewMouseWheel"
                                       VerticalScrollBarVisibility="Auto">
@@ -1122,10 +1332,11 @@
                                 <Border Margin="0,0,0,8"
                                         MaxHeight="120"
                                         Padding="10"
-                                        Background="{DynamicResource Brush.Surface.Subtle}"
-                                        BorderBrush="{DynamicResource Brush.Accent}"
+                                        Background="{DynamicResource Brush.Review.Warning.Surface}"
+                                        BorderBrush="{DynamicResource Brush.Review.Warning.Border}"
                                         BorderThickness="1"
                                         CornerRadius="4"
+                                        AutomationProperties.LiveSetting="Polite"
                                         Visibility="{Binding Review.HasWarnings, Converter={StaticResource BooleanToVisibilityConverter}}">
                                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                                         <ItemsControl ItemsSource="{Binding Review.Warnings}" />
@@ -1139,6 +1350,7 @@
                                         BorderBrush="{DynamicResource Brush.Accent}"
                                         BorderThickness="1"
                                         CornerRadius="4"
+                                        AutomationProperties.LiveSetting="Assertive"
                                         Visibility="{Binding Review.HasDiagnostics, Converter={StaticResource BooleanToVisibilityConverter}}">
                                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                                         <ItemsControl ItemsSource="{Binding Review.Diagnostics}" />
@@ -1146,13 +1358,41 @@
                                 </Border>
 
                                 <StackPanel Visibility="{Binding Review.HasReview, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                    <TextBlock Margin="0,0,0,10"
-                                               FontWeight="SemiBold"
-                                               Text="{Binding Review.ImportModeLabel, StringFormat=Import mode: {0}}" />
+                                    <Border Margin="0,0,0,12"
+                                            Padding="12"
+                                            Background="{DynamicResource Brush.Surface.Selected}"
+                                            BorderBrush="{DynamicResource Brush.Border.Strong}"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Visibility="{Binding Review.ShowNoActionableChanges, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold" Text="No schema changes found" />
+                                            <TextBlock Margin="0,3,0,0"
+                                                       Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                       Text="You can cancel, or apply this no-op review to record the successful import as the latest snapshot."
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Margin="0,0,0,12"
+                                            Padding="12"
+                                            Background="{DynamicResource Brush.Review.Missing.Surface}"
+                                            BorderBrush="{DynamicResource Brush.Review.Missing.Border}"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            AutomationProperties.LiveSetting="Polite"
+                                            Visibility="{Binding Review.ShowArchiveImpact, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <StackPanel>
+                                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="Archive impact" />
+                                            <TextBlock Margin="0,3,0,0"
+                                                       Text="{Binding Review.ArchiveImpactText}"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
 
                                     <StackPanel Margin="0,0,0,12"
-                                                Visibility="{Binding Review.HasNewEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                        <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Brand.Green100}" Text="New entities" />
+                                                Visibility="{Binding Review.ShowNewEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Text.Primary}" Text="{Binding Review.NewEntities.Count, StringFormat=New entities ({0})}" />
                                         <ItemsControl ItemsSource="{Binding Review.NewEntities}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
@@ -1169,7 +1409,7 @@
                                                                         Cursor="Hand"
                                                                         FontSize="19"
                                                                         ToolTip="Entity actions"
-                                                                        AutomationProperties.Name="Entity actions"
+                                                                        AutomationProperties.Name="{Binding SourceName, StringFormat=Actions for {0}}"
                                                                         Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                         Click="OnContextMenuButtonClick">
                                                                     <Button.ContextMenu>
@@ -1182,7 +1422,13 @@
                                                                 </Button>
                                                                 <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding SourceName, StringFormat=+ {0}}" />
                                                             </DockPanel>
-                                                            <TextBlock Margin="16,3,0,0" Foreground="{DynamicResource Brush.Text.Secondary}" Text="{Binding Details}" TextWrapping="Wrap" />
+                                                            <TextBlock Margin="16,3,0,0"
+                                                                       Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                                       Text="{Binding Details}"
+                                                                       TextWrapping="Wrap"
+                                                                       Visibility="{Binding HasDetails, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                            <ItemsControl ItemsSource="{Binding DependencyChangeItems}"
+                                                                          ItemTemplate="{StaticResource SynchronizationDependencyChangeTemplate}" />
                                                         </StackPanel>
                                                     </Border>
                                                 </DataTemplate>
@@ -1190,9 +1436,10 @@
                                         </ItemsControl>
                                     </StackPanel>
 
-                                    <StackPanel Margin="0,0,0,12"
-                                                Visibility="{Binding Review.HasChangedEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                        <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Text.Primary}" Text="Changed entities" />
+                                    <StackPanel x:Name="ChangedReviewSection"
+                                                Margin="0,0,0,12"
+                                                Visibility="{Binding Review.ShowChangedEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Text.Primary}" Text="{Binding Review.ChangedEntities.Count, StringFormat=Changed entities ({0})}" />
                                         <ItemsControl ItemsSource="{Binding Review.ChangedEntities}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
@@ -1209,7 +1456,7 @@
                                                                         Cursor="Hand"
                                                                         FontSize="19"
                                                                         ToolTip="Entity actions"
-                                                                        AutomationProperties.Name="Entity actions"
+                                                                        AutomationProperties.Name="{Binding SourceName, StringFormat=Actions for {0}}"
                                                                         Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                         Click="OnContextMenuButtonClick">
                                                                     <Button.ContextMenu>
@@ -1222,7 +1469,16 @@
                                                                 </Button>
                                                                 <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding SourceName, StringFormat=~ {0}}" />
                                                             </DockPanel>
-                                                            <TextBlock Margin="16,3,0,0" Foreground="{DynamicResource Brush.Text.Secondary}" Text="{Binding Details}" TextWrapping="Wrap" />
+                                                            <TextBlock Margin="16,3,0,0"
+                                                                       Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                                       Text="{Binding Details}"
+                                                                       TextWrapping="Wrap"
+                                                                       Visibility="{Binding HasDetails, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                            <ItemsControl ItemsSource="{Binding DependencyChangeItems}"
+                                                                          ItemTemplate="{StaticResource SynchronizationDependencyChangeTemplate}" />
+                                                            <ContentControl Content="{Binding ProgressImpact}"
+                                                                            ContentTemplate="{StaticResource SynchronizationProgressImpactTemplate}"
+                                                                            Visibility="{Binding HasProgressImpact, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                                         </StackPanel>
                                                     </Border>
                                                 </DataTemplate>
@@ -1232,14 +1488,14 @@
 
                                     <StackPanel x:Name="MissingReviewSection"
                                                 Margin="0,0,0,12"
-                                                Visibility="{Binding Review.HasMissingEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                Visibility="{Binding Review.ShowMissingEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <Border Padding="8,5"
                                                 Background="{DynamicResource Brush.Review.Missing.Header}"
                                                 CornerRadius="3">
                                             <TextBlock FontSize="16"
                                                        FontWeight="SemiBold"
                                                        Foreground="{DynamicResource Brush.Brand.DarkGreen}"
-                                                       Text="Missing / possibly removed" />
+                                                       Text="{Binding Review.MissingEntities.Count, StringFormat=Missing / possibly removed ({0})}" />
                                         </Border>
                                         <ItemsControl ItemsSource="{Binding Review.MissingEntities}">
                                             <ItemsControl.ItemTemplate>
@@ -1260,11 +1516,11 @@
                                     </StackPanel>
 
                                     <StackPanel Margin="0,0,0,12"
-                                                Visibility="{Binding Review.HasManualOnlyEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                Visibility="{Binding Review.ShowManualOnlyEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <TextBlock FontSize="16"
                                                    FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource Brush.Brand.Green100}"
-                                                   Text="Manual entities not yet in CSV — kept active" />
+                                                   Foreground="{DynamicResource Brush.Text.Primary}"
+                                                   Text="{Binding Review.ManualOnlyEntities.Count, StringFormat=Manual entities kept active ({0})}" />
                                         <ItemsControl ItemsSource="{Binding Review.ManualOnlyEntities}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
@@ -1280,6 +1536,11 @@
                                                                        Foreground="{DynamicResource Brush.Text.Primary}"
                                                                        Text="{Binding Details}"
                                                                        TextWrapping="Wrap" />
+                                                            <ItemsControl ItemsSource="{Binding DependencyChangeItems}"
+                                                                          ItemTemplate="{StaticResource SynchronizationDependencyChangeTemplate}" />
+                                                            <ContentControl Content="{Binding ProgressImpact}"
+                                                                            ContentTemplate="{StaticResource SynchronizationProgressImpactTemplate}"
+                                                                            Visibility="{Binding HasProgressImpact, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                                         </StackPanel>
                                                     </Border>
                                                 </DataTemplate>
@@ -1289,11 +1550,11 @@
 
                                     <StackPanel x:Name="UnresolvedReviewSection"
                                                 Margin="0,0,0,12"
-                                                Visibility="{Binding Review.HasUnresolvedEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                Visibility="{Binding Review.ShowUnresolvedEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <TextBlock FontSize="16"
                                                    FontWeight="SemiBold"
                                                    Foreground="{DynamicResource Brush.Review.Warning.Header}"
-                                                   Text="Unresolved dependencies" />
+                                                   Text="{Binding Review.UnresolvedEntities.Count, StringFormat=Directly unresolved dependencies ({0})}" />
                                         <ItemsControl ItemsSource="{Binding Review.UnresolvedEntities}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
@@ -1315,64 +1576,55 @@
                                         </ItemsControl>
                                     </StackPanel>
 
-                                    <StackPanel Margin="0,0,0,12"
-                                                Visibility="{Binding Review.HasProgressImpacts, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <StackPanel x:Name="BlockedReviewSection"
+                                                Margin="0,0,0,12"
+                                                Visibility="{Binding Review.ShowBlockedEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <TextBlock FontSize="16"
                                                    FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource Brush.Accent}"
-                                                   Text="Completed entities with dependency changes" />
+                                                   Foreground="{DynamicResource Brush.Review.Warning.Header}"
+                                                   Text="{Binding Review.BlockedEntities.Count, StringFormat=Upstream-blocked effects ({0})}" />
                                         <TextBlock Margin="0,3,0,4"
                                                    Foreground="{DynamicResource Brush.Text.Secondary}"
-                                                   Text="Choose whether each entity keeps its current status or needs rework before importing."
+                                                   Text="These entities do not directly name a missing dependency, but their dependency chain is blocked."
                                                    TextWrapping="Wrap" />
-                                        <ItemsControl ItemsSource="{Binding Review.ProgressImpacts}">
+                                        <ItemsControl ItemsSource="{Binding Review.BlockedEntities}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
                                                     <Border Margin="0,5,0,0"
                                                             Padding="10"
-                                                            Background="{DynamicResource Brush.Surface.Subtle}"
-                                                            BorderBrush="{DynamicResource Brush.Accent}"
+                                                            Background="{DynamicResource Brush.Review.Warning.Surface}"
+                                                            BorderBrush="{DynamicResource Brush.Review.Warning.Border}"
                                                             BorderThickness="1">
-                                                        <Grid>
-                                                            <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="*" />
-                                                                <ColumnDefinition Width="Auto" />
-                                                            </Grid.ColumnDefinitions>
-                                                            <StackPanel>
-                                                                <TextBlock FontWeight="SemiBold" Text="{Binding SourceName}" />
-                                                                <TextBlock Margin="0,3,0,0"
-                                                                           Foreground="{DynamicResource Brush.Text.Primary}"
-                                                                           Text="{Binding CurrentStatus, StringFormat=Current: {0}}" />
-                                                                <TextBlock Margin="0,3,0,0"
-                                                                           FontWeight="SemiBold"
-                                                                           Foreground="{DynamicResource Brush.Text.Primary}"
-                                                                           Text="{Binding DecisionText}" />
-                                                            </StackPanel>
-                                                            <StackPanel Grid.Column="1"
-                                                                        Margin="12,0,0,0"
-                                                                        VerticalAlignment="Center"
-                                                                        Orientation="Horizontal">
-                                                                <Button Margin="0,0,8,0"
-                                                                        Command="{Binding DataContext.KeepSynchronizationStatusCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                                        CommandParameter="{Binding}"
-                                                                        Content="Keep current status"
-                                                                        Style="{StaticResource SecondaryButtonStyle}" />
-                                                                <Button Command="{Binding DataContext.MarkSynchronizationReworkCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                                        CommandParameter="{Binding}"
-                                                                        Content="Mark Rework needed"
-                                                                        Style="{StaticResource SecondaryButtonStyle}" />
-                                                            </StackPanel>
-                                                        </Grid>
+                                                        <StackPanel>
+                                                            <TextBlock FontWeight="SemiBold" Text="{Binding SourceName, StringFormat=↳ {0}}" />
+                                                            <TextBlock Margin="16,3,0,0"
+                                                                       Foreground="{DynamicResource Brush.Review.Warning.Text}"
+                                                                       Text="{Binding Explanation}"
+                                                                       TextWrapping="Wrap" />
+                                                        </StackPanel>
                                                     </Border>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
                                     </StackPanel>
 
-                                    <Border Padding="10" Background="{DynamicResource Brush.Surface.Subtle}" BorderBrush="{DynamicResource Brush.Border.Strong}" BorderThickness="1">
-                                        <TextBlock Foreground="{DynamicResource Brush.Text.Primary}"
-                                                   Text="{Binding Review.UnchangedEntityCount, StringFormat=✓ {0} imported entities unchanged}" />
-                                    </Border>
+                                    <Expander Padding="10"
+                                              Background="{DynamicResource Brush.Surface.Subtle}"
+                                              BorderBrush="{DynamicResource Brush.Border.Strong}"
+                                              BorderThickness="1"
+                                              Header="{Binding Review.UnchangedEntityCount, StringFormat=✓ {0} imported entities unchanged}"
+                                              IsExpanded="{Binding Review.IsUnchangedExpanded}"
+                                              Visibility="{Binding Review.ShowUnchangedEntities, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding Review.UnchangedEntities}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Margin="12,2,0,0"
+                                                               Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                               Text="{Binding SourceName, StringFormat=✓ {0}}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Expander>
                                 </StackPanel>
 
                                 <Border Padding="20"
@@ -1383,7 +1635,7 @@
                                     <StackPanel>
                                         <TextBlock HorizontalAlignment="Center"
                                                    Foreground="{DynamicResource Brush.Text.Secondary}"
-                                                   Text="Choose an import type, then select a CSV to review. Nothing is saved until Import Changes." />
+                                                   Text="Choose an import type, then select a CSV to review. Nothing is saved until Apply Changes." />
                                         <TextBlock Margin="0,5,0,0"
                                                    HorizontalAlignment="Center"
                                                    Foreground="{DynamicResource Brush.Text.Secondary}"
@@ -1394,19 +1646,25 @@
                         </ScrollViewer>
                     </Grid>
 
-                    <StackPanel Grid.Row="3"
-                                Margin="0,12,0,0"
-                                HorizontalAlignment="Right"
-                                Orientation="Horizontal"
-                                Visibility="{Binding Review.HasReview, Converter={StaticResource BooleanToVisibilityConverter}}">
-                        <Button Margin="0,0,8,0"
-                                Command="{Binding CancelSynchronizationCommand}"
-                                Content="Cancel"
-                                Style="{StaticResource SecondaryButtonStyle}" />
-                        <Button Command="{Binding ApplySynchronizationCommand}"
-                                Content="Import Changes"
-                                Style="{StaticResource PrimaryButtonStyle}" />
-                    </StackPanel>
+                    <DockPanel Grid.Row="3"
+                               Margin="0,12,0,0"
+                               Visibility="{Binding Review.HasReview, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <Button Margin="0,0,8,0"
+                                    Command="{Binding CancelSynchronizationCommand}"
+                                    Content="Cancel"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Command="{Binding ApplySynchronizationCommand}"
+                                    Content="Apply Changes"
+                                    Style="{StaticResource PrimaryButtonStyle}" />
+                        </StackPanel>
+                        <TextBlock Margin="0,0,16,0"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Text="{Binding Review.ApplyDisabledReason}"
+                                   TextWrapping="Wrap"
+                                   Visibility="{Binding Review.HasApplyDisabledReason, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </DockPanel>
                 </Grid>
             </TabItem>
 
@@ -1899,80 +2157,6 @@
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
-
-            <TabItem Header="Help &amp; SQL" Tag="{x:Static viewModels:MainWindowTab.SqlHelp}">
-                <Grid Margin="12">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-
-                    <DockPanel Margin="0,0,0,14">
-                        <Button DockPanel.Dock="Right"
-                                Command="{Binding Help.BackToImportCommand}"
-                                Content="Back to Schema Synchronization"
-                                Style="{StaticResource SecondaryButtonStyle}" />
-                        <StackPanel>
-                            <TextBlock FontSize="20"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource Brush.Text.Primary}"
-                                       Text="PostgreSQL schema export" />
-                            <TextBlock Margin="0,3,0,0"
-                                       Foreground="{DynamicResource Brush.Text.Secondary}"
-                                       Text="Run this query in PostgreSQL, export its result as a semicolon-delimited CSV, then import that CSV separately." />
-                        </StackPanel>
-                    </DockPanel>
-
-                    <Border Grid.Row="1"
-                            Margin="0,0,0,12"
-                            Padding="12"
-                            Background="{DynamicResource Brush.Surface.Selected}"
-                            BorderBrush="{DynamicResource Brush.Border.Medium}"
-                            BorderThickness="1"
-                            CornerRadius="4">
-                        <StackPanel>
-                            <TextBlock FontWeight="SemiBold"
-                                       Text="{Binding Help.CsvContractVersion, StringFormat=PostgreSQL · CSV contract v{0}}" />
-                            <TextBlock Margin="0,4,0,0"
-                                       Foreground="{DynamicResource Brush.Text.Secondary}"
-                                       Text="The query targets the public schema by default. Change target_schema in the settings section near the top when needed. Keep the six column headers unchanged."
-                                       TextWrapping="Wrap" />
-                            <TextBlock Margin="0,4,0,0"
-                                       Foreground="{DynamicResource Brush.Text.Secondary}"
-                                       Text="Export as UTF-8 CSV with a semicolon (;) delimiter and include the header row." />
-                        </StackPanel>
-                    </Border>
-
-                    <Grid Grid.Row="2">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
-                        <DockPanel Margin="0,0,0,8">
-                            <Button DockPanel.Dock="Right"
-                                    Command="{Binding Help.CopyQueryCommand}"
-                                    Content="Copy SQL"
-                                    Style="{StaticResource PrimaryButtonStyle}" />
-                            <TextBlock VerticalAlignment="Center"
-                                       Foreground="{DynamicResource Brush.Text.Primary}"
-                                       Text="{Binding Help.CopyMessage}"
-                                       Visibility="{Binding Help.HasCopyMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                        </DockPanel>
-                        <TextBox Grid.Row="1"
-                                 Padding="12"
-                                 AcceptsReturn="True"
-                                 AcceptsTab="True"
-                                 FontFamily="Consolas"
-                                 FontSize="13"
-                                 HorizontalScrollBarVisibility="Auto"
-                                 IsReadOnly="True"
-                                 Text="{Binding Help.Query, Mode=OneWay}"
-                                 VerticalScrollBarVisibility="Auto" />
-                    </Grid>
-                </Grid>
-            </TabItem>
-
 
         </TabControl>
     </DockPanel>

@@ -48,7 +48,6 @@ public sealed class TrackerWorkspaceViewModelFactory(
             entityLifecycleService,
             csvFilePicker,
             progress,
-            clipboard,
             synchronizationConfirmation,
             loggerFactory);
     }

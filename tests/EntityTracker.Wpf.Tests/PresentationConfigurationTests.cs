@@ -115,6 +115,35 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void SchemaSynchronization_UsesStructuredFluentReviewAndSingleShellSqlDestination()
+    {
+        XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XDocument help = LoadWpfXaml("Views", "HelpSqlView.xaml");
+        string workspaceText = workspace.ToString(SaveOptions.DisableFormatting);
+        string helpText = help.ToString(SaveOptions.DisableFormatting);
+
+        Assert.Contains("Review.UnchangedEntities", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("Review.BlockedEntities", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("Review.ShowImportConfiguration", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("Review.ImportModeLabel", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("SchemaReviewSummary", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("SchemaReviewScrollViewer", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("Review.ToggleFilterCommand", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("Review.ClearFilterCommand", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("Reset filter", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("SynchronizationDependencyChangeTemplate", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("Apply Changes", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("Schema synchronization review", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("Focusable=\"True\"", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("ShellDestination.HelpSql", workspaceText, StringComparison.Ordinal);
+        Assert.DoesNotContain("MainWindowTab.SqlHelp", workspaceText, StringComparison.Ordinal);
+        Assert.DoesNotContain("Binding Help.Query", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("UTF-8 CSV", helpText, StringComparison.Ordinal);
+        Assert.Contains("semicolon", helpText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("six column headers", helpText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void MainWindow_ComposesTypedPersistentShellWithoutLegacyDestinations()
     {
         XDocument document = LoadWpfXaml("MainWindow.xaml");

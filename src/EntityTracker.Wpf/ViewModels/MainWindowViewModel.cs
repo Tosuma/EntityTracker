@@ -37,7 +37,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private readonly RelayCommand _closeEntityDetailsCommand;
     private readonly AsyncCommand<EntityOverviewRow> _editOverviewEntityCommand;
     private readonly AsyncCommand<SchemaSynchronizationReviewRow> _editReviewEntityCommand;
-    private readonly RelayCommand _openSqlQueryCommand;
     private readonly RelayCommand<DevelopmentStatus> _selectOverviewStatusCommand;
     private readonly RelayCommand<SynchronizationProgressImpactRow> _keepSynchronizationStatusCommand;
     private readonly RelayCommand<SynchronizationProgressImpactRow> _markSynchronizationReworkCommand;
@@ -66,7 +65,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         EntityLifecycleService entityLifecycleService,
         ICsvFilePicker filePicker,
         ProgressDashboardViewModel progressDashboard,
-        IClipboardService clipboard,
         ISchemaSynchronizationConfirmation confirmationService,
         ILoggerFactory? loggerFactory = null)
     {
@@ -78,7 +76,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         ArgumentNullException.ThrowIfNull(entityLifecycleService);
         ArgumentNullException.ThrowIfNull(filePicker);
         ArgumentNullException.ThrowIfNull(progressDashboard);
-        ArgumentNullException.ThrowIfNull(clipboard);
         ArgumentNullException.ThrowIfNull(confirmationService);
         _trackerId = trackerId;
         _overviewService = overviewService;
@@ -95,10 +92,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         ActiveTable.PropertyChanged += OnActiveTablePropertyChanged;
         ArchivedTable.PropertyChanged += OnArchivedTablePropertyChanged;
         Progress = progressDashboard;
-        Help = new SqlQueryHelpViewModel(
-            clipboard,
-            () => SelectedTab = MainWindowTab.SchemaSynchronization,
-            effectiveLoggerFactory.CreateLogger<SqlQueryHelpViewModel>());
         Review = new SchemaSynchronizationReviewViewModel();
         ManualCreation = new ManualEntityCreationViewModel(
             trackerId,
@@ -154,9 +147,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         _editReviewEntityCommand = new AsyncCommand<SchemaSynchronizationReviewRow>(
             row => EditReviewEntityAsync(row),
             _ => !IsBusy && !ManualCreation.IsBusy && !Editor.IsOpen && Review.HasReview);
-        _openSqlQueryCommand = new RelayCommand(
-            () => SelectedTab = MainWindowTab.SqlHelp,
-            () => !IsBusy && !ManualCreation.IsBusy && !Editor.IsOpen);
         _selectOverviewStatusCommand = new RelayCommand<DevelopmentStatus>(
             status => ActiveTable.SetSingleStatusFilter(status));
         _keepSynchronizationStatusCommand = new RelayCommand<SynchronizationProgressImpactRow>(
@@ -189,8 +179,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public EntityDependencyEditorViewModel Editor { get; }
 
     public ProgressDashboardViewModel Progress { get; }
-
-    public SqlQueryHelpViewModel Help { get; }
 
     public EntityTableViewModel ActiveTable { get; }
 
@@ -488,8 +476,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public ICommand ClearOverviewSearchCommand => ActiveTable.ClearSearchCommand;
 
     public ICommand CloseOverviewSearchCommand => ActiveTable.CloseSearchCommand;
-
-    public ICommand OpenSqlQueryCommand => _openSqlQueryCommand;
 
     public ICommand SelectOverviewStatusCommand => _selectOverviewStatusCommand;
 
@@ -828,7 +814,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         _openEntityDetailsCommand.NotifyCanExecuteChanged();
         _editOverviewEntityCommand.NotifyCanExecuteChanged();
         _editReviewEntityCommand.NotifyCanExecuteChanged();
-        _openSqlQueryCommand.NotifyCanExecuteChanged();
         _keepSynchronizationStatusCommand.NotifyCanExecuteChanged();
         _markSynchronizationReworkCommand.NotifyCanExecuteChanged();
     }

@@ -113,6 +113,12 @@ internal sealed class ReadmeScreenshotGenerator
             await shell.NavigateAsync(ShellDestination.SchemaSynchronization, cancellationToken);
             await renderer.CaptureAsync("schema-synchronization.png");
 
+            await CaptureChangedReviewAsync(
+                workspace,
+                picker,
+                viewModel,
+                renderer,
+                cancellationToken);
             await CaptureMissingReviewAsync(
                 repositoryRoot,
                 picker,
@@ -158,6 +164,58 @@ internal sealed class ReadmeScreenshotGenerator
                 System.Windows.Application.Current.MainWindow = null;
             }
         }
+    }
+
+    private static async Task CaptureChangedReviewAsync(
+        ScreenshotWorkspace workspace,
+        ScreenshotCsvFilePicker picker,
+        MainWindowViewModel viewModel,
+        WpfScreenshotRenderer renderer,
+        CancellationToken cancellationToken)
+    {
+        EntityOverviewRow affectedEntity = viewModel.OverviewItems
+            .Where(static row => row.DevelopmentStatus is
+                DevelopmentStatus.DevelopmentCompleted or DevelopmentStatus.Reconciled)
+            .Where(static row => row.DependencyNames.Count > 0)
+            .OrderBy(static row => row.SourceName, StringComparer.Ordinal)
+            .FirstOrDefault()
+            ?? throw new InvalidDataException(
+                "The deterministic tracker has no completed entity with dependencies.");
+        string[] importedDependencies = affectedEntity.DependencyNames
+            .Skip(1)
+            .Append("screenshot_missing_dependency")
+            .ToArray();
+        string partialSchemaPath = Path.Combine(
+            workspace.RootDirectory,
+            "partial-schema-changes.csv");
+        await File.WriteAllLinesAsync(
+            partialSchemaPath,
+            [
+                "table_name;mandatory_dependencies;mandatory_dependency_count;optional_dependencies;optional_dependency_count;total_dependency_count",
+                $"{affectedEntity.SourceName};{string.Join(", ", importedDependencies)};{importedDependencies.Length};;0;{importedDependencies.Length}"
+            ],
+            cancellationToken);
+
+        viewModel.Review.Clear();
+        viewModel.Review.IsPartialImport = true;
+        picker.SelectedPath = partialSchemaPath;
+        await viewModel.ImportCsvAsync(cancellationToken);
+        if (!viewModel.Review.HasChangedEntities ||
+            viewModel.Review.PendingProgressDecisionCount == 0)
+        {
+            throw new InvalidDataException(
+                "The deterministic changed-entity review contains no progress decision.");
+        }
+
+        viewModel.Review.ToggleFilterCommand.Execute(
+            SchemaSynchronizationReviewFilter.Changed);
+        if (!viewModel.Review.IsChangedFilterSelected)
+        {
+            throw new InvalidDataException(
+                "The deterministic changed-entity review filter was not selected.");
+        }
+
+        await renderer.CaptureAsync("schema-synchronization-changed-entities.png");
     }
 
     private static async Task CaptureTrackerLifecycleAsync(

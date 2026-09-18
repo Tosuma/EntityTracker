@@ -281,6 +281,13 @@ public sealed class SchemaSynchronizationPlanner
             candidateEntities,
             candidateEffective.ResolvedDependencies.Select(static dependency => dependency.Edge),
             candidateEffective.UnresolvedDependencies.Select(static dependency => dependency.Dependency));
+        TrackedEntity[] currentActiveEntities = currentEntities
+            .Where(static entity => entity.LifecycleState == EntityLifecycleState.Active)
+            .ToArray();
+        DependencyRankingResult currentRanking = _dependencyRanker.Rank(
+            currentActiveEntities,
+            currentEffective.ResolvedDependencies.Select(static dependency => dependency.Edge),
+            currentEffective.UnresolvedDependencies.Select(static dependency => dependency.Dependency));
 
         List<EntitySynchronizationChange> newChanges = [];
         List<EntitySynchronizationChange> changedChanges = [];
@@ -289,7 +296,7 @@ public sealed class SchemaSynchronizationPlanner
         List<TrackedEntity> entitiesToAdd = [];
         List<TrackedEntity> entitiesToUpdate = [];
         HashSet<EntityId> reconciledOwnerIds = [];
-        int unchangedCount = 0;
+        List<TrackedEntity> unchangedEntities = [];
         HashSet<EntityId> progressImpactIds = [];
 
         Dictionary<EntityId, UnrankedEntity> unrankedById = ranking.UnrankedEntities
@@ -395,7 +402,7 @@ public sealed class SchemaSynchronizationPlanner
             }
             else if (isImported)
             {
-                unchangedCount++;
+                unchangedEntities.Add(candidateEntity);
             }
         }
 
@@ -487,6 +494,13 @@ public sealed class SchemaSynchronizationPlanner
                     unrankedById))
                 .OrderBy(static change => change.Entity.SourceName, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
+        IReadOnlyList<SynchronizationResolutionEffect> reviewResolutionEffects =
+            CreateReviewResolutionEffects(
+                mode,
+                importedByKey.Keys,
+                candidateById,
+                currentRanking,
+                ranking);
 
         return new SchemaSynchronizationPlan(
             trackerId,
@@ -495,8 +509,12 @@ public sealed class SchemaSynchronizationPlanner
             Sort(changedChanges),
             Sort(missingChanges),
             Sort(manualOnlyChanges),
-            unchangedCount,
+            unchangedEntities
+                .OrderBy(static entity => entity.SourceName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static entity => entity.SourceName, StringComparer.Ordinal),
             unresolvedChanges,
+            reviewResolutionEffects,
+            currentActiveEntities.Length,
             ranking,
             changeSet,
             importCandidate,
@@ -515,6 +533,52 @@ public sealed class SchemaSynchronizationPlanner
                     static entity => entity.Id),
             progressImpacts);
     }
+
+    private static IReadOnlyList<SynchronizationResolutionEffect> CreateReviewResolutionEffects(
+        SchemaImportMode mode,
+        IEnumerable<EntitySourceKey> importedKeys,
+        IReadOnlyDictionary<EntityId, TrackedEntity> candidateById,
+        DependencyRankingResult currentRanking,
+        DependencyRankingResult candidateRanking)
+    {
+        HashSet<EntitySourceKey> imported = importedKeys.ToHashSet();
+        Dictionary<EntityId, UnrankedEntity> currentById = currentRanking.IsSuccess
+            ? currentRanking.UnrankedEntities.ToDictionary(static item => item.EntityId)
+            : [];
+
+        return candidateRanking.UnrankedEntities
+            .Where(effect =>
+            {
+                TrackedEntity entity = candidateById[effect.EntityId];
+                if (mode == SchemaImportMode.Complete ||
+                    imported.Contains(EntitySourceKey.From(entity.SourceName)))
+                {
+                    return true;
+                }
+
+                return !currentById.TryGetValue(effect.EntityId, out UnrankedEntity? previous) ||
+                       previous.State != effect.State ||
+                       !HaveSameMissingNames(
+                           previous.MissingDependencyNames,
+                           effect.MissingDependencyNames);
+            })
+            .Select(effect => new SynchronizationResolutionEffect(
+                effect.EntityId,
+                candidateById[effect.EntityId].SourceName,
+                effect.State,
+                effect.MissingDependencyNames))
+            .OrderBy(static effect => effect.SourceName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static effect => effect.SourceName, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static bool HaveSameMissingNames(
+        IEnumerable<string> first,
+        IEnumerable<string> second) =>
+        first.OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+            .SequenceEqual(
+                second.OrderBy(static name => name, StringComparer.OrdinalIgnoreCase),
+                StringComparer.OrdinalIgnoreCase);
 
     private static EntityId[] FindChangedOverrideOwners(
         IEnumerable<ManualDependencyOverride> current,

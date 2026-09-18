@@ -24,6 +24,7 @@ internal static class ScreenshotManifest
         "overview-search.png",
         "overview-missing-entities-as-dependencies.png",
         "schema-synchronization.png",
+        "schema-synchronization-changed-entities.png",
         "schema-synchronization-import-csv-with-missing-entities.png",
         "schema-synchronization-unresolved-dependencies.png",
         "add-entity.png",

@@ -91,6 +91,10 @@ public sealed class MainWindowViewModelTests
 
         SynchronizationProgressImpactRow row = Assert.Single(viewModel.Review.ProgressImpacts);
         Assert.Equal("Decision required", row.DecisionText);
+        Assert.Same(row, Assert.Single(viewModel.Review.ChangedEntities).ProgressImpact);
+        Assert.Contains(
+            Assert.Single(viewModel.Review.ChangedEntities).DependencyChangeItems,
+            static change => change.Action == "Added" && change.DependencySourceName == "Target");
         Assert.False(viewModel.Review.CanApply);
         Assert.False(viewModel.ApplySynchronizationCommand.CanExecute(null));
 
@@ -882,8 +886,33 @@ public sealed class MainWindowViewModelTests
         Assert.Equal("Removed", Assert.Single(viewModel.Review.MissingEntities).SourceName);
         Assert.Empty(viewModel.Review.ChangedEntities);
         Assert.Equal(1, viewModel.Review.UnchangedEntityCount);
+        Assert.Equal("A", Assert.Single(viewModel.Review.UnchangedEntities).SourceName);
+        Assert.True(viewModel.Review.HasArchiveImpact);
+        Assert.Contains("1 of 2", viewModel.Review.ArchiveImpactText);
         Assert.False(viewModel.Review.CanSelectImportMode);
         Assert.True(viewModel.ApplySynchronizationCommand.CanExecute(null));
+
+        Assert.True(viewModel.Review.ToggleFilterCommand.CanExecute(
+            SchemaSynchronizationReviewFilter.New));
+        Assert.False(viewModel.Review.ToggleFilterCommand.CanExecute(
+            SchemaSynchronizationReviewFilter.Changed));
+        viewModel.Review.ToggleFilterCommand.Execute(SchemaSynchronizationReviewFilter.New);
+        Assert.True(viewModel.Review.IsNewFilterSelected);
+        Assert.True(viewModel.Review.ShowNewEntities);
+        Assert.False(viewModel.Review.ShowMissingEntities);
+        Assert.False(viewModel.Review.ShowUnchangedEntities);
+        Assert.True(viewModel.Review.HasActiveFilter);
+
+        viewModel.Review.ToggleFilterCommand.Execute(SchemaSynchronizationReviewFilter.New);
+        Assert.False(viewModel.Review.HasActiveFilter);
+        Assert.True(viewModel.Review.ShowNewEntities);
+        Assert.True(viewModel.Review.ShowMissingEntities);
+        Assert.True(viewModel.Review.ShowUnchangedEntities);
+
+        viewModel.Review.ToggleFilterCommand.Execute(SchemaSynchronizationReviewFilter.Missing);
+        Assert.True(viewModel.Review.ShowArchiveImpact);
+        viewModel.Review.ClearFilterCommand.Execute(null);
+        Assert.False(viewModel.Review.HasActiveFilter);
     }
 
     [Fact]
@@ -904,6 +933,62 @@ public sealed class MainWindowViewModelTests
         Assert.Equal("Partial", viewModel.Review.ImportModeLabel);
         Assert.Empty(viewModel.Review.MissingEntities);
         Assert.Equal(1, viewModel.Review.UnchangedEntityCount);
+    }
+
+    [Fact]
+    public async Task ImportCsvAsync_IdenticalImport_ExposesCollapsedUnchangedEntitiesAndNoOpState()
+    {
+        TrackedEntity a = Entity(1, "A");
+        MainWindowViewModel viewModel = CreateViewModel(
+            [a],
+            [],
+            SchemaImportResult.Success(Candidate(["A"], [])),
+            new StubFilePicker("same.csv"),
+            out _);
+
+        await viewModel.ImportCsvAsync();
+
+        Assert.True(viewModel.Review.HasNoActionableChanges);
+        Assert.False(viewModel.Review.ShowImportConfiguration);
+        Assert.Equal("Complete", viewModel.Review.ImportModeLabel);
+        Assert.False(viewModel.Review.IsUnchangedExpanded);
+        Assert.Equal("A", Assert.Single(viewModel.Review.UnchangedEntities).SourceName);
+        Assert.True(viewModel.Review.CanApply);
+
+        viewModel.Review.IsUnchangedExpanded = true;
+        await viewModel.CancelSynchronizationAsync();
+
+        Assert.False(viewModel.Review.IsUnchangedExpanded);
+        Assert.Empty(viewModel.Review.UnchangedEntities);
+        Assert.True(viewModel.Review.ShowImportConfiguration);
+    }
+
+    [Fact]
+    public async Task ImportCsvAsync_SeparatesDirectlyUnresolvedAndUpstreamBlockedEffects()
+    {
+        MainWindowViewModel viewModel = CreateViewModel(
+            [],
+            [],
+            SchemaImportResult.Success(Candidate(
+                ["Direct", "Upstream"],
+                [("Upstream", "Direct", ImportedDependencyKind.Mandatory)],
+                [("Direct", "MissingRoot", ImportedDependencyKind.Mandatory)])),
+            new StubFilePicker("unresolved.csv"),
+            out _);
+
+        await viewModel.ImportCsvAsync();
+
+        Assert.Equal("Direct", Assert.Single(viewModel.Review.UnresolvedEntities).SourceName);
+        SynchronizationResolutionEffectRow blocked = Assert.Single(viewModel.Review.BlockedEntities);
+        Assert.Equal("Upstream", blocked.SourceName);
+        Assert.Contains("MissingRoot", blocked.Explanation);
+
+        viewModel.Review.ToggleFilterCommand.Execute(
+            SchemaSynchronizationReviewFilter.Unresolved);
+        Assert.True(viewModel.Review.IsUnresolvedFilterSelected);
+        Assert.False(viewModel.Review.ShowNewEntities);
+        Assert.True(viewModel.Review.ShowUnresolvedEntities);
+        Assert.True(viewModel.Review.ShowBlockedEntities);
     }
 
     [Fact]
@@ -1308,7 +1393,6 @@ public sealed class MainWindowViewModelTests
                 ranker),
             picker,
             CreateProgressDashboardViewModel(),
-            new NoOpImageClipboard(),
             confirmationService ?? new AlwaysConfirmService());
     }
 

@@ -152,6 +152,11 @@ implemented direct dependencies.
 
 ### Import review details
 
+Changed entities show dependency additions and removals directly, with any required progress choice
+kept beside the affected entity before Apply becomes available.
+
+![Schema synchronization review showing dependency additions, removals, and progress-impact choices](images/light/schema-synchronization-changed-entities.png)
+
 Complete imports make potentially removed entities explicit before anything is saved. Entities
 missing from the new snapshot are proposed for soft-archiving, while their progress and notes are
 preserved.
@@ -173,7 +178,7 @@ CSV without requiring a live database connection inside EntityTracker.
 
 ## Project status
 
-Product Milestones 1–12 and UX Milestones UX-01 through UX-04 are complete. EntityTracker uses
+Product Milestones 1–12 and UX Milestones UX-01 through UX-05 are complete. EntityTracker uses
 SQLite as its local catalog and working store. The former SharePoint Connections workflow has been
 removed, and the application exposes no remote synchronization control.
 
