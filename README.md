@@ -40,8 +40,8 @@ EntityTracker keeps those concerns separate:
   name.
 - **Progress reporting** — inspect current status, implementation history, ready-versus-blocked
   trends, and weekly change; copy or export charts as PNG files.
-- **Project portfolio** — group Trackers into Projects, compare basic progress and attention
-  summaries, and switch tracker context without opening another window or database.
+- **Project portfolio** — compare entity-weighted Project/Tracker progress, persisted trends, and
+  normalized entity differences without opening another window or database.
 - **Safe catalog management** — create blank, CSV-backed, or copied Trackers and rename, recycle,
   restore, or guardedly purge Projects and Trackers.
 - **Local-first reliability** — SQLite persistence, automatic daily and pre-migration backups,
@@ -55,7 +55,7 @@ EntityTracker keeps those concerns separate:
 2. Choose Complete or Partial synchronization and review every actionable difference.
 3. Apply the reviewed schema while EntityTracker preserves stable progress, notes, and history.
 4. Use dependency-safe rank, readiness, blockers, filters, and search to choose the next work item.
-5. Update work status and use the Progress page to communicate delivery trends.
+5. Update work status and use Reports to communicate delivery trends.
 
 ## Screenshots
 
@@ -73,8 +73,8 @@ for consistency.
       <img src="images/light/portfolio.png" alt="EntityTracker portfolio with active project summary cards" />
     </td>
     <td width="50%">
-      <strong>Switch between related Trackers</strong><br />
-      Review basic progress and attention summaries within the selected Project.<br /><br />
+      <strong>Compare related Trackers</strong><br />
+      Review aggregate history, per-Tracker context, and actionable entity differences.<br /><br />
       <img src="images/light/project-dashboard.png" alt="EntityTracker project dashboard with tracker summary cards" />
     </td>
   </tr>
@@ -85,9 +85,9 @@ for consistency.
       <img src="images/light/schema-synchronization.png" alt="Schema Synchronization page with Complete and Partial import choices" />
     </td>
     <td width="50%">
-      <strong>Track progress over time</strong><br />
+      <strong>Report progress over time</strong><br />
       See manager summaries, status distribution, implementation history, and blockers.<br /><br />
-      <img src="images/light/progress.png" alt="Progress page with status pie chart and implementation history charts" />
+      <img src="images/light/progress.png" alt="Reports page with status pie chart and implementation history charts" />
     </td>
   </tr>
   <tr>
@@ -103,6 +103,15 @@ for consistency.
     </td>
   </tr>
 </table>
+
+### Compare sibling Trackers
+
+The Project matrix aligns active entities by normalized source key. It starts with actionable
+differences—including missing entities, divergent statuses, blockers, rework, and unresolved
+references—and can explicitly show all entities. Each present cell opens that entity in its
+Tracker's Overview after the normal unsaved-work confirmation.
+
+![Project entity comparison with labeled statuses and explicit missing entities](images/light/project-comparison.png)
 
 ### Manage Tracker lifecycle
 

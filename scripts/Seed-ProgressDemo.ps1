@@ -89,4 +89,4 @@ if ($LASTEXITCODE -ne 0) {
     throw "The demo-data utility exited with code $LASTEXITCODE."
 }
 
-Write-Host 'Synthetic progress is ready. Start EntityTracker and open the Progress page.'
+Write-Host 'Synthetic progress is ready. Start EntityTracker and open Reports.'

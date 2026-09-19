@@ -1,0 +1,141 @@
+<UserControl x:Class="EntityTracker.Wpf.Views.AggregateProgressView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF">
+    <StackPanel>
+        <DockPanel Margin="0,0,0,12">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <TextBlock Margin="0,0,7,0"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource Brush.Text.Secondary}"
+                           Text="History" />
+                <ComboBox MinWidth="145"
+                          AutomationProperties.Name="Aggregate progress history range"
+                          DisplayMemberPath="DisplayName"
+                          ItemsSource="{Binding RangeOptions}"
+                          SelectedValue="{Binding SelectedRange}"
+                          SelectedValuePath="Value" />
+            </StackPanel>
+            <StackPanel>
+                <TextBlock FontSize="18" FontWeight="SemiBold" Text="Aggregate progress" />
+                <TextBlock Margin="0,3,0,0"
+                           Foreground="{DynamicResource Brush.Text.Secondary}"
+                           Text="Entity-weighted status and persisted implementation history." />
+            </StackPanel>
+        </DockPanel>
+
+        <Border Margin="0,0,0,12"
+                Padding="12"
+                Style="{StaticResource EntityTrackerCardStyle}"
+                Visibility="{Binding IsCustomRange, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Margin="0,0,7,0" VerticalAlignment="Center" Text="From" />
+                    <DatePicker Width="145"
+                                AutomationProperties.Name="Aggregate history from date"
+                                SelectedDate="{Binding CustomFrom}" />
+                    <TextBlock Margin="14,0,7,0" VerticalAlignment="Center" Text="To" />
+                    <DatePicker Width="145"
+                                AutomationProperties.Name="Aggregate history to date"
+                                SelectedDate="{Binding CustomTo}" />
+                    <Button Margin="12,0,0,0"
+                            Command="{Binding ApplyRangeCommand}"
+                            Content="Apply range"
+                            Style="{StaticResource PrimaryButtonStyle}" />
+                </StackPanel>
+                <TextBlock Margin="0,7,0,0"
+                           Foreground="{DynamicResource Brush.Status.ReworkNeeded}"
+                           Text="{Binding RangeValidationMessage}"
+                           Visibility="{Binding HasRangeValidationError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            </StackPanel>
+        </Border>
+
+        <Border Margin="0,0,0,12"
+                Padding="10"
+                Background="{DynamicResource Brush.Surface.Alert}"
+                BorderBrush="{DynamicResource Brush.Status.ReworkNeeded}"
+                BorderThickness="1"
+                CornerRadius="5"
+                AutomationProperties.LiveSetting="Polite"
+                Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" />
+        </Border>
+
+        <Border Margin="0,0,0,12"
+                Padding="14"
+                Style="{StaticResource EntityTrackerCardStyle}"
+                Visibility="{Binding HasReport, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <UniformGrid Columns="5">
+                <StackPanel Margin="4">
+                    <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Active" />
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.ActiveEntityCount}" />
+                </StackPanel>
+                <StackPanel Margin="4">
+                    <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Implemented" />
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.ImplementedEntityCount}" />
+                </StackPanel>
+                <StackPanel Margin="4">
+                    <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Reconciled" />
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.ReconciledEntityCount}" />
+                </StackPanel>
+                <StackPanel Margin="4">
+                    <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Ready" />
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.ReadyEntityCount}" />
+                </StackPanel>
+                <StackPanel Margin="4">
+                    <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Blocked" />
+                    <TextBlock FontSize="22" FontWeight="SemiBold"
+                               Foreground="{DynamicResource Brush.Status.ReworkNeeded}"
+                               Text="{Binding Report.ManagerSummary.BlockedEntityCount}" />
+                </StackPanel>
+            </UniformGrid>
+        </Border>
+
+        <TextBlock Margin="0,8,0,12"
+                   HorizontalAlignment="Center"
+                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                   Text="No persisted progress history is available in this range."
+                   Visibility="{Binding ShowNoHistoricalData, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Border Height="280" Padding="12" Style="{StaticResource EntityTrackerCardStyle}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Margin="0,0,0,8" FontSize="16" FontWeight="SemiBold"
+                               Text="Entities by current status" />
+                    <Border Grid.Row="1" Background="{DynamicResource Brush.Report.Canvas}">
+                        <lvc:PieChart AutomationProperties.Name="Aggregate entities by current status chart"
+                                      LegendPosition="Right"
+                                      Series="{Binding CurrentStatusSeries}" />
+                    </Border>
+                </Grid>
+            </Border>
+            <Border Grid.Column="2" Height="280" Padding="12" Style="{StaticResource EntityTrackerCardStyle}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Margin="0,0,0,8" FontSize="16" FontWeight="SemiBold"
+                               Text="Implemented entities over time" />
+                    <Border Grid.Row="1" Background="{DynamicResource Brush.Report.Canvas}">
+                        <lvc:CartesianChart AutomationProperties.Name="Aggregate implemented entities over time chart"
+                                            LegendPosition="Top"
+                                            Series="{Binding ImplementedSeries}"
+                                            TooltipPosition="Top"
+                                            XAxes="{Binding ImplementedXAxes}"
+                                            YAxes="{Binding CountYAxes}" />
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+    </StackPanel>
+</UserControl>

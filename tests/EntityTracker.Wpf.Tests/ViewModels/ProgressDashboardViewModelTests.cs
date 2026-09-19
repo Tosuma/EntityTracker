@@ -254,6 +254,11 @@ public sealed class ProgressDashboardViewModelTests
         public Task<IReadOnlyList<ProgressSnapshot>> GetProgressSnapshotsAsync(
             TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(snapshots);
+
+        public Task<ProgressSnapshot?> GetLatestProgressSnapshotAsync(
+            TrackerId trackerId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(snapshots.LastOrDefault());
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset value) : TimeProvider

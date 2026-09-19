@@ -4,34 +4,55 @@ using EntityTracker.Domain;
 namespace EntityTracker.Application.Projects;
 
 public sealed record TrackerProgressSummary(
-    int ActiveEntityCount,
-    int ImplementedEntityCount,
-    double? ImplementedPercentage,
-    int ReadyCount,
-    int BlockedCount,
-    int ReworkNeededCount,
-    int DependencyIssueCount)
+    ProgressSnapshotState State,
+    int UnresolvedReferenceCount,
+    DateTimeOffset? LastActivityUtc)
 {
+    public int ActiveEntityCount => State.TotalActiveCount;
+
+    public int ImplementedEntityCount => State.ImplementedCount;
+
+    public int NotStartedCount => State.NotStartedCount;
+
+    public int InProgressCount => State.InProgressCount;
+
+    public int ReworkNeededCount => State.ReworkNeededCount;
+
+    public int DevelopmentCompletedCount => State.DevelopmentCompletedCount;
+
+    public int ReconciledCount => State.ReconciledCount;
+
+    public int ReadyCount => State.ReadyCount;
+
+    public int BlockedCount => State.BlockedCount;
+
+    public int DependencyIssueCount => UnresolvedReferenceCount;
+
+    public double? ImplementedPercentage => ActiveEntityCount == 0
+        ? null
+        : ImplementedEntityCount * 100d / ActiveEntityCount;
+
+    public double? ReconciledPercentage => ActiveEntityCount == 0
+        ? null
+        : ReconciledCount * 100d / ActiveEntityCount;
+
     public string ImplementedProgressText => ImplementedPercentage is null
         ? "No active entities"
         : $"{ImplementedPercentage.Value:0}% implemented";
 
+    public string ReconciledProgressText => ReconciledPercentage is null
+        ? "No active entities"
+        : $"{ReconciledPercentage.Value:0}% reconciled";
+
+    public string LastActivityText => LastActivityUtc is null
+        ? "No recorded activity"
+        : $"Last activity {LastActivityUtc.Value.ToLocalTime():g}";
+
     public static TrackerProgressSummary From(
         ProgressSnapshotState state,
-        int dependencyIssueCount)
-    {
-        double? percentage = state.TotalActiveCount == 0
-            ? null
-            : state.ImplementedCount * 100d / state.TotalActiveCount;
-        return new TrackerProgressSummary(
-            state.TotalActiveCount,
-            state.ImplementedCount,
-            percentage,
-            state.ReadyCount,
-            state.BlockedCount,
-            state.ReworkNeededCount,
-            dependencyIssueCount);
-    }
+        int unresolvedReferenceCount,
+        DateTimeOffset? lastActivityUtc) =>
+        new(state, unresolvedReferenceCount, lastActivityUtc);
 }
 
 public sealed record TrackerDashboardSummary(
@@ -48,7 +69,8 @@ public sealed record ProjectPortfolioSummary(
     TrackerProgressSummary Progress);
 
 public sealed record PortfolioDashboard(
-    IReadOnlyList<ProjectPortfolioSummary> Projects);
+    IReadOnlyList<ProjectPortfolioSummary> Projects,
+    TrackerProgressSummary Progress);
 
 public sealed record ProjectDashboard(
     Project Project,

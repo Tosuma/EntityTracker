@@ -95,17 +95,17 @@ chart tooltips/legends, theme changes, resizing, DPI, keyboard navigation, and e
 
 ## Acceptance criteria
 
-- [ ] Progress is renamed Reports without losing tracker-level charts or export.
-- [ ] Portfolio and Project dashboards show entity-weighted aggregate progress charts.
-- [ ] Per-Tracker context remains visible beside aggregates.
-- [ ] Recycled/archived state is excluded consistently.
-- [ ] Project comparison aligns sibling entities deterministically.
-- [ ] Missing entities and actionable differences are explicit.
-- [ ] The matrix defaults to actionable differences and can show all.
-- [ ] Dashboard/history values come from persisted Application/Reporting data.
-- [ ] Reports remain testable without WPF rendering.
-- [ ] No Git synchronization or new document-export format is introduced.
-- [ ] The complete solution builds and all tests pass.
+- [x] Progress is renamed Reports without losing tracker-level charts or export.
+- [x] Portfolio and Project dashboards show entity-weighted aggregate progress charts.
+- [x] Per-Tracker context remains visible beside aggregates.
+- [x] Recycled/archived state is excluded consistently.
+- [x] Project comparison aligns sibling entities deterministically.
+- [x] Missing entities and actionable differences are explicit.
+- [x] The matrix defaults to actionable differences and can show all.
+- [x] Dashboard/history values come from persisted Application/Reporting data.
+- [x] Reports remain testable without WPF rendering.
+- [x] No Git synchronization or new document-export format is introduced.
+- [x] The complete solution builds and all tests pass.
 
 ## Out of scope
 
@@ -135,4 +135,3 @@ entity-weighted Portfolio/Project charts, Tracker summaries, and the Project ent
 calculations outside WPF, preserve existing chart/export behavior, add automated and screenshot
 coverage, build the solution, and run all tests. Do not begin UX-08 or Git synchronization.
 ```
-

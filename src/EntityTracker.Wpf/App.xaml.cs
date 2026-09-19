@@ -85,10 +85,17 @@ public partial class App : System.Windows.Application
             services.AddSingleton<SchemaSynchronizationPlanner>();
             services.AddSingleton<ProgressHistoryInitializer>();
             services.AddSingleton<ProgressDashboardBuilder>();
+            services.AddSingleton<AggregateProgressDashboardBuilder>();
             services.AddSingleton(serviceProvider => new ProgressReportingService(
                 serviceProvider.GetRequiredService<IProgressHistoryRepository>(),
                 TimeZoneInfo.Local,
                 serviceProvider.GetRequiredService<ProgressDashboardBuilder>()));
+            services.AddSingleton(serviceProvider => new AggregateProgressReportingService(
+                serviceProvider.GetRequiredService<IProjectRepository>(),
+                serviceProvider.GetRequiredService<ITrackerRepository>(),
+                serviceProvider.GetRequiredService<IProgressHistoryRepository>(),
+                TimeZoneInfo.Local,
+                serviceProvider.GetRequiredService<AggregateProgressDashboardBuilder>()));
             services.AddSingleton<ProgressChartPresentationBuilder>();
             services.AddSingleton<ProgressChartPngExporter>();
             services.AddSingleton<IProgressChartFilePicker, ProgressChartFilePicker>();
@@ -105,9 +112,11 @@ public partial class App : System.Windows.Application
             services.AddSingleton<TrackerCsvCreationService>();
             services.AddSingleton<CatalogNameValidationService>();
             services.AddSingleton<PortfolioQueryService>();
+            services.AddSingleton<ProjectEntityComparisonQueryService>();
             services.AddSingleton<CatalogPurgeImpactService>();
             services.AddSingleton<ICsvFilePicker, CsvFilePicker>();
             services.AddSingleton<TrackerWorkspaceViewModelFactory>();
+            services.AddSingleton<DashboardViewModelFactory>();
             services.AddSingleton<CatalogManagementViewModel>();
             services.AddSingleton<ShellViewModel>();
 

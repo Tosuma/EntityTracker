@@ -11,6 +11,7 @@ public sealed class PortfolioQueryService(
     IEntityRepository entityRepository,
     IDependencyRepository dependencyRepository,
     IManualDependencyOverrideRepository overrideRepository,
+    IProgressHistoryRepository progressHistoryRepository,
     EffectiveDependencyResolver effectiveDependencyResolver,
     ProgressSnapshotCalculator snapshotCalculator)
 {
@@ -19,9 +20,14 @@ public sealed class PortfolioQueryService(
     {
         Project[] projects = (await projectRepository.GetAllAsync(cancellationToken))
             .Where(static project => project.LifecycleState == CatalogLifecycleState.Active)
+            .OrderBy(static project => project.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static project => project.Name, StringComparer.Ordinal)
+            .ThenBy(static project => project.Id.Value)
             .ToArray();
+        HashSet<ProjectId> activeProjectIds = projects.Select(static project => project.Id).ToHashSet();
         Tracker[] trackers = (await trackerRepository.GetAllAsync(cancellationToken))
-            .Where(static tracker => tracker.LifecycleState == CatalogLifecycleState.Active)
+            .Where(tracker => tracker.LifecycleState == CatalogLifecycleState.Active &&
+                              activeProjectIds.Contains(tracker.ProjectId))
             .ToArray();
         Dictionary<TrackerId, TrackerProgressSummary> summaries = await LoadSummariesAsync(
             trackers,
@@ -38,7 +44,7 @@ public sealed class PortfolioQueryService(
                 projectTrackers.Length,
                 Aggregate(projectTrackers.Select(tracker => summaries[tracker.Id])));
         }).ToArray();
-        return new PortfolioDashboard(result);
+        return new PortfolioDashboard(result, Aggregate(summaries.Values));
     }
 
     public async Task<ProjectDashboard?> GetProjectAsync(
@@ -54,6 +60,9 @@ public sealed class PortfolioQueryService(
 
         Tracker[] trackers = (await trackerRepository.GetByProjectAsync(projectId, cancellationToken))
             .Where(static tracker => tracker.LifecycleState == CatalogLifecycleState.Active)
+            .OrderBy(static tracker => tracker.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static tracker => tracker.Name, StringComparer.Ordinal)
+            .ThenBy(static tracker => tracker.Id.Value)
             .ToArray();
         Dictionary<TrackerId, TrackerProgressSummary> summaries = await LoadSummariesAsync(
             trackers,
@@ -90,7 +99,14 @@ public sealed class PortfolioQueryService(
             dependencyRepository.GetAllUnresolvedAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<ManualDependencyOverride>> overrideTask =
             overrideRepository.GetAllAsync(trackerId, cancellationToken);
-        await Task.WhenAll(entityTask, dependencyTask, unresolvedTask, overrideTask);
+        Task<ProgressSnapshot?> latestSnapshotTask =
+            progressHistoryRepository.GetLatestProgressSnapshotAsync(trackerId, cancellationToken);
+        await Task.WhenAll(
+            entityTask,
+            dependencyTask,
+            unresolvedTask,
+            overrideTask,
+            latestSnapshotTask);
 
         EffectiveDependencyState effective = effectiveDependencyResolver.Resolve(
             await entityTask,
@@ -98,25 +114,27 @@ public sealed class PortfolioQueryService(
             await unresolvedTask,
             await overrideTask);
         ProgressSnapshotState state = snapshotCalculator.Calculate(await entityTask, effective);
-        int issues = effective.UnresolvedDependencies
-            .Select(static dependency => dependency.Dependency.DependentEntityId)
-            .Distinct()
-            .Count();
-        return TrackerProgressSummary.From(state, issues);
+        return TrackerProgressSummary.From(
+            state,
+            effective.UnresolvedDependencies.Count,
+            (await latestSnapshotTask)?.RecordedAtUtc);
     }
 
     private static TrackerProgressSummary Aggregate(IEnumerable<TrackerProgressSummary> summaries)
     {
         TrackerProgressSummary[] items = summaries.ToArray();
-        int active = items.Sum(static item => item.ActiveEntityCount);
-        int implemented = items.Sum(static item => item.ImplementedEntityCount);
-        return new TrackerProgressSummary(
-            active,
-            implemented,
-            active == 0 ? null : implemented * 100d / active,
+        ProgressSnapshotState state = new(
             items.Sum(static item => item.ReadyCount),
             items.Sum(static item => item.BlockedCount),
+            items.Sum(static item => item.InProgressCount),
             items.Sum(static item => item.ReworkNeededCount),
-            items.Sum(static item => item.DependencyIssueCount));
+            items.Sum(static item => item.DevelopmentCompletedCount),
+            items.Sum(static item => item.ReconciledCount));
+        return new TrackerProgressSummary(
+            state,
+            items.Sum(static item => item.UnresolvedReferenceCount),
+            items.Where(static item => item.LastActivityUtc is not null)
+                .Select(static item => item.LastActivityUtc)
+                .Max());
     }
 }

@@ -85,10 +85,18 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<SchemaSynchronizationPlanner>();
         services.AddSingleton<ProgressHistoryInitializer>();
         services.AddSingleton<ProgressDashboardBuilder>();
+        services.AddSingleton<AggregateProgressDashboardBuilder>();
         services.AddSingleton(provider => new ProgressReportingService(
             provider.GetRequiredService<IProgressHistoryRepository>(),
             TimeZoneInfo.Utc,
             provider.GetRequiredService<ProgressDashboardBuilder>()));
+        services.AddSingleton(provider => new AggregateProgressReportingService(
+            provider.GetRequiredService<IProjectRepository>(),
+            provider.GetRequiredService<ITrackerRepository>(),
+            provider.GetRequiredService<IProgressHistoryRepository>(),
+            TimeZoneInfo.Utc,
+            provider.GetRequiredService<AggregateProgressDashboardBuilder>(),
+            timeProvider));
         services.AddSingleton<ProgressChartPresentationBuilder>();
         services.AddSingleton<ProgressChartPngExporter>();
         services.AddSingleton<IProgressChartFilePicker, ScreenshotChartFilePicker>();
@@ -107,8 +115,10 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<TrackerCsvCreationService>();
         services.AddSingleton<CatalogNameValidationService>();
         services.AddSingleton<PortfolioQueryService>();
+        services.AddSingleton<ProjectEntityComparisonQueryService>();
         services.AddSingleton<CatalogPurgeImpactService>();
         services.AddSingleton<TrackerWorkspaceViewModelFactory>();
+        services.AddSingleton<DashboardViewModelFactory>();
         services.AddSingleton<CatalogManagementViewModel>();
         services.AddSingleton<ShellViewModel>();
 

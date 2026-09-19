@@ -20,13 +20,14 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly IProjectRepository _projectRepository;
     private readonly ITrackerRepository _trackerRepository;
-    private readonly PortfolioQueryService _portfolioQueryService;
+    private readonly DashboardViewModelFactory _dashboardFactory;
     private readonly ProgressHistoryInitializer _historyInitializer;
     private readonly EntityTrackerSettingsStore _settingsStore;
     private readonly TrackerWorkspaceViewModelFactory _workspaceFactory;
     private readonly IContextDiscardConfirmation _discardConfirmation;
     private readonly ILogger<ShellViewModel> _logger;
     private readonly Dictionary<TrackerId, MainWindowViewModel> _workspaces = [];
+    private readonly Dictionary<ProjectId, ProjectDashboardViewModel> _projectDashboards = [];
     private readonly ProjectId? _startupProjectId;
     private readonly TrackerId? _startupTrackerId;
     private readonly AsyncCommand<ShellDestination> _navigateCommand;
@@ -36,6 +37,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private MainWindowViewModel? _currentWorkspace;
     private PortfolioDashboard? _portfolio;
     private ProjectDashboard? _projectDashboard;
+    private ProjectDashboardViewModel? _projectReporting;
     private bool _isBusy;
     private string _busyMessage = string.Empty;
     private string? _notificationMessage;
@@ -44,7 +46,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public ShellViewModel(
         IProjectRepository projectRepository,
         ITrackerRepository trackerRepository,
-        PortfolioQueryService portfolioQueryService,
+        DashboardViewModelFactory dashboardFactory,
         ProgressHistoryInitializer historyInitializer,
         EntityTrackerSettingsStore settingsStore,
         TrackerWorkspaceViewModelFactory workspaceFactory,
@@ -57,7 +59,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     {
         _projectRepository = projectRepository;
         _trackerRepository = trackerRepository;
-        _portfolioQueryService = portfolioQueryService;
+        _dashboardFactory = dashboardFactory;
         _historyInitializer = historyInitializer;
         _settingsStore = settingsStore;
         _workspaceFactory = workspaceFactory;
@@ -72,6 +74,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         _logger = logger ?? NullLogger<ShellViewModel>.Instance;
         Projects = [];
         Trackers = [];
+        PortfolioReporting = dashboardFactory.CreatePortfolio();
         NavigationItems =
         [
             new(ShellDestination.Portfolio, string.Empty, "Portfolio", false, false),
@@ -104,6 +107,14 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public AppearanceViewModel Appearance { get; }
 
     public SqlQueryHelpViewModel Help { get; }
+
+    public PortfolioDashboardViewModel PortfolioReporting { get; }
+
+    public ProjectDashboardViewModel? ProjectReporting
+    {
+        get => _projectReporting;
+        private set => SetField(ref _projectReporting, value);
+    }
 
     public PortfolioDashboard? Portfolio
     {
@@ -388,6 +399,28 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    public async Task<bool> OpenComparisonCellAsync(ProjectComparisonCell cell)
+    {
+        ArgumentNullException.ThrowIfNull(cell);
+        if (!cell.IsPresent || cell.EntityId is null)
+        {
+            return false;
+        }
+
+        Tracker? tracker = Trackers.FirstOrDefault(item => item.Id == cell.TrackerId);
+        if (tracker is null || !await SelectTrackerAsync(tracker))
+        {
+            return false;
+        }
+
+        if (!await NavigateAsync(ShellDestination.Overview))
+        {
+            return false;
+        }
+
+        return CurrentWorkspace?.OpenEntityDetails(cell.EntityId) == true;
+    }
+
     public void DismissDefaultNamePrompt() => ShowDefaultNamePrompt = false;
 
     public void DismissNotification() => NotificationMessage = null;
@@ -524,7 +557,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             {
                 ShellDestination.Overview => MainWindowTab.Overview,
                 ShellDestination.Archived => MainWindowTab.Archived,
-                ShellDestination.Reports => MainWindowTab.Progress,
+                ShellDestination.Reports => MainWindowTab.Reports,
                 ShellDestination.SchemaSynchronization => MainWindowTab.SchemaSynchronization,
                 ShellDestination.AddEntity => MainWindowTab.AddEntity,
                 _ => CurrentWorkspace.SelectedTab
@@ -541,10 +574,26 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     private async Task RefreshDashboardsAsync(CancellationToken cancellationToken)
     {
-        Portfolio = await _portfolioQueryService.GetPortfolioAsync(cancellationToken);
-        ProjectDashboard = SelectedProject is null
-            ? null
-            : await _portfolioQueryService.GetProjectAsync(SelectedProject.Id, cancellationToken);
+        await PortfolioReporting.RefreshAsync(cancellationToken);
+        Portfolio = PortfolioReporting.Dashboard;
+        if (SelectedProject is null)
+        {
+            ProjectReporting = null;
+            ProjectDashboard = null;
+            return;
+        }
+
+        if (!_projectDashboards.TryGetValue(
+                SelectedProject.Id,
+                out ProjectDashboardViewModel? projectDashboard))
+        {
+            projectDashboard = _dashboardFactory.CreateProject(SelectedProject.Id);
+            _projectDashboards.Add(SelectedProject.Id, projectDashboard);
+        }
+
+        await projectDashboard.RefreshAsync(cancellationToken);
+        ProjectReporting = projectDashboard;
+        ProjectDashboard = projectDashboard.Dashboard;
     }
 
     private async void OnWorkspacePersistedStateChanged(object? sender, EventArgs e)
@@ -572,7 +621,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         {
             MainWindowTab.Overview => ShellDestination.Overview,
             MainWindowTab.Archived => ShellDestination.Archived,
-            MainWindowTab.Progress => ShellDestination.Reports,
+            MainWindowTab.Reports => ShellDestination.Reports,
             MainWindowTab.SchemaSynchronization => ShellDestination.SchemaSynchronization,
             MainWindowTab.AddEntity => ShellDestination.AddEntity,
             _ => SelectedDestination

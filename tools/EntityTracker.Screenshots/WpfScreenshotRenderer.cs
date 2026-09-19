@@ -152,6 +152,22 @@ internal sealed class WpfScreenshotRenderer(MainWindow window, string outputDire
         await CaptureAsync(fileName);
     }
 
+    internal async Task BringNamedElementIntoViewAndCaptureAsync(
+        string elementName,
+        string fileName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(elementName);
+        FrameworkElement element = FindVisualDescendants<FrameworkElement>(Root)
+            .FirstOrDefault(candidate => string.Equals(
+                candidate.Name,
+                elementName,
+                StringComparison.Ordinal))
+            ?? throw new InvalidOperationException(
+                $"The rendered element '{elementName}' could not be found.");
+        element.BringIntoView();
+        await CaptureAsync(fileName, settleMilliseconds: 500);
+    }
+
     internal async Task SettleAsync(int milliseconds = 150)
     {
         await _window.Dispatcher.InvokeAsync(

@@ -1598,6 +1598,11 @@ public sealed class MainWindowViewModelTests
             TrackerId trackerId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ProgressSnapshot>>([]);
+
+        public Task<ProgressSnapshot?> GetLatestProgressSnapshotAsync(
+            TrackerId trackerId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<ProgressSnapshot?>(null);
     }
 
     private sealed class StubDependencyRepository(

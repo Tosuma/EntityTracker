@@ -14,6 +14,7 @@ internal static class ScreenshotManifest
     [
         "portfolio.png",
         "project-dashboard.png",
+        "project-comparison.png",
         "tracker-recycle-confirmation.png",
         "tracker-recycle-bin.png",
         "project-dashboard-tracker-restored.png",

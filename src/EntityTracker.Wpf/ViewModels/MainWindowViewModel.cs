@@ -967,6 +967,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         SelectedEntityDetails = new EntityDetailsViewModel(row);
     }
 
+    public bool OpenEntityDetails(EntityId entityId)
+    {
+        ArgumentNullException.ThrowIfNull(entityId);
+        EntityOverviewRow? row = OverviewItems.FirstOrDefault(item => item.EntityId == entityId);
+        if (row is null)
+        {
+            return false;
+        }
+
+        OpenEntityDetails(row);
+        return true;
+    }
+
     public void CloseEntityDetails() => SelectedEntityDetails = null;
 
     private async Task OpenArchivedFromCreationAsync(EntityId entityId)

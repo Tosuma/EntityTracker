@@ -1,9 +1,11 @@
 using EntityTracker.Application.History;
+using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Projects;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Tracking;
+using EntityTracker.Application.Workflow;
 using EntityTracker.DemoData;
 using EntityTracker.Domain;
 
@@ -128,7 +130,7 @@ internal static class ScreenshotDataSeeder
             defaultTracker.Id,
             PrimaryTrackerName,
             cancellationToken);
-        await trackerManagement.CopyAsync(
+        Tracker releaseReadiness = await trackerManagement.CopyAsync(
             defaultTracker.Id,
             defaultProject.Id,
             "Release readiness",
@@ -138,5 +140,27 @@ internal static class ScreenshotDataSeeder
             customerPlatform.Id,
             "Data contracts",
             cancellationToken);
+
+        IEntityRepository releaseEntities = catalogProvider
+            .GetRequiredService<IEntityRepository>();
+        IReadOnlyList<TrackedEntity> copiedEntities = await releaseEntities.GetAllAsync(
+            releaseReadiness.Id,
+            cancellationToken);
+        TrackedEntity changedEntity = copiedEntities.Single(static entity =>
+            entity.SourceName == "customer_preference");
+        await catalogProvider.GetRequiredService<BulkStatusUpdateService>().ApplyAsync(
+            releaseReadiness.Id,
+            [changedEntity.Id],
+            DevelopmentStatus.ReworkNeeded,
+            cancellationToken);
+        TrackedEntity missingEntity = copiedEntities.Single(static entity =>
+            entity.SourceName == "employee_contact");
+        bool archived = await catalogProvider.GetRequiredService<EntityLifecycleService>()
+            .TryArchiveAsync(releaseReadiness.Id, missingEntity.Id, cancellationToken);
+        if (!archived)
+        {
+            throw new InvalidDataException(
+                "The deterministic comparison screenshot could not create a missing entity.");
+        }
     }
 }

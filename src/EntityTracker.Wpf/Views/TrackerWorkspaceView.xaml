@@ -1894,7 +1894,7 @@
                 </Grid>
             </TabItem>
 
-            <TabItem Header="Reports" Tag="{x:Static viewModels:MainWindowTab.Progress}">
+            <TabItem Header="Reports" Tag="{x:Static viewModels:MainWindowTab.Reports}">
                 <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                               PreviewMouseWheel="OnReviewPreviewMouseWheel"
                               VerticalScrollBarVisibility="Auto">

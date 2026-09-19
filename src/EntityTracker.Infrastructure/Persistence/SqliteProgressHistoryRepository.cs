@@ -95,6 +95,41 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
         return snapshots;
     }
 
+    public async Task<ProgressSnapshot?> GetLatestProgressSnapshotAsync(
+        TrackerId trackerId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(trackerId);
+        await using SqliteConnection connection =
+            await _database.OpenConnectionAsync(cancellationToken);
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT recorded_at_utc, ready_count, blocked_count, in_progress_count,
+                   rework_needed_count, development_completed_count, reconciled_count
+            FROM progress_snapshots
+            WHERE tracker_id = $trackerId
+            ORDER BY recorded_at_utc DESC, id DESC
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
+
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return new ProgressSnapshot(
+            ParseTimestamp(reader.GetString(0)),
+            new ProgressSnapshotState(
+                reader.GetInt32(1),
+                reader.GetInt32(2),
+                reader.GetInt32(3),
+                reader.GetInt32(4),
+                reader.GetInt32(5),
+                reader.GetInt32(6)));
+    }
+
     private static DateTimeOffset ParseTimestamp(string value)
     {
         if (!DateTimeOffset.TryParseExact(

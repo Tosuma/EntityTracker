@@ -12,4 +12,8 @@ public interface IProgressHistoryRepository
     Task<IReadOnlyList<ProgressSnapshot>> GetProgressSnapshotsAsync(
         TrackerId trackerId,
         CancellationToken cancellationToken = default);
+
+    Task<ProgressSnapshot?> GetLatestProgressSnapshotAsync(
+        TrackerId trackerId,
+        CancellationToken cancellationToken = default);
 }

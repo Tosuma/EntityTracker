@@ -1,5 +1,7 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 
 using EntityTracker.Application.Projects;
 using EntityTracker.Wpf.ViewModels;
@@ -8,8 +10,117 @@ namespace EntityTracker.Wpf.Views;
 
 public partial class ProjectDashboardView : UserControl
 {
-    public ProjectDashboardView() => InitializeComponent();
+    private ShellViewModel? _attachedShell;
+    private ProjectDashboardViewModel? _attachedDashboard;
+
+    public ProjectDashboardView()
+    {
+        InitializeComponent();
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+        DataContextChanged += OnDataContextChanged;
+    }
+
     private ShellViewModel Shell => (ShellViewModel)DataContext;
+
+    private void OnLoaded(object sender, RoutedEventArgs e) => AttachToContext();
+
+    private void OnUnloaded(object sender, RoutedEventArgs e) => DetachFromContext();
+
+    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (IsLoaded)
+        {
+            AttachToContext();
+        }
+    }
+
+    private void AttachToContext()
+    {
+        DetachFromContext();
+        _attachedShell = DataContext as ShellViewModel;
+        if (_attachedShell is not null)
+        {
+            _attachedShell.PropertyChanged += OnShellPropertyChanged;
+            AttachDashboard(_attachedShell.ProjectReporting);
+        }
+
+        RebuildComparisonColumns();
+    }
+
+    private void DetachFromContext()
+    {
+        if (_attachedShell is not null)
+        {
+            _attachedShell.PropertyChanged -= OnShellPropertyChanged;
+            _attachedShell = null;
+        }
+
+        AttachDashboard(null);
+    }
+
+    private void AttachDashboard(ProjectDashboardViewModel? dashboard)
+    {
+        if (_attachedDashboard is not null)
+        {
+            _attachedDashboard.PropertyChanged -= OnDashboardPropertyChanged;
+        }
+
+        _attachedDashboard = dashboard;
+        if (_attachedDashboard is not null)
+        {
+            _attachedDashboard.PropertyChanged += OnDashboardPropertyChanged;
+        }
+    }
+
+    private void OnShellPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ShellViewModel.ProjectReporting))
+        {
+            AttachDashboard(_attachedShell?.ProjectReporting);
+            RebuildComparisonColumns();
+        }
+    }
+
+    private void OnDashboardPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(ProjectDashboardViewModel.Comparison) or
+            nameof(ProjectDashboardViewModel.ComparisonRows))
+        {
+            RebuildComparisonColumns();
+        }
+    }
+
+    private void RebuildComparisonColumns()
+    {
+        while (ComparisonGrid.Columns.Count > 1)
+        {
+            ComparisonGrid.Columns.RemoveAt(ComparisonGrid.Columns.Count - 1);
+        }
+
+        if (_attachedDashboard?.Comparison is not { } comparison)
+        {
+            return;
+        }
+
+        DataTemplate comparisonCellTemplate =
+            (DataTemplate)FindResource("ComparisonCellTemplate");
+        for (int index = 0; index < comparison.Trackers.Count; index++)
+        {
+            FrameworkElementFactory content = new(typeof(ContentControl));
+            content.SetBinding(
+                ContentControl.ContentProperty,
+                new Binding($"Cells[{index}]"));
+            content.SetValue(ContentControl.ContentTemplateProperty, comparisonCellTemplate);
+            ComparisonGrid.Columns.Add(new DataGridTemplateColumn
+            {
+                Header = comparison.Trackers[index].Name,
+                CellTemplate = new DataTemplate { VisualTree = content },
+                MinWidth = 170,
+                Width = new DataGridLength(190)
+            });
+        }
+    }
 
     private void OnCreateTracker(object sender, RoutedEventArgs e)
     {
@@ -42,5 +153,13 @@ public partial class ProjectDashboardView : UserControl
         if ((sender as FrameworkElement)?.DataContext is TrackerDashboardSummary item &&
             Shell.Trackers.FirstOrDefault(tracker => tracker.Id == item.TrackerId) is { } tracker)
             Shell.Catalog.RequestRecycle(tracker);
+    }
+
+    private async void OnOpenComparisonCell(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is ProjectComparisonDisplayCell cell)
+        {
+            await Shell.OpenComparisonCellAsync(cell.Model);
+        }
     }
 }

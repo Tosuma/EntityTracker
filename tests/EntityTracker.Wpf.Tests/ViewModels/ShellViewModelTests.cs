@@ -50,7 +50,7 @@ public sealed class ShellViewModelTests
         Assert.True(shell.NavigateCommand.CanExecute(ShellDestination.Reports));
 
         Assert.True(await shell.NavigateAsync(ShellDestination.Reports));
-        Assert.Equal(MainWindowTab.Progress, shell.CurrentWorkspace?.SelectedTab);
+        Assert.Equal(MainWindowTab.Reports, shell.CurrentWorkspace?.SelectedTab);
         Assert.True(await shell.NavigateAsync(ShellDestination.Settings));
         Assert.False(shell.IsTrackerWorkspace);
         Assert.Equal(harness.DefaultTracker.Id, shell.SelectedTracker?.Id);
@@ -86,6 +86,43 @@ public sealed class ShellViewModelTests
         workspace.ManualCreation.CancelCommand.Execute(null);
         Assert.Equal(MainWindowTab.Overview, workspace.SelectedTab);
         Assert.Equal(ShellDestination.Overview, shell.SelectedDestination);
+    }
+
+    [Fact]
+    public async Task ComparisonCellNavigation_GuardsDirtyStateAndOpensTargetDetails()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        Tracker second = await harness.TrackerManagement.CreateBlankAsync(
+            harness.DefaultProject.Id,
+            "Second tracker");
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "First only");
+        await harness.AddEntityAsync(second.Id, "Second only");
+        RecordingDiscardConfirmation confirmation = new(false);
+        using ShellViewModel shell = harness.CreateShell(
+            new EntityTrackerSettings(
+                StorageProviderKind.Sqlite,
+                lastProjectId: harness.DefaultProject.Id,
+                lastTrackerId: harness.DefaultTracker.Id),
+            confirmation);
+        await shell.InitializeAsync();
+        Assert.True(await shell.NavigateAsync(ShellDestination.ProjectDashboard));
+        await WaitUntilAsync(() => shell.ProjectReporting?.Comparison is not null);
+        ProjectComparisonCell cell = shell.ProjectReporting!.Comparison!.Rows
+            .Single(static row => row.DisplayName == "Second only")
+            .Cells.Single(candidate => candidate.TrackerId == second.Id);
+
+        shell.CurrentWorkspace!.ManualCreation.EntityName = "Unsaved draft";
+        Assert.False(await shell.OpenComparisonCellAsync(cell));
+        Assert.Equal(harness.DefaultTracker.Id, shell.SelectedTracker?.Id);
+        Assert.Equal(ShellDestination.ProjectDashboard, shell.SelectedDestination);
+        Assert.Equal(1, confirmation.CallCount);
+
+        confirmation.Result = true;
+        Assert.True(await shell.OpenComparisonCellAsync(cell));
+        Assert.Equal(second.Id, shell.SelectedTracker?.Id);
+        Assert.Equal(ShellDestination.Overview, shell.SelectedDestination);
+        Assert.True(shell.CurrentWorkspace?.IsEntityDetailsOpen);
+        Assert.Equal(cell.EntityId, shell.CurrentWorkspace?.SelectedEntityDetails?.EntityId);
     }
 
     [Fact]
@@ -315,7 +352,7 @@ public sealed class ShellViewModelTests
         private readonly SqliteTrackedStateStore _stateStore;
         private readonly IProjectRepository _projects;
         private readonly ITrackerRepository _trackers;
-        private readonly PortfolioQueryService _portfolioQuery;
+        private readonly DashboardViewModelFactory _dashboardFactory;
         private readonly ProgressHistoryInitializer _historyInitializer;
         private readonly TrackerWorkspaceViewModelFactory _workspaceFactory;
         private readonly CatalogManagementViewModel _catalog;
@@ -331,7 +368,7 @@ public sealed class ShellViewModelTests
             Project defaultProject,
             Tracker defaultTracker,
             TrackerManagementService trackerManagement,
-            PortfolioQueryService portfolioQuery,
+            DashboardViewModelFactory dashboardFactory,
             ProgressHistoryInitializer historyInitializer,
             TrackerWorkspaceViewModelFactory workspaceFactory,
             CatalogManagementViewModel catalog,
@@ -346,7 +383,7 @@ public sealed class ShellViewModelTests
             DefaultProject = defaultProject;
             DefaultTracker = defaultTracker;
             TrackerManagement = trackerManagement;
-            _portfolioQuery = portfolioQuery;
+            _dashboardFactory = dashboardFactory;
             _historyInitializer = historyInitializer;
             _workspaceFactory = workspaceFactory;
             _catalog = catalog;
@@ -427,6 +464,7 @@ public sealed class ShellViewModelTests
                 entities,
                 dependencies,
                 overrides,
+                history,
                 resolver,
                 snapshots);
             ProgressHistoryInitializer historyInitializer = new(
@@ -437,6 +475,21 @@ public sealed class ShellViewModelTests
                 resolver,
                 snapshots);
             ProgressChartPresentationBuilder chartPresentation = new();
+            AggregateProgressReportingService aggregateReporting = new(
+                projects,
+                trackers,
+                history,
+                TimeZoneInfo.Utc,
+                timeProvider: TimeProvider.System);
+            ProjectEntityComparisonQueryService comparison = new(
+                projects,
+                trackers,
+                overview);
+            DashboardViewModelFactory dashboardFactory = new(
+                portfolio,
+                comparison,
+                aggregateReporting,
+                chartPresentation);
             TestAdapters adapters = new();
             TrackerWorkspaceViewModelFactory workspaceFactory = new(
                 overview,
@@ -499,7 +552,7 @@ public sealed class ShellViewModelTests
                 defaultProject,
                 defaultTracker,
                 trackerManagement,
-                portfolio,
+                dashboardFactory,
                 historyInitializer,
                 workspaceFactory,
                 catalog,
@@ -513,7 +566,7 @@ public sealed class ShellViewModelTests
             IContextDiscardConfirmation confirmation) => new(
                 _projects,
                 _trackers,
-                _portfolioQuery,
+                _dashboardFactory,
                 _historyInitializer,
                 SettingsStore,
                 _workspaceFactory,

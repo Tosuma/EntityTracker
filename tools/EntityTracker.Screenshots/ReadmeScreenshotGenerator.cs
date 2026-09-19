@@ -66,7 +66,9 @@ internal sealed class ReadmeScreenshotGenerator
         try
         {
             await WaitUntilAsync(
-                () => !shell.IsBusy && shell.Portfolio?.Projects.Count == 2,
+                () => !shell.IsBusy &&
+                      shell.PortfolioReporting.Dashboard?.Projects.Count == 2 &&
+                      shell.PortfolioReporting.Progress.HasReport,
                 "The screenshot window did not finish loading.",
                 cancellationToken);
             await ExerciseLiveThemeSwitchAsync(provider, appearance, cancellationToken);
@@ -76,10 +78,15 @@ internal sealed class ReadmeScreenshotGenerator
 
             await shell.OpenProjectAsync(project.Id);
             await WaitUntilAsync(
-                () => shell.ProjectDashboard?.Trackers.Count == 2,
+                () => shell.ProjectReporting?.Dashboard?.Trackers.Count == 2 &&
+                      shell.ProjectReporting.Progress.HasReport &&
+                      shell.ProjectReporting.Comparison is not null,
                 "The project dashboard did not finish loading.",
                 cancellationToken);
-            await renderer.CaptureAsync("project-dashboard.png");
+            await renderer.CaptureAsync("project-dashboard.png", settleMilliseconds: 900);
+            await renderer.BringNamedElementIntoViewAndCaptureAsync(
+                "ComparisonGrid",
+                "project-comparison.png");
 
             await CaptureTrackerLifecycleAsync(shell, renderer, cancellationToken);
 
