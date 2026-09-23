@@ -1,4 +1,5 @@
 using EntityTracker.Wpf.Services;
+using System.Windows.Controls;
 
 namespace EntityTracker.Wpf.Tests.Services;
 
@@ -34,6 +35,24 @@ public sealed class MouseWheelScrollRouterTests
                 delta,
                 logical,
                 wheelScrollLines));
+    }
+
+    [Theory]
+    [InlineData(false, null, false)]
+    [InlineData(false, ScrollUnit.Item, false)]
+    [InlineData(true, ScrollUnit.Pixel, false)]
+    [InlineData(true, ScrollUnit.Item, true)]
+    [InlineData(true, null, true)]
+    public void UsesLogicalScrolling_RespectsEffectiveItemsControlScrollUnit(
+        bool canContentScroll,
+        ScrollUnit? scrollUnit,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            MouseWheelScrollRouter.UsesLogicalScrolling(
+                canContentScroll,
+                scrollUnit));
     }
 
     [Fact]

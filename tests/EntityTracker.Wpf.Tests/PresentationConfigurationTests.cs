@@ -69,6 +69,25 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void DataGridStyle_UsesPixelScrollingWithRecyclingVirtualization()
+    {
+        XDocument components = LoadWpfXaml("Themes", "EntityTrackerComponents.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement style = Assert.Single(components.Descendants(), element =>
+            element.Name.LocalName == "Style" &&
+            (string?)element.Attribute(x + "Key") == "EntityTrackerDataGridStyle");
+        Dictionary<string, string?> setters = style.Elements()
+            .Where(static element => element.Name.LocalName == "Setter")
+            .ToDictionary(
+                element => (string)element.Attribute("Property")!,
+                element => (string?)element.Attribute("Value"));
+
+        Assert.Equal("True", setters["VirtualizingPanel.IsVirtualizing"]);
+        Assert.Equal("Recycling", setters["VirtualizingPanel.VirtualizationMode"]);
+        Assert.Equal("Pixel", setters["VirtualizingPanel.ScrollUnit"]);
+    }
+
+    [Fact]
     public void Palette_UsesDynamicFluentColorsForThemeAwareSemantics()
     {
         XDocument palette = LoadWpfXaml("Themes", "EntityTrackerPalette.xaml");

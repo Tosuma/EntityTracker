@@ -110,7 +110,7 @@ internal sealed class MouseWheelScrollRouter
             viewer.ScrollableHeight,
             viewer.ViewportHeight,
             wheelDelta,
-            viewer.CanContentScroll,
+            UsesLogicalScrolling(viewer),
             wheelScrollLines);
         return Math.Abs(target - viewer.VerticalOffset) >= 0.001;
     }
@@ -125,12 +125,26 @@ internal sealed class MouseWheelScrollRouter
             viewer.ScrollableHeight,
             viewer.ViewportHeight,
             wheelDelta,
-            viewer.CanContentScroll,
+            UsesLogicalScrolling(viewer),
             wheelScrollLines);
         if (Math.Abs(target - viewer.VerticalOffset) >= 0.001)
         {
             viewer.ScrollToVerticalOffset(target);
         }
+    }
+
+    internal static bool UsesLogicalScrolling(
+        bool canContentScroll,
+        ScrollUnit? itemsControlScrollUnit) =>
+        canContentScroll && itemsControlScrollUnit != ScrollUnit.Pixel;
+
+    private static bool UsesLogicalScrolling(ScrollViewer viewer)
+    {
+        ItemsControl? itemsControl = FindAncestor<ItemsControl>(viewer);
+        ScrollUnit? scrollUnit = itemsControl is null
+            ? null
+            : VirtualizingPanel.GetScrollUnit(itemsControl);
+        return UsesLogicalScrolling(viewer.CanContentScroll, scrollUnit);
     }
 
     private static IEnumerable<ScrollViewer> GetScrollViewerAncestors(DependencyObject source)
@@ -162,5 +176,22 @@ internal sealed class MouseWheelScrollRouter
         return child is Visual or Visual3D
             ? VisualTreeHelper.GetParent(child)
             : LogicalTreeHelper.GetParent(child);
+    }
+
+    private static T? FindAncestor<T>(DependencyObject child)
+        where T : DependencyObject
+    {
+        DependencyObject? current = GetParent(child);
+        while (current is not null)
+        {
+            if (current is T match)
+            {
+                return match;
+            }
+
+            current = GetParent(current);
+        }
+
+        return null;
     }
 }
