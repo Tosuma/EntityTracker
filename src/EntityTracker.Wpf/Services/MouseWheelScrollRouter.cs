@@ -9,8 +9,8 @@ namespace EntityTracker.Wpf.Services;
 
 internal sealed class MouseWheelScrollRouter
 {
-    internal const double PixelsPerNotch = 10;
-    internal const double LogicalItemsPerNotch = 1;
+    internal const double PixelsPerLine = 10;
+    internal const int WheelPageScroll = -1;
     private const double DeltaPerNotch = 120;
     private static readonly TimeSpan GesturePause = TimeSpan.FromMilliseconds(300);
 
@@ -28,45 +28,77 @@ internal sealed class MouseWheelScrollRouter
         ScrollViewer[] candidates = GetScrollViewerAncestors(source)
             .Where(static viewer => viewer.IsVisible && viewer.IsEnabled)
             .ToArray();
-        long now = Stopwatch.GetTimestamp();
-        bool sameGesture = _gestureOwner is not null &&
-            Stopwatch.GetElapsedTime(_lastWheelTimestamp, now) <= GesturePause &&
-            candidates.Contains(_gestureOwner);
-        _lastWheelTimestamp = now;
-
-        IEnumerable<ScrollViewer> ordered = sameGesture
-            ? candidates.OrderByDescending(viewer => ReferenceEquals(viewer, _gestureOwner))
-            : candidates;
-        foreach (ScrollViewer viewer in ordered)
+        int wheelScrollLines = SystemParameters.WheelScrollLines;
+        if (wheelScrollLines == 0)
         {
-            if (!TryScroll(viewer, e.Delta))
-            {
-                continue;
-            }
-
-            _gestureOwner = viewer;
-            e.Handled = true;
-            return true;
+            _gestureOwner = null;
+            e.Handled = candidates.Length > 0;
+            return e.Handled;
         }
 
-        _gestureOwner = null;
-        return false;
+        long now = Stopwatch.GetTimestamp();
+        bool sameGesture = _gestureOwner is { IsVisible: true, IsEnabled: true } &&
+            Stopwatch.GetElapsedTime(_lastWheelTimestamp, now) <= GesturePause;
+        _lastWheelTimestamp = now;
+
+        ScrollViewer? target = SelectTarget(
+            candidates,
+            _gestureOwner,
+            sameGesture,
+            viewer => CanScroll(viewer, e.Delta, wheelScrollLines));
+        if (target is null)
+        {
+            _gestureOwner = null;
+            return false;
+        }
+
+        _gestureOwner = target;
+        TryScroll(target, e.Delta, wheelScrollLines);
+        e.Handled = true;
+        return true;
     }
 
     internal static double CalculateTargetOffset(
         double currentOffset,
         double scrollableHeight,
+        double viewportHeight,
         int wheelDelta,
-        bool usesLogicalScrolling)
+        bool usesLogicalScrolling,
+        int wheelScrollLines)
     {
-        double step = usesLogicalScrolling ? LogicalItemsPerNotch : PixelsPerNotch;
+        if (wheelScrollLines == 0)
+        {
+            return currentOffset;
+        }
+
+        double step = wheelScrollLines == WheelPageScroll
+            ? viewportHeight
+            : wheelScrollLines * (usesLogicalScrolling ? 1 : PixelsPerLine);
         return Math.Clamp(
             currentOffset - wheelDelta / DeltaPerNotch * step,
             0,
             scrollableHeight);
     }
 
-    private static bool TryScroll(ScrollViewer viewer, int wheelDelta)
+    internal static T? SelectTarget<T>(
+        IReadOnlyList<T> candidates,
+        T? gestureOwner,
+        bool sameGesture,
+        Func<T, bool> canScroll)
+        where T : class
+    {
+        if (sameGesture && gestureOwner is not null)
+        {
+            return gestureOwner;
+        }
+
+        return candidates.FirstOrDefault(canScroll);
+    }
+
+    private static bool CanScroll(
+        ScrollViewer viewer,
+        int wheelDelta,
+        int wheelScrollLines)
     {
         if (viewer.ScrollableHeight <= 0)
         {
@@ -76,15 +108,29 @@ internal sealed class MouseWheelScrollRouter
         double target = CalculateTargetOffset(
             viewer.VerticalOffset,
             viewer.ScrollableHeight,
+            viewer.ViewportHeight,
             wheelDelta,
-            viewer.CanContentScroll);
-        if (Math.Abs(target - viewer.VerticalOffset) < 0.001)
-        {
-            return false;
-        }
+            viewer.CanContentScroll,
+            wheelScrollLines);
+        return Math.Abs(target - viewer.VerticalOffset) >= 0.001;
+    }
 
-        viewer.ScrollToVerticalOffset(target);
-        return true;
+    private static void TryScroll(
+        ScrollViewer viewer,
+        int wheelDelta,
+        int wheelScrollLines)
+    {
+        double target = CalculateTargetOffset(
+            viewer.VerticalOffset,
+            viewer.ScrollableHeight,
+            viewer.ViewportHeight,
+            wheelDelta,
+            viewer.CanContentScroll,
+            wheelScrollLines);
+        if (Math.Abs(target - viewer.VerticalOffset) >= 0.001)
+        {
+            viewer.ScrollToVerticalOffset(target);
+        }
     }
 
     private static IEnumerable<ScrollViewer> GetScrollViewerAncestors(DependencyObject source)

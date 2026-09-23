@@ -470,6 +470,35 @@ public sealed class PresentationConfigurationTests
             "{Binding DataContext.OpenEntityDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}");
     }
 
+    [Fact]
+    public void ProjectComparison_DisabledFilterCardsRetainSurfaceWithMildFade()
+    {
+        XDocument document = LoadWpfXaml("Views", "ProjectDashboardView.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement style = Assert.Single(document.Descendants(), element =>
+            element.Name.LocalName == "Style" &&
+            (string?)element.Attribute(x + "Key") == "ComparisonFilterButtonStyle");
+        XElement disabledTrigger = Assert.Single(style.Descendants(), element =>
+            element.Name.LocalName == "Trigger" &&
+            (string?)element.Attribute("Property") == "IsEnabled" &&
+            (string?)element.Attribute("Value") == "False");
+        XElement[] setters = disabledTrigger.Elements()
+            .Where(static element => element.Name.LocalName == "Setter")
+            .ToArray();
+
+        Assert.Contains(setters, setter =>
+            (string?)setter.Attribute("TargetName") == "Card" &&
+            (string?)setter.Attribute("Property") == "Background" &&
+            (string?)setter.Attribute("Value") == "{DynamicResource Brush.Surface.Card}");
+        Assert.Contains(setters, setter =>
+            (string?)setter.Attribute("TargetName") == "Card" &&
+            (string?)setter.Attribute("Property") == "Opacity" &&
+            (string?)setter.Attribute("Value") == "0.72");
+        Assert.Contains(setters, setter =>
+            (string?)setter.Attribute("Property") == "Cursor" &&
+            (string?)setter.Attribute("Value") == "Arrow");
+    }
+
     private static XDocument LoadWpfXaml(params string[] relativePath)
     {
         string repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
