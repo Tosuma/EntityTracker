@@ -518,6 +518,22 @@ public sealed class PresentationConfigurationTests
             (string?)setter.Attribute("Value") == "Arrow");
     }
 
+    [Fact]
+    public void ProjectComparison_UsesSmoothPixelScrollingWithVirtualization()
+    {
+        XDocument document = LoadWpfXaml("Views", "ProjectDashboardView.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement comparisonGrid = Assert.Single(document.Descendants(), element =>
+            element.Name.LocalName == "DataGrid" &&
+            (string?)element.Attribute(x + "Name") == "ComparisonGrid");
+
+        Assert.Equal("True", (string?)comparisonGrid.Attribute("ScrollViewer.CanContentScroll"));
+        Assert.Equal("True", (string?)comparisonGrid.Attribute("EnableRowVirtualization"));
+        Assert.Equal("True", (string?)comparisonGrid.Attribute("VirtualizingPanel.IsVirtualizing"));
+        Assert.Equal("Pixel", (string?)comparisonGrid.Attribute("VirtualizingPanel.ScrollUnit"));
+        Assert.Equal("Recycling", (string?)comparisonGrid.Attribute("VirtualizingPanel.VirtualizationMode"));
+    }
+
     private static XDocument LoadWpfXaml(params string[] relativePath)
     {
         string repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);

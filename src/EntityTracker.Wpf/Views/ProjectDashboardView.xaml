@@ -405,6 +405,7 @@
                               SelectionMode="Single"
                               SelectionUnit="CellOrRowHeader"
                               VirtualizingPanel.IsVirtualizing="True"
+                              VirtualizingPanel.ScrollUnit="Pixel"
                               VirtualizingPanel.VirtualizationMode="Recycling">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Entity"
