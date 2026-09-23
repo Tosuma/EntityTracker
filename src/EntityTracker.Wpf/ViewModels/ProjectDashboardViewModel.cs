@@ -1,9 +1,11 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows.Input;
 
 using EntityTracker.Application.Projects;
 using EntityTracker.Domain;
 using EntityTracker.Reporting;
+using EntityTracker.Wpf.Commands;
 
 namespace EntityTracker.Wpf.ViewModels;
 
@@ -11,11 +13,14 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
 {
     private readonly PortfolioQueryService _queryService;
     private readonly ProjectEntityComparisonQueryService _comparisonService;
+    private readonly AsyncCommand<ProjectComparisonCategory> _selectCategoryCommand;
+    private readonly AsyncCommand _clearCategoryCommand;
     private readonly SemaphoreSlim _comparisonGate = new(1, 1);
     private ProjectDashboard? _dashboard;
     private ProjectEntityComparison? _comparison;
     private IReadOnlyList<ProjectComparisonDisplayRow> _comparisonRows = [];
     private bool _showAllEntities;
+    private ProjectComparisonCategory _selectedCategory;
     private string? _errorMessage;
     private bool _isBusy;
 
@@ -32,6 +37,12 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
         ProjectId = projectId;
         _queryService = queryService;
         _comparisonService = comparisonService;
+        _selectCategoryCommand = new AsyncCommand<ProjectComparisonCategory>(
+            SelectCategoryAsync,
+            category => GetCategoryCount(category) > 0);
+        _clearCategoryCommand = new AsyncCommand(
+            ClearCategoryAsync,
+            () => HasCategoryFilter);
         Progress = new AggregateProgressDashboardViewModel(
             (range, cancellationToken) => reportingService.GetProjectReportAsync(
                 projectId,
@@ -70,6 +81,8 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(ShowNoActionableRows));
                 OnPropertyChanged(nameof(ShowNoComparisonEntities));
                 OnPropertyChanged(nameof(ComparisonSummary));
+                NotifyCategoryPropertiesChanged();
+                _selectCategoryCommand.NotifyCanExecuteChanged();
             }
         }
     }
@@ -81,6 +94,12 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _showAllEntities, value))
             {
+                if (value && _selectedCategory != ProjectComparisonCategory.None)
+                {
+                    _selectedCategory = ProjectComparisonCategory.None;
+                    NotifyCategoryPropertiesChanged();
+                }
+
                 OnPropertyChanged(nameof(ShowNoActionableRows));
                 OnPropertyChanged(nameof(ComparisonSummary));
                 _ = LoadComparisonSafelyAsync();
@@ -109,11 +128,49 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
 
     public bool ShowNoComparisonEntities => Comparison is { TotalEntityCount: 0 };
 
+    public string ComparisonEmptyTitle => HasCategoryFilter
+        ? $"No {FormatCategory(SelectedCategory).ToLowerInvariant()} entities"
+        : "No actionable differences";
+
+    public string ComparisonEmptyHint => HasCategoryFilter
+        ? "Choose the selected category again or clear the filter."
+        : "Choose Show all to inspect matching entities.";
+
+    public ProjectComparisonCategory SelectedCategory => _selectedCategory;
+
+    public bool HasCategoryFilter => SelectedCategory != ProjectComparisonCategory.None;
+
+    public bool IsMissingSelected => SelectedCategory == ProjectComparisonCategory.Missing;
+
+    public bool IsDivergentSelected => SelectedCategory == ProjectComparisonCategory.Divergent;
+
+    public bool IsBlockedSelected => SelectedCategory == ProjectComparisonCategory.Blocked;
+
+    public bool IsReworkSelected => SelectedCategory == ProjectComparisonCategory.ReworkNeeded;
+
+    public bool IsUnresolvedSelected => SelectedCategory == ProjectComparisonCategory.Unresolved;
+
+    public int MissingCount => Comparison?.CategoryCounts.Missing ?? 0;
+
+    public int DivergentCount => Comparison?.CategoryCounts.Divergent ?? 0;
+
+    public int BlockedCount => Comparison?.CategoryCounts.Blocked ?? 0;
+
+    public int ReworkCount => Comparison?.CategoryCounts.ReworkNeeded ?? 0;
+
+    public int UnresolvedCount => Comparison?.CategoryCounts.Unresolved ?? 0;
+
+    public ICommand SelectCategoryCommand => _selectCategoryCommand;
+
+    public ICommand ClearCategoryCommand => _clearCategoryCommand;
+
     public string ComparisonSummary => Comparison is null
         ? string.Empty
         : ShowAllEntities
             ? $"Showing all {Comparison.TotalEntityCount} entities"
-            : $"Showing {Comparison.ActionableEntityCount} actionable of {Comparison.TotalEntityCount} entities";
+            : HasCategoryFilter
+                ? $"Showing {Comparison.Rows.Count} {FormatCategory(SelectedCategory).ToLowerInvariant()} of {Comparison.TotalEntityCount} entities"
+                : $"Showing {Comparison.ActionableEntityCount} actionable of {Comparison.TotalEntityCount} entities";
 
     public bool IsBusy
     {
@@ -172,6 +229,7 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
                 ShowAllEntities
                     ? ProjectComparisonFilter.All
                     : ProjectComparisonFilter.ActionableDifferences,
+                ShowAllEntities ? ProjectComparisonCategory.None : SelectedCategory,
                 cancellationToken);
         }
         finally
@@ -179,6 +237,79 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
             _comparisonGate.Release();
         }
     }
+
+    private async Task SelectCategoryAsync(ProjectComparisonCategory category)
+    {
+        if (GetCategoryCount(category) == 0)
+        {
+            return;
+        }
+
+        if (_showAllEntities)
+        {
+            _showAllEntities = false;
+            OnPropertyChanged(nameof(ShowAllEntities));
+        }
+
+        _selectedCategory = _selectedCategory == category
+            ? ProjectComparisonCategory.None
+            : category;
+        NotifyCategoryPropertiesChanged();
+        await LoadComparisonSafelyAsync();
+    }
+
+    private async Task ClearCategoryAsync()
+    {
+        if (!HasCategoryFilter)
+        {
+            return;
+        }
+
+        _selectedCategory = ProjectComparisonCategory.None;
+        NotifyCategoryPropertiesChanged();
+        await LoadComparisonSafelyAsync();
+    }
+
+    private int GetCategoryCount(ProjectComparisonCategory category) => category switch
+    {
+        ProjectComparisonCategory.Missing => MissingCount,
+        ProjectComparisonCategory.Divergent => DivergentCount,
+        ProjectComparisonCategory.Blocked => BlockedCount,
+        ProjectComparisonCategory.ReworkNeeded => ReworkCount,
+        ProjectComparisonCategory.Unresolved => UnresolvedCount,
+        _ => 0
+    };
+
+    private void NotifyCategoryPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(SelectedCategory));
+        OnPropertyChanged(nameof(HasCategoryFilter));
+        OnPropertyChanged(nameof(IsMissingSelected));
+        OnPropertyChanged(nameof(IsDivergentSelected));
+        OnPropertyChanged(nameof(IsBlockedSelected));
+        OnPropertyChanged(nameof(IsReworkSelected));
+        OnPropertyChanged(nameof(IsUnresolvedSelected));
+        OnPropertyChanged(nameof(MissingCount));
+        OnPropertyChanged(nameof(DivergentCount));
+        OnPropertyChanged(nameof(BlockedCount));
+        OnPropertyChanged(nameof(ReworkCount));
+        OnPropertyChanged(nameof(UnresolvedCount));
+        OnPropertyChanged(nameof(ComparisonSummary));
+        OnPropertyChanged(nameof(ShowNoActionableRows));
+        OnPropertyChanged(nameof(ComparisonEmptyTitle));
+        OnPropertyChanged(nameof(ComparisonEmptyHint));
+        _clearCategoryCommand.NotifyCanExecuteChanged();
+    }
+
+    private static string FormatCategory(ProjectComparisonCategory category) => category switch
+    {
+        ProjectComparisonCategory.Missing => "Missing",
+        ProjectComparisonCategory.Divergent => "Divergent",
+        ProjectComparisonCategory.Blocked => "Blocked",
+        ProjectComparisonCategory.ReworkNeeded => "Rework",
+        ProjectComparisonCategory.Unresolved => "Unresolved",
+        _ => "Actionable"
+    };
 
     private async Task LoadComparisonSafelyAsync()
     {

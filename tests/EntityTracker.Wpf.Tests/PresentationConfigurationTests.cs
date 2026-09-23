@@ -220,9 +220,16 @@ public sealed class PresentationConfigurationTests
 
         XElement query = Assert.Single(help.Descendants(), element =>
             (string?)element.Attribute(x + "Name") == "QueryTextBox");
-        Assert.Equal(
-            "OnQueryPreviewMouseWheel",
-            (string?)query.Attribute("PreviewMouseWheel"));
+        Assert.Null((string?)query.Attribute("PreviewMouseWheel"));
+
+        string repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
+        string mainWindowCode = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "src",
+            "EntityTracker.Wpf",
+            "MainWindow.xaml.cs"));
+        Assert.Contains("MouseWheelScrollRouter", mainWindowCode, StringComparison.Ordinal);
+        Assert.Contains("PreviewMouseWheel += OnPreviewMouseWheel", mainWindowCode, StringComparison.Ordinal);
 
         XElement modalRoot = Assert.Single(catalog.Root!.Elements(), element =>
             element.Name.LocalName == "Grid");

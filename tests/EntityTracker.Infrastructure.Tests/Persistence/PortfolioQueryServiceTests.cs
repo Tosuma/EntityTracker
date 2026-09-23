@@ -116,23 +116,25 @@ public sealed class PortfolioQueryServiceTests
         TrackedEntity alphaOnly = new(EntityId.New(), alpha.Id, "Alpha only");
         TrackedEntity alphaAttention = new(
             EntityId.New(), alpha.Id, "Attention", DevelopmentStatus.Reconciled);
+        TrackedEntity alphaStable = new(EntityId.New(), alpha.Id, "Stable");
         TrackedEntity alphaArchived = new(
             EntityId.New(), alpha.Id, "Archived only",
             lifecycleState: EntityLifecycleState.Archived);
         await state.ApplyAsync(alpha.Id, new TrackedStateChangeSet(
-            [alphaCommon, alphaOnly, alphaAttention, alphaArchived],
+            [alphaCommon, alphaOnly, alphaAttention, alphaStable, alphaArchived],
             [], [], [alphaAttention.Id], [],
             [new PersistedUnresolvedDependency(
                 new UnresolvedDependency(alphaAttention.Id, "Missing target"),
                 ImportedDependencyKind.Mandatory)]));
 
         TrackedEntity zuluCommon = new(
-            EntityId.New(), zulu.Id, "customer", DevelopmentStatus.InProgress);
+            EntityId.New(), zulu.Id, "customer", DevelopmentStatus.DevelopmentCompleted);
         TrackedEntity zuluOnly = new(EntityId.New(), zulu.Id, "Zulu only");
         TrackedEntity zuluAttention = new(
             EntityId.New(), zulu.Id, "Attention", DevelopmentStatus.Reconciled);
+        TrackedEntity zuluStable = new(EntityId.New(), zulu.Id, "stable");
         await state.ApplyAsync(zulu.Id, new TrackedStateChangeSet(
-            [zuluCommon, zuluOnly, zuluAttention], [], [], [], [], []));
+            [zuluCommon, zuluOnly, zuluAttention, zuluStable], [], [], [], [], []));
 
         EntityOverviewService overview = new(
             entities,
@@ -149,20 +151,31 @@ public sealed class PortfolioQueryServiceTests
             await query.GetAsync(project.Id));
         ProjectEntityComparison all = Assert.IsType<ProjectEntityComparison>(
             await query.GetAsync(project.Id, ProjectComparisonFilter.All));
+        ProjectEntityComparison missing = Assert.IsType<ProjectEntityComparison>(
+            await query.GetAsync(
+                project.Id,
+                ProjectComparisonFilter.ActionableDifferences,
+                ProjectComparisonCategory.Missing));
 
         Assert.Equal(["Alpha", "Zulu"], actionable.Trackers.Select(static item => item.Name));
-        Assert.Equal(4, all.TotalEntityCount);
-        Assert.Equal(3, actionable.ActionableEntityCount);
+        Assert.Equal(5, all.TotalEntityCount);
+        Assert.Equal(4, actionable.ActionableEntityCount);
         Assert.Equal(
-            ["ALPHA ONLY", "ATTENTION", "ZULU ONLY"],
+            ["ALPHA ONLY", "ATTENTION", "CUSTOMER", "ZULU ONLY"],
             actionable.Rows.Select(static row => row.NormalizedSourceKey));
+        Assert.Equal(2, actionable.CategoryCounts.Missing);
+        Assert.Equal(1, actionable.CategoryCounts.Divergent);
+        Assert.Equal(1, actionable.CategoryCounts.Unresolved);
+        Assert.Equal(["ALPHA ONLY", "ZULU ONLY"],
+            missing.Rows.Select(static row => row.NormalizedSourceKey));
         Assert.DoesNotContain(all.Rows, static row => row.NormalizedSourceKey == "ARCHIVED ONLY");
         ProjectComparisonRow alphaOnlyRow = actionable.Rows[0];
         Assert.True(alphaOnlyRow.Cells[0].IsPresent);
         Assert.False(alphaOnlyRow.Cells[1].IsPresent);
         Assert.True(actionable.Rows[1].Cells[0].HasIssues);
         Assert.False(actionable.Rows[1].Cells[1].HasIssues);
-        Assert.False(all.Rows.Single(static row => row.NormalizedSourceKey == "CUSTOMER").IsActionable);
+        Assert.True(all.Rows.Single(static row => row.NormalizedSourceKey == "CUSTOMER").IsActionable);
+        Assert.False(all.Rows.Single(static row => row.NormalizedSourceKey == "STABLE").IsActionable);
     }
 
     [Fact]

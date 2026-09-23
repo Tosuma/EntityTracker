@@ -9,6 +9,27 @@ public enum ProjectComparisonFilter
     All
 }
 
+[Flags]
+public enum ProjectComparisonCategory
+{
+    None = 0,
+    Missing = 1,
+    Divergent = 2,
+    Blocked = 4,
+    ReworkNeeded = 8,
+    Unresolved = 16
+}
+
+public sealed record ProjectComparisonCategoryCounts(
+    int Missing,
+    int Divergent,
+    int Blocked,
+    int ReworkNeeded,
+    int Unresolved)
+{
+    public static ProjectComparisonCategoryCounts Empty { get; } = new(0, 0, 0, 0, 0);
+}
+
 public sealed record ProjectComparisonTracker(
     TrackerId TrackerId,
     string Name);
@@ -29,7 +50,10 @@ public sealed record ProjectComparisonRow(
     string NormalizedSourceKey,
     string DisplayName,
     IReadOnlyList<ProjectComparisonCell> Cells,
-    bool IsActionable);
+    ProjectComparisonCategory Categories)
+{
+    public bool IsActionable => Categories != ProjectComparisonCategory.None;
+}
 
 public sealed record ProjectEntityComparison(
     ProjectId ProjectId,
@@ -37,4 +61,6 @@ public sealed record ProjectEntityComparison(
     IReadOnlyList<ProjectComparisonRow> Rows,
     int TotalEntityCount,
     int ActionableEntityCount,
-    ProjectComparisonFilter Filter);
+    ProjectComparisonFilter Filter,
+    ProjectComparisonCategory SelectedCategory,
+    ProjectComparisonCategoryCounts CategoryCounts);

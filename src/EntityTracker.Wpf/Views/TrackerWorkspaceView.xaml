@@ -293,7 +293,6 @@
         </DataTemplate>
 
         <Style TargetType="DataGrid" BasedOn="{StaticResource EntityTrackerDataGridStyle}">
-            <EventSetter Event="PreviewMouseWheel" Handler="OnDataGridPreviewMouseWheel" />
             <EventSetter Event="PreviewMouseMove" Handler="OnDataGridPreviewMouseMove" />
             <EventSetter Event="PreviewMouseLeftButtonDown" Handler="OnDataGridPreviewMouseLeftButtonDown" />
             <EventSetter Event="PreviewMouseLeftButtonUp" Handler="OnDataGridPreviewMouseLeftButtonUp" />
@@ -1325,7 +1324,6 @@
                         <ScrollViewer x:Name="SchemaReviewScrollViewer"
                                       Grid.Row="1"
                                       HorizontalScrollBarVisibility="Disabled"
-                                      PreviewMouseWheel="OnReviewPreviewMouseWheel"
                                       VerticalScrollBarVisibility="Auto">
                             <StackPanel>
                                 <Border Margin="0,0,0,8"
@@ -1689,7 +1687,6 @@
                     <ScrollViewer x:Name="AddEntityScrollViewer"
                                   Grid.Row="1"
                                   HorizontalScrollBarVisibility="Disabled"
-                                  PreviewMouseWheel="OnReviewPreviewMouseWheel"
                                   VerticalScrollBarVisibility="Auto">
                         <StackPanel MaxWidth="820" HorizontalAlignment="Left">
                             <Border Margin="0,0,0,14"
@@ -1896,7 +1893,6 @@
 
             <TabItem Header="Reports" Tag="{x:Static viewModels:MainWindowTab.Reports}">
                 <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                              PreviewMouseWheel="OnReviewPreviewMouseWheel"
                               VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="12">
                         <DockPanel Margin="0,0,0,14">
@@ -2425,7 +2421,6 @@
                     <ScrollViewer x:Name="EditorScrollViewer"
                                   Grid.Row="1"
                                   HorizontalScrollBarVisibility="Disabled"
-                                  PreviewMouseWheel="OnReviewPreviewMouseWheel"
                                   VerticalScrollBarVisibility="Auto">
                         <StackPanel MaxWidth="860" HorizontalAlignment="Stretch">
                             <TextBlock FontSize="17"

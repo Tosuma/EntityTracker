@@ -108,8 +108,9 @@ for consistency.
 
 The Project matrix aligns active entities by normalized source key. It starts with actionable
 differences—including missing entities, divergent statuses, blockers, rework, and unresolved
-references—and can explicitly show all entities. Each present cell opens that entity in its
-Tracker's Overview after the normal unsaved-work confirmation.
+references—and can explicitly show all entities. The category cards filter the matrix and reuse
+the Overview status colors for fast scanning. Each present cell opens that entity in its Tracker's
+Overview after the normal unsaved-work confirmation.
 
 ![Project entity comparison with labeled statuses and explicit missing entities](images/light/project-comparison.png)
 

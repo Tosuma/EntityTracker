@@ -1,14 +1,17 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 
 using EntityTracker.Domain;
 using EntityTracker.Wpf.ViewModels;
+using EntityTracker.Wpf.Services;
 
 namespace EntityTracker.Wpf;
 
 public partial class MainWindow : Window
 {
     private readonly ShellViewModel _viewModel;
+    private readonly MouseWheelScrollRouter _mouseWheelRouter = new();
     private bool _updatingSelectors;
 
     public MainWindow(ShellViewModel viewModel)
@@ -18,8 +21,12 @@ public partial class MainWindow : Window
         DataContext = viewModel;
         Loaded += OnLoaded;
         Closed += OnClosed;
+        PreviewMouseWheel += OnPreviewMouseWheel;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
     }
+
+    private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e) =>
+        _mouseWheelRouter.Route(e);
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {

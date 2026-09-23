@@ -55,7 +55,6 @@
                  AcceptsTab="True"
                  FontFamily="Consolas"
                  IsReadOnly="True"
-                 PreviewMouseWheel="OnQueryPreviewMouseWheel"
                  ScrollViewer.CanContentScroll="False"
                  Text="{Binding Help.Query, Mode=OneWay}"
                  TextWrapping="NoWrap"

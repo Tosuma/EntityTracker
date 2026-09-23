@@ -107,6 +107,21 @@ public sealed class ShellViewModelTests
         await shell.InitializeAsync();
         Assert.True(await shell.NavigateAsync(ShellDestination.ProjectDashboard));
         await WaitUntilAsync(() => shell.ProjectReporting?.Comparison is not null);
+        Assert.Equal(2, shell.ProjectReporting!.MissingCount);
+        Assert.True(shell.ProjectReporting.SelectCategoryCommand.CanExecute(
+            ProjectComparisonCategory.Missing));
+        shell.ProjectReporting.SelectCategoryCommand.Execute(ProjectComparisonCategory.Missing);
+        await WaitUntilAsync(() =>
+            shell.ProjectReporting.SelectedCategory == ProjectComparisonCategory.Missing &&
+            shell.ProjectReporting.Comparison?.Rows.Count == 2);
+        Assert.All(
+            shell.ProjectReporting.Comparison!.Rows,
+            static row => Assert.True(
+                (row.Categories & ProjectComparisonCategory.Missing) != 0));
+        shell.ProjectReporting.SelectCategoryCommand.Execute(ProjectComparisonCategory.Missing);
+        await WaitUntilAsync(() =>
+            shell.ProjectReporting.SelectedCategory == ProjectComparisonCategory.None &&
+            shell.ProjectReporting.Comparison?.SelectedCategory == ProjectComparisonCategory.None);
         ProjectComparisonCell cell = shell.ProjectReporting!.Comparison!.Rows
             .Single(static row => row.DisplayName == "Second only")
             .Cells.Single(candidate => candidate.TrackerId == second.Id);

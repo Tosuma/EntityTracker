@@ -1,8 +1,113 @@
 <UserControl x:Class="EntityTracker.Wpf.Views.ProjectDashboardView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:domain="clr-namespace:EntityTracker.Domain;assembly=EntityTracker.Domain"
+             xmlns:projects="clr-namespace:EntityTracker.Application.Projects;assembly=EntityTracker.Application"
+             xmlns:workflow="clr-namespace:EntityTracker.Application.Workflow;assembly=EntityTracker.Application"
              xmlns:views="clr-namespace:EntityTracker.Wpf.Views">
     <UserControl.Resources>
+        <Style x:Key="ComparisonFilterButtonStyle" TargetType="Button">
+            <Setter Property="Margin" Value="0,0,8,8" />
+            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="MinWidth" Value="104" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Surface.Card}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+
+        <DataTemplate x:Key="ComparisonDevelopmentStatusBadgeTemplate">
+            <Border x:Name="Badge"
+                    Padding="8,3"
+                    HorizontalAlignment="Left"
+                    Background="{DynamicResource Brush.Status.NotStarted}"
+                    CornerRadius="10">
+                <TextBlock x:Name="BadgeText"
+                           FontSize="12"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource Brush.Brand.DarkGreen}"
+                           Text="Not started" />
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Surface.Subtle}" />
+                    <Setter TargetName="Badge" Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
+                    <Setter TargetName="Badge" Property="BorderThickness" Value="1" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.Secondary}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Not present" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.InProgress}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.InProgress}" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="In progress" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.ReworkNeeded}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.ReworkNeeded}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Rework needed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.DevelopmentCompleted}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.DevelopmentCompleted}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Dev. completed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.Reconciled}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Reconciled}" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Reconciled" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ComparisonWorkStatusBadgeTemplate">
+            <Border x:Name="Badge" Margin="0,4,0,0" Padding="8,3"
+                    HorizontalAlignment="Left"
+                    Background="{DynamicResource Brush.Surface.Subtle}"
+                    BorderBrush="{DynamicResource Brush.Border.Medium}"
+                    BorderThickness="1"
+                    CornerRadius="10">
+                <TextBlock x:Name="BadgeText" FontSize="12" FontWeight="SemiBold"
+                           Foreground="{DynamicResource Brush.Text.Primary}" />
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.Ready}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Ready}" />
+                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Ready" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.Blocked}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Blocked}" />
+                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Blocked" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.InProgress}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.InProgress}" />
+                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="In progress" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.ReworkNeeded}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.ReworkNeeded}" />
+                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Rework needed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.DevelopmentCompleted}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.DevelopmentCompleted}" />
+                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Dev. completed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.Reconciled}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Reconciled}" />
+                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Reconciled" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
         <DataTemplate x:Key="ComparisonCellTemplate">
             <Button MinWidth="155"
                     MinHeight="72"
@@ -14,10 +119,11 @@
                     IsEnabled="{Binding IsPresent}"
                     Style="{StaticResource SecondaryButtonStyle}">
                 <StackPanel>
-                    <TextBlock FontWeight="SemiBold" Text="{Binding DevelopmentStatus}" />
-                    <TextBlock Margin="0,2,0,0"
-                               Foreground="{DynamicResource Brush.Text.Secondary}"
-                               Text="{Binding WorkStatus}" />
+                    <ContentControl Content="{Binding Model.DevelopmentStatus}"
+                                    ContentTemplate="{StaticResource ComparisonDevelopmentStatusBadgeTemplate}" />
+                    <ContentControl Content="{Binding Model.WorkStatus}"
+                                    ContentTemplate="{StaticResource ComparisonWorkStatusBadgeTemplate}"
+                                    Visibility="{Binding IsPresent, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <TextBlock Margin="0,4,0,0"
                                Foreground="{DynamicResource Brush.Status.ReworkNeeded}"
                                Text="{Binding IssueText}"
@@ -45,9 +151,6 @@
                                Text="Aggregate progress, comparable trackers, and entity-level differences." />
                 </StackPanel>
             </DockPanel>
-
-            <views:AggregateProgressView Margin="0,0,0,22"
-                                         DataContext="{Binding ProjectReporting.Progress}" />
 
             <TextBlock Margin="0,0,0,10" FontSize="20" FontWeight="SemiBold" Text="Trackers" />
             <Border Margin="0,0,0,16" Padding="20">
@@ -107,6 +210,9 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
+            <views:AggregateProgressView Margin="0,8,0,22"
+                                         DataContext="{Binding ProjectReporting.Progress}" />
+
             <Border Margin="0,8,0,0" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
                 <StackPanel>
                     <DockPanel Margin="0,0,0,12">
@@ -123,6 +229,116 @@
                         </StackPanel>
                     </DockPanel>
 
+                    <WrapPanel Margin="0,0,0,8">
+                        <Button AutomationProperties.Name="Filter comparison to missing entities"
+                                Command="{Binding ProjectReporting.SelectCategoryCommand}"
+                                CommandParameter="{x:Static projects:ProjectComparisonCategory.Missing}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ProjectReporting.IsMissingSelected}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green100}" />
+                                            <Setter Property="BorderThickness" Value="2" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <StackPanel>
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Missing" />
+                                <TextBlock Margin="0,2,0,0" FontSize="18" FontWeight="SemiBold"
+                                           Text="{Binding ProjectReporting.MissingCount}" />
+                            </StackPanel>
+                        </Button>
+                        <Button AutomationProperties.Name="Filter comparison to divergent entities"
+                                Command="{Binding ProjectReporting.SelectCategoryCommand}"
+                                CommandParameter="{x:Static projects:ProjectComparisonCategory.Divergent}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ProjectReporting.IsDivergentSelected}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green100}" />
+                                            <Setter Property="BorderThickness" Value="2" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <StackPanel>
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Divergent" />
+                                <TextBlock Margin="0,2,0,0" FontSize="18" FontWeight="SemiBold"
+                                           Text="{Binding ProjectReporting.DivergentCount}" />
+                            </StackPanel>
+                        </Button>
+                        <Button AutomationProperties.Name="Filter comparison to blocked entities"
+                                Command="{Binding ProjectReporting.SelectCategoryCommand}"
+                                CommandParameter="{x:Static projects:ProjectComparisonCategory.Blocked}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ProjectReporting.IsBlockedSelected}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Status.Blocked}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Status.ReworkNeeded}" />
+                                            <Setter Property="BorderThickness" Value="2" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <StackPanel>
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Blocked" />
+                                <TextBlock Margin="0,2,0,0" FontSize="18" FontWeight="SemiBold"
+                                           Text="{Binding ProjectReporting.BlockedCount}" />
+                            </StackPanel>
+                        </Button>
+                        <Button AutomationProperties.Name="Filter comparison to rework entities"
+                                Command="{Binding ProjectReporting.SelectCategoryCommand}"
+                                CommandParameter="{x:Static projects:ProjectComparisonCategory.ReworkNeeded}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ProjectReporting.IsReworkSelected}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Status.ReworkNeeded}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Status.ReworkNeeded}" />
+                                            <Setter Property="BorderThickness" Value="2" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <StackPanel>
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Rework" />
+                                <TextBlock Margin="0,2,0,0" FontSize="18" FontWeight="SemiBold"
+                                           Text="{Binding ProjectReporting.ReworkCount}" />
+                            </StackPanel>
+                        </Button>
+                        <Button AutomationProperties.Name="Filter comparison to unresolved entities"
+                                Command="{Binding ProjectReporting.SelectCategoryCommand}"
+                                CommandParameter="{x:Static projects:ProjectComparisonCategory.Unresolved}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ProjectReporting.IsUnresolvedSelected}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Surface.Alert}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Status.ReworkNeeded}" />
+                                            <Setter Property="BorderThickness" Value="2" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <StackPanel>
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Unresolved" />
+                                <TextBlock Margin="0,2,0,0" FontSize="18" FontWeight="SemiBold"
+                                           Text="{Binding ProjectReporting.UnresolvedCount}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Margin="0,0,8,8"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="Clear comparison category filter"
+                                Command="{Binding ProjectReporting.ClearCategoryCommand}"
+                                Content="Clear filter"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Visibility="{Binding ProjectReporting.HasCategoryFilter, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </WrapPanel>
+
                     <TextBlock Margin="0,8"
                                HorizontalAlignment="Center"
                                Foreground="{DynamicResource Brush.Text.Secondary}"
@@ -132,9 +348,9 @@
                                 HorizontalAlignment="Center"
                                 Visibility="{Binding ProjectReporting.ShowNoActionableRows, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <TextBlock HorizontalAlignment="Center" FontWeight="SemiBold"
-                                   Text="No actionable differences" />
+                                   Text="{Binding ProjectReporting.ComparisonEmptyTitle}" />
                         <TextBlock Margin="0,3,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
-                                   Text="Choose Show all to inspect matching entities." />
+                                   Text="{Binding ProjectReporting.ComparisonEmptyHint}" />
                     </StackPanel>
 
                     <DataGrid x:Name="ComparisonGrid"

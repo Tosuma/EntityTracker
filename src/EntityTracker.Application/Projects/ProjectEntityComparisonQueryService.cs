@@ -14,12 +14,25 @@ public sealed class ProjectEntityComparisonQueryService(
     public async Task<ProjectEntityComparison?> GetAsync(
         ProjectId projectId,
         ProjectComparisonFilter filter = ProjectComparisonFilter.ActionableDifferences,
+        ProjectComparisonCategory category = ProjectComparisonCategory.None,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(projectId);
         if (!Enum.IsDefined(filter))
         {
             throw new ArgumentOutOfRangeException(nameof(filter));
+        }
+
+        const ProjectComparisonCategory allCategories =
+            ProjectComparisonCategory.Missing |
+            ProjectComparisonCategory.Divergent |
+            ProjectComparisonCategory.Blocked |
+            ProjectComparisonCategory.ReworkNeeded |
+            ProjectComparisonCategory.Unresolved;
+        if ((category & ~allCategories) != 0 ||
+            category != ProjectComparisonCategory.None && !IsSingleCategory(category))
+        {
+            throw new ArgumentOutOfRangeException(nameof(category));
         }
 
         Project? project = await projectRepository.GetAsync(projectId, cancellationToken);
@@ -85,12 +98,20 @@ public sealed class ProjectEntityComparisonQueryService(
                 key.Value,
                 displayName,
                 cells,
-                IsActionable(cells));
+                Categorize(cells));
         }).ToArray();
         int actionableCount = allRows.Count(static row => row.IsActionable);
         ProjectComparisonRow[] rows = filter == ProjectComparisonFilter.All
             ? allRows
-            : allRows.Where(static row => row.IsActionable).ToArray();
+            : category == ProjectComparisonCategory.None
+                ? allRows.Where(static row => row.IsActionable).ToArray()
+                : allRows.Where(row => (row.Categories & category) != 0).ToArray();
+        ProjectComparisonCategoryCounts counts = new(
+            Count(ProjectComparisonCategory.Missing),
+            Count(ProjectComparisonCategory.Divergent),
+            Count(ProjectComparisonCategory.Blocked),
+            Count(ProjectComparisonCategory.ReworkNeeded),
+            Count(ProjectComparisonCategory.Unresolved));
 
         return new ProjectEntityComparison(
             projectId,
@@ -98,21 +119,50 @@ public sealed class ProjectEntityComparisonQueryService(
             rows,
             allRows.Length,
             actionableCount,
-            filter);
+            filter,
+            category,
+            counts);
+
+        int Count(ProjectComparisonCategory value) =>
+            allRows.Count(row => (row.Categories & value) != 0);
     }
 
-    private static bool IsActionable(IReadOnlyList<ProjectComparisonCell> cells)
+    private static ProjectComparisonCategory Categorize(
+        IReadOnlyList<ProjectComparisonCell> cells)
     {
-        if (cells.Any(static cell => !cell.IsPresent ||
-                                     cell.HasIssues ||
-                                     cell.DevelopmentStatus == DevelopmentStatus.ReworkNeeded ||
-                                     cell.WorkStatus == EntityWorkflowState.Blocked))
+        ProjectComparisonCategory categories = ProjectComparisonCategory.None;
+        if (cells.Any(static cell => !cell.IsPresent))
         {
-            return true;
+            categories |= ProjectComparisonCategory.Missing;
         }
 
-        return cells.Select(static cell => cell.DevelopmentStatus).Distinct().Skip(1).Any() ||
-               cells.Select(static cell => cell.WorkStatus).Distinct().Skip(1).Any() ||
-               cells.Select(static cell => cell.HasIssues).Distinct().Skip(1).Any();
+        ProjectComparisonCell[] present = cells.Where(static cell => cell.IsPresent).ToArray();
+        if (present.Select(static cell => cell.DevelopmentStatus).Distinct().Skip(1).Any() ||
+            present.Select(static cell => cell.WorkStatus).Distinct().Skip(1).Any())
+        {
+            categories |= ProjectComparisonCategory.Divergent;
+        }
+
+        if (cells.Any(static cell => cell.WorkStatus == EntityWorkflowState.Blocked))
+        {
+            categories |= ProjectComparisonCategory.Blocked;
+        }
+
+        if (cells.Any(static cell =>
+                cell.DevelopmentStatus == DevelopmentStatus.ReworkNeeded ||
+                cell.WorkStatus == EntityWorkflowState.ReworkNeeded))
+        {
+            categories |= ProjectComparisonCategory.ReworkNeeded;
+        }
+
+        if (cells.Any(static cell => cell.HasIssues))
+        {
+            categories |= ProjectComparisonCategory.Unresolved;
+        }
+
+        return categories;
     }
+
+    private static bool IsSingleCategory(ProjectComparisonCategory category) =>
+        ((int)category & ((int)category - 1)) == 0;
 }
