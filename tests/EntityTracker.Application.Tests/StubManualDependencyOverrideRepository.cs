@@ -8,6 +8,7 @@ internal sealed class StubManualDependencyOverrideRepository(
     : IManualDependencyOverrideRepository
 {
     public Task<IReadOnlyList<ManualDependencyOverride>> GetAllAsync(
+        TrackerId trackerId,
         CancellationToken cancellationToken = default) =>
         Task.FromResult(overrides ?? (IReadOnlyList<ManualDependencyOverride>)[]);
 }

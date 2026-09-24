@@ -274,6 +274,7 @@ public sealed class EntityDependencyEditorServiceTests
     {
         TrackedEntity owner = new(
             new EntityId(new Guid(1, 0, 0, new byte[8])),
+            TestTrackerId,
             "Owner",
             DevelopmentStatus.Reconciled,
             "Verified",
@@ -308,6 +309,7 @@ public sealed class EntityDependencyEditorServiceTests
         TrackedEntity active = Entity(2, "ActiveTarget");
         TrackedEntity archived = new(
             Id(3),
+            TestTrackerId,
             "ArchivedTarget",
             lifecycleState: EntityLifecycleState.Archived);
         EntityDependencyEditorService service = Service(
@@ -326,6 +328,7 @@ public sealed class EntityDependencyEditorServiceTests
         TrackedEntity owner = Entity(1, "Owner", groupName: "Current Team");
         TrackedEntity archived = new(
             Id(2),
+            TestTrackerId,
             "Archived",
             lifecycleState: EntityLifecycleState.Archived,
             groupName: "Legacy Team");
@@ -401,6 +404,7 @@ public sealed class EntityDependencyEditorServiceTests
         string? groupName = null) =>
         new(
             Id(id),
+            TestTrackerId,
             name,
             responsibleDeveloper: responsibleDeveloper,
             groupName: groupName);
@@ -417,11 +421,13 @@ public sealed class EntityDependencyEditorServiceTests
         : IEntityRepository
     {
         public Task<TrackedEntity?> GetAsync(
+            TrackerId trackerId,
             EntityId id,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(entities.SingleOrDefault(entity => entity.Id == id));
 
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(entities);
 
     }
@@ -431,9 +437,11 @@ public sealed class EntityDependencyEditorServiceTests
         IReadOnlyList<PersistedUnresolvedDependency> unresolved) : IDependencyRepository
     {
         public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(resolved);
 
         public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(unresolved);
 
     }
@@ -443,6 +451,7 @@ public sealed class EntityDependencyEditorServiceTests
         public TrackedStateChangeSet? LastChangeSet { get; private set; }
 
         public Task ApplyAsync(
+            TrackerId trackerId,
             TrackedStateChangeSet changeSet,
             CancellationToken cancellationToken = default)
         {
@@ -451,6 +460,7 @@ public sealed class EntityDependencyEditorServiceTests
         }
 
         public Task EnsureHistoryBaselineAsync(
+            TrackerId trackerId,
             IEnumerable<TrackedEntity> entities,
             EntityTracker.Application.History.ProgressSnapshotState snapshot,
             CancellationToken cancellationToken = default) => Task.CompletedTask;

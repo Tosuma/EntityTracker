@@ -1,6 +1,7 @@
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
 
 namespace EntityTracker.Application.Workflow;
@@ -40,10 +41,12 @@ public sealed class BulkStatusUpdateService
     }
 
     public async Task<BulkStatusUpdateResult> ApplyAsync(
+        TrackerId trackerId,
         IReadOnlyCollection<EntityId> entityIds,
         DevelopmentStatus targetStatus,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(entityIds);
         if (entityIds.Count == 0)
         {
@@ -69,16 +72,22 @@ public sealed class BulkStatusUpdateService
 
         EntityId[] selectedIds = entityIds.Distinct().ToArray();
         Task<IReadOnlyList<TrackedEntity>> entitiesTask =
-            _entityRepository.GetAllAsync(cancellationToken);
+            _entityRepository.GetAllAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<PersistedDependency>> resolvedTask =
-            _dependencyRepository.GetAllAsync(cancellationToken);
+            _dependencyRepository.GetAllAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
-            _dependencyRepository.GetAllUnresolvedAsync(cancellationToken);
+            _dependencyRepository.GetAllUnresolvedAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
-            _overrideRepository.GetAllAsync(cancellationToken);
+            _overrideRepository.GetAllAsync(trackerId, cancellationToken);
         await Task.WhenAll(entitiesTask, resolvedTask, unresolvedTask, overridesTask);
 
         TrackedEntity[] entities = (await entitiesTask).ToArray();
+        TrackerStateValidator.EnsureOwned(
+            trackerId,
+            entities,
+            await resolvedTask,
+            await unresolvedTask,
+            await overridesTask);
         Dictionary<EntityId, TrackedEntity> entitiesById = entities.ToDictionary(
             static entity => entity.Id);
         foreach (EntityId selectedId in selectedIds)
@@ -101,6 +110,7 @@ public sealed class BulkStatusUpdateService
             .Where(entity => selectedIdSet.Contains(entity.Id) && entity.Status != targetStatus)
             .Select(entity => new TrackedEntity(
                 entity.Id,
+                trackerId,
                 entity.SourceName,
                 targetStatus,
                 entity.Notes,
@@ -128,6 +138,7 @@ public sealed class BulkStatusUpdateService
             await overridesTask);
 
         await _store.ApplyAsync(
+            trackerId,
             new TrackedStateChangeSet(
                 [],
                 [],

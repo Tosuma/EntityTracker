@@ -6,7 +6,5 @@ public enum MainWindowTab
     Archived,
     SchemaSynchronization,
     AddEntity,
-    Progress,
-    SqlHelp,
-    Connections
+    Reports
 }

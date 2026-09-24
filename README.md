@@ -11,7 +11,7 @@ dependency-safe order. It imports PostgreSQL schema relationships, keeps progres
 stable entities, highlights blockers, and turns implementation history into useful progress
 reports.
 
-![EntityTracker overview showing ranked entities, work status, blockers, and progress](images/overview.png)
+![EntityTracker portfolio showing projects and implementation progress](images/light/portfolio.png)
 
 ## Why EntityTracker?
 
@@ -40,10 +40,16 @@ EntityTracker keeps those concerns separate:
   name.
 - **Progress reporting** — inspect current status, implementation history, ready-versus-blocked
   trends, and weekly change; copy or export charts as PNG files.
+- **Project portfolio** — compare entity-weighted Project/Tracker progress, persisted trends, and
+  normalized entity differences without opening another window or database.
+- **Safe catalog management** — create blank, CSV-backed, or copied Trackers and rename, recycle,
+  restore, or guardedly purge Projects and Trackers.
 - **Local-first reliability** — SQLite persistence, automatic daily and pre-migration backups,
   rolling logs, and documented recovery procedures.
+- **Accessible Fluent workflow** — built-in .NET 10 WPF Fluent controls, Light/Dark/System themes,
+  keyboard-safe dialogs, visible focus, labeled status, and automation names for repeated actions.
 - **Replaceable core** — Domain, Application, and Reporting remain independent of WPF, SQLite,
-  CSV libraries, and future SharePoint infrastructure.
+  CSV libraries, and future synchronization infrastructure.
 
 ## How it works
 
@@ -51,38 +57,79 @@ EntityTracker keeps those concerns separate:
 2. Choose Complete or Partial synchronization and review every actionable difference.
 3. Apply the reviewed schema while EntityTracker preserves stable progress, notes, and history.
 4. Use dependency-safe rank, readiness, blockers, filters, and search to choose the next work item.
-5. Update work status and use the Progress page to communicate delivery trends.
+5. Update work status and use Reports to communicate delivery trends.
 
 ## Screenshots
 
 <!-- Generated with scripts/Generate-ReadmeScreenshots.ps1. See docs/DEVELOPMENT.md. -->
 
+The deterministic screenshot suite contains matching [`images/light`](images/light) and
+[`images/dark`](images/dark) captures for every state shown below. The README uses the light set
+for consistency.
+
 <table>
+  <tr>
+    <td width="50%">
+      <strong>Manage the implementation portfolio</strong><br />
+      Compare active Projects using entity-weighted progress summaries.<br /><br />
+      <img src="images/light/portfolio.png" alt="EntityTracker portfolio with active project summary cards" />
+    </td>
+    <td width="50%">
+      <strong>Compare related Trackers</strong><br />
+      Review aggregate history, per-Tracker context, and actionable entity differences.<br /><br />
+      <img src="images/light/project-dashboard.png" alt="EntityTracker project dashboard with tracker summary cards" />
+    </td>
+  </tr>
   <tr>
     <td width="50%">
       <strong>Review schema synchronization</strong><br />
       Compare a complete or partial PostgreSQL snapshot before changing tracked state.<br /><br />
-      <img src="images/schema-synchronization.png" alt="Schema Synchronization page with Complete and Partial import choices" />
+      <img src="images/light/schema-synchronization.png" alt="Schema Synchronization page with Complete and Partial import choices" />
     </td>
     <td width="50%">
-      <strong>Track progress over time</strong><br />
+      <strong>Report progress over time</strong><br />
       See manager summaries, status distribution, implementation history, and blockers.<br /><br />
-      <img src="images/progress.png" alt="Progress page with status pie chart and implementation history charts" />
+      <img src="images/light/progress.png" alt="Reports page with status pie chart and implementation history charts" />
     </td>
   </tr>
   <tr>
     <td width="50%">
       <strong>Create tracked entities</strong><br />
       Add manual entities with resolved or deliberately unresolved dependencies.<br /><br />
-      <img src="images/add-entity.png" alt="Add Entity page for creating a tracked entity and selecting dependencies" />
+      <img src="images/light/add-entity.png" alt="Add Entity page for creating a tracked entity and selecting dependencies" />
     </td>
     <td width="50%">
       <strong>Edit without losing imported facts</strong><br />
       Update work status, notes, lifecycle, and manual dependency corrections.<br /><br />
-      <img src="images/edit-entity.png" alt="Edit Entity modal with status, notes, dependencies, and archive controls" />
+      <img src="images/light/edit-entity.png" alt="Edit Entity modal with status, notes, dependencies, and archive controls" />
     </td>
   </tr>
 </table>
+
+### Compare sibling Trackers
+
+The Project matrix aligns active entities by normalized source key. It starts with actionable
+differences—including missing entities, divergent statuses, blockers, rework, and unresolved
+references—and can explicitly show all entities. The category cards filter the matrix and reuse
+the Overview status colors for fast scanning. Each present cell opens that entity in its Tracker's
+Overview after the normal unsaved-work confirmation.
+
+![Project entity comparison with labeled statuses and explicit missing entities](images/light/project-comparison.png)
+
+### Manage Tracker lifecycle
+
+Recycling a Tracker is reversible and returns to its owning Project dashboard. The Project-scoped
+recycle bin keeps the removed Tracker available for restore without losing its entities or history;
+restoring it also returns to that Project dashboard.
+
+| Recycle confirmation | Project recycle bin | Restored Project dashboard |
+| --- | --- | --- |
+| ![Confirm recycling a Tracker](images/light/tracker-recycle-confirmation.png) | ![Project recycle bin with a Tracker available to restore](images/light/tracker-recycle-bin.png) | ![Project dashboard after restoring its Tracker](images/light/project-dashboard-tracker-restored.png) |
+
+Permanent deletion is deliberately separate from recycling, lists the affected data, requires the
+exact Tracker name, and starts with focus on the safe Cancel action.
+
+![Guarded permanent Tracker deletion confirmation](images/light/tracker-permanent-delete-confirmation.png)
 
 ### Find and maintain tracked entities
 
@@ -92,52 +139,78 @@ different columns work together. Status summary cards remain useful one-click sh
 entity names and, when needed, dependency names from the overview; the same search opens with
 <kbd>Ctrl</kbd>+<kbd>F</kbd>.
 
-![EntityTracker overview filtered by the dependency name unit](images/overview-search.png)
+![EntityTracker Work status column filter with staged choices and typed sorting](images/light/overview-filter-flyout.png)
+
+![EntityTracker overview filtered by the dependency name unit](images/light/overview-search.png)
 
 Archived entities have their own tab and independent search, filters, and Status sort. They remain
 available as read-only records with their progress, notes, and dependencies intact and can be
 deliberately restored from the archived view.
 
-![Archived EntityTracker entity with its preserved details and Restore entity action](images/archived-entity.png)
+Entity names and each row's **View details** action open a read-only side pane with priorities,
+rank, provenance, assignment, full notes, effective dependencies, blockers, and audit timestamps.
+Opening or closing this pane does not disturb bulk row selection; editing remains in the row action
+menu.
+
+The Add Entity and edit workflows use searchable Fluent suggestion controls. Unknown dependency
+names are added only through the explicit **Add as unresolved** action, while archive remains a
+separate reversible action with confirmation.
+
+![EntityTracker read-only entity details pane](images/light/overview-details.png)
+
+![EntityTracker edit modal focused on dependencies and explicit unresolved additions](images/light/edit-entity-dependencies.png)
+
+![EntityTracker reversible archive confirmation naming the selected entity](images/light/archive-entity-confirmation.png)
+
+![Archived EntityTracker entity with its preserved details and Restore entity action](images/light/archived-entity.png)
+
+![EntityTracker read-only archived entity details pane with preserved dependencies](images/light/archived-details.png)
 
 ### Understand dependency blockers
 
 Entities with unresolved references—or dependencies that are themselves unresolved—are marked
 directly in the overview. Selecting the warning icon explains the graph state and lists the
-unresolved names affecting that entity, while the Missing Dependencies column shows outstanding
-implementation work.
+unresolved names affecting that entity, while the Blockers column shows unresolved or not-yet-
+implemented direct dependencies.
 
-![EntityTracker overview showing dependency warning icons, missing dependencies, and details for an upstream-unresolved entity](images/overview-missing-entities-as-dependencies.png)
+![EntityTracker overview showing dependency warning icons, missing dependencies, and details for an upstream-unresolved entity](images/light/overview-missing-entities-as-dependencies.png)
 
 ### Import review details
+
+Changed entities show dependency additions and removals directly, with any required progress choice
+kept beside the affected entity before Apply becomes available.
+
+![Schema synchronization review showing dependency additions, removals, and progress-impact choices](images/light/schema-synchronization-changed-entities.png)
 
 Complete imports make potentially removed entities explicit before anything is saved. Entities
 missing from the new snapshot are proposed for soft-archiving, while their progress and notes are
 preserved.
 
-![Schema synchronization review showing entities missing from a Complete snapshot and proposed for soft-archiving](images/schema-synchronization-import-csv-with-missing-entities.png)
+![Schema synchronization review showing entities missing from a Complete snapshot and proposed for soft-archiving](images/light/schema-synchronization-import-csv-with-missing-entities.png)
 
 Unknown dependency references do not make an otherwise valid import fail. EntityTracker retains
 them as unresolved dependencies, shows exactly which entities are affected, and keeps them blocked
 until matching entities become available.
 
-![Schema synchronization review showing retained unresolved dependencies and their missing entity names](images/schema-synchronization-unresolved-dependencies.png)
+![Schema synchronization review showing retained unresolved dependencies and their missing entity names](images/light/schema-synchronization-unresolved-dependencies.png)
 
 ### Extract a PostgreSQL schema
 
-The built-in helper provides the versioned PostgreSQL query used to produce a compatible schema
-CSV without requiring a live database connection inside EntityTracker.
+Help & SQL explains Portfolio, Project, and Tracker context; statuses and blockers; import modes;
+Reports; and lifecycle actions. It also provides the versioned PostgreSQL query used to produce a
+compatible schema CSV without requiring a live database connection inside EntityTracker.
 
-![EntityTracker PostgreSQL schema extraction query helper](images/sql-query.png)
+![EntityTracker Help and SQL guidance](images/light/help-and-sql.png)
+
+![EntityTracker PostgreSQL schema extraction query helper](images/light/sql-query.png)
 
 ## Project status
 
-Product Milestones 1–12 are complete. EntityTracker currently uses SQLite as its active store. The
-Connections page can save non-secret SharePoint setup, but this release does not authenticate,
-connect, or synchronize with SharePoint.
+Product Milestones 1–12 and UX Milestones UX-01 through UX-08 are complete. EntityTracker uses
+SQLite as its local catalog and working store. Obsolete SharePoint presentation and runtime
+configuration have been retired, and the application exposes no remote synchronization control.
 
-Live SharePoint integration is planned in
-[Milestone 13](docs/milestones/13_sharepoint_integration.md). A separate
+A separate
 [PF-01–PF-05 product feedback milestone group](docs/milestones/00_README.md#product-feedback-milestones)
 plans bulk status updates, customer priority, responsible-developer and group metadata, and
 column filtering with status-order sorting without extending the numbered roadmap. The independent
@@ -166,8 +239,9 @@ Domain model
 
 Business rules do not depend on WPF or infrastructure technologies. Read the
 [architecture rules](docs/architecture/ARCHITECTURE.md) and
-[collaborative storage contract](docs/architecture/COLLABORATIVE_STORAGE.md) for the boundaries and
-future SharePoint semantics.
+[collaborative storage contract](docs/architecture/COLLABORATIVE_STORAGE.md) for the historical
+storage boundary. Any future Project-level Git synchronization requires a separately approved
+design and is not exposed by this release.
 
 ## Getting started
 

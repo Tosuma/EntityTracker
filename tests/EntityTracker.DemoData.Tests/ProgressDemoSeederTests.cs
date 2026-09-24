@@ -16,10 +16,12 @@ public sealed class ProgressDemoSeederTests
         await using TemporaryDatabase file = new();
         SqliteDatabase database = new(file.DatabasePath);
         await database.InitializeAsync();
+        Tracker tracker = Assert.Single(await new SqliteTrackerRepository(database).GetAllAsync());
 
         TrackedEntity[] active = Enumerable.Range(1, 10)
             .Select(index => new TrackedEntity(
                 new EntityId(Guid.Parse($"10000000-0000-0000-0000-{index:D12}")),
+                tracker.Id,
                 $"Entity {index:D2}",
                 index % 2 == 0
                     ? DevelopmentStatus.Reconciled
@@ -31,6 +33,7 @@ public sealed class ProgressDemoSeederTests
             .ToArray();
         TrackedEntity archived = new(
             new EntityId(Guid.Parse("20000000-0000-0000-0000-000000000001")),
+            tracker.Id,
             "Archived entity",
             DevelopmentStatus.Reconciled,
             "Keep archived note",
@@ -46,7 +49,7 @@ public sealed class ProgressDemoSeederTests
             active[3].Id,
             active[0].SourceName,
             ManualDependencyOverrideAction.Add);
-        await new SqliteTrackedStateStore(database).ApplyAsync(new TrackedStateChangeSet(
+        await new SqliteTrackedStateStore(database).ApplyAsync(tracker.Id, new TrackedStateChangeSet(
             [.. active, archived],
             [],
             [],
@@ -57,15 +60,15 @@ public sealed class ProgressDemoSeederTests
             manualDependencyOverrides: [dependencyOverride]));
 
         EntityProjection[] expectedEntities = (await new SqliteEntityRepository(database)
-                .GetAllAsync())
+                .GetAllAsync(tracker.Id))
             .Select(EntityProjection.From)
             .ToArray();
         PersistedDependency[] expectedResolved =
-            (await new SqliteDependencyRepository(database).GetAllAsync()).ToArray();
+            (await new SqliteDependencyRepository(database).GetAllAsync(tracker.Id)).ToArray();
         PersistedUnresolvedDependency[] expectedUnresolved =
-            (await new SqliteDependencyRepository(database).GetAllUnresolvedAsync()).ToArray();
+            (await new SqliteDependencyRepository(database).GetAllUnresolvedAsync(tracker.Id)).ToArray();
         ManualDependencyOverride[] expectedOverrides =
-            (await new SqliteManualDependencyOverrideRepository(database).GetAllAsync()).ToArray();
+            (await new SqliteManualDependencyOverrideRepository(database).GetAllAsync(tracker.Id)).ToArray();
 
         ProgressDemoOptions options = new(
             days: 90,
@@ -78,18 +81,22 @@ public sealed class ProgressDemoSeederTests
 
         SqliteDatabase seededDatabase = new(file.DatabasePath);
         await seededDatabase.InitializeAsync();
+        Tracker seededTracker = Assert.Single(
+            await new SqliteTrackerRepository(seededDatabase).GetAllAsync());
         TrackedEntity[] seededEntities =
-            (await new SqliteEntityRepository(seededDatabase).GetAllAsync()).ToArray();
+            (await new SqliteEntityRepository(seededDatabase).GetAllAsync(seededTracker.Id)).ToArray();
         Assert.Equal(expectedEntities, seededEntities.Select(EntityProjection.From));
         Assert.Equal(
             expectedResolved,
-            await new SqliteDependencyRepository(seededDatabase).GetAllAsync());
+            await new SqliteDependencyRepository(seededDatabase).GetAllAsync(seededTracker.Id));
         Assert.Equal(
             expectedUnresolved,
-            await new SqliteDependencyRepository(seededDatabase).GetAllUnresolvedAsync());
+            await new SqliteDependencyRepository(seededDatabase).GetAllUnresolvedAsync(
+                seededTracker.Id));
         Assert.Equal(
             expectedOverrides,
-            await new SqliteManualDependencyOverrideRepository(seededDatabase).GetAllAsync());
+            await new SqliteManualDependencyOverrideRepository(seededDatabase).GetAllAsync(
+                seededTracker.Id));
 
         TrackedEntity seededArchived = Assert.Single(
             seededEntities,
@@ -106,9 +113,9 @@ public sealed class ProgressDemoSeederTests
 
         SqliteProgressHistoryRepository historyRepository = new(seededDatabase);
         EntityStatusHistoryEntry[] history =
-            (await historyRepository.GetStatusHistoryAsync()).ToArray();
+            (await historyRepository.GetStatusHistoryAsync(seededTracker.Id)).ToArray();
         ProgressSnapshot[] snapshots =
-            (await historyRepository.GetProgressSnapshotsAsync()).ToArray();
+            (await historyRepository.GetProgressSnapshotsAsync(seededTracker.Id)).ToArray();
         Assert.Equal(seededEntities.Length + result.TransitionCount, history.Length);
         Assert.Equal(result.SnapshotCount, snapshots.Length);
         Assert.True(snapshots.Select(static snapshot => snapshot.RecordedAtUtc.Date).Distinct().Count() > 10);
@@ -131,11 +138,13 @@ public sealed class ProgressDemoSeederTests
         await using TemporaryDatabase file = new();
         SqliteDatabase database = new(file.DatabasePath);
         await database.InitializeAsync();
+        Tracker tracker = Assert.Single(await new SqliteTrackerRepository(database).GetAllAsync());
         TrackedEntity archived = new(
             EntityId.New(),
+            tracker.Id,
             "Archived",
             lifecycleState: EntityLifecycleState.Archived);
-        await new SqliteTrackedStateStore(database).ApplyAsync(new TrackedStateChangeSet(
+        await new SqliteTrackedStateStore(database).ApplyAsync(tracker.Id, new TrackedStateChangeSet(
             [archived], [], [], [], [], []));
         SqliteConnection.ClearAllPools();
         byte[] original = await File.ReadAllBytesAsync(file.DatabasePath);

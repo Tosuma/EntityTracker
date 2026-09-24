@@ -22,27 +22,33 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         _database = database;
     }
 
+    internal SqliteDatabase Database => _database;
+
     public async Task ApplyAsync(
+        TrackerId trackerId,
         TrackedStateChangeSet changeSet,
         CancellationToken cancellationToken = default)
     {
-        await ApplyInternalAsync(changeSet, null, cancellationToken);
+        await ApplyInternalAsync(trackerId, changeSet, null, cancellationToken);
     }
 
     public async Task<SchemaImportSummary> ApplyAsync(
+        TrackerId trackerId,
         TrackedStateChangeSet changeSet,
         SchemaImportCompletion completion,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(completion);
-        return (await ApplyInternalAsync(changeSet, completion, cancellationToken))!;
+        return (await ApplyInternalAsync(trackerId, changeSet, completion, cancellationToken))!;
     }
 
     private async Task<SchemaImportSummary?> ApplyInternalAsync(
+        TrackerId trackerId,
         TrackedStateChangeSet changeSet,
         SchemaImportCompletion? completion,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(changeSet);
 
         DateTimeOffset appliedAtUtc = _database.TimeProvider.GetUtcNow();
@@ -54,11 +60,18 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
 
         try
         {
+            await ValidateScopeAsync(
+                connection,
+                transaction,
+                trackerId,
+                changeSet,
+                cancellationToken);
             foreach (TrackedEntity entity in changeSet.EntitiesToAdd)
             {
                 await InsertEntityAsync(
                     connection,
                     transaction,
+                    trackerId,
                     entity,
                     timestamp,
                     cancellationToken);
@@ -220,6 +233,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                 await InsertSnapshotIfChangedAsync(
                     connection,
                     transaction,
+                    trackerId,
                     changeSet.ProgressSnapshotAfterChanges,
                     timestamp,
                     cancellationToken);
@@ -232,6 +246,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                 await UpsertImportSummaryAsync(
                     connection,
                     transaction,
+                    trackerId,
                     summary,
                     cancellationToken);
             }
@@ -248,8 +263,10 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
     }
 
     public async Task<SchemaImportSummary?> GetLatestImportAsync(
+        TrackerId trackerId,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         await using SqliteConnection connection =
             await _database.OpenConnectionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
@@ -258,8 +275,9 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                    new_entity_count, changed_entity_count, archived_entity_count,
                    unchanged_entity_count, unresolved_entity_count
             FROM schema_import_summary
-            WHERE singleton_id = 1;
+            WHERE tracker_id = $trackerId;
             """;
+        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
         {
@@ -280,14 +298,20 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
     }
 
     public async Task EnsureHistoryBaselineAsync(
+        TrackerId trackerId,
         IEnumerable<TrackedEntity> entities,
         ProgressSnapshotState snapshot,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(entities);
         ArgumentNullException.ThrowIfNull(snapshot);
 
         TrackedEntity[] entityArray = entities.ToArray();
+        if (entityArray.Any(entity => entity.TrackerId != trackerId))
+        {
+            throw new InvalidOperationException("History baseline entities belong to another tracker.");
+        }
         string timestamp = SqlitePersistenceValues.FormatTimestamp(
             _database.TimeProvider.GetUtcNow());
         await using SqliteConnection connection =
@@ -295,15 +319,24 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         await using SqliteTransaction transaction =
             (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
 
+        await ValidateHistoryScopeAsync(
+            connection,
+            transaction,
+            trackerId,
+            entityArray,
+            cancellationToken);
+
         long historyCount = await CountAsync(
             connection,
             transaction,
             "entity_status_history",
+            trackerId,
             cancellationToken);
         long snapshotCount = await CountAsync(
             connection,
             transaction,
             "progress_snapshots",
+            trackerId,
             cancellationToken);
         if (historyCount > 0 || snapshotCount > 0)
         {
@@ -333,32 +366,93 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         await InsertSnapshotAsync(
             connection,
             transaction,
+            trackerId,
             snapshot,
             timestamp,
             cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
+    private static async Task ValidateHistoryScopeAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        TrackerId trackerId,
+        IReadOnlyCollection<TrackedEntity> entities,
+        CancellationToken cancellationToken)
+    {
+        using (SqliteCommand trackerCommand = CreateCommand(connection, transaction, """
+            SELECT COUNT(*)
+            FROM trackers tracker
+            INNER JOIN projects project ON project.id = tracker.project_id
+            WHERE tracker.id = $trackerId
+              AND tracker.lifecycle_state = 'Active'
+              AND project.lifecycle_state = 'Active';
+            """))
+        {
+            trackerCommand.Parameters.AddWithValue(
+                "$trackerId",
+                SqlitePersistenceValues.Format(trackerId));
+            if (Convert.ToInt64(
+                    await trackerCommand.ExecuteScalarAsync(cancellationToken),
+                    System.Globalization.CultureInfo.InvariantCulture) != 1)
+            {
+                throw new InvalidOperationException("The selected tracker is not active.");
+            }
+        }
+
+        if (entities.Count == 0)
+        {
+            return;
+        }
+
+        using SqliteCommand entityCommand = CreateCommand(connection, transaction, $"""
+            SELECT COUNT(*)
+            FROM tracked_entities
+            WHERE tracker_id = $trackerId
+              AND id IN ({string.Join(", ", entities.Select((_, index) => $"$entityId{index}"))});
+            """);
+        entityCommand.Parameters.AddWithValue(
+            "$trackerId",
+            SqlitePersistenceValues.Format(trackerId));
+        int index = 0;
+        foreach (TrackedEntity entity in entities)
+        {
+            entityCommand.Parameters.AddWithValue(
+                $"$entityId{index++}",
+                SqlitePersistenceValues.Format(entity.Id));
+        }
+
+        long ownedCount = Convert.ToInt64(
+            await entityCommand.ExecuteScalarAsync(cancellationToken),
+            System.Globalization.CultureInfo.InvariantCulture);
+        if (ownedCount != entities.Select(static entity => entity.Id).Distinct().Count())
+        {
+            throw new InvalidOperationException(
+                "History baseline entities are not owned by the selected tracker.");
+        }
+    }
+
     private static async Task UpsertImportSummaryAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
+        TrackerId trackerId,
         SchemaImportSummary summary,
         CancellationToken cancellationToken)
     {
         using SqliteCommand command = CreateCommand(connection, transaction, """
             INSERT INTO schema_import_summary
             (
-                singleton_id, applied_at_utc, source_file_name, import_mode,
+                tracker_id, applied_at_utc, source_file_name, import_mode,
                 new_entity_count, changed_entity_count, archived_entity_count,
                 unchanged_entity_count, unresolved_entity_count
             )
             VALUES
             (
-                1, $appliedAtUtc, $sourceFileName, $importMode,
+                $trackerId, $appliedAtUtc, $sourceFileName, $importMode,
                 $newCount, $changedCount, $archivedCount,
                 $unchangedCount, $unresolvedCount
             )
-            ON CONFLICT (singleton_id)
+            ON CONFLICT (tracker_id)
             DO UPDATE SET
                 applied_at_utc = excluded.applied_at_utc,
                 source_file_name = excluded.source_file_name,
@@ -369,6 +463,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                 unchanged_entity_count = excluded.unchanged_entity_count,
                 unresolved_entity_count = excluded.unresolved_entity_count;
             """);
+        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
         command.Parameters.AddWithValue(
             "$appliedAtUtc",
             SqlitePersistenceValues.FormatTimestamp(summary.AppliedAtUtc));
@@ -386,12 +481,19 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         SqliteConnection connection,
         SqliteTransaction transaction,
         string tableName,
+        TrackerId trackerId,
         CancellationToken cancellationToken)
     {
-        using SqliteCommand command = CreateCommand(
-            connection,
-            transaction,
-            $"SELECT COUNT(*) FROM {tableName};");
+        string sql = tableName == "entity_status_history"
+            ? """
+                SELECT COUNT(*)
+                FROM entity_status_history history
+                INNER JOIN tracked_entities entity ON entity.id = history.entity_id
+                WHERE entity.tracker_id = $trackerId;
+                """
+            : $"SELECT COUNT(*) FROM {tableName} WHERE tracker_id = $trackerId;";
+        using SqliteCommand command = CreateCommand(connection, transaction, sql);
+        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
         object? value = await command.ExecuteScalarAsync(cancellationToken);
         return Convert.ToInt64(value, System.Globalization.CultureInfo.InvariantCulture);
     }
@@ -448,6 +550,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
     private static async Task InsertSnapshotIfChangedAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
+        TrackerId trackerId,
         ProgressSnapshotState snapshot,
         string timestamp,
         CancellationToken cancellationToken)
@@ -456,9 +559,11 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
             SELECT ready_count, blocked_count, in_progress_count, rework_needed_count,
                    development_completed_count, reconciled_count
             FROM progress_snapshots
+            WHERE tracker_id = $trackerId
             ORDER BY id DESC
             LIMIT 1;
             """);
+        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
         bool unchanged;
         await using (SqliteDataReader reader =
                      await command.ExecuteReaderAsync(cancellationToken))
@@ -477,6 +582,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
             await InsertSnapshotAsync(
                 connection,
                 transaction,
+                trackerId,
                 snapshot,
                 timestamp,
                 cancellationToken);
@@ -486,6 +592,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
     private static async Task InsertSnapshotAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
+        TrackerId trackerId,
         ProgressSnapshotState snapshot,
         string timestamp,
         CancellationToken cancellationToken)
@@ -493,15 +600,16 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         using SqliteCommand command = CreateCommand(connection, transaction, """
             INSERT INTO progress_snapshots
             (
-                recorded_at_utc, ready_count, blocked_count, in_progress_count,
+                tracker_id, recorded_at_utc, ready_count, blocked_count, in_progress_count,
                 rework_needed_count, development_completed_count, reconciled_count
             )
             VALUES
             (
-                $timestamp, $ready, $blocked, $inProgress, $rework,
+                $trackerId, $timestamp, $ready, $blocked, $inProgress, $rework,
                 $developmentCompleted, $reconciled
             );
             """);
+        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
         command.Parameters.AddWithValue("$timestamp", timestamp);
         command.Parameters.AddWithValue("$ready", snapshot.ReadyCount);
         command.Parameters.AddWithValue("$blocked", snapshot.BlockedCount);
@@ -517,26 +625,32 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
     private static async Task InsertEntityAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
+        TrackerId trackerId,
         TrackedEntity entity,
         string timestamp,
         CancellationToken cancellationToken)
     {
+        if (entity.TrackerId != trackerId)
+        {
+            throw new InvalidOperationException("The entity belongs to another tracker.");
+        }
         using SqliteCommand command = CreateCommand(connection, transaction, """
             INSERT INTO tracked_entities
             (
-                id, source_key, source_name, development_status, notes,
+                id, tracker_id, source_key, source_name, development_status, notes,
                 lifecycle_state, provenance, requested_priority, responsible_developer, group_name,
                 created_at_utc, schema_updated_at_utc,
                 progress_updated_at_utc
             )
             VALUES
             (
-                $id, $sourceKey, $sourceName, $developmentStatus, $notes,
+                $id, $trackerId, $sourceKey, $sourceName, $developmentStatus, $notes,
                 $lifecycleState, $provenance, $requestedPriority, $responsibleDeveloper, $groupName,
                 $timestamp, $timestamp, $timestamp
             );
             """);
         AddEntityParameters(command, entity);
+        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
         command.Parameters.AddWithValue("$timestamp", timestamp);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -875,6 +989,83 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         for (int index = 0; index < values.Count; index++)
         {
             command.Parameters.AddWithValue($"$keep{index}", values[index]);
+        }
+    }
+
+    private static async Task ValidateScopeAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        TrackerId trackerId,
+        TrackedStateChangeSet changeSet,
+        CancellationToken cancellationToken)
+    {
+        using (SqliteCommand trackerCommand = CreateCommand(connection, transaction, """
+            SELECT COUNT(*)
+            FROM trackers tracker
+            INNER JOIN projects project ON project.id = tracker.project_id
+            WHERE tracker.id = $trackerId
+              AND tracker.lifecycle_state = 'Active'
+              AND project.lifecycle_state = 'Active';
+            """))
+        {
+            trackerCommand.Parameters.AddWithValue(
+                "$trackerId",
+                SqlitePersistenceValues.Format(trackerId));
+            if (Convert.ToInt64(await trackerCommand.ExecuteScalarAsync(cancellationToken)) != 1)
+            {
+                throw new InvalidOperationException("The selected tracker is not active.");
+            }
+        }
+
+        TrackedEntity[] added = changeSet.EntitiesToAdd.ToArray();
+        if (added.Any(entity => entity.TrackerId != trackerId) ||
+            added.Select(static entity => entity.Id).Distinct().Count() != added.Length)
+        {
+            throw new InvalidOperationException("The change set contains invalid tracker ownership.");
+        }
+
+        HashSet<EntityId> addedIds = added.Select(static entity => entity.Id).ToHashSet();
+        HashSet<EntityId> referencedIds = [];
+        referencedIds.UnionWith(changeSet.EntitiesToUpdate.Select(static entity => entity.Id));
+        referencedIds.UnionWith(changeSet.EntitiesWithProgressToUpdate.Select(static entity => entity.Id));
+        referencedIds.UnionWith(changeSet.EntitiesWithRequestedPriorityToUpdate.Select(static entity => entity.Id));
+        referencedIds.UnionWith(changeSet.EntitiesWithResponsibleDeveloperToUpdate.Select(static entity => entity.Id));
+        referencedIds.UnionWith(changeSet.EntitiesWithGroupNameToUpdate.Select(static entity => entity.Id));
+        referencedIds.UnionWith(changeSet.EntityIdsToArchive);
+        referencedIds.UnionWith(changeSet.EntityIdsToRestore);
+        referencedIds.UnionWith(changeSet.ReconciledOwnerIds);
+        referencedIds.UnionWith(changeSet.ReconciledOverrideOwnerIds);
+        referencedIds.UnionWith(changeSet.ResolvedDependencies.Select(static item => item.Edge.DependentEntityId));
+        referencedIds.UnionWith(changeSet.ResolvedDependencies.Select(static item => item.Edge.DependencyEntityId));
+        referencedIds.UnionWith(changeSet.UnresolvedDependencies.Select(static item => item.Dependency.DependentEntityId));
+        referencedIds.UnionWith(changeSet.ManualDependencyOverrides.Select(static item => item.DependentEntityId));
+        referencedIds.ExceptWith(addedIds);
+
+        foreach (TrackedEntity entity in changeSet.EntitiesToUpdate
+                     .Concat(changeSet.EntitiesWithProgressToUpdate)
+                     .Concat(changeSet.EntitiesWithRequestedPriorityToUpdate)
+                     .Concat(changeSet.EntitiesWithResponsibleDeveloperToUpdate)
+                     .Concat(changeSet.EntitiesWithGroupNameToUpdate))
+        {
+            if (entity.TrackerId != trackerId)
+            {
+                throw new InvalidOperationException("The change set contains an entity from another tracker.");
+            }
+        }
+
+        foreach (EntityId entityId in referencedIds)
+        {
+            using SqliteCommand command = CreateCommand(connection, transaction, """
+                SELECT COUNT(*) FROM tracked_entities
+                WHERE tracker_id = $trackerId AND id = $entityId;
+                """);
+            command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
+            command.Parameters.AddWithValue("$entityId", SqlitePersistenceValues.Format(entityId));
+            if (Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken)) != 1)
+            {
+                throw new InvalidOperationException(
+                    "The change set references an entity outside the selected tracker.");
+            }
         }
     }
 

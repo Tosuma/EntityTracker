@@ -1,7 +1,11 @@
 using EntityTracker.Application.History;
+using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Projects;
 using EntityTracker.Application.Synchronization;
+using EntityTracker.Application.Tracking;
+using EntityTracker.Application.Workflow;
 using EntityTracker.DemoData;
 using EntityTracker.Domain;
 
@@ -11,6 +15,9 @@ namespace EntityTracker.Screenshots;
 
 internal static class ScreenshotDataSeeder
 {
+    internal const string PrimaryProjectName = "Commerce modernization";
+    internal const string PrimaryTrackerName = "Core schema";
+
     internal static readonly DateTimeOffset FixedNow =
         new(2026, 8, 24, 12, 0, 0, TimeSpan.Zero);
 
@@ -38,10 +45,15 @@ internal static class ScreenshotDataSeeder
         {
             await provider.GetRequiredService<IPersistenceInitializer>()
                 .InitializeAsync(cancellationToken);
+            Tracker tracker = (await provider
+                    .GetRequiredService<ITrackerRepository>()
+                    .GetAllAsync(cancellationToken))
+                .Single(static item => item.Name == "Default tracker");
 
             SchemaSynchronizationService synchronization =
                 provider.GetRequiredService<SchemaSynchronizationService>();
             SchemaSynchronizationResult result = await synchronization.PlanAsync(
+                tracker.Id,
                 schemaPath,
                 SchemaImportMode.Complete,
                 cancellationToken);
@@ -56,21 +68,24 @@ internal static class ScreenshotDataSeeder
             }
 
             await synchronization.ApplyAsync(
+                tracker.Id,
                 result.Plan,
                 Path.GetFileName(schemaPath),
                 cancellationToken);
             await provider.GetRequiredService<ProgressHistoryInitializer>()
-                .EnsureInitializedAsync(cancellationToken);
+                .EnsureInitializedAsync(tracker.Id, cancellationToken);
 
             IEntityRepository repository = provider.GetRequiredService<IEntityRepository>();
-            TrackedEntity noteEntity = (await repository.GetAllAsync(cancellationToken))
+            TrackedEntity noteEntity = (await repository.GetAllAsync(tracker.Id, cancellationToken))
                 .Single(static entity => entity.SourceName == "time_zone");
             EntityDependencyEditorService editor =
                 provider.GetRequiredService<EntityDependencyEditorService>();
             EntityDependencyEditPlan editPlan = await editor.LoadAsync(
+                tracker.Id,
                 noteEntity.Id,
                 cancellationToken);
             await editor.SaveAsync(
+                tracker.Id,
                 editPlan,
                 noteEntity.Status,
                 "Coordinate rollout with the platform team.",
@@ -89,5 +104,63 @@ internal static class ScreenshotDataSeeder
             workspace.Paths.DatabasePath,
             options,
             cancellationToken);
+
+        await using ServiceProvider catalogProvider = ScreenshotServiceProviderFactory.Create(
+            workspace.Paths,
+            new ScreenshotCsvFilePicker(),
+            new FixedTimeProvider(FixedNow));
+        await catalogProvider.GetRequiredService<IPersistenceInitializer>()
+            .InitializeAsync(cancellationToken);
+        Project defaultProject = (await catalogProvider
+                .GetRequiredService<IProjectRepository>()
+                .GetAllAsync(cancellationToken))
+            .Single(static item => item.Name == "Default project");
+        Tracker defaultTracker = (await catalogProvider
+                .GetRequiredService<ITrackerRepository>()
+                .GetAllAsync(cancellationToken))
+            .Single(static item => item.Name == "Default tracker");
+        Project customerPlatform = await catalogProvider
+            .GetRequiredService<ProjectManagementService>()
+            .CreateAsync("Customer platform", cancellationToken);
+        TrackerManagementService trackerManagement = catalogProvider
+            .GetRequiredService<TrackerManagementService>();
+        await catalogProvider.GetRequiredService<ProjectManagementService>()
+            .RenameAsync(defaultProject.Id, PrimaryProjectName, cancellationToken);
+        await trackerManagement.RenameAsync(
+            defaultTracker.Id,
+            PrimaryTrackerName,
+            cancellationToken);
+        Tracker releaseReadiness = await trackerManagement.CopyAsync(
+            defaultTracker.Id,
+            defaultProject.Id,
+            "Release readiness",
+            cancellationToken);
+        await trackerManagement.CopyAsync(
+            defaultTracker.Id,
+            customerPlatform.Id,
+            "Data contracts",
+            cancellationToken);
+
+        IEntityRepository releaseEntities = catalogProvider
+            .GetRequiredService<IEntityRepository>();
+        IReadOnlyList<TrackedEntity> copiedEntities = await releaseEntities.GetAllAsync(
+            releaseReadiness.Id,
+            cancellationToken);
+        TrackedEntity changedEntity = copiedEntities.Single(static entity =>
+            entity.SourceName == "customer_preference");
+        await catalogProvider.GetRequiredService<BulkStatusUpdateService>().ApplyAsync(
+            releaseReadiness.Id,
+            [changedEntity.Id],
+            DevelopmentStatus.ReworkNeeded,
+            cancellationToken);
+        TrackedEntity missingEntity = copiedEntities.Single(static entity =>
+            entity.SourceName == "employee_contact");
+        bool archived = await catalogProvider.GetRequiredService<EntityLifecycleService>()
+            .TryArchiveAsync(releaseReadiness.Id, missingEntity.Id, cancellationToken);
+        if (!archived)
+        {
+            throw new InvalidDataException(
+                "The deterministic comparison screenshot could not create a missing entity.");
+        }
     }
 }

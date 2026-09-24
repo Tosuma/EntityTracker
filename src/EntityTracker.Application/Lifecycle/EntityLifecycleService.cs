@@ -2,6 +2,7 @@ using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
+using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
 
 namespace EntityTracker.Application.Lifecycle;
@@ -45,22 +46,30 @@ public sealed class EntityLifecycleService
     }
 
     public async Task<bool> TryArchiveAsync(
+        TrackerId trackerId,
         EntityId entityId,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(entityId);
 
         Task<IReadOnlyList<TrackedEntity>> entitiesTask =
-            _entityRepository.GetAllAsync(cancellationToken);
+            _entityRepository.GetAllAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<PersistedDependency>> resolvedTask =
-            _dependencyRepository.GetAllAsync(cancellationToken);
+            _dependencyRepository.GetAllAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
-            _dependencyRepository.GetAllUnresolvedAsync(cancellationToken);
+            _dependencyRepository.GetAllUnresolvedAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
-            _overrideRepository.GetAllAsync(cancellationToken);
+            _overrideRepository.GetAllAsync(trackerId, cancellationToken);
         await Task.WhenAll(entitiesTask, resolvedTask, unresolvedTask, overridesTask);
 
         TrackedEntity[] entities = (await entitiesTask).ToArray();
+        TrackerStateValidator.EnsureOwned(
+            trackerId,
+            entities,
+            await resolvedTask,
+            await unresolvedTask,
+            await overridesTask);
         TrackedEntity? entity = entities.SingleOrDefault(item => item.Id == entityId);
         if (entity?.LifecycleState != EntityLifecycleState.Active)
         {
@@ -69,6 +78,7 @@ public sealed class EntityLifecycleService
 
         TrackedEntity archived = new(
             entity.Id,
+            trackerId,
             entity.SourceName,
             entity.Status,
             entity.Notes,
@@ -86,6 +96,7 @@ public sealed class EntityLifecycleService
             await unresolvedTask,
             await overridesTask);
         await _store.ApplyAsync(
+            trackerId,
             new TrackedStateChangeSet(
                 [], [], [entityId], [], [], [],
                 progressSnapshotAfterChanges: _snapshotCalculator.Calculate(
@@ -96,22 +107,30 @@ public sealed class EntityLifecycleService
     }
 
     public async Task<EntityRestorationResult> RestoreAsync(
+        TrackerId trackerId,
         EntityId entityId,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(entityId);
 
         Task<IReadOnlyList<TrackedEntity>> entitiesTask =
-            _entityRepository.GetAllAsync(cancellationToken);
+            _entityRepository.GetAllAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<PersistedDependency>> resolvedTask =
-            _dependencyRepository.GetAllAsync(cancellationToken);
+            _dependencyRepository.GetAllAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
-            _dependencyRepository.GetAllUnresolvedAsync(cancellationToken);
+            _dependencyRepository.GetAllUnresolvedAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
-            _overrideRepository.GetAllAsync(cancellationToken);
+            _overrideRepository.GetAllAsync(trackerId, cancellationToken);
         await Task.WhenAll(entitiesTask, resolvedTask, unresolvedTask, overridesTask);
 
         TrackedEntity[] currentEntities = (await entitiesTask).ToArray();
+        TrackerStateValidator.EnsureOwned(
+            trackerId,
+            currentEntities,
+            await resolvedTask,
+            await unresolvedTask,
+            await overridesTask);
         TrackedEntity? archived = currentEntities.SingleOrDefault(entity => entity.Id == entityId);
         if (archived is null)
         {
@@ -125,6 +144,7 @@ public sealed class EntityLifecycleService
 
         TrackedEntity restored = new(
             archived.Id,
+            trackerId,
             archived.SourceName,
             archived.Status,
             archived.Notes,
@@ -154,6 +174,7 @@ public sealed class EntityLifecycleService
         }
 
         await _store.ApplyAsync(
+            trackerId,
             new TrackedStateChangeSet(
                 [],
                 [],

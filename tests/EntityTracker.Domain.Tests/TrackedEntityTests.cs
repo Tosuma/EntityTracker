@@ -2,12 +2,15 @@ namespace EntityTracker.Domain.Tests;
 
 public sealed class TrackedEntityTests
 {
+    private static readonly TrackerId TestTrackerId =
+        new(new Guid("10000000-0000-0000-0000-000000000001"));
+
     [Fact]
     public void Constructor_PreservesIdentityAndSourceNameAndDefaultsStatus()
     {
         EntityId id = EntityId.New();
 
-        TrackedEntity entity = new(id, " sales.Customer ");
+        TrackedEntity entity = new(id, TestTrackerId, " sales.Customer ");
 
         Assert.Same(id, entity.Id);
         Assert.Equal(" sales.Customer ", entity.SourceName);
@@ -25,6 +28,7 @@ public sealed class TrackedEntityTests
     {
         TrackedEntity entity = new(
             EntityId.New(),
+            TestTrackerId,
             "sales.Customer",
             DevelopmentStatus.InProgress,
             " Keep formatting. \nSecond line. ");
@@ -35,7 +39,7 @@ public sealed class TrackedEntityTests
     [Fact]
     public void ChangeSourceName_UpdatesSourceName()
     {
-        TrackedEntity entity = new(EntityId.New(), "sales.Customer");
+        TrackedEntity entity = new(EntityId.New(), TestTrackerId, "sales.Customer");
 
         entity.ChangeSourceName("sales.Client");
 
@@ -45,7 +49,7 @@ public sealed class TrackedEntityTests
     [Fact]
     public void ChangeSourceName_RejectsInvalidValueAndPreservesCurrentName()
     {
-        TrackedEntity entity = new(EntityId.New(), "sales.Customer");
+        TrackedEntity entity = new(EntityId.New(), TestTrackerId, "sales.Customer");
 
         Assert.Throws<ArgumentException>(() => entity.ChangeSourceName("   "));
         Assert.Equal("sales.Customer", entity.SourceName);
@@ -54,7 +58,7 @@ public sealed class TrackedEntityTests
     [Fact]
     public void ChangeNotes_UpdatesNotesWithoutNormalizingText()
     {
-        TrackedEntity entity = new(EntityId.New(), "sales.Customer");
+        TrackedEntity entity = new(EntityId.New(), TestTrackerId, "sales.Customer");
 
         entity.ChangeNotes("  Review with team.  ");
 
@@ -67,12 +71,14 @@ public sealed class TrackedEntityTests
         Assert.Throws<ArgumentNullException>(() =>
             new TrackedEntity(
                 EntityId.New(),
+                TestTrackerId,
                 "sales.Customer",
                 DevelopmentStatus.NotStarted,
                 null!));
 
         TrackedEntity entity = new(
             EntityId.New(),
+            TestTrackerId,
             "sales.Customer",
             DevelopmentStatus.NotStarted,
             "Existing");
@@ -86,6 +92,7 @@ public sealed class TrackedEntityTests
     {
         TrackedEntity entity = new(
             EntityId.New(),
+            TestTrackerId,
             "sales.Customer",
             DevelopmentStatus.InProgress);
 
@@ -102,7 +109,8 @@ public sealed class TrackedEntityTests
     [Fact]
     public void Constructor_RejectsNullIdentity()
     {
-        Assert.Throws<ArgumentNullException>(() => new TrackedEntity(null!, "sales.Customer"));
+        Assert.Throws<ArgumentNullException>(() =>
+            new TrackedEntity(null!, TestTrackerId, "sales.Customer"));
     }
 
     [Theory]
@@ -111,20 +119,25 @@ public sealed class TrackedEntityTests
     [InlineData("   ")]
     public void Constructor_RejectsMissingSourceName(string? sourceName)
     {
-        Assert.ThrowsAny<ArgumentException>(() => new TrackedEntity(EntityId.New(), sourceName!));
+        Assert.ThrowsAny<ArgumentException>(() =>
+            new TrackedEntity(EntityId.New(), TestTrackerId, sourceName!));
     }
 
     [Fact]
     public void Constructor_RejectsUndefinedStatus()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new TrackedEntity(EntityId.New(), "sales.Customer", (DevelopmentStatus)999));
+            new TrackedEntity(
+                EntityId.New(),
+                TestTrackerId,
+                "sales.Customer",
+                (DevelopmentStatus)999));
     }
 
     [Fact]
     public void ChangeStatus_RejectsUndefinedStatusAndPreservesCurrentStatus()
     {
-        TrackedEntity entity = new(EntityId.New(), "sales.Customer");
+        TrackedEntity entity = new(EntityId.New(), TestTrackerId, "sales.Customer");
 
         Assert.Throws<ArgumentOutOfRangeException>(() => entity.ChangeStatus((DevelopmentStatus)999));
         Assert.Equal(DevelopmentStatus.NotStarted, entity.Status);
@@ -133,7 +146,7 @@ public sealed class TrackedEntityTests
     [Fact]
     public void LifecycleState_CanBeArchivedAndReactivated()
     {
-        TrackedEntity entity = new(EntityId.New(), "sales.Customer");
+        TrackedEntity entity = new(EntityId.New(), TestTrackerId, "sales.Customer");
 
         entity.ChangeLifecycleState(EntityLifecycleState.Archived);
         Assert.Equal(EntityLifecycleState.Archived, entity.LifecycleState);
@@ -147,10 +160,11 @@ public sealed class TrackedEntityTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new TrackedEntity(
             EntityId.New(),
+            TestTrackerId,
             "sales.Customer",
             lifecycleState: (EntityLifecycleState)999));
 
-        TrackedEntity entity = new(EntityId.New(), "sales.Customer");
+        TrackedEntity entity = new(EntityId.New(), TestTrackerId, "sales.Customer");
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             entity.ChangeLifecycleState((EntityLifecycleState)999));
         Assert.Equal(EntityLifecycleState.Active, entity.LifecycleState);
@@ -161,6 +175,7 @@ public sealed class TrackedEntityTests
     {
         TrackedEntity entity = new(
             EntityId.New(),
+            TestTrackerId,
             "sales.Customer",
             provenance: EntityProvenance.ManualOnly);
 
@@ -170,14 +185,29 @@ public sealed class TrackedEntityTests
     }
 
     [Fact]
+    public void CopiedProvenance_CanTransitionToCopiedAndImported()
+    {
+        TrackedEntity entity = new(
+            EntityId.New(),
+            TestTrackerId,
+            "sales.Customer",
+            provenance: EntityProvenance.Copied);
+
+        entity.ChangeProvenance(EntityProvenance.CopiedAndImported);
+
+        Assert.Equal(EntityProvenance.CopiedAndImported, entity.Provenance);
+    }
+
+    [Fact]
     public void Provenance_RejectsUndefinedOrInvalidTransitions()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new TrackedEntity(
             EntityId.New(),
+            TestTrackerId,
             "sales.Customer",
             provenance: (EntityProvenance)999));
 
-        TrackedEntity imported = new(EntityId.New(), "sales.Customer");
+        TrackedEntity imported = new(EntityId.New(), TestTrackerId, "sales.Customer");
         Assert.Throws<InvalidOperationException>(() =>
             imported.ChangeProvenance(EntityProvenance.ManualAndImported));
         Assert.Equal(EntityProvenance.Imported, imported.Provenance);
@@ -193,6 +223,7 @@ public sealed class TrackedEntityTests
     {
         TrackedEntity entity = new(
             EntityId.New(),
+            TestTrackerId,
             "sales.Customer",
             requestedPriority: priority);
 
@@ -210,11 +241,13 @@ public sealed class TrackedEntityTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new TrackedEntity(
             EntityId.New(),
+            TestTrackerId,
             "sales.Customer",
             requestedPriority: priority));
 
         TrackedEntity entity = new(
             EntityId.New(),
+            TestTrackerId,
             "sales.Customer",
             requestedPriority: 3);
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -232,6 +265,7 @@ public sealed class TrackedEntityTests
     {
         TrackedEntity entity = new(
             EntityId.New(),
+            TestTrackerId,
             "sales.Customer",
             responsibleDeveloper: value);
 
@@ -246,6 +280,7 @@ public sealed class TrackedEntityTests
     {
         TrackedEntity entity = new(
             EntityId.New(),
+            TestTrackerId,
             "sales.Customer",
             responsibleDeveloper: "Existing Team");
 
@@ -264,6 +299,7 @@ public sealed class TrackedEntityTests
     {
         TrackedEntity entity = new(
             EntityId.New(),
+            TestTrackerId,
             "sales.Customer",
             groupName: value);
 
@@ -278,6 +314,7 @@ public sealed class TrackedEntityTests
     {
         TrackedEntity entity = new(
             EntityId.New(),
+            TestTrackerId,
             "sales.Customer",
             groupName: "Existing Group");
 

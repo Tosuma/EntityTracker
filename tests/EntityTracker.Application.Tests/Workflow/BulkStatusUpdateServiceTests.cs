@@ -224,6 +224,7 @@ public sealed class BulkStatusUpdateServiceTests
         string? groupName = null) =>
         new(
             Id(id),
+            TestTrackerId,
             name,
             status,
             lifecycleState: lifecycleState,
@@ -244,11 +245,13 @@ public sealed class BulkStatusUpdateServiceTests
         : IEntityRepository
     {
         public Task<TrackedEntity?> GetAsync(
+            TrackerId trackerId,
             EntityId id,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(entities.SingleOrDefault(entity => entity.Id == id));
 
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(entities);
     }
 
@@ -256,9 +259,11 @@ public sealed class BulkStatusUpdateServiceTests
         IReadOnlyList<PersistedDependency> dependencies) : IDependencyRepository
     {
         public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(dependencies);
 
         public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<PersistedUnresolvedDependency>>([]);
     }
@@ -266,6 +271,7 @@ public sealed class BulkStatusUpdateServiceTests
     private sealed class StubOverrideRepository : IManualDependencyOverrideRepository
     {
         public Task<IReadOnlyList<ManualDependencyOverride>> GetAllAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ManualDependencyOverride>>([]);
     }
@@ -277,6 +283,7 @@ public sealed class BulkStatusUpdateServiceTests
         public TrackedStateChangeSet? LastChangeSet { get; private set; }
 
         public Task ApplyAsync(
+            TrackerId trackerId,
             TrackedStateChangeSet changeSet,
             CancellationToken cancellationToken = default)
         {
@@ -286,6 +293,7 @@ public sealed class BulkStatusUpdateServiceTests
         }
 
         public Task EnsureHistoryBaselineAsync(
+            TrackerId trackerId,
             IEnumerable<TrackedEntity> entities,
             ProgressSnapshotState snapshot,
             CancellationToken cancellationToken = default) => Task.CompletedTask;

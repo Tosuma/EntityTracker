@@ -3,6 +3,7 @@ using System.Globalization;
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Persistence;
 
@@ -12,7 +13,13 @@ namespace EntityTracker.DemoData;
 
 public sealed record ProgressDemoOptions
 {
-    public ProgressDemoOptions(int days, int seed, DateOnly endDate, TimeZoneInfo timeZone)
+    public ProgressDemoOptions(
+        int days,
+        int seed,
+        DateOnly endDate,
+        TimeZoneInfo timeZone,
+        string? projectName = null,
+        string? trackerName = null)
     {
         if (days < 7)
         {
@@ -26,6 +33,14 @@ public sealed record ProgressDemoOptions
         Seed = seed;
         EndDate = endDate;
         TimeZone = timeZone;
+        if (string.IsNullOrWhiteSpace(projectName) != string.IsNullOrWhiteSpace(trackerName))
+        {
+            throw new ArgumentException(
+                "ProjectName and TrackerName must be provided together.");
+        }
+
+        ProjectName = string.IsNullOrWhiteSpace(projectName) ? null : projectName.Trim();
+        TrackerName = string.IsNullOrWhiteSpace(trackerName) ? null : trackerName.Trim();
     }
 
     public int Days { get; }
@@ -35,6 +50,10 @@ public sealed record ProgressDemoOptions
     public DateOnly EndDate { get; }
 
     public TimeZoneInfo TimeZone { get; }
+
+    public string? ProjectName { get; }
+
+    public string? TrackerName { get; }
 
     public DateOnly StartDate => EndDate.AddDays(-(Days - 1));
 }
@@ -137,9 +156,21 @@ public sealed class ProgressDemoSeeder
         SqliteDatabase database = new(workingPath, timeProvider);
         await database.InitializeAsync(cancellationToken);
 
+        SqliteProjectRepository projectRepository = new(database);
+        SqliteTrackerRepository trackerRepository = new(database);
+        Project[] activeProjects = (await projectRepository.GetAllAsync(cancellationToken))
+            .Where(static project => project.LifecycleState == CatalogLifecycleState.Active)
+            .ToArray();
+        Project? selectedProject = SelectProject(activeProjects, options.ProjectName);
+        Tracker[] activeTrackers = (await trackerRepository.GetAllAsync(cancellationToken))
+            .Where(item => item.LifecycleState == CatalogLifecycleState.Active &&
+                          (selectedProject is null || item.ProjectId == selectedProject.Id))
+            .ToArray();
+        Tracker tracker = SelectTracker(activeTrackers, options.TrackerName, selectedProject);
+
         SqliteEntityRepository entityRepository = new(database);
         TrackedEntity[] originalEntities =
-            (await entityRepository.GetAllAsync(cancellationToken)).ToArray();
+            (await entityRepository.GetAllAsync(tracker.Id, cancellationToken)).ToArray();
         TrackedEntity[] originalActive = originalEntities
             .Where(static entity => entity.LifecycleState == EntityLifecycleState.Active)
             .ToArray();
@@ -157,6 +188,7 @@ public sealed class ProgressDemoSeeder
             options.Seed);
         await ResetProgressAsync(
             workingPath,
+            tracker.Id,
             timeline.BaselineAtUtc,
             cancellationToken);
 
@@ -167,13 +199,13 @@ public sealed class ProgressDemoSeeder
         ProgressSnapshotCalculator snapshotCalculator = new();
 
         Task<IReadOnlyList<TrackedEntity>> entitiesTask =
-            entityRepository.GetAllAsync(cancellationToken);
+            entityRepository.GetAllAsync(tracker.Id, cancellationToken);
         Task<IReadOnlyList<PersistedDependency>> resolvedTask =
-            dependencyRepository.GetAllAsync(cancellationToken);
+            dependencyRepository.GetAllAsync(tracker.Id, cancellationToken);
         Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
-            dependencyRepository.GetAllUnresolvedAsync(cancellationToken);
+            dependencyRepository.GetAllUnresolvedAsync(tracker.Id, cancellationToken);
         Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
-            overrideRepository.GetAllAsync(cancellationToken);
+            overrideRepository.GetAllAsync(tracker.Id, cancellationToken);
         await Task.WhenAll(entitiesTask, resolvedTask, unresolvedTask, overridesTask);
 
         TrackedEntity[] entities = (await entitiesTask).ToArray();
@@ -184,6 +216,7 @@ public sealed class ProgressDemoSeeder
             await overridesTask);
         timeProvider.SetUtcNow(timeline.BaselineAtUtc);
         await store.EnsureHistoryBaselineAsync(
+            tracker.Id,
             entities,
             snapshotCalculator.Calculate(entities, effectiveDependencies),
             cancellationToken);
@@ -203,6 +236,7 @@ public sealed class ProgressDemoSeeder
             }
 
             await store.ApplyAsync(
+                tracker.Id,
                 new TrackedStateChangeSet(
                     [],
                     [],
@@ -219,6 +253,7 @@ public sealed class ProgressDemoSeeder
 
         return await ValidateAndCreateResultAsync(
             database,
+            tracker.Id,
             destinationPath,
             options,
             timeline,
@@ -227,8 +262,60 @@ public sealed class ProgressDemoSeeder
             cancellationToken);
     }
 
+    private static Project? SelectProject(
+        IReadOnlyList<Project> activeProjects,
+        string? projectName)
+    {
+        if (projectName is null)
+        {
+            return null;
+        }
+
+        Project[] matches = activeProjects
+            .Where(project => string.Equals(project.Name, projectName, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        return matches.Length switch
+        {
+            1 => matches[0],
+            0 => throw new InvalidOperationException(
+                $"No active Project named '{projectName}' was found."),
+            _ => throw new InvalidOperationException(
+                $"More than one active Project is named '{projectName}'. Select it by ID or rename the duplicate.")
+        };
+    }
+
+    private static Tracker SelectTracker(
+        IReadOnlyList<Tracker> activeTrackers,
+        string? trackerName,
+        Project? selectedProject)
+    {
+        Tracker[] matches = trackerName is null
+            ? activeTrackers.ToArray()
+            : activeTrackers
+                .Where(tracker => string.Equals(
+                    tracker.Name,
+                    trackerName,
+                    StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+        if (matches.Length == 1)
+        {
+            return matches[0];
+        }
+
+        string scope = selectedProject is null
+            ? "the active Projects"
+            : $"Project '{selectedProject.Name}'";
+        throw new InvalidOperationException(
+            trackerName is null
+                ? $"Expected exactly one active Tracker across {scope}; provide --project-name and --tracker-name to select one."
+                : matches.Length == 0
+                    ? $"No active Tracker named '{trackerName}' was found in {scope}."
+                    : $"More than one active Tracker is named '{trackerName}' in {scope}. Select a unique Project/Tracker pair.");
+    }
+
     private static async Task ResetProgressAsync(
         string databasePath,
+        TrackerId trackerId,
         DateTimeOffset baselineAtUtc,
         CancellationToken cancellationToken)
     {
@@ -245,14 +332,21 @@ public sealed class ProgressDemoSeeder
         using SqliteCommand command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            DELETE FROM entity_status_history;
-            DELETE FROM progress_snapshots;
+            DELETE FROM entity_status_history
+            WHERE entity_id IN (
+                SELECT id FROM tracked_entities WHERE tracker_id = $trackerId);
+            DELETE FROM progress_snapshots
+            WHERE tracker_id = $trackerId;
 
             UPDATE tracked_entities
             SET development_status = 'NotStarted',
                 progress_updated_at_utc = $baselineTimestamp
-            WHERE lifecycle_state = 'Active';
+            WHERE tracker_id = $trackerId
+              AND lifecycle_state = 'Active';
             """;
+        command.Parameters.AddWithValue(
+            "$trackerId",
+            trackerId.Value.ToString("D", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue(
             "$baselineTimestamp",
             baselineAtUtc.ToString("O", CultureInfo.InvariantCulture));
@@ -262,6 +356,7 @@ public sealed class ProgressDemoSeeder
 
     private static async Task<ProgressDemoResult> ValidateAndCreateResultAsync(
         SqliteDatabase database,
+        TrackerId trackerId,
         string destinationPath,
         ProgressDemoOptions options,
         SyntheticProgressTimeline timeline,
@@ -271,7 +366,7 @@ public sealed class ProgressDemoSeeder
     {
         SqliteEntityRepository entityRepository = new(database);
         TrackedEntity[] entities =
-            (await entityRepository.GetAllAsync(cancellationToken)).ToArray();
+            (await entityRepository.GetAllAsync(trackerId, cancellationToken)).ToArray();
         TrackedEntity[] active = entities
             .Where(static entity => entity.LifecycleState == EntityLifecycleState.Active)
             .ToArray();
@@ -287,9 +382,9 @@ public sealed class ProgressDemoSeeder
 
         SqliteProgressHistoryRepository historyRepository = new(database);
         EntityStatusHistoryEntry[] history =
-            (await historyRepository.GetStatusHistoryAsync(cancellationToken)).ToArray();
+            (await historyRepository.GetStatusHistoryAsync(trackerId, cancellationToken)).ToArray();
         ProgressSnapshot[] snapshots =
-            (await historyRepository.GetProgressSnapshotsAsync(cancellationToken)).ToArray();
+            (await historyRepository.GetProgressSnapshotsAsync(trackerId, cancellationToken)).ToArray();
         if (history.Length != entities.Length + timeline.Changes.Count ||
             history.Count(static entry => entry.Kind == StatusHistoryEntryKind.Baseline) !=
             entities.Length ||

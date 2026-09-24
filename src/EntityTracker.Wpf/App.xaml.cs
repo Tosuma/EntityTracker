@@ -9,9 +9,12 @@ using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Planning;
+using EntityTracker.Application.Projects;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
+using EntityTracker.Application.Tracking;
 using EntityTracker.Application.Workflow;
+using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Infrastructure.Importing;
 using EntityTracker.Infrastructure.Persistence;
@@ -21,6 +24,7 @@ using EntityTracker.Wpf.ViewModels;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Win32;
 
 namespace EntityTracker.Wpf;
 
@@ -28,6 +32,7 @@ public partial class App : System.Windows.Application
 {
     private ServiceProvider? _serviceProvider;
     private ILogger<App>? _logger;
+    private IApplicationThemeService? _themeService;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -42,9 +47,12 @@ public partial class App : System.Windows.Application
         try
         {
             SettingsLoadResult settings = await settingsStore.LoadAsync();
+            ApplicationThemeService themeService = new();
+            themeService.Apply(settings.Settings.Appearance);
+            _themeService = themeService;
+            SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
             bootstrapLogger.LogInformation(
-                "Starting EntityTracker with {StorageProvider} storage.",
-                settings.EffectiveStorage);
+                "Starting EntityTracker with SQLite storage.");
 
             ServiceCollection services = new();
             services.AddLogging(builder =>
@@ -56,7 +64,14 @@ public partial class App : System.Windows.Application
             services.AddSingleton(dataPathResolver);
             services.AddSingleton(dataPaths);
             services.AddSingleton(settingsStore);
-            ConfigurePersistence(services, settings.EffectiveStorage, dataPaths);
+            services.AddSingleton(settings.Settings);
+            services.AddSingleton<IApplicationThemeService>(themeService);
+            services.AddSingleton(provider => new AppearanceViewModel(
+                settingsStore,
+                themeService,
+                settings.Settings.Appearance,
+                provider.GetRequiredService<ILogger<AppearanceViewModel>>()));
+            ConfigurePersistence(services, dataPaths);
             services.AddSingleton<ISchemaImportParser, CsvSchemaImportParser>();
             services.AddSingleton<ISchemaImportFileParser, CsvSchemaImportFileParser>();
             services.AddSingleton<IDependencyRankingService, DependencyRanker>();
@@ -69,25 +84,40 @@ public partial class App : System.Windows.Application
             services.AddSingleton<SchemaSynchronizationPlanner>();
             services.AddSingleton<ProgressHistoryInitializer>();
             services.AddSingleton<ProgressDashboardBuilder>();
+            services.AddSingleton<AggregateProgressDashboardBuilder>();
             services.AddSingleton(serviceProvider => new ProgressReportingService(
                 serviceProvider.GetRequiredService<IProgressHistoryRepository>(),
                 TimeZoneInfo.Local,
                 serviceProvider.GetRequiredService<ProgressDashboardBuilder>()));
+            services.AddSingleton(serviceProvider => new AggregateProgressReportingService(
+                serviceProvider.GetRequiredService<IProjectRepository>(),
+                serviceProvider.GetRequiredService<ITrackerRepository>(),
+                serviceProvider.GetRequiredService<IProgressHistoryRepository>(),
+                TimeZoneInfo.Local,
+                serviceProvider.GetRequiredService<AggregateProgressDashboardBuilder>()));
             services.AddSingleton<ProgressChartPresentationBuilder>();
             services.AddSingleton<ProgressChartPngExporter>();
             services.AddSingleton<IProgressChartFilePicker, ProgressChartFilePicker>();
             services.AddSingleton<IClipboardService, WpfClipboardService>();
             services.AddSingleton<ISchemaSynchronizationConfirmation,
                 WpfSchemaSynchronizationConfirmation>();
-            services.AddSingleton<ProgressDashboardViewModel>();
-            services.AddSingleton<ConnectionsViewModel>();
+            services.AddSingleton<IContextDiscardConfirmation, WpfContextDiscardConfirmation>();
             services.AddSingleton<SchemaSynchronizationService>();
             services.AddSingleton<ManualEntityCreationService>();
             services.AddSingleton<EntityDependencyEditorService>();
             services.AddSingleton<EntityLifecycleService>();
+            services.AddSingleton<ProjectManagementService>();
+            services.AddSingleton<TrackerManagementService>();
+            services.AddSingleton<TrackerCsvCreationService>();
+            services.AddSingleton<CatalogNameValidationService>();
+            services.AddSingleton<PortfolioQueryService>();
+            services.AddSingleton<ProjectEntityComparisonQueryService>();
+            services.AddSingleton<CatalogPurgeImpactService>();
             services.AddSingleton<ICsvFilePicker, CsvFilePicker>();
-            services.AddSingleton<MainWindowViewModel>();
-            services.AddSingleton<MainWindow>();
+            services.AddSingleton<TrackerWorkspaceViewModelFactory>();
+            services.AddSingleton<DashboardViewModelFactory>();
+            services.AddSingleton<CatalogManagementViewModel>();
+            services.AddSingleton<ShellViewModel>();
 
             _serviceProvider = services.BuildServiceProvider(new ServiceProviderOptions
             {
@@ -102,10 +132,6 @@ public partial class App : System.Windows.Application
                 _serviceProvider.GetRequiredService<IPersistenceInitializer>();
             PersistenceInitializationResult initialization =
                 await persistenceInitializer.InitializeAsync();
-            ProgressHistoryInitializer historyInitializer =
-                _serviceProvider.GetRequiredService<ProgressHistoryInitializer>();
-            await historyInitializer.EnsureInitializedAsync();
-
             string[] startupWarnings = settings.Warnings
                 .Concat(initialization.Warnings)
                 .ToArray();
@@ -114,7 +140,9 @@ public partial class App : System.Windows.Application
                 _logger.LogWarning("Startup warning: {Warning}", warning);
             }
 
-            MainWindow mainWindow = _serviceProvider.GetRequiredService<MainWindow>();
+            ShellViewModel shellViewModel =
+                _serviceProvider.GetRequiredService<ShellViewModel>();
+            MainWindow mainWindow = new(shellViewModel);
             MainWindow = mainWindow;
             mainWindow.Show();
 
@@ -148,33 +176,27 @@ public partial class App : System.Windows.Application
 
     private static void ConfigurePersistence(
         IServiceCollection services,
-        StorageProviderKind storageProvider,
         ApplicationDataPaths dataPaths)
     {
-        switch (storageProvider)
-        {
-            case StorageProviderKind.Sqlite:
-                services.AddSingleton(new SqliteDatabase(dataPaths.DatabasePath));
-                services.AddSingleton(provider => new SqliteBackupService(
-                    provider.GetRequiredService<SqliteDatabase>(),
-                    dataPaths.BackupsDirectory));
-                services.AddSingleton<IPersistenceInitializer, SqlitePersistenceInitializer>();
-                services.AddSingleton<IEntityRepository, SqliteEntityRepository>();
-                services.AddSingleton<IDependencyRepository, SqliteDependencyRepository>();
-                services.AddSingleton<IManualDependencyOverrideRepository,
-                    SqliteManualDependencyOverrideRepository>();
-                services.AddSingleton<SqliteTrackedStateStore>();
-                services.AddSingleton<ITrackedStateStore>(static provider =>
-                    provider.GetRequiredService<SqliteTrackedStateStore>());
-                services.AddSingleton<ISchemaSynchronizationStore>(static provider =>
-                    provider.GetRequiredService<SqliteTrackedStateStore>());
-                services.AddSingleton<IProgressHistoryRepository,
-                    SqliteProgressHistoryRepository>();
-                break;
-            default:
-                throw new InvalidOperationException(
-                    $"Storage provider '{storageProvider}' is not available in this build.");
-        }
+        services.AddSingleton(new SqliteDatabase(dataPaths.DatabasePath));
+        services.AddSingleton(provider => new SqliteBackupService(
+            provider.GetRequiredService<SqliteDatabase>(),
+            dataPaths.BackupsDirectory));
+        services.AddSingleton<IPersistenceInitializer, SqlitePersistenceInitializer>();
+        services.AddSingleton<IEntityRepository, SqliteEntityRepository>();
+        services.AddSingleton<IEntityAuditReader, SqliteEntityAuditReader>();
+        services.AddSingleton<IDependencyRepository, SqliteDependencyRepository>();
+        services.AddSingleton<IManualDependencyOverrideRepository,
+            SqliteManualDependencyOverrideRepository>();
+        services.AddSingleton<SqliteTrackedStateStore>();
+        services.AddSingleton<ITrackedStateStore>(static provider =>
+            provider.GetRequiredService<SqliteTrackedStateStore>());
+        services.AddSingleton<ISchemaSynchronizationStore>(static provider =>
+            provider.GetRequiredService<SqliteTrackedStateStore>());
+        services.AddSingleton<IProgressHistoryRepository, SqliteProgressHistoryRepository>();
+        services.AddSingleton<IProjectRepository, SqliteProjectRepository>();
+        services.AddSingleton<ITrackerRepository, SqliteTrackerRepository>();
+        services.AddSingleton<IProjectTrackerStore, SqliteProjectTrackerStore>();
     }
 
     private void OnDispatcherUnhandledException(
@@ -192,8 +214,22 @@ public partial class App : System.Windows.Application
         Shutdown(-1);
     }
 
+    private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+    {
+        if (_themeService?.CurrentAppearance != ApplicationAppearance.System ||
+            Dispatcher.HasShutdownStarted)
+        {
+            return;
+        }
+
+        _ = Dispatcher.BeginInvoke(
+            () => _themeService.Apply(ApplicationAppearance.System),
+            System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
+        SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         DispatcherUnhandledException -= OnDispatcherUnhandledException;
         _logger?.LogInformation("EntityTracker stopped.");
         _serviceProvider?.Dispose();

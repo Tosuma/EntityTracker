@@ -4,6 +4,7 @@ using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
+using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
 
 namespace EntityTracker.Application.ManualCreation;
@@ -44,42 +45,48 @@ public sealed class ManualEntityCreationService
     }
 
     public async Task<ManualDependencySearchResult> SearchDependenciesAsync(
+        TrackerId trackerId,
         string query,
         string? proposedEntityName = null,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(query);
 
         IReadOnlyList<TrackedEntity> entities =
-            await _entityRepository.GetAllAsync(cancellationToken);
+            await _entityRepository.GetAllAsync(trackerId, cancellationToken);
         return DependencySearch.Search(query, proposedEntityName, entities);
     }
 
     public async Task<IReadOnlyList<string>> SearchGroupNamesAsync(
+        TrackerId trackerId,
         string query,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(query);
 
         IReadOnlyList<TrackedEntity> entities =
-            await _entityRepository.GetAllAsync(cancellationToken);
+            await _entityRepository.GetAllAsync(trackerId, cancellationToken);
         return GroupNameSuggestionSearch.Search(query, entities);
     }
 
     public async Task<ManualEntityCreationResult> CreateAsync(
+        TrackerId trackerId,
         ManualEntityCreationRequest request,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(request);
 
         Task<IReadOnlyList<TrackedEntity>> entitiesTask =
-            _entityRepository.GetAllAsync(cancellationToken);
+            _entityRepository.GetAllAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<PersistedDependency>> dependenciesTask =
-            _dependencyRepository.GetAllAsync(cancellationToken);
+            _dependencyRepository.GetAllAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
-            _dependencyRepository.GetAllUnresolvedAsync(cancellationToken);
+            _dependencyRepository.GetAllUnresolvedAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
-            _overrideRepository.GetAllAsync(cancellationToken);
+            _overrideRepository.GetAllAsync(trackerId, cancellationToken);
         await Task.WhenAll(entitiesTask, dependenciesTask, unresolvedTask, overridesTask);
 
         TrackedEntity[] currentEntities = (await entitiesTask).ToArray();
@@ -95,6 +102,7 @@ public sealed class ManualEntityCreationService
 
         List<ManualEntityCreationDiagnostic> diagnostics = [];
         string entityName = request.EntityName.Trim();
+        ValidateRequestedPriority(request.RequestedPriority, diagnostics);
         EntitySourceKey? entityKey = ValidateEntityName(
             entityName,
             currentByKey,
@@ -124,8 +132,10 @@ public sealed class ManualEntityCreationService
 
         TrackedEntity createdEntity = new(
             EntityId.New(),
+            trackerId,
             entityName,
             provenance: EntityProvenance.ManualOnly,
+            requestedPriority: request.RequestedPriority,
             responsibleDeveloper: request.ResponsibleDeveloper,
             groupName: request.GroupName);
         Dictionary<EntitySourceKey, TrackedEntity> candidateActiveByKey = new(activeByKey)
@@ -162,6 +172,12 @@ public sealed class ManualEntityCreationService
         ManualDependencyOverride[] candidateOverrides = (await overridesTask)
             .Concat(createdOverrides)
             .ToArray();
+        TrackerStateValidator.EnsureOwned(
+            trackerId,
+            currentEntities,
+            currentResolved,
+            currentUnresolved,
+            await overridesTask);
         TrackedEntity[] candidateEntities = candidateActiveByKey.Values.ToArray();
         EffectiveDependencyState effectiveState = _effectiveDependencyResolver.Resolve(
             candidateEntities,
@@ -214,7 +230,7 @@ public sealed class ManualEntityCreationService
             progressSnapshotAfterChanges: _snapshotCalculator.Calculate(
                 candidateEntities,
                 effectiveState));
-        await _store.ApplyAsync(changeSet, cancellationToken);
+        await _store.ApplyAsync(trackerId, changeSet, cancellationToken);
 
         return ManualEntityCreationResult.Success(createdEntity.Id, diagnostics);
     }
@@ -388,6 +404,18 @@ public sealed class ManualEntityCreationService
 
     private static bool IsSupportedSourceName(string sourceName) =>
         !sourceName.Contains(',', StringComparison.Ordinal);
+
+    private static void ValidateRequestedPriority(
+        int? requestedPriority,
+        ICollection<ManualEntityCreationDiagnostic> diagnostics)
+    {
+        if (requestedPriority is not null and (< 1 or > 5))
+        {
+            diagnostics.Add(new ManualEntityCreationDiagnostic(
+                ManualEntityCreationDiagnosticCode.InvalidRequestedPriority,
+                "Requested priority must be between 1 and 5."));
+        }
+    }
 
     private static bool HasErrors(IEnumerable<ManualEntityCreationDiagnostic> diagnostics) =>
         diagnostics.Any(static diagnostic =>

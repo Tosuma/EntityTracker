@@ -91,6 +91,10 @@ public sealed class MainWindowViewModelTests
 
         SynchronizationProgressImpactRow row = Assert.Single(viewModel.Review.ProgressImpacts);
         Assert.Equal("Decision required", row.DecisionText);
+        Assert.Same(row, Assert.Single(viewModel.Review.ChangedEntities).ProgressImpact);
+        Assert.Contains(
+            Assert.Single(viewModel.Review.ChangedEntities).DependencyChangeItems,
+            static change => change.Action == "Added" && change.DependencySourceName == "Target");
         Assert.False(viewModel.Review.CanApply);
         Assert.False(viewModel.ApplySynchronizationCommand.CanExecute(null));
 
@@ -414,6 +418,87 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task EntityDetails_AreReadOnlyPreserveSelectionAndCloseOnProjectionChange()
+    {
+        TrackedEntity dependency = Entity(1, "Foundation");
+        TrackedEntity owner = Entity(
+            2,
+            "Customer",
+            notes: "Full implementation notes",
+            requestedPriority: 2,
+            responsibleDeveloper: "Alice",
+            groupName: "Billing");
+        MainWindowViewModel viewModel = CreateViewModel(
+            [owner, dependency],
+            [Dependency(owner, dependency)],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+        await viewModel.InitializeAsync();
+        EntityOverviewRow row = viewModel.OverviewItems.Single(item => item.EntityId == owner.Id);
+        viewModel.UpdateOverviewSelection([row]);
+
+        viewModel.OpenEntityDetailsCommand.Execute(row);
+
+        EntityDetailsViewModel details = Assert.IsType<EntityDetailsViewModel>(
+            viewModel.SelectedEntityDetails);
+        Assert.True(viewModel.IsEntityDetailsOpen);
+        Assert.Equal(1, viewModel.SelectedActiveEntityCount);
+        Assert.Equal("Customer", details.SourceName);
+        Assert.Equal("2", details.RequestedPriority);
+        Assert.Equal("Full implementation notes", details.Notes);
+        Assert.Equal("Alice", details.ResponsibleDeveloper);
+        Assert.Equal("Billing", details.GroupName);
+        Assert.Equal("Foundation", Assert.Single(details.Dependencies).Name);
+        Assert.Equal("Foundation", Assert.Single(details.Blockers).Name);
+
+        viewModel.CloseEntityDetailsCommand.Execute(null);
+        Assert.False(viewModel.IsEntityDetailsOpen);
+        Assert.Equal(1, viewModel.SelectedActiveEntityCount);
+
+        viewModel.OpenEntityDetailsCommand.Execute(row);
+        viewModel.OverviewSearchQuery = "Customer";
+        Assert.False(viewModel.IsEntityDetailsOpen);
+        Assert.Equal(0, viewModel.SelectedActiveEntityCount);
+    }
+
+    [Fact]
+    public async Task ArchivedDetails_UsePreservedContextAndRestoreRemainsInExistingEditor()
+    {
+        TrackedEntity target = Entity(1, "Legacy target");
+        TrackedEntity archived = Entity(
+            2,
+            "Legacy owner",
+            notes: "Preserved notes",
+            lifecycle: EntityLifecycleState.Archived,
+            requestedPriority: 4);
+        MainWindowViewModel viewModel = CreateViewModel(
+            [target, archived],
+            [Dependency(archived, target)],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+        await viewModel.InitializeAsync();
+        viewModel.SelectedTab = MainWindowTab.Archived;
+        EntityOverviewRow row = Assert.Single(viewModel.ArchivedItems);
+
+        viewModel.OpenEntityDetailsCommand.Execute(row);
+
+        EntityDetailsViewModel details = Assert.IsType<EntityDetailsViewModel>(
+            viewModel.SelectedEntityDetails);
+        Assert.True(details.IsArchived);
+        Assert.Equal("4", details.RequestedPriority);
+        Assert.Equal("Not applicable while archived", details.EffectivePriority);
+        Assert.Equal("Legacy target", Assert.Single(details.Dependencies).Name);
+        Assert.False(viewModel.Editor.IsOpen);
+
+        viewModel.EditOverviewEntityCommand.Execute(row);
+        await WaitUntilAsync(() => viewModel.Editor.IsOpen);
+        Assert.False(viewModel.IsEntityDetailsOpen);
+        Assert.True(viewModel.Editor.CanRestoreEntity);
+    }
+
+    [Fact]
     public async Task StandaloneEditor_SavesStatusNotesAndDependenciesAsOneRefresh()
     {
         TrackedEntity entity = Entity(1, "Customer");
@@ -451,6 +536,42 @@ public sealed class MainWindowViewModelTests
         Assert.Equal("Core Data", row.GroupName);
         Assert.Equal(100, viewModel.ImplementedPercentage);
         Assert.Equal(100, viewModel.ReconciledPercentage);
+    }
+
+    [Fact]
+    public async Task TryCloseEditor_ProtectsDirtyWorkButClosesUnchangedEditorImmediately()
+    {
+        TrackedEntity entity = Entity(1, "Customer");
+        RecordingDiscardConfirmation discard = new(false);
+        MainWindowViewModel viewModel = CreateViewModel(
+            [entity],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out _,
+            discardConfirmation: discard);
+        await viewModel.InitializeAsync();
+        EntityOverviewRow row = Assert.Single(viewModel.OverviewItems);
+
+        viewModel.EditOverviewEntityCommand.Execute(row);
+        await WaitUntilAsync(() => viewModel.Editor.IsOpen && !viewModel.Editor.IsBusy);
+        Assert.True(viewModel.TryCloseEditor());
+        Assert.False(viewModel.Editor.IsOpen);
+        Assert.Equal(0, discard.CallCount);
+
+        viewModel.EditOverviewEntityCommand.Execute(row);
+        await WaitUntilAsync(() => viewModel.Editor.IsOpen && !viewModel.Editor.IsBusy);
+        viewModel.Editor.EditedNotes = "Unsaved note";
+
+        Assert.False(viewModel.TryCloseEditor());
+        Assert.True(viewModel.Editor.IsOpen);
+        Assert.Equal("Unsaved note", viewModel.Editor.EditedNotes);
+        Assert.Equal(1, discard.CallCount);
+
+        discard.Result = true;
+        Assert.True(viewModel.TryCloseEditor());
+        Assert.False(viewModel.Editor.IsOpen);
+        Assert.Equal(2, discard.CallCount);
     }
 
     [Fact]
@@ -727,6 +848,8 @@ public sealed class MainWindowViewModelTests
             new StubFilePicker(),
             out _);
         viewModel.SelectedTab = MainWindowTab.AddEntity;
+        EntityId? revealedEntityId = null;
+        viewModel.EntityRevealRequested += id => revealedEntityId = id;
         viewModel.ManualCreation.EntityName = "NewManualEntity";
 
         await viewModel.ManualCreation.CreateAsync();
@@ -736,6 +859,8 @@ public sealed class MainWindowViewModelTests
         Assert.Equal("NewManualEntity", row.SourceName);
         Assert.Equal("Manual only", row.Provenance);
         Assert.Equal("Not started", row.Status);
+        Assert.Equal(row.EntityId, revealedEntityId);
+        Assert.Equal(row.EntityId, viewModel.SelectedEntityDetails?.EntityId);
     }
 
     [Fact]
@@ -801,8 +926,33 @@ public sealed class MainWindowViewModelTests
         Assert.Equal("Removed", Assert.Single(viewModel.Review.MissingEntities).SourceName);
         Assert.Empty(viewModel.Review.ChangedEntities);
         Assert.Equal(1, viewModel.Review.UnchangedEntityCount);
+        Assert.Equal("A", Assert.Single(viewModel.Review.UnchangedEntities).SourceName);
+        Assert.True(viewModel.Review.HasArchiveImpact);
+        Assert.Contains("1 of 2", viewModel.Review.ArchiveImpactText);
         Assert.False(viewModel.Review.CanSelectImportMode);
         Assert.True(viewModel.ApplySynchronizationCommand.CanExecute(null));
+
+        Assert.True(viewModel.Review.ToggleFilterCommand.CanExecute(
+            SchemaSynchronizationReviewFilter.New));
+        Assert.False(viewModel.Review.ToggleFilterCommand.CanExecute(
+            SchemaSynchronizationReviewFilter.Changed));
+        viewModel.Review.ToggleFilterCommand.Execute(SchemaSynchronizationReviewFilter.New);
+        Assert.True(viewModel.Review.IsNewFilterSelected);
+        Assert.True(viewModel.Review.ShowNewEntities);
+        Assert.False(viewModel.Review.ShowMissingEntities);
+        Assert.False(viewModel.Review.ShowUnchangedEntities);
+        Assert.True(viewModel.Review.HasActiveFilter);
+
+        viewModel.Review.ToggleFilterCommand.Execute(SchemaSynchronizationReviewFilter.New);
+        Assert.False(viewModel.Review.HasActiveFilter);
+        Assert.True(viewModel.Review.ShowNewEntities);
+        Assert.True(viewModel.Review.ShowMissingEntities);
+        Assert.True(viewModel.Review.ShowUnchangedEntities);
+
+        viewModel.Review.ToggleFilterCommand.Execute(SchemaSynchronizationReviewFilter.Missing);
+        Assert.True(viewModel.Review.ShowArchiveImpact);
+        viewModel.Review.ClearFilterCommand.Execute(null);
+        Assert.False(viewModel.Review.HasActiveFilter);
     }
 
     [Fact]
@@ -823,6 +973,62 @@ public sealed class MainWindowViewModelTests
         Assert.Equal("Partial", viewModel.Review.ImportModeLabel);
         Assert.Empty(viewModel.Review.MissingEntities);
         Assert.Equal(1, viewModel.Review.UnchangedEntityCount);
+    }
+
+    [Fact]
+    public async Task ImportCsvAsync_IdenticalImport_ExposesCollapsedUnchangedEntitiesAndNoOpState()
+    {
+        TrackedEntity a = Entity(1, "A");
+        MainWindowViewModel viewModel = CreateViewModel(
+            [a],
+            [],
+            SchemaImportResult.Success(Candidate(["A"], [])),
+            new StubFilePicker("same.csv"),
+            out _);
+
+        await viewModel.ImportCsvAsync();
+
+        Assert.True(viewModel.Review.HasNoActionableChanges);
+        Assert.False(viewModel.Review.ShowImportConfiguration);
+        Assert.Equal("Complete", viewModel.Review.ImportModeLabel);
+        Assert.False(viewModel.Review.IsUnchangedExpanded);
+        Assert.Equal("A", Assert.Single(viewModel.Review.UnchangedEntities).SourceName);
+        Assert.True(viewModel.Review.CanApply);
+
+        viewModel.Review.IsUnchangedExpanded = true;
+        await viewModel.CancelSynchronizationAsync();
+
+        Assert.False(viewModel.Review.IsUnchangedExpanded);
+        Assert.Empty(viewModel.Review.UnchangedEntities);
+        Assert.True(viewModel.Review.ShowImportConfiguration);
+    }
+
+    [Fact]
+    public async Task ImportCsvAsync_SeparatesDirectlyUnresolvedAndUpstreamBlockedEffects()
+    {
+        MainWindowViewModel viewModel = CreateViewModel(
+            [],
+            [],
+            SchemaImportResult.Success(Candidate(
+                ["Direct", "Upstream"],
+                [("Upstream", "Direct", ImportedDependencyKind.Mandatory)],
+                [("Direct", "MissingRoot", ImportedDependencyKind.Mandatory)])),
+            new StubFilePicker("unresolved.csv"),
+            out _);
+
+        await viewModel.ImportCsvAsync();
+
+        Assert.Equal("Direct", Assert.Single(viewModel.Review.UnresolvedEntities).SourceName);
+        SynchronizationResolutionEffectRow blocked = Assert.Single(viewModel.Review.BlockedEntities);
+        Assert.Equal("Upstream", blocked.SourceName);
+        Assert.Contains("MissingRoot", blocked.Explanation);
+
+        viewModel.Review.ToggleFilterCommand.Execute(
+            SchemaSynchronizationReviewFilter.Unresolved);
+        Assert.True(viewModel.Review.IsUnresolvedFilterSelected);
+        Assert.False(viewModel.Review.ShowNewEntities);
+        Assert.True(viewModel.Review.ShowUnresolvedEntities);
+        Assert.True(viewModel.Review.ShowBlockedEntities);
     }
 
     [Fact]
@@ -1141,6 +1347,24 @@ public sealed class MainWindowViewModelTests
         Assert.False(viewModel.ApplyBulkStatusCommand.CanExecute(null));
     }
 
+    [Fact]
+    public void DirtyCreationFlow_IsReportedAndCanBeExplicitlyDiscarded()
+    {
+        MainWindowViewModel viewModel = CreateViewModel(
+            [],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+
+        viewModel.ManualCreation.EntityName = "Pending entity";
+
+        Assert.True(viewModel.HasUnsavedWork);
+        viewModel.DiscardTransientWork();
+        Assert.False(viewModel.HasUnsavedWork);
+        Assert.Equal(string.Empty, viewModel.ManualCreation.EntityName);
+    }
+
     private static MainWindowViewModel CreateViewModel(
         IReadOnlyList<TrackedEntity> entities,
         IReadOnlyList<PersistedDependency> dependencies,
@@ -1148,7 +1372,8 @@ public sealed class MainWindowViewModelTests
         ICsvFilePicker picker,
         out StubSynchronizationStore store,
         IReadOnlyList<PersistedUnresolvedDependency>? unresolvedDependencies = null,
-        ISchemaSynchronizationConfirmation? confirmationService = null)
+        ISchemaSynchronizationConfirmation? confirmationService = null,
+        IContextDiscardConfirmation? discardConfirmation = null)
     {
         StubEntityRepository entityRepository = new(entities);
         StubDependencyRepository dependencyRepository = new(
@@ -1175,7 +1400,9 @@ public sealed class MainWindowViewModelTests
             editorService,
             store);
         return new MainWindowViewModel(
+            TestTrackerId,
             new EntityOverviewService(
+                entityRepository,
                 entityRepository,
                 dependencyRepository,
                 overrideRepository,
@@ -1207,14 +1434,15 @@ public sealed class MainWindowViewModelTests
                 ranker),
             picker,
             CreateProgressDashboardViewModel(),
-            new NoOpImageClipboard(),
-            confirmationService ?? new AlwaysConfirmService());
+            confirmationService ?? new AlwaysConfirmService(),
+            discardConfirmation ?? new AlwaysDiscardConfirmation());
     }
 
     private static ProgressDashboardViewModel CreateProgressDashboardViewModel()
     {
         ProgressChartPresentationBuilder presentationBuilder = new();
         return new ProgressDashboardViewModel(
+            TestTrackerId,
             new ProgressReportingService(
                 new EmptyProgressHistoryRepository(),
                 TimeZoneInfo.Utc),
@@ -1298,6 +1526,7 @@ public sealed class MainWindowViewModelTests
         string? groupName = null) =>
         new(
             new EntityId(new Guid(id, 0, 0, new byte[8])),
+            TestTrackerId,
             name,
             status,
             notes,
@@ -1337,7 +1566,7 @@ public sealed class MainWindowViewModelTests
                 item.Kind)));
     }
 
-    private sealed class StubEntityRepository : IEntityRepository
+    private sealed class StubEntityRepository : IEntityRepository, IEntityAuditReader
     {
         private readonly List<TrackedEntity> _entities;
 
@@ -1346,12 +1575,24 @@ public sealed class MainWindowViewModelTests
             _entities = entities.ToList();
         }
 
-        public Task<TrackedEntity?> GetAsync(EntityId id, CancellationToken cancellationToken = default) =>
+        public Task<TrackedEntity?> GetAsync(TrackerId trackerId, EntityId id, CancellationToken cancellationToken = default) =>
             Task.FromResult(_entities.SingleOrDefault(entity => entity.Id == id));
 
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<TrackedEntity>>(_entities.ToArray());
+
+        Task<IReadOnlyList<EntityAuditTimestamps>> IEntityAuditReader.GetAllAsync(
+            TrackerId trackerId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<EntityAuditTimestamps>>(_entities
+                .Select(static entity => new EntityAuditTimestamps(
+                    entity.Id,
+                    new DateTimeOffset(2026, 8, 24, 10, 0, 0, TimeSpan.Zero),
+                    new DateTimeOffset(2026, 8, 24, 11, 0, 0, TimeSpan.Zero),
+                    new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero)))
+                .ToArray());
 
         public void Add(TrackedEntity entity) => _entities.Add(entity);
 
@@ -1387,12 +1628,37 @@ public sealed class MainWindowViewModelTests
     private sealed class EmptyProgressHistoryRepository : IProgressHistoryRepository
     {
         public Task<IReadOnlyList<EntityStatusHistoryEntry>> GetStatusHistoryAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<EntityStatusHistoryEntry>>([]);
 
         public Task<IReadOnlyList<ProgressSnapshot>> GetProgressSnapshotsAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ProgressSnapshot>>([]);
+
+        public Task<ProgressSnapshot?> GetLatestProgressSnapshotAsync(
+            TrackerId trackerId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<ProgressSnapshot?>(null);
+    }
+
+    private sealed class AlwaysDiscardConfirmation : IContextDiscardConfirmation
+    {
+        public bool ConfirmDiscard(string description) => true;
+    }
+
+    private sealed class RecordingDiscardConfirmation(bool result) : IContextDiscardConfirmation
+    {
+        public bool Result { get; set; } = result;
+
+        public int CallCount { get; private set; }
+
+        public bool ConfirmDiscard(string description)
+        {
+            CallCount++;
+            return Result;
+        }
     }
 
     private sealed class StubDependencyRepository(
@@ -1401,9 +1667,11 @@ public sealed class MainWindowViewModelTests
         : IDependencyRepository
     {
         public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(dependencies);
 
         public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(unresolvedDependencies);
 
@@ -1435,6 +1703,7 @@ public sealed class MainWindowViewModelTests
         public SchemaImportSummary? LatestSummary { get; private set; }
 
         public Task ApplyAsync(
+            TrackerId trackerId,
             TrackedStateChangeSet changeSet,
             CancellationToken cancellationToken = default)
         {
@@ -1484,16 +1753,18 @@ public sealed class MainWindowViewModelTests
         }
 
         public Task EnsureHistoryBaselineAsync(
+            TrackerId trackerId,
             IEnumerable<TrackedEntity> entities,
             ProgressSnapshotState snapshot,
             CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public async Task<SchemaImportSummary> ApplyAsync(
+            TrackerId trackerId,
             TrackedStateChangeSet changeSet,
             SchemaImportCompletion completion,
             CancellationToken cancellationToken = default)
         {
-            await ApplyAsync(changeSet, cancellationToken);
+            await ApplyAsync(trackerId, changeSet, cancellationToken);
             LatestSummary = new SchemaImportSummary(
                 new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero),
                 completion);
@@ -1501,6 +1772,7 @@ public sealed class MainWindowViewModelTests
         }
 
         public Task<SchemaImportSummary?> GetLatestImportAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(LatestSummary);
     }
 }

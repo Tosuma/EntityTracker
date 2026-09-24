@@ -2,7 +2,9 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
 using EntityTracker.Application.Importing;
+using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
+using EntityTracker.Wpf.Commands;
 
 namespace EntityTracker.Wpf.ViewModels;
 
@@ -16,10 +18,28 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
     private IReadOnlyList<SchemaSynchronizationReviewRow> _missingEntities = [];
     private IReadOnlyList<SchemaSynchronizationReviewRow> _manualOnlyEntities = [];
     private IReadOnlyList<SchemaSynchronizationReviewRow> _unresolvedEntities = [];
+    private IReadOnlyList<SynchronizationResolutionEffectRow> _blockedEntities = [];
+    private IReadOnlyList<SchemaSynchronizationReviewRow> _unchangedEntities = [];
     private IReadOnlyList<string> _warnings = [];
     private IReadOnlyList<string> _diagnostics = [];
     private IReadOnlyList<SynchronizationProgressImpactRow> _progressImpacts = [];
     private int _unchangedEntityCount;
+    private int _preSynchronizationActiveEntityCount;
+    private bool _isUnchangedExpanded;
+    private SchemaSynchronizationReviewFilter? _activeFilter;
+
+    private readonly RelayCommand<SchemaSynchronizationReviewFilter> _toggleFilterCommand;
+    private readonly RelayCommand _clearFilterCommand;
+
+    public SchemaSynchronizationReviewViewModel()
+    {
+        _toggleFilterCommand = new RelayCommand<SchemaSynchronizationReviewFilter>(
+            ToggleFilter,
+            CanFilter);
+        _clearFilterCommand = new RelayCommand(
+            () => ActiveFilter = null,
+            () => HasActiveFilter);
+    }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -56,10 +76,15 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
             if (SetField(ref _currentPlan, value))
             {
                 OnPropertyChanged(nameof(HasReview));
+                OnPropertyChanged(nameof(ShowImportConfiguration));
                 OnPropertyChanged(nameof(ShowEmptyState));
                 OnPropertyChanged(nameof(ImportModeLabel));
                 OnPropertyChanged(nameof(CanSelectImportMode));
                 OnPropertyChanged(nameof(CanApply));
+                OnPropertyChanged(nameof(HasNoActionableChanges));
+                OnPropertyChanged(nameof(ShowNoActionableChanges));
+                OnPropertyChanged(nameof(ApplyDisabledReason));
+                OnPropertyChanged(nameof(HasApplyDisabledReason));
             }
         }
     }
@@ -67,34 +92,97 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
     public IReadOnlyList<SchemaSynchronizationReviewRow> NewEntities
     {
         get => _newEntities;
-        private set => SetCollection(ref _newEntities, value, nameof(HasNewEntities));
+        private set
+        {
+            if (SetCollection(ref _newEntities, value, nameof(HasNewEntities)))
+            {
+                OnPropertyChanged(nameof(ShowNewEntities));
+                NotifyFilterAvailabilityChanged();
+            }
+        }
     }
 
     public IReadOnlyList<SchemaSynchronizationReviewRow> ChangedEntities
     {
         get => _changedEntities;
-        private set => SetCollection(ref _changedEntities, value, nameof(HasChangedEntities));
+        private set
+        {
+            if (SetCollection(ref _changedEntities, value, nameof(HasChangedEntities)))
+            {
+                OnPropertyChanged(nameof(ShowChangedEntities));
+                NotifyFilterAvailabilityChanged();
+            }
+        }
     }
 
     public IReadOnlyList<SchemaSynchronizationReviewRow> MissingEntities
     {
         get => _missingEntities;
-        private set => SetCollection(ref _missingEntities, value, nameof(HasMissingEntities));
+        private set
+        {
+            if (SetCollection(ref _missingEntities, value, nameof(HasMissingEntities)))
+            {
+                OnPropertyChanged(nameof(HasArchiveImpact));
+                OnPropertyChanged(nameof(ArchiveImpactText));
+                OnPropertyChanged(nameof(ShowMissingEntities));
+                OnPropertyChanged(nameof(ShowArchiveImpact));
+                NotifyFilterAvailabilityChanged();
+            }
+        }
     }
 
     public IReadOnlyList<SchemaSynchronizationReviewRow> ManualOnlyEntities
     {
         get => _manualOnlyEntities;
-        private set => SetCollection(
-            ref _manualOnlyEntities,
-            value,
-            nameof(HasManualOnlyEntities));
+        private set
+        {
+            if (SetCollection(
+                    ref _manualOnlyEntities,
+                    value,
+                    nameof(HasManualOnlyEntities)))
+            {
+                OnPropertyChanged(nameof(ShowManualOnlyEntities));
+            }
+        }
     }
 
     public IReadOnlyList<SchemaSynchronizationReviewRow> UnresolvedEntities
     {
         get => _unresolvedEntities;
-        private set => SetCollection(ref _unresolvedEntities, value, nameof(HasUnresolvedEntities));
+        private set
+        {
+            if (SetCollection(ref _unresolvedEntities, value, nameof(HasUnresolvedEntities)))
+            {
+                OnPropertyChanged(nameof(ShowUnresolvedEntities));
+                NotifyFilterAvailabilityChanged();
+            }
+        }
+    }
+
+    public IReadOnlyList<SynchronizationResolutionEffectRow> BlockedEntities
+    {
+        get => _blockedEntities;
+        private set
+        {
+            if (SetCollection(ref _blockedEntities, value, nameof(HasBlockedEntities)))
+            {
+                OnPropertyChanged(nameof(ShowBlockedEntities));
+                NotifyFilterAvailabilityChanged();
+            }
+        }
+    }
+
+    public IReadOnlyList<SchemaSynchronizationReviewRow> UnchangedEntities
+    {
+        get => _unchangedEntities;
+        private set
+        {
+            if (SetCollection(ref _unchangedEntities, value, nameof(HasUnchangedEntities)))
+            {
+                OnPropertyChanged(nameof(ShowUnchangedEntities));
+                NotifyFilterAvailabilityChanged();
+            }
+        }
     }
 
     public IReadOnlyList<string> Warnings
@@ -112,7 +200,15 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
     public IReadOnlyList<SynchronizationProgressImpactRow> ProgressImpacts
     {
         get => _progressImpacts;
-        private set => SetCollection(ref _progressImpacts, value, nameof(HasProgressImpacts));
+        private set
+        {
+            if (SetCollection(ref _progressImpacts, value, nameof(HasProgressImpacts)))
+            {
+                OnPropertyChanged(nameof(PendingProgressDecisionCount));
+                OnPropertyChanged(nameof(ApplyDisabledReason));
+                OnPropertyChanged(nameof(HasApplyDisabledReason));
+            }
+        }
     }
 
     public int UnchangedEntityCount
@@ -121,7 +217,77 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
         private set => SetField(ref _unchangedEntityCount, value);
     }
 
+    public int PreSynchronizationActiveEntityCount
+    {
+        get => _preSynchronizationActiveEntityCount;
+        private set
+        {
+            if (SetField(ref _preSynchronizationActiveEntityCount, value))
+            {
+                OnPropertyChanged(nameof(ArchiveImpactText));
+            }
+        }
+    }
+
+    public bool IsUnchangedExpanded
+    {
+        get => _isUnchangedExpanded;
+        set => SetField(ref _isUnchangedExpanded, value);
+    }
+
     public bool HasReview => CurrentPlan is not null;
+
+    public SchemaSynchronizationReviewFilter? ActiveFilter
+    {
+        get => _activeFilter;
+        private set
+        {
+            if (!SetField(ref _activeFilter, value))
+            {
+                return;
+            }
+
+            OnPropertyChanged(nameof(HasActiveFilter));
+            OnPropertyChanged(nameof(IsNewFilterSelected));
+            OnPropertyChanged(nameof(IsChangedFilterSelected));
+            OnPropertyChanged(nameof(IsMissingFilterSelected));
+            OnPropertyChanged(nameof(IsUnresolvedFilterSelected));
+            OnPropertyChanged(nameof(IsUnchangedFilterSelected));
+            OnPropertyChanged(nameof(ShowNewEntities));
+            OnPropertyChanged(nameof(ShowChangedEntities));
+            OnPropertyChanged(nameof(ShowMissingEntities));
+            OnPropertyChanged(nameof(ShowManualOnlyEntities));
+            OnPropertyChanged(nameof(ShowUnresolvedEntities));
+            OnPropertyChanged(nameof(ShowBlockedEntities));
+            OnPropertyChanged(nameof(ShowUnchangedEntities));
+            OnPropertyChanged(nameof(ShowArchiveImpact));
+            OnPropertyChanged(nameof(ShowNoActionableChanges));
+            _clearFilterCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    public RelayCommand<SchemaSynchronizationReviewFilter> ToggleFilterCommand =>
+        _toggleFilterCommand;
+
+    public RelayCommand ClearFilterCommand => _clearFilterCommand;
+
+    public bool HasActiveFilter => ActiveFilter is not null;
+
+    public bool IsNewFilterSelected => ActiveFilter == SchemaSynchronizationReviewFilter.New;
+
+    public bool IsChangedFilterSelected =>
+        ActiveFilter == SchemaSynchronizationReviewFilter.Changed;
+
+    public bool IsMissingFilterSelected =>
+        ActiveFilter == SchemaSynchronizationReviewFilter.Missing;
+
+    public bool IsUnresolvedFilterSelected =>
+        ActiveFilter == SchemaSynchronizationReviewFilter.Unresolved;
+
+    public bool IsUnchangedFilterSelected =>
+        ActiveFilter == SchemaSynchronizationReviewFilter.Unchanged;
+
+    public bool ShowImportConfiguration => !HasReview;
 
     public bool HasNewEntities => NewEntities.Count > 0;
 
@@ -133,11 +299,64 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
 
     public bool HasUnresolvedEntities => UnresolvedEntities.Count > 0;
 
+    public bool HasBlockedEntities => BlockedEntities.Count > 0;
+
+    public bool HasUnchangedEntities => UnchangedEntities.Count > 0;
+
     public bool HasWarnings => Warnings.Count > 0;
 
     public bool HasDiagnostics => Diagnostics.Count > 0;
 
     public bool HasProgressImpacts => ProgressImpacts.Count > 0;
+
+    public bool HasArchiveImpact => MissingEntities.Count > 0;
+
+    public bool HasNoActionableChanges => HasReview && CurrentPlan?.HasActionableChanges == false;
+
+    public bool ShowNewEntities =>
+        HasNewEntities && IsVisibleFor(SchemaSynchronizationReviewFilter.New);
+
+    public bool ShowChangedEntities =>
+        HasChangedEntities && IsVisibleFor(SchemaSynchronizationReviewFilter.Changed);
+
+    public bool ShowMissingEntities =>
+        HasMissingEntities && IsVisibleFor(SchemaSynchronizationReviewFilter.Missing);
+
+    public bool ShowManualOnlyEntities => HasManualOnlyEntities && !HasActiveFilter;
+
+    public bool ShowUnresolvedEntities =>
+        HasUnresolvedEntities && IsVisibleFor(SchemaSynchronizationReviewFilter.Unresolved);
+
+    public bool ShowBlockedEntities =>
+        HasBlockedEntities && IsVisibleFor(SchemaSynchronizationReviewFilter.Unresolved);
+
+    public bool ShowUnchangedEntities =>
+        HasUnchangedEntities && IsVisibleFor(SchemaSynchronizationReviewFilter.Unchanged);
+
+    public bool ShowArchiveImpact =>
+        HasArchiveImpact && IsVisibleFor(SchemaSynchronizationReviewFilter.Missing);
+
+    public bool ShowNoActionableChanges => HasNoActionableChanges && !HasActiveFilter;
+
+    public int PendingProgressDecisionCount => ProgressImpacts.Count(static row => row.Decision is null);
+
+    public string ArchiveImpactText => MissingEntities.Count == 0
+        ? string.Empty
+        : $"{MissingEntities.Count} of {PreSynchronizationActiveEntityCount} active " +
+          $"{(PreSynchronizationActiveEntityCount == 1 ? "entity" : "entities")} will be archived when these changes are applied. Progress, notes, and history are preserved.";
+
+    public string ApplyDisabledReason => CurrentPlan switch
+    {
+        null => string.Empty,
+        { CandidateRanking.IsSuccess: false } =>
+            "Apply is unavailable until the dependency errors are corrected.",
+        _ when PendingProgressDecisionCount > 0 =>
+            $"Choose a progress outcome for {PendingProgressDecisionCount} affected " +
+            $"{(PendingProgressDecisionCount == 1 ? "entity" : "entities")} before applying.",
+        _ => string.Empty
+    };
+
+    public bool HasApplyDisabledReason => !string.IsNullOrEmpty(ApplyDisabledReason);
 
     public bool ShowEmptyState => !HasReview && !HasDiagnostics;
 
@@ -175,59 +394,68 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
             return;
         }
 
-        SchemaSynchronizationPlan plan = result.Plan!;
-        NewEntities = plan.NewEntities.Select(ToRow).ToArray();
-        ChangedEntities = plan.ChangedEntities.Select(ToRow).ToArray();
-        MissingEntities = plan.MissingEntities
-            .Select(static change => new SchemaSynchronizationReviewRow(
-                change.Entity.Id,
-                change.Entity.SourceName,
-                "Will be soft-archived; progress and notes will be preserved."))
-            .ToArray();
-        ManualOnlyEntities = plan.ManualOnlyEntities
-            .Select(static change => new SchemaSynchronizationReviewRow(
-                change.Entity.Id,
-                change.Entity.SourceName,
-                FormatManualOnlyDetails(change)))
-            .ToArray();
-        UnresolvedEntities = plan.UnresolvedEntities
-            .Select(static change => new SchemaSynchronizationReviewRow(
-                change.Entity.Id,
-                change.Entity.SourceName,
-                $"Missing: {string.Join(", ", change.MissingDependencyNames)}"))
-            .ToArray();
-        UnchangedEntityCount = plan.UnchangedEntityCount;
-        ProgressImpacts = plan.ProgressImpacts.Select(ToProgressImpactRow).ToArray();
-        CurrentPlan = plan;
+        PopulatePlan(result.Plan!);
     }
 
     public void ReplacePlan(SchemaSynchronizationPlan plan)
     {
         ArgumentNullException.ThrowIfNull(plan);
-        NewEntities = plan.NewEntities.Select(ToRow).ToArray();
-        ChangedEntities = plan.ChangedEntities.Select(ToRow).ToArray();
+        PopulatePlan(plan);
+        Diagnostics = plan.CandidateRanking.Diagnostics
+            .Select(static diagnostic => diagnostic.Message)
+            .ToArray();
+    }
+
+    private void PopulatePlan(SchemaSynchronizationPlan plan)
+    {
+        Dictionary<EntityTracker.Domain.EntityId, SynchronizationProgressImpactRow> impacts =
+            plan.ProgressImpacts
+                .Select(ToProgressImpactRow)
+                .ToDictionary(static row => row.EntityId);
+        NewEntities = plan.NewEntities.Select(change => ToRow(change, impacts)).ToArray();
+        ChangedEntities = plan.ChangedEntities.Select(change => ToRow(change, impacts)).ToArray();
         MissingEntities = plan.MissingEntities
             .Select(static change => new SchemaSynchronizationReviewRow(
                 change.Entity.Id,
                 change.Entity.SourceName,
-                "Will be soft-archived; progress and notes will be preserved."))
+                "Will be soft-archived; progress, notes, and history will be preserved."))
             .ToArray();
         ManualOnlyEntities = plan.ManualOnlyEntities
-            .Select(static change => new SchemaSynchronizationReviewRow(
+            .Select(change => new SchemaSynchronizationReviewRow(
                 change.Entity.Id,
                 change.Entity.SourceName,
-                FormatManualOnlyDetails(change)))
+                ManualOnlyDetails,
+                change.DependencyChanges.Select(ToDependencyRow).ToArray(),
+                impacts.GetValueOrDefault(change.Entity.Id)))
             .ToArray();
-        UnresolvedEntities = plan.UnresolvedEntities
-            .Select(static change => new SchemaSynchronizationReviewRow(
-                change.Entity.Id,
-                change.Entity.SourceName,
-                $"Missing: {string.Join(", ", change.MissingDependencyNames)}"))
+        SynchronizationResolutionEffectRow[] resolutionEffects = plan.ReviewResolutionEffects
+            .Select(static effect => new SynchronizationResolutionEffectRow(
+                effect.EntityId,
+                effect.SourceName,
+                string.Join(", ", effect.MissingDependencyNames),
+                effect.State == DependencyResolutionState.Unresolved))
+            .ToArray();
+        UnresolvedEntities = resolutionEffects
+            .Where(static effect => effect.IsDirectlyUnresolved)
+            .Select(static effect => new SchemaSynchronizationReviewRow(
+                effect.EntityId,
+                effect.SourceName,
+                effect.Explanation))
+            .ToArray();
+        BlockedEntities = resolutionEffects
+            .Where(static effect => !effect.IsDirectlyUnresolved)
+            .ToArray();
+        UnchangedEntities = plan.UnchangedEntities
+            .Select(static entity => new SchemaSynchronizationReviewRow(
+                entity.Id,
+                entity.SourceName,
+                "No imported schema changes."))
             .ToArray();
         UnchangedEntityCount = plan.UnchangedEntityCount;
-        ProgressImpacts = plan.ProgressImpacts.Select(ToProgressImpactRow).ToArray();
-        Diagnostics = plan.CandidateRanking.Diagnostics
-            .Select(static diagnostic => diagnostic.Message)
+        PreSynchronizationActiveEntityCount = plan.PreSynchronizationActiveEntityCount;
+        ProgressImpacts = impacts.Values
+            .OrderBy(static row => row.SourceName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static row => row.SourceName, StringComparer.Ordinal)
             .ToArray();
         CurrentPlan = plan;
     }
@@ -253,24 +481,48 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
 
     private void ClearReviewState()
     {
+        ActiveFilter = null;
         CurrentPlan = null;
         NewEntities = [];
         ChangedEntities = [];
         MissingEntities = [];
         ManualOnlyEntities = [];
         UnresolvedEntities = [];
+        BlockedEntities = [];
+        UnchangedEntities = [];
         Warnings = [];
         Diagnostics = [];
         ProgressImpacts = [];
         UnchangedEntityCount = 0;
+        PreSynchronizationActiveEntityCount = 0;
+        IsUnchangedExpanded = false;
     }
 
-    private static SchemaSynchronizationReviewRow ToRow(
-        EntitySynchronizationChange change)
+    private void ToggleFilter(SchemaSynchronizationReviewFilter filter) =>
+        ActiveFilter = ActiveFilter == filter ? null : filter;
+
+    private bool CanFilter(SchemaSynchronizationReviewFilter filter) => filter switch
     {
-        List<string> details = change.DependencyChanges
-            .Select(FormatDependencyChange)
-            .ToList();
+        SchemaSynchronizationReviewFilter.New => HasNewEntities,
+        SchemaSynchronizationReviewFilter.Changed => HasChangedEntities,
+        SchemaSynchronizationReviewFilter.Missing => HasMissingEntities,
+        SchemaSynchronizationReviewFilter.Unresolved =>
+            HasUnresolvedEntities || HasBlockedEntities,
+        SchemaSynchronizationReviewFilter.Unchanged => HasUnchangedEntities,
+        _ => false
+    };
+
+    private bool IsVisibleFor(SchemaSynchronizationReviewFilter filter) =>
+        ActiveFilter is null || ActiveFilter == filter;
+
+    private void NotifyFilterAvailabilityChanged() =>
+        _toggleFilterCommand.NotifyCanExecuteChanged();
+
+    private static SchemaSynchronizationReviewRow ToRow(
+        EntitySynchronizationChange change,
+        IReadOnlyDictionary<EntityTracker.Domain.EntityId, SynchronizationProgressImpactRow> impacts)
+    {
+        List<string> details = [];
         if (change.IsReactivation)
         {
             details.Insert(0, "Reactivated with its existing identity and progress.");
@@ -281,7 +533,7 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
             details.Insert(0, "Now tracked by CSV; manual origin and existing progress are preserved.");
         }
 
-        if (details.Count == 0)
+        if (details.Count == 0 && change.DependencyChanges.Count == 0)
         {
             details.Add(change.ChangeKind == EntitySynchronizationChangeKind.New
                 ? "New tracked entity."
@@ -291,8 +543,46 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
         return new SchemaSynchronizationReviewRow(
             change.Entity.Id,
             change.Entity.SourceName,
-            string.Join(Environment.NewLine, details));
+            string.Join(Environment.NewLine, details),
+            change.DependencyChanges.Select(ToDependencyRow).ToArray(),
+            impacts.GetValueOrDefault(change.Entity.Id));
     }
+
+    private static SchemaSynchronizationDependencyChangeRow ToDependencyRow(
+        DependencySynchronizationChange change) => change.ChangeKind switch
+        {
+            DependencySynchronizationChangeKind.Added => new(
+                change.ChangeKind,
+                "Added",
+                change.DependencySourceName,
+                change.NewKind?.ToString()),
+            DependencySynchronizationChangeKind.Removed => new(
+                change.ChangeKind,
+                "Removed",
+                change.DependencySourceName,
+                change.PreviousKind?.ToString()),
+            DependencySynchronizationChangeKind.KindChanged => new(
+                change.ChangeKind,
+                "Kind changed",
+                change.DependencySourceName,
+                $"{change.PreviousKind} to {change.NewKind}"),
+            DependencySynchronizationChangeKind.MetadataChanged => new(
+                change.ChangeKind,
+                "Metadata changed",
+                change.DependencySourceName,
+                null),
+            DependencySynchronizationChangeKind.Resolved => new(
+                change.ChangeKind,
+                "Now resolved",
+                change.DependencySourceName,
+                null),
+            DependencySynchronizationChangeKind.BecameUnresolved => new(
+                change.ChangeKind,
+                "Now unresolved",
+                change.DependencySourceName,
+                null),
+            _ => throw new ArgumentOutOfRangeException(nameof(change))
+        };
 
     private static SynchronizationProgressImpactRow ToProgressImpactRow(
         SynchronizationProgressImpact impact) =>
@@ -304,35 +594,8 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
                 : "Reconciled",
             impact.Decision);
 
-    private static string FormatManualOnlyDetails(EntitySynchronizationChange change)
-    {
-        List<string> details =
-        [
-            "Not present in this Complete CSV; kept active because it has never been imported."
-        ];
-        details.AddRange(change.DependencyChanges.Select(FormatDependencyChange));
-        return string.Join(Environment.NewLine, details);
-    }
-
-    private static string FormatDependencyChange(DependencySynchronizationChange change)
-    {
-        return change.ChangeKind switch
-        {
-            DependencySynchronizationChangeKind.Added =>
-                $"+ {change.DependencySourceName} ({change.NewKind})",
-            DependencySynchronizationChangeKind.Removed =>
-                $"− {change.DependencySourceName} ({change.PreviousKind})",
-            DependencySynchronizationChangeKind.KindChanged =>
-                $"~ {change.DependencySourceName}: {change.PreviousKind} → {change.NewKind}",
-            DependencySynchronizationChangeKind.MetadataChanged =>
-                $"~ {change.DependencySourceName}: metadata updated",
-            DependencySynchronizationChangeKind.Resolved =>
-                $"✓ {change.DependencySourceName}: now resolved",
-            DependencySynchronizationChangeKind.BecameUnresolved =>
-                $"! {change.DependencySourceName}: now unresolved",
-            _ => throw new ArgumentOutOfRangeException(nameof(change))
-        };
-    }
+    private const string ManualOnlyDetails =
+        "Not present in this Complete CSV; kept active because it has never been imported.";
 
     private static string FormatImportDiagnostic(ImportDiagnostic diagnostic)
     {
@@ -346,7 +609,7 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
         return location + diagnostic.Message;
     }
 
-    private void SetCollection<T>(
+    private bool SetCollection<T>(
         ref IReadOnlyList<T> field,
         IReadOnlyList<T> value,
         string dependentPropertyName,
@@ -356,7 +619,10 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
         {
             OnPropertyChanged(dependentPropertyName);
             OnPropertyChanged(nameof(ShowEmptyState));
+            return true;
         }
+
+        return false;
     }
 
     private bool SetField<T>(

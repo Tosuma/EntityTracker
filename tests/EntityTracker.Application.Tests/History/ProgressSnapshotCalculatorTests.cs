@@ -19,6 +19,7 @@ public sealed class ProgressSnapshotCalculatorTests
         TrackedEntity reconciled = Entity(6, "Reconciled", DevelopmentStatus.Reconciled);
         TrackedEntity archived = new(
             new EntityId(new Guid(7, 0, 0, new byte[8])),
+            TestTrackerId,
             "Archived",
             lifecycleState: EntityLifecycleState.Archived);
         TrackedEntity[] entities =
@@ -49,5 +50,5 @@ public sealed class ProgressSnapshotCalculatorTests
         int id,
         string name,
         DevelopmentStatus status = DevelopmentStatus.NotStarted) =>
-        new(new EntityId(new Guid(id, 0, 0, new byte[8])), name, status);
+        new(new EntityId(new Guid(id, 0, 0, new byte[8])), TestTrackerId, name, status);
 }

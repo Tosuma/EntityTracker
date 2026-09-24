@@ -19,6 +19,7 @@ namespace EntityTracker.Wpf.ViewModels;
 public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 {
     private readonly EntityDependencyEditorService _editorService;
+    private readonly TrackerId _trackerId;
     private readonly EntityLifecycleService _lifecycleService;
     private readonly SchemaSynchronizationService _synchronizationService;
     private readonly Func<Task> _onPersisted;
@@ -45,10 +46,14 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private IReadOnlyList<string> _warnings = [];
     private IReadOnlyList<string> _errors = [];
     private string _dependencyQuery = string.Empty;
+    private ManualDependencySuggestion? _selectedDependencySuggestion;
+    private string? _selectedGroupSuggestion;
     private string? _searchMessage;
     private string? _groupSearchMessage;
     private string? _archiveErrorMessage;
     private bool _canAddAsUnresolved;
+    private bool _isDependencySuggestionsOpen;
+    private bool _isGroupSuggestionsOpen;
     private bool _isBusy;
     private bool _isOpen;
     private EntityEditorMode _mode;
@@ -67,8 +72,10 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private IReadOnlyList<PriorityPlanningRow> _priorityPreviewRows = [];
     private IReadOnlyList<string> _priorityUnresolvedDependencyNames = [];
     private bool _hasPendingPriorityChange;
+    private string? _initialOverrideSignature;
 
     public EntityDependencyEditorViewModel(
+        TrackerId trackerId,
         EntityDependencyEditorService editorService,
         EntityLifecycleService lifecycleService,
         SchemaSynchronizationService synchronizationService,
@@ -87,6 +94,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         ArgumentNullException.ThrowIfNull(onRestored);
         ArgumentNullException.ThrowIfNull(onReviewStaged);
 
+        _trackerId = trackerId;
         _editorService = editorService;
         _lifecycleService = lifecycleService;
         _synchronizationService = synchronizationService;
@@ -181,9 +189,55 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _dependencyQuery, value ?? string.Empty))
             {
+                IsDependencySuggestionsOpen = false;
                 _ = SearchAsync(++_searchVersion);
             }
         }
+    }
+
+    public ManualDependencySuggestion? SelectedDependencySuggestion
+    {
+        get => _selectedDependencySuggestion;
+        set
+        {
+            if (!SetField(ref _selectedDependencySuggestion, value) || value is null)
+            {
+                return;
+            }
+
+            _ = AddManualDependencyAsync(value.SourceName);
+            _selectedDependencySuggestion = null;
+            OnPropertyChanged();
+        }
+    }
+
+    public string? SelectedGroupSuggestion
+    {
+        get => _selectedGroupSuggestion;
+        set
+        {
+            if (!SetField(ref _selectedGroupSuggestion, value) ||
+                string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            UseGroupSuggestion(value);
+            _selectedGroupSuggestion = null;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool IsDependencySuggestionsOpen
+    {
+        get => _isDependencySuggestionsOpen;
+        set => SetField(ref _isDependencySuggestionsOpen, value);
+    }
+
+    public bool IsGroupSuggestionsOpen
+    {
+        get => _isGroupSuggestionsOpen;
+        set => SetField(ref _isGroupSuggestionsOpen, value);
     }
 
     public IReadOnlyList<string> Warnings
@@ -301,6 +355,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             {
                 OnPropertyChanged(nameof(IsReviewMode));
                 OnPropertyChanged(nameof(IsArchivedMode));
+                OnPropertyChanged(nameof(ShowStandaloneSections));
+                OnPropertyChanged(nameof(ShowArchivedSections));
                 OnPropertyChanged(nameof(ContextTitle));
                 OnPropertyChanged(nameof(ContextDescription));
                 OnPropertyChanged(nameof(SaveLabel));
@@ -319,6 +375,10 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     public bool IsReviewMode => Mode == EntityEditorMode.SynchronizationReview;
 
     public bool IsArchivedMode => Mode == EntityEditorMode.ArchivedDetails;
+
+    public bool ShowStandaloneSections => Mode == EntityEditorMode.Standalone;
+
+    public bool ShowArchivedSections => Mode == EntityEditorMode.ArchivedDetails;
 
     public bool IsArchiveConfirmationOpen
     {
@@ -376,12 +436,16 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         get => _selectedStatus;
         set
         {
-            if (CanEditProgress)
+            if (CanEditProgress && SetField(ref _selectedStatus, value))
             {
-                SetField(ref _selectedStatus, value);
+                OnPropertyChanged(nameof(SelectedStatusDisplay));
             }
         }
     }
+
+    public string SelectedStatusDisplay => StatusOptions
+        .Single(option => option.Value == SelectedStatus)
+        .DisplayName;
 
     public string EditedNotes
     {
@@ -526,6 +590,25 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     public bool HasPriorityUnresolvedDependencies =>
         PriorityUnresolvedDependencyNames.Count > 0;
 
+    public bool IsDirty
+    {
+        get
+        {
+            if (!IsOpen || IsArchivedMode || CurrentEditPlan is null)
+            {
+                return false;
+            }
+
+            TrackedEntity entity = CurrentEditPlan.Entity;
+            return SelectedStatus != entity.Status ||
+                   EditedNotes != entity.Notes ||
+                   EditedResponsibleDeveloper != entity.ResponsibleDeveloper ||
+                   EditedGroupName != entity.GroupName ||
+                   SelectedRequestedPriority != entity.RequestedPriority ||
+                   OverrideSignature(CurrentEditPlan.DesiredOverrides) != _initialOverrideSignature;
+        }
+    }
+
     public string SelectedEntityName => SelectedEntity?.SourceName ?? "Loading entity…";
 
     public string EntityDetails => SelectedEntity is null
@@ -598,7 +681,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         IsBusy = true;
         try
         {
-            LoadPlan(await _editorService.LoadAsync(entityId, cancellationToken), true);
+            LoadPlan(await _editorService.LoadAsync(_trackerId, entityId, cancellationToken), true);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -636,7 +719,11 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 .Where(item => item.DependentEntityId == ownerId)
                 .ToArray();
             LoadPlan(
-                _synchronizationService.PreviewDependencyEdit(plan, ownerId, desired),
+                _synchronizationService.PreviewDependencyEdit(
+                    _trackerId,
+                    plan,
+                    ownerId,
+                    desired),
                 true);
         }
         catch (Exception exception)
@@ -665,10 +752,14 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         try
         {
             ArchivedEntityDetails details =
-                await _editorService.LoadArchivedDetailsAsync(entityId, cancellationToken);
+                await _editorService.LoadArchivedDetailsAsync(
+                    _trackerId,
+                    entityId,
+                    cancellationToken);
             ArchivedDetails = details;
             _selectedStatus = details.Entity.Status;
             OnPropertyChanged(nameof(SelectedStatus));
+            OnPropertyChanged(nameof(SelectedStatusDisplay));
             _editedNotes = details.Entity.Notes;
             OnPropertyChanged(nameof(EditedNotes));
             _editedResponsibleDeveloper = details.Entity.ResponsibleDeveloper;
@@ -710,6 +801,31 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         NotifyCommandsChanged();
     }
 
+    public bool DismissOpenSuggestions()
+    {
+        if (IsDependencySuggestionsOpen)
+        {
+            IsDependencySuggestionsOpen = false;
+            return true;
+        }
+
+        if (IsGroupSuggestionsOpen)
+        {
+            IsGroupSuggestionsOpen = false;
+            return true;
+        }
+
+        return false;
+    }
+
+    public void DiscardAndClose()
+    {
+        if (IsOpen && !IsBusy)
+        {
+            CloseSession();
+        }
+    }
+
     private async Task SearchAsync(int searchVersion)
     {
         if (!CanEdit || CurrentEditPlan is null)
@@ -722,10 +838,12 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         {
             ManualDependencySearchResult result = IsReviewMode
                 ? _editorService.SearchDependencies(
+                    _trackerId,
                     CurrentEditPlan.Entity.Id,
                     DependencyQuery,
                     _reviewPlan!.CandidateEntities)
                 : await _editorService.SearchDependenciesAsync(
+                    _trackerId,
                     CurrentEditPlan.Entity.Id,
                     DependencyQuery);
             if (searchVersion != _searchVersion)
@@ -734,6 +852,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             }
 
             Suggestions = result.Suggestions;
+            IsDependencySuggestionsOpen = result.Suggestions.Count > 0;
             CanAddAsUnresolved = result.CanAddAsUnresolved &&
                                  !ContainsDependency(result.EnteredKey);
             SearchMessage = result.BlockingMessage ??
@@ -750,6 +869,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             }
 
             Suggestions = [];
+            IsDependencySuggestionsOpen = false;
             CanAddAsUnresolved = false;
             SearchMessage = $"Dependencies could not be searched: {exception.Message}";
         }
@@ -766,13 +886,14 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         try
         {
             IReadOnlyList<string> suggestions =
-                await _editorService.SearchGroupNamesAsync(EditedGroupName);
+                await _editorService.SearchGroupNamesAsync(_trackerId, EditedGroupName);
             if (searchVersion != _groupSearchVersion)
             {
                 return;
             }
 
             GroupSuggestions = suggestions;
+            IsGroupSuggestionsOpen = suggestions.Count > 0;
             GroupSearchMessage = null;
         }
         catch (Exception exception)
@@ -784,6 +905,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             }
 
             GroupSuggestions = [];
+            IsGroupSuggestionsOpen = false;
             GroupSearchMessage = $"Groups could not be searched: {exception.Message}";
         }
     }
@@ -799,6 +921,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _editedGroupName = groupName;
         OnPropertyChanged(nameof(EditedGroupName));
         GroupSuggestions = [];
+        IsGroupSuggestionsOpen = false;
         GroupSearchMessage = null;
     }
 
@@ -854,10 +977,14 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         {
             EntityDependencyEditPlan plan = IsReviewMode
                 ? _synchronizationService.PreviewDependencyEdit(
+                    _trackerId,
                     _reviewPlan!,
                     CurrentEditPlan.Entity.Id,
                     desired)
-                : await _editorService.PreviewAsync(CurrentEditPlan.Entity.Id, desired);
+                : await _editorService.PreviewAsync(
+                    _trackerId,
+                    CurrentEditPlan.Entity.Id,
+                    desired);
             LoadPlan(plan, false);
             ClearSearch();
         }
@@ -881,12 +1008,16 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             if (IsReviewMode)
             {
                 SchemaSynchronizationPlan revised =
-                    _synchronizationService.StageDependencyEdit(_reviewPlan!, CurrentEditPlan);
+                    _synchronizationService.StageDependencyEdit(
+                        _trackerId,
+                        _reviewPlan!,
+                        CurrentEditPlan);
                 _onReviewStaged(revised);
             }
             else
             {
                 await _editorService.SaveAsync(
+                    _trackerId,
                     CurrentEditPlan,
                     SelectedStatus,
                     EditedNotes,
@@ -943,7 +1074,9 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         ArchiveErrorMessage = null;
         try
         {
-            bool archived = await _lifecycleService.TryArchiveAsync(CurrentEditPlan.Entity.Id);
+            bool archived = await _lifecycleService.TryArchiveAsync(
+                _trackerId,
+                CurrentEditPlan.Entity.Id);
             if (!archived)
             {
                 ArchiveErrorMessage =
@@ -977,7 +1110,9 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         try
         {
             EntityRestorationResult result =
-                await _lifecycleService.RestoreAsync(ArchivedDetails.Entity.Id);
+                await _lifecycleService.RestoreAsync(
+                    _trackerId,
+                    ArchivedDetails.Entity.Id);
             if (!result.IsSuccess)
             {
                 Errors = result.Errors;
@@ -1000,11 +1135,17 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
     private void LoadPlan(EntityDependencyEditPlan plan, bool initializeProgress)
     {
+        if (initializeProgress)
+        {
+            _initialOverrideSignature = OverrideSignature(plan.DesiredOverrides);
+        }
+
         CurrentEditPlan = plan;
         if (initializeProgress)
         {
             _selectedStatus = plan.Entity.Status;
             OnPropertyChanged(nameof(SelectedStatus));
+            OnPropertyChanged(nameof(SelectedStatusDisplay));
             _editedNotes = plan.Entity.Notes;
             OnPropertyChanged(nameof(EditedNotes));
             _editedResponsibleDeveloper = plan.Entity.ResponsibleDeveloper;
@@ -1024,6 +1165,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         Errors = plan.Errors;
         RefreshPriorityPresentation();
         NotifyCommandsChanged();
+        OnPropertyChanged(nameof(IsDirty));
     }
 
     private void RefreshPriorityPresentation()
@@ -1038,6 +1180,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
 
         PriorityPlanningPreview preview = _editorService.CreatePriorityPreview(
+            _trackerId,
             CurrentEditPlan,
             SelectedRequestedPriority);
         PriorityPlanningItem target = preview.Entities.Single(static item => item.IsTarget);
@@ -1073,9 +1216,11 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         Errors = [];
         ArchiveErrorMessage = null;
         _reviewPlan = null;
+        _initialOverrideSignature = null;
         Mode = EntityEditorMode.Standalone;
         _selectedStatus = DevelopmentStatus.NotStarted;
         OnPropertyChanged(nameof(SelectedStatus));
+        OnPropertyChanged(nameof(SelectedStatusDisplay));
         _editedNotes = string.Empty;
         OnPropertyChanged(nameof(EditedNotes));
         _editedResponsibleDeveloper = string.Empty;
@@ -1097,7 +1242,10 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _searchVersion++;
         _dependencyQuery = string.Empty;
         OnPropertyChanged(nameof(DependencyQuery));
+        _selectedDependencySuggestion = null;
+        OnPropertyChanged(nameof(SelectedDependencySuggestion));
         Suggestions = [];
+        IsDependencySuggestionsOpen = false;
         CanAddAsUnresolved = false;
         SearchMessage = null;
     }
@@ -1105,7 +1253,10 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private void ClearGroupSearch()
     {
         _groupSearchVersion++;
+        _selectedGroupSuggestion = null;
+        OnPropertyChanged(nameof(SelectedGroupSuggestion));
         GroupSuggestions = [];
+        IsGroupSuggestionsOpen = false;
         GroupSearchMessage = null;
     }
 
@@ -1179,8 +1330,17 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
         field = value;
         OnPropertyChanged(propertyName);
+        OnPropertyChanged(nameof(IsDirty));
         return true;
     }
+
+    private static string OverrideSignature(IEnumerable<ManualDependencyOverride> overrides) =>
+        string.Join(
+            "|",
+            overrides
+                .OrderBy(static item => item.DependencySourceName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static item => item.Action)
+                .Select(static item => $"{item.Action}:{item.DependencySourceName.Trim().ToUpperInvariant()}"));
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));

@@ -13,11 +13,11 @@ public sealed class EntityLifecycleServiceTests
     [Fact]
     public async Task TryArchiveAsync_ActiveEntity_WritesOnlyArchiveChange()
     {
-        TrackedEntity entity = new(EntityId.New(), "Customer");
+        TrackedEntity entity = new(EntityId.New(), TestTrackerId, "Customer");
         RecordingStore store = new();
         EntityLifecycleService service = CreateService([entity], store);
 
-        bool archived = await service.TryArchiveAsync(entity.Id);
+        bool archived = await service.TryArchiveAsync(TestTrackerId, entity.Id);
 
         Assert.True(archived);
         TrackedStateChangeSet changeSet = Assert.IsType<TrackedStateChangeSet>(
@@ -39,13 +39,14 @@ public sealed class EntityLifecycleServiceTests
     {
         TrackedEntity archivedEntity = new(
             EntityId.New(),
+            TestTrackerId,
             "Legacy",
             lifecycleState: EntityLifecycleState.Archived);
         RecordingStore store = new();
         EntityLifecycleService service = CreateService([archivedEntity], store);
 
-        Assert.False(await service.TryArchiveAsync(EntityId.New()));
-        Assert.False(await service.TryArchiveAsync(archivedEntity.Id));
+        Assert.False(await service.TryArchiveAsync(TestTrackerId, EntityId.New()));
+        Assert.False(await service.TryArchiveAsync(TestTrackerId, archivedEntity.Id));
         Assert.Null(store.LastChangeSet);
     }
 
@@ -54,6 +55,7 @@ public sealed class EntityLifecycleServiceTests
     {
         TrackedEntity archivedEntity = new(
             EntityId.New(),
+            TestTrackerId,
             "Legacy",
             DevelopmentStatus.Reconciled,
             "Keep notes",
@@ -62,7 +64,9 @@ public sealed class EntityLifecycleServiceTests
         RecordingStore store = new();
         EntityLifecycleService service = CreateService([archivedEntity], store);
 
-        EntityRestorationResult result = await service.RestoreAsync(archivedEntity.Id);
+        EntityRestorationResult result = await service.RestoreAsync(
+            TestTrackerId,
+            archivedEntity.Id);
 
         Assert.True(result.IsSuccess);
         TrackedStateChangeSet changeSet = Assert.IsType<TrackedStateChangeSet>(
@@ -78,12 +82,16 @@ public sealed class EntityLifecycleServiceTests
     [Fact]
     public async Task RestoreAsync_ActiveOrMissingEntity_ReturnsExpectedFailureWithoutWrite()
     {
-        TrackedEntity activeEntity = new(EntityId.New(), "Active");
+        TrackedEntity activeEntity = new(EntityId.New(), TestTrackerId, "Active");
         RecordingStore store = new();
         EntityLifecycleService service = CreateService([activeEntity], store);
 
-        EntityRestorationResult activeResult = await service.RestoreAsync(activeEntity.Id);
-        EntityRestorationResult missingResult = await service.RestoreAsync(EntityId.New());
+        EntityRestorationResult activeResult = await service.RestoreAsync(
+            TestTrackerId,
+            activeEntity.Id);
+        EntityRestorationResult missingResult = await service.RestoreAsync(
+            TestTrackerId,
+            EntityId.New());
 
         Assert.False(activeResult.IsSuccess);
         Assert.False(missingResult.IsSuccess);
@@ -95,9 +103,10 @@ public sealed class EntityLifecycleServiceTests
     {
         TrackedEntity archived = new(
             EntityId.New(),
+            TestTrackerId,
             "Archived",
             lifecycleState: EntityLifecycleState.Archived);
-        TrackedEntity active = new(EntityId.New(), "Active");
+        TrackedEntity active = new(EntityId.New(), TestTrackerId, "Active");
         PersistedDependency[] dependencies =
         [
             new(new DependencyEdge(archived.Id, active.Id), ImportedDependencyKind.Mandatory),
@@ -106,7 +115,7 @@ public sealed class EntityLifecycleServiceTests
         RecordingStore store = new();
         EntityLifecycleService service = CreateService([archived, active], store, dependencies);
 
-        EntityRestorationResult result = await service.RestoreAsync(archived.Id);
+        EntityRestorationResult result = await service.RestoreAsync(TestTrackerId, archived.Id);
 
         Assert.False(result.IsSuccess);
         Assert.Contains(result.Errors, error =>
@@ -132,11 +141,13 @@ public sealed class EntityLifecycleServiceTests
         : IEntityRepository
     {
         public Task<TrackedEntity?> GetAsync(
+            TrackerId trackerId,
             EntityId id,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(entities.SingleOrDefault(entity => entity.Id == id));
 
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(entities);
 
     }
@@ -146,9 +157,11 @@ public sealed class EntityLifecycleServiceTests
         IReadOnlyList<PersistedUnresolvedDependency> unresolved) : IDependencyRepository
     {
         public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(dependencies);
 
         public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(unresolved);
 
     }
@@ -157,6 +170,7 @@ public sealed class EntityLifecycleServiceTests
         : IManualDependencyOverrideRepository
     {
         public Task<IReadOnlyList<ManualDependencyOverride>> GetAllAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(overrides);
     }
 
@@ -165,6 +179,7 @@ public sealed class EntityLifecycleServiceTests
         public TrackedStateChangeSet? LastChangeSet { get; private set; }
 
         public Task ApplyAsync(
+            TrackerId trackerId,
             TrackedStateChangeSet changeSet,
             CancellationToken cancellationToken = default)
         {
@@ -173,6 +188,7 @@ public sealed class EntityLifecycleServiceTests
         }
 
         public Task EnsureHistoryBaselineAsync(
+            TrackerId trackerId,
             IEnumerable<TrackedEntity> entities,
             EntityTracker.Application.History.ProgressSnapshotState snapshot,
             CancellationToken cancellationToken = default) => Task.CompletedTask;

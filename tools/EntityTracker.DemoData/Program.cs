@@ -30,7 +30,9 @@ internal static class Program
                 commandLine.Days,
                 commandLine.Seed,
                 DateOnly.FromDateTime(DateTime.Today),
-                TimeZoneInfo.Local);
+                TimeZoneInfo.Local,
+                commandLine.ProjectName,
+                commandLine.TrackerName);
             ProgressDemoResult result = await new ProgressDemoSeeder().SeedAsync(
                 commandLine.DatabasePath!,
                 options);
@@ -94,7 +96,8 @@ internal static class Program
         Console.WriteLine("Usage:");
         Console.WriteLine(
             "  dotnet run --project tools/EntityTracker.DemoData -- " +
-            "--database <path> --confirm-reset [--days 90] [--seed 12345]");
+            "--database <path> --confirm-reset [--project-name <name> " +
+            "--tracker-name <name>] [--days 90] [--seed 12345]");
         Console.WriteLine();
         Console.WriteLine(
             "This replaces progress statuses and progress history in the selected database. " +

@@ -1,26 +1,31 @@
 namespace EntityTracker.Infrastructure.Configuration;
 
+using EntityTracker.Domain;
+
 public sealed class EntityTrackerSettings
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 4;
 
     public EntityTrackerSettings(
-        StorageProviderKind activeStorage,
-        SharePointConnectionSettings? sharePoint = null)
+        ApplicationAppearance appearance = ApplicationAppearance.System,
+        ProjectId? lastProjectId = null,
+        TrackerId? lastTrackerId = null)
     {
-        if (!Enum.IsDefined(activeStorage))
+        if (!Enum.IsDefined(appearance))
         {
-            throw new ArgumentOutOfRangeException(nameof(activeStorage));
+            throw new ArgumentOutOfRangeException(nameof(appearance));
         }
 
-        ActiveStorage = activeStorage;
-        SharePoint = sharePoint;
+        Appearance = appearance;
+        LastProjectId = lastProjectId;
+        LastTrackerId = lastTrackerId;
     }
 
-    public StorageProviderKind ActiveStorage { get; }
+    public ApplicationAppearance Appearance { get; }
 
-    public SharePointConnectionSettings? SharePoint { get; }
+    public ProjectId? LastProjectId { get; }
 
-    public static EntityTrackerSettings Default { get; } =
-        new(StorageProviderKind.Sqlite);
+    public TrackerId? LastTrackerId { get; }
+
+    public static EntityTrackerSettings Default { get; } = new();
 }

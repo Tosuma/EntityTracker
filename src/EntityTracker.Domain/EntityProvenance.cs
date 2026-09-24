@@ -13,5 +13,11 @@ public enum EntityProvenance
     ManualOnly,
 
     /// <summary>The entity was created manually and later matched by a CSV import.</summary>
-    ManualAndImported
+    ManualAndImported,
+
+    /// <summary>The entity structure was copied from another tracker.</summary>
+    Copied,
+
+    /// <summary>A copied entity was later confirmed by a CSV import.</summary>
+    CopiedAndImported
 }

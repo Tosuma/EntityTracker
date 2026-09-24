@@ -1,0 +1,134 @@
+<UserControl x:Class="EntityTracker.Wpf.Views.HelpSqlView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled"
+                  ScrollViewer.CanContentScroll="False">
+        <StackPanel MaxWidth="1040" HorizontalAlignment="Left">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Command="{Binding Help.BackToImportCommand}"
+                            Content="Back to Schema synchronization"
+                            Style="{StaticResource SecondaryButtonStyle}" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Help &amp; SQL" />
+                    <TextBlock Margin="0,4,0,0"
+                               Style="{StaticResource PageDescriptionTextStyle}"
+                               Text="A concise guide to navigation, tracker status, imports, reports, lifecycle actions, and PostgreSQL extraction." />
+                </StackPanel>
+            </DockPanel>
+
+            <TextBlock Margin="0,24,0,8" Style="{StaticResource SectionHeadingTextStyle}" Text="Working in EntityTracker" />
+            <UniformGrid Columns="2">
+                <Border Margin="0,0,6,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Portfolio, Project, and Tracker" />
+                        <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}"
+                                   Text="Portfolio lists Projects. A Project dashboard lists its Trackers. Opening a Tracker makes it the active context for Overview, Archived, Schema synchronization, Add entity, and Reports." />
+                    </StackPanel>
+                </Border>
+                <Border Margin="6,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Development status, Work status, and Blockers" />
+                        <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}"
+                                   Text="Development status records progress. Work status derives whether work is ready, active, complete, or blocked. Blockers name unresolved or incomplete dependencies; status and issue meaning is always shown as text as well as color." />
+                    </StackPanel>
+                </Border>
+                <Border Margin="0,0,6,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Complete import and Partial import" />
+                        <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}"
+                                   Text="Complete import treats missing CSV entities as absent from the full schema and offers to archive them. Partial import updates only entities represented by the file. Review New, Changed, Missing, Unresolved, and Unchanged items before applying." />
+                    </StackPanel>
+                </Border>
+                <Border Margin="6,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Reports" />
+                        <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}"
+                                   Text="Tracker Reports show progress history for a selected date range. Project and Portfolio reporting compare multiple Trackers without changing their stored data." />
+                    </StackPanel>
+                </Border>
+                <Border Margin="0,0,6,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Recycle, Restore, and Permanently delete" />
+                        <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}"
+                                   Text="Recycle hides a Project or Tracker while keeping it recoverable. Restore returns it. Permanently delete removes the selected item and its listed data after exact-name confirmation and cannot be undone." />
+                    </StackPanel>
+                </Border>
+            </UniformGrid>
+
+            <TextBlock Margin="0,12,0,8" Style="{StaticResource SectionHeadingTextStyle}" Text="PostgreSQL extraction query" />
+            <Border Margin="0,0,0,12" Style="{StaticResource InfoMessageStyle}">
+                <StackPanel>
+                    <TextBlock FontWeight="SemiBold"
+                               Text="{Binding Help.CsvContractVersion, StringFormat=PostgreSQL · CSV contract v{0}}" />
+                    <TextBlock Margin="0,4,0,0" Style="{StaticResource PageDescriptionTextStyle}"
+                               Text="The query targets the public schema by default. Change target_schema near the top when needed and keep all six column headers unchanged." />
+                    <TextBlock Margin="0,4,0,0" Style="{StaticResource PageDescriptionTextStyle}"
+                               Text="Export as UTF-8 CSV with a semicolon (;) delimiter and include the header row." />
+                </StackPanel>
+            </Border>
+            <Border Margin="0,0,0,12"
+                    Background="{DynamicResource Brush.Surface.Subtle}"
+                    Style="{StaticResource EntityTrackerCardStyle}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Border Padding="12,8"
+                            Background="{DynamicResource Brush.Surface.Card}"
+                            BorderBrush="{DynamicResource Brush.Border.Default}"
+                            BorderThickness="0,0,0,1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock VerticalAlignment="Center"
+                                       FontFamily="Consolas"
+                                       FontWeight="SemiBold"
+                                       Text="SQL" />
+                            <TextBlock Grid.Column="1"
+                                       Margin="12,0"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Right"
+                                       AutomationProperties.LiveSetting="Polite"
+                                       Foreground="{DynamicResource Brush.Text.Secondary}"
+                                       Text="{Binding Help.CopyMessage}" />
+                            <Button x:Name="CopyQueryButton"
+                                    Grid.Column="2"
+                                    AutomationProperties.Name="Copy SQL query"
+                                    AutomationProperties.HelpText="Copies the complete PostgreSQL schema extraction query to the clipboard."
+                                    Command="{Binding Help.CopyQueryCommand}"
+                                    Content="Copy SQL"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                        </Grid>
+                    </Border>
+
+                    <TextBox x:Name="QueryTextBox"
+                             Grid.Row="1"
+                             Height="360"
+                             Padding="12"
+                             AutomationProperties.Name="PostgreSQL schema extraction query"
+                             AutomationProperties.HelpText="Read-only SQL code. Select the text or use Copy SQL to place the complete query on the clipboard."
+                             AcceptsReturn="True"
+                             AcceptsTab="True"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             FontFamily="Consolas"
+                             FontSize="13"
+                             IsReadOnly="True"
+                             ScrollViewer.CanContentScroll="False"
+                             Text="{Binding Help.Query, Mode=OneWay}"
+                             TextWrapping="NoWrap"
+                             VerticalScrollBarVisibility="Auto"
+                             HorizontalScrollBarVisibility="Auto" />
+                </Grid>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

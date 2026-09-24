@@ -4,6 +4,7 @@ public sealed class TrackedEntity
 {
     public TrackedEntity(
         EntityId id,
+        TrackerId trackerId,
         string sourceName,
         DevelopmentStatus status = DevelopmentStatus.NotStarted,
         string notes = "",
@@ -14,6 +15,7 @@ public sealed class TrackedEntity
         string? groupName = null)
     {
         ArgumentNullException.ThrowIfNull(id);
+        ArgumentNullException.ThrowIfNull(trackerId);
         ValidateSourceName(sourceName);
         ArgumentNullException.ThrowIfNull(notes);
 
@@ -23,6 +25,7 @@ public sealed class TrackedEntity
         EnsureValidRequestedPriority(requestedPriority);
 
         Id = id;
+        TrackerId = trackerId;
         SourceName = sourceName;
         Status = status;
         Notes = notes;
@@ -34,6 +37,8 @@ public sealed class TrackedEntity
     }
 
     public EntityId Id { get; }
+
+    public TrackerId TrackerId { get; }
 
     public string SourceName { get; private set; }
 
@@ -79,11 +84,15 @@ public sealed class TrackedEntity
     {
         EnsureDefinedProvenance(provenance);
 
-        if (Provenance != EntityProvenance.ManualOnly ||
-            provenance != EntityProvenance.ManualAndImported)
+        bool validTransition =
+            Provenance == EntityProvenance.ManualOnly &&
+            provenance == EntityProvenance.ManualAndImported ||
+            Provenance == EntityProvenance.Copied &&
+            provenance == EntityProvenance.CopiedAndImported;
+        if (!validTransition)
         {
             throw new InvalidOperationException(
-                "Entity provenance may only transition from ManualOnly to ManualAndImported.");
+                "Entity provenance may only transition when CSV confirms manual or copied structure.");
         }
 
         Provenance = provenance;

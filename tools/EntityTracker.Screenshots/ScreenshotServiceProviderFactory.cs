@@ -7,8 +7,10 @@ using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Planning;
+using EntityTracker.Application.Projects;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
+using EntityTracker.Application.Tracking;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Infrastructure.Importing;
@@ -29,7 +31,8 @@ internal static class ScreenshotServiceProviderFactory
     internal static ServiceProvider Create(
         ApplicationDataPaths paths,
         ScreenshotCsvFilePicker csvFilePicker,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ApplicationAppearance appearance = ApplicationAppearance.Light)
     {
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(csvFilePicker);
@@ -38,13 +41,23 @@ internal static class ScreenshotServiceProviderFactory
         ServiceCollection services = new();
         services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
         services.AddSingleton(paths);
-        services.AddSingleton(new EntityTrackerSettingsStore(paths.SettingsPath));
+        EntityTrackerSettingsStore settingsStore = new(paths.SettingsPath);
+        ApplicationThemeService themeService = new();
+        themeService.Apply(appearance);
+        services.AddSingleton(settingsStore);
+        services.AddSingleton(new EntityTrackerSettings(appearance));
+        services.AddSingleton<IApplicationThemeService>(themeService);
+        services.AddSingleton(provider => new AppearanceViewModel(
+            settingsStore,
+            themeService,
+            appearance));
         services.AddSingleton(new SqliteDatabase(paths.DatabasePath, timeProvider));
         services.AddSingleton(provider => new SqliteBackupService(
             provider.GetRequiredService<SqliteDatabase>(),
             paths.BackupsDirectory));
         services.AddSingleton<IPersistenceInitializer, SqlitePersistenceInitializer>();
         services.AddSingleton<IEntityRepository, SqliteEntityRepository>();
+        services.AddSingleton<IEntityAuditReader, SqliteEntityAuditReader>();
         services.AddSingleton<IDependencyRepository, SqliteDependencyRepository>();
         services.AddSingleton<IManualDependencyOverrideRepository,
             SqliteManualDependencyOverrideRepository>();
@@ -54,6 +67,9 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<ISchemaSynchronizationStore>(static provider =>
             provider.GetRequiredService<SqliteTrackedStateStore>());
         services.AddSingleton<IProgressHistoryRepository, SqliteProgressHistoryRepository>();
+        services.AddSingleton<IProjectRepository, SqliteProjectRepository>();
+        services.AddSingleton<ITrackerRepository, SqliteTrackerRepository>();
+        services.AddSingleton<IProjectTrackerStore, SqliteProjectTrackerStore>();
 
         services.AddSingleton<ISchemaImportParser, CsvSchemaImportParser>();
         services.AddSingleton<ISchemaImportFileParser, CsvSchemaImportFileParser>();
@@ -67,25 +83,42 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<SchemaSynchronizationPlanner>();
         services.AddSingleton<ProgressHistoryInitializer>();
         services.AddSingleton<ProgressDashboardBuilder>();
+        services.AddSingleton<AggregateProgressDashboardBuilder>();
         services.AddSingleton(provider => new ProgressReportingService(
             provider.GetRequiredService<IProgressHistoryRepository>(),
             TimeZoneInfo.Utc,
             provider.GetRequiredService<ProgressDashboardBuilder>()));
+        services.AddSingleton(provider => new AggregateProgressReportingService(
+            provider.GetRequiredService<IProjectRepository>(),
+            provider.GetRequiredService<ITrackerRepository>(),
+            provider.GetRequiredService<IProgressHistoryRepository>(),
+            TimeZoneInfo.Utc,
+            provider.GetRequiredService<AggregateProgressDashboardBuilder>(),
+            timeProvider));
         services.AddSingleton<ProgressChartPresentationBuilder>();
         services.AddSingleton<ProgressChartPngExporter>();
         services.AddSingleton<IProgressChartFilePicker, ScreenshotChartFilePicker>();
         services.AddSingleton<IClipboardService, ScreenshotClipboard>();
         services.AddSingleton<ISchemaSynchronizationConfirmation,
             ScreenshotSynchronizationConfirmation>();
+        services.AddSingleton<IContextDiscardConfirmation,
+            ScreenshotContextDiscardConfirmation>();
         services.AddSingleton<ICsvFilePicker>(csvFilePicker);
-        services.AddSingleton<ProgressDashboardViewModel>();
-        services.AddSingleton<ConnectionsViewModel>();
         services.AddSingleton<SchemaSynchronizationService>();
         services.AddSingleton<ManualEntityCreationService>();
         services.AddSingleton<EntityDependencyEditorService>();
         services.AddSingleton<EntityLifecycleService>();
-        services.AddSingleton<MainWindowViewModel>();
-        services.AddSingleton<MainWindow>();
+        services.AddSingleton<ProjectManagementService>();
+        services.AddSingleton<TrackerManagementService>();
+        services.AddSingleton<TrackerCsvCreationService>();
+        services.AddSingleton<CatalogNameValidationService>();
+        services.AddSingleton<PortfolioQueryService>();
+        services.AddSingleton<ProjectEntityComparisonQueryService>();
+        services.AddSingleton<CatalogPurgeImpactService>();
+        services.AddSingleton<TrackerWorkspaceViewModelFactory>();
+        services.AddSingleton<DashboardViewModelFactory>();
+        services.AddSingleton<CatalogManagementViewModel>();
+        services.AddSingleton<ShellViewModel>();
 
         return services.BuildServiceProvider(new ServiceProviderOptions
         {

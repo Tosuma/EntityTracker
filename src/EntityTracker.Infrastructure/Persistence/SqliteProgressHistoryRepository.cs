@@ -18,17 +18,24 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
         _database = database;
     }
 
+    internal SqliteDatabase Database => _database;
+
     public async Task<IReadOnlyList<EntityStatusHistoryEntry>> GetStatusHistoryAsync(
+        TrackerId trackerId,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         await using SqliteConnection connection =
             await _database.OpenConnectionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT entity_id, previous_status, new_status, occurred_at_utc, entry_kind
-            FROM entity_status_history
-            ORDER BY occurred_at_utc, id;
+            FROM entity_status_history history
+            INNER JOIN tracked_entities entity ON entity.id = history.entity_id
+            WHERE entity.tracker_id = $trackerId
+            ORDER BY history.occurred_at_utc, history.id;
             """;
+        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
 
         List<EntityStatusHistoryEntry> entries = [];
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -54,8 +61,10 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
     }
 
     public async Task<IReadOnlyList<ProgressSnapshot>> GetProgressSnapshotsAsync(
+        TrackerId trackerId,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         await using SqliteConnection connection =
             await _database.OpenConnectionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
@@ -63,8 +72,10 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
             SELECT recorded_at_utc, ready_count, blocked_count, in_progress_count,
                    rework_needed_count, development_completed_count, reconciled_count
             FROM progress_snapshots
+            WHERE tracker_id = $trackerId
             ORDER BY recorded_at_utc, id;
             """;
+        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
 
         List<ProgressSnapshot> snapshots = [];
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -82,6 +93,41 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
         }
 
         return snapshots;
+    }
+
+    public async Task<ProgressSnapshot?> GetLatestProgressSnapshotAsync(
+        TrackerId trackerId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(trackerId);
+        await using SqliteConnection connection =
+            await _database.OpenConnectionAsync(cancellationToken);
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT recorded_at_utc, ready_count, blocked_count, in_progress_count,
+                   rework_needed_count, development_completed_count, reconciled_count
+            FROM progress_snapshots
+            WHERE tracker_id = $trackerId
+            ORDER BY recorded_at_utc DESC, id DESC
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
+
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return new ProgressSnapshot(
+            ParseTimestamp(reader.GetString(0)),
+            new ProgressSnapshotState(
+                reader.GetInt32(1),
+                reader.GetInt32(2),
+                reader.GetInt32(3),
+                reader.GetInt32(4),
+                reader.GetInt32(5),
+                reader.GetInt32(6)));
     }
 
     private static DateTimeOffset ParseTimestamp(string value)

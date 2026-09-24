@@ -147,6 +147,7 @@ public sealed class ManualEntityCreationServiceTests
         Assert.Equal(EntityProvenance.ManualOnly, added.Provenance);
         Assert.Equal("Platform Team", added.ResponsibleDeveloper);
         Assert.Equal("Core Data", added.GroupName);
+        Assert.Null(added.RequestedPriority);
         Assert.Equal(added.Id, result.CreatedEntityId);
         Assert.Empty(store.LastChangeSet.ResolvedDependencies);
         Assert.Empty(store.LastChangeSet.UnresolvedDependencies);
@@ -154,6 +155,42 @@ public sealed class ManualEntityCreationServiceTests
             store.LastChangeSet.ProgressSnapshotAfterChanges);
         Assert.Equal(1, snapshot.ReadyCount);
         Assert.Equal(1, snapshot.TotalActiveCount);
+    }
+
+    [Fact]
+    public async Task CreateAsync_WithRequestedPriority_PersistsPriorityOnCreatedEntity()
+    {
+        ManualEntityCreationService service = Service([], [], [], out RecordingStore store);
+
+        ManualEntityCreationResult result = await service.CreateAsync(
+            new ManualEntityCreationRequest(
+                "PlannedEntity",
+                [],
+                requestedPriority: 2));
+
+        Assert.True(result.IsSuccess);
+        TrackedEntity added = Assert.Single(store.LastChangeSet!.EntitiesToAdd);
+        Assert.Equal(2, added.RequestedPriority);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(6)]
+    public async Task CreateAsync_InvalidRequestedPriorityIsRejectedWithoutWrite(
+        int requestedPriority)
+    {
+        ManualEntityCreationService service = Service([], [], [], out RecordingStore store);
+
+        ManualEntityCreationResult result = await service.CreateAsync(
+            new ManualEntityCreationRequest(
+                "InvalidPriority",
+                [],
+                requestedPriority: requestedPriority));
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Diagnostics, diagnostic =>
+            diagnostic.Code == ManualEntityCreationDiagnosticCode.InvalidRequestedPriority);
+        Assert.Null(store.LastChangeSet);
     }
 
     [Fact]
@@ -395,6 +432,7 @@ public sealed class ManualEntityCreationServiceTests
         string? groupName = null) =>
         new(
             new EntityId(new Guid(id, 0, 0, new byte[8])),
+            TestTrackerId,
             name,
             lifecycleState: lifecycle,
             groupName: groupName);
@@ -403,11 +441,13 @@ public sealed class ManualEntityCreationServiceTests
         : IEntityRepository
     {
         public Task<TrackedEntity?> GetAsync(
+            TrackerId trackerId,
             EntityId id,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(entities.SingleOrDefault(entity => entity.Id == id));
 
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(entities);
 
     }
@@ -417,9 +457,11 @@ public sealed class ManualEntityCreationServiceTests
         IReadOnlyList<PersistedUnresolvedDependency> unresolved) : IDependencyRepository
     {
         public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(dependencies);
 
         public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(unresolved);
 
     }
@@ -429,6 +471,7 @@ public sealed class ManualEntityCreationServiceTests
         public TrackedStateChangeSet? LastChangeSet { get; private set; }
 
         public Task ApplyAsync(
+            TrackerId trackerId,
             TrackedStateChangeSet changeSet,
             CancellationToken cancellationToken = default)
         {
@@ -437,6 +480,7 @@ public sealed class ManualEntityCreationServiceTests
         }
 
         public Task EnsureHistoryBaselineAsync(
+            TrackerId trackerId,
             IEnumerable<TrackedEntity> entities,
             EntityTracker.Application.History.ProgressSnapshotState snapshot,
             CancellationToken cancellationToken = default) => Task.CompletedTask;

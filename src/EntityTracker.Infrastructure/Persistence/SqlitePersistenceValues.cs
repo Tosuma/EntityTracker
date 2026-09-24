@@ -11,6 +11,12 @@ internal static class SqlitePersistenceValues
         return entityId.Value.ToString("D", CultureInfo.InvariantCulture);
     }
 
+    public static string Format(ProjectId projectId) =>
+        projectId.Value.ToString("D", CultureInfo.InvariantCulture);
+
+    public static string Format(TrackerId trackerId) =>
+        trackerId.Value.ToString("D", CultureInfo.InvariantCulture);
+
     public static EntityId ParseEntityId(string value)
     {
         if (!Guid.TryParseExact(value, "D", out Guid id))
@@ -19,6 +25,22 @@ internal static class SqlitePersistenceValues
         }
 
         return new EntityId(id);
+    }
+
+    public static ProjectId ParseProjectId(string value) =>
+        new(ParseGuid(value, "project"));
+
+    public static TrackerId ParseTrackerId(string value) =>
+        new(ParseGuid(value, "tracker"));
+
+    private static Guid ParseGuid(string value, string kind)
+    {
+        if (!Guid.TryParseExact(value, "D", out Guid id))
+        {
+            throw new InvalidDataException($"The stored {kind} ID '{value}' is not a valid GUID.");
+        }
+
+        return id;
     }
 
     public static string FormatTimestamp(DateTimeOffset value)

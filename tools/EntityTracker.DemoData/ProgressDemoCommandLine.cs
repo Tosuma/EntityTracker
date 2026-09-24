@@ -2,6 +2,8 @@ namespace EntityTracker.DemoData;
 
 internal sealed record ProgressDemoCommandLine(
     string? DatabasePath,
+    string? ProjectName,
+    string? TrackerName,
     int Days,
     int Seed,
     bool ConfirmReset,
@@ -12,6 +14,8 @@ internal sealed record ProgressDemoCommandLine(
         ArgumentNullException.ThrowIfNull(arguments);
 
         string? databasePath = null;
+        string? projectName = null;
+        string? trackerName = null;
         int days = 90;
         int seed = 12345;
         bool confirmReset = false;
@@ -24,6 +28,12 @@ internal sealed record ProgressDemoCommandLine(
             {
                 case "--database":
                     databasePath = ReadValue(arguments, ref index, argument);
+                    break;
+                case "--project-name":
+                    projectName = ReadValue(arguments, ref index, argument);
+                    break;
+                case "--tracker-name":
+                    trackerName = ReadValue(arguments, ref index, argument);
                     break;
                 case "--days":
                     days = ParseInt(ReadValue(arguments, ref index, argument), argument);
@@ -56,6 +66,12 @@ internal sealed record ProgressDemoCommandLine(
                     "The --confirm-reset flag is required because existing progress history will be replaced.");
             }
 
+            if (string.IsNullOrWhiteSpace(projectName) != string.IsNullOrWhiteSpace(trackerName))
+            {
+                throw new ArgumentException(
+                    "The --project-name and --tracker-name arguments must be provided together.");
+            }
+
             if (days < 7)
             {
                 throw new ArgumentOutOfRangeException(
@@ -66,6 +82,8 @@ internal sealed record ProgressDemoCommandLine(
 
         return new ProgressDemoCommandLine(
             databasePath,
+            projectName,
+            trackerName,
             days,
             seed,
             confirmReset,

@@ -1,10 +1,12 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
 using EntityTracker.Wpf;
+using EntityTracker.Wpf.Controls;
 using EntityTracker.Wpf.ViewModels;
 
 namespace EntityTracker.Screenshots;
@@ -74,13 +76,51 @@ internal sealed class WpfScreenshotRenderer(MainWindow window, string outputDire
         }
     }
 
+    internal async Task CaptureOpenPopupAsync(string fileName)
+    {
+        await SettleAsync();
+        Popup popup = FindVisualDescendants<FilterableColumnHeader>(Root)
+            .Select(static header => header.FindName("FilterPopup"))
+            .OfType<Popup>()
+            .FirstOrDefault(static candidate => candidate.IsOpen && candidate.Child is FrameworkElement)
+            ?? throw new InvalidOperationException("An open filter popup could not be found.");
+        FrameworkElement popupContent = (FrameworkElement)popup.Child;
+        FrameworkElement placementTarget = popup.PlacementTarget as FrameworkElement
+            ?? throw new InvalidOperationException("The open popup has no placement target.");
+
+        RenderTargetBitmap main = RenderVisual(Root, includePageBackground: true);
+        RenderTargetBitmap popupBitmap = RenderVisual(popupContent);
+        Point anchor = placementTarget.TransformToAncestor(Root)
+            .Transform(new Point(0, placementTarget.ActualHeight + 4));
+        double left = Math.Clamp(anchor.X, 0, Root.ActualWidth - popupBitmap.PixelWidth);
+        double top = Math.Clamp(anchor.Y, 0, Root.ActualHeight - popupBitmap.PixelHeight);
+
+        DrawingVisual drawing = new();
+        using (DrawingContext context = drawing.RenderOpen())
+        {
+            context.DrawImage(main, new Rect(0, 0, main.PixelWidth, main.PixelHeight));
+            context.DrawImage(
+                popupBitmap,
+                new Rect(left, top, popupBitmap.PixelWidth, popupBitmap.PixelHeight));
+        }
+
+        RenderTargetBitmap composite = new(
+            main.PixelWidth,
+            main.PixelHeight,
+            Dpi,
+            Dpi,
+            PixelFormats.Pbgra32);
+        composite.Render(drawing);
+        Save(composite, Path.Combine(_outputDirectory, fileName));
+    }
+
     internal async Task CaptureReviewSectionAsync(
         FrameworkElement section,
+        ScrollViewer scrollViewer,
         string fileName)
     {
         ArgumentNullException.ThrowIfNull(section);
         await SettleAsync();
-        ScrollViewer scrollViewer = (ScrollViewer)_window.FindName("SchemaReviewScrollViewer");
         Point currentPosition = section.TransformToAncestor(scrollViewer).Transform(new Point());
         scrollViewer.ScrollToVerticalOffset(
             Math.Max(0, scrollViewer.VerticalOffset + currentPosition.Y - 4));
@@ -96,6 +136,36 @@ internal sealed class WpfScreenshotRenderer(MainWindow window, string outputDire
             full.PixelWidth,
             full.PixelHeight);
         Save(new CroppedBitmap(full, crop), Path.Combine(_outputDirectory, fileName));
+    }
+
+    internal async Task ScrollSectionIntoViewAndCaptureAsync(
+        FrameworkElement section,
+        ScrollViewer scrollViewer,
+        string fileName)
+    {
+        ArgumentNullException.ThrowIfNull(section);
+        ArgumentNullException.ThrowIfNull(scrollViewer);
+        await SettleAsync();
+        Point currentPosition = section.TransformToAncestor(scrollViewer).Transform(new Point());
+        scrollViewer.ScrollToVerticalOffset(
+            Math.Max(0, scrollViewer.VerticalOffset + currentPosition.Y - 4));
+        await CaptureAsync(fileName);
+    }
+
+    internal async Task BringNamedElementIntoViewAndCaptureAsync(
+        string elementName,
+        string fileName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(elementName);
+        FrameworkElement element = FindVisualDescendants<FrameworkElement>(Root)
+            .FirstOrDefault(candidate => string.Equals(
+                candidate.Name,
+                elementName,
+                StringComparison.Ordinal))
+            ?? throw new InvalidOperationException(
+                $"The rendered element '{elementName}' could not be found.");
+        element.BringIntoView();
+        await CaptureAsync(fileName, settleMilliseconds: 500);
     }
 
     internal async Task SettleAsync(int milliseconds = 150)
@@ -184,4 +254,5 @@ internal sealed class WpfScreenshotRenderer(MainWindow window, string outputDire
             }
         }
     }
+
 }

@@ -8,13 +8,16 @@ namespace EntityTracker.Application.Synchronization;
 public sealed class SchemaSynchronizationPlan
 {
     public SchemaSynchronizationPlan(
+        TrackerId trackerId,
         SchemaImportMode mode,
         IEnumerable<EntitySynchronizationChange> newEntities,
         IEnumerable<EntitySynchronizationChange> changedEntities,
         IEnumerable<EntitySynchronizationChange> missingEntities,
         IEnumerable<EntitySynchronizationChange> manualOnlyEntities,
-        int unchangedEntityCount,
+        IEnumerable<TrackedEntity> unchangedEntities,
         IEnumerable<EntitySynchronizationChange> unresolvedEntities,
+        IEnumerable<SynchronizationResolutionEffect> reviewResolutionEffects,
+        int preSynchronizationActiveEntityCount,
         DependencyRankingResult candidateRanking,
         TrackedStateChangeSet changeSet,
         SchemaImportCandidate importCandidate,
@@ -29,13 +32,18 @@ public sealed class SchemaSynchronizationPlan
         IReadOnlyDictionary<EntitySourceKey, EntityId> plannedNewEntityIds,
         IEnumerable<SynchronizationProgressImpact>? progressImpacts = null)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
+        TrackerId = trackerId;
         Mode = mode;
         NewEntities = newEntities.ToArray();
         ChangedEntities = changedEntities.ToArray();
         MissingEntities = missingEntities.ToArray();
         ManualOnlyEntities = manualOnlyEntities.ToArray();
-        UnchangedEntityCount = unchangedEntityCount;
+        UnchangedEntities = unchangedEntities.ToArray();
         UnresolvedEntities = unresolvedEntities.ToArray();
+        ReviewResolutionEffects = reviewResolutionEffects.ToArray();
+        ArgumentOutOfRangeException.ThrowIfNegative(preSynchronizationActiveEntityCount);
+        PreSynchronizationActiveEntityCount = preSynchronizationActiveEntityCount;
         CandidateRanking = candidateRanking;
         ChangeSet = changeSet;
         ImportCandidate = importCandidate;
@@ -51,6 +59,8 @@ public sealed class SchemaSynchronizationPlan
         ProgressImpacts = (progressImpacts ?? []).ToArray();
     }
 
+    public TrackerId TrackerId { get; }
+
     public SchemaImportMode Mode { get; }
 
     public IReadOnlyList<EntitySynchronizationChange> NewEntities { get; }
@@ -64,9 +74,15 @@ public sealed class SchemaSynchronizationPlan
     /// </summary>
     public IReadOnlyList<EntitySynchronizationChange> ManualOnlyEntities { get; }
 
-    public int UnchangedEntityCount { get; }
+    public IReadOnlyList<TrackedEntity> UnchangedEntities { get; }
+
+    public int UnchangedEntityCount => UnchangedEntities.Count;
 
     public IReadOnlyList<EntitySynchronizationChange> UnresolvedEntities { get; }
+
+    public IReadOnlyList<SynchronizationResolutionEffect> ReviewResolutionEffects { get; }
+
+    public int PreSynchronizationActiveEntityCount { get; }
 
     public DependencyRankingResult CandidateRanking { get; }
 

@@ -19,22 +19,25 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace EntityTracker.Wpf.ViewModels;
 
-public sealed class MainWindowViewModel : INotifyPropertyChanged
+public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly EntityOverviewService _overviewService;
+    private readonly TrackerId _trackerId;
     private readonly SchemaSynchronizationService _synchronizationService;
     private readonly BulkStatusUpdateService _bulkStatusUpdateService;
     private readonly ICsvFilePicker _filePicker;
     private readonly ISchemaSynchronizationConfirmation _confirmationService;
+    private readonly IContextDiscardConfirmation _discardConfirmation;
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly AsyncCommand _refreshCommand;
     private readonly AsyncCommand _importCsvCommand;
     private readonly AsyncCommand _applySynchronizationCommand;
     private readonly AsyncCommand _cancelSynchronizationCommand;
     private readonly AsyncCommand _applyBulkStatusCommand;
+    private readonly RelayCommand<EntityOverviewRow> _openEntityDetailsCommand;
+    private readonly RelayCommand _closeEntityDetailsCommand;
     private readonly AsyncCommand<EntityOverviewRow> _editOverviewEntityCommand;
     private readonly AsyncCommand<SchemaSynchronizationReviewRow> _editReviewEntityCommand;
-    private readonly RelayCommand _openSqlQueryCommand;
     private readonly RelayCommand<DevelopmentStatus> _selectOverviewStatusCommand;
     private readonly RelayCommand<SynchronizationProgressImpactRow> _keepSynchronizationStatusCommand;
     private readonly RelayCommand<SynchronizationProgressImpactRow> _markSynchronizationReworkCommand;
@@ -51,8 +54,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private int _developmentCompletedCount;
     private int _reconciledCount;
     private DevelopmentStatus _selectedBulkStatus = DevelopmentStatus.InProgress;
+    private EntityDetailsViewModel? _selectedEntityDetails;
 
     public MainWindowViewModel(
+        TrackerId trackerId,
         EntityOverviewService overviewService,
         SchemaSynchronizationService synchronizationService,
         BulkStatusUpdateService bulkStatusUpdateService,
@@ -61,9 +66,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         EntityLifecycleService entityLifecycleService,
         ICsvFilePicker filePicker,
         ProgressDashboardViewModel progressDashboard,
-        IClipboardService clipboard,
         ISchemaSynchronizationConfirmation confirmationService,
-        ConnectionsViewModel? connections = null,
+        IContextDiscardConfirmation discardConfirmation,
         ILoggerFactory? loggerFactory = null)
     {
         ArgumentNullException.ThrowIfNull(overviewService);
@@ -74,28 +78,27 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ArgumentNullException.ThrowIfNull(entityLifecycleService);
         ArgumentNullException.ThrowIfNull(filePicker);
         ArgumentNullException.ThrowIfNull(progressDashboard);
-        ArgumentNullException.ThrowIfNull(clipboard);
         ArgumentNullException.ThrowIfNull(confirmationService);
+        ArgumentNullException.ThrowIfNull(discardConfirmation);
+        _trackerId = trackerId;
         _overviewService = overviewService;
         _synchronizationService = synchronizationService;
         _bulkStatusUpdateService = bulkStatusUpdateService;
         _filePicker = filePicker;
         _confirmationService = confirmationService;
+        _discardConfirmation = discardConfirmation;
         ILoggerFactory effectiveLoggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
         _logger = effectiveLoggerFactory.CreateLogger<MainWindowViewModel>();
         ActiveTable = EntityTableViewModel.CreateActive();
         ArchivedTable = EntityTableViewModel.CreateArchived();
-        ActiveTable.ProjectionChanging += (_, _) => ClearOverviewSelection();
+        ActiveTable.ProjectionChanging += OnActiveTableProjectionChanging;
+        ArchivedTable.ProjectionChanging += OnArchivedTableProjectionChanging;
         ActiveTable.PropertyChanged += OnActiveTablePropertyChanged;
         ArchivedTable.PropertyChanged += OnArchivedTablePropertyChanged;
         Progress = progressDashboard;
-        Help = new SqlQueryHelpViewModel(
-            clipboard,
-            () => SelectedTab = MainWindowTab.SchemaSynchronization,
-            effectiveLoggerFactory.CreateLogger<SqlQueryHelpViewModel>());
-        Connections = connections;
         Review = new SchemaSynchronizationReviewViewModel();
         ManualCreation = new ManualEntityCreationViewModel(
+            trackerId,
             manualEntityCreationService,
             OnManualEntityCreatedAsync,
             OpenArchivedFromCreationAsync,
@@ -104,6 +107,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             effectiveLoggerFactory.CreateLogger<ManualEntityCreationViewModel>());
         ManualCreation.PropertyChanged += OnManualCreationPropertyChanged;
         Editor = new EntityDependencyEditorViewModel(
+            trackerId,
             entityDependencyEditorService,
             entityLifecycleService,
             synchronizationService,
@@ -132,6 +136,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _applyBulkStatusCommand = new AsyncCommand(
             () => ApplyBulkStatusAsync(),
             CanApplyBulkStatus);
+        _openEntityDetailsCommand = new RelayCommand<EntityOverviewRow>(
+            OpenEntityDetails,
+            _ => !IsBusy && !ManualCreation.IsBusy && !Editor.IsOpen && !Review.HasReview);
+        _closeEntityDetailsCommand = new RelayCommand(
+            CloseEntityDetails,
+            () => IsEntityDetailsOpen);
         _editOverviewEntityCommand = new AsyncCommand<EntityOverviewRow>(
             OpenOverviewEntityAsync,
             _ => !IsBusy &&
@@ -141,9 +151,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _editReviewEntityCommand = new AsyncCommand<SchemaSynchronizationReviewRow>(
             row => EditReviewEntityAsync(row),
             _ => !IsBusy && !ManualCreation.IsBusy && !Editor.IsOpen && Review.HasReview);
-        _openSqlQueryCommand = new RelayCommand(
-            () => SelectedTab = MainWindowTab.SqlHelp,
-            () => !IsBusy && !ManualCreation.IsBusy && !Editor.IsOpen);
         _selectOverviewStatusCommand = new RelayCommand<DevelopmentStatus>(
             status => ActiveTable.SetSingleStatusFilter(status));
         _keepSynchronizationStatusCommand = new RelayCommand<SynchronizationProgressImpactRow>(
@@ -162,6 +169,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public event EventHandler? OverviewSelectionClearRequested;
 
+    public event EventHandler? PersistedStateChanged;
+
+    public event Action<EntityId>? EntityRevealRequested;
+
+    public TrackerId TrackerId => _trackerId;
+
+    public bool HasUnsavedWork =>
+        Review.HasReview || ManualCreation.IsDirty || Editor.IsDirty;
+
     public SchemaSynchronizationReviewViewModel Review { get; }
 
     public ManualEntityCreationViewModel ManualCreation { get; }
@@ -170,13 +186,24 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ProgressDashboardViewModel Progress { get; }
 
-    public SqlQueryHelpViewModel Help { get; }
-
-    public ConnectionsViewModel? Connections { get; }
-
     public EntityTableViewModel ActiveTable { get; }
 
     public EntityTableViewModel ArchivedTable { get; }
+
+    public EntityDetailsViewModel? SelectedEntityDetails
+    {
+        get => _selectedEntityDetails;
+        private set
+        {
+            if (SetField(ref _selectedEntityDetails, value))
+            {
+                OnPropertyChanged(nameof(IsEntityDetailsOpen));
+                _closeEntityDetailsCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    public bool IsEntityDetailsOpen => SelectedEntityDetails is not null;
 
     public IReadOnlyList<DevelopmentStatusOption> BulkStatusOptions { get; } =
     [
@@ -296,6 +323,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             {
                 ActiveTable.CloseOpenFilter();
                 ArchivedTable.CloseOpenFilter();
+                CloseEntityDetails();
                 ClearOverviewSelection();
                 _applyBulkStatusCommand.NotifyCanExecuteChanged();
             }
@@ -441,6 +469,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ICommand ApplyBulkStatusCommand => _applyBulkStatusCommand;
 
+    public ICommand OpenEntityDetailsCommand => _openEntityDetailsCommand;
+
+    public ICommand CloseEntityDetailsCommand => _closeEntityDetailsCommand;
+
     public ICommand EditOverviewEntityCommand => _editOverviewEntityCommand;
 
     public ICommand EditReviewEntityCommand => _editReviewEntityCommand;
@@ -451,8 +483,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ICommand CloseOverviewSearchCommand => ActiveTable.CloseSearchCommand;
 
-    public ICommand OpenSqlQueryCommand => _openSqlQueryCommand;
-
     public ICommand SelectOverviewStatusCommand => _selectOverviewStatusCommand;
 
     public ICommand KeepSynchronizationStatusCommand => _keepSynchronizationStatusCommand;
@@ -461,12 +491,24 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        if (Connections is not null)
-        {
-            await Connections.InitializeAsync(cancellationToken);
-        }
-
         await RefreshAsync(cancellationToken);
+    }
+
+    public void PrepareForDeactivation()
+    {
+        ActiveTable.CloseOpenFilter();
+        ArchivedTable.CloseOpenFilter();
+        CloseEntityDetails();
+        ClearOverviewSelection();
+    }
+
+    public void DiscardTransientWork()
+    {
+        Review.Clear();
+        ManualCreation.Reset();
+        Editor.DiscardAndClose();
+        PrepareForDeactivation();
+        NotifyCommandsChanged();
     }
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
@@ -476,6 +518,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
+        CloseEntityDetails();
         ClearOverviewSelection();
         IsBusy = true;
         BusyMessage = "Loading persisted entities…";
@@ -533,6 +576,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             BulkStatusUpdateResult result = await _bulkStatusUpdateService.ApplyAsync(
+                _trackerId,
                 selectedIds,
                 targetStatus,
                 cancellationToken);
@@ -540,6 +584,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             OperationMessage = FormatBulkStatusResult(result, targetStatus);
             BusyMessage = "Recomputing workflow readiness and progress…";
             await LoadOverviewAndProgressAsync(cancellationToken);
+            PersistedStateChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -598,6 +643,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             SchemaSynchronizationResult result = await _synchronizationService.PlanAsync(
+                _trackerId,
                 filePath,
                 mode,
                 cancellationToken);
@@ -638,6 +684,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             SchemaImportSummary summary = await _synchronizationService.ApplyAsync(
+                _trackerId,
                 plan,
                 Review.SelectedFileName,
                 cancellationToken);
@@ -650,6 +697,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             SelectedTab = MainWindowTab.Overview;
             BusyMessage = "Recomputing dependency ranking…";
             await LoadOverviewAndProgressAsync(cancellationToken);
+            PersistedStateChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -680,7 +728,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task LoadOverviewAsync(CancellationToken cancellationToken)
     {
-        EntityOverviewResult result = await _overviewService.GetAsync(cancellationToken);
+        EntityOverviewResult result = await _overviewService.GetAsync(_trackerId, cancellationToken);
         if (!result.IsSuccess)
         {
             SetOverviewFailure(string.Join(
@@ -702,7 +750,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         await LoadOverviewAsync(cancellationToken);
         await Progress.LoadAsync(cancellationToken);
-        LatestImportSummary = await _synchronizationService.GetLatestImportAsync(cancellationToken);
+        LatestImportSummary = await _synchronizationService.GetLatestImportAsync(
+            _trackerId,
+            cancellationToken);
     }
 
     private void SetOverviewFailure(string message)
@@ -716,6 +766,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         IReadOnlyList<EntityOverviewRow> items,
         IReadOnlyList<EntityOverviewRow> archivedItems)
     {
+        CloseEntityDetails();
         ClearOverviewSelection();
         ActiveTable.ReplaceSourceItems(items);
         ArchivedTable.ReplaceSourceItems(archivedItems);
@@ -766,9 +817,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _applySynchronizationCommand.NotifyCanExecuteChanged();
         _cancelSynchronizationCommand.NotifyCanExecuteChanged();
         _applyBulkStatusCommand.NotifyCanExecuteChanged();
+        _openEntityDetailsCommand.NotifyCanExecuteChanged();
         _editOverviewEntityCommand.NotifyCanExecuteChanged();
         _editReviewEntityCommand.NotifyCanExecuteChanged();
-        _openSqlQueryCommand.NotifyCanExecuteChanged();
         _keepSynchronizationStatusCommand.NotifyCanExecuteChanged();
         _markSynchronizationReworkCommand.NotifyCanExecuteChanged();
     }
@@ -813,7 +864,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         return $"{changed} to {FormatStatus(targetStatus)}; {unchanged}.";
     }
 
-    private async Task OnManualEntityCreatedAsync()
+    private async Task OnManualEntityCreatedAsync(EntityId createdEntityId)
     {
         SelectedTab = MainWindowTab.Overview;
         IsBusy = true;
@@ -821,6 +872,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             await LoadOverviewAndProgressAsync(CancellationToken.None);
+            EntityOverviewRow? createdRow = ActiveTable.Items.FirstOrDefault(
+                row => row.EntityId == createdEntityId);
+            if (createdRow is null)
+            {
+                ActiveTable.ClearAllFiltersAndSort();
+                ActiveTable.ClearSearchCommand.Execute(null);
+                createdRow = ActiveTable.Items.FirstOrDefault(
+                    row => row.EntityId == createdEntityId);
+            }
+
+            if (createdRow is not null)
+            {
+                SelectedEntityDetails = new EntityDetailsViewModel(createdRow);
+                EntityRevealRequested?.Invoke(createdEntityId);
+            }
+
+            PersistedStateChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception exception)
         {
@@ -839,6 +907,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             await LoadOverviewAndProgressAsync(CancellationToken.None);
+            PersistedStateChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception exception)
         {
@@ -854,6 +923,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             await LoadOverviewAndProgressAsync(CancellationToken.None);
+            PersistedStateChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception exception)
         {
@@ -872,6 +942,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             await LoadOverviewAndProgressAsync(CancellationToken.None);
+            PersistedStateChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception exception)
         {
@@ -881,10 +952,56 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    private Task OpenOverviewEntityAsync(EntityOverviewRow row) =>
-        row.LifecycleState == EntityLifecycleState.Archived
-            ? Editor.BeginArchivedAsync(row.EntityId)
-            : Editor.BeginStandaloneAsync(row.EntityId);
+    private async Task OpenOverviewEntityAsync(EntityOverviewRow row)
+    {
+        CloseEntityDetails();
+        if (row.LifecycleState == EntityLifecycleState.Archived)
+        {
+            await Editor.BeginArchivedAsync(row.EntityId);
+        }
+        else
+        {
+            await Editor.BeginStandaloneAsync(row.EntityId);
+        }
+    }
+
+    private void OpenEntityDetails(EntityOverviewRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        SelectedEntityDetails = new EntityDetailsViewModel(row);
+    }
+
+    public bool TryCloseEditor()
+    {
+        if (!Editor.IsOpen)
+        {
+            return true;
+        }
+
+        if (Editor.IsDirty && !_discardConfirmation.ConfirmDiscard(
+                "This entity has unsaved changes."))
+        {
+            return false;
+        }
+
+        Editor.DiscardAndClose();
+        return true;
+    }
+
+    public bool OpenEntityDetails(EntityId entityId)
+    {
+        ArgumentNullException.ThrowIfNull(entityId);
+        EntityOverviewRow? row = OverviewItems.FirstOrDefault(item => item.EntityId == entityId);
+        if (row is null)
+        {
+            return false;
+        }
+
+        OpenEntityDetails(row);
+        return true;
+    }
+
+    public void CloseEntityDetails() => SelectedEntityDetails = null;
 
     private async Task OpenArchivedFromCreationAsync(EntityId entityId)
     {
@@ -909,6 +1026,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         SchemaSynchronizationPlan revised = _synchronizationService.StageProgressDecision(
+            _trackerId,
             Review.CurrentPlan,
             row.EntityId,
             decision);
@@ -1006,10 +1124,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             FormatProvenance(item.Provenance),
             FormatStatus(item.Status),
             FormatWorkflowState(item.WorkflowState),
-            isArchived
-                ? "—"
-                : item.DependencyCount.ToString(
-                    System.Globalization.CultureInfo.InvariantCulture),
+            item.DependencyCount.ToString(
+                System.Globalization.CultureInfo.InvariantCulture),
             item.DependencyNames,
             item.DependencyResolutionIssueNames,
             FormatGraphIssueTitle(item.DependencyState),
@@ -1017,7 +1133,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             FormatGraphIssueNames(item.DependencyResolutionIssueNames),
             isArchived ? "—" : FormatMissingDependencies(item.MissingDependencyNames),
             item.Notes,
-            isArchived ? "View and restore" : "Edit entity");
+            isArchived ? "View and restore" : "Edit entity",
+            item.RequestedPriority,
+            item.Blockers,
+            item.AuditTimestamps.CreatedAtUtc,
+            item.AuditTimestamps.SchemaUpdatedAtUtc,
+            item.AuditTimestamps.ProgressUpdatedAtUtc);
     }
 
     private static string FormatStatus(DevelopmentStatus status) => status switch
@@ -1050,6 +1171,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         EntityProvenance.Imported => "CSV",
         EntityProvenance.ManualOnly => "Manual only",
         EntityProvenance.ManualAndImported => "Manual + CSV",
+        EntityProvenance.Copied => "Copied",
+        EntityProvenance.CopiedAndImported => "Copied + CSV",
         _ => throw new ArgumentOutOfRangeException(nameof(provenance), provenance, null)
     };
 
@@ -1102,4 +1225,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+
+    public void Dispose()
+    {
+        ActiveTable.ProjectionChanging -= OnActiveTableProjectionChanging;
+        ArchivedTable.ProjectionChanging -= OnArchivedTableProjectionChanging;
+        ActiveTable.PropertyChanged -= OnActiveTablePropertyChanged;
+        ArchivedTable.PropertyChanged -= OnArchivedTablePropertyChanged;
+        ManualCreation.PropertyChanged -= OnManualCreationPropertyChanged;
+        Editor.PropertyChanged -= OnEditorPropertyChanged;
+    }
+
+    private void OnActiveTableProjectionChanging(object? sender, EventArgs e)
+    {
+        CloseEntityDetails();
+        ClearOverviewSelection();
+    }
+
+    private void OnArchivedTableProjectionChanging(object? sender, EventArgs e) =>
+        CloseEntityDetails();
 }

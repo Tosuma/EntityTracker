@@ -50,6 +50,9 @@ public sealed class ManualEntityCreationViewModelTests
 
         await viewModel.SearchDependenciesAsync();
         ManualDependencySuggestion suggestion = Assert.Single(viewModel.Suggestions);
+        Assert.True(viewModel.IsDependencySuggestionsOpen);
+        Assert.True(viewModel.DismissOpenSuggestions());
+        Assert.False(viewModel.IsDependencySuggestionsOpen);
         viewModel.AddExistingCommand.Execute(suggestion);
 
         ManualDependencyRow selected = Assert.Single(viewModel.SelectedDependencies);
@@ -92,10 +95,39 @@ public sealed class ManualEntityCreationViewModelTests
 
         await viewModel.SearchGroupNamesAsync();
         string suggestion = Assert.Single(viewModel.GroupSuggestions);
-        viewModel.UseGroupSuggestionCommand.Execute(suggestion);
+        Assert.True(viewModel.IsGroupSuggestionsOpen);
+        viewModel.SelectedGroupSuggestion = suggestion;
 
         Assert.Equal("Core Data", viewModel.GroupName);
         Assert.Empty(viewModel.GroupSuggestions);
+        Assert.False(viewModel.IsGroupSuggestionsOpen);
+    }
+
+    [Fact]
+    public async Task InvalidPriorityIsFatalUntilDraftIsCorrectedWhileUnresolvedIsNotFatal()
+    {
+        ManualEntityCreationViewModel viewModel = ViewModel(
+            [],
+            out RecordingStore store,
+            out _,
+            out _);
+        viewModel.EntityName = "Owner";
+        viewModel.SelectedRequestedPriority = 6;
+
+        await viewModel.CreateAsync();
+
+        Assert.True(viewModel.HasFatalValidation);
+        Assert.False(viewModel.CreateCommand.CanExecute(null));
+        Assert.Null(store.LastChangeSet);
+
+        viewModel.SelectedRequestedPriority = 3;
+        viewModel.DependencyQuery = "Future";
+        await viewModel.SearchDependenciesAsync();
+        viewModel.AddUnresolvedCommand.Execute(null);
+
+        Assert.False(viewModel.HasFatalValidation);
+        Assert.True(viewModel.HasWarnings);
+        Assert.True(viewModel.CreateCommand.CanExecute(null));
     }
 
     [Fact]
@@ -109,16 +141,20 @@ public sealed class ManualEntityCreationViewModelTests
         viewModel.EntityName = "NewEntity";
         viewModel.ResponsibleDeveloper = "  Platform Team  ";
         viewModel.GroupName = "  New Group  ";
+        viewModel.SelectedRequestedPriority = 2;
 
         await viewModel.CreateAsync();
 
         TrackedEntity added = Assert.Single(store.LastChangeSet!.EntitiesToAdd);
         Assert.Equal("Platform Team", added.ResponsibleDeveloper);
         Assert.Equal("New Group", added.GroupName);
+        Assert.Equal(2, added.RequestedPriority);
         Assert.Equal(1, created.Count);
+        Assert.Equal(added.Id, created.LastEntityId);
         Assert.Equal(string.Empty, viewModel.EntityName);
         Assert.Equal(string.Empty, viewModel.ResponsibleDeveloper);
         Assert.Equal(string.Empty, viewModel.GroupName);
+        Assert.Null(viewModel.SelectedRequestedPriority);
         Assert.Empty(viewModel.SelectedDependencies);
         Assert.False(viewModel.HasErrors);
     }
@@ -188,10 +224,12 @@ public sealed class ManualEntityCreationViewModelTests
             new EffectiveDependencyResolver(),
             store);
         return new ManualEntityCreationViewModel(
+            TestTrackerId,
             service,
-            () =>
+            id =>
             {
                 createdCounter.Count++;
+                createdCounter.LastEntityId = id;
                 return Task.CompletedTask;
             },
             id =>
@@ -218,6 +256,7 @@ public sealed class ManualEntityCreationViewModelTests
         string? groupName = null) =>
         new(
             new EntityId(new Guid(id, 0, 0, new byte[8])),
+            TestTrackerId,
             name,
             lifecycleState: lifecycle,
             groupName: groupName);
@@ -225,17 +264,21 @@ public sealed class ManualEntityCreationViewModelTests
     private sealed class CallbackCounter
     {
         public int Count { get; set; }
+
+        public EntityId? LastEntityId { get; set; }
     }
 
     private sealed class StubEntityRepository(IReadOnlyList<TrackedEntity> entities)
         : IEntityRepository
     {
         public Task<TrackedEntity?> GetAsync(
+            TrackerId trackerId,
             EntityId id,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(entities.SingleOrDefault(entity => entity.Id == id));
 
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(entities);
 
     }
@@ -243,10 +286,12 @@ public sealed class ManualEntityCreationViewModelTests
     private sealed class StubDependencyRepository : IDependencyRepository
     {
         public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<PersistedDependency>>([]);
 
         public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
+            TrackerId trackerId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<PersistedUnresolvedDependency>>([]);
 
@@ -257,6 +302,7 @@ public sealed class ManualEntityCreationViewModelTests
         public TrackedStateChangeSet? LastChangeSet { get; private set; }
 
         public Task ApplyAsync(
+            TrackerId trackerId,
             TrackedStateChangeSet changeSet,
             CancellationToken cancellationToken = default)
         {
@@ -265,6 +311,7 @@ public sealed class ManualEntityCreationViewModelTests
         }
 
         public Task EnsureHistoryBaselineAsync(
+            TrackerId trackerId,
             IEnumerable<TrackedEntity> entities,
             EntityTracker.Application.History.ProgressSnapshotState snapshot,
             CancellationToken cancellationToken = default) => Task.CompletedTask;

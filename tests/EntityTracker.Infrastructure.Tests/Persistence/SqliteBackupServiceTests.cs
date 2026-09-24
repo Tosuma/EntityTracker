@@ -16,6 +16,7 @@ public sealed class SqliteBackupServiceTests
         await database.InitializeAsync();
         TrackedEntity prioritized = new(
             EntityId.New(),
+            database.GetTrackerId(),
             "Prioritized",
             requestedPriority: 4,
             responsibleDeveloper: "Platform Team",

@@ -42,10 +42,12 @@ public sealed class SchemaSynchronizationService
     }
 
     public async Task<SchemaSynchronizationResult> PlanAsync(
+        TrackerId trackerId,
         string filePath,
         SchemaImportMode mode,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(filePath);
         if (!Enum.IsDefined(mode))
         {
@@ -60,16 +62,17 @@ public sealed class SchemaSynchronizationService
         }
 
         Task<IReadOnlyList<TrackedEntity>> entitiesTask =
-            _entityRepository.GetAllAsync(cancellationToken);
+            _entityRepository.GetAllAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<PersistedDependency>> dependenciesTask =
-            _dependencyRepository.GetAllAsync(cancellationToken);
+            _dependencyRepository.GetAllAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
-            _dependencyRepository.GetAllUnresolvedAsync(cancellationToken);
+            _dependencyRepository.GetAllUnresolvedAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
-            _overrideRepository.GetAllAsync(cancellationToken);
+            _overrideRepository.GetAllAsync(trackerId, cancellationToken);
         await Task.WhenAll(entitiesTask, dependenciesTask, unresolvedTask, overridesTask);
 
         SchemaSynchronizationPlan plan = _planner.CreatePlan(
+            trackerId,
             importResult.Candidate!,
             mode,
             await entitiesTask,
@@ -87,12 +90,16 @@ public sealed class SchemaSynchronizationService
     }
 
     public EntityDependencyEditPlan PreviewDependencyEdit(
+        TrackerId trackerId,
         SchemaSynchronizationPlan plan,
         EntityId ownerId,
         IEnumerable<ManualDependencyOverride> desiredOwnerOverrides)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(plan);
+        EnsurePlanTracker(trackerId, plan);
         return _dependencyEditorService.CreatePlan(
+            trackerId,
             ownerId,
             plan.CandidateEntities,
             plan.CandidateImportedResolvedDependencies,
@@ -102,10 +109,13 @@ public sealed class SchemaSynchronizationService
     }
 
     public SchemaSynchronizationPlan StageDependencyEdit(
+        TrackerId trackerId,
         SchemaSynchronizationPlan plan,
         EntityDependencyEditPlan editPlan)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(plan);
+        EnsurePlanTracker(trackerId, plan);
         ArgumentNullException.ThrowIfNull(editPlan);
         if (!editPlan.IsValid)
         {
@@ -120,17 +130,25 @@ public sealed class SchemaSynchronizationService
     }
 
     public SchemaSynchronizationPlan StageProgressDecision(
+        TrackerId trackerId,
         SchemaSynchronizationPlan plan,
         EntityId entityId,
-        SynchronizationProgressDecision decision) =>
-        _planner.ReviseProgressDecision(plan, entityId, decision);
+        SynchronizationProgressDecision decision)
+    {
+        ArgumentNullException.ThrowIfNull(trackerId);
+        EnsurePlanTracker(trackerId, plan);
+        return _planner.ReviseProgressDecision(plan, entityId, decision);
+    }
 
     public Task<SchemaImportSummary> ApplyAsync(
+        TrackerId trackerId,
         SchemaSynchronizationPlan plan,
         string sourceFileName,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(plan);
+        EnsurePlanTracker(trackerId, plan);
         if (!plan.CanApply)
         {
             throw new InvalidOperationException(
@@ -154,12 +172,23 @@ public sealed class SchemaSynchronizationService
             plan.UnresolvedEntities.Count);
 
         return _synchronizationStore.ApplyAsync(
+            trackerId,
             plan.ChangeSet,
             completion,
             cancellationToken);
     }
 
     public Task<SchemaImportSummary?> GetLatestImportAsync(
+        TrackerId trackerId,
         CancellationToken cancellationToken = default) =>
-        _synchronizationStore.GetLatestImportAsync(cancellationToken);
+        _synchronizationStore.GetLatestImportAsync(trackerId, cancellationToken);
+
+    private static void EnsurePlanTracker(TrackerId trackerId, SchemaSynchronizationPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        if (plan.TrackerId != trackerId)
+        {
+            throw new InvalidOperationException("The synchronization plan belongs to another tracker.");
+        }
+    }
 }

@@ -338,7 +338,7 @@ public sealed class DependencyRankerTests
     public void Rank_DuplicateEntityIds_ThrowsArgumentException()
     {
         TrackedEntity first = Entity(1, "First");
-        TrackedEntity duplicate = new(first.Id, "Duplicate");
+        TrackedEntity duplicate = new(first.Id, TestTrackerId, "Duplicate");
 
         Assert.Throws<ArgumentException>(() => _ranker.Rank([first, duplicate], []));
     }
@@ -443,7 +443,7 @@ public sealed class DependencyRankerTests
 
     private static TrackedEntity Entity(int id, string name)
     {
-        return new TrackedEntity(Id(id), name);
+        return new TrackedEntity(Id(id), TestTrackerId, name);
     }
 
     private static EntityId Id(int value)

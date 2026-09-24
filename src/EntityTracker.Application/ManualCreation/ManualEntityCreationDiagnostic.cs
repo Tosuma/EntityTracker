@@ -17,7 +17,8 @@ public enum ManualEntityCreationDiagnosticCode
     ArchivedDependency,
     MissingSelectedEntity,
     UnresolvedDependency,
-    CycleDetected
+    CycleDetected,
+    InvalidRequestedPriority
 }
 
 public sealed record ManualEntityCreationDiagnostic(

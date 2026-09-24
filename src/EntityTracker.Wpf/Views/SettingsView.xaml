@@ -1,0 +1,33 @@
+<UserControl x:Class="EntityTracker.Wpf.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:configuration="clr-namespace:EntityTracker.Infrastructure.Configuration;assembly=EntityTracker.Infrastructure">
+    <StackPanel MaxWidth="720" HorizontalAlignment="Left">
+        <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Settings" />
+        <TextBlock Margin="0,4,0,20" Style="{StaticResource PageDescriptionTextStyle}"
+                   Text="Choose whether EntityTracker follows Windows or uses a pinned appearance. Changes apply immediately and are saved locally." />
+        <Border Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
+            <StackPanel>
+                <TextBlock Margin="0,0,0,4" Style="{StaticResource SectionHeadingTextStyle}" Text="Appearance" />
+                <TextBlock Margin="0,0,0,12" Style="{StaticResource PageDescriptionTextStyle}"
+                           Text="System follows the current Windows app theme. Light and Dark stay selected until you change this setting." />
+                <RadioButton Margin="0,4" Content="System — follow Windows" GroupName="Appearance" Command="{Binding Appearance.SelectAppearanceCommand}"
+                             AutomationProperties.HelpText="Use the current Windows app theme."
+                             CommandParameter="{x:Static configuration:ApplicationAppearance.System}" IsChecked="{Binding Appearance.IsSystem, Mode=OneWay}" />
+                <RadioButton Margin="0,4" Content="Light" GroupName="Appearance" Command="{Binding Appearance.SelectAppearanceCommand}"
+                             AutomationProperties.HelpText="Always use the light appearance."
+                             CommandParameter="{x:Static configuration:ApplicationAppearance.Light}" IsChecked="{Binding Appearance.IsLight, Mode=OneWay}" />
+                <RadioButton Margin="0,4" Content="Dark" GroupName="Appearance" Command="{Binding Appearance.SelectAppearanceCommand}"
+                             AutomationProperties.HelpText="Always use the dark appearance."
+                             CommandParameter="{x:Static configuration:ApplicationAppearance.Dark}" IsChecked="{Binding Appearance.IsDark, Mode=OneWay}" />
+                <Border Margin="0,12,0,0" MaxHeight="120" Style="{StaticResource ErrorMessageStyle}"
+                        Visibility="{Binding Appearance.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <TextBlock AutomationProperties.LiveSetting="Assertive"
+                                   Text="{Binding Appearance.ErrorMessage}" TextWrapping="Wrap" />
+                    </ScrollViewer>
+                </Border>
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

@@ -16,21 +16,26 @@ public sealed class SqliteEntityRepository : IEntityRepository
         _database = database;
     }
 
+    internal SqliteDatabase Database => _database;
+
     public async Task<TrackedEntity?> GetAsync(
+        TrackerId trackerId,
         EntityId id,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(id);
 
         await using SqliteConnection connection =
             await _database.OpenConnectionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, source_name, development_status, notes, lifecycle_state, provenance,
+            SELECT id, tracker_id, source_name, development_status, notes, lifecycle_state, provenance,
                    requested_priority, responsible_developer, group_name
             FROM tracked_entities
-            WHERE id = $id;
+            WHERE tracker_id = $trackerId AND id = $id;
             """;
+        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
         command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(id));
 
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -40,17 +45,21 @@ public sealed class SqliteEntityRepository : IEntityRepository
     }
 
     public async Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
+        TrackerId trackerId,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         await using SqliteConnection connection =
             await _database.OpenConnectionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, source_name, development_status, notes, lifecycle_state, provenance,
+            SELECT id, tracker_id, source_name, development_status, notes, lifecycle_state, provenance,
                    requested_priority, responsible_developer, group_name
             FROM tracked_entities
+            WHERE tracker_id = $trackerId
             ORDER BY source_name COLLATE NOCASE, id;
             """;
+        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
 
         List<TrackedEntity> entities = [];
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -64,10 +73,16 @@ public sealed class SqliteEntityRepository : IEntityRepository
     }
 
     internal async Task<bool> TryAddAsync(
+        TrackerId trackerId,
         TrackedEntity entity,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(entity);
+        if (entity.TrackerId != trackerId)
+        {
+            throw new InvalidOperationException("The entity belongs to another tracker.");
+        }
 
         string timestamp = SqlitePersistenceValues.FormatTimestamp(
             _database.TimeProvider.GetUtcNow());
@@ -78,6 +93,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
             INSERT INTO tracked_entities
             (
                 id,
+                tracker_id,
                 source_key,
                 source_name,
                 development_status,
@@ -94,6 +110,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
             VALUES
             (
                 $id,
+                $trackerId,
                 $sourceKey,
                 $sourceName,
                 $developmentStatus,
@@ -110,6 +127,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
             ON CONFLICT DO NOTHING;
             """;
         AddEntityParameters(command, entity);
+        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
         command.Parameters.AddWithValue("$createdAtUtc", timestamp);
         command.Parameters.AddWithValue("$schemaUpdatedAtUtc", timestamp);
         command.Parameters.AddWithValue("$progressUpdatedAtUtc", timestamp);
@@ -118,10 +136,16 @@ public sealed class SqliteEntityRepository : IEntityRepository
     }
 
     internal async Task<bool> UpdateSchemaMetadataAsync(
+        TrackerId trackerId,
         TrackedEntity entity,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(entity);
+        if (entity.TrackerId != trackerId)
+        {
+            throw new InvalidOperationException("The entity belongs to another tracker.");
+        }
 
         await using SqliteConnection connection =
             await _database.OpenConnectionAsync(cancellationToken);
@@ -132,8 +156,9 @@ public sealed class SqliteEntityRepository : IEntityRepository
                 source_name = $sourceName,
                 provenance = $provenance,
                 schema_updated_at_utc = $schemaUpdatedAtUtc
-            WHERE id = $id;
+            WHERE tracker_id = $trackerId AND id = $id;
             """;
+        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
         command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
         command.Parameters.AddWithValue("$sourceKey", EntitySourceKey.From(entity.SourceName).Value);
         command.Parameters.AddWithValue("$sourceName", entity.SourceName);
@@ -177,24 +202,26 @@ public sealed class SqliteEntityRepository : IEntityRepository
     private static TrackedEntity ReadEntity(SqliteDataReader reader)
     {
         EntityId id = SqlitePersistenceValues.ParseEntityId(reader.GetString(0));
-        string sourceName = reader.GetString(1);
+        TrackerId trackerId = SqlitePersistenceValues.ParseTrackerId(reader.GetString(1));
+        string sourceName = reader.GetString(2);
         DevelopmentStatus status = SqlitePersistenceValues.ParseEnum<DevelopmentStatus>(
-            reader.GetString(2),
+            reader.GetString(3),
             "development status");
-        string notes = reader.GetString(3);
+        string notes = reader.GetString(4);
         EntityLifecycleState lifecycleState =
             SqlitePersistenceValues.ParseEnum<EntityLifecycleState>(
-                reader.GetString(4),
+                reader.GetString(5),
                 "entity lifecycle state");
         EntityProvenance provenance = SqlitePersistenceValues.ParseEnum<EntityProvenance>(
-            reader.GetString(5),
+            reader.GetString(6),
             "entity provenance");
-        int? requestedPriority = reader.IsDBNull(6) ? null : reader.GetInt32(6);
-        string responsibleDeveloper = reader.GetString(7);
-        string groupName = reader.GetString(8);
+        int? requestedPriority = reader.IsDBNull(7) ? null : reader.GetInt32(7);
+        string responsibleDeveloper = reader.GetString(8);
+        string groupName = reader.GetString(9);
 
         return new TrackedEntity(
             id,
+            trackerId,
             sourceName,
             status,
             notes,
