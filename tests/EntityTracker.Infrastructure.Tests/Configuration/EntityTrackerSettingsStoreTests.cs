@@ -6,175 +6,25 @@ namespace EntityTracker.Infrastructure.Tests.Configuration;
 public sealed class EntityTrackerSettingsStoreTests
 {
     [Fact]
-    public async Task LoadAsync_WhenFileIsMissing_UsesSqliteWithoutCreatingSettings()
+    public async Task LoadAsync_WhenFileIsMissing_ReturnsDefaultsWithoutCreatingSettings()
     {
         using TemporarySettingsDirectory directory = new();
-        EntityTrackerSettingsStore store = new(directory.SettingsPath);
-
-        SettingsLoadResult result = await store.LoadAsync();
-
-        Assert.Equal(StorageProviderKind.Sqlite, result.EffectiveStorage);
-        Assert.Null(result.Settings.SharePoint);
-        Assert.Equal(ApplicationAppearance.System, result.Settings.Appearance);
-        Assert.Empty(result.Warnings);
-        Assert.False(File.Exists(directory.SettingsPath));
-    }
-
-    [Fact]
-    public async Task SaveAndLoad_RoundTripsNormalizedNonSecretSharePointSetup()
-    {
-        using TemporarySettingsDirectory directory = new();
-        EntityTrackerSettingsStore store = new(directory.SettingsPath);
-
-        SharePointConnectionSettings saved = await store.SaveSharePointSetupAsync(
-            "  Production tracking  ",
-            "  https://contoso.sharepoint.com/sites/tracking/  ");
-        SettingsLoadResult loaded = await store.LoadAsync();
-
-        Assert.Equal("Production tracking", saved.DisplayName);
-        Assert.Equal(
-            "https://contoso.sharepoint.com/sites/tracking",
-            saved.SiteUrl);
-        Assert.Equal(StorageProviderKind.Sqlite, loaded.EffectiveStorage);
-        Assert.Equal(saved.DisplayName, loaded.Settings.SharePoint?.DisplayName);
-        Assert.Equal(saved.SiteUrl, loaded.Settings.SharePoint?.SiteUrl);
-
-        string json = await File.ReadAllTextAsync(directory.SettingsPath);
-        Assert.Contains("\"version\": 3", json, StringComparison.Ordinal);
-        Assert.Contains("\"activeStorage\": \"Sqlite\"", json, StringComparison.Ordinal);
-        Assert.Contains("\"appearance\": \"System\"", json, StringComparison.Ordinal);
-        Assert.DoesNotContain("password", json, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("token", json, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("secret", json, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Theory]
-    [InlineData("https://contoso.sharepoint.com/sites/tracking?x=1")]
-    [InlineData("https://contoso.sharepoint.com/sites/tracking#section")]
-    [InlineData("https://user@contoso.sharepoint.com/sites/tracking")]
-    [InlineData("http://contoso.sharepoint.com/sites/tracking")]
-    [InlineData("not a URL")]
-    public async Task SaveSharePointSetupAsync_RejectsUnsafeOrInvalidUrl(string siteUrl)
-    {
-        using TemporarySettingsDirectory directory = new();
-        EntityTrackerSettingsStore store = new(directory.SettingsPath);
-
-        await Assert.ThrowsAsync<ArgumentException>(() =>
-            store.SaveSharePointSetupAsync("Test", siteUrl));
-
-        Assert.False(File.Exists(directory.SettingsPath));
-    }
-
-    [Theory]
-    [InlineData("{ this is not json")]
-    [InlineData("""
-        { "version": 3, "activeStorage": "Sqlite" }
-        """)]
-    [InlineData("""
-        { "version": 1, "activeStorage": "Sqlite", "unexpected": true }
-        """)]
-    [InlineData("""
-        { "version": 1 }
-        """)]
-    [InlineData("""
-        {
-          "version": 1,
-          "activeStorage": "Sqlite",
-          "sharePoint": {
-            "displayName": "Test",
-            "siteUrl": "https://contoso.sharepoint.com/sites/test",
-            "clientSecret": "must-not-be-accepted"
-          }
-        }
-        """)]
-    public async Task LoadAsync_InvalidOrUnsupportedDocument_FallsBackWithoutOverwriting(
-        string document)
-    {
-        using TemporarySettingsDirectory directory = new();
-        Directory.CreateDirectory(directory.DirectoryPath);
-        await File.WriteAllTextAsync(directory.SettingsPath, document);
-        EntityTrackerSettingsStore store = new(directory.SettingsPath);
-
-        SettingsLoadResult result = await store.LoadAsync();
-
-        Assert.Equal(StorageProviderKind.Sqlite, result.EffectiveStorage);
-        Assert.Null(result.Settings.SharePoint);
-        Assert.Single(result.Warnings);
-        Assert.Equal(document, await File.ReadAllTextAsync(directory.SettingsPath));
-    }
-
-    [Fact]
-    public async Task LoadAsync_UnavailableProvider_PreservesSetupButUsesSqlite()
-    {
-        using TemporarySettingsDirectory directory = new();
-        Directory.CreateDirectory(directory.DirectoryPath);
-        await File.WriteAllTextAsync(directory.SettingsPath, """
-            {
-              "version": 1,
-              "activeStorage": "SharePointCached",
-              "sharePoint": {
-                "displayName": "Production",
-                "siteUrl": "https://contoso.sharepoint.com/sites/tracking"
-              }
-            }
-            """);
-        EntityTrackerSettingsStore store = new(directory.SettingsPath);
-
-        SettingsLoadResult result = await store.LoadAsync();
-
-        Assert.Equal(StorageProviderKind.Sqlite, result.EffectiveStorage);
-        Assert.Equal(StorageProviderKind.SharePointCached, result.Settings.ActiveStorage);
-        Assert.NotNull(result.Settings.SharePoint);
-        Assert.Single(result.Warnings);
-    }
-
-    [Fact]
-    public async Task RemoveSharePointSetupAsync_RemovesOptionalSettingsFile()
-    {
-        using TemporarySettingsDirectory directory = new();
-        EntityTrackerSettingsStore store = new(directory.SettingsPath);
-        await store.SaveSharePointSetupAsync(
-            "Test",
-            "https://contoso.sharepoint.com/sites/test");
-
-        await store.RemoveSharePointSetupAsync();
-
-        Assert.False(File.Exists(directory.SettingsPath));
-        SettingsLoadResult loaded = await store.LoadAsync();
-        Assert.Null(loaded.Settings.SharePoint);
-    }
-
-    [Fact]
-    public async Task LoadAsync_VersionOneDefaultsAppearanceWithoutRewritingFile()
-    {
-        using TemporarySettingsDirectory directory = new();
-        Directory.CreateDirectory(directory.DirectoryPath);
-        const string document = """
-            {
-              "version": 1,
-              "activeStorage": "Sqlite",
-              "sharePoint": {
-                "displayName": "Production",
-                "siteUrl": "https://contoso.sharepoint.com/sites/tracking"
-              }
-            }
-            """;
-        await File.WriteAllTextAsync(directory.SettingsPath, document);
         EntityTrackerSettingsStore store = new(directory.SettingsPath);
 
         SettingsLoadResult result = await store.LoadAsync();
 
         Assert.Equal(ApplicationAppearance.System, result.Settings.Appearance);
-        Assert.Equal("Production", result.Settings.SharePoint?.DisplayName);
+        Assert.Null(result.Settings.LastProjectId);
+        Assert.Null(result.Settings.LastTrackerId);
         Assert.Empty(result.Warnings);
-        Assert.Equal(document, await File.ReadAllTextAsync(directory.SettingsPath));
+        Assert.False(File.Exists(directory.SettingsPath));
     }
 
     [Theory]
     [InlineData(ApplicationAppearance.System)]
     [InlineData(ApplicationAppearance.Light)]
     [InlineData(ApplicationAppearance.Dark)]
-    public async Task SaveAppearanceAsync_RoundTripsCurrentVersion(
+    public async Task SaveAppearanceAsync_WritesVersionFourWithoutRetiredProviderFields(
         ApplicationAppearance appearance)
     {
         using TemporarySettingsDirectory directory = new();
@@ -185,22 +35,28 @@ public sealed class EntityTrackerSettingsStoreTests
 
         Assert.Equal(appearance, result.Settings.Appearance);
         string json = await File.ReadAllTextAsync(directory.SettingsPath);
-        Assert.Contains("\"version\": 3", json, StringComparison.Ordinal);
+        Assert.Contains("\"version\": 4", json, StringComparison.Ordinal);
         Assert.Contains($"\"appearance\": \"{appearance}\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("activeStorage", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("sharePoint", json, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task LoadAsync_InvalidVersionTwoAppearance_FallsBackAndPreservesOtherSettings()
+    public async Task LoadAsync_LegacySharePointDocument_PreservesSupportedValuesWithoutRewriting()
     {
         using TemporarySettingsDirectory directory = new();
         Directory.CreateDirectory(directory.DirectoryPath);
-        const string document = """
+        ProjectId projectId = ProjectId.New();
+        TrackerId trackerId = TrackerId.New();
+        string document = $$"""
             {
-              "version": 2,
-              "activeStorage": "Sqlite",
-              "appearance": "Sepia",
+              "version": 3,
+              "activeStorage": "SharePointCached",
+              "appearance": "Dark",
+              "lastProjectId": "{{projectId.Value:D}}",
+              "lastTrackerId": "{{trackerId.Value:D}}",
               "sharePoint": {
-                "displayName": "Production",
+                "displayName": "Retired setup",
                 "siteUrl": "https://contoso.sharepoint.com/sites/tracking"
               }
             }
@@ -210,44 +66,55 @@ public sealed class EntityTrackerSettingsStoreTests
 
         SettingsLoadResult result = await store.LoadAsync();
 
-        Assert.Equal(ApplicationAppearance.System, result.Settings.Appearance);
-        Assert.Equal("Production", result.Settings.SharePoint?.DisplayName);
+        Assert.Equal(ApplicationAppearance.Dark, result.Settings.Appearance);
+        Assert.Equal(projectId, result.Settings.LastProjectId);
+        Assert.Equal(trackerId, result.Settings.LastTrackerId);
         Assert.Single(result.Warnings);
         Assert.Equal(document, await File.ReadAllTextAsync(directory.SettingsPath));
     }
 
     [Fact]
-    public async Task SharePointChanges_PreserveNonDefaultAppearance()
+    public async Task SaveAfterLegacyLoad_StripsRetiredFieldsAndPreservesContext()
     {
         using TemporarySettingsDirectory directory = new();
+        Directory.CreateDirectory(directory.DirectoryPath);
+        ProjectId projectId = ProjectId.New();
+        TrackerId trackerId = TrackerId.New();
+        await File.WriteAllTextAsync(directory.SettingsPath, $$"""
+            {
+              "version": 3,
+              "activeStorage": "Sqlite",
+              "appearance": "Light",
+              "lastProjectId": "{{projectId.Value:D}}",
+              "lastTrackerId": "{{trackerId.Value:D}}",
+              "sharePoint": {
+                "displayName": "Retired setup",
+                "siteUrl": "https://contoso.sharepoint.com/sites/tracking"
+              }
+            }
+            """);
         EntityTrackerSettingsStore store = new(directory.SettingsPath);
+
         await store.SaveAppearanceAsync(ApplicationAppearance.Dark);
-
-        await store.SaveSharePointSetupAsync(
-            "Production",
-            "https://contoso.sharepoint.com/sites/tracking");
-        Assert.Equal(
-            ApplicationAppearance.Dark,
-            (await store.LoadAsync()).Settings.Appearance);
-
-        await store.RemoveSharePointSetupAsync();
         SettingsLoadResult result = await store.LoadAsync();
+
         Assert.Equal(ApplicationAppearance.Dark, result.Settings.Appearance);
-        Assert.Null(result.Settings.SharePoint);
-        Assert.True(File.Exists(directory.SettingsPath));
+        Assert.Equal(projectId, result.Settings.LastProjectId);
+        Assert.Equal(trackerId, result.Settings.LastTrackerId);
+        string json = await File.ReadAllTextAsync(directory.SettingsPath);
+        Assert.Contains("\"version\": 4", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("activeStorage", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("sharePoint", json, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task SaveActiveContextAsync_RoundTripsIdsAndPreservesOtherSettings()
+    public async Task SaveActiveContextAsync_RoundTripsIdsAndAppearance()
     {
         using TemporarySettingsDirectory directory = new();
         EntityTrackerSettingsStore store = new(directory.SettingsPath);
         ProjectId projectId = ProjectId.New();
         TrackerId trackerId = TrackerId.New();
         await store.SaveAppearanceAsync(ApplicationAppearance.Dark);
-        await store.SaveSharePointSetupAsync(
-            "Legacy setup",
-            "https://contoso.sharepoint.com/sites/tracking");
 
         await store.SaveActiveContextAsync(projectId, trackerId);
         SettingsLoadResult result = await store.LoadAsync();
@@ -255,31 +122,49 @@ public sealed class EntityTrackerSettingsStoreTests
         Assert.Equal(projectId, result.Settings.LastProjectId);
         Assert.Equal(trackerId, result.Settings.LastTrackerId);
         Assert.Equal(ApplicationAppearance.Dark, result.Settings.Appearance);
-        Assert.Equal("Legacy setup", result.Settings.SharePoint?.DisplayName);
         Assert.Empty(result.Warnings);
     }
 
     [Fact]
-    public async Task LoadAsync_VersionTwoMigratesWithNoSavedContext()
+    public async Task LoadAsync_VersionsOneAndTwoRetainAppearanceRulesWithoutRewriting()
     {
         using TemporarySettingsDirectory directory = new();
         Directory.CreateDirectory(directory.DirectoryPath);
-        const string document = """
-            {
-              "version": 2,
-              "activeStorage": "Sqlite",
-              "appearance": "Light"
-            }
+        const string versionOne = """
+            { "version": 1, "activeStorage": "Sqlite" }
             """;
+        await File.WriteAllTextAsync(directory.SettingsPath, versionOne);
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+
+        SettingsLoadResult first = await store.LoadAsync();
+        Assert.Equal(ApplicationAppearance.System, first.Settings.Appearance);
+        Assert.Equal(versionOne, await File.ReadAllTextAsync(directory.SettingsPath));
+
+        const string versionTwo = """
+            { "version": 2, "activeStorage": "Sqlite", "appearance": "Light" }
+            """;
+        await File.WriteAllTextAsync(directory.SettingsPath, versionTwo);
+        SettingsLoadResult second = await store.LoadAsync();
+        Assert.Equal(ApplicationAppearance.Light, second.Settings.Appearance);
+        Assert.Equal(versionTwo, await File.ReadAllTextAsync(directory.SettingsPath));
+    }
+
+    [Theory]
+    [InlineData("{ this is not json")]
+    [InlineData("{ \"version\": 99, \"appearance\": \"Dark\" }")]
+    [InlineData("{ \"version\": 4, \"appearance\": \"Dark\", \"unexpected\": true }")]
+    public async Task LoadAsync_InvalidOrUnsupportedDocument_FallsBackWithoutOverwriting(
+        string document)
+    {
+        using TemporarySettingsDirectory directory = new();
+        Directory.CreateDirectory(directory.DirectoryPath);
         await File.WriteAllTextAsync(directory.SettingsPath, document);
 
         SettingsLoadResult result = await new EntityTrackerSettingsStore(directory.SettingsPath)
             .LoadAsync();
 
-        Assert.Equal(ApplicationAppearance.Light, result.Settings.Appearance);
-        Assert.Null(result.Settings.LastProjectId);
-        Assert.Null(result.Settings.LastTrackerId);
-        Assert.Empty(result.Warnings);
+        Assert.Equal(ApplicationAppearance.System, result.Settings.Appearance);
+        Assert.Single(result.Warnings);
         Assert.Equal(document, await File.ReadAllTextAsync(directory.SettingsPath));
     }
 
@@ -290,8 +175,7 @@ public sealed class EntityTrackerSettingsStoreTests
         Directory.CreateDirectory(directory.DirectoryPath);
         await File.WriteAllTextAsync(directory.SettingsPath, """
             {
-              "version": 3,
-              "activeStorage": "Sqlite",
+              "version": 4,
               "appearance": "System",
               "lastProjectId": "not-a-guid",
               "lastTrackerId": "also-not-a-guid"
@@ -307,24 +191,153 @@ public sealed class EntityTrackerSettingsStoreTests
     }
 
     [Fact]
-    public async Task RemoveSharePointSetupAsync_PreservesSavedContext()
+    public async Task SaveActiveContextAsync_RejectsTrackerWithoutProject()
     {
         using TemporarySettingsDirectory directory = new();
         EntityTrackerSettingsStore store = new(directory.SettingsPath);
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.SaveActiveContextAsync(null, TrackerId.New()));
+
+        Assert.False(File.Exists(directory.SettingsPath));
+    }
+
+    [Fact]
+    public async Task LoadAsync_CurrentVersionRoundTripsContextWithoutRewriting()
+    {
+        using TemporarySettingsDirectory directory = new();
+        Directory.CreateDirectory(directory.DirectoryPath);
         ProjectId projectId = ProjectId.New();
         TrackerId trackerId = TrackerId.New();
-        await store.SaveSharePointSetupAsync(
-            "Legacy setup",
-            "https://contoso.sharepoint.com/sites/tracking");
-        await store.SaveActiveContextAsync(projectId, trackerId);
+        string document = $$"""
+            {
+              "version": 4,
+              "appearance": "Dark",
+              "lastProjectId": "{{projectId.Value:D}}",
+              "lastTrackerId": "{{trackerId.Value:D}}"
+            }
+            """;
+        await File.WriteAllTextAsync(directory.SettingsPath, document);
 
-        await store.RemoveSharePointSetupAsync();
-        SettingsLoadResult result = await store.LoadAsync();
+        SettingsLoadResult result = await new EntityTrackerSettingsStore(directory.SettingsPath)
+            .LoadAsync();
 
-        Assert.True(File.Exists(directory.SettingsPath));
-        Assert.Null(result.Settings.SharePoint);
+        Assert.Equal(ApplicationAppearance.Dark, result.Settings.Appearance);
         Assert.Equal(projectId, result.Settings.LastProjectId);
         Assert.Equal(trackerId, result.Settings.LastTrackerId);
+        Assert.Empty(result.Warnings);
+        Assert.Equal(document, await File.ReadAllTextAsync(directory.SettingsPath));
+    }
+
+    [Fact]
+    public async Task LoadAsync_LegacySqliteSharePointSetupIsIgnoredWithoutWarning()
+    {
+        using TemporarySettingsDirectory directory = new();
+        Directory.CreateDirectory(directory.DirectoryPath);
+        const string document = """
+            {
+              "version": 2,
+              "activeStorage": "Sqlite",
+              "appearance": "Light",
+              "sharePoint": { "displayName": "Retired", "siteUrl": "https://example.test" }
+            }
+            """;
+        await File.WriteAllTextAsync(directory.SettingsPath, document);
+
+        SettingsLoadResult result = await new EntityTrackerSettingsStore(directory.SettingsPath)
+            .LoadAsync();
+
+        Assert.Equal(ApplicationAppearance.Light, result.Settings.Appearance);
+        Assert.Empty(result.Warnings);
+        Assert.Equal(document, await File.ReadAllTextAsync(directory.SettingsPath));
+    }
+
+    [Fact]
+    public async Task LoadAsync_InvalidLegacyAppearanceUsesSystemWithoutRewriting()
+    {
+        using TemporarySettingsDirectory directory = new();
+        Directory.CreateDirectory(directory.DirectoryPath);
+        const string document = """
+            { "version": 2, "activeStorage": "Sqlite", "appearance": "Sepia" }
+            """;
+        await File.WriteAllTextAsync(directory.SettingsPath, document);
+
+        SettingsLoadResult result = await new EntityTrackerSettingsStore(directory.SettingsPath)
+            .LoadAsync();
+
+        Assert.Equal(ApplicationAppearance.System, result.Settings.Appearance);
+        Assert.Single(result.Warnings);
+        Assert.Equal(document, await File.ReadAllTextAsync(directory.SettingsPath));
+    }
+
+    [Fact]
+    public async Task LoadAsync_TrackerWithoutProjectIsIgnored()
+    {
+        using TemporarySettingsDirectory directory = new();
+        Directory.CreateDirectory(directory.DirectoryPath);
+        await File.WriteAllTextAsync(directory.SettingsPath, $$"""
+            {
+              "version": 3,
+              "activeStorage": "Sqlite",
+              "appearance": "System",
+              "lastTrackerId": "{{TrackerId.New().Value:D}}"
+            }
+            """);
+
+        SettingsLoadResult result = await new EntityTrackerSettingsStore(directory.SettingsPath)
+            .LoadAsync();
+
+        Assert.Null(result.Settings.LastProjectId);
+        Assert.Null(result.Settings.LastTrackerId);
+        Assert.Single(result.Warnings);
+    }
+
+    [Fact]
+    public async Task SaveActiveContextAsync_CanClearSavedContext()
+    {
+        using TemporarySettingsDirectory directory = new();
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+        await store.SaveActiveContextAsync(ProjectId.New(), TrackerId.New());
+
+        await store.SaveActiveContextAsync(null, null);
+        SettingsLoadResult result = await store.LoadAsync();
+
+        Assert.Null(result.Settings.LastProjectId);
+        Assert.Null(result.Settings.LastTrackerId);
+        Assert.Equal(ApplicationAppearance.System, result.Settings.Appearance);
+    }
+
+    [Fact]
+    public async Task SaveAppearanceAsync_UnsupportedExistingVersionFailsWithoutOverwriting()
+    {
+        using TemporarySettingsDirectory directory = new();
+        Directory.CreateDirectory(directory.DirectoryPath);
+        const string document = "{ \"version\": 99, \"appearance\": \"Dark\" }";
+        await File.WriteAllTextAsync(directory.SettingsPath, document);
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            store.SaveAppearanceAsync(ApplicationAppearance.Light));
+
+        Assert.Equal(document, await File.ReadAllTextAsync(directory.SettingsPath));
+    }
+
+    [Fact]
+    public async Task SaveAppearanceAsync_RejectsUnknownAppearanceWithoutCreatingFile()
+    {
+        using TemporarySettingsDirectory directory = new();
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            store.SaveAppearanceAsync((ApplicationAppearance)999));
+
+        Assert.False(File.Exists(directory.SettingsPath));
+    }
+
+    [Fact]
+    public void Constructor_RejectsBlankSettingsPath()
+    {
+        Assert.Throws<ArgumentException>(() => new EntityTrackerSettingsStore(" "));
     }
 
     private sealed class TemporarySettingsDirectory : IDisposable

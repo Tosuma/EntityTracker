@@ -539,6 +539,42 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task TryCloseEditor_ProtectsDirtyWorkButClosesUnchangedEditorImmediately()
+    {
+        TrackedEntity entity = Entity(1, "Customer");
+        RecordingDiscardConfirmation discard = new(false);
+        MainWindowViewModel viewModel = CreateViewModel(
+            [entity],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out _,
+            discardConfirmation: discard);
+        await viewModel.InitializeAsync();
+        EntityOverviewRow row = Assert.Single(viewModel.OverviewItems);
+
+        viewModel.EditOverviewEntityCommand.Execute(row);
+        await WaitUntilAsync(() => viewModel.Editor.IsOpen && !viewModel.Editor.IsBusy);
+        Assert.True(viewModel.TryCloseEditor());
+        Assert.False(viewModel.Editor.IsOpen);
+        Assert.Equal(0, discard.CallCount);
+
+        viewModel.EditOverviewEntityCommand.Execute(row);
+        await WaitUntilAsync(() => viewModel.Editor.IsOpen && !viewModel.Editor.IsBusy);
+        viewModel.Editor.EditedNotes = "Unsaved note";
+
+        Assert.False(viewModel.TryCloseEditor());
+        Assert.True(viewModel.Editor.IsOpen);
+        Assert.Equal("Unsaved note", viewModel.Editor.EditedNotes);
+        Assert.Equal(1, discard.CallCount);
+
+        discard.Result = true;
+        Assert.True(viewModel.TryCloseEditor());
+        Assert.False(viewModel.Editor.IsOpen);
+        Assert.Equal(2, discard.CallCount);
+    }
+
+    [Fact]
     public async Task Overview_ShowsEffectivePriorityAndKeepsPrerequisiteBeforeTarget()
     {
         TrackedEntity prerequisite = Entity(1, "ZuluPrerequisite");
@@ -1336,7 +1372,8 @@ public sealed class MainWindowViewModelTests
         ICsvFilePicker picker,
         out StubSynchronizationStore store,
         IReadOnlyList<PersistedUnresolvedDependency>? unresolvedDependencies = null,
-        ISchemaSynchronizationConfirmation? confirmationService = null)
+        ISchemaSynchronizationConfirmation? confirmationService = null,
+        IContextDiscardConfirmation? discardConfirmation = null)
     {
         StubEntityRepository entityRepository = new(entities);
         StubDependencyRepository dependencyRepository = new(
@@ -1397,7 +1434,8 @@ public sealed class MainWindowViewModelTests
                 ranker),
             picker,
             CreateProgressDashboardViewModel(),
-            confirmationService ?? new AlwaysConfirmService());
+            confirmationService ?? new AlwaysConfirmService(),
+            discardConfirmation ?? new AlwaysDiscardConfirmation());
     }
 
     private static ProgressDashboardViewModel CreateProgressDashboardViewModel()
@@ -1603,6 +1641,24 @@ public sealed class MainWindowViewModelTests
             TrackerId trackerId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<ProgressSnapshot?>(null);
+    }
+
+    private sealed class AlwaysDiscardConfirmation : IContextDiscardConfirmation
+    {
+        public bool ConfirmDiscard(string description) => true;
+    }
+
+    private sealed class RecordingDiscardConfirmation(bool result) : IContextDiscardConfirmation
+    {
+        public bool Result { get; set; } = result;
+
+        public int CallCount { get; private set; }
+
+        public bool ConfirmDiscard(string description)
+        {
+            CallCount++;
+            return Result;
+        }
     }
 
     private sealed class StubDependencyRepository(

@@ -4,18 +4,29 @@
              xmlns:configuration="clr-namespace:EntityTracker.Infrastructure.Configuration;assembly=EntityTracker.Infrastructure">
     <StackPanel MaxWidth="720" HorizontalAlignment="Left">
         <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Settings" />
-        <TextBlock Margin="0,4,0,20" Foreground="{DynamicResource Brush.Text.Secondary}"
-                   Text="Choose how EntityTracker follows Windows. Changes apply immediately and are saved locally." TextWrapping="Wrap" />
+        <TextBlock Margin="0,4,0,20" Style="{StaticResource PageDescriptionTextStyle}"
+                   Text="Choose whether EntityTracker follows Windows or uses a pinned appearance. Changes apply immediately and are saved locally." />
         <Border Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
             <StackPanel>
-                <TextBlock Margin="0,0,0,12" FontSize="18" FontWeight="SemiBold" Text="Appearance" />
-                <RadioButton Margin="0,4" Content="System" GroupName="Appearance" Command="{Binding Appearance.SelectAppearanceCommand}"
+                <TextBlock Margin="0,0,0,4" Style="{StaticResource SectionHeadingTextStyle}" Text="Appearance" />
+                <TextBlock Margin="0,0,0,12" Style="{StaticResource PageDescriptionTextStyle}"
+                           Text="System follows the current Windows app theme. Light and Dark stay selected until you change this setting." />
+                <RadioButton Margin="0,4" Content="System — follow Windows" GroupName="Appearance" Command="{Binding Appearance.SelectAppearanceCommand}"
+                             AutomationProperties.HelpText="Use the current Windows app theme."
                              CommandParameter="{x:Static configuration:ApplicationAppearance.System}" IsChecked="{Binding Appearance.IsSystem, Mode=OneWay}" />
                 <RadioButton Margin="0,4" Content="Light" GroupName="Appearance" Command="{Binding Appearance.SelectAppearanceCommand}"
+                             AutomationProperties.HelpText="Always use the light appearance."
                              CommandParameter="{x:Static configuration:ApplicationAppearance.Light}" IsChecked="{Binding Appearance.IsLight, Mode=OneWay}" />
                 <RadioButton Margin="0,4" Content="Dark" GroupName="Appearance" Command="{Binding Appearance.SelectAppearanceCommand}"
+                             AutomationProperties.HelpText="Always use the dark appearance."
                              CommandParameter="{x:Static configuration:ApplicationAppearance.Dark}" IsChecked="{Binding Appearance.IsDark, Mode=OneWay}" />
-                <TextBlock Margin="0,12,0,0" Foreground="{DynamicResource Brush.Accent}" Text="{Binding Appearance.ErrorMessage}" TextWrapping="Wrap" />
+                <Border Margin="0,12,0,0" MaxHeight="120" Style="{StaticResource ErrorMessageStyle}"
+                        Visibility="{Binding Appearance.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <TextBlock AutomationProperties.LiveSetting="Assertive"
+                                   Text="{Binding Appearance.ErrorMessage}" TextWrapping="Wrap" />
+                    </ScrollViewer>
+                </Border>
             </StackPanel>
         </Border>
     </StackPanel>

@@ -6,7 +6,7 @@
              xmlns:workflow="clr-namespace:EntityTracker.Application.Workflow;assembly=EntityTracker.Application"
              xmlns:views="clr-namespace:EntityTracker.Wpf.Views">
     <UserControl.Resources>
-        <Style x:Key="ComparisonFilterButtonStyle" TargetType="Button">
+        <Style x:Key="ComparisonFilterButtonStyle" TargetType="ToggleButton">
             <Setter Property="Margin" Value="0,0,8,8" />
             <Setter Property="Padding" Value="12,8" />
             <Setter Property="MinWidth" Value="104" />
@@ -19,7 +19,7 @@
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="Button">
+                    <ControlTemplate TargetType="ToggleButton">
                         <Border x:Name="Card"
                                 Padding="{TemplateBinding Padding}"
                                 Background="{TemplateBinding Background}"
@@ -37,6 +37,10 @@
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="Card" Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Brush.Focus}" />
+                                <Setter TargetName="Card" Property="BorderThickness" Value="2" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Cursor" Value="Arrow" />
@@ -180,10 +184,21 @@
                 <StackPanel>
                     <TextBlock Style="{StaticResource PageHeadingTextStyle}"
                                Text="{Binding ProjectReporting.Dashboard.Project.Name}" />
-                    <TextBlock Margin="0,4,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
+                    <TextBlock Margin="0,4,0,0" Style="{StaticResource PageDescriptionTextStyle}"
                                Text="Aggregate progress, comparable trackers, and entity-level differences." />
                 </StackPanel>
             </DockPanel>
+
+            <Border Margin="0,0,0,12" MaxHeight="120" Style="{StaticResource ErrorMessageStyle}"
+                    Visibility="{Binding ProjectReporting.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <TextBlock AutomationProperties.LiveSetting="Assertive" Text="{Binding ProjectReporting.ErrorMessage}" TextWrapping="Wrap" />
+                </ScrollViewer>
+            </Border>
+            <Border Margin="0,0,0,12" Style="{StaticResource InfoMessageStyle}"
+                    Visibility="{Binding ProjectReporting.IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <TextBlock AutomationProperties.LiveSetting="Polite" Text="Loading Project dashboard…" />
+            </Border>
 
             <TextBlock Margin="0,0,0,10" FontSize="20" FontWeight="SemiBold" Text="Trackers" />
             <Border Margin="0,0,0,16" Padding="20">
@@ -232,9 +247,12 @@
                                 </StackPanel>
                                 <StackPanel Grid.Row="2" Orientation="Horizontal">
                                     <Button Margin="0,0,8,0" Click="OnOpenTracker" Content="Open"
+                                            AutomationProperties.Name="{Binding Name, StringFormat=Open tracker {0}}"
                                             Style="{StaticResource PrimaryButtonStyle}" />
-                                    <Button Margin="0,0,8,0" Click="OnRenameTracker" Content="Rename" />
+                                    <Button Margin="0,0,8,0" Click="OnRenameTracker" Content="Rename"
+                                            AutomationProperties.Name="{Binding Name, StringFormat=Rename tracker {0}}" />
                                     <Button Click="OnRecycleTracker" Content="Recycle"
+                                            AutomationProperties.Name="{Binding Name, StringFormat=Recycle tracker {0}}"
                                             Style="{StaticResource DangerButtonStyle}" />
                                 </StackPanel>
                             </Grid>
@@ -263,11 +281,13 @@
                     </DockPanel>
 
                     <WrapPanel Margin="0,0,0,8">
-                        <Button AutomationProperties.Name="Filter comparison to missing entities"
+                        <ToggleButton AutomationProperties.Name="Filter comparison to missing entities"
+                                IsChecked="{Binding ProjectReporting.IsMissingSelected, Mode=OneWay}"
+                                ToolTip="Filter to missing entities. Unavailable when the count is zero."
                                 Command="{Binding ProjectReporting.SelectCategoryCommand}"
                                 CommandParameter="{x:Static projects:ProjectComparisonCategory.Missing}">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
+                            <ToggleButton.Style>
+                                <Style TargetType="ToggleButton" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding ProjectReporting.IsMissingSelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
@@ -276,18 +296,20 @@
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </Button.Style>
+                            </ToggleButton.Style>
                             <StackPanel>
-                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Missing" />
+                                <TextBlock Text="Missing" />
                                 <TextBlock Margin="0,2,0,0" FontSize="18" FontWeight="SemiBold"
                                            Text="{Binding ProjectReporting.MissingCount}" />
                             </StackPanel>
-                        </Button>
-                        <Button AutomationProperties.Name="Filter comparison to divergent entities"
+                        </ToggleButton>
+                        <ToggleButton AutomationProperties.Name="Filter comparison to divergent entities"
+                                IsChecked="{Binding ProjectReporting.IsDivergentSelected, Mode=OneWay}"
+                                ToolTip="Filter to divergent entities. Unavailable when the count is zero."
                                 Command="{Binding ProjectReporting.SelectCategoryCommand}"
                                 CommandParameter="{x:Static projects:ProjectComparisonCategory.Divergent}">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
+                            <ToggleButton.Style>
+                                <Style TargetType="ToggleButton" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding ProjectReporting.IsDivergentSelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
@@ -296,58 +318,66 @@
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </Button.Style>
+                            </ToggleButton.Style>
                             <StackPanel>
-                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Divergent" />
+                                <TextBlock Text="Divergent" />
                                 <TextBlock Margin="0,2,0,0" FontSize="18" FontWeight="SemiBold"
                                            Text="{Binding ProjectReporting.DivergentCount}" />
                             </StackPanel>
-                        </Button>
-                        <Button AutomationProperties.Name="Filter comparison to blocked entities"
+                        </ToggleButton>
+                        <ToggleButton AutomationProperties.Name="Filter comparison to blocked entities"
+                                IsChecked="{Binding ProjectReporting.IsBlockedSelected, Mode=OneWay}"
+                                ToolTip="Filter to blocked entities. Unavailable when the count is zero."
                                 Command="{Binding ProjectReporting.SelectCategoryCommand}"
                                 CommandParameter="{x:Static projects:ProjectComparisonCategory.Blocked}">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
+                            <ToggleButton.Style>
+                                <Style TargetType="ToggleButton" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding ProjectReporting.IsBlockedSelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Status.Blocked}" />
                                             <Setter Property="BorderBrush" Value="{DynamicResource Brush.Status.ReworkNeeded}" />
                                             <Setter Property="BorderThickness" Value="2" />
+                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </Button.Style>
+                            </ToggleButton.Style>
                             <StackPanel>
-                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Blocked" />
+                                <TextBlock Text="Blocked" />
                                 <TextBlock Margin="0,2,0,0" FontSize="18" FontWeight="SemiBold"
                                            Text="{Binding ProjectReporting.BlockedCount}" />
                             </StackPanel>
-                        </Button>
-                        <Button AutomationProperties.Name="Filter comparison to rework entities"
+                        </ToggleButton>
+                        <ToggleButton AutomationProperties.Name="Filter comparison to rework entities"
+                                IsChecked="{Binding ProjectReporting.IsReworkSelected, Mode=OneWay}"
+                                ToolTip="Filter to Rework needed entities. Unavailable when the count is zero."
                                 Command="{Binding ProjectReporting.SelectCategoryCommand}"
                                 CommandParameter="{x:Static projects:ProjectComparisonCategory.ReworkNeeded}">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
+                            <ToggleButton.Style>
+                                <Style TargetType="ToggleButton" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding ProjectReporting.IsReworkSelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Status.ReworkNeeded}" />
                                             <Setter Property="BorderBrush" Value="{DynamicResource Brush.Status.ReworkNeeded}" />
                                             <Setter Property="BorderThickness" Value="2" />
+                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </Button.Style>
+                            </ToggleButton.Style>
                             <StackPanel>
-                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Rework" />
+                                <TextBlock Text="Rework" />
                                 <TextBlock Margin="0,2,0,0" FontSize="18" FontWeight="SemiBold"
                                            Text="{Binding ProjectReporting.ReworkCount}" />
                             </StackPanel>
-                        </Button>
-                        <Button AutomationProperties.Name="Filter comparison to unresolved entities"
+                        </ToggleButton>
+                        <ToggleButton AutomationProperties.Name="Filter comparison to unresolved entities"
+                                IsChecked="{Binding ProjectReporting.IsUnresolvedSelected, Mode=OneWay}"
+                                ToolTip="Filter to unresolved entities. Unavailable when the count is zero."
                                 Command="{Binding ProjectReporting.SelectCategoryCommand}"
                                 CommandParameter="{x:Static projects:ProjectComparisonCategory.Unresolved}">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
+                            <ToggleButton.Style>
+                                <Style TargetType="ToggleButton" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding ProjectReporting.IsUnresolvedSelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Surface.Alert}" />
@@ -356,13 +386,13 @@
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </Button.Style>
+                            </ToggleButton.Style>
                             <StackPanel>
-                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Unresolved" />
+                                <TextBlock Text="Unresolved" />
                                 <TextBlock Margin="0,2,0,0" FontSize="18" FontWeight="SemiBold"
                                            Text="{Binding ProjectReporting.UnresolvedCount}" />
                             </StackPanel>
-                        </Button>
+                        </ToggleButton>
                         <Button Margin="0,0,8,8"
                                 VerticalAlignment="Center"
                                 AutomationProperties.Name="Clear comparison category filter"

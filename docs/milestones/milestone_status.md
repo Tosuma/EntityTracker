@@ -36,9 +36,6 @@
 - UX-04 — Overview and Entity Details
 - UX-05 — Schema Synchronization Experience
 - UX-06 — Entity Creation and Editing
-
-## Planned UI/UX modernization milestones
-
 - UX-07 — Reporting and Tracker Comparison
 - UX-08 — Accessibility and Consistency
 

@@ -2,8 +2,8 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Grid Background="{DynamicResource Brush.Overlay.Strong}"
+          IsVisibleChanged="OnIsVisibleChanged"
           FocusManager.IsFocusScope="True"
-          FocusManager.FocusedElement="{Binding ElementName=CancelButton}"
           KeyboardNavigation.TabNavigation="Cycle"
           KeyboardNavigation.ControlTabNavigation="Cycle">
         <Border Width="680"
@@ -22,19 +22,20 @@
                         <Grid>
                             <StackPanel Visibility="{Binding IsNameDialog, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <Label x:Name="CatalogNameLabel" Content="Name" />
-                                <TextBox AutomationProperties.LabeledBy="{Binding ElementName=CatalogNameLabel}"
+                                <TextBox x:Name="CatalogNameTextBox" AutomationProperties.LabeledBy="{Binding ElementName=CatalogNameLabel}"
                                          Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
                             </StackPanel>
 
                             <StackPanel Visibility="{Binding IsTrackerCreation, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <Label x:Name="TrackerNameLabel" Content="Tracker name" />
-                            <TextBox AutomationProperties.LabeledBy="{Binding ElementName=TrackerNameLabel}"
+                            <TextBox x:Name="TrackerNameTextBox" AutomationProperties.LabeledBy="{Binding ElementName=TrackerNameLabel}"
                                      Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
                             <TextBlock Margin="0,18,0,6" FontWeight="SemiBold" Text="Starting point" />
                             <StackPanel Orientation="Horizontal">
                                 <RadioButton Margin="0,0,18,0" Content="Blank" GroupName="CreationMode" IsChecked="{Binding IsBlankMode, Mode=OneWay}" Checked="OnBlankChecked" />
-                                <RadioButton Margin="0,0,18,0" Content="Complete CSV" GroupName="CreationMode" IsChecked="{Binding IsCsvMode, Mode=OneWay}" Checked="OnCsvChecked" />
-                                <RadioButton Content="Copy tracker" GroupName="CreationMode" IsChecked="{Binding IsCopyMode, Mode=OneWay}" Checked="OnCopyChecked" />
+                                <RadioButton Margin="0,0,18,0" Content="Complete import (CSV)" GroupName="CreationMode" IsChecked="{Binding IsCsvMode, Mode=OneWay}" Checked="OnCsvChecked" />
+                                <RadioButton Content="Copy tracker" GroupName="CreationMode" IsChecked="{Binding IsCopyMode, Mode=OneWay}" Checked="OnCopyChecked"
+                                             IsEnabled="{Binding HasCopySources}" ToolTip="Create or import a tracker before copying." ToolTipService.ShowOnDisabled="True" />
                             </StackPanel>
                             <StackPanel Margin="0,16,0,0" Visibility="{Binding IsCopyMode, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <Label x:Name="CopySourceLabel" Content="Source tracker" />
@@ -49,7 +50,7 @@
                             <Border Margin="0,16,0,0" Padding="12" Style="{StaticResource EntityTrackerCardStyle}"
                                     Visibility="{Binding IsCsvMode, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <StackPanel>
-                                    <TextBlock FontWeight="SemiBold" Text="Complete CSV review" />
+                                    <TextBlock FontWeight="SemiBold" Text="Complete import review" />
                                     <TextBlock Margin="0,6,0,0" Text="{Binding CsvReview.NewEntities.Count, StringFormat={}{0} new entities}" />
                                     <TextBlock Text="{Binding CsvReview.UnresolvedEntities.Count, StringFormat={}{0} unresolved references}" />
                                     <TextBlock Margin="0,6,0,0" Text="Nothing is persisted until Apply." TextWrapping="Wrap" />
@@ -60,21 +61,29 @@
 
                             <StackPanel Visibility="{Binding IsRecycleBin, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="Recycled projects" />
+                            <TextBlock Margin="0,8,0,12" Style="{StaticResource PageDescriptionTextStyle}" Text="No recycled projects."
+                                       Visibility="{Binding ShowNoRecycledProjects, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             <ItemsControl Margin="0,8,0,18" ItemsSource="{Binding RecycledProjects}">
                                 <ItemsControl.ItemTemplate><DataTemplate>
                                     <DockPanel Margin="0,3">
-                                        <Button DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnPurgeProject" Content="Permanently delete" Style="{StaticResource DangerButtonStyle}" />
-                                        <Button DockPanel.Dock="Right" Click="OnRestoreProject" Content="Restore" />
+                                        <Button DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnPurgeProject" Content="Permanently delete" Style="{StaticResource DangerButtonStyle}"
+                                                AutomationProperties.Name="{Binding Name, StringFormat=Permanently delete project {0}}" />
+                                        <Button DockPanel.Dock="Right" Click="OnRestoreProject" Content="Restore"
+                                                AutomationProperties.Name="{Binding Name, StringFormat=Restore project {0}}" />
                                         <TextBlock VerticalAlignment="Center" Text="{Binding Name}" />
                                     </DockPanel>
                                 </DataTemplate></ItemsControl.ItemTemplate>
                             </ItemsControl>
                             <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="Recycled trackers" />
+                            <TextBlock Margin="0,8,0,12" Style="{StaticResource PageDescriptionTextStyle}" Text="No recycled trackers in this context."
+                                       Visibility="{Binding ShowNoRecycledTrackers, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding RecycledTrackers}">
                                 <ItemsControl.ItemTemplate><DataTemplate>
                                     <DockPanel Margin="0,3">
-                                        <Button DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnPurgeTracker" Content="Permanently delete" Style="{StaticResource DangerButtonStyle}" />
-                                        <Button DockPanel.Dock="Right" Click="OnRestoreTracker" Content="Restore" />
+                                        <Button DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnPurgeTracker" Content="Permanently delete" Style="{StaticResource DangerButtonStyle}"
+                                                AutomationProperties.Name="{Binding Name, StringFormat=Permanently delete tracker {0}}" />
+                                        <Button DockPanel.Dock="Right" Click="OnRestoreTracker" Content="Restore"
+                                                AutomationProperties.Name="{Binding Name, StringFormat=Restore tracker {0}}" />
                                         <TextBlock VerticalAlignment="Center" Text="{Binding Name}" />
                                     </DockPanel>
                                 </DataTemplate></ItemsControl.ItemTemplate>
@@ -91,16 +100,17 @@
                                        Text="This action cannot be undone." />
                             <TextBlock Margin="0,10,0,0" Text="{Binding PurgeImpactSummary}" TextWrapping="Wrap" />
                             <TextBlock Margin="0,14,0,4" Text="{Binding PendingItemName, StringFormat=Type the exact name {0} to continue:}" TextWrapping="Wrap" />
-                            <TextBox AutomationProperties.Name="Exact name confirmation"
+                            <TextBox x:Name="PurgeConfirmationTextBox" AutomationProperties.Name="Exact name confirmation"
                                      Text="{Binding TypedConfirmation, UpdateSourceTrigger=PropertyChanged}" />
                             </StackPanel>
                         </Grid>
 
-                        <TextBlock Margin="0,12,0,0"
-                                   Foreground="{DynamicResource Brush.Accent}"
-                                   Text="{Binding ErrorMessage}"
-                                   TextWrapping="Wrap"
-                                   Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <Border Margin="0,12,0,0" MaxHeight="100" Style="{StaticResource ErrorMessageStyle}"
+                                Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <TextBlock AutomationProperties.LiveSetting="Assertive" Text="{Binding ErrorMessage}" TextWrapping="Wrap" />
+                            </ScrollViewer>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
 

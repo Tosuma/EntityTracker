@@ -8,6 +8,22 @@
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
+        <Style.Triggers>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.72" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style TargetType="{x:Type ToggleButton}"
+           BasedOn="{StaticResource {x:Type ToggleButton}}">
+        <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
+        <Style.Triggers>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.72" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <Style x:Key="PrimaryButtonStyle"
@@ -56,6 +72,33 @@
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="{DynamicResource CornerRadius.Card}" />
+    </Style>
+
+    <Style x:Key="InfoMessageStyle"
+           TargetType="{x:Type Border}"
+           BasedOn="{StaticResource EntityTrackerCardStyle}">
+        <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
+        <Setter Property="Padding" Value="12" />
+    </Style>
+    <Style x:Key="SuccessMessageStyle"
+           TargetType="{x:Type Border}"
+           BasedOn="{StaticResource EntityTrackerCardStyle}">
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Status.Reconciled}" />
+        <Setter Property="Padding" Value="12" />
+    </Style>
+    <Style x:Key="WarningMessageStyle"
+           TargetType="{x:Type Border}"
+           BasedOn="{StaticResource EntityTrackerCardStyle}">
+        <Setter Property="Background" Value="{DynamicResource Brush.Review.Warning.Surface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Review.Warning.Border}" />
+        <Setter Property="Padding" Value="12" />
+    </Style>
+    <Style x:Key="ErrorMessageStyle"
+           TargetType="{x:Type Border}"
+           BasedOn="{StaticResource EntityTrackerCardStyle}">
+        <Setter Property="Background" Value="{DynamicResource Brush.Review.Missing.Surface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Review.Missing.Border}" />
+        <Setter Property="Padding" Value="12" />
     </Style>
 
     <Style TargetType="{x:Type TextBox}"

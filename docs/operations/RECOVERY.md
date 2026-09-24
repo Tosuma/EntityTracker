@@ -64,7 +64,7 @@ messages can still contain local file paths.
 
 Malformed, unsupported-version, or unknown-field settings never replace the working file.
 EntityTracker shows a warning and continues with SQLite. Correct or move the existing
-`settings.json`, then save appearance again from **Settings / Appearance** or choose a Project and
+`settings.json`, then save appearance again from **Settings** or choose a Project and
 Tracker. Moving the file resets only local appearance and the remembered selection; it does not
 change Projects, Trackers, or entity data in SQLite. Legacy non-secret SharePoint fields can remain
 in an older settings file for compatibility, but no Connections UI or remote behavior is exposed.

@@ -45,9 +45,7 @@ internal static class ScreenshotServiceProviderFactory
         ApplicationThemeService themeService = new();
         themeService.Apply(appearance);
         services.AddSingleton(settingsStore);
-        services.AddSingleton(new EntityTrackerSettings(
-            StorageProviderKind.Sqlite,
-            appearance: appearance));
+        services.AddSingleton(new EntityTrackerSettings(appearance));
         services.AddSingleton<IApplicationThemeService>(themeService);
         services.AddSingleton(provider => new AppearanceViewModel(
             settingsStore,

@@ -27,6 +27,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private readonly BulkStatusUpdateService _bulkStatusUpdateService;
     private readonly ICsvFilePicker _filePicker;
     private readonly ISchemaSynchronizationConfirmation _confirmationService;
+    private readonly IContextDiscardConfirmation _discardConfirmation;
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly AsyncCommand _refreshCommand;
     private readonly AsyncCommand _importCsvCommand;
@@ -66,6 +67,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         ICsvFilePicker filePicker,
         ProgressDashboardViewModel progressDashboard,
         ISchemaSynchronizationConfirmation confirmationService,
+        IContextDiscardConfirmation discardConfirmation,
         ILoggerFactory? loggerFactory = null)
     {
         ArgumentNullException.ThrowIfNull(overviewService);
@@ -77,12 +79,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         ArgumentNullException.ThrowIfNull(filePicker);
         ArgumentNullException.ThrowIfNull(progressDashboard);
         ArgumentNullException.ThrowIfNull(confirmationService);
+        ArgumentNullException.ThrowIfNull(discardConfirmation);
         _trackerId = trackerId;
         _overviewService = overviewService;
         _synchronizationService = synchronizationService;
         _bulkStatusUpdateService = bulkStatusUpdateService;
         _filePicker = filePicker;
         _confirmationService = confirmationService;
+        _discardConfirmation = discardConfirmation;
         ILoggerFactory effectiveLoggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
         _logger = effectiveLoggerFactory.CreateLogger<MainWindowViewModel>();
         ActiveTable = EntityTableViewModel.CreateActive();
@@ -965,6 +969,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     {
         ArgumentNullException.ThrowIfNull(row);
         SelectedEntityDetails = new EntityDetailsViewModel(row);
+    }
+
+    public bool TryCloseEditor()
+    {
+        if (!Editor.IsOpen)
+        {
+            return true;
+        }
+
+        if (Editor.IsDirty && !_discardConfirmation.ConfirmDiscard(
+                "This entity has unsaved changes."))
+        {
+            return false;
+        }
+
+        Editor.DiscardAndClose();
+        return true;
     }
 
     public bool OpenEntityDetails(EntityId entityId)

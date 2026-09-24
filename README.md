@@ -46,6 +46,8 @@ EntityTracker keeps those concerns separate:
   restore, or guardedly purge Projects and Trackers.
 - **Local-first reliability** — SQLite persistence, automatic daily and pre-migration backups,
   rolling logs, and documented recovery procedures.
+- **Accessible Fluent workflow** — built-in .NET 10 WPF Fluent controls, Light/Dark/System themes,
+  keyboard-safe dialogs, visible focus, labeled status, and automation names for repeated actions.
 - **Replaceable core** — Domain, Application, and Reporting remain independent of WPF, SQLite,
   CSV libraries, and future synchronization infrastructure.
 
@@ -124,6 +126,11 @@ restoring it also returns to that Project dashboard.
 | --- | --- | --- |
 | ![Confirm recycling a Tracker](images/light/tracker-recycle-confirmation.png) | ![Project recycle bin with a Tracker available to restore](images/light/tracker-recycle-bin.png) | ![Project dashboard after restoring its Tracker](images/light/project-dashboard-tracker-restored.png) |
 
+Permanent deletion is deliberately separate from recycling, lists the affected data, requires the
+exact Tracker name, and starts with focus on the safe Cancel action.
+
+![Guarded permanent Tracker deletion confirmation](images/light/tracker-permanent-delete-confirmation.png)
+
 ### Find and maintain tracked entities
 
 Use the dropdown on a supported column header to select any combination of responsible developers,
@@ -189,16 +196,19 @@ until matching entities become available.
 
 ### Extract a PostgreSQL schema
 
-The built-in helper provides the versioned PostgreSQL query used to produce a compatible schema
-CSV without requiring a live database connection inside EntityTracker.
+Help & SQL explains Portfolio, Project, and Tracker context; statuses and blockers; import modes;
+Reports; and lifecycle actions. It also provides the versioned PostgreSQL query used to produce a
+compatible schema CSV without requiring a live database connection inside EntityTracker.
+
+![EntityTracker Help and SQL guidance](images/light/help-and-sql.png)
 
 ![EntityTracker PostgreSQL schema extraction query helper](images/light/sql-query.png)
 
 ## Project status
 
-Product Milestones 1–12 and UX Milestones UX-01 through UX-05 are complete. EntityTracker uses
-SQLite as its local catalog and working store. The former SharePoint Connections workflow has been
-removed, and the application exposes no remote synchronization control.
+Product Milestones 1–12 and UX Milestones UX-01 through UX-08 are complete. EntityTracker uses
+SQLite as its local catalog and working store. Obsolete SharePoint presentation and runtime
+configuration have been retired, and the application exposes no remote synchronization control.
 
 A separate
 [PF-01–PF-05 product feedback milestone group](docs/milestones/00_README.md#product-feedback-milestones)

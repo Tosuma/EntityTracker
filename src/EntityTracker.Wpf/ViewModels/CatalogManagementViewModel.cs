@@ -257,6 +257,11 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     public bool IsBlankMode => CreationMode == TrackerCreationMode.Blank;
     public bool IsCsvMode => CreationMode == TrackerCreationMode.Csv;
     public bool IsCopyMode => CreationMode == TrackerCreationMode.Copy;
+    public bool HasCopySources => CopySources.Count > 0;
+    public bool HasRecycledProjects => RecycledProjects.Count > 0;
+    public bool HasRecycledTrackers => RecycledTrackers.Count > 0;
+    public bool ShowNoRecycledProjects => !HasRecycledProjects;
+    public bool ShowNoRecycledTrackers => !HasRecycledTrackers;
     public bool ShowApplyTracker => CreationMode != TrackerCreationMode.Blank;
     public string PrepareTrackerLabel => CreationMode switch
     {
@@ -617,6 +622,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
             .Select(tracker => new TrackerCopySourceOption(
                 tracker,
                 projectNames[tracker.ProjectId])));
+        OnPropertyChanged(nameof(HasCopySources));
     }
 
     private async Task UpdateCopyPreviewAsync()
@@ -650,6 +656,10 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         }
 
         Replace(RecycledTrackers, recycled);
+        OnPropertyChanged(nameof(HasRecycledProjects));
+        OnPropertyChanged(nameof(HasRecycledTrackers));
+        OnPropertyChanged(nameof(ShowNoRecycledProjects));
+        OnPropertyChanged(nameof(ShowNoRecycledTrackers));
     }
 
     private async Task RunAsync(Func<Task> action)

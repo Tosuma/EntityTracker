@@ -26,6 +26,7 @@ public sealed class TrackerWorkspaceViewModelFactory(
     IProgressChartFilePicker chartFilePicker,
     IClipboardService clipboard,
     ISchemaSynchronizationConfirmation synchronizationConfirmation,
+    IContextDiscardConfirmation discardConfirmation,
     ILoggerFactory loggerFactory)
 {
     public MainWindowViewModel Create(TrackerId trackerId)
@@ -49,6 +50,7 @@ public sealed class TrackerWorkspaceViewModelFactory(
             csvFilePicker,
             progress,
             synchronizationConfirmation,
+            discardConfirmation,
             loggerFactory);
     }
 }

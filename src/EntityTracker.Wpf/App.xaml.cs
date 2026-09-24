@@ -52,8 +52,7 @@ public partial class App : System.Windows.Application
             _themeService = themeService;
             SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
             bootstrapLogger.LogInformation(
-                "Starting EntityTracker with {StorageProvider} storage.",
-                settings.EffectiveStorage);
+                "Starting EntityTracker with SQLite storage.");
 
             ServiceCollection services = new();
             services.AddLogging(builder =>
@@ -72,7 +71,7 @@ public partial class App : System.Windows.Application
                 themeService,
                 settings.Settings.Appearance,
                 provider.GetRequiredService<ILogger<AppearanceViewModel>>()));
-            ConfigurePersistence(services, settings.EffectiveStorage, dataPaths);
+            ConfigurePersistence(services, dataPaths);
             services.AddSingleton<ISchemaImportParser, CsvSchemaImportParser>();
             services.AddSingleton<ISchemaImportFileParser, CsvSchemaImportFileParser>();
             services.AddSingleton<IDependencyRankingService, DependencyRanker>();
@@ -177,37 +176,27 @@ public partial class App : System.Windows.Application
 
     private static void ConfigurePersistence(
         IServiceCollection services,
-        StorageProviderKind storageProvider,
         ApplicationDataPaths dataPaths)
     {
-        switch (storageProvider)
-        {
-            case StorageProviderKind.Sqlite:
-                services.AddSingleton(new SqliteDatabase(dataPaths.DatabasePath));
-                services.AddSingleton(provider => new SqliteBackupService(
-                    provider.GetRequiredService<SqliteDatabase>(),
-                    dataPaths.BackupsDirectory));
-                services.AddSingleton<IPersistenceInitializer, SqlitePersistenceInitializer>();
-                services.AddSingleton<IEntityRepository, SqliteEntityRepository>();
-                services.AddSingleton<IEntityAuditReader, SqliteEntityAuditReader>();
-                services.AddSingleton<IDependencyRepository, SqliteDependencyRepository>();
-                services.AddSingleton<IManualDependencyOverrideRepository,
-                    SqliteManualDependencyOverrideRepository>();
-                services.AddSingleton<SqliteTrackedStateStore>();
-                services.AddSingleton<ITrackedStateStore>(static provider =>
-                    provider.GetRequiredService<SqliteTrackedStateStore>());
-                services.AddSingleton<ISchemaSynchronizationStore>(static provider =>
-                    provider.GetRequiredService<SqliteTrackedStateStore>());
-                services.AddSingleton<IProgressHistoryRepository,
-                    SqliteProgressHistoryRepository>();
-                services.AddSingleton<IProjectRepository, SqliteProjectRepository>();
-                services.AddSingleton<ITrackerRepository, SqliteTrackerRepository>();
-                services.AddSingleton<IProjectTrackerStore, SqliteProjectTrackerStore>();
-                break;
-            default:
-                throw new InvalidOperationException(
-                    $"Storage provider '{storageProvider}' is not available in this build.");
-        }
+        services.AddSingleton(new SqliteDatabase(dataPaths.DatabasePath));
+        services.AddSingleton(provider => new SqliteBackupService(
+            provider.GetRequiredService<SqliteDatabase>(),
+            dataPaths.BackupsDirectory));
+        services.AddSingleton<IPersistenceInitializer, SqlitePersistenceInitializer>();
+        services.AddSingleton<IEntityRepository, SqliteEntityRepository>();
+        services.AddSingleton<IEntityAuditReader, SqliteEntityAuditReader>();
+        services.AddSingleton<IDependencyRepository, SqliteDependencyRepository>();
+        services.AddSingleton<IManualDependencyOverrideRepository,
+            SqliteManualDependencyOverrideRepository>();
+        services.AddSingleton<SqliteTrackedStateStore>();
+        services.AddSingleton<ITrackedStateStore>(static provider =>
+            provider.GetRequiredService<SqliteTrackedStateStore>());
+        services.AddSingleton<ISchemaSynchronizationStore>(static provider =>
+            provider.GetRequiredService<SqliteTrackedStateStore>());
+        services.AddSingleton<IProgressHistoryRepository, SqliteProgressHistoryRepository>();
+        services.AddSingleton<IProjectRepository, SqliteProjectRepository>();
+        services.AddSingleton<ITrackerRepository, SqliteTrackerRepository>();
+        services.AddSingleton<IProjectTrackerStore, SqliteProjectTrackerStore>();
     }
 
     private void OnDispatcherUnhandledException(

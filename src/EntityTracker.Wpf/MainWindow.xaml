@@ -75,6 +75,7 @@
                                 CommandParameter="{x:Static viewModels:ShellDestination.ProjectDashboard}"
                                 IsChecked="{Binding IsProjectDashboard, Mode=OneWay}"
                                 Content="Project dashboard"
+                                ToolTip="Select a Project to open its dashboard."
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
 
                         <TextBlock Margin="8,18,0,4"
@@ -85,16 +86,19 @@
                                 CommandParameter="{x:Static viewModels:ShellDestination.Overview}"
                                 IsChecked="{Binding IsOverview, Mode=OneWay}"
                                 Content="Overview"
+                                ToolTip="Select a Tracker to open Overview."
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.Archived}"
                                 IsChecked="{Binding IsArchived, Mode=OneWay}"
                                 Content="Archived"
+                                ToolTip="Select a Tracker to view archived entities."
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.Reports}"
                                 IsChecked="{Binding IsReports, Mode=OneWay}"
                                 Content="Reports"
+                                ToolTip="Select a Tracker to open Reports."
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
 
                         <TextBlock Margin="8,18,0,4"
@@ -105,11 +109,13 @@
                                 CommandParameter="{x:Static viewModels:ShellDestination.SchemaSynchronization}"
                                 IsChecked="{Binding IsSchemaSynchronization, Mode=OneWay}"
                                 Content="Schema synchronization"
+                                ToolTip="Select a Tracker to synchronize its schema."
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.AddEntity}"
                                 IsChecked="{Binding IsAddEntity, Mode=OneWay}"
                                 Content="Add entity"
+                                ToolTip="Select a Tracker before adding an entity."
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
                     </StackPanel>
 
@@ -126,7 +132,7 @@
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.Settings}"
                                 IsChecked="{Binding IsSettings, Mode=OneWay}"
-                                Content="Settings / Appearance"
+                                Content="Settings"
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
                     </StackPanel>
                 </DockPanel>
@@ -217,6 +223,7 @@
                 </Grid>
 
                 <Border Grid.Row="3"
+                        MaxHeight="140"
                         Padding="12,8"
                         Background="{DynamicResource Brush.Surface.Alert}"
                         BorderBrush="{DynamicResource Brush.Accent}"
@@ -230,9 +237,11 @@
                                 Click="OnDismissNotification"
                                 Content="Dismiss"
                                 Style="{StaticResource SecondaryButtonStyle}" />
-                        <TextBlock VerticalAlignment="Center"
-                                   Text="{Binding NotificationMessage}"
-                                   TextWrapping="Wrap" />
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <TextBlock VerticalAlignment="Center"
+                                       Text="{Binding NotificationMessage}"
+                                       TextWrapping="Wrap" />
+                        </ScrollViewer>
                     </DockPanel>
                 </Border>
 

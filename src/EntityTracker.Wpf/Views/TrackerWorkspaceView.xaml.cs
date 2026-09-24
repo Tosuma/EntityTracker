@@ -18,6 +18,7 @@ public partial class TrackerWorkspaceView : UserControl
     private MainWindowViewModel? _viewModel;
     private IInputElement? _focusBeforeEditor;
     private IInputElement? _focusBeforeDetails;
+    private IInputElement? _focusBeforeArchiveConfirmation;
     private Button? _lastEntityActionButton;
     private IReadOnlyList<EntityId> _selectionBeforeRowClick = [];
     private DataGrid? _resizingDataGrid;
@@ -116,6 +117,31 @@ public partial class TrackerWorkspaceView : UserControl
 
     private void OnEditorPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(EntityDependencyEditorViewModel.IsArchiveConfirmationOpen))
+        {
+            if (_viewModel?.Editor.IsArchiveConfirmationOpen == true)
+            {
+                _focusBeforeArchiveConfirmation = Keyboard.FocusedElement;
+                Dispatcher.BeginInvoke(new Action(() => CancelArchiveButton.Focus()));
+            }
+            else
+            {
+                IInputElement? archiveRestoreTarget = _focusBeforeArchiveConfirmation;
+                _focusBeforeArchiveConfirmation = null;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (archiveRestoreTarget is not null && Keyboard.Focus(archiveRestoreTarget) is not null)
+                    {
+                        return;
+                    }
+
+                    ArchiveEntityButton.Focus();
+                }));
+            }
+
+            return;
+        }
+
         if (e.PropertyName != nameof(EntityDependencyEditorViewModel.IsOpen))
         {
             return;
@@ -342,7 +368,7 @@ public partial class TrackerWorkspaceView : UserControl
 
         if (_viewModel.Editor.IsOpen)
         {
-            _viewModel.Editor.CancelCommand.Execute(null);
+            _viewModel.TryCloseEditor();
             e.Handled = true;
             return;
         }

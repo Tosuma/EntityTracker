@@ -17,6 +17,7 @@ internal static class ScreenshotManifest
         "project-comparison.png",
         "tracker-recycle-confirmation.png",
         "tracker-recycle-bin.png",
+        "tracker-permanent-delete-confirmation.png",
         "project-dashboard-tracker-restored.png",
         "create-tracker-copy.png",
         "overview.png",
@@ -35,6 +36,7 @@ internal static class ScreenshotManifest
         "progress.png",
         "archived-entity.png",
         "archived-details.png",
+        "help-and-sql.png",
         "sql-query.png",
         "settings.png"
     ];

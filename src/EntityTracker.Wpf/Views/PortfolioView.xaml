@@ -13,10 +13,21 @@
                 </StackPanel>
                 <StackPanel>
                     <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Portfolio" />
-                    <TextBlock Margin="0,4,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
+                    <TextBlock Margin="0,4,0,0" Style="{StaticResource PageDescriptionTextStyle}"
                                Text="Entity-weighted progress across active projects and trackers." />
                 </StackPanel>
             </DockPanel>
+
+            <Border Margin="0,0,0,12" MaxHeight="120" Style="{StaticResource ErrorMessageStyle}"
+                    Visibility="{Binding PortfolioReporting.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <TextBlock AutomationProperties.LiveSetting="Assertive" Text="{Binding PortfolioReporting.ErrorMessage}" TextWrapping="Wrap" />
+                </ScrollViewer>
+            </Border>
+            <Border Margin="0,0,0,12" Style="{StaticResource InfoMessageStyle}"
+                    Visibility="{Binding PortfolioReporting.IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <TextBlock AutomationProperties.LiveSetting="Polite" Text="Loading Portfolio…" />
+            </Border>
 
             <TextBlock Margin="0,0,0,10" FontSize="20" FontWeight="SemiBold" Text="Projects" />
             <Border Margin="0,0,0,16" Padding="20">
@@ -82,9 +93,12 @@
                                 </StackPanel>
                                 <StackPanel Grid.Row="2" Orientation="Horizontal">
                                     <Button Margin="0,0,8,0" Click="OnOpenProject" Content="Open dashboard"
+                                            AutomationProperties.Name="{Binding Name, StringFormat=Open project {0}}"
                                             Style="{StaticResource PrimaryButtonStyle}" />
-                                    <Button Margin="0,0,8,0" Click="OnRenameProject" Content="Rename" />
+                                    <Button Margin="0,0,8,0" Click="OnRenameProject" Content="Rename"
+                                            AutomationProperties.Name="{Binding Name, StringFormat=Rename project {0}}" />
                                     <Button Click="OnRecycleProject" Content="Recycle"
+                                            AutomationProperties.Name="{Binding Name, StringFormat=Recycle project {0}}"
                                             Style="{StaticResource DangerButtonStyle}" />
                                 </StackPanel>
                             </Grid>

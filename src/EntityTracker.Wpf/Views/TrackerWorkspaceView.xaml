@@ -110,7 +110,8 @@
                                 <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Brush.Border.Strong}" />
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green100}" />
+                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Brush.Focus}" />
+                                <Setter TargetName="Card" Property="BorderThickness" Value="2" />
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="Card" Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
@@ -119,7 +120,7 @@
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Cursor" Value="Arrow" />
-                                <Setter TargetName="Card" Property="Opacity" Value="0.44" />
+                                <Setter TargetName="Card" Property="Opacity" Value="0.72" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -180,11 +181,12 @@
                                 <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Brush.Border.Strong}" />
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green100}" />
+                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Brush.Focus}" />
+                                <Setter TargetName="Card" Property="BorderThickness" Value="2" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Cursor" Value="Arrow" />
-                                <Setter TargetName="Card" Property="Opacity" Value="0.48" />
+                                <Setter TargetName="Card" Property="Opacity" Value="0.72" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -354,9 +356,11 @@
         </Border>
 
         <TabControl Margin="18"
+                    Focusable="False"
+                    IsTabStop="False"
                     SelectedValue="{Binding SelectedTab}"
                     SelectedValuePath="Tag">
-            <TabItem Header="Overview" Tag="{x:Static viewModels:MainWindowTab.Overview}">
+            <TabItem Header="Overview" Focusable="False" IsTabStop="False" Tag="{x:Static viewModels:MainWindowTab.Overview}">
                 <Grid Margin="12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -388,10 +392,7 @@
                                     Style="{StaticResource SecondaryButtonStyle}" />
                         </StackPanel>
                         <StackPanel>
-                            <TextBlock FontSize="20"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource Brush.Text.Primary}"
-                                       Text="Persisted entities" />
+                            <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Overview" />
                             <TextBlock Margin="0,3,0,0"
                                        Foreground="{DynamicResource Brush.Text.Secondary}"
                                        Text="Entities are grouped by priority while dependencies remain before the entities that use them." />
@@ -400,7 +401,8 @@
 
                     <WrapPanel Grid.Row="1" Margin="0,0,0,6">
 
-                        <Button AutomationProperties.Name="Show all active entities"
+                        <Button AutomationProperties.Name="{Binding TotalEntityCount, StringFormat=Show all active entities. {0} entities}"
+                                AutomationProperties.ItemStatus="{Binding IsTotalSummarySelected, StringFormat=Selected: {0}}"
                                 Command="{Binding ActiveTable.ClearAllFiltersCommand}"
                                 ToolTip="Show all active entities">
                             <Button.Style>
@@ -423,7 +425,8 @@
                                            Text="{Binding TotalEntityCount}" />
                             </StackPanel>
                         </Button>
-                        <Button AutomationProperties.Name="Show not started entities"
+                        <Button AutomationProperties.Name="{Binding NotStartedCount, StringFormat=Show not started entities. {0} entities}"
+                                AutomationProperties.ItemStatus="{Binding IsNotStartedSummarySelected, StringFormat=Selected: {0}}"
                                 Command="{Binding SelectOverviewStatusCommand}"
                                 CommandParameter="{x:Static domain:DevelopmentStatus.NotStarted}"
                                 ToolTip="Show not started entities">
@@ -447,7 +450,8 @@
                                            Text="{Binding NotStartedCount}" />
                             </StackPanel>
                         </Button>
-                        <Button AutomationProperties.Name="Show in progress entities"
+                        <Button AutomationProperties.Name="{Binding InProgressCount, StringFormat=Show in progress entities. {0} entities}"
+                                AutomationProperties.ItemStatus="{Binding IsInProgressSummarySelected, StringFormat=Selected: {0}}"
                                 Command="{Binding SelectOverviewStatusCommand}"
                                 CommandParameter="{x:Static domain:DevelopmentStatus.InProgress}"
                                 ToolTip="Show in progress entities">
@@ -471,7 +475,8 @@
                                            Text="{Binding InProgressCount}" />
                             </StackPanel>
                         </Button>
-                        <Button AutomationProperties.Name="Show rework needed entities"
+                        <Button AutomationProperties.Name="{Binding ReworkNeededCount, StringFormat=Show rework needed entities. {0} entities}"
+                                AutomationProperties.ItemStatus="{Binding IsReworkNeededSummarySelected, StringFormat=Selected: {0}}"
                                 Command="{Binding SelectOverviewStatusCommand}"
                                 CommandParameter="{x:Static domain:DevelopmentStatus.ReworkNeeded}"
                                 ToolTip="Show rework needed entities">
@@ -506,7 +511,8 @@
                             </StackPanel>
                         </Button>
 
-                        <Button AutomationProperties.Name="Show development completed entities"
+                        <Button AutomationProperties.Name="{Binding DevelopmentCompletedCount, StringFormat=Show development completed entities. {0} entities}"
+                                AutomationProperties.ItemStatus="{Binding IsDevelopmentCompletedSummarySelected, StringFormat=Selected: {0}}"
                                 Command="{Binding SelectOverviewStatusCommand}"
                                 CommandParameter="{x:Static domain:DevelopmentStatus.DevelopmentCompleted}"
                                 ToolTip="Show development completed entities">
@@ -531,7 +537,8 @@
                             </StackPanel>
                         </Button>
 
-                        <Button AutomationProperties.Name="Show reconciled entities"
+                        <Button AutomationProperties.Name="{Binding ReconciledCount, StringFormat=Show reconciled entities. {0} entities}"
+                                AutomationProperties.ItemStatus="{Binding IsReconciledSummarySelected, StringFormat=Selected: {0}}"
                                 Command="{Binding SelectOverviewStatusCommand}"
                                 CommandParameter="{x:Static domain:DevelopmentStatus.Reconciled}"
                                 ToolTip="Show reconciled entities">
@@ -633,6 +640,7 @@
                             </Grid.ColumnDefinitions>
 
                             <TextBox x:Name="OverviewSearchTextBox"
+                                     AutomationProperties.Name="Search active entities"
                                      MinWidth="280"
                                      Padding="9,7"
                                      ToolTip="Search active entities"
@@ -722,6 +730,7 @@
 
                     <Grid Grid.Row="5">
                         <DataGrid x:Name="OverviewDataGrid"
+                                  AutomationProperties.Name="Active entities"
                                   ItemsSource="{Binding OverviewItems}"
                                   MouseDoubleClick="OnEntityDataGridMouseDoubleClick"
                                   SelectionChanged="OnOverviewSelectionChanged"
@@ -878,7 +887,7 @@
                                                     Cursor="Hand"
                                                     FontSize="19"
                                                     ToolTip="Entity actions"
-                                                    AutomationProperties.Name="Entity actions"
+                                                    AutomationProperties.Name="{Binding SourceName, StringFormat=Actions for {0}}"
                                                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     Click="OnContextMenuButtonClick">
                                                 <Button.ContextMenu>
@@ -943,7 +952,7 @@
                 </Grid>
             </TabItem>
 
-            <TabItem Header="Archived" Tag="{x:Static viewModels:MainWindowTab.Archived}">
+            <TabItem Header="Archived" Focusable="False" IsTabStop="False" Tag="{x:Static viewModels:MainWindowTab.Archived}">
                 <Grid Margin="12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -969,10 +978,7 @@
                                     Style="{StaticResource SecondaryButtonStyle}" />
                         </StackPanel>
                         <StackPanel>
-                            <TextBlock FontSize="20"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource Brush.Text.Primary}"
-                                       Text="Archived entities" />
+                            <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Archived" />
                             <TextBlock Margin="0,3,0,0"
                                        Foreground="{DynamicResource Brush.Text.Secondary}"
                                        Text="Inspect archived metadata or restore an entity to the active dependency graph." />
@@ -994,6 +1000,7 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <TextBox x:Name="ArchivedSearchTextBox"
+                                     AutomationProperties.Name="Search archived entities"
                                      MinWidth="280"
                                      Padding="9,7"
                                      ToolTip="Search archived entities"
@@ -1035,6 +1042,7 @@
 
                     <Grid Grid.Row="3">
                         <DataGrid x:Name="ArchivedDataGrid"
+                                  AutomationProperties.Name="Archived entities"
                                   ItemsSource="{Binding ArchivedItems}"
                                   MouseDoubleClick="OnEntityDataGridMouseDoubleClick"
                                   SelectionMode="Single"
@@ -1090,7 +1098,7 @@
                                                     Cursor="Hand"
                                                     FontSize="19"
                                                     ToolTip="Archived entity actions"
-                                                    AutomationProperties.Name="Archived entity actions"
+                                                    AutomationProperties.Name="{Binding SourceName, StringFormat=Archived actions for {0}}"
                                                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     Click="OnContextMenuButtonClick">
                                                 <Button.ContextMenu>
@@ -1154,7 +1162,7 @@
                 </Grid>
             </TabItem>
 
-            <TabItem Header="Schema Synchronization" Tag="{x:Static viewModels:MainWindowTab.SchemaSynchronization}">
+            <TabItem Header="Schema synchronization" Focusable="False" IsTabStop="False" Tag="{x:Static viewModels:MainWindowTab.SchemaSynchronization}">
                 <Grid Margin="12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -1168,18 +1176,15 @@
                             <Button Margin="0,0,8,0"
                                     Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                     CommandParameter="{x:Static viewModels:ShellDestination.HelpSql}"
-                                    Content="Get SQL Query"
+                                    Content="Get SQL query"
                                     Style="{StaticResource SecondaryButtonStyle}" />
                             <Button x:Name="ChooseCsvButton"
                                     Command="{Binding ImportCsvCommand}"
-                                    Content="Choose CSV and Review"
+                                    Content="Choose CSV and review"
                                     Style="{StaticResource PrimaryButtonStyle}" />
                         </StackPanel>
                         <StackPanel>
-                            <TextBlock FontSize="20"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource Brush.Text.Primary}"
-                                       Text="Schema synchronization" />
+                            <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Schema synchronization" />
                             <TextBlock Margin="0,3,0,0"
                                        Foreground="{DynamicResource Brush.Text.Secondary}"
                                        Text="{Binding Review.SelectedFileName}" />
@@ -1632,7 +1637,7 @@
                                     <StackPanel>
                                         <TextBlock HorizontalAlignment="Center"
                                                    Foreground="{DynamicResource Brush.Text.Secondary}"
-                                                   Text="Choose an import type, then select a CSV to review. Nothing is saved until Apply Changes." />
+                                                   Text="Choose an import type, then select a CSV to review. Nothing is saved until Apply changes." />
                                         <TextBlock Margin="0,5,0,0"
                                                    HorizontalAlignment="Center"
                                                    Foreground="{DynamicResource Brush.Text.Secondary}"
@@ -1652,7 +1657,7 @@
                                     Content="Cancel"
                                     Style="{StaticResource SecondaryButtonStyle}" />
                             <Button Command="{Binding ApplySynchronizationCommand}"
-                                    Content="Apply Changes"
+                                    Content="Apply changes"
                                     Style="{StaticResource PrimaryButtonStyle}" />
                         </StackPanel>
                         <TextBlock Margin="0,0,16,0"
@@ -1665,7 +1670,7 @@
                 </Grid>
             </TabItem>
 
-            <TabItem Header="Add Entity" Tag="{x:Static viewModels:MainWindowTab.AddEntity}">
+            <TabItem Header="Add entity" Focusable="False" IsTabStop="False" Tag="{x:Static viewModels:MainWindowTab.AddEntity}">
                 <Grid Margin="12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -1674,10 +1679,7 @@
                     </Grid.RowDefinitions>
 
                     <StackPanel Margin="0,0,0,14">
-                        <TextBlock FontSize="20"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource Brush.Text.Primary}"
-                                   Text="Create a tracked entity" />
+                        <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Add entity" />
                         <TextBlock Margin="0,3,0,0"
                                    Foreground="{DynamicResource Brush.Text.Secondary}"
                                    Text="Add a new entity and its initial mandatory dependencies. Unknown names are kept as unresolved warnings."
@@ -1891,7 +1893,7 @@
                 </Grid>
             </TabItem>
 
-            <TabItem Header="Reports" Tag="{x:Static viewModels:MainWindowTab.Reports}">
+            <TabItem Header="Reports" Focusable="False" IsTabStop="False" Tag="{x:Static viewModels:MainWindowTab.Reports}">
                 <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                               VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="12">
@@ -1902,16 +1904,14 @@
                                            Foreground="{DynamicResource Brush.Text.Secondary}"
                                            Text="History" />
                                 <ComboBox MinWidth="145"
+                                          AutomationProperties.Name="Report history range"
                                           DisplayMemberPath="DisplayName"
                                           ItemsSource="{Binding Progress.RangeOptions}"
                                           SelectedValue="{Binding Progress.SelectedRange}"
                                           SelectedValuePath="Value" />
                             </StackPanel>
                             <StackPanel>
-                                <TextBlock FontSize="20"
-                                           FontWeight="SemiBold"
-                                           Foreground="{DynamicResource Brush.Text.Primary}"
-                                           Text="Progress history" />
+                                <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Reports" />
                                 <TextBlock Margin="0,3,0,0"
                                            Foreground="{DynamicResource Brush.Text.Secondary}"
                                            Text="Current work status and persisted implementation/readiness trends." />
@@ -1928,9 +1928,9 @@
                             <StackPanel>
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Margin="0,0,7,0" VerticalAlignment="Center" Text="From" />
-                                    <DatePicker Width="145" SelectedDate="{Binding Progress.CustomFrom}" />
+                                    <DatePicker Width="145" AutomationProperties.Name="Report history from date" SelectedDate="{Binding Progress.CustomFrom}" />
                                     <TextBlock Margin="14,0,7,0" VerticalAlignment="Center" Text="To" />
-                                    <DatePicker Width="145" SelectedDate="{Binding Progress.CustomTo}" />
+                                    <DatePicker Width="145" AutomationProperties.Name="Report history to date" SelectedDate="{Binding Progress.CustomTo}" />
                                     <Button Margin="12,0,0,0"
                                             Command="{Binding Progress.ApplyRangeCommand}"
                                             Content="Apply range"
@@ -2042,18 +2042,20 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Text="Entities by current work status" />
                                         <Button Grid.Column="1" Margin="8,0,5,0" Padding="10,5"
+                                                AutomationProperties.Name="Save current work status chart as PNG"
                                                 Command="{Binding Progress.SaveChartCommand}"
                                                 CommandParameter="{x:Static reporting:ProgressChartKind.CurrentStatus}"
                                                 Content="Save PNG" Style="{StaticResource SecondaryButtonStyle}"
                                                 ToolTip="Save a report-ready PNG" />
                                         <Button Grid.Column="2" Padding="10,5"
+                                                AutomationProperties.Name="Copy current work status chart"
                                                 Command="{Binding Progress.CopyChartCommand}"
                                                 CommandParameter="{x:Static reporting:ProgressChartKind.CurrentStatus}"
                                                 Content="Copy" Style="{StaticResource SecondaryButtonStyle}"
                                                 ToolTip="Copy a report-ready PNG to the clipboard" />
                                     </Grid>
                                     <Border Grid.Row="1" Background="{DynamicResource Brush.Report.Canvas}">
-                                        <lvc:PieChart LegendPosition="Right"
+                                        <lvc:PieChart AutomationProperties.Name="Entities by current work status chart" LegendPosition="Right"
                                                       Series="{Binding Progress.CurrentStatusSeries}" />
                                     </Border>
                                 </Grid>
@@ -2072,18 +2074,20 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Text="Implemented entities over time" />
                                         <Button Grid.Column="1" Margin="8,0,5,0" Padding="10,5"
+                                                AutomationProperties.Name="Save implemented entities chart as PNG"
                                                 Command="{Binding Progress.SaveChartCommand}"
                                                 CommandParameter="{x:Static reporting:ProgressChartKind.ImplementedOverTime}"
                                                 Content="Save PNG" Style="{StaticResource SecondaryButtonStyle}"
                                                 ToolTip="Save a report-ready PNG" />
                                         <Button Grid.Column="2" Padding="10,5"
+                                                AutomationProperties.Name="Copy implemented entities chart"
                                                 Command="{Binding Progress.CopyChartCommand}"
                                                 CommandParameter="{x:Static reporting:ProgressChartKind.ImplementedOverTime}"
                                                 Content="Copy" Style="{StaticResource SecondaryButtonStyle}"
                                                 ToolTip="Copy a report-ready PNG to the clipboard" />
                                     </Grid>
                                     <Border Grid.Row="1" Background="{DynamicResource Brush.Report.Canvas}">
-                                        <lvc:CartesianChart LegendPosition="Top"
+                                        <lvc:CartesianChart AutomationProperties.Name="Implemented entities over time chart" LegendPosition="Top"
                                                             Series="{Binding Progress.ImplementedSeries}"
                                                             TooltipPosition="Top"
                                                             XAxes="{Binding Progress.ImplementedXAxes}"
@@ -2105,18 +2109,20 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Text="Ready vs blocked over time" />
                                         <Button Grid.Column="1" Margin="8,0,5,0" Padding="10,5"
+                                                AutomationProperties.Name="Save readiness chart as PNG"
                                                 Command="{Binding Progress.SaveChartCommand}"
                                                 CommandParameter="{x:Static reporting:ProgressChartKind.ReadyAndBlockedOverTime}"
                                                 Content="Save PNG" Style="{StaticResource SecondaryButtonStyle}"
                                                 ToolTip="Save a report-ready PNG" />
                                         <Button Grid.Column="2" Padding="10,5"
+                                                AutomationProperties.Name="Copy readiness chart"
                                                 Command="{Binding Progress.CopyChartCommand}"
                                                 CommandParameter="{x:Static reporting:ProgressChartKind.ReadyAndBlockedOverTime}"
                                                 Content="Copy" Style="{StaticResource SecondaryButtonStyle}"
                                                 ToolTip="Copy a report-ready PNG to the clipboard" />
                                     </Grid>
                                     <Border Grid.Row="1" Background="{DynamicResource Brush.Report.Canvas}">
-                                        <lvc:CartesianChart LegendPosition="Top"
+                                        <lvc:CartesianChart AutomationProperties.Name="Ready versus blocked over time chart" LegendPosition="Top"
                                                             Series="{Binding Progress.ReadinessSeries}"
                                                             TooltipPosition="Top"
                                                             XAxes="{Binding Progress.ReadinessXAxes}"
@@ -2138,18 +2144,20 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Text="Weekly net implemented change" />
                                         <Button Grid.Column="1" Margin="8,0,5,0" Padding="10,5"
+                                                AutomationProperties.Name="Save weekly net implemented change chart as PNG"
                                                 Command="{Binding Progress.SaveChartCommand}"
                                                 CommandParameter="{x:Static reporting:ProgressChartKind.WeeklyNetImplementedChange}"
                                                 Content="Save PNG" Style="{StaticResource SecondaryButtonStyle}"
                                                 ToolTip="Save a report-ready PNG" />
                                         <Button Grid.Column="2" Padding="10,5"
+                                                AutomationProperties.Name="Copy weekly net implemented change chart"
                                                 Command="{Binding Progress.CopyChartCommand}"
                                                 CommandParameter="{x:Static reporting:ProgressChartKind.WeeklyNetImplementedChange}"
                                                 Content="Copy" Style="{StaticResource SecondaryButtonStyle}"
                                                 ToolTip="Copy a report-ready PNG to the clipboard" />
                                     </Grid>
                                     <Border Grid.Row="1" Background="{DynamicResource Brush.Report.Canvas}">
-                                        <lvc:CartesianChart LegendPosition="Top"
+                                        <lvc:CartesianChart AutomationProperties.Name="Weekly net implemented change chart" LegendPosition="Top"
                                                             Series="{Binding Progress.WeeklySeries}"
                                                             TooltipPosition="Top"
                                                             XAxes="{Binding Progress.WeeklyXAxes}"
@@ -2409,6 +2417,7 @@
 
                     <StackPanel Margin="0,0,0,14">
                         <TextBlock FontSize="20"
+                                   AutomationProperties.HeadingLevel="Level2"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource Brush.Text.Primary}"
                                    Text="{Binding Editor.ContextTitle}" />
@@ -2458,6 +2467,7 @@
                                     <StackPanel Margin="0,0,12,0">
                                         <TextBlock FontWeight="SemiBold" Text="Development status" />
                                         <ComboBox x:Name="EditorStatusComboBox"
+                                                  AutomationProperties.Name="Development status"
                                                   Margin="0,5,0,0"
                                                   DisplayMemberPath="DisplayName"
                                                   IsEnabled="{Binding Editor.CanEditProgress}"
@@ -2468,6 +2478,7 @@
                                     <StackPanel Grid.Column="1">
                                         <TextBlock FontWeight="SemiBold" Text="Notes" />
                                         <TextBox MinHeight="64"
+                                                 AutomationProperties.Name="Notes"
                                                  Margin="0,5,0,0"
                                                  Padding="8"
                                                  AcceptsReturn="True"
@@ -2480,6 +2491,7 @@
                                 <StackPanel Margin="0,0,0,12">
                                     <TextBlock FontWeight="SemiBold" Text="Responsible developer" />
                                     <TextBox Margin="0,5,0,0"
+                                             AutomationProperties.Name="Responsible developer"
                                              Padding="8,6"
                                              IsEnabled="{Binding Editor.CanEditProgress}"
                                              Text="{Binding Editor.EditedResponsibleDeveloper, UpdateSourceTrigger=PropertyChanged}" />
@@ -2514,6 +2526,7 @@
                                     <StackPanel Margin="0,0,12,0">
                                         <TextBlock FontWeight="SemiBold" Text="Requested priority" />
                                         <ComboBox Margin="0,5,0,0"
+                                                  AutomationProperties.Name="Requested priority"
                                                   DisplayMemberPath="DisplayName"
                                                   IsEnabled="{Binding Editor.CanEditPriority}"
                                                   ItemsSource="{Binding Editor.PriorityOptions}"
@@ -2697,7 +2710,7 @@
                     </ScrollViewer>
 
                     <DockPanel Grid.Row="2" Margin="0,12,0,0">
-                        <Button DockPanel.Dock="Left"
+                        <Button x:Name="ArchiveEntityButton" DockPanel.Dock="Left"
                                 Command="{Binding Editor.RequestArchiveCommand}"
                                 Content="Archive entity"
                                 Style="{StaticResource DangerButtonStyle}"
@@ -2739,6 +2752,7 @@
                                 CornerRadius="6">
                             <StackPanel>
                                 <TextBlock FontSize="20"
+                                           AutomationProperties.HeadingLevel="Level2"
                                            FontWeight="SemiBold"
                                            Foreground="{DynamicResource Brush.Text.Primary}"
                                            Text="Archive entity?" />
@@ -2759,6 +2773,7 @@
                                             Command="{Binding Editor.CancelArchiveCommand}"
                                             Content="Cancel — keep entity"
                                             IsDefault="True"
+                                            IsCancel="True"
                                             Style="{StaticResource PrimaryButtonStyle}" />
                                     <Button Command="{Binding Editor.ConfirmArchiveCommand}"
                                             Content="Archive entity"

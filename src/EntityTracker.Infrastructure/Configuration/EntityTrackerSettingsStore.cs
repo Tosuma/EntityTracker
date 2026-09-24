@@ -9,6 +9,7 @@ public sealed class EntityTrackerSettingsStore
 {
     private const int LegacyVersion = 1;
     private const int AppearanceVersion = 2;
+    private const int ContextVersion = 3;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -56,72 +57,9 @@ public sealed class EntityTrackerSettingsStore
             EntityTrackerSettings current = await LoadSettingsForUpdateAsync(cancellationToken);
             await WriteAsync(
                 new EntityTrackerSettings(
-                    current.ActiveStorage,
-                    current.SharePoint,
                     appearance,
                     current.LastProjectId,
                     current.LastTrackerId),
-                cancellationToken);
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    public async Task<SharePointConnectionSettings> SaveSharePointSetupAsync(
-        string displayName,
-        string siteUrl,
-        CancellationToken cancellationToken = default)
-    {
-        SharePointConnectionSettings sharePoint = new(displayName, siteUrl);
-
-        await _gate.WaitAsync(cancellationToken);
-        try
-        {
-            EntityTrackerSettings current = await LoadSettingsForUpdateAsync(cancellationToken);
-            await WriteAsync(
-                new EntityTrackerSettings(
-                    StorageProviderKind.Sqlite,
-                    sharePoint,
-                    current.Appearance,
-                    current.LastProjectId,
-                    current.LastTrackerId),
-                cancellationToken);
-        }
-        finally
-        {
-            _gate.Release();
-        }
-
-        return sharePoint;
-    }
-
-    public async Task RemoveSharePointSetupAsync(CancellationToken cancellationToken = default)
-    {
-        await _gate.WaitAsync(cancellationToken);
-        try
-        {
-            if (!File.Exists(SettingsPath))
-            {
-                return;
-            }
-
-            EntityTrackerSettings current = await LoadSettingsForUpdateAsync(cancellationToken);
-            if (current.Appearance == ApplicationAppearance.System &&
-                current.LastProjectId is null &&
-                current.LastTrackerId is null)
-            {
-                File.Delete(SettingsPath);
-                return;
-            }
-
-            await WriteAsync(
-                new EntityTrackerSettings(
-                    StorageProviderKind.Sqlite,
-                    appearance: current.Appearance,
-                    lastProjectId: current.LastProjectId,
-                    lastTrackerId: current.LastTrackerId),
                 cancellationToken);
         }
         finally
@@ -146,8 +84,6 @@ public sealed class EntityTrackerSettingsStore
             EntityTrackerSettings current = await LoadSettingsForUpdateAsync(cancellationToken);
             await WriteAsync(
                 new EntityTrackerSettings(
-                    current.ActiveStorage,
-                    current.SharePoint,
                     current.Appearance,
                     projectId,
                     trackerId),
@@ -169,7 +105,7 @@ public sealed class EntityTrackerSettingsStore
         try
         {
             SettingsDocument document = await ReadDocumentAsync(cancellationToken);
-            if (document.Version is not (LegacyVersion or AppearanceVersion or EntityTrackerSettings.CurrentVersion))
+            if (!IsSupportedVersion(document.Version))
             {
                 return DefaultResult(
                     $"Settings version {document.Version} is not supported. " +
@@ -179,14 +115,15 @@ public sealed class EntityTrackerSettingsStore
             List<string> warnings = [];
             ApplicationAppearance appearance = ParseAppearance(document, warnings);
             EntityTrackerSettings settings = CreateSettings(document, appearance, warnings);
-            if (settings.ActiveStorage != StorageProviderKind.Sqlite)
+            if (document.Version <= ContextVersion &&
+                !string.Equals(document.ActiveStorage, "Sqlite", StringComparison.OrdinalIgnoreCase))
             {
                 warnings.Add(
-                    "The configured storage provider is not available in this build. " +
-                    "SQLite remains active and the settings file was not changed.");
+                    "The retired storage-provider setting was ignored. SQLite remains active " +
+                    "and the settings file was not changed.");
             }
 
-            return new SettingsLoadResult(settings, StorageProviderKind.Sqlite, warnings);
+            return new SettingsLoadResult(settings, warnings);
         }
         catch (Exception exception) when (IsSettingsReadException(exception))
         {
@@ -207,7 +144,7 @@ public sealed class EntityTrackerSettingsStore
         try
         {
             SettingsDocument document = await ReadDocumentAsync(cancellationToken);
-            if (document.Version is not (LegacyVersion or AppearanceVersion or EntityTrackerSettings.CurrentVersion))
+            if (!IsSupportedVersion(document.Version))
             {
                 throw new InvalidOperationException(
                     $"Settings version {document.Version} is not supported and was not changed.");
@@ -246,17 +183,9 @@ public sealed class EntityTrackerSettingsStore
         SettingsDocument document = new()
         {
             Version = EntityTrackerSettings.CurrentVersion,
-            ActiveStorage = settings.ActiveStorage,
             Appearance = settings.Appearance.ToString(),
             LastProjectId = settings.LastProjectId?.Value.ToString("D"),
-            LastTrackerId = settings.LastTrackerId?.Value.ToString("D"),
-            SharePoint = settings.SharePoint is null
-                ? null
-                : new SharePointDocument
-                {
-                    DisplayName = settings.SharePoint.DisplayName,
-                    SiteUrl = settings.SharePoint.SiteUrl
-                }
+            LastTrackerId = settings.LastTrackerId?.Value.ToString("D")
         };
 
         string directory = Path.GetDirectoryName(SettingsPath)
@@ -296,16 +225,9 @@ public sealed class EntityTrackerSettingsStore
         ApplicationAppearance appearance,
         ICollection<string> warnings)
     {
-        SharePointConnectionSettings? sharePoint = document.SharePoint is null
-            ? null
-            : new SharePointConnectionSettings(
-                document.SharePoint.DisplayName,
-                document.SharePoint.SiteUrl);
         ProjectId? projectId = ParseProjectId(document, warnings);
         TrackerId? trackerId = ParseTrackerId(document, projectId, warnings);
         return new EntityTrackerSettings(
-            document.ActiveStorage,
-            sharePoint,
             appearance,
             projectId,
             trackerId);
@@ -315,7 +237,7 @@ public sealed class EntityTrackerSettingsStore
         SettingsDocument document,
         ICollection<string> warnings)
     {
-        if (document.Version < EntityTrackerSettings.CurrentVersion || document.LastProjectId is null)
+        if (document.Version < ContextVersion || document.LastProjectId is null)
         {
             return null;
         }
@@ -334,7 +256,7 @@ public sealed class EntityTrackerSettingsStore
         ProjectId? projectId,
         ICollection<string> warnings)
     {
-        if (document.Version < EntityTrackerSettings.CurrentVersion || document.LastTrackerId is null)
+        if (document.Version < ContextVersion || document.LastTrackerId is null)
         {
             return null;
         }
@@ -381,10 +303,12 @@ public sealed class EntityTrackerSettingsStore
             IOException or
             UnauthorizedAccessException;
 
+    private static bool IsSupportedVersion(int version) =>
+        version is LegacyVersion or AppearanceVersion or ContextVersion or EntityTrackerSettings.CurrentVersion;
+
     private static SettingsLoadResult DefaultResult(string? warning = null) =>
         new(
             EntityTrackerSettings.Default,
-            StorageProviderKind.Sqlite,
             warning is null ? [] : [warning]);
 
     private sealed class SettingsDocument
@@ -392,8 +316,8 @@ public sealed class EntityTrackerSettingsStore
         [JsonRequired]
         public int Version { get; init; }
 
-        [JsonRequired]
-        public StorageProviderKind ActiveStorage { get; init; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ActiveStorage { get; init; }
 
         public string? Appearance { get; init; }
 
@@ -401,15 +325,7 @@ public sealed class EntityTrackerSettingsStore
 
         public string? LastTrackerId { get; init; }
 
-        public SharePointDocument? SharePoint { get; init; }
-    }
-
-    private sealed class SharePointDocument
-    {
-        [JsonRequired]
-        public string DisplayName { get; init; } = string.Empty;
-
-        [JsonRequired]
-        public string SiteUrl { get; init; } = string.Empty;
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public JsonElement? SharePoint { get; init; }
     }
 }

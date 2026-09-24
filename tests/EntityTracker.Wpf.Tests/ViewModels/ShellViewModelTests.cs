@@ -36,7 +36,6 @@ public sealed class ShellViewModelTests
         RecordingDiscardConfirmation confirmation = new(true);
         using ShellViewModel shell = harness.CreateShell(
             new EntityTrackerSettings(
-                StorageProviderKind.Sqlite,
                 lastProjectId: harness.DefaultProject.Id,
                 lastTrackerId: harness.DefaultTracker.Id),
             confirmation);
@@ -73,7 +72,6 @@ public sealed class ShellViewModelTests
         await using ShellHarness harness = await ShellHarness.CreateAsync();
         using ShellViewModel shell = harness.CreateShell(
             new EntityTrackerSettings(
-                StorageProviderKind.Sqlite,
                 lastProjectId: harness.DefaultProject.Id,
                 lastTrackerId: harness.DefaultTracker.Id),
             new RecordingDiscardConfirmation(true));
@@ -100,7 +98,6 @@ public sealed class ShellViewModelTests
         RecordingDiscardConfirmation confirmation = new(false);
         using ShellViewModel shell = harness.CreateShell(
             new EntityTrackerSettings(
-                StorageProviderKind.Sqlite,
                 lastProjectId: harness.DefaultProject.Id,
                 lastTrackerId: harness.DefaultTracker.Id),
             confirmation);
@@ -146,7 +143,6 @@ public sealed class ShellViewModelTests
         await using ShellHarness harness = await ShellHarness.CreateAsync();
         using ShellViewModel shell = harness.CreateShell(
             new EntityTrackerSettings(
-                StorageProviderKind.Sqlite,
                 lastProjectId: ProjectId.New(),
                 lastTrackerId: TrackerId.New()),
             new RecordingDiscardConfirmation(true));
@@ -173,7 +169,6 @@ public sealed class ShellViewModelTests
         RecordingDiscardConfirmation confirmation = new(false);
         using ShellViewModel shell = harness.CreateShell(
             new EntityTrackerSettings(
-                StorageProviderKind.Sqlite,
                 lastProjectId: harness.DefaultProject.Id,
                 lastTrackerId: harness.DefaultTracker.Id),
             confirmation);
@@ -218,7 +213,6 @@ public sealed class ShellViewModelTests
         RecordingDiscardConfirmation confirmation = new(false);
         using ShellViewModel shell = harness.CreateShell(
             new EntityTrackerSettings(
-                StorageProviderKind.Sqlite,
                 lastProjectId: harness.DefaultProject.Id,
                 lastTrackerId: harness.DefaultTracker.Id),
             confirmation);
@@ -244,7 +238,7 @@ public sealed class ShellViewModelTests
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
         using ShellViewModel shell = harness.CreateShell(
-            new EntityTrackerSettings(StorageProviderKind.Sqlite),
+            new EntityTrackerSettings(),
             new RecordingDiscardConfirmation(true));
         CatalogManagementViewModel catalog = shell.Catalog;
         int initialProjectCount = await harness.GetProjectCountAsync();
@@ -280,7 +274,6 @@ public sealed class ShellViewModelTests
         await using ShellHarness harness = await ShellHarness.CreateAsync();
         using ShellViewModel shell = harness.CreateShell(
             new EntityTrackerSettings(
-                StorageProviderKind.Sqlite,
                 lastProjectId: harness.DefaultProject.Id,
                 lastTrackerId: harness.DefaultTracker.Id),
             new RecordingDiscardConfirmation(true));
@@ -323,7 +316,6 @@ public sealed class ShellViewModelTests
             "Second tracker");
         using ShellViewModel shell = harness.CreateShell(
             new EntityTrackerSettings(
-                StorageProviderKind.Sqlite,
                 lastProjectId: harness.DefaultProject.Id,
                 lastTrackerId: harness.DefaultTracker.Id),
             new RecordingDiscardConfirmation(true));
@@ -334,6 +326,7 @@ public sealed class ShellViewModelTests
         shell.Catalog.ConfirmRecycleCommand.Execute(null);
         await WaitUntilAsync(() =>
             !shell.Catalog.IsOpen &&
+            !shell.IsBusy &&
             shell.SelectedDestination == ShellDestination.ProjectDashboard &&
             shell.SelectedTracker is null &&
             shell.ProjectDashboard?.Trackers.Count == 1);
@@ -345,6 +338,7 @@ public sealed class ShellViewModelTests
         await shell.Catalog.RestoreAsync(recycled);
         await WaitUntilAsync(() =>
             !shell.Catalog.IsOpen &&
+            !shell.IsBusy &&
             shell.SelectedDestination == ShellDestination.ProjectDashboard &&
             shell.ProjectDashboard?.Trackers.Count == 2);
 
@@ -537,6 +531,7 @@ public sealed class ShellViewModelTests
                 adapters,
                 adapters,
                 adapters,
+                adapters,
                 NullLoggerFactory.Instance);
             CatalogManagementViewModel catalog = new(
                 projectManagement,
@@ -635,7 +630,8 @@ public sealed class ShellViewModelTests
         ICsvFilePicker,
         IProgressChartFilePicker,
         IClipboardService,
-        ISchemaSynchronizationConfirmation
+        ISchemaSynchronizationConfirmation,
+        IContextDiscardConfirmation
     {
         public string? CsvPath { get; set; }
 
@@ -644,6 +640,7 @@ public sealed class ShellViewModelTests
         public void SetPng(byte[] png) { }
         public void SetText(string text) { }
         public bool ConfirmArchiveMissingEntities(int entityCount) => true;
+        public bool ConfirmDiscard(string description) => true;
     }
 
     private sealed class TestClipboard : IClipboardService

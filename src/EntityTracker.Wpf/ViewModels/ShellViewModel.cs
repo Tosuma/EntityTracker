@@ -85,7 +85,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             new(ShellDestination.SchemaSynchronization, "Manage", "Schema synchronization", true, true),
             new(ShellDestination.AddEntity, "Manage", "Add entity", true, true),
             new(ShellDestination.HelpSql, "Utilities", "Help & SQL", false, false),
-            new(ShellDestination.Settings, "Utilities", "Settings / Appearance", false, false)
+            new(ShellDestination.Settings, "Utilities", "Settings", false, false)
         ];
         _navigateCommand = new AsyncCommand<ShellDestination>(
             NavigateFromCommandAsync,

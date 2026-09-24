@@ -8,7 +8,7 @@ public sealed class WpfContextDiscardConfirmation : IContextDiscardConfirmation
         description + Environment.NewLine + Environment.NewLine +
         "Discard the unfinished work and continue?",
         "Discard unfinished work?",
-        MessageBoxButton.OKCancel,
+        MessageBoxButton.YesNo,
         MessageBoxImage.Warning,
-        MessageBoxResult.Cancel) == MessageBoxResult.OK;
+        MessageBoxResult.No) == MessageBoxResult.Yes;
 }

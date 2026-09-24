@@ -161,7 +161,10 @@ internal sealed class ReadmeScreenshotGenerator
                 cancellationToken);
 
             await shell.NavigateAsync(ShellDestination.HelpSql, cancellationToken);
-            await renderer.CaptureAsync("sql-query.png");
+            await renderer.CaptureAsync("help-and-sql.png");
+            await renderer.BringNamedElementIntoViewAndCaptureAsync(
+                "QueryTextBox",
+                "sql-query.png");
 
             await shell.NavigateAsync(ShellDestination.Settings, cancellationToken);
             await renderer.CaptureAsync("settings.png");
@@ -254,6 +257,12 @@ internal sealed class ReadmeScreenshotGenerator
         await renderer.CaptureAsync("tracker-recycle-bin.png");
 
         Tracker recycled = shell.Catalog.RecycledTrackers.Single(item => item.Id == tracker.Id);
+        await shell.Catalog.RequestPurgeAsync(recycled);
+        await renderer.CaptureAsync("tracker-permanent-delete-confirmation.png");
+        shell.Catalog.CancelCommand.Execute(null);
+
+        await shell.Catalog.OpenRecycleBinAsync(shell.SelectedProject);
+        recycled = shell.Catalog.RecycledTrackers.Single(item => item.Id == tracker.Id);
         await shell.Catalog.RestoreAsync(recycled);
         await WaitUntilAsync(
             () => !shell.Catalog.IsOpen &&

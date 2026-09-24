@@ -77,17 +77,16 @@ Manage
 
 Utilities
   Help & SQL
-  Settings / Appearance
+  Settings
 ```
 
 Ready and Blocked remain Work-status filters within Overview. They are not separate destinations.
 Import CSV and Add Entity remain focused destinations rather than shortcuts on the Overview page.
 The SQL query remains independently available and is never a prerequisite for importing.
 
-The obsolete SharePoint Connections page will be removed. A future Git-based synchronization
-capability will operate per Project using a repository and folder. The shell may reserve an
-appropriate future location, but it must not expose a connection or Sync control before that
-functionality works.
+The obsolete SharePoint Connections page and configuration are removed. The shell does not expose
+a remote connection, repository, or Sync control before a separately approved synchronization
+milestone provides working behavior.
 
 ## Density and layout
 
@@ -202,4 +201,3 @@ Accessibility applies to every UX milestone, not only the final audit.
 - Tracker scope is explicit at Application and persistence boundaries; do not introduce a mutable
   global tracker singleton.
 - Git synchronization is not part of the Fluent roadmap.
-

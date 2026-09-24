@@ -46,6 +46,7 @@ public sealed class PresentationConfigurationTests
         string[] controlTypes =
         [
             "Button",
+            "ToggleButton",
             "TextBox",
             "ComboBox",
             "CheckBox",
@@ -151,7 +152,7 @@ public sealed class PresentationConfigurationTests
         Assert.Contains("Review.ClearFilterCommand", workspaceText, StringComparison.Ordinal);
         Assert.Contains("Reset filter", workspaceText, StringComparison.Ordinal);
         Assert.Contains("SynchronizationDependencyChangeTemplate", workspaceText, StringComparison.Ordinal);
-        Assert.Contains("Apply Changes", workspaceText, StringComparison.Ordinal);
+        Assert.Contains("Apply changes", workspaceText, StringComparison.Ordinal);
         Assert.Contains("Schema synchronization review", workspaceText, StringComparison.Ordinal);
         Assert.Contains("Focusable=\"True\"", workspaceText, StringComparison.Ordinal);
         Assert.Contains("ShellDestination.HelpSql", workspaceText, StringComparison.Ordinal);
@@ -262,7 +263,83 @@ public sealed class PresentationConfigurationTests
             (string?)modalSurface.Attribute("Background"));
         XElement error = Assert.Single(catalog.Descendants(), element =>
             (string?)element.Attribute("Text") == "{Binding ErrorMessage}");
-        Assert.Equal("StackPanel", error.Parent?.Name.LocalName);
+        Assert.Equal("ScrollViewer", error.Parent?.Name.LocalName);
+        Assert.Equal(
+            "{StaticResource ErrorMessageStyle}",
+            (string?)error.Parent?.Parent?.Attribute("Style"));
+    }
+
+    [Fact]
+    public void ProductStatusColors_MeetNormalTextContrastThreshold()
+    {
+        XDocument palette = LoadWpfXaml("Themes", "EntityTrackerPalette.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        Dictionary<string, string> colors = palette.Descendants()
+            .Where(element => element.Name.LocalName == "Color")
+            .ToDictionary(
+                element => (string)element.Attribute(x + "Key")!,
+                element => element.Value);
+        (string Foreground, string Background)[] pairs =
+        [
+            ("Color.Brand.DarkGreen", "Color.Brand.Green40"),
+            ("Color.Brand.DarkGreen", "Color.Brand.Green60"),
+            ("Color.Brand.DarkGreen", "Color.Brand.Coral"),
+            ("Color.Brand.White", "Color.Brand.Green80"),
+            ("Color.Brand.White", "Color.Brand.Green100"),
+            ("Color.Brand.Green10", "Color.Brand.Green80"),
+            ("Color.Brand.Green10", "Color.Brand.Green100")
+        ];
+
+        Assert.All(pairs, pair => Assert.True(
+            ContrastRatio(colors[pair.Foreground], colors[pair.Background]) >= 4.5,
+            $"{pair.Foreground} on {pair.Background} does not meet 4.5:1 contrast."));
+    }
+
+    [Fact]
+    public void AccessibilityAudit_ProvidesHeadingsNamesAndRemovesHiddenTabsFromKeyboardOrder()
+    {
+        XDocument typography = LoadWpfXaml("Themes", "EntityTrackerTypography.xaml");
+        XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XDocument help = LoadWpfXaml("Views", "HelpSqlView.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        XElement pageHeading = Assert.Single(typography.Descendants(), element =>
+            (string?)element.Attribute(x + "Key") == "PageHeadingTextStyle");
+        Assert.Contains(pageHeading.Elements(), element =>
+            (string?)element.Attribute("Property") == "AutomationProperties.HeadingLevel" &&
+            (string?)element.Attribute("Value") == "Level1");
+
+        XElement tabControl = Assert.Single(workspace.Descendants(), element =>
+            element.Name.LocalName == "TabControl");
+        Assert.Equal("False", (string?)tabControl.Attribute("Focusable"));
+        Assert.Equal("False", (string?)tabControl.Attribute("IsTabStop"));
+        Assert.All(workspace.Descendants().Where(element => element.Name.LocalName == "TabItem"), tab =>
+        {
+            Assert.Equal("False", (string?)tab.Attribute("Focusable"));
+            Assert.Equal("False", (string?)tab.Attribute("IsTabStop"));
+        });
+
+        string[] namedWorkspaceElements =
+        [
+            "OverviewSearchTextBox",
+            "OverviewDataGrid",
+            "ArchivedSearchTextBox",
+            "ArchivedDataGrid",
+            "EditorStatusComboBox"
+        ];
+        Assert.All(namedWorkspaceElements, name =>
+        {
+            XElement element = Assert.Single(workspace.Descendants(), candidate =>
+                (string?)candidate.Attribute(x + "Name") == name);
+            Assert.False(string.IsNullOrWhiteSpace(
+                (string?)element.Attribute("AutomationProperties.Name")));
+        });
+
+        XElement query = Assert.Single(help.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "QueryTextBox");
+        Assert.Equal(
+            "PostgreSQL schema extraction query",
+            (string?)query.Attribute("AutomationProperties.Name"));
     }
 
     [Fact]
@@ -539,6 +616,27 @@ public sealed class PresentationConfigurationTests
         string repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
         return XDocument.Load(Path.Combine(
             [repositoryRoot, "src", "EntityTracker.Wpf", .. relativePath]));
+    }
+
+    private static double ContrastRatio(string foreground, string background)
+    {
+        double lighter = Math.Max(RelativeLuminance(foreground), RelativeLuminance(background));
+        double darker = Math.Min(RelativeLuminance(foreground), RelativeLuminance(background));
+        return (lighter + 0.05) / (darker + 0.05);
+    }
+
+    private static double RelativeLuminance(string color)
+    {
+        string hex = color.TrimStart('#');
+        double Channel(int offset)
+        {
+            double value = Convert.ToInt32(hex.Substring(offset, 2), 16) / 255d;
+            return value <= 0.04045
+                ? value / 12.92
+                : Math.Pow((value + 0.055) / 1.055, 2.4);
+        }
+
+        return (0.2126 * Channel(0)) + (0.7152 * Channel(2)) + (0.0722 * Channel(4));
     }
 
     private static string FindRepositoryRoot(string startDirectory)

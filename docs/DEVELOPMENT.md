@@ -146,8 +146,8 @@ unrelated image assets are preserved. Each open screenshot window switches to th
 appearance and back before capture, exercising live Light-to-Dark and Dark-to-Light transitions.
 The utility imports the repository's 125-entity synthetic schema, creates two Projects and three
 related Trackers, creates fixed status and 90-day history data, and captures the portfolio, Project
-dashboard, Tracker copy review, overview, synchronization, entity, progress, archive, search,
-SQL-query, and Settings/Appearance states. It uses a new SQLite database below the
+dashboard, Tracker copy review, overview, synchronization, entity, progress, archive, destructive
+confirmation, Help &amp; SQL, SQL-query, and Settings states. It uses a new SQLite database below the
 operating-system temporary directory for each appearance and never reads or changes
 `%LOCALAPPDATA%\EntityTracker`. The application may remain open while the screenshots are
 generated.
@@ -189,12 +189,13 @@ import an existing compatible file. The exact versioned input format is document
 
 ## Settings and current storage behavior
 
-The **Settings / Appearance** destination controls System, Light, or Dark appearance. The local
+The **Settings** destination controls System, Light, or Dark appearance. The local
 settings file also remembers the last valid active Project/Tracker context. SQLite remains the only
 active provider; the application does not expose a remote connection or synchronization control.
 
-Older settings files that contain non-secret SharePoint setup are still read and preserved during
-the settings migration, but UX-03 provides no SharePoint configuration or runtime behavior.
+Settings version 4 stores only appearance and active Project/Tracker context. Versions 1–3 are
+read without modification; retired provider and SharePoint fields are ignored, and the next
+legitimate settings save atomically writes version 4 without those fields.
 
 ## Local application data
 
