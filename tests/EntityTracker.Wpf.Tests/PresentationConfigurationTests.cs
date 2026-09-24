@@ -340,6 +340,13 @@ public sealed class PresentationConfigurationTests
         Assert.Equal(
             "PostgreSQL schema extraction query",
             (string?)query.Attribute("AutomationProperties.Name"));
+        Assert.Equal("Consolas", (string?)query.Attribute("FontFamily"));
+        Assert.Equal("True", (string?)query.Attribute("IsReadOnly"));
+
+        XElement copyQuery = Assert.Single(help.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "CopyQueryButton");
+        Assert.Equal("Copy SQL query", (string?)copyQuery.Attribute("AutomationProperties.Name"));
+        Assert.Equal("{Binding Help.CopyQueryCommand}", (string?)copyQuery.Attribute("Command"));
     }
 
     [Fact]

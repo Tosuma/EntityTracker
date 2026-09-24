@@ -7,13 +7,9 @@
         <StackPanel MaxWidth="1040" HorizontalAlignment="Left">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Margin="0,0,8,0"
-                            Command="{Binding Help.BackToImportCommand}"
+                    <Button Command="{Binding Help.BackToImportCommand}"
                             Content="Back to Schema synchronization"
                             Style="{StaticResource SecondaryButtonStyle}" />
-                    <Button Command="{Binding Help.CopyQueryCommand}"
-                            Content="Copy query"
-                            Style="{StaticResource PrimaryButtonStyle}" />
                 </StackPanel>
                 <StackPanel>
                     <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Help &amp; SQL" />
@@ -73,22 +69,66 @@
                                Text="Export as UTF-8 CSV with a semicolon (;) delimiter and include the header row." />
                 </StackPanel>
             </Border>
-            <TextBlock Margin="0,0,0,8"
-                       AutomationProperties.LiveSetting="Polite"
-                       Text="{Binding Help.CopyMessage}" />
-            <TextBox x:Name="QueryTextBox"
-                     Height="360"
-                     AutomationProperties.Name="PostgreSQL schema extraction query"
-                     AutomationProperties.HelpText="Read-only SQL query. Use Copy query to place it on the clipboard."
-                     AcceptsReturn="True"
-                     AcceptsTab="True"
-                     FontFamily="Consolas"
-                     IsReadOnly="True"
-                     ScrollViewer.CanContentScroll="False"
-                     Text="{Binding Help.Query, Mode=OneWay}"
-                     TextWrapping="NoWrap"
-                     VerticalScrollBarVisibility="Auto"
-                     HorizontalScrollBarVisibility="Auto" />
+            <Border Margin="0,0,0,12"
+                    Background="{DynamicResource Brush.Surface.Subtle}"
+                    Style="{StaticResource EntityTrackerCardStyle}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Border Padding="12,8"
+                            Background="{DynamicResource Brush.Surface.Card}"
+                            BorderBrush="{DynamicResource Brush.Border.Default}"
+                            BorderThickness="0,0,0,1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock VerticalAlignment="Center"
+                                       FontFamily="Consolas"
+                                       FontWeight="SemiBold"
+                                       Text="SQL" />
+                            <TextBlock Grid.Column="1"
+                                       Margin="12,0"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Right"
+                                       AutomationProperties.LiveSetting="Polite"
+                                       Foreground="{DynamicResource Brush.Text.Secondary}"
+                                       Text="{Binding Help.CopyMessage}" />
+                            <Button x:Name="CopyQueryButton"
+                                    Grid.Column="2"
+                                    AutomationProperties.Name="Copy SQL query"
+                                    AutomationProperties.HelpText="Copies the complete PostgreSQL schema extraction query to the clipboard."
+                                    Command="{Binding Help.CopyQueryCommand}"
+                                    Content="Copy SQL"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                        </Grid>
+                    </Border>
+
+                    <TextBox x:Name="QueryTextBox"
+                             Grid.Row="1"
+                             Height="360"
+                             Padding="12"
+                             AutomationProperties.Name="PostgreSQL schema extraction query"
+                             AutomationProperties.HelpText="Read-only SQL code. Select the text or use Copy SQL to place the complete query on the clipboard."
+                             AcceptsReturn="True"
+                             AcceptsTab="True"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             FontFamily="Consolas"
+                             FontSize="13"
+                             IsReadOnly="True"
+                             ScrollViewer.CanContentScroll="False"
+                             Text="{Binding Help.Query, Mode=OneWay}"
+                             TextWrapping="NoWrap"
+                             VerticalScrollBarVisibility="Auto"
+                             HorizontalScrollBarVisibility="Auto" />
+                </Grid>
+            </Border>
         </StackPanel>
     </ScrollViewer>
 </UserControl>
