@@ -487,11 +487,17 @@ The WPF composition root composes SQLite. Application exposes the small
 Existing persistence interfaces remain focused on real read and atomic store operations; do not
 replace them with a generic repository framework.
 
-SQLite is the only supported provider. SharePoint configuration and provider selection were
-retired in UX-08. Settings versions 1–3 remain readable so appearance and active Project/Tracker
-context survive; the next settings save writes version 4 without retired provider fields.
-Backend-neutral collaborative conflict value types are currently inactive historical seams, as
-described in [COLLABORATIVE_STORAGE.md](COLLABORATIVE_STORAGE.md).
+SQLite is the only currently implemented provider. SharePoint configuration and provider selection
+were retired in UX-08. Settings versions 1–3 remain readable so appearance and active
+Project/Tracker context survive; the next settings save writes version 4 without retired provider
+fields.
+
+The approved RS-01–RS-05 direction adds optional Project-level Git backing. A dedicated Git
+repository will be authoritative for a linked Project and SQLite will be its local projection/cache;
+SQLite-only Projects remain supported. Git/process/filesystem concerns stay in Infrastructure,
+semantic merge stays outside WPF, and derived data is recomputed. This is planned rather than
+implemented behavior. See [COLLABORATIVE_STORAGE.md](COLLABORATIVE_STORAGE.md) and the
+[remote synchronization roadmap](../milestones/remote-sync/README.md).
 
 Local backup, logging, retention, and restore procedures are defined in
 [RECOVERY.md](../operations/RECOVERY.md).

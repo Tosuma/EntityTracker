@@ -14,7 +14,10 @@
 - 10
 - 11
 - 12
-- CI-01
+
+## Completed engineering milestones
+
+- CI-01 — Continuous integration
 
 ## Retired product milestones
 
@@ -39,5 +42,14 @@
 - UX-07 — Reporting and Tracker Comparison
 - UX-08 — Accessibility and Consistency
 
-Future Project-level Git synchronization will be planned separately after its data format, merge,
-authentication, and recovery requirements are decided.
+## Planned remote synchronization milestones
+
+- RS-01 — Repository Contract and Git Tooling
+- RS-02 — Local Git-Backed Projects
+- RS-03 — Remote Synchronization
+- RS-04 — Semantic Merge and Conflict Review
+- RS-05 — Recovery, Security, and Consistency
+
+The [remote synchronization roadmap](remote-sync/README.md) fixes the authority, repository,
+offline, authentication, merge, deletion, and recovery direction. No RS milestone is implemented
+yet.

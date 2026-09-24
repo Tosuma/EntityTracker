@@ -191,9 +191,9 @@ Plan UX-01 — Projects and Trackers Foundation.
 Read:
 - docs/architecture/ARCHITECTURE.md
 - docs/design/FLUENT_UI_DIRECTION.md
-- docs/milestones/00_README.md
-- docs/milestones/ux_00_README.md
-- docs/milestones/ux_01_projects_and_trackers_foundation.md
+- docs/milestones/README.md
+- docs/milestones/ux/README.md
+- docs/milestones/ux/ux_01_projects_and_trackers_foundation.md
 
 Inspect the current Domain, Application persistence contracts and services, SQLite schema/migrations,
 settings, WPF composition, reporting queries, and all tests. Produce a repository-specific plan for
@@ -208,7 +208,7 @@ coverage. Do not modify the repository and do not plan UX-02 or Git synchronizat
 Implement UX-01 according to:
 - docs/architecture/ARCHITECTURE.md
 - docs/design/FLUENT_UI_DIRECTION.md
-- docs/milestones/ux_01_projects_and_trackers_foundation.md
+- docs/milestones/ux/ux_01_projects_and_trackers_foundation.md
 - the approved UX-01 implementation plan.
 
 Implement UX-01 only. Keep tracker scope explicit outside WPF, migrate existing data transactionally,

@@ -206,21 +206,23 @@ compatible schema CSV without requiring a live database connection inside Entity
 
 ## Project status
 
-Product Milestones 1–12 and UX Milestones UX-01 through UX-08 are complete. EntityTracker uses
-SQLite as its local catalog and working store. Obsolete SharePoint presentation and runtime
+Product Milestones 1–12 and UX Milestones UX-01 through UX-08 are complete. EntityTracker currently
+uses SQLite as its local catalog and working store. Obsolete SharePoint presentation and runtime
 configuration have been retired, and the application exposes no remote synchronization control.
 
 A separate
-[PF-01–PF-05 product feedback milestone group](docs/milestones/00_README.md#product-feedback-milestones)
+[PF-01–PF-05 product feedback milestone group](docs/milestones/feedback/README.md)
 plans bulk status updates, customer priority, responsible-developer and group metadata, and
 column filtering with status-order sorting without extending the numbered roadmap. The independent
-[CI-01 engineering milestone](docs/milestones/ci_01_continuous_integration.md) now validates pull
+[CI-01 engineering milestone](docs/milestones/engineering/ci_01_continuous_integration.md) now validates pull
 requests and pushes to `main` and packages successful `main` builds. The live badge above reports
 the current `main` build status; CI-01 remains in progress until the `main` package artifact is
 verified.
 
 See the [milestone status](docs/milestones/milestone_status.md) and complete
-[roadmap](docs/milestones/00_README.md) for details.
+[roadmap](docs/milestones/README.md) for details. Project-level Git synchronization is now specified
+as the planned [RS-01–RS-05 roadmap](docs/milestones/remote-sync/README.md), but none of those
+milestones is implemented or exposed by the current release.
 
 ## Technology and architecture
 
@@ -239,9 +241,8 @@ Domain model
 
 Business rules do not depend on WPF or infrastructure technologies. Read the
 [architecture rules](docs/architecture/ARCHITECTURE.md) and
-[collaborative storage contract](docs/architecture/COLLABORATIVE_STORAGE.md) for the historical
-storage boundary. Any future Project-level Git synchronization requires a separately approved
-design and is not exposed by this release.
+[collaborative storage direction](docs/architecture/COLLABORATIVE_STORAGE.md) for the preserved
+boundary and approved Git roadmap. Git synchronization remains unimplemented in this release.
 
 ## Getting started
 
@@ -258,7 +259,7 @@ application data.
 - [PostgreSQL schema CSV contract](docs/importing/schema-csv-contract-v1.md)
 - [Local backup, logs, and recovery](docs/operations/RECOVERY.md)
 - [Architecture rules](docs/architecture/ARCHITECTURE.md)
-- [Roadmap and milestones](docs/milestones/00_README.md)
+- [Roadmap and milestones](docs/milestones/README.md)
 
 ## Contributing
 
