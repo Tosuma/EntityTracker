@@ -44,7 +44,10 @@ EntityTracker keeps those concerns separate:
   normalized entity differences without opening another window or database.
 - **Safe catalog management** — create blank, CSV-backed, or copied Trackers and rename, recycle,
   restore, or guardedly purge Projects and Trackers.
-- **Local-first reliability** — SQLite persistence, automatic daily and pre-migration backups,
+- **Optional local Git history** — retain SQLite-only Projects or link an existing dedicated Git
+  repository so accepted changes create local commits and SQLite can be rebuilt from HEAD, with no
+  remote required.
+- **Local-first reliability** — SQLite projections, automatic daily and pre-migration backups,
   rolling logs, and documented recovery procedures.
 - **Accessible Fluent workflow** — built-in .NET 10 WPF Fluent controls, Light/Dark/System themes,
   keyboard-safe dialogs, visible focus, labeled status, and automation names for repeated actions.
@@ -58,6 +61,8 @@ EntityTracker keeps those concerns separate:
 3. Apply the reviewed schema while EntityTracker preserves stable progress, notes, and history.
 4. Use dependency-safe rank, readiness, blockers, filters, and search to choose the next work item.
 5. Update work status and use Reports to communicate delivery trends.
+6. Optionally link a Project to an existing empty Git repository for local committed history;
+   remote synchronization is not part of the current release.
 
 ## Screenshots
 
@@ -78,6 +83,18 @@ for consistency.
       <strong>Compare related Trackers</strong><br />
       Review aggregate history, per-Tracker context, and actionable entity differences.<br /><br />
       <img src="images/light/project-dashboard.png" alt="EntityTracker project dashboard with tracker summary cards" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <strong>Recover a stale local cache</strong><br />
+      Rebuild one Git-backed Project from authoritative repository HEAD without contacting a remote.<br /><br />
+      <img src="images/light/repository-stale-cache.png" alt="Git-backed Project showing a stale-cache status and Rebuild cache action" />
+    </td>
+    <td width="50%">
+      <strong>Locate a moved repository</strong><br />
+      Restore a Project-scoped repository association while keeping other Projects available.<br /><br />
+      <img src="images/light/repository-unavailable.png" alt="Git-backed Project showing an unavailable repository and Locate repository action" />
     </td>
   </tr>
   <tr>

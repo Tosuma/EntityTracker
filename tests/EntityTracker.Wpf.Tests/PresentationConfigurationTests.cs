@@ -618,6 +618,30 @@ public sealed class PresentationConfigurationTests
         Assert.Equal("Recycling", (string?)comparisonGrid.Attribute("VirtualizingPanel.VirtualizationMode"));
     }
 
+    [Fact]
+    public void RepositoryActions_AreProjectScopedKeyboardControlsWithAccessibleHelp()
+    {
+        XDocument portfolio = LoadWpfXaml("Views", "PortfolioView.xaml");
+        XElement open = Assert.Single(portfolio.Descendants(), element =>
+            element.Name.LocalName == "Button" &&
+            (string?)element.Attribute("Content") == "Open repository");
+        Assert.False(string.IsNullOrWhiteSpace((string?)open.Attribute("AutomationProperties.HelpText")));
+
+        XDocument dashboard = LoadWpfXaml("Views", "ProjectDashboardView.xaml");
+        foreach (string label in new[] { "Link repository", "Locate repository", "Rebuild cache" })
+        {
+            XElement action = Assert.Single(dashboard.Descendants(), element =>
+                element.Name.LocalName == "Button" &&
+                (string?)element.Attribute("Content") == label);
+            Assert.False(string.IsNullOrWhiteSpace(
+                (string?)action.Attribute("AutomationProperties.HelpText")));
+        }
+        Assert.Contains(dashboard.Descendants(), element =>
+            element.Name.LocalName == "TextBlock" &&
+            (string?)element.Attribute("AutomationProperties.LiveSetting") == "Polite" &&
+            (string?)element.Attribute("Text") == "{Binding RepositoryStatusText}");
+    }
+
     private static XDocument LoadWpfXaml(params string[] relativePath)
     {
         string repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);

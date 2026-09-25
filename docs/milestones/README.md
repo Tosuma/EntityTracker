@@ -22,18 +22,19 @@ progress, and supports multiple Trackers grouped into Projects.
   improvements.
 - [Engineering milestones](engineering/README.md) — independent repository and delivery work.
 - [UI/UX modernization](ux/README.md) — completed UX-01–UX-08 Fluent modernization.
-- [Remote synchronization](remote-sync/README.md) — planned RS-01–RS-05 Project-level Git
-  synchronization.
+- [Remote synchronization](remote-sync/README.md) — RS-01 and RS-02 completed; RS-03–RS-05 plan
+  explicit remote synchronization and semantic merge.
 
 See [milestone status](milestone_status.md) for the current state of every group.
 
 ## Approved storage direction
 
 SQLite remains the working store for SQLite-only Projects and the local projection/cache for a
-future Git-backed Project. Git backing is optional per Project. Each linked Project uses one
+Git-backed Project. Git backing is optional per Project. Each linked Project uses one
 dedicated, user-selected repository and one managed branch. Repository files are app-owned but
-reviewable. Accepted operations create local commits, offline work is allowed, and a user-triggered
-Sync will fetch, semantically merge, and push through installed Git.
+reviewable. Accepted operations create local commits, offline work is allowed, and a future
+user-triggered Sync will fetch, semantically merge, and push through installed Git.
 
-The approved direction does not yet change the application. Implement RS-01 through RS-05 in
-order; do not expose partial remote behavior from a later milestone.
+RS-02 implements local linking, opening, commits, and cache rebuilds without network access.
+Implement RS-03 through RS-05 in order; do not expose partial remote behavior from a later
+milestone.

@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using EntityTracker.Application.Collaboration;
+using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Synchronization;
@@ -295,7 +296,9 @@ public sealed class ProjectRepositoryCodec
                 operation.EntityIds.Any(id => !knownEntityIds.Contains(id.Value)) ||
                 operation.StatusTransitions.Any(entry =>
                     entry.OperationId != operation.Id ||
-                    !knownEntityIds.Contains(entry.EntityId.Value)))
+                    !knownEntityIds.Contains(entry.EntityId.Value)) ||
+                operation.RecordedProgressSnapshots.Any(snapshot =>
+                    !knownTrackerIds.Contains(snapshot.TrackerId.Value)))
             {
                 throw new InvalidDataException("A repository operation is inconsistent.");
             }
@@ -306,6 +309,13 @@ public sealed class ProjectRepositoryCodec
             foreach (EntityStatusHistoryEntry transition in operation.StatusTransitions)
             {
                 EnsureUtc(transition.OccurredAtUtc, "status transition");
+            }
+            EnsureUnique(
+                operation.RecordedProgressSnapshots.Select(item => item.TrackerId.Value),
+                "progress snapshot Tracker IDs within an operation");
+            foreach (RepositoryProgressSnapshot snapshot in operation.RecordedProgressSnapshots)
+            {
+                EnsureUtc(snapshot.RecordedAtUtc, "progress snapshot");
             }
 
             if (operation.ImportSummary is { } summary &&
@@ -360,10 +370,13 @@ public sealed class ProjectRepositoryCodec
                 operation.Kind == RepositoryOperationKind.ProjectPurged &&
                 operation.ProjectIds.Any(id => id.Value == tombstone.DeletedId),
             RepositoryTombstoneKind.Tracker =>
-                operation.Kind == RepositoryOperationKind.TrackerPurged &&
+                operation.Kind is RepositoryOperationKind.ProjectPurged or
+                    RepositoryOperationKind.TrackerPurged &&
                 operation.TrackerIds.Any(id => id.Value == tombstone.DeletedId),
             RepositoryTombstoneKind.Entity =>
-                operation.Kind == RepositoryOperationKind.EntityPurged &&
+                operation.Kind is RepositoryOperationKind.ProjectPurged or
+                    RepositoryOperationKind.TrackerPurged or
+                    RepositoryOperationKind.EntityPurged &&
                 operation.EntityIds.Any(id => id.Value == tombstone.DeletedId),
             _ => false
         };
@@ -486,15 +499,21 @@ public sealed class ProjectRepositoryCodec
     private sealed record DependencyDto(string SourceName, string Kind);
     private sealed record OverrideDto(string SourceName, string Action);
 
-    private sealed record OperationDocument(string DocumentType, int FormatVersion, string ProjectId, string OperationId, string Kind, string OccurredAtUtc, IReadOnlyList<string> ProjectIds, IReadOnlyList<string> TrackerIds, IReadOnlyList<string> EntityIds, IReadOnlyList<TransitionDto> StatusTransitions, ImportDto? ImportSummary)
+    private sealed record OperationDocument(string DocumentType, int FormatVersion, string ProjectId, string OperationId, string Kind, string OccurredAtUtc, IReadOnlyList<string> ProjectIds, IReadOnlyList<string> TrackerIds, IReadOnlyList<string> EntityIds, IReadOnlyList<TransitionDto> StatusTransitions, ImportDto? ImportSummary, IReadOnlyList<ProgressSnapshotDto> ProgressSnapshots)
     {
-        public static OperationDocument From(ProjectId projectId, RepositoryOperation value) => new("entitytracker-operation", CurrentFormatVersion, Format(projectId.Value), Format(value.Id.Value), value.Kind.ToString(), Format(value.OccurredAtUtc), value.ProjectIds.Select(item => Format(item.Value)).Order(StringComparer.Ordinal).ToArray(), value.TrackerIds.Select(item => Format(item.Value)).Order(StringComparer.Ordinal).ToArray(), value.EntityIds.Select(item => Format(item.Value)).Order(StringComparer.Ordinal).ToArray(), value.StatusTransitions.OrderBy(item => item.OccurredAtUtc).ThenBy(item => Format(item.EntityId.Value), StringComparer.Ordinal).ThenBy(item => item.Kind).Select(TransitionDto.From).ToArray(), value.ImportSummary is null ? null : ImportDto.From(value.ImportSummary));
+        public static OperationDocument From(ProjectId projectId, RepositoryOperation value) => new("entitytracker-operation", CurrentFormatVersion, Format(projectId.Value), Format(value.Id.Value), value.Kind.ToString(), Format(value.OccurredAtUtc), value.ProjectIds.Select(item => Format(item.Value)).Order(StringComparer.Ordinal).ToArray(), value.TrackerIds.Select(item => Format(item.Value)).Order(StringComparer.Ordinal).ToArray(), value.EntityIds.Select(item => Format(item.Value)).Order(StringComparer.Ordinal).ToArray(), value.StatusTransitions.OrderBy(item => item.OccurredAtUtc).ThenBy(item => Format(item.EntityId.Value), StringComparer.Ordinal).ThenBy(item => item.Kind).Select(TransitionDto.From).ToArray(), value.ImportSummary is null ? null : ImportDto.From(value.ImportSummary), value.RecordedProgressSnapshots.OrderBy(item => Format(item.TrackerId.Value), StringComparer.Ordinal).Select(ProgressSnapshotDto.From).ToArray());
         public RepositoryOperation ToDomain(ProjectId expectedProjectId)
         {
             EnsureProjectId(ProjectId, expectedProjectId, $"operation {OperationId}");
             OperationId operationId = new(ParseId(OperationId, "operation.id"));
-            return new(operationId, ParseEnum<RepositoryOperationKind>(Kind, "operation.kind"), ParseTime(OccurredAtUtc, "operation.occurredAtUtc"), ProjectIds.Select(item => new ProjectId(ParseId(item, "affected project ID"))).ToArray(), TrackerIds.Select(item => new TrackerId(ParseId(item, "affected tracker ID"))).ToArray(), EntityIds.Select(item => new EntityId(ParseId(item, "affected entity ID"))).ToArray(), StatusTransitions.Select(item => item.ToDomain(operationId)).ToArray(), ImportSummary?.ToDomain());
+            return new(operationId, ParseEnum<RepositoryOperationKind>(Kind, "operation.kind"), ParseTime(OccurredAtUtc, "operation.occurredAtUtc"), ProjectIds.Select(item => new ProjectId(ParseId(item, "affected project ID"))).ToArray(), TrackerIds.Select(item => new TrackerId(ParseId(item, "affected tracker ID"))).ToArray(), EntityIds.Select(item => new EntityId(ParseId(item, "affected entity ID"))).ToArray(), StatusTransitions.Select(item => item.ToDomain(operationId)).ToArray(), ImportSummary?.ToDomain(), ProgressSnapshots.Select(item => item.ToDomain()).ToArray());
         }
+    }
+
+    private sealed record ProgressSnapshotDto(string TrackerId, string RecordedAtUtc, int ReadyCount, int BlockedCount, int InProgressCount, int ReworkNeededCount, int DevelopmentCompletedCount, int ReconciledCount)
+    {
+        public static ProgressSnapshotDto From(RepositoryProgressSnapshot value) => new(Format(value.TrackerId.Value), Format(value.RecordedAtUtc), value.State.ReadyCount, value.State.BlockedCount, value.State.InProgressCount, value.State.ReworkNeededCount, value.State.DevelopmentCompletedCount, value.State.ReconciledCount);
+        public RepositoryProgressSnapshot ToDomain() => new(new TrackerId(ParseId(TrackerId, "progressSnapshot.trackerId")), ParseTime(RecordedAtUtc, "progressSnapshot.recordedAtUtc"), new ProgressSnapshotState(ReadyCount, BlockedCount, InProgressCount, ReworkNeededCount, DevelopmentCompletedCount, ReconciledCount));
     }
 
     private sealed record TransitionDto(string EntityId, string? PreviousStatus, string NewStatus, string OccurredAtUtc, string Kind)

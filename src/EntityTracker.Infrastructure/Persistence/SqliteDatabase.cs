@@ -8,7 +8,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    internal const int CurrentSchemaVersion = 13;
+    internal const int CurrentSchemaVersion = 14;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -164,6 +164,66 @@ public sealed class SqliteDatabase
             ON entity_status_history (occurred_at_utc, id);
         CREATE INDEX ix_entity_status_history_operation
             ON entity_status_history (operation_id, occurred_at_utc, id);
+        """;
+
+    private const string OperationProjectionHistorySchemaSql = """
+        CREATE TABLE progress_snapshots_v14
+        (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            operation_id TEXT NOT NULL
+                CHECK (length(operation_id) = 36 AND operation_id = lower(operation_id)),
+            tracker_id TEXT NOT NULL,
+            recorded_at_utc TEXT NOT NULL,
+            ready_count INTEGER NOT NULL CHECK (ready_count >= 0),
+            blocked_count INTEGER NOT NULL CHECK (blocked_count >= 0),
+            in_progress_count INTEGER NOT NULL CHECK (in_progress_count >= 0),
+            rework_needed_count INTEGER NOT NULL CHECK (rework_needed_count >= 0),
+            development_completed_count INTEGER NOT NULL CHECK (development_completed_count >= 0),
+            reconciled_count INTEGER NOT NULL CHECK (reconciled_count >= 0),
+            FOREIGN KEY (tracker_id) REFERENCES trackers (id) ON DELETE CASCADE
+        );
+
+        INSERT INTO progress_snapshots_v14
+        (id, operation_id, tracker_id, recorded_at_utc, ready_count, blocked_count,
+         in_progress_count, rework_needed_count, development_completed_count, reconciled_count)
+        SELECT id, operation_id, tracker_id, recorded_at_utc, ready_count, blocked_count,
+               in_progress_count, rework_needed_count, development_completed_count, reconciled_count
+        FROM progress_snapshots;
+
+        DROP TABLE progress_snapshots;
+        ALTER TABLE progress_snapshots_v14 RENAME TO progress_snapshots;
+        CREATE INDEX ix_progress_snapshots_tracker_time
+            ON progress_snapshots (tracker_id, recorded_at_utc, operation_id, id);
+        CREATE INDEX ix_progress_snapshots_operation
+            ON progress_snapshots (operation_id, tracker_id);
+
+        CREATE TABLE schema_import_summary_v14
+        (
+            tracker_id TEXT NOT NULL PRIMARY KEY,
+            operation_id TEXT NOT NULL
+                CHECK (length(operation_id) = 36 AND operation_id = lower(operation_id)),
+            applied_at_utc TEXT NOT NULL,
+            source_file_name TEXT NOT NULL CHECK (length(trim(source_file_name)) > 0),
+            import_mode TEXT NOT NULL CHECK (import_mode IN ('Complete', 'Partial')),
+            new_entity_count INTEGER NOT NULL CHECK (new_entity_count >= 0),
+            changed_entity_count INTEGER NOT NULL CHECK (changed_entity_count >= 0),
+            archived_entity_count INTEGER NOT NULL CHECK (archived_entity_count >= 0),
+            unchanged_entity_count INTEGER NOT NULL CHECK (unchanged_entity_count >= 0),
+            unresolved_entity_count INTEGER NOT NULL CHECK (unresolved_entity_count >= 0),
+            FOREIGN KEY (tracker_id) REFERENCES trackers (id) ON DELETE CASCADE
+        );
+
+        INSERT INTO schema_import_summary_v14
+        (tracker_id, operation_id, applied_at_utc, source_file_name, import_mode,
+         new_entity_count, changed_entity_count, archived_entity_count,
+         unchanged_entity_count, unresolved_entity_count)
+        SELECT tracker_id, operation_id, applied_at_utc, source_file_name, import_mode,
+               new_entity_count, changed_entity_count, archived_entity_count,
+               unchanged_entity_count, unresolved_entity_count
+        FROM schema_import_summary;
+
+        DROP TABLE schema_import_summary;
+        ALTER TABLE schema_import_summary_v14 RENAME TO schema_import_summary;
         """;
 
     private const string SchemaImportSummarySql = """
@@ -769,6 +829,27 @@ public sealed class SqliteDatabase
                     cancellationToken);
             }
 
+            if (schemaVersion < 14)
+            {
+                await EnsureTrackerOwnedProjectionHistoryAsync(
+                    connection,
+                    transaction,
+                    cancellationToken);
+                await AddOperationIdsToProjectionHistoryAsync(
+                    connection,
+                    transaction,
+                    cancellationToken);
+                await ExecuteAsync(
+                    connection,
+                    transaction,
+                    OperationProjectionHistorySchemaSql,
+                    cancellationToken);
+                await EnsureNoForeignKeyViolationsAsync(
+                    connection,
+                    transaction,
+                    cancellationToken);
+            }
+
             await ExecuteAsync(
                 connection,
                 transaction,
@@ -833,6 +914,213 @@ public sealed class SqliteDatabase
             updateCommand.Parameters.AddWithValue("$operationId", CreateDeterministicGuid(seed));
             updateCommand.Parameters.AddWithValue("$id", id);
             await updateCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+    }
+
+    private static async Task AddOperationIdsToProjectionHistoryAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (!await ColumnExistsAsync(
+                connection,
+                transaction,
+                "progress_snapshots",
+                "operation_id",
+                cancellationToken))
+        {
+            await ExecuteAsync(
+                connection,
+                transaction,
+                "ALTER TABLE progress_snapshots ADD COLUMN operation_id TEXT NULL;",
+                cancellationToken);
+        }
+
+        List<(long Id, string OperationId)> snapshots = [];
+        using (SqliteCommand command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = """
+                SELECT snapshot.id, snapshot.tracker_id, snapshot.recorded_at_utc,
+                       snapshot.ready_count, snapshot.blocked_count, snapshot.in_progress_count,
+                       snapshot.rework_needed_count, snapshot.development_completed_count,
+                       snapshot.reconciled_count,
+                       (
+                           SELECT min(history.operation_id)
+                           FROM entity_status_history history
+                           INNER JOIN tracked_entities entity ON entity.id = history.entity_id
+                           WHERE entity.tracker_id = snapshot.tracker_id
+                             AND history.occurred_at_utc = snapshot.recorded_at_utc
+                       )
+                FROM progress_snapshots snapshot
+                ORDER BY snapshot.id;
+                """;
+            await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                string operationId = reader.IsDBNull(9)
+                    ? CreateDeterministicGuid(string.Join(
+                        "\n",
+                        "entitytracker-progress-snapshot-v14",
+                        reader.GetInt64(0).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        reader.GetString(1), reader.GetString(2),
+                        reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5),
+                        reader.GetInt32(6), reader.GetInt32(7), reader.GetInt32(8)))
+                    : reader.GetString(9);
+                snapshots.Add((reader.GetInt64(0), operationId));
+            }
+        }
+
+        foreach ((long id, string operationId) in snapshots)
+        {
+            using SqliteCommand command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText =
+                "UPDATE progress_snapshots SET operation_id = $operationId WHERE id = $id;";
+            command.Parameters.AddWithValue("$operationId", operationId);
+            command.Parameters.AddWithValue("$id", id);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        if (!await ColumnExistsAsync(
+                connection,
+                transaction,
+                "schema_import_summary",
+                "operation_id",
+                cancellationToken))
+        {
+            await ExecuteAsync(
+                connection,
+                transaction,
+                "ALTER TABLE schema_import_summary ADD COLUMN operation_id TEXT NULL;",
+                cancellationToken);
+        }
+
+        List<(string TrackerId, string OperationId)> imports = [];
+        using (SqliteCommand command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = """
+                SELECT summary.tracker_id, summary.applied_at_utc, summary.source_file_name,
+                       summary.import_mode, summary.new_entity_count, summary.changed_entity_count,
+                       summary.archived_entity_count, summary.unchanged_entity_count,
+                       summary.unresolved_entity_count,
+                       coalesce(
+                           (SELECT min(snapshot.operation_id)
+                            FROM progress_snapshots snapshot
+                            WHERE snapshot.tracker_id = summary.tracker_id
+                              AND snapshot.recorded_at_utc = summary.applied_at_utc),
+                           (SELECT min(history.operation_id)
+                            FROM entity_status_history history
+                            INNER JOIN tracked_entities entity ON entity.id = history.entity_id
+                            WHERE entity.tracker_id = summary.tracker_id
+                              AND history.occurred_at_utc = summary.applied_at_utc))
+                FROM schema_import_summary summary
+                ORDER BY summary.tracker_id;
+                """;
+            await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                string operationId = reader.IsDBNull(9)
+                    ? CreateDeterministicGuid(string.Join(
+                        "\n",
+                        "entitytracker-import-summary-v14",
+                        reader.GetString(0), reader.GetString(1), reader.GetString(2),
+                        reader.GetString(3), reader.GetInt32(4), reader.GetInt32(5),
+                        reader.GetInt32(6), reader.GetInt32(7), reader.GetInt32(8)))
+                    : reader.GetString(9);
+                imports.Add((reader.GetString(0), operationId));
+            }
+        }
+
+        foreach ((string trackerId, string operationId) in imports)
+        {
+            using SqliteCommand command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = """
+                UPDATE schema_import_summary
+                SET operation_id = $operationId
+                WHERE tracker_id = $trackerId;
+                """;
+            command.Parameters.AddWithValue("$operationId", operationId);
+            command.Parameters.AddWithValue("$trackerId", trackerId);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+    }
+
+    private static async Task EnsureTrackerOwnedProjectionHistoryAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        if (!await TableExistsAsync(
+                connection,
+                transaction,
+                "progress_snapshots",
+                cancellationToken))
+        {
+            await ExecuteAsync(connection, transaction, """
+                CREATE TABLE progress_snapshots
+                (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    tracker_id TEXT NULL,
+                    recorded_at_utc TEXT NOT NULL,
+                    ready_count INTEGER NOT NULL CHECK (ready_count >= 0),
+                    blocked_count INTEGER NOT NULL CHECK (blocked_count >= 0),
+                    in_progress_count INTEGER NOT NULL CHECK (in_progress_count >= 0),
+                    rework_needed_count INTEGER NOT NULL CHECK (rework_needed_count >= 0),
+                    development_completed_count INTEGER NOT NULL CHECK (development_completed_count >= 0),
+                    reconciled_count INTEGER NOT NULL CHECK (reconciled_count >= 0)
+                );
+                """, cancellationToken);
+        }
+        else if (!await ColumnExistsAsync(
+                     connection,
+                     transaction,
+                     "progress_snapshots",
+                     "tracker_id",
+                     cancellationToken))
+        {
+            await ExecuteAsync(connection, transaction, """
+                ALTER TABLE progress_snapshots ADD COLUMN tracker_id TEXT NULL;
+                UPDATE progress_snapshots
+                SET tracker_id = (SELECT id FROM trackers ORDER BY id LIMIT 1);
+                """, cancellationToken);
+        }
+
+        if (!await TableExistsAsync(
+                connection,
+                transaction,
+                "schema_import_summary",
+                cancellationToken))
+        {
+            await ExecuteAsync(connection, transaction, """
+                CREATE TABLE schema_import_summary
+                (
+                    tracker_id TEXT NULL,
+                    applied_at_utc TEXT NOT NULL,
+                    source_file_name TEXT NOT NULL CHECK (length(trim(source_file_name)) > 0),
+                    import_mode TEXT NOT NULL CHECK (import_mode IN ('Complete', 'Partial')),
+                    new_entity_count INTEGER NOT NULL CHECK (new_entity_count >= 0),
+                    changed_entity_count INTEGER NOT NULL CHECK (changed_entity_count >= 0),
+                    archived_entity_count INTEGER NOT NULL CHECK (archived_entity_count >= 0),
+                    unchanged_entity_count INTEGER NOT NULL CHECK (unchanged_entity_count >= 0),
+                    unresolved_entity_count INTEGER NOT NULL CHECK (unresolved_entity_count >= 0)
+                );
+                """, cancellationToken);
+        }
+        else if (!await ColumnExistsAsync(
+                     connection,
+                     transaction,
+                     "schema_import_summary",
+                     "tracker_id",
+                     cancellationToken))
+        {
+            await ExecuteAsync(connection, transaction, """
+                ALTER TABLE schema_import_summary ADD COLUMN tracker_id TEXT NULL;
+                UPDATE schema_import_summary
+                SET tracker_id = (SELECT id FROM trackers ORDER BY id LIMIT 1);
+                """, cancellationToken);
         }
     }
 

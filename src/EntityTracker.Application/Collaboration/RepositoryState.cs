@@ -1,4 +1,5 @@
 using EntityTracker.Application.Importing;
+using EntityTracker.Application.History;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Domain;
@@ -33,7 +34,17 @@ public sealed record RepositoryOperation(
     IReadOnlyList<TrackerId> TrackerIds,
     IReadOnlyList<EntityId> EntityIds,
     IReadOnlyList<EntityStatusHistoryEntry> StatusTransitions,
-    RepositoryImportSummary? ImportSummary = null);
+    RepositoryImportSummary? ImportSummary = null,
+    IReadOnlyList<RepositoryProgressSnapshot>? ProgressSnapshots = null)
+{
+    public IReadOnlyList<RepositoryProgressSnapshot> RecordedProgressSnapshots { get; } =
+        ProgressSnapshots?.ToArray() ?? [];
+}
+
+public sealed record RepositoryProgressSnapshot(
+    TrackerId TrackerId,
+    DateTimeOffset RecordedAtUtc,
+    ProgressSnapshotState State);
 
 public sealed record RepositoryImportSummary(
     TrackerId TrackerId,
@@ -61,6 +72,8 @@ public enum RepositoryTombstoneKind
 
 public enum RepositoryOperationKind
 {
+    RepositoryLinked,
+    HistoryImported,
     ProjectCreated,
     ProjectRenamed,
     ProjectRecycled,

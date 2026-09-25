@@ -13,6 +13,7 @@ The relevant paths are:
 ```text
 entity-tracker.db              active SQLite database
 settings.json                  optional local appearance and last active Project/Tracker context
+repositories.json              local Git-backed Project locations and projected commit IDs
 backups\                       automatic SQLite backups
 logs\                          daily application logs
 ```
@@ -21,6 +22,9 @@ The settings file is created when appearance or active context is saved. It must
 never contain a password, client secret, access token, certificate, or other authentication
 material. Appearance and the remembered selection are installation-local; Project and Tracker
 records remain in SQLite.
+
+`repositories.json` contains no remote URL or credential. Do not copy it between computers as a
+Project backup: repository paths are installation-local.
 
 ## Automatic backups
 
@@ -49,6 +53,18 @@ application from opening. A database initialization or migration failure still s
 Do not edit or restore the database while EntityTracker is running. If the restored database is
 newer than the application supports, use a newer compatible application version instead of trying
 to downgrade the schema manually.
+
+## Rebuild a Git-backed Project cache
+
+For a Git-backed Project, committed repository HEAD is authoritative. If EntityTracker reports a
+stale cache, choose **Rebuild cache** on the Project dashboard. If the repository folder moved,
+choose **Locate repository** and select the same Project repository at the registered branch and
+commit. Rebuild replaces only that Project's SQLite projection and does not create a commit or
+contact a remote.
+
+Do not edit managed repository JSON or use Git history-rewriting commands as a recovery shortcut.
+Resolve a dirty worktree with normal Git tools without discarding work, then retry. A local-only
+repository is fully supported; no remote needs to be added for local commits or cache recovery.
 
 ## Logs
 

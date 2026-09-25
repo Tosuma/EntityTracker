@@ -44,7 +44,6 @@
 
 ## Planned remote synchronization milestones
 
-- RS-02 — Local Git-Backed Projects
 - RS-03 — Remote Synchronization
 - RS-04 — Semantic Merge and Conflict Review
 - RS-05 — Recovery, Security, and Consistency
@@ -52,7 +51,9 @@
 ## Completed remote synchronization milestones
 
 - RS-01 — Repository Contract and Git Tooling
+- RS-02 — Local Git-Backed Projects
 
 The [remote synchronization roadmap](remote-sync/README.md) fixes the authority, repository,
 offline, authentication, merge, deletion, and recovery direction. RS-01 provides the repository
-contract and safe Git tooling; Project linking and synchronization remain planned.
+contract and safe Git tooling; RS-02 adds optional local Git authority and local commits. Remote
+network synchronization remains planned.

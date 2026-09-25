@@ -482,21 +482,24 @@ No milestone should leave deliberately broken intermediate architecture.
 
 ## 18. Provider startup and storage
 
-The WPF composition root composes SQLite. Application exposes the small
+The WPF composition root composes SQLite plus the optional local Project-repository authority.
+Application exposes the small
 `IPersistenceInitializer` startup seam so the UI does not initialize `SqliteDatabase` directly.
 Existing persistence interfaces remain focused on real read and atomic store operations; do not
 replace them with a generic repository framework.
 
-SQLite is the only currently implemented provider. SharePoint configuration and provider selection
-were retired in UX-08. Settings versions 1–3 remain readable so appearance and active
-Project/Tracker context survive; the next settings save writes version 4 without retired provider
-fields.
+SQLite remains the authority for an unlinked Project. For an RS-02 linked Project, committed Git
+HEAD is authoritative and SQLite is its replaceable local projection. A single Application mutation
+coordinator routes existing use cases without making WPF or business services branch on storage.
+SharePoint configuration and provider selection were retired in UX-08. Settings versions 1–3
+remain readable so appearance and active Project/Tracker context survive; the next settings save
+writes version 4 without retired provider fields.
 
-The approved RS-01–RS-05 direction adds optional Project-level Git backing. A dedicated Git
-repository will be authoritative for a linked Project and SQLite will be its local projection/cache;
-SQLite-only Projects remain supported. Git/process/filesystem concerns stay in Infrastructure,
-semantic merge stays outside WPF, and derived data is recomputed. This is planned rather than
-implemented behavior. See [COLLABORATIVE_STORAGE.md](COLLABORATIVE_STORAGE.md) and the
+RS-02 implements optional Project-level local Git backing. A dedicated Git repository is
+authoritative for a linked Project and SQLite is its local projection/cache; SQLite-only Projects
+remain supported. Git/process/filesystem concerns stay in Infrastructure, semantic merge stays
+outside WPF, and derived data is recomputed. Network synchronization and semantic merge remain
+planned for later RS milestones. See [COLLABORATIVE_STORAGE.md](COLLABORATIVE_STORAGE.md) and the
 [remote synchronization roadmap](../milestones/remote-sync/README.md).
 
 Local backup, logging, retention, and restore procedures are defined in

@@ -6,6 +6,9 @@
         <StackPanel>
             <DockPanel Margin="0,0,0,18">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Margin="0,0,8,0" Click="OnOpenRepository" Content="Open repository"
+                            AutomationProperties.HelpText="Open an existing EntityTracker Project repository without accessing a remote."
+                            Style="{StaticResource SecondaryButtonStyle}" />
                     <Button Margin="0,0,8,0" Click="OnOpenRecycleBins" Content="Recycle bins"
                             Style="{StaticResource SecondaryButtonStyle}" />
                     <Button Click="OnCreateProject" Content="Create project"

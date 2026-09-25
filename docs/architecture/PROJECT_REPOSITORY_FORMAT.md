@@ -1,8 +1,9 @@
 # Project repository format v1
 
 EntityTracker repository format 1 is the durable, app-owned representation used by the remote-sync
-roadmap. The format is defined in RS-01 but is not user-visible until RS-02. SQLite remains the
-only authority until a Project is explicitly linked in that later milestone.
+roadmap. RS-02 activates this format for a Project explicitly linked to or opened from an existing
+local Git repository. SQLite remains authoritative for unlinked Projects and is a projection of
+committed HEAD for linked Projects.
 
 ## Managed tree
 
@@ -28,7 +29,8 @@ reparse point.
 - UTC timestamps use `yyyy-MM-ddTHH:mm:ss.fffffffZ`.
 - Nullable properties and empty collections are emitted explicitly.
 - Identity collections sort by GUID. Dependency declarations and overrides sort by normalized
-  source name and then kind/action. Status transitions sort by occurrence, entity ID, and kind.
+  source name and then kind/action. Status transitions and retained progress snapshots sort by
+  occurrence, identity, and kind.
 - Unknown properties, malformed values, and missing or unsupported versions are rejected rather
   than ignored.
 
@@ -38,14 +40,17 @@ requested priority, responsible developer, group, notes, audit timestamps, impor
 declarations, and manual dependency overrides.
 
 Imported dependencies are stored by source name and kind. Resolved and unresolved edges are cache
-projections and are never authoritative repository data. Ranks, readiness, blockers, progress
-snapshots, dashboard totals, and comparison results are likewise excluded.
+projections and are never authoritative repository data. Ranks, readiness, blockers, dashboard
+totals, and comparison results are likewise excluded. Progress snapshot counts are retained in
+their creating operation so reporting history can be reconstructed exactly; they do not store
+derived entity rows or ranking output.
 
 ## Operations and deletion
 
 Operation documents are immutable and append-only. They preserve the operation ID and kind,
-occurrence time, affected identities, status transitions, and optional import summary. Tombstones
-are also immutable and append-only and must reference the matching deletion operation.
+occurrence time, affected identities, status transitions, retained progress snapshots, and optional
+import summary. Tombstones are also immutable and append-only and must reference the matching
+deletion operation.
 
 A permanently deleted Project keeps `entitytracker-project.json` as its versioned repository
 identity and last complete metadata. Its Project tombstone makes the repository terminal; no live
@@ -66,5 +71,5 @@ HTTPS or SSH configuration only. Authentication remains owned by Git Credential 
 tooling; EntityTracker neither receives nor stores secrets.
 
 The supported API cannot force push, rewrite history, reset, clean, rebase, switch branches, or
-accept arbitrary Git switches/refspecs. RS-01 does not call fetch or push from the application and
-does not register repositories.
+accept arbitrary Git switches/refspecs. RS-02 stages only managed paths and creates local commits;
+it does not call fetch, pull, or push. A valid local-only repository needs no remote.

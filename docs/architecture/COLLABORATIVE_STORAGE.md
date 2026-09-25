@@ -2,15 +2,17 @@
 
 ## Current implementation
 
-EntityTracker currently uses SQLite as its only implemented persistence provider. UX-08 retired
+EntityTracker supports SQLite-only Projects and optional local Git-backed Projects. UX-08 retired
 the unused SharePoint configuration model and provider selector. The application does not yet
-authenticate with, read from, write to, or synchronize with a remote service, and it exposes no
+authenticate with, fetch from, push to, or synchronize with a remote service, and it exposes no
 Sync control.
 
-RS-01 defines the inactive [Project repository format v1](PROJECT_REPOSITORY_FORMAT.md), adds
-backend-neutral operation IDs to status history, and provides a constrained installed-Git command
-boundary in Infrastructure. No Project can select or use that boundary yet, so this does not
-change the current SQLite authority model.
+RS-01 defines [Project repository format v1](PROJECT_REPOSITORY_FORMAT.md), adds backend-neutral
+operation IDs to retained history, and provides a constrained installed-Git command boundary in
+Infrastructure. RS-02 lets a Project link an existing empty Git repository or open an existing
+EntityTracker repository. For that Project, committed HEAD is authoritative and SQLite is rebuilt
+as a local projection. A repository may have no remote; accepted operations still create local
+commits and work offline.
 
 Settings versions 1–3 may contain retired `activeStorage` and `sharePoint` fields. They remain
 readable only so supported appearance and active Project/Tracker context migrate safely. The next
@@ -18,7 +20,7 @@ legitimate settings save writes version 4 without those retired fields.
 
 ## Approved Git direction
 
-RS-01 through RS-05 will add optional Git backing at Project scope:
+RS-01 through RS-05 govern optional Git backing at Project scope:
 
 ```text
 Dedicated Project Git repository (authoritative)

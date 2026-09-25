@@ -107,7 +107,7 @@ public sealed class ProjectTrackerMigrationTests
         Assert.Equal(5, summary.UnresolvedEntityCount);
 
         await using SqliteConnection connection = await OpenAsync(file.DatabasePath);
-        Assert.Equal(13L, await ScalarInt64Async(connection, "PRAGMA user_version;"));
+        Assert.Equal(14L, await ScalarInt64Async(connection, "PRAGMA user_version;"));
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT source_key, created_at_utc, schema_updated_at_utc, progress_updated_at_utc

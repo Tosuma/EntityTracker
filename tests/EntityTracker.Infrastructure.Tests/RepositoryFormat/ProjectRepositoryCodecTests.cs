@@ -1,6 +1,7 @@
 using System.Text;
 
 using EntityTracker.Application.Collaboration;
+using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Synchronization;
@@ -35,7 +36,7 @@ public sealed class ProjectRepositoryCodecTests
 
         string allJson = string.Join("\n", first.Values.Select(Encoding.UTF8.GetString));
         Assert.Contains("München_日本", allJson, StringComparison.Ordinal);
-        Assert.DoesNotContain("progressSnapshots", allJson, StringComparison.Ordinal);
+        Assert.Contains("progressSnapshots", allJson, StringComparison.Ordinal);
         Assert.DoesNotContain("readiness", allJson, StringComparison.OrdinalIgnoreCase);
         Assert.Single(restored.Trackers);
         Assert.Single(restored.Trackers[0].Entities[0].ImportedDependencies);
@@ -139,7 +140,11 @@ public sealed class ProjectRepositoryCodecTests
                 2,
                 3,
                 4,
-                5));
+                5),
+            [new RepositoryProgressSnapshot(
+                trackerId,
+                Timestamp,
+                new ProgressSnapshotState(1, 2, 3, 4, 5, 6))]);
         return new(project, [new TrackerRepositoryState(tracker, [entityState])], [operation], []);
     }
 }

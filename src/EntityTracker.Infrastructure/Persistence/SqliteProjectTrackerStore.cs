@@ -148,6 +148,7 @@ public sealed class SqliteProjectTrackerStore(
                 tracker.Id,
                 creation.InitialSnapshot,
                 timestamp,
+                SqlitePersistenceValues.Format(changeSet.OperationId),
                 cancellationToken);
 
             if (creation.ImportCompletion is { } completion)
@@ -158,6 +159,7 @@ public sealed class SqliteProjectTrackerStore(
                     tracker.Id,
                     completion,
                     timestamp,
+                    SqlitePersistenceValues.Format(changeSet.OperationId),
                     cancellationToken);
             }
 
@@ -328,15 +330,17 @@ public sealed class SqliteProjectTrackerStore(
         TrackerId trackerId,
         ProgressSnapshotState snapshot,
         string timestamp,
+        string operationId,
         CancellationToken cancellationToken)
     {
         using SqliteCommand command = CreateCommand(connection, transaction, """
             INSERT INTO progress_snapshots
-            (tracker_id, recorded_at_utc, ready_count, blocked_count, in_progress_count,
+            (tracker_id, operation_id, recorded_at_utc, ready_count, blocked_count, in_progress_count,
              rework_needed_count, development_completed_count, reconciled_count)
-            VALUES ($trackerId, $timestamp, $ready, $blocked, $inProgress, $rework, $completed, $reconciled);
+            VALUES ($trackerId, $operationId, $timestamp, $ready, $blocked, $inProgress, $rework, $completed, $reconciled);
             """);
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
+        command.Parameters.AddWithValue("$operationId", operationId);
         command.Parameters.AddWithValue("$timestamp", timestamp);
         command.Parameters.AddWithValue("$ready", snapshot.ReadyCount);
         command.Parameters.AddWithValue("$blocked", snapshot.BlockedCount);
@@ -353,16 +357,18 @@ public sealed class SqliteProjectTrackerStore(
         TrackerId trackerId,
         SchemaImportCompletion completion,
         string timestamp,
+        string operationId,
         CancellationToken cancellationToken)
     {
         using SqliteCommand command = CreateCommand(connection, transaction, """
             INSERT INTO schema_import_summary
-            (tracker_id, applied_at_utc, source_file_name, import_mode, new_entity_count,
+            (tracker_id, operation_id, applied_at_utc, source_file_name, import_mode, new_entity_count,
              changed_entity_count, archived_entity_count, unchanged_entity_count,
              unresolved_entity_count)
-            VALUES ($trackerId, $timestamp, $file, $mode, $new, $changed, $archived, $unchanged, $unresolved);
+            VALUES ($trackerId, $operationId, $timestamp, $file, $mode, $new, $changed, $archived, $unchanged, $unresolved);
             """);
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
+        command.Parameters.AddWithValue("$operationId", operationId);
         command.Parameters.AddWithValue("$timestamp", timestamp);
         command.Parameters.AddWithValue("$file", completion.SourceFileName);
         command.Parameters.AddWithValue("$mode", completion.Mode.ToString());

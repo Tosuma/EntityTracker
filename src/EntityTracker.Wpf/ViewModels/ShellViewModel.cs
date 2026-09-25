@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 
+using EntityTracker.Application.Collaboration;
 using EntityTracker.Application.History;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Projects;
@@ -25,6 +27,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private readonly EntityTrackerSettingsStore _settingsStore;
     private readonly TrackerWorkspaceViewModelFactory _workspaceFactory;
     private readonly IContextDiscardConfirmation _discardConfirmation;
+    private readonly IProjectRepositoryManager? _repositoryManager;
     private readonly ILogger<ShellViewModel> _logger;
     private readonly Dictionary<TrackerId, MainWindowViewModel> _workspaces = [];
     private readonly Dictionary<ProjectId, ProjectDashboardViewModel> _projectDashboards = [];
@@ -42,6 +45,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private string _busyMessage = string.Empty;
     private string? _notificationMessage;
     private bool _showDefaultNamePrompt;
+    private ProjectRepositoryStatus? _activeRepositoryStatus;
 
     public ShellViewModel(
         IProjectRepository projectRepository,
@@ -55,6 +59,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         AppearanceViewModel appearance,
         IClipboardService clipboard,
         EntityTrackerSettings initialSettings,
+        IProjectRepositoryManager? repositoryManager = null,
         ILogger<ShellViewModel>? logger = null)
     {
         _projectRepository = projectRepository;
@@ -64,6 +69,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         _settingsStore = settingsStore;
         _workspaceFactory = workspaceFactory;
         _discardConfirmation = discardConfirmation;
+        _repositoryManager = repositoryManager;
         Catalog = catalogManagement;
         Appearance = appearance;
         Help = new SqlQueryHelpViewModel(
@@ -152,6 +158,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(ContextSummary));
                 OnPropertyChanged(nameof(DefaultNamePromptMessage));
                 OnPropertyChanged(nameof(DefaultNamePromptActionLabel));
+                OnPropertyChanged(nameof(CanLinkRepository));
+                OnPropertyChanged(nameof(CanLocateRepository));
+                OnPropertyChanged(nameof(CanRebuildRepositoryCache));
             }
         }
     }
@@ -242,6 +251,25 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         private set => SetField(ref _showDefaultNamePrompt, value);
     }
 
+    public ProjectRepositoryStatus? ActiveRepositoryStatus
+    {
+        get => _activeRepositoryStatus;
+        private set
+        {
+            if (SetField(ref _activeRepositoryStatus, value))
+            {
+                OnPropertyChanged(nameof(RepositoryStatusText));
+                OnPropertyChanged(nameof(RepositoryStatusDetails));
+                OnPropertyChanged(nameof(HasRepositoryStatusDetails));
+                OnPropertyChanged(nameof(CanLinkRepository));
+                OnPropertyChanged(nameof(CanLocateRepository));
+                OnPropertyChanged(nameof(CanRebuildRepositoryCache));
+                OnPropertyChanged(nameof(CanUseActiveRepository));
+                _navigateCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
     public string DefaultNamePromptMessage =>
         SelectedTracker?.Name == "Default tracker"
             ? "Give the migrated default Tracker a name your team will recognize."
@@ -265,6 +293,36 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public string ContextSummary => HasProject
         ? HasTracker ? $"{ProjectContextName} / {TrackerContextName}" : ProjectContextName
         : "Portfolio";
+    public string RepositoryStatusText => ActiveRepositoryStatus?.Kind switch
+    {
+        ProjectRepositoryStatusKind.GitClean => "Git-backed · clean",
+        ProjectRepositoryStatusKind.Unavailable => "Git-backed · repository unavailable",
+        ProjectRepositoryStatusKind.StaleCache => "Git-backed · cache rebuild required",
+        ProjectRepositoryStatusKind.Blocked => "Git-backed · blocked",
+        _ => "SQLite only"
+    };
+    public string RepositoryStatusDetails
+    {
+        get
+        {
+            if (ActiveRepositoryStatus is not { } status) return string.Empty;
+            string location = status.RepositoryPath is null
+                ? string.Empty
+                : status.ManagedBranch is null
+                    ? status.RepositoryPath
+                    : $"{status.RepositoryPath} · branch {status.ManagedBranch}";
+            return string.Join(Environment.NewLine,
+                new[] { location, status.Diagnostic }.Where(static value => !string.IsNullOrWhiteSpace(value)));
+        }
+    }
+    public bool HasRepositoryStatusDetails => !string.IsNullOrWhiteSpace(RepositoryStatusDetails);
+    public bool CanLinkRepository => HasProject &&
+        ActiveRepositoryStatus?.Kind == ProjectRepositoryStatusKind.SQLiteOnly;
+    public bool CanLocateRepository => HasProject && ActiveRepositoryStatus?.Kind is
+        ProjectRepositoryStatusKind.Unavailable or ProjectRepositoryStatusKind.Blocked;
+    public bool CanRebuildRepositoryCache => HasProject &&
+        ActiveRepositoryStatus?.Kind == ProjectRepositoryStatusKind.StaleCache;
+    public bool CanUseActiveRepository => ActiveRepositoryStatus?.CanUseProject != false;
 
     public bool IsPortfolio => SelectedDestination == ShellDestination.Portfolio;
     public bool IsProjectDashboard => SelectedDestination == ShellDestination.ProjectDashboard;
@@ -389,6 +447,55 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    public async Task OpenRepositoryAsync(string repositoryPath)
+    {
+        if (_repositoryManager is null) return;
+        await RunRepositoryActionAsync("Opening repository…", async cancellationToken =>
+        {
+            ProjectId projectId = await _repositoryManager.OpenAsync(repositoryPath, cancellationToken);
+            await ReloadCatalogAsync(cancellationToken);
+            Project project = Projects.Single(item => item.Id == projectId);
+            if (await ApplyContextAsync(project, null, ShellDestination.ProjectDashboard, true, cancellationToken))
+                NotificationMessage = $"Opened Git-backed Project “{project.Name}”.";
+        });
+    }
+
+    public async Task LinkSelectedProjectAsync(string repositoryPath)
+    {
+        if (_repositoryManager is null || SelectedProject is not { } project) return;
+        await RunRepositoryActionAsync("Linking repository…", async cancellationToken =>
+        {
+            await _repositoryManager.LinkAsync(project.Id, repositoryPath, cancellationToken);
+            await RefreshRepositoryStatusAsync(cancellationToken);
+            await RefreshDashboardsAsync(cancellationToken);
+            NotificationMessage = $"“{project.Name}” is now Git-backed. Changes create local commits.";
+        });
+    }
+
+    public async Task LocateSelectedRepositoryAsync(string repositoryPath)
+    {
+        if (_repositoryManager is null || SelectedProject is not { } project) return;
+        await RunRepositoryActionAsync("Locating repository…", async cancellationToken =>
+        {
+            await _repositoryManager.LocateAsync(project.Id, repositoryPath, cancellationToken);
+            await RefreshRepositoryStatusAsync(cancellationToken);
+            NotificationMessage = "Repository location updated.";
+        });
+    }
+
+    public async Task RebuildSelectedRepositoryCacheAsync()
+    {
+        if (_repositoryManager is null || SelectedProject is not { } project) return;
+        await RunRepositoryActionAsync("Rebuilding local cache…", async cancellationToken =>
+        {
+            await _repositoryManager.RebuildCacheAsync(project.Id, cancellationToken);
+            await ReloadCatalogAsync(cancellationToken);
+            Project refreshed = Projects.Single(item => item.Id == project.Id);
+            if (await ApplyContextAsync(refreshed, null, ShellDestination.ProjectDashboard, true, cancellationToken))
+                NotificationMessage = "SQLite cache rebuilt from repository HEAD.";
+        });
+    }
+
     public async Task OpenTrackerAsync(TrackerId trackerId)
     {
         Tracker? tracker = Trackers.FirstOrDefault(item => item.Id == trackerId);
@@ -426,7 +533,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public void DismissNotification() => NotificationMessage = null;
 
     private bool CanNavigate(ShellNavigationItem item) =>
-        !IsBusy && (!item.RequiresProject || HasProject) && (!item.RequiresTracker || HasTracker);
+        !IsBusy && (!item.RequiresProject || HasProject) && (!item.RequiresTracker || HasTracker) &&
+        (!item.RequiresTracker || CanUseActiveRepository);
 
     private bool ConfirmLeavingDirtyWorkspace()
     {
@@ -459,13 +567,19 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         Tracker? previousTracker = SelectedTracker;
         MainWindowViewModel? previousWorkspace = CurrentWorkspace;
         ShellDestination previousDestination = SelectedDestination;
+        ProjectRepositoryStatus? previousRepositoryStatus = ActiveRepositoryStatus;
         Tracker[] previousTrackers = Trackers.ToArray();
         IsBusy = true;
         BusyMessage = tracker is null ? "Loading project context…" : "Loading tracker workspace…";
         try
         {
             CurrentWorkspace?.PrepareForDeactivation();
-            Tracker[] availableTrackers = project is null
+            ActiveRepositoryStatus = project is null
+                ? null
+                : _repositoryManager is null
+                    ? new ProjectRepositoryStatus(project.Id, ProjectRepositoryStatusKind.SQLiteOnly)
+                    : await _repositoryManager.GetStatusAsync(project.Id, cancellationToken);
+            Tracker[] availableTrackers = project is null || !CanUseActiveRepository
                 ? []
                 : (await _trackerRepository.GetByProjectAsync(project.Id, cancellationToken))
                     .Where(static item => item.LifecycleState == CatalogLifecycleState.Active)
@@ -535,6 +649,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             SelectedProject = previousProject;
             SelectedTracker = previousTracker;
             CurrentWorkspace = previousWorkspace;
+            ActiveRepositoryStatus = previousRepositoryStatus;
             Replace(Trackers, previousTrackers);
             SetDestination(previousDestination);
             _logger.LogError(exception, "Application context could not be changed.");
@@ -583,6 +698,13 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
+        if (!CanUseActiveRepository)
+        {
+            ProjectReporting = null;
+            ProjectDashboard = null;
+            return;
+        }
+
         if (!_projectDashboards.TryGetValue(
                 SelectedProject.Id,
                 out ProjectDashboardViewModel? projectDashboard))
@@ -594,6 +716,40 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         await projectDashboard.RefreshAsync(cancellationToken);
         ProjectReporting = projectDashboard;
         ProjectDashboard = projectDashboard.Dashboard;
+    }
+
+    private async Task RefreshRepositoryStatusAsync(CancellationToken cancellationToken)
+    {
+        ActiveRepositoryStatus = SelectedProject is null
+            ? null
+            : _repositoryManager is null
+                ? new ProjectRepositoryStatus(SelectedProject.Id, ProjectRepositoryStatusKind.SQLiteOnly)
+                : await _repositoryManager.GetStatusAsync(SelectedProject.Id, cancellationToken);
+    }
+
+    private async Task RunRepositoryActionAsync(
+        string busyMessage,
+        Func<CancellationToken, Task> action)
+    {
+        if (IsBusy) return;
+        IsBusy = true;
+        BusyMessage = busyMessage;
+        try
+        {
+            await action(CancellationToken.None);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or InvalidDataException or
+                                          IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(exception, "Project repository action failed.");
+            NotificationMessage = $"Repository action could not be completed: {exception.Message}";
+            await RefreshRepositoryStatusAsync(CancellationToken.None);
+        }
+        finally
+        {
+            IsBusy = false;
+            BusyMessage = string.Empty;
+        }
     }
 
     private async void OnWorkspacePersistedStateChanged(object? sender, EventArgs e)

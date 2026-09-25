@@ -4,6 +4,46 @@ namespace EntityTracker.Infrastructure.RepositoryFormat;
 
 public sealed class ProjectRepositoryStore(ProjectRepositoryCodec codec)
 {
+    public async Task<RepositoryFileSnapshot> CaptureAsync(
+        string repositoryPath,
+        CancellationToken cancellationToken = default)
+    {
+        string root = ValidateRoot(repositoryPath);
+        IReadOnlyDictionary<string, ReadOnlyMemory<byte>> files =
+            await ReadManagedFilesAsync(root, cancellationToken, allowMissingManifest: true);
+        return new RepositoryFileSnapshot(files.ToDictionary(
+            item => item.Key,
+            item => item.Value.ToArray(),
+            StringComparer.Ordinal));
+    }
+
+    public async Task RestoreAsync(
+        string repositoryPath,
+        RepositoryFileSnapshot snapshot,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        string root = ValidateRoot(repositoryPath);
+        IReadOnlyDictionary<string, ReadOnlyMemory<byte>> current =
+            await ReadManagedFilesAsync(root, cancellationToken, allowMissingManifest: true);
+        foreach ((string relativePath, byte[] bytes) in snapshot.Files.OrderBy(item => item.Key, StringComparer.Ordinal))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            string target = ResolveManagedPath(root, relativePath);
+            EnsureSafePath(root, target);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            string temporary = target + $".entitytracker-{Guid.NewGuid():N}.tmp";
+            await File.WriteAllBytesAsync(temporary, bytes, cancellationToken);
+            File.Move(temporary, target, overwrite: true);
+        }
+        foreach (string relativePath in current.Keys.Except(snapshot.Files.Keys, StringComparer.Ordinal))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            string target = ResolveManagedPath(root, relativePath);
+            EnsureSafePath(root, target);
+            File.Delete(target);
+        }
+    }
     public async Task<ProjectRepositoryState> LoadAsync(
         string repositoryPath,
         CancellationToken cancellationToken = default)
@@ -287,3 +327,5 @@ public sealed class ProjectRepositoryStore(ProjectRepositoryCodec codec)
 
     private sealed record PreparedDelete(string Target, string Backup);
 }
+
+public sealed record RepositoryFileSnapshot(IReadOnlyDictionary<string, byte[]> Files);

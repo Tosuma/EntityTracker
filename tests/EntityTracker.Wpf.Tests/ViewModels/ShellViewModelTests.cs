@@ -1,5 +1,6 @@
 using System.IO;
 
+using EntityTracker.Application.Collaboration;
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
@@ -46,6 +47,8 @@ public sealed class ShellViewModelTests
         Assert.Equal(harness.DefaultTracker.Id, shell.SelectedTracker?.Id);
         Assert.Equal(ShellDestination.Overview, shell.SelectedDestination);
         Assert.True(shell.IsTrackerWorkspace);
+        Assert.Equal(ProjectRepositoryStatusKind.SQLiteOnly, shell.ActiveRepositoryStatus?.Kind);
+        Assert.True(shell.CanLinkRepository);
         Assert.True(shell.NavigateCommand.CanExecute(ShellDestination.Reports));
 
         Assert.True(await shell.NavigateAsync(ShellDestination.Reports));

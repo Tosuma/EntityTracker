@@ -1,5 +1,6 @@
 using EntityTracker.Application.History;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Synchronization;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Persistence;
 
@@ -48,6 +49,64 @@ public sealed class OperationIdMigrationTests
 
         Assert.Equal(2, history.Count);
         Assert.All(history, entry => Assert.Equal(operationId, entry.OperationId));
+    }
+
+    [Fact]
+    public async Task VersionThirteenProjectionHistoryReusesTheCreatingOperationId()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        TrackerId trackerId = database.GetTrackerId();
+        OperationId operationId = OperationId.New();
+        TrackedEntity entity = new(EntityId.New(), trackerId, "customer");
+        TrackedStateChangeSet changes = new(
+            [entity], [], [], [], [], [],
+            progressSnapshotAfterChanges: new ProgressSnapshotState(1, 0, 0, 0, 0, 0),
+            operationId: operationId);
+        await new SqliteTrackedStateStore(database).ApplyAsync(
+            trackerId,
+            changes,
+            new SchemaImportCompletion("schema.csv", SchemaImportMode.Complete, 1, 0, 0, 0, 0));
+
+        await using (SqliteConnection connection = new($"Data Source={file.DatabasePath}"))
+        {
+            await connection.OpenAsync();
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                DROP INDEX ix_progress_snapshots_tracker_time;
+                DROP INDEX ix_progress_snapshots_operation;
+                ALTER TABLE progress_snapshots DROP COLUMN operation_id;
+                CREATE INDEX ix_progress_snapshots_tracker_time
+                    ON progress_snapshots (tracker_id, recorded_at_utc, id);
+                ALTER TABLE schema_import_summary DROP COLUMN operation_id;
+                PRAGMA user_version = 13;
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await database.InitializeAsync();
+
+        await using SqliteConnection migrated = new($"Data Source={file.DatabasePath}");
+        await migrated.OpenAsync();
+        using SqliteCommand read = migrated.CreateCommand();
+        read.CommandText = """
+            SELECT history.operation_id, snapshot.operation_id, summary.operation_id
+            FROM entity_status_history history
+            INNER JOIN tracked_entities entity ON entity.id = history.entity_id
+            INNER JOIN progress_snapshots snapshot
+                ON snapshot.tracker_id = entity.tracker_id
+               AND snapshot.recorded_at_utc = history.occurred_at_utc
+            INNER JOIN schema_import_summary summary
+                ON summary.tracker_id = entity.tracker_id
+               AND summary.applied_at_utc = history.occurred_at_utc
+            LIMIT 1;
+            """;
+        await using SqliteDataReader reader = await read.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(operationId.Value.ToString("D"), reader.GetString(0));
+        Assert.Equal(reader.GetString(0), reader.GetString(1));
+        Assert.Equal(reader.GetString(0), reader.GetString(2));
     }
 
     private static async Task CreateVersionTwelveAsync(string path)

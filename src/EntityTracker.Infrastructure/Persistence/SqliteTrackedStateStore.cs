@@ -239,6 +239,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                     trackerId,
                     changeSet.ProgressSnapshotAfterChanges,
                     timestamp,
+                    operationId,
                     cancellationToken);
             }
 
@@ -251,6 +252,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                     transaction,
                     trackerId,
                     summary,
+                    operationId,
                     cancellationToken);
             }
 
@@ -374,6 +376,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
             trackerId,
             snapshot,
             timestamp,
+            operationId,
             cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
@@ -442,23 +445,25 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         SqliteTransaction transaction,
         TrackerId trackerId,
         SchemaImportSummary summary,
+        string operationId,
         CancellationToken cancellationToken)
     {
         using SqliteCommand command = CreateCommand(connection, transaction, """
             INSERT INTO schema_import_summary
             (
-                tracker_id, applied_at_utc, source_file_name, import_mode,
+                tracker_id, operation_id, applied_at_utc, source_file_name, import_mode,
                 new_entity_count, changed_entity_count, archived_entity_count,
                 unchanged_entity_count, unresolved_entity_count
             )
             VALUES
             (
-                $trackerId, $appliedAtUtc, $sourceFileName, $importMode,
+                $trackerId, $operationId, $appliedAtUtc, $sourceFileName, $importMode,
                 $newCount, $changedCount, $archivedCount,
                 $unchangedCount, $unresolvedCount
             )
             ON CONFLICT (tracker_id)
             DO UPDATE SET
+                operation_id = excluded.operation_id,
                 applied_at_utc = excluded.applied_at_utc,
                 source_file_name = excluded.source_file_name,
                 import_mode = excluded.import_mode,
@@ -469,6 +474,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                 unresolved_entity_count = excluded.unresolved_entity_count;
             """);
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
+        command.Parameters.AddWithValue("$operationId", operationId);
         command.Parameters.AddWithValue(
             "$appliedAtUtc",
             SqlitePersistenceValues.FormatTimestamp(summary.AppliedAtUtc));
@@ -562,6 +568,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         TrackerId trackerId,
         ProgressSnapshotState snapshot,
         string timestamp,
+        string operationId,
         CancellationToken cancellationToken)
     {
         using SqliteCommand command = CreateCommand(connection, transaction, """
@@ -594,6 +601,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                 trackerId,
                 snapshot,
                 timestamp,
+                operationId,
                 cancellationToken);
         }
     }
@@ -604,21 +612,23 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         TrackerId trackerId,
         ProgressSnapshotState snapshot,
         string timestamp,
+        string operationId,
         CancellationToken cancellationToken)
     {
         using SqliteCommand command = CreateCommand(connection, transaction, """
             INSERT INTO progress_snapshots
             (
-                tracker_id, recorded_at_utc, ready_count, blocked_count, in_progress_count,
+                tracker_id, operation_id, recorded_at_utc, ready_count, blocked_count, in_progress_count,
                 rework_needed_count, development_completed_count, reconciled_count
             )
             VALUES
             (
-                $trackerId, $timestamp, $ready, $blocked, $inProgress, $rework,
+                $trackerId, $operationId, $timestamp, $ready, $blocked, $inProgress, $rework,
                 $developmentCompleted, $reconciled
             );
             """);
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
+        command.Parameters.AddWithValue("$operationId", operationId);
         command.Parameters.AddWithValue("$timestamp", timestamp);
         command.Parameters.AddWithValue("$ready", snapshot.ReadyCount);
         command.Parameters.AddWithValue("$blocked", snapshot.BlockedCount);

@@ -242,6 +242,46 @@ public sealed partial class GitCommandClient
         return RunBooleanAsync(repositoryPath, ["add", "--", .. paths], DefaultTimeout, cancellationToken);
     }
 
+    public async Task<GitResult<IReadOnlyList<string>>> GetTrackedPathsAsync(
+        string repositoryPath,
+        CancellationToken cancellationToken = default)
+    {
+        CommandResult command = await RunAsync(repositoryPath, ["ls-files", "-z"], DefaultTimeout, cancellationToken);
+        return command.Success
+            ? GitResult<IReadOnlyList<string>>.Success(command.StandardOutput
+                .Split('\0', StringSplitOptions.RemoveEmptyEntries).ToArray(), command.Truncated)
+            : Failure<IReadOnlyList<string>>(command);
+    }
+
+    public Task<GitResult<bool>> RestoreManagedPathsAsync(
+        string repositoryPath,
+        IEnumerable<string> managedPaths,
+        bool headExists,
+        CancellationToken cancellationToken = default)
+    {
+        string[] paths = managedPaths.Select(ValidateManagedPath).Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal).ToArray();
+        if (paths.Length == 0) return Task.FromResult(GitResult<bool>.Success(true));
+        return headExists
+            ? RunBooleanAsync(repositoryPath,
+                ["restore", "--source=HEAD", "--staged", "--worktree", "--", .. paths],
+                DefaultTimeout, cancellationToken)
+            : RunBooleanAsync(repositoryPath,
+                ["rm", "--cached", "--ignore-unmatch", "-r", "--", .. paths],
+                DefaultTimeout, cancellationToken);
+    }
+
+    public async Task<GitResult<string>> GetHeadMessageAsync(
+        string repositoryPath,
+        CancellationToken cancellationToken = default)
+    {
+        CommandResult command = await RunAsync(repositoryPath,
+            ["show", "-s", "--format=%B", "HEAD"], DefaultTimeout, cancellationToken);
+        return command.Success
+            ? GitResult<string>.Success(command.StandardOutput, command.Truncated)
+            : Failure<string>(command);
+    }
+
     public Task<GitResult<bool>> CommitAsync(string repositoryPath, string subject, OperationId operationId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(subject);
