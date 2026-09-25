@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+
 using Microsoft.Data.Sqlite;
 using EntityTracker.Domain;
 
@@ -5,7 +8,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    internal const int CurrentSchemaVersion = 12;
+    internal const int CurrentSchemaVersion = 13;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -123,6 +126,44 @@ public sealed class SqliteDatabase
 
         CREATE INDEX ix_progress_snapshots_time
             ON progress_snapshots (recorded_at_utc, id);
+        """;
+
+    private const string OperationHistorySchemaSql = """
+        CREATE TABLE entity_status_history_v13
+        (
+            id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            operation_id TEXT NOT NULL
+                CHECK (length(operation_id) = 36 AND operation_id = lower(operation_id)),
+            entity_id TEXT NOT NULL,
+            previous_status TEXT NULL
+                CHECK (previous_status IS NULL OR previous_status IN
+                    ('NotStarted', 'InProgress', 'ReworkNeeded', 'DevelopmentCompleted', 'Reconciled')),
+            new_status TEXT NOT NULL
+                CHECK (new_status IN
+                    ('NotStarted', 'InProgress', 'ReworkNeeded', 'DevelopmentCompleted', 'Reconciled')),
+            entry_kind TEXT NOT NULL
+                CHECK (entry_kind IN ('Baseline', 'Created', 'Transition')),
+            occurred_at_utc TEXT NOT NULL,
+            CHECK (
+                (entry_kind = 'Transition' AND previous_status IS NOT NULL) OR
+                (entry_kind IN ('Baseline', 'Created') AND previous_status IS NULL)),
+            FOREIGN KEY (entity_id) REFERENCES tracked_entities (id) ON DELETE RESTRICT
+        );
+
+        INSERT INTO entity_status_history_v13
+        (id, operation_id, entity_id, previous_status, new_status, entry_kind, occurred_at_utc)
+        SELECT id, operation_id, entity_id, previous_status, new_status, entry_kind, occurred_at_utc
+        FROM entity_status_history;
+
+        DROP TABLE entity_status_history;
+        ALTER TABLE entity_status_history_v13 RENAME TO entity_status_history;
+
+        CREATE INDEX ix_entity_status_history_entity_time
+            ON entity_status_history (entity_id, occurred_at_utc, id);
+        CREATE INDEX ix_entity_status_history_time
+            ON entity_status_history (occurred_at_utc, id);
+        CREATE INDEX ix_entity_status_history_operation
+            ON entity_status_history (operation_id, occurred_at_utc, id);
         """;
 
     private const string SchemaImportSummarySql = """
@@ -706,6 +747,28 @@ public sealed class SqliteDatabase
                     cancellationToken);
             }
 
+            if (schemaVersion < 13)
+            {
+                if (!await ColumnExistsAsync(
+                        connection,
+                        transaction,
+                        "entity_status_history",
+                        "operation_id",
+                        cancellationToken))
+                {
+                    await AddOperationIdsToHistoryAsync(connection, transaction, cancellationToken);
+                }
+                await ExecuteAsync(
+                    connection,
+                    transaction,
+                    OperationHistorySchemaSql,
+                    cancellationToken);
+                await EnsureNoForeignKeyViolationsAsync(
+                    connection,
+                    transaction,
+                    cancellationToken);
+            }
+
             await ExecuteAsync(
                 connection,
                 transaction,
@@ -721,6 +784,66 @@ public sealed class SqliteDatabase
                 await ExecuteAsync(connection, "PRAGMA foreign_keys = ON;", CancellationToken.None);
             }
         }
+    }
+
+    private static async Task AddOperationIdsToHistoryAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await ExecuteAsync(
+            connection,
+            transaction,
+            "ALTER TABLE entity_status_history ADD COLUMN operation_id TEXT NULL;",
+            cancellationToken);
+
+        List<(long Id, string Seed)> rows = [];
+        using (SqliteCommand readCommand = connection.CreateCommand())
+        {
+            readCommand.Transaction = transaction;
+            readCommand.CommandText = """
+                SELECT id, entity_id, ifnull(previous_status, ''), new_status,
+                       entry_kind, occurred_at_utc
+                FROM entity_status_history
+                ORDER BY id;
+                """;
+            await using SqliteDataReader reader =
+                await readCommand.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                string seed = string.Join(
+                    "\n",
+                    "entitytracker-status-history-v13",
+                    reader.GetInt64(0).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetString(3),
+                    reader.GetString(4),
+                    reader.GetString(5));
+                rows.Add((reader.GetInt64(0), seed));
+            }
+        }
+
+        foreach ((long id, string seed) in rows)
+        {
+            using SqliteCommand updateCommand = connection.CreateCommand();
+            updateCommand.Transaction = transaction;
+            updateCommand.CommandText =
+                "UPDATE entity_status_history SET operation_id = $operationId WHERE id = $id;";
+            updateCommand.Parameters.AddWithValue("$operationId", CreateDeterministicGuid(seed));
+            updateCommand.Parameters.AddWithValue("$id", id);
+            await updateCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+    }
+
+    private static string CreateDeterministicGuid(string seed)
+    {
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(seed));
+        Span<byte> bytes = hash.AsSpan(0, 16);
+        bytes[7] = (byte)((bytes[7] & 0x0f) | 0x50);
+        bytes[8] = (byte)((bytes[8] & 0x3f) | 0x80);
+        return new Guid(bytes).ToString("D", System.Globalization.CultureInfo.InvariantCulture)
+            .ToLowerInvariant();
     }
 
     private static async Task<bool> ColumnExistsAsync(

@@ -3,12 +3,14 @@ namespace EntityTracker.Domain;
 public sealed record EntityStatusHistoryEntry
 {
     public EntityStatusHistoryEntry(
+        OperationId operationId,
         EntityId entityId,
         DevelopmentStatus? previousStatus,
         DevelopmentStatus newStatus,
         DateTimeOffset occurredAtUtc,
         StatusHistoryEntryKind kind)
     {
+        ArgumentNullException.ThrowIfNull(operationId);
         ArgumentNullException.ThrowIfNull(entityId);
         if (previousStatus is { } oldStatus && !Enum.IsDefined(oldStatus))
         {
@@ -44,12 +46,25 @@ public sealed record EntityStatusHistoryEntry
                 nameof(previousStatus));
         }
 
+        OperationId = operationId;
         EntityId = entityId;
         PreviousStatus = previousStatus;
         NewStatus = newStatus;
         OccurredAtUtc = occurredAtUtc;
         Kind = kind;
     }
+
+    public EntityStatusHistoryEntry(
+        EntityId entityId,
+        DevelopmentStatus? previousStatus,
+        DevelopmentStatus newStatus,
+        DateTimeOffset occurredAtUtc,
+        StatusHistoryEntryKind kind)
+        : this(OperationId.New(), entityId, previousStatus, newStatus, occurredAtUtc, kind)
+    {
+    }
+
+    public OperationId OperationId { get; }
 
     public EntityId EntityId { get; }
 

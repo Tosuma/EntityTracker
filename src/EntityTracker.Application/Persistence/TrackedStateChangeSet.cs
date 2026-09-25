@@ -22,7 +22,8 @@ public sealed class TrackedStateChangeSet
         ProgressSnapshotState? progressSnapshotAfterChanges = null,
         IEnumerable<TrackedEntity>? entitiesWithRequestedPriorityToUpdate = null,
         IEnumerable<TrackedEntity>? entitiesWithResponsibleDeveloperToUpdate = null,
-        IEnumerable<TrackedEntity>? entitiesWithGroupNameToUpdate = null)
+        IEnumerable<TrackedEntity>? entitiesWithGroupNameToUpdate = null,
+        OperationId? operationId = null)
     {
         EntitiesToAdd = entitiesToAdd.ToArray();
         EntitiesToUpdate = entitiesToUpdate.ToArray();
@@ -41,6 +42,7 @@ public sealed class TrackedStateChangeSet
             (entitiesWithResponsibleDeveloperToUpdate ?? []).ToArray();
         EntitiesWithGroupNameToUpdate =
             (entitiesWithGroupNameToUpdate ?? []).ToArray();
+        OperationId = operationId ?? OperationId.New();
     }
 
     public IReadOnlyList<TrackedEntity> EntitiesToAdd { get; }
@@ -70,6 +72,8 @@ public sealed class TrackedStateChangeSet
     public IReadOnlyList<TrackedEntity> EntitiesWithResponsibleDeveloperToUpdate { get; }
 
     public IReadOnlyList<TrackedEntity> EntitiesWithGroupNameToUpdate { get; }
+
+    public OperationId OperationId { get; }
 
     public bool HasChanges =>
         EntitiesToAdd.Count > 0 ||

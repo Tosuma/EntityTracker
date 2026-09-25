@@ -87,7 +87,13 @@ public sealed class SqliteProjectTrackerStore(
 
             foreach (TrackedEntity entity in changeSet.EntitiesToAdd)
             {
-                await InsertEntityAsync(connection, transaction, entity, timestamp, cancellationToken);
+                await InsertEntityAsync(
+                    connection,
+                    transaction,
+                    entity,
+                    timestamp,
+                    SqlitePersistenceValues.Format(changeSet.OperationId),
+                    cancellationToken);
             }
 
             foreach (PersistedDependency dependency in changeSet.ResolvedDependencies)
@@ -283,6 +289,7 @@ public sealed class SqliteProjectTrackerStore(
         SqliteTransaction transaction,
         TrackedEntity entity,
         string timestamp,
+        string operationId,
         CancellationToken cancellationToken)
     {
         using SqliteCommand command = CreateCommand(connection, transaction, """
@@ -296,8 +303,8 @@ public sealed class SqliteProjectTrackerStore(
              $timestamp, $timestamp, $timestamp);
 
             INSERT INTO entity_status_history
-            (entity_id, previous_status, new_status, entry_kind, occurred_at_utc)
-            VALUES ($id, NULL, $status, 'Baseline', $timestamp);
+            (operation_id, entity_id, previous_status, new_status, entry_kind, occurred_at_utc)
+            VALUES ($operationId, $id, NULL, $status, 'Baseline', $timestamp);
             """);
         command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(entity.TrackerId));
@@ -311,6 +318,7 @@ public sealed class SqliteProjectTrackerStore(
         command.Parameters.AddWithValue("$developer", entity.ResponsibleDeveloper);
         command.Parameters.AddWithValue("$group", entity.GroupName);
         command.Parameters.AddWithValue("$timestamp", timestamp);
+        command.Parameters.AddWithValue("$operationId", operationId);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

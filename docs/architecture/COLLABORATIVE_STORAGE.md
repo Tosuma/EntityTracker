@@ -7,6 +7,11 @@ the unused SharePoint configuration model and provider selector. The application
 authenticate with, read from, write to, or synchronize with a remote service, and it exposes no
 Sync control.
 
+RS-01 defines the inactive [Project repository format v1](PROJECT_REPOSITORY_FORMAT.md), adds
+backend-neutral operation IDs to status history, and provides a constrained installed-Git command
+boundary in Infrastructure. No Project can select or use that boundary yet, so this does not
+change the current SQLite authority model.
+
 Settings versions 1–3 may contain retired `activeStorage` and `sharePoint` fields. They remain
 readable only so supported appearance and active Project/Tracker context migrate safely. The next
 legitimate settings save writes version 4 without those retired fields.

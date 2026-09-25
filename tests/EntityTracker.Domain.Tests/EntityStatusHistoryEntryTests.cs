@@ -6,9 +6,11 @@ public sealed class EntityStatusHistoryEntryTests
     public void Constructor_AcceptsBaselineAndTransitionShapes()
     {
         EntityId id = EntityId.New();
+        OperationId operationId = OperationId.New();
         DateTimeOffset timestamp = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
         EntityStatusHistoryEntry baseline = new(
+            operationId,
             id,
             null,
             DevelopmentStatus.ReworkNeeded,
@@ -22,6 +24,7 @@ public sealed class EntityStatusHistoryEntryTests
             StatusHistoryEntryKind.Transition);
 
         Assert.Null(baseline.PreviousStatus);
+        Assert.Equal(operationId, baseline.OperationId);
         Assert.Equal(DevelopmentStatus.ReworkNeeded, transition.NewStatus);
     }
 
