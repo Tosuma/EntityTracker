@@ -90,6 +90,9 @@ public partial class MainWindow : Window
     private void OnDismissNotification(object sender, RoutedEventArgs e) =>
         _viewModel.DismissNotification();
 
+    private void OnCancelSynchronization(object sender, RoutedEventArgs e) =>
+        _viewModel.CancelSynchronization();
+
     private void OnRenameDefaultName(object sender, RoutedEventArgs e)
     {
         if (_viewModel.SelectedTracker is not null &&

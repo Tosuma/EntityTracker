@@ -1,10 +1,9 @@
 using System.Security.AccessControl;
 using System.Security.Principal;
-using System.Text.RegularExpressions;
 
 namespace EntityTracker.Infrastructure.Git;
 
-public sealed partial class GitRepositoryValidator(GitCommandClient client)
+public sealed class GitRepositoryValidator(GitCommandClient client)
 {
     public async Task<GitRepositoryValidationResult> ValidateAsync(
         string repositoryPath,
@@ -66,7 +65,7 @@ public sealed partial class GitRepositoryValidator(GitCommandClient client)
                 }
                 foreach (string url in remote.FetchUrls.Concat(remote.PushUrls))
                 {
-                    if (!IsAllowedRemote(url))
+                    if (!client.IsRemoteUrlAllowed(url))
                     {
                         errors.Add($"Remote '{remote.Name}' does not use supported credential-free HTTPS or SSH transport.");
                     }
@@ -146,23 +145,4 @@ public sealed partial class GitRepositoryValidator(GitCommandClient client)
         relative.StartsWith("operations/", StringComparison.Ordinal) ||
         relative.StartsWith("tombstones/", StringComparison.Ordinal);
 
-    private static bool IsAllowedRemote(string url)
-    {
-        if (url.Contains("<redacted>@", StringComparison.Ordinal) || url.StartsWith("ext::", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-        if (Uri.TryCreate(url, UriKind.Absolute, out Uri? uri))
-        {
-            bool https = uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase) &&
-                         uri.UserInfo.Length == 0;
-            bool ssh = uri.Scheme.Equals("ssh", StringComparison.OrdinalIgnoreCase) &&
-                       !uri.UserInfo.Contains(':', StringComparison.Ordinal);
-            return uri.Query.Length == 0 && uri.Fragment.Length == 0 && (https || ssh);
-        }
-        return ScpRemoteRegex().IsMatch(url);
-    }
-
-    [GeneratedRegex(@"^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:[^\s]+$")]
-    private static partial Regex ScpRemoteRegex();
 }

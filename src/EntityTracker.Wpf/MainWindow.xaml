@@ -247,11 +247,18 @@
 
                 <Border Grid.Row="4"
                         Padding="12,8"
+                        AutomationProperties.LiveSetting="Polite"
                         Background="{DynamicResource Brush.Surface.Subtle}"
                         Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <StackPanel Orientation="Horizontal">
                         <ProgressBar Width="100" Height="5" IsIndeterminate="True" />
                         <TextBlock Margin="12,0,0,0" Text="{Binding BusyMessage}" />
+                        <Button Margin="12,0,0,0"
+                                AutomationProperties.Name="Cancel synchronization"
+                                Click="OnCancelSynchronization"
+                                Content="Cancel"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Visibility="{Binding CanCancelSynchronization, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     </StackPanel>
                 </Border>
             </Grid>

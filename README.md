@@ -44,9 +44,9 @@ EntityTracker keeps those concerns separate:
   normalized entity differences without opening another window or database.
 - **Safe catalog management** — create blank, CSV-backed, or copied Trackers and rename, recycle,
   restore, or guardedly purge Projects and Trackers.
-- **Optional local Git history** — retain SQLite-only Projects or link an existing dedicated Git
-  repository so accepted changes create local commits and SQLite can be rebuilt from HEAD, with no
-  remote required.
+- **Optional Git collaboration** — retain SQLite-only or local-only Projects, or explicitly Sync a
+  dedicated repository through its configured HTTPS/SSH upstream; non-diverged work pushes or
+  fast-forwards while divergence is blocked without data loss.
 - **Local-first reliability** — SQLite projections, automatic daily and pre-migration backups,
   rolling logs, and documented recovery procedures.
 - **Accessible Fluent workflow** — built-in .NET 10 WPF Fluent controls, Light/Dark/System themes,
@@ -61,8 +61,8 @@ EntityTracker keeps those concerns separate:
 3. Apply the reviewed schema while EntityTracker preserves stable progress, notes, and history.
 4. Use dependency-safe rank, readiness, blockers, filters, and search to choose the next work item.
 5. Update work status and use Reports to communicate delivery trends.
-6. Optionally link a Project to an existing empty Git repository for local committed history;
-   remote synchronization is not part of the current release.
+6. Optionally link a Project to an existing empty Git repository for committed history. A remote
+   is not required; when an upstream is configured, use the Project-scoped Sync action explicitly.
 
 ## Screenshots
 
@@ -83,6 +83,30 @@ for consistency.
       <strong>Compare related Trackers</strong><br />
       Review aggregate history, per-Tracker context, and actionable entity differences.<br /><br />
       <img src="images/light/project-dashboard.png" alt="EntityTracker project dashboard with tracker summary cards" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <strong>Synchronize an upstream explicitly</strong><br />
+      Fetch or push only the managed Project branch through configured HTTPS or SSH tooling.<br /><br />
+      <img src="images/light/repository-sync-up-to-date.png" alt="Git-backed Project showing an up-to-date configured upstream and Sync action" />
+    </td>
+    <td width="50%">
+      <strong>Keep repositories local-only</strong><br />
+      Continue creating local commits when no upstream is configured.<br /><br />
+      <img src="images/light/repository-local-only.png" alt="Local-only Git-backed Project with Sync disabled and an explanatory message" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <strong>Publish offline commits</strong><br />
+      See ahead/behind state before pushing local work normally.<br /><br />
+      <img src="images/light/repository-sync-ahead.png" alt="Git-backed Project showing three local commits ahead of its upstream" />
+    </td>
+    <td width="50%">
+      <strong>Block unsafe divergence</strong><br />
+      Preserve local HEAD and SQLite when semantic merge is required.<br /><br />
+      <img src="images/light/repository-merge-required.png" alt="Git-backed Project showing merge-required state with Sync safely disabled" />
     </td>
   </tr>
   <tr>
@@ -237,9 +261,9 @@ the current `main` build status; CI-01 remains in progress until the `main` pack
 verified.
 
 See the [milestone status](docs/milestones/milestone_status.md) and complete
-[roadmap](docs/milestones/README.md) for details. Project-level Git synchronization is now specified
-as the planned [RS-01–RS-05 roadmap](docs/milestones/remote-sync/README.md), but none of those
-milestones is implemented or exposed by the current release.
+[roadmap](docs/milestones/README.md) for details. RS-01 through RS-03 of the
+[remote-sync roadmap](docs/milestones/remote-sync/README.md) are implemented. Semantic merge and
+final recovery/security hardening remain planned as RS-04 and RS-05.
 
 ## Technology and architecture
 
@@ -259,7 +283,8 @@ Domain model
 Business rules do not depend on WPF or infrastructure technologies. Read the
 [architecture rules](docs/architecture/ARCHITECTURE.md) and
 [collaborative storage direction](docs/architecture/COLLABORATIVE_STORAGE.md) for the preserved
-boundary and approved Git roadmap. Git synchronization remains unimplemented in this release.
+boundary and approved Git roadmap. Explicit non-diverged synchronization is implemented; semantic
+merge remains deliberately unavailable.
 
 ## Getting started
 

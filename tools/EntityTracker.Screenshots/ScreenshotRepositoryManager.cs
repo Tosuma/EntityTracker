@@ -3,7 +3,7 @@ using EntityTracker.Domain;
 
 namespace EntityTracker.Screenshots;
 
-internal sealed class ScreenshotRepositoryManager : IProjectRepositoryManager
+internal sealed class ScreenshotRepositoryManager : IProjectRepositoryManager, IProjectSynchronizationService
 {
     private readonly Dictionary<ProjectId, ProjectRepositoryStatus> _statuses = [];
 
@@ -16,6 +16,29 @@ internal sealed class ScreenshotRepositoryManager : IProjectRepositoryManager
             diagnostic);
 
     internal void ClearStatus(ProjectId projectId) => _statuses.Remove(projectId);
+
+    internal void SetSyncStatus(
+        ProjectId projectId,
+        ProjectSyncState syncState,
+        string? diagnostic = null,
+        int? ahead = null,
+        int? behind = null) =>
+        _statuses[projectId] = new ProjectRepositoryStatus(
+            projectId,
+            ProjectRepositoryStatusKind.GitClean,
+            @"C:\Work\EntityTracker\Order Modernization",
+            "main",
+            diagnostic,
+            syncState,
+            syncState == ProjectSyncState.NoUpstream ? null : "team/main",
+            ahead ?? (syncState == ProjectSyncState.UpToDate ? 0 : null),
+            behind ?? (syncState == ProjectSyncState.UpToDate ? 0 : null),
+            syncState == ProjectSyncState.NoUpstream
+                ? null
+                : new DateTimeOffset(2026, 9, 25, 8, 30, 0, TimeSpan.Zero),
+            syncState == ProjectSyncState.NoUpstream
+                ? null
+                : new DateTimeOffset(2026, 9, 24, 15, 45, 0, TimeSpan.Zero));
 
     public Task<IReadOnlyList<ProjectRepositoryStatus>> GetStatusesAsync(
         CancellationToken cancellationToken = default) =>
@@ -38,5 +61,8 @@ internal sealed class ScreenshotRepositoryManager : IProjectRepositoryManager
         throw new NotSupportedException();
 
     public Task RebuildCacheAsync(ProjectId projectId, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException();
+
+    public Task<ProjectSyncResult> SyncAsync(ProjectId projectId, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
 }

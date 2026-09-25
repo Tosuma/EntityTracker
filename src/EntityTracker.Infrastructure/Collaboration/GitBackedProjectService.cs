@@ -22,7 +22,7 @@ public sealed class GitBackedProjectService(
     SqliteProjectTrackerStore sqliteCatalogStore,
     SqliteTrackedStateStore sqliteTrackedStore,
     IProjectRepository projectRepository,
-    TimeProvider? timeProvider = null) : IProjectMutationBackend, IProjectRepositoryManager
+    TimeProvider? timeProvider = null) : IProjectMutationBackend, IProjectRepositoryManager, IProjectSynchronizationService
 {
     private readonly ConcurrentDictionary<ProjectId, SemaphoreSlim> _projectGates = [];
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
@@ -219,6 +219,415 @@ public sealed class GitBackedProjectService(
         finally { gate.Release(); }
     }
 
+    public async Task<ProjectSyncResult> SyncAsync(
+        ProjectId projectId,
+        CancellationToken cancellationToken = default)
+    {
+        LocalRepositoryRegistration? registration = await registry.GetAsync(projectId, cancellationToken);
+        if (registration is null)
+        {
+            ProjectRepositoryStatus sqlite = new(projectId, ProjectRepositoryStatusKind.SQLiteOnly);
+            return new(ProjectSyncOutcome.Failed, ProjectSyncFailureKind.RepositoryBlocked,
+                "SQLite-only Projects do not have a Git upstream.", sqlite);
+        }
+
+        SemaphoreSlim gate = _projectGates.GetOrAdd(projectId, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            LinkedContext context;
+            try
+            {
+                context = await RequireCleanContextAsync(registration, requireProjectedHead: true, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return Cancelled(registration);
+            }
+            catch (Exception exception) when (IsRepositoryException(exception))
+            {
+                ProjectRepositoryStatus blocked = Status(
+                    registration,
+                    ProjectRepositoryStatusKind.Blocked,
+                    ProjectSyncState.NeedsSync,
+                    exception.Message);
+                return new(ProjectSyncOutcome.Failed, ProjectSyncFailureKind.RepositoryBlocked,
+                    exception.Message, blocked);
+            }
+
+            GitResult<GitUpstreamDetails> upstreamResult = await git.GetUpstreamDetailsAsync(
+                registration.RepositoryPath, registration.ManagedBranch, cancellationToken);
+            if (!upstreamResult.IsSuccess || upstreamResult.Value is null)
+                return Failure(registration, upstreamResult.FailureKind, upstreamResult.Diagnostic);
+            GitUpstreamDetails upstream = upstreamResult.Value;
+            if (!upstream.IsConfigured)
+            {
+                ProjectRepositoryStatus noUpstream = Status(
+                    registration,
+                    ProjectRepositoryStatusKind.GitClean,
+                    ProjectSyncState.NoUpstream,
+                    "No upstream is configured for the managed branch.");
+                return new(ProjectSyncOutcome.MissingUpstream, ProjectSyncFailureKind.MissingUpstream,
+                    "Configure an HTTPS or SSH upstream with Git before synchronizing.", noUpstream);
+            }
+
+            GitResult<bool> fetch = await git.FetchAsync(
+                registration.RepositoryPath,
+                upstream.RemoteName!,
+                upstream.RemoteBranch!,
+                upstream.TrackingReference!,
+                cancellationToken);
+            if (!fetch.IsSuccess)
+                return fetch.FailureKind == GitFailureKind.Cancelled
+                    ? Cancelled(registration, upstream)
+                    : Failure(registration, fetch.FailureKind, fetch.Diagnostic, upstream);
+
+            registration = registration with
+            {
+                LastSuccessfulFetchAtUtc = _timeProvider.GetUtcNow().ToUniversalTime()
+            };
+            try
+            {
+                await registry.UpsertAsync(registration, CancellationToken.None);
+            }
+            catch (Exception exception) when (IsRepositoryException(exception))
+            {
+                return Failure(registration, GitFailureKind.CommandFailed,
+                    $"Fetch succeeded, but local synchronization metadata could not be saved: {exception.Message}",
+                    upstream);
+            }
+
+            GitResult<GitUpstreamDetails> refreshedResult = await git.GetUpstreamDetailsAsync(
+                registration.RepositoryPath, registration.ManagedBranch, cancellationToken);
+            if (!refreshedResult.IsSuccess || refreshedResult.Value is not
+                { IsConfigured: true, CommitId: not null } refreshed)
+            {
+                return Failure(registration,
+                    refreshedResult.IsSuccess ? GitFailureKind.InvalidRepository : refreshedResult.FailureKind,
+                    refreshedResult.IsSuccess
+                        ? "The configured upstream branch does not exist after fetch."
+                        : refreshedResult.Diagnostic,
+                    upstream);
+            }
+            if (!SameUpstream(upstream, refreshed))
+                return Failure(registration, GitFailureKind.InvalidRepository,
+                    "The configured upstream changed while synchronization was running.", refreshed);
+
+            string localCommit = context.Head.CommitId!;
+            string remoteCommit = refreshed.CommitId;
+            GitResult<GitAheadBehind> graph = await git.GetAheadBehindAsync(
+                registration.RepositoryPath, localCommit, remoteCommit, cancellationToken);
+            if (!graph.IsSuccess || graph.Value is null)
+                return Failure(registration, graph.FailureKind, graph.Diagnostic, refreshed);
+
+            if (graph.Value is { Ahead: 0, Behind: 0 })
+            {
+                ProjectRepositoryStatus current = Status(registration, ProjectRepositoryStatusKind.GitClean,
+                    ProjectSyncState.UpToDate, null, refreshed, 0, 0);
+                return new(ProjectSyncOutcome.UpToDate, ProjectSyncFailureKind.None,
+                    "The Project is up to date.", current);
+            }
+
+            if (graph.Value is { Ahead: > 0, Behind: 0 })
+                return await PushAsync(registration, context, refreshed, graph.Value.Ahead, cancellationToken);
+
+            if (graph.Value is { Ahead: 0, Behind: > 0 })
+                return await FastForwardAsync(registration, context, refreshed, graph.Value.Behind, cancellationToken);
+
+            ProjectRepositoryStatus diverged = Status(registration, ProjectRepositoryStatusKind.GitClean,
+                ProjectSyncState.MergeRequired,
+                "Local and upstream commits have diverged. Semantic merge is required.",
+                refreshed, graph.Value.Ahead, graph.Value.Behind);
+            return new(ProjectSyncOutcome.MergeRequired, ProjectSyncFailureKind.None,
+                "Local and upstream commits have diverged. RS-04 semantic merge is required; no files or cache data were changed.",
+                diverged);
+        }
+        catch (OperationCanceledException)
+        {
+            return Cancelled(registration);
+        }
+        finally { gate.Release(); }
+    }
+
+    private async Task<ProjectSyncResult> PushAsync(
+        LocalRepositoryRegistration registration,
+        LinkedContext expectedContext,
+        GitUpstreamDetails expectedUpstream,
+        int ahead,
+        CancellationToken cancellationToken)
+    {
+        LinkedContext current;
+        try
+        {
+            current = await RequireCleanContextAsync(registration, requireProjectedHead: true, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return Cancelled(registration, expectedUpstream);
+        }
+        catch (Exception exception) when (IsRepositoryException(exception))
+        {
+            return Failure(registration, GitFailureKind.InvalidRepository, exception.Message, expectedUpstream);
+        }
+        GitResult<GitUpstreamDetails> currentUpstream = await git.GetUpstreamDetailsAsync(
+            registration.RepositoryPath, registration.ManagedBranch, cancellationToken);
+        if (current.Head.CommitId != expectedContext.Head.CommitId ||
+            !currentUpstream.IsSuccess || currentUpstream.Value is null ||
+            !SameUpstream(expectedUpstream, currentUpstream.Value) ||
+            currentUpstream.Value.CommitId != expectedUpstream.CommitId)
+        {
+            return Failure(registration, GitFailureKind.InvalidRepository,
+                "The repository or upstream changed while synchronization was running.", expectedUpstream);
+        }
+
+        GitResult<bool> push = await git.PushAsync(
+            registration.RepositoryPath,
+            expectedUpstream.RemoteName!,
+            registration.ManagedBranch,
+            expectedUpstream.RemoteBranch!,
+            cancellationToken);
+        if (!push.IsSuccess)
+        {
+            ProjectSyncResult failed = push.FailureKind == GitFailureKind.Cancelled
+                ? Cancelled(registration, expectedUpstream)
+                : Failure(registration, push.FailureKind, push.Diagnostic, expectedUpstream, ahead, 0);
+            if (push.FailureKind == GitFailureKind.PushRejected)
+            {
+                failed = failed with
+                {
+                    Outcome = ProjectSyncOutcome.NeedsSync,
+                    Message = "The upstream moved after fetch. Local commits are intact; run Sync again.",
+                    Status = failed.Status with
+                    {
+                        SyncState = ProjectSyncState.NeedsSync,
+                        Diagnostic = "The push was rejected because the upstream moved."
+                    }
+                };
+            }
+            return failed;
+        }
+
+        registration = registration with
+        {
+            LastSuccessfulPushAtUtc = _timeProvider.GetUtcNow().ToUniversalTime()
+        };
+        try
+        {
+            await registry.UpsertAsync(registration, CancellationToken.None);
+        }
+        catch (Exception exception) when (IsRepositoryException(exception))
+        {
+            ProjectRepositoryStatus completed = Status(registration, ProjectRepositoryStatusKind.GitClean,
+                ProjectSyncState.UpToDate,
+                "The push succeeded, but its completion time could not be saved locally.",
+                expectedUpstream, 0, 0);
+            return new(ProjectSyncOutcome.Pushed, ProjectSyncFailureKind.RepositoryBlocked,
+                $"The push succeeded, but local synchronization metadata could not be saved: {exception.Message}",
+                completed);
+        }
+        ProjectRepositoryStatus status = Status(registration, ProjectRepositoryStatusKind.GitClean,
+            ProjectSyncState.UpToDate, null, expectedUpstream, 0, 0);
+        return new(ProjectSyncOutcome.Pushed, ProjectSyncFailureKind.None,
+            ahead == 1 ? "Pushed 1 local commit." : $"Pushed {ahead} local commits.", status);
+    }
+
+    private async Task<ProjectSyncResult> FastForwardAsync(
+        LocalRepositoryRegistration registration,
+        LinkedContext expectedContext,
+        GitUpstreamDetails upstream,
+        int behind,
+        CancellationToken cancellationToken)
+    {
+        GitResult<GitTreeSnapshot> tree = await git.ReadTreeAsync(
+            registration.RepositoryPath, upstream.CommitId!, cancellationToken);
+        if (!tree.IsSuccess || tree.Value is null)
+            return Failure(registration, tree.FailureKind, tree.Diagnostic, upstream, 0, behind);
+
+        ProjectRepositoryState candidate;
+        try
+        {
+            candidate = codec.Deserialize(tree.Value.Files);
+            ValidateCanonicalSnapshot(candidate, tree.Value.Files);
+            if (candidate.Project.Id != registration.ProjectId)
+                throw new InvalidDataException("The fetched repository belongs to another Project.");
+            if (!candidate.Tombstones.Any(item => item.Kind == RepositoryTombstoneKind.Project) &&
+                await projectRepository.IsNameReservedAsync(
+                    candidate.Project.Name,
+                    excludingProjectId: candidate.Project.Id,
+                    cancellationToken))
+            {
+                throw new InvalidDataException(
+                    "The fetched Project name is already reserved by another local Project.");
+            }
+            RepositoryFileSnapshot current = await repositoryStore.CaptureAsync(
+                registration.RepositoryPath, cancellationToken);
+            ValidateAppendOnlySuccessor(current.Files, tree.Value.Files);
+        }
+        catch (Exception exception) when (exception is InvalidDataException or InvalidOperationException)
+        {
+            ProjectSyncFailureKind kind = exception.Message.Contains("version", StringComparison.OrdinalIgnoreCase)
+                ? ProjectSyncFailureKind.UnsupportedSchema
+                : ProjectSyncFailureKind.InvalidRemote;
+            ProjectRepositoryStatus invalid = Status(registration, ProjectRepositoryStatusKind.GitClean,
+                ProjectSyncState.NeedsSync, exception.Message, upstream, 0, behind);
+            return new(ProjectSyncOutcome.Failed, kind,
+                $"The fetched Project was rejected: {exception.Message}", invalid);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        LinkedContext currentContext = await RequireCleanContextAsync(
+            registration, requireProjectedHead: true, cancellationToken);
+        GitResult<GitUpstreamDetails> currentUpstream = await git.GetUpstreamDetailsAsync(
+            registration.RepositoryPath, registration.ManagedBranch, cancellationToken);
+        if (currentContext.Head.CommitId != expectedContext.Head.CommitId ||
+            !currentUpstream.IsSuccess || currentUpstream.Value is null ||
+            !SameUpstream(upstream, currentUpstream.Value) || currentUpstream.Value.CommitId != upstream.CommitId)
+        {
+            return Failure(registration, GitFailureKind.InvalidRepository,
+                "The repository or upstream changed while synchronization was running.", upstream, 0, behind);
+        }
+
+        // HEAD is the authority boundary. Once the fast-forward begins, finish local projection
+        // and registry bookkeeping even if the caller cancels.
+        GitResult<bool> fastForward = await git.FastForwardAsync(
+            registration.RepositoryPath, upstream.CommitId!, CancellationToken.None);
+        if (!fastForward.IsSuccess)
+            return Failure(registration, fastForward.FailureKind, fastForward.Diagnostic, upstream, 0, behind);
+        GitResult<GitHead> afterHead = await git.GetHeadAsync(registration.RepositoryPath, CancellationToken.None);
+        if (!afterHead.IsSuccess || afterHead.Value?.CommitId != upstream.CommitId)
+        {
+            ProjectRepositoryStatus uncertain = Status(registration, ProjectRepositoryStatusKind.StaleCache,
+                ProjectSyncState.NeedsSync,
+                "The fast-forward completed but authoritative HEAD could not be verified.", upstream);
+            return new(ProjectSyncOutcome.Failed, ProjectSyncFailureKind.RepositoryBlocked,
+                uncertain.Diagnostic!, uncertain);
+        }
+
+        try
+        {
+            await projectStateStore.ReplaceAsync(candidate, CancellationToken.None);
+            registration = registration with { LastProjectedCommit = upstream.CommitId };
+            await registry.UpsertAsync(registration, CancellationToken.None);
+        }
+        catch (Exception exception) when (IsRepositoryException(exception))
+        {
+            ProjectRepositoryStatus stale = Status(registration, ProjectRepositoryStatusKind.StaleCache,
+                ProjectSyncState.NeedsSync,
+                "The repository fast-forwarded, but the SQLite cache is stale. Rebuild the Project cache.",
+                upstream);
+            return new(ProjectSyncOutcome.FastForwarded, ProjectSyncFailureKind.RepositoryBlocked,
+                $"The authoritative repository was updated, but cache projection failed: {exception.Message}", stale);
+        }
+
+        ProjectRepositoryStatus status = Status(registration, ProjectRepositoryStatusKind.GitClean,
+            ProjectSyncState.UpToDate, null, upstream, 0, 0);
+        return new(ProjectSyncOutcome.FastForwarded, ProjectSyncFailureKind.None,
+            behind == 1 ? "Fast-forwarded by 1 upstream commit." : $"Fast-forwarded by {behind} upstream commits.",
+            status);
+    }
+
+    private static void ValidateAppendOnlySuccessor(
+        IReadOnlyDictionary<string, byte[]> current,
+        IReadOnlyDictionary<string, ReadOnlyMemory<byte>> candidate)
+    {
+        foreach ((string path, byte[] bytes) in current.Where(item =>
+                     item.Key.StartsWith("operations/", StringComparison.Ordinal) ||
+                     item.Key.StartsWith("tombstones/", StringComparison.Ordinal)))
+        {
+            if (!candidate.TryGetValue(path, out ReadOnlyMemory<byte> remote) ||
+                !remote.Span.SequenceEqual(bytes))
+            {
+                throw new InvalidDataException(
+                    $"Fetched history document '{path}' changed or removed append-only history.");
+            }
+        }
+    }
+
+    private void ValidateCanonicalSnapshot(
+        ProjectRepositoryState state,
+        IReadOnlyDictionary<string, ReadOnlyMemory<byte>> fetched)
+    {
+        IReadOnlyDictionary<string, byte[]> canonical = codec.Serialize(state);
+        if (!canonical.Keys.SequenceEqual(fetched.Keys, StringComparer.Ordinal) ||
+            canonical.Any(item => !fetched.TryGetValue(item.Key, out ReadOnlyMemory<byte> bytes) ||
+                                  !bytes.Span.SequenceEqual(item.Value)))
+        {
+            throw new InvalidDataException(
+                "The fetched Project tree is not in canonical EntityTracker repository format.");
+        }
+    }
+
+    private ProjectSyncResult Cancelled(
+        LocalRepositoryRegistration registration,
+        GitUpstreamDetails? upstream = null)
+    {
+        ProjectRepositoryStatus status = Status(registration, ProjectRepositoryStatusKind.GitClean,
+            ProjectSyncState.NeedsSync, "Synchronization was cancelled.", upstream);
+        return new(ProjectSyncOutcome.Cancelled, ProjectSyncFailureKind.Cancelled,
+            "Synchronization was cancelled. Local commits remain intact.", status);
+    }
+
+    private ProjectSyncResult Failure(
+        LocalRepositoryRegistration registration,
+        GitFailureKind failureKind,
+        string diagnostic,
+        GitUpstreamDetails? upstream = null,
+        int? ahead = null,
+        int? behind = null)
+    {
+        ProjectSyncFailureKind mapped = failureKind switch
+        {
+            GitFailureKind.Authentication => ProjectSyncFailureKind.Authentication,
+            GitFailureKind.Network => ProjectSyncFailureKind.Network,
+            GitFailureKind.Cancelled => ProjectSyncFailureKind.Cancelled,
+            GitFailureKind.TimedOut => ProjectSyncFailureKind.TimedOut,
+            GitFailureKind.InvalidRepository => ProjectSyncFailureKind.InvalidRemote,
+            _ => ProjectSyncFailureKind.CommandFailed
+        };
+        ProjectSyncOutcome outcome = mapped == ProjectSyncFailureKind.Cancelled
+            ? ProjectSyncOutcome.Cancelled
+            : failureKind == GitFailureKind.PushRejected
+                ? ProjectSyncOutcome.NeedsSync
+                : ProjectSyncOutcome.Failed;
+        ProjectRepositoryStatus status = Status(registration, ProjectRepositoryStatusKind.GitClean,
+            ProjectSyncState.NeedsSync, diagnostic, upstream, ahead, behind);
+        return new(outcome, mapped,
+            string.IsNullOrWhiteSpace(diagnostic) ? "Synchronization could not be completed." : diagnostic,
+            status);
+    }
+
+    private static bool SameUpstream(GitUpstreamDetails left, GitUpstreamDetails right) =>
+        left.IsConfigured == right.IsConfigured &&
+        string.Equals(left.RemoteName, right.RemoteName, StringComparison.Ordinal) &&
+        string.Equals(left.RemoteBranch, right.RemoteBranch, StringComparison.Ordinal) &&
+        string.Equals(left.TrackingReference, right.TrackingReference, StringComparison.Ordinal);
+
+    private static bool IsRepositoryException(Exception exception) =>
+        exception is InvalidOperationException or InvalidDataException or IOException or UnauthorizedAccessException;
+
+    private static ProjectRepositoryStatus Status(
+        LocalRepositoryRegistration registration,
+        ProjectRepositoryStatusKind kind,
+        ProjectSyncState syncState,
+        string? diagnostic,
+        GitUpstreamDetails? upstream = null,
+        int? ahead = null,
+        int? behind = null) =>
+        new(
+            registration.ProjectId,
+            kind,
+            registration.RepositoryPath,
+            registration.ManagedBranch,
+            diagnostic,
+            syncState,
+            upstream is { IsConfigured: true }
+                ? $"{upstream.RemoteName}/{upstream.RemoteBranch}"
+                : null,
+            ahead,
+            behind,
+            registration.LastSuccessfulFetchAtUtc,
+            registration.LastSuccessfulPushAtUtc);
+
     private async Task<ProjectMutationResult> ApplySqliteAsync(ProjectMutation mutation, CancellationToken cancellationToken)
     {
         switch (mutation)
@@ -344,7 +753,32 @@ public sealed class GitBackedProjectService(
             ProjectRepositoryState state = await repositoryStore.LoadAsync(registration.RepositoryPath, cancellationToken);
             if (state.Project.Id != registration.ProjectId)
                 return Status(ProjectRepositoryStatusKind.Blocked, "The repository manifest belongs to another Project.");
-            return Status(ProjectRepositoryStatusKind.GitClean, null);
+            GitResult<GitUpstreamDetails> upstream = await git.GetUpstreamDetailsAsync(
+                registration.RepositoryPath, registration.ManagedBranch, cancellationToken);
+            if (!upstream.IsSuccess || upstream.Value is null)
+                return Status(ProjectRepositoryStatusKind.Blocked, upstream.Diagnostic);
+            if (!upstream.Value.IsConfigured)
+                return GitBackedProjectService.Status(registration, ProjectRepositoryStatusKind.GitClean,
+                    ProjectSyncState.NoUpstream, "No upstream is configured for the managed branch.");
+            if (upstream.Value.CommitId is null)
+                return GitBackedProjectService.Status(registration, ProjectRepositoryStatusKind.GitClean,
+                    ProjectSyncState.NeedsSync, "The configured upstream has not been fetched.", upstream.Value);
+            GitResult<GitAheadBehind> graph = await git.GetAheadBehindAsync(
+                registration.RepositoryPath, head.Value!.CommitId!, upstream.Value.CommitId, cancellationToken);
+            if (!graph.IsSuccess || graph.Value is null)
+                return Status(ProjectRepositoryStatusKind.Blocked, graph.Diagnostic);
+            ProjectSyncState syncState = graph.Value switch
+            {
+                { Ahead: 0, Behind: 0 } => ProjectSyncState.UpToDate,
+                { Ahead: > 0, Behind: 0 } => ProjectSyncState.Ahead,
+                { Ahead: 0, Behind: > 0 } => ProjectSyncState.Behind,
+                _ => ProjectSyncState.MergeRequired
+            };
+            string? diagnostic = syncState == ProjectSyncState.MergeRequired
+                ? "Local and upstream commits have diverged. Semantic merge is required."
+                : null;
+            return GitBackedProjectService.Status(registration, ProjectRepositoryStatusKind.GitClean,
+                syncState, diagnostic, upstream.Value, graph.Value.Ahead, graph.Value.Behind);
         }
         catch (Exception exception) when (exception is InvalidOperationException or InvalidDataException or IOException or UnauthorizedAccessException)
         {
@@ -352,7 +786,13 @@ public sealed class GitBackedProjectService(
         }
 
         ProjectRepositoryStatus Status(ProjectRepositoryStatusKind kind, string? diagnostic) =>
-            new(registration.ProjectId, kind, registration.RepositoryPath, registration.ManagedBranch, diagnostic);
+            GitBackedProjectService.Status(
+                registration,
+                kind,
+                kind == ProjectRepositoryStatusKind.GitClean
+                    ? ProjectSyncState.NeedsSync
+                    : ProjectSyncState.NotApplicable,
+                diagnostic);
     }
 
     private async Task EnsureOnlyManagedTrackedPathsAsync(string path, CancellationToken cancellationToken)

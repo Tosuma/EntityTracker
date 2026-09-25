@@ -27,6 +27,9 @@ provider selector.
 4. [RS-04 — Semantic Merge and Conflict Review](rs_04_semantic_merge_and_conflict_review.md)
 5. [RS-05 — Recovery, Security, and Consistency](rs_05_recovery_security_and_consistency.md)
 
+RS-01 through RS-03 are complete. RS-03 synchronizes equal, local-ahead, and remote-ahead histories
+and reports divergence without integrating it. RS-04 and RS-05 remain planned.
+
 Implement the milestones in order. An earlier milestone may safely detect and block a state owned
 by a later milestone, but it must not expose a misleading partial success.
 

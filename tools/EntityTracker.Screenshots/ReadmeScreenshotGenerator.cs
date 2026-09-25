@@ -202,6 +202,28 @@ internal sealed class ReadmeScreenshotGenerator
         await shell.OpenProjectAsync(project.Id);
         await renderer.CaptureAsync("repository-unavailable.png");
 
+        repositories.SetSyncStatus(project.Id, ProjectSyncState.UpToDate);
+        await shell.SelectProjectAsync(null, cancellationToken);
+        await shell.OpenProjectAsync(project.Id);
+        await renderer.CaptureAsync("repository-sync-up-to-date.png");
+
+        repositories.SetSyncStatus(project.Id, ProjectSyncState.NoUpstream,
+            "No upstream is configured for the managed branch.");
+        await shell.SelectProjectAsync(null, cancellationToken);
+        await shell.OpenProjectAsync(project.Id);
+        await renderer.CaptureAsync("repository-local-only.png");
+
+        repositories.SetSyncStatus(project.Id, ProjectSyncState.Ahead, ahead: 3, behind: 0);
+        await shell.SelectProjectAsync(null, cancellationToken);
+        await shell.OpenProjectAsync(project.Id);
+        await renderer.CaptureAsync("repository-sync-ahead.png");
+
+        repositories.SetSyncStatus(project.Id, ProjectSyncState.MergeRequired,
+            "Local and upstream commits have diverged. Semantic merge is required.", 2, 1);
+        await shell.SelectProjectAsync(null, cancellationToken);
+        await shell.OpenProjectAsync(project.Id);
+        await renderer.CaptureAsync("repository-merge-required.png");
+
         repositories.ClearStatus(project.Id);
         await shell.SelectProjectAsync(null, cancellationToken);
         await shell.OpenProjectAsync(project.Id);

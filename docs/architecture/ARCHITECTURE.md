@@ -495,11 +495,12 @@ SharePoint configuration and provider selection were retired in UX-08. Settings 
 remain readable so appearance and active Project/Tracker context survive; the next settings save
 writes version 4 without retired provider fields.
 
-RS-02 implements optional Project-level local Git backing. A dedicated Git repository is
+RS-02 implements optional Project-level local Git backing. RS-03 adds explicit synchronization of
+non-diverged managed branches through a configured HTTPS or SSH upstream. A dedicated Git repository is
 authoritative for a linked Project and SQLite is its local projection/cache; SQLite-only Projects
 remain supported. Git/process/filesystem concerns stay in Infrastructure, semantic merge stays
-outside WPF, and derived data is recomputed. Network synchronization and semantic merge remain
-planned for later RS milestones. See [COLLABORATIVE_STORAGE.md](COLLABORATIVE_STORAGE.md) and the
+outside WPF, and derived data is recomputed. Divergence is detected without changing HEAD or cache;
+semantic merge remains planned for RS-04. See [COLLABORATIVE_STORAGE.md](COLLABORATIVE_STORAGE.md) and the
 [remote synchronization roadmap](../milestones/remote-sync/README.md).
 
 Local backup, logging, retention, and restore procedures are defined in

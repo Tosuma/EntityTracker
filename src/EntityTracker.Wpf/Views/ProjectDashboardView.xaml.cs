@@ -143,6 +143,13 @@ public partial class ProjectDashboardView : UserControl
     private async void OnRebuildRepositoryCache(object sender, RoutedEventArgs e) =>
         await Shell.RebuildSelectedRepositoryCacheAsync();
 
+    private async void OnSyncRepository(object sender, RoutedEventArgs e)
+    {
+        await Shell.SyncSelectedProjectAsync();
+        if (sender is Button { IsVisible: true, IsEnabled: true } button)
+            button.Focus();
+    }
+
     private string? SelectRepositoryFolder(string title)
     {
         OpenFolderDialog dialog = new() { Title = title, Multiselect = false };

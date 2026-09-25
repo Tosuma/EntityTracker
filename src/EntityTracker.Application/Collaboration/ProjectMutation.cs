@@ -77,10 +77,66 @@ public sealed record ProjectRepositoryStatus(
     ProjectRepositoryStatusKind Kind,
     string? RepositoryPath = null,
     string? ManagedBranch = null,
-    string? Diagnostic = null)
+    string? Diagnostic = null,
+    ProjectSyncState SyncState = ProjectSyncState.NotApplicable,
+    string? Upstream = null,
+    int? AheadCount = null,
+    int? BehindCount = null,
+    DateTimeOffset? LastSuccessfulFetchAtUtc = null,
+    DateTimeOffset? LastSuccessfulPushAtUtc = null)
 {
     public bool IsGitBacked => Kind != ProjectRepositoryStatusKind.SQLiteOnly;
     public bool CanUseProject => Kind is ProjectRepositoryStatusKind.SQLiteOnly or ProjectRepositoryStatusKind.GitClean;
+}
+
+public enum ProjectSyncState
+{
+    NotApplicable,
+    NoUpstream,
+    NeedsSync,
+    UpToDate,
+    Ahead,
+    Behind,
+    MergeRequired
+}
+
+public enum ProjectSyncOutcome
+{
+    UpToDate,
+    Pushed,
+    FastForwarded,
+    MergeRequired,
+    NeedsSync,
+    MissingUpstream,
+    Failed,
+    Cancelled
+}
+
+public enum ProjectSyncFailureKind
+{
+    None,
+    MissingUpstream,
+    Authentication,
+    Network,
+    InvalidRemote,
+    UnsupportedSchema,
+    Cancelled,
+    TimedOut,
+    RepositoryBlocked,
+    CommandFailed
+}
+
+public sealed record ProjectSyncResult(
+    ProjectSyncOutcome Outcome,
+    ProjectSyncFailureKind FailureKind,
+    string Message,
+    ProjectRepositoryStatus Status);
+
+public interface IProjectSynchronizationService
+{
+    Task<ProjectSyncResult> SyncAsync(
+        ProjectId projectId,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IProjectRepositoryManager

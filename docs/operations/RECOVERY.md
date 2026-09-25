@@ -24,7 +24,26 @@ material. Appearance and the remembered selection are installation-local; Projec
 records remain in SQLite.
 
 `repositories.json` contains no remote URL or credential. Do not copy it between computers as a
-Project backup: repository paths are installation-local.
+Project backup: repository paths and last successful fetch/push timestamps are installation-local.
+
+## Explicit Project synchronization
+
+A Git-backed Project may remain local-only indefinitely. When its managed branch has a configured
+upstream, **Sync** is the only action that contacts it. EntityTracker uses the upstream's configured
+remote name and branch; it does not require `origin`. Production remotes must use credential-free
+HTTPS or SSH configuration, and authentication remains with installed Git, Git Credential Manager,
+the SSH agent, and the user's SSH host-key policy.
+
+EntityTracker repository documents use canonical LF line endings. When cloning a repository with
+external Git tooling on Windows, configure that dedicated checkout with `core.autocrlf=false`
+before checkout. EntityTracker blocks a checkout whose managed files were transformed or are dirty;
+it does not reset or normalize user files automatically.
+
+Sync fetches first. Equal tips require no change, local-ahead work is pushed normally, and a
+remote-ahead Project is validated before HEAD fast-forwards and SQLite is rebuilt. Failed fetches,
+authentication failures, cancellation, and rejected pushes preserve local commits. If a push may
+have raced with another client, run Sync again; never force-push. Diverged histories are reported
+as **Merge required** and remain untouched until RS-04 semantic merge is implemented.
 
 ## Automatic backups
 

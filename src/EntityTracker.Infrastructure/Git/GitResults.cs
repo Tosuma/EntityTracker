@@ -10,6 +10,7 @@ public enum GitFailureKind
     MissingIdentity,
     Authentication,
     Network,
+    PushRejected,
     Cancelled,
     TimedOut,
     CommandFailed
@@ -49,6 +50,16 @@ public sealed record GitRepositoryStatus(bool IsClean, string PorcelainOutput);
 public sealed record GitIdentity(string Name, string Email);
 public sealed record GitHead(bool Exists, string? CommitId);
 public sealed record GitUpstream(bool IsConfigured, string? Reference);
+public sealed record GitUpstreamDetails(
+    bool IsConfigured,
+    string? RemoteName,
+    string? RemoteBranch,
+    string? TrackingReference,
+    string? CommitId);
+public sealed record GitAheadBehind(int Ahead, int Behind);
+public sealed record GitTreeSnapshot(
+    string CommitId,
+    IReadOnlyDictionary<string, ReadOnlyMemory<byte>> Files);
 public sealed record GitRemoteInfo(
     string Name,
     IReadOnlyList<string> FetchUrls,

@@ -9,11 +9,14 @@ public sealed record LocalRepositoryRegistration(
     ProjectId ProjectId,
     string RepositoryPath,
     string ManagedBranch,
-    string? LastProjectedCommit);
+    string? LastProjectedCommit,
+    DateTimeOffset? LastSuccessfulFetchAtUtc = null,
+    DateTimeOffset? LastSuccessfulPushAtUtc = null);
 
 public sealed class LocalRepositoryRegistry
 {
-    private const int CurrentVersion = 1;
+    private const int LegacyVersion = 1;
+    private const int CurrentVersion = 2;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -88,14 +91,16 @@ public sealed class LocalRepositoryRegistry
             RegistryDocument document = await JsonSerializer.DeserializeAsync<RegistryDocument>(
                 stream, JsonOptions, cancellationToken)
                 ?? throw new InvalidDataException("The repository registry is empty.");
-            if (document.Version != CurrentVersion)
+            if (document.Version is not (LegacyVersion or CurrentVersion))
                 throw new InvalidDataException($"Repository registry version {document.Version} is not supported.");
             LocalRepositoryRegistration[] entries = document.Repositories.Select(item => Normalize(
                 new LocalRepositoryRegistration(
                     new ProjectId(ParseId(item.ProjectId)),
                     item.RepositoryPath,
                     item.ManagedBranch,
-                    NormalizeCommit(item.LastProjectedCommit)))).ToArray();
+                    NormalizeCommit(item.LastProjectedCommit),
+                    ParseTimestamp(item.LastSuccessfulFetchAtUtc, "last successful fetch"),
+                    ParseTimestamp(item.LastSuccessfulPushAtUtc, "last successful push")))).ToArray();
             ValidateUnique(entries);
             return entries;
         }
@@ -118,7 +123,9 @@ public sealed class LocalRepositoryRegistry
                 ProjectId = item.ProjectId.Value.ToString("D").ToLowerInvariant(),
                 RepositoryPath = item.RepositoryPath,
                 ManagedBranch = item.ManagedBranch,
-                LastProjectedCommit = item.LastProjectedCommit
+                LastProjectedCommit = item.LastProjectedCommit,
+                LastSuccessfulFetchAtUtc = FormatTimestamp(item.LastSuccessfulFetchAtUtc),
+                LastSuccessfulPushAtUtc = FormatTimestamp(item.LastSuccessfulPushAtUtc)
             }).ToArray()
         };
         string directory = Path.GetDirectoryName(RegistryPath)
@@ -153,7 +160,9 @@ public sealed class LocalRepositoryRegistry
         {
             RepositoryPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(value.RepositoryPath)),
             ManagedBranch = value.ManagedBranch.Trim(),
-            LastProjectedCommit = NormalizeCommit(value.LastProjectedCommit)
+            LastProjectedCommit = NormalizeCommit(value.LastProjectedCommit),
+            LastSuccessfulFetchAtUtc = value.LastSuccessfulFetchAtUtc?.ToUniversalTime(),
+            LastSuccessfulPushAtUtc = value.LastSuccessfulPushAtUtc?.ToUniversalTime()
         };
     }
 
@@ -179,6 +188,27 @@ public sealed class LocalRepositoryRegistry
         return result;
     }
 
+    private static string? FormatTimestamp(DateTimeOffset? value) =>
+        value?.ToUniversalTime().ToString(
+            "yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'",
+            System.Globalization.CultureInfo.InvariantCulture);
+
+    private static DateTimeOffset? ParseTimestamp(string? value, string field)
+    {
+        if (value is null) return null;
+        if (!DateTimeOffset.TryParseExact(
+                value,
+                "yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal |
+                System.Globalization.DateTimeStyles.AdjustToUniversal,
+                out DateTimeOffset result))
+        {
+            throw new InvalidDataException($"The registry {field} timestamp is invalid.");
+        }
+        return result;
+    }
+
     private sealed class RegistryDocument
     {
         [JsonRequired] public int Version { get; init; }
@@ -191,5 +221,7 @@ public sealed class LocalRepositoryRegistry
         [JsonRequired] public string RepositoryPath { get; init; } = string.Empty;
         [JsonRequired] public string ManagedBranch { get; init; } = string.Empty;
         public string? LastProjectedCommit { get; init; }
+        public string? LastSuccessfulFetchAtUtc { get; init; }
+        public string? LastSuccessfulPushAtUtc { get; init; }
     }
 }

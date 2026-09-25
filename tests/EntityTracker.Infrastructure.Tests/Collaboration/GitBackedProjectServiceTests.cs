@@ -29,6 +29,10 @@ public sealed class GitBackedProjectServiceTests
         Assert.True(File.Exists(Path.Combine(repository.Path, ProjectRepositoryCodec.ManifestPath)));
         ProjectRepositoryStatus linked = await system.Service.GetStatusAsync(project.Id);
         Assert.Equal(ProjectRepositoryStatusKind.GitClean, linked.Kind);
+        Assert.Equal(ProjectSyncState.NoUpstream, linked.SyncState);
+        ProjectSyncResult localOnlySync = await system.Service.SyncAsync(project.Id);
+        Assert.Equal(ProjectSyncOutcome.MissingUpstream, localOnlySync.Outcome);
+        Assert.Equal(1, repository.CommitCount());
 
         ProjectMutationCoordinator coordinator = new(system.Service, system.Trackers);
         await coordinator.RenameProjectAsync(project.Id, "Git Project");
@@ -140,9 +144,9 @@ public sealed class GitBackedProjectServiceTests
                 projectId, root, "main", new string('a', 64)));
             Assert.Equal(new string('a', 64), (await registry.GetAsync(projectId))!.LastProjectedCommit);
 
-            await File.WriteAllTextAsync(path, "{\"version\":2,\"repositories\":[]}");
+            await File.WriteAllTextAsync(path, "{\"version\":3,\"repositories\":[]}");
             await Assert.ThrowsAsync<InvalidDataException>(() => registry.GetAllAsync());
-            Assert.Equal("{\"version\":2,\"repositories\":[]}", await File.ReadAllTextAsync(path));
+            Assert.Equal("{\"version\":3,\"repositories\":[]}", await File.ReadAllTextAsync(path));
         }
         finally
         {
@@ -150,14 +154,169 @@ public sealed class GitBackedProjectServiceTests
         }
     }
 
-    private static TestSystem CreateSystem(SqliteDatabase database, string registryPath)
+    [Fact]
+    public async Task RegistryVersionOneLoadsAndUpgradesWithoutInventingSyncTimes()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "EntityTracker-RegistryTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string path = Path.Combine(root, "repositories.json");
+        ProjectId projectId = ProjectId.New();
+        try
+        {
+            await File.WriteAllTextAsync(path,
+                $$"""
+                {
+                  "version": 1,
+                  "repositories": [
+                    {
+                      "projectId": "{{projectId.Value:D}}",
+                      "repositoryPath": "{{root.Replace("\\", "\\\\", StringComparison.Ordinal)}}",
+                      "managedBranch": "main",
+                      "lastProjectedCommit": "{{new string('a', 40)}}"
+                    }
+                  ]
+                }
+                """);
+            LocalRepositoryRegistry registry = new(path);
+
+            LocalRepositoryRegistration loaded = Assert.Single(await registry.GetAllAsync());
+            Assert.Null(loaded.LastSuccessfulFetchAtUtc);
+            Assert.Null(loaded.LastSuccessfulPushAtUtc);
+
+            await registry.UpsertAsync(loaded with
+            {
+                LastSuccessfulFetchAtUtc = new DateTimeOffset(2026, 9, 25, 10, 0, 0, TimeSpan.Zero)
+            });
+            string upgraded = await File.ReadAllTextAsync(path);
+            Assert.Contains("\"version\": 2", upgraded, StringComparison.Ordinal);
+            Assert.Contains("lastSuccessfulFetchAtUtc", upgraded, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ExplicitSync_PushesFastForwardsAndBlocksDivergenceWithoutChangingCache()
+    {
+        await using TemporarySqliteFile sourceFile = new();
+        await using TemporarySqliteFile destinationFile = new();
+        using TemporaryGitRepository sourceRepository = new();
+        string bareRemote = Path.Combine(Path.GetTempPath(), "EntityTracker-GitBackedTests", $"{Guid.NewGuid():N}.git");
+        string? destinationPath = null;
+        try
+        {
+            Directory.CreateDirectory(bareRemote);
+            sourceRepository.RunGit("init", "--bare", "--initial-branch=main", bareRemote);
+            GitCommandClient sourceGit = new("git", null, allowLocalRemotesForTesting: true);
+            SqliteDatabase sourceDatabase = new(sourceFile.DatabasePath);
+            await sourceDatabase.InitializeAsync();
+            TestSystem source = CreateSystem(sourceDatabase, sourceRepository.RegistryPath, sourceGit);
+            Project project = Assert.Single(await source.Projects.GetAllAsync());
+            await source.SqliteCatalog.RenameProjectAsync(project.Id, "Shared Project");
+            await source.Service.LinkAsync(project.Id, sourceRepository.Path);
+            sourceRepository.RunGit("remote", "add", "team", bareRemote);
+            sourceRepository.RunGit("push", "-u", "team", "refs/heads/main:refs/heads/main");
+
+            ProjectSyncResult equal = await source.Service.SyncAsync(project.Id);
+            Assert.Equal(ProjectSyncOutcome.UpToDate, equal.Outcome);
+
+            destinationPath = Path.Combine(Path.GetTempPath(), "EntityTracker-GitBackedTests", Guid.NewGuid().ToString("N"));
+            sourceRepository.RunGit("-c", "core.autocrlf=false", "clone", bareRemote, destinationPath);
+            RunGit(destinationPath, "config", "core.autocrlf", "false");
+            RunGit(destinationPath, "config", "user.name", "EntityTracker Tests");
+            RunGit(destinationPath, "config", "user.email", "entitytracker@example.invalid");
+            SqliteDatabase destinationDatabase = new(destinationFile.DatabasePath);
+            await destinationDatabase.InitializeAsync();
+            GitCommandClient destinationGit = new("git", null, allowLocalRemotesForTesting: true);
+            TestSystem destination = CreateSystem(
+                destinationDatabase, destinationPath + "-registry.json", destinationGit);
+            ProjectId openedId = await destination.Service.OpenAsync(destinationPath);
+
+            ProjectMutationCoordinator sourceMutations = new(source.Service, source.Trackers);
+            await sourceMutations.RenameProjectAsync(project.Id, "Pushed Project");
+            ProjectSyncResult pushed = await source.Service.SyncAsync(project.Id);
+            Assert.Equal(ProjectSyncOutcome.Pushed, pushed.Outcome);
+            Assert.Equal(ProjectSyncState.UpToDate,
+                (await source.Service.GetStatusAsync(project.Id)).SyncState);
+
+            ProjectSyncResult fastForwarded = await destination.Service.SyncAsync(openedId);
+            Assert.Equal(ProjectSyncOutcome.FastForwarded, fastForwarded.Outcome);
+            Assert.Equal("Pushed Project", (await destination.Projects.GetAsync(openedId))!.Name);
+
+            string destinationHeadBeforeInvalidRemote = RunGit(destinationPath, "rev-parse", "HEAD").Trim();
+            await File.WriteAllTextAsync(Path.Combine(sourceRepository.Path, "unmanaged.txt"), "unsupported\n");
+            sourceRepository.RunGit("add", "unmanaged.txt");
+            sourceRepository.RunGit("commit", "-m", "unsupported external edit");
+            sourceRepository.RunGit("push", "team", "main:main");
+
+            ProjectSyncResult invalidRemote = await destination.Service.SyncAsync(openedId);
+            Assert.Equal(ProjectSyncOutcome.Failed, invalidRemote.Outcome);
+            Assert.Equal(ProjectSyncFailureKind.InvalidRemote, invalidRemote.FailureKind);
+            Assert.Equal(destinationHeadBeforeInvalidRemote, RunGit(destinationPath, "rev-parse", "HEAD").Trim());
+            Assert.Equal("Pushed Project", (await destination.Projects.GetAsync(openedId))!.Name);
+
+            sourceRepository.RunGit("rm", "unmanaged.txt");
+            sourceRepository.RunGit("commit", "-m", "remove unsupported external edit");
+            sourceRepository.RunGit("push", "team", "main:main");
+
+            string manifestPath = Path.Combine(sourceRepository.Path, ProjectRepositoryCodec.ManifestPath);
+            string canonicalManifest = await File.ReadAllTextAsync(manifestPath);
+            await File.WriteAllTextAsync(
+                manifestPath,
+                canonicalManifest.Replace("\"formatVersion\": 1", "\"formatVersion\": 99", StringComparison.Ordinal));
+            sourceRepository.RunGit("add", ProjectRepositoryCodec.ManifestPath);
+            sourceRepository.RunGit("commit", "-m", "unsupported future schema");
+            sourceRepository.RunGit("push", "team", "main:main");
+
+            ProjectSyncResult newerSchema = await destination.Service.SyncAsync(openedId);
+            Assert.Equal(ProjectSyncOutcome.Failed, newerSchema.Outcome);
+            Assert.Equal(ProjectSyncFailureKind.UnsupportedSchema, newerSchema.FailureKind);
+            Assert.Equal(destinationHeadBeforeInvalidRemote, RunGit(destinationPath, "rev-parse", "HEAD").Trim());
+
+            await File.WriteAllTextAsync(manifestPath, canonicalManifest);
+            sourceRepository.RunGit("add", ProjectRepositoryCodec.ManifestPath);
+            sourceRepository.RunGit("commit", "-m", "restore supported schema");
+            sourceRepository.RunGit("push", "team", "main:main");
+            await source.Service.RebuildCacheAsync(project.Id);
+            Assert.Equal(ProjectSyncOutcome.FastForwarded,
+                (await destination.Service.SyncAsync(openedId)).Outcome);
+
+            await sourceMutations.RenameProjectAsync(project.Id, "Source divergence");
+            ProjectMutationCoordinator destinationMutations = new(destination.Service, destination.Trackers);
+            await destinationMutations.RenameProjectAsync(openedId, "Destination divergence");
+            Assert.Equal(ProjectSyncOutcome.Pushed, (await source.Service.SyncAsync(project.Id)).Outcome);
+            string destinationHead = RunGit(destinationPath, "rev-parse", "HEAD").Trim();
+
+            ProjectSyncResult diverged = await destination.Service.SyncAsync(openedId);
+
+            Assert.Equal(ProjectSyncOutcome.MergeRequired, diverged.Outcome);
+            Assert.Equal(ProjectSyncState.MergeRequired, diverged.Status.SyncState);
+            Assert.Equal(destinationHead, RunGit(destinationPath, "rev-parse", "HEAD").Trim());
+            Assert.Equal("Destination divergence", (await destination.Projects.GetAsync(openedId))!.Name);
+            Assert.NotNull(diverged.Status.LastSuccessfulFetchAtUtc);
+        }
+        finally
+        {
+            DeleteGitDirectory(destinationPath);
+            DeleteGitDirectory(bareRemote);
+            if (destinationPath is not null && File.Exists(destinationPath + "-registry.json"))
+                File.Delete(destinationPath + "-registry.json");
+        }
+    }
+
+    private static TestSystem CreateSystem(
+        SqliteDatabase database,
+        string registryPath,
+        GitCommandClient? gitClient = null)
     {
         SqliteProjectRepository projects = new(database);
         SqliteTrackerRepository trackers = new(database);
         SqliteProjectTrackerStore catalog = new(database);
         SqliteTrackedStateStore tracked = new(database);
         ProjectRepositoryCodec codec = new();
-        GitCommandClient git = new();
+        GitCommandClient git = gitClient ?? new();
         GitBackedProjectService service = new(
             new LocalRepositoryRegistry(registryPath),
             new GitRepositoryValidator(git),
@@ -177,6 +336,34 @@ public sealed class GitBackedProjectServiceTests
             tracked,
             projects);
         return new TestSystem(service, projects, trackers, catalog);
+    }
+
+    private static string RunGit(string workingDirectory, params string[] arguments)
+    {
+        ProcessStartInfo start = new()
+        {
+            FileName = "git",
+            WorkingDirectory = workingDirectory,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        foreach (string argument in arguments) start.ArgumentList.Add(argument);
+        using Process process = Process.Start(start)!;
+        string output = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0) throw new InvalidOperationException(error);
+        return output;
+    }
+
+    private static void DeleteGitDirectory(string? path)
+    {
+        if (path is null || !Directory.Exists(path)) return;
+        foreach (string item in Directory.EnumerateFileSystemEntries(path, "*", SearchOption.AllDirectories))
+            File.SetAttributes(item, FileAttributes.Normal);
+        Directory.Delete(path, recursive: true);
     }
 
     private sealed record TestSystem(
@@ -224,6 +411,8 @@ public sealed class GitBackedProjectServiceTests
 
         public string[] Lines(params string[] arguments) => Run(arguments)
             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+
+        public void RunGit(params string[] arguments) => _ = Run(arguments);
 
         private string Run(params string[] arguments)
         {

@@ -2,17 +2,18 @@
 
 ## Current implementation
 
-EntityTracker supports SQLite-only Projects and optional local Git-backed Projects. UX-08 retired
-the unused SharePoint configuration model and provider selector. The application does not yet
-authenticate with, fetch from, push to, or synchronize with a remote service, and it exposes no
-Sync control.
+EntityTracker supports SQLite-only Projects and optional Git-backed Projects. UX-08 retired the
+unused SharePoint configuration model and provider selector. A user-triggered Project Sync can now
+fetch, fast-forward, or normally push a non-diverged managed branch through a configured HTTPS or
+SSH upstream. There is no startup, timer, navigation, or save-triggered network access.
 
 RS-01 defines [Project repository format v1](PROJECT_REPOSITORY_FORMAT.md), adds backend-neutral
 operation IDs to retained history, and provides a constrained installed-Git command boundary in
 Infrastructure. RS-02 lets a Project link an existing empty Git repository or open an existing
 EntityTracker repository. For that Project, committed HEAD is authoritative and SQLite is rebuilt
-as a local projection. A repository may have no remote; accepted operations still create local
-commits and work offline.
+as a local projection. RS-03 adds safe upstream classification and blocks diverged histories for
+RS-04. A repository may have no remote; accepted operations still create local commits and work
+offline.
 
 Settings versions 1–3 may contain retired `activeStorage` and `sharePoint` fields. They remain
 readable only so supported appearance and active Project/Tracker context migrate safely. The next
@@ -40,6 +41,7 @@ Dedicated Project Git repository (authoritative)
 - Permanent deletion removes current state and records a tombstone; existing Git history is not
   rewritten.
 
+RS-03 implements the non-diverged subset of this direction. Semantic merge remains unimplemented.
 The complete sequencing and acceptance criteria are defined in the
 [remote synchronization roadmap](../milestones/remote-sync/README.md). These decisions are approved
 architecture direction, not implemented behavior.
@@ -69,3 +71,5 @@ only with backend-neutral conflict payloads required by the approved three-way m
 - Reject unsupported schemas and external modifications before changing authoritative state.
 - Commit authoritative state before updating its SQLite projection. A projection failure triggers
   a rebuild and must not replay the authoritative operation.
+- Validate a fetched remote tree before fast-forwarding. Divergence, failed fetch, and rejected
+  pushes leave local commits and SQLite intact.

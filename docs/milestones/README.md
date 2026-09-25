@@ -22,8 +22,8 @@ progress, and supports multiple Trackers grouped into Projects.
   improvements.
 - [Engineering milestones](engineering/README.md) — independent repository and delivery work.
 - [UI/UX modernization](ux/README.md) — completed UX-01–UX-08 Fluent modernization.
-- [Remote synchronization](remote-sync/README.md) — RS-01 and RS-02 completed; RS-03–RS-05 plan
-  explicit remote synchronization and semantic merge.
+- [Remote synchronization](remote-sync/README.md) — RS-01 through RS-03 completed; RS-04–RS-05 plan
+  semantic merge and final recovery/security hardening.
 
 See [milestone status](milestone_status.md) for the current state of every group.
 
@@ -35,6 +35,7 @@ dedicated, user-selected repository and one managed branch. Repository files are
 reviewable. Accepted operations create local commits, offline work is allowed, and a future
 user-triggered Sync will fetch, semantically merge, and push through installed Git.
 
-RS-02 implements local linking, opening, commits, and cache rebuilds without network access.
-Implement RS-03 through RS-05 in order; do not expose partial remote behavior from a later
+RS-02 implements local linking, opening, commits, and cache rebuilds. RS-03 implements explicit
+non-diverged Sync while preserving local-only repositories. Implement RS-04 and RS-05 in order;
+do not expose partial remote behavior from a later
 milestone.

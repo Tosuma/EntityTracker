@@ -211,6 +211,10 @@ public partial class App : System.Windows.Application
             provider.GetRequiredService<GitBackedProjectService>());
         services.AddSingleton<IProjectRepositoryManager>(static provider =>
             provider.GetRequiredService<GitBackedProjectService>());
+        services.AddSingleton<IProjectSynchronizationService>(static provider =>
+            provider.GetRequiredService<GitBackedProjectService>());
+        services.AddSingleton<IProjectSynchronizationService>(static provider =>
+            provider.GetRequiredService<GitBackedProjectService>());
         services.AddSingleton<ProjectMutationCoordinator>();
         services.AddSingleton<ITrackedStateStore>(static provider =>
             provider.GetRequiredService<ProjectMutationCoordinator>());

@@ -71,5 +71,7 @@ HTTPS or SSH configuration only. Authentication remains owned by Git Credential 
 tooling; EntityTracker neither receives nor stores secrets.
 
 The supported API cannot force push, rewrite history, reset, clean, rebase, switch branches, or
-accept arbitrary Git switches/refspecs. RS-02 stages only managed paths and creates local commits;
-it does not call fetch, pull, or push. A valid local-only repository needs no remote.
+accept arbitrary Git switches/refspecs. RS-02 stages only managed paths and creates local commits.
+RS-03 fetches only the configured upstream branch, validates its complete tree before a
+fast-forward, and pushes only the managed branch with a normal explicit refspec. A valid local-only
+repository needs no remote.

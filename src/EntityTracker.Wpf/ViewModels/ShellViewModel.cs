@@ -28,6 +28,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private readonly TrackerWorkspaceViewModelFactory _workspaceFactory;
     private readonly IContextDiscardConfirmation _discardConfirmation;
     private readonly IProjectRepositoryManager? _repositoryManager;
+    private readonly IProjectSynchronizationService? _synchronizationService;
     private readonly ILogger<ShellViewModel> _logger;
     private readonly Dictionary<TrackerId, MainWindowViewModel> _workspaces = [];
     private readonly Dictionary<ProjectId, ProjectDashboardViewModel> _projectDashboards = [];
@@ -46,6 +47,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private string? _notificationMessage;
     private bool _showDefaultNamePrompt;
     private ProjectRepositoryStatus? _activeRepositoryStatus;
+    private CancellationTokenSource? _synchronizationCancellation;
 
     public ShellViewModel(
         IProjectRepository projectRepository,
@@ -60,6 +62,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         IClipboardService clipboard,
         EntityTrackerSettings initialSettings,
         IProjectRepositoryManager? repositoryManager = null,
+        IProjectSynchronizationService? synchronizationService = null,
         ILogger<ShellViewModel>? logger = null)
     {
         _projectRepository = projectRepository;
@@ -70,6 +73,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         _workspaceFactory = workspaceFactory;
         _discardConfirmation = discardConfirmation;
         _repositoryManager = repositoryManager;
+        _synchronizationService = synchronizationService;
         Catalog = catalogManagement;
         Appearance = appearance;
         Help = new SqlQueryHelpViewModel(
@@ -223,6 +227,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             if (SetField(ref _isBusy, value))
             {
                 _navigateCommand.NotifyCanExecuteChanged();
+                OnPropertyChanged(nameof(CanSyncRepository));
+                OnPropertyChanged(nameof(CanCancelSynchronization));
             }
         }
     }
@@ -265,6 +271,10 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(CanLocateRepository));
                 OnPropertyChanged(nameof(CanRebuildRepositoryCache));
                 OnPropertyChanged(nameof(CanUseActiveRepository));
+                OnPropertyChanged(nameof(ShowSyncRepository));
+                OnPropertyChanged(nameof(CanSyncRepository));
+                OnPropertyChanged(nameof(SyncDisabledReason));
+                OnPropertyChanged(nameof(HasSyncDisabledReason));
                 _navigateCommand.NotifyCanExecuteChanged();
             }
         }
@@ -295,7 +305,15 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         : "Portfolio";
     public string RepositoryStatusText => ActiveRepositoryStatus?.Kind switch
     {
-        ProjectRepositoryStatusKind.GitClean => "Git-backed · clean",
+        ProjectRepositoryStatusKind.GitClean => ActiveRepositoryStatus.SyncState switch
+        {
+            ProjectSyncState.NoUpstream => "Git-backed · local only",
+            ProjectSyncState.UpToDate => "Git-backed · up to date",
+            ProjectSyncState.Ahead => "Git-backed · local changes to push",
+            ProjectSyncState.Behind => "Git-backed · upstream changes available",
+            ProjectSyncState.MergeRequired => "Git-backed · merge required",
+            _ => "Git-backed · sync required"
+        },
         ProjectRepositoryStatusKind.Unavailable => "Git-backed · repository unavailable",
         ProjectRepositoryStatusKind.StaleCache => "Git-backed · cache rebuild required",
         ProjectRepositoryStatusKind.Blocked => "Git-backed · blocked",
@@ -311,8 +329,15 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 : status.ManagedBranch is null
                     ? status.RepositoryPath
                     : $"{status.RepositoryPath} · branch {status.ManagedBranch}";
+            string graph = status.AheadCount is null && status.BehindCount is null
+                ? string.Empty
+                : $"Ahead {status.AheadCount ?? 0} · behind {status.BehindCount ?? 0}";
+            string upstream = status.Upstream is null ? string.Empty : $"Upstream {status.Upstream}";
+            string fetched = FormatSyncTime("Last successful fetch", status.LastSuccessfulFetchAtUtc);
+            string pushed = FormatSyncTime("Last successful push", status.LastSuccessfulPushAtUtc);
             return string.Join(Environment.NewLine,
-                new[] { location, status.Diagnostic }.Where(static value => !string.IsNullOrWhiteSpace(value)));
+                new[] { location, upstream, graph, fetched, pushed, status.Diagnostic }
+                    .Where(static value => !string.IsNullOrWhiteSpace(value)));
         }
     }
     public bool HasRepositoryStatusDetails => !string.IsNullOrWhiteSpace(RepositoryStatusDetails);
@@ -323,6 +348,24 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public bool CanRebuildRepositoryCache => HasProject &&
         ActiveRepositoryStatus?.Kind == ProjectRepositoryStatusKind.StaleCache;
     public bool CanUseActiveRepository => ActiveRepositoryStatus?.CanUseProject != false;
+    public bool ShowSyncRepository => ActiveRepositoryStatus?.IsGitBacked == true;
+    public bool CanSyncRepository => !IsBusy && _synchronizationService is not null &&
+        ActiveRepositoryStatus is
+        {
+            Kind: ProjectRepositoryStatusKind.GitClean,
+            SyncState: not ProjectSyncState.NoUpstream and not ProjectSyncState.MergeRequired
+        };
+    public bool CanCancelSynchronization => _synchronizationCancellation is not null;
+    public string SyncDisabledReason => ActiveRepositoryStatus switch
+    {
+        { Kind: ProjectRepositoryStatusKind.StaleCache } => "Rebuild the SQLite cache before synchronizing.",
+        { Kind: ProjectRepositoryStatusKind.Unavailable } => "Locate the repository before synchronizing.",
+        { Kind: ProjectRepositoryStatusKind.Blocked } => "Resolve the repository validation problem before synchronizing.",
+        { SyncState: ProjectSyncState.NoUpstream } => "No upstream is configured. Local commits continue to work without a remote.",
+        { SyncState: ProjectSyncState.MergeRequired } => "The histories diverged. Semantic merge will be available in RS-04.",
+        _ => string.Empty
+    };
+    public bool HasSyncDisabledReason => !string.IsNullOrWhiteSpace(SyncDisabledReason);
 
     public bool IsPortfolio => SelectedDestination == ShellDestination.Portfolio;
     public bool IsProjectDashboard => SelectedDestination == ShellDestination.ProjectDashboard;
@@ -495,6 +538,70 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 NotificationMessage = "SQLite cache rebuilt from repository HEAD.";
         });
     }
+
+    public async Task SyncSelectedProjectAsync()
+    {
+        if (!CanSyncRepository || _synchronizationService is null || SelectedProject is not { } project)
+            return;
+
+        _synchronizationCancellation = new CancellationTokenSource();
+        OnPropertyChanged(nameof(CanCancelSynchronization));
+        IsBusy = true;
+        BusyMessage = "Synchronizing Project…";
+        try
+        {
+            ProjectSyncResult result = await _synchronizationService.SyncAsync(
+                project.Id, _synchronizationCancellation.Token);
+            _logger.LogInformation(
+                "Project synchronization completed with outcome {Outcome} and failure kind {FailureKind}.",
+                result.Outcome,
+                result.FailureKind);
+            ActiveRepositoryStatus = result.Status;
+            NotificationMessage = result.Message;
+            if (result.Outcome == ProjectSyncOutcome.FastForwarded &&
+                result.Status.Kind == ProjectRepositoryStatusKind.GitClean)
+            {
+                TrackerId? trackerId = SelectedTracker?.Id;
+                ShellDestination destination = SelectedDestination;
+                await ReloadCatalogAsync(CancellationToken.None);
+                Project? refreshedProject = Projects.FirstOrDefault(item => item.Id == project.Id);
+                Tracker? refreshedTracker = trackerId is null
+                    ? null
+                    : await _trackerRepository.GetAsync(trackerId, CancellationToken.None);
+                if (refreshedTracker?.ProjectId != project.Id ||
+                    refreshedTracker.LifecycleState != CatalogLifecycleState.Active)
+                    refreshedTracker = null;
+                await ApplyContextAsync(
+                    refreshedProject,
+                    refreshedTracker,
+                    refreshedTracker is null && IsTrackerDestination(destination)
+                        ? ShellDestination.ProjectDashboard
+                        : destination,
+                    true,
+                    CancellationToken.None);
+            }
+            else
+            {
+                await RefreshDashboardsAsync(CancellationToken.None);
+            }
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Project synchronization failed.");
+            NotificationMessage = $"Synchronization could not be completed: {exception.Message}";
+            await RefreshRepositoryStatusAsync(CancellationToken.None);
+        }
+        finally
+        {
+            _synchronizationCancellation.Dispose();
+            _synchronizationCancellation = null;
+            IsBusy = false;
+            BusyMessage = string.Empty;
+            OnPropertyChanged(nameof(CanCancelSynchronization));
+        }
+    }
+
+    public void CancelSynchronization() => _synchronizationCancellation?.Cancel();
 
     public async Task OpenTrackerAsync(TrackerId trackerId)
     {
@@ -844,6 +951,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         ShellDestination.SchemaSynchronization or
         ShellDestination.AddEntity;
 
+    private static string FormatSyncTime(string label, DateTimeOffset? timestamp) =>
+        timestamp is null ? string.Empty : $"{label}: {timestamp.Value.ToLocalTime():g}";
+
     private static void Replace<T>(ObservableCollection<T> collection, IEnumerable<T> items)
     {
         collection.Clear();
@@ -870,6 +980,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     public void Dispose()
     {
+        _synchronizationCancellation?.Cancel();
+        _synchronizationCancellation?.Dispose();
         Catalog.Changed -= OnCatalogChanged;
         Catalog.SelectionRequested -= OnCatalogSelectionRequested;
         foreach (MainWindowViewModel workspace in _workspaces.Values)

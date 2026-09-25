@@ -25,6 +25,16 @@ public sealed class GitCommandClientTests
         Assert.Equal(GitFailureKind.UnsupportedVersion, result.FailureKind);
     }
 
+    [Theory]
+    [InlineData("Authentication failed for remote", GitFailureKind.Authentication)]
+    [InlineData("Permission denied (publickey)", GitFailureKind.Authentication)]
+    [InlineData("Could not resolve host: example.invalid", GitFailureKind.Network)]
+    [InlineData("[rejected] main -> main (fetch first)", GitFailureKind.PushRejected)]
+    public void RemoteFailuresAreClassifiedWithoutCredentials(
+        string diagnostic,
+        GitFailureKind expected) =>
+        Assert.Equal(expected, GitCommandClient.Classify(1, diagnostic));
+
     [Fact]
     public async Task OutputReaderIsBoundedButDrainsInput()
     {
@@ -104,6 +114,18 @@ public sealed class GitCommandClientTests
     }
 
     [Fact]
+    public async Task ProductionClientRejectsFilesystemRemoteBeforeFetch()
+    {
+        using TemporaryGitRepository repository = new();
+        repository.RunGit("remote", "add", "local", repository.Path);
+
+        GitResult<bool> result = await new GitCommandClient().FetchAsync(repository.Path, "local");
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(GitFailureKind.InvalidRepository, result.FailureKind);
+    }
+
+    [Fact]
     public async Task ValidatorAllowsSshUsernameButRejectsCredentialQuery()
     {
         using TemporaryGitRepository repository = new();
@@ -116,6 +138,118 @@ public sealed class GitCommandClientTests
 
         Assert.True(ssh.IsValid, string.Join(Environment.NewLine, ssh.Errors));
         Assert.False(credentialQuery.IsValid);
+    }
+
+    [Fact]
+    public async Task ConfiguredUpstreamIsResolvedWithoutAssumingOriginOrMatchingBranchName()
+    {
+        using TemporaryGitRepository repository = new();
+        string remote = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "EntityTracker-GitTests", Guid.NewGuid().ToString("N") + ".git");
+        Directory.CreateDirectory(remote);
+        try
+        {
+            repository.RunGit("init", "--bare", remote);
+            await File.WriteAllTextAsync(System.IO.Path.Combine(repository.Path, "entitytracker-project.json"), "{}\n");
+            repository.RunGit("add", "entitytracker-project.json");
+            repository.RunGit("commit", "-m", "initial");
+            repository.RunGit("remote", "add", "team", remote);
+            repository.RunGit("push", "-u", "team", "refs/heads/main:refs/heads/shared");
+
+            GitCommandClient client = new("git", null, allowLocalRemotesForTesting: true);
+            GitResult<GitUpstreamDetails> upstream = await client.GetUpstreamDetailsAsync(repository.Path, "main");
+            GitResult<GitTreeSnapshot> tree = await client.ReadTreeAsync(
+                repository.Path, (await client.GetHeadAsync(repository.Path)).Value!.CommitId!);
+
+            Assert.True(upstream.IsSuccess, upstream.Diagnostic);
+            Assert.Equal("team", upstream.Value!.RemoteName);
+            Assert.Equal("shared", upstream.Value.RemoteBranch);
+            Assert.Equal("refs/remotes/team/shared", upstream.Value.TrackingReference);
+            Assert.NotNull(upstream.Value.CommitId);
+            Assert.True(tree.IsSuccess, tree.Diagnostic);
+            Assert.Contains("entitytracker-project.json", tree.Value!.Files.Keys);
+        }
+        finally
+        {
+            if (Directory.Exists(remote))
+            {
+                foreach (string item in Directory.EnumerateFileSystemEntries(remote, "*", SearchOption.AllDirectories))
+                    File.SetAttributes(item, FileAttributes.Normal);
+                Directory.Delete(remote, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task NormalPushRejectsMovedRemoteAndPreservesLocalHead()
+    {
+        using TemporaryGitRepository repository = new();
+        string root = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "EntityTracker-GitTests", Guid.NewGuid().ToString("N"));
+        string remote = root + ".git";
+        string competitor = root + "-competitor";
+        Directory.CreateDirectory(remote);
+        try
+        {
+            repository.RunGit("init", "--bare", "--initial-branch=main", remote);
+            await File.WriteAllTextAsync(System.IO.Path.Combine(repository.Path, "base.txt"), "base\n");
+            repository.RunGit("add", "base.txt");
+            repository.RunGit("commit", "-m", "base");
+            repository.RunGit("remote", "add", "team", remote);
+            repository.RunGit("push", "-u", "team", "main:main");
+            repository.RunGit("-c", "core.autocrlf=false", "clone", remote, competitor);
+            RunGit(competitor, "config", "user.name", "EntityTracker Tests");
+            RunGit(competitor, "config", "user.email", "entitytracker@example.invalid");
+            await File.WriteAllTextAsync(System.IO.Path.Combine(competitor, "remote.txt"), "remote\n");
+            RunGit(competitor, "add", "remote.txt");
+            RunGit(competitor, "commit", "-m", "remote moved");
+            RunGit(competitor, "push", "origin", "main:main");
+
+            await File.WriteAllTextAsync(System.IO.Path.Combine(repository.Path, "local.txt"), "local\n");
+            repository.RunGit("add", "local.txt");
+            repository.RunGit("commit", "-m", "local work");
+            string localHead = RunGit(repository.Path, "rev-parse", "HEAD").Trim();
+            GitCommandClient client = new("git", null, allowLocalRemotesForTesting: true);
+
+            GitResult<bool> push = await client.PushAsync(repository.Path, "team", "main", "main");
+
+            Assert.False(push.IsSuccess);
+            Assert.Equal(GitFailureKind.PushRejected, push.FailureKind);
+            Assert.Equal(localHead, RunGit(repository.Path, "rev-parse", "HEAD").Trim());
+        }
+        finally
+        {
+            DeleteGitDirectory(competitor);
+            DeleteGitDirectory(remote);
+        }
+    }
+
+    private static string RunGit(string workingDirectory, params string[] arguments)
+    {
+        ProcessStartInfo start = new()
+        {
+            FileName = "git",
+            WorkingDirectory = workingDirectory,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        foreach (string argument in arguments) start.ArgumentList.Add(argument);
+        using Process process = Process.Start(start)!;
+        string output = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0) throw new InvalidOperationException(error);
+        return output;
+    }
+
+    private static void DeleteGitDirectory(string path)
+    {
+        if (!Directory.Exists(path)) return;
+        foreach (string item in Directory.EnumerateFileSystemEntries(path, "*", SearchOption.AllDirectories))
+            File.SetAttributes(item, FileAttributes.Normal);
+        Directory.Delete(path, recursive: true);
     }
 
     private sealed class TemporaryGitRepository : IDisposable

@@ -84,6 +84,8 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<ScreenshotRepositoryManager>();
         services.AddSingleton<IProjectRepositoryManager>(static provider =>
             provider.GetRequiredService<ScreenshotRepositoryManager>());
+        services.AddSingleton<IProjectSynchronizationService>(static provider =>
+            provider.GetRequiredService<ScreenshotRepositoryManager>());
         services.AddSingleton<ProjectMutationCoordinator>();
         services.AddSingleton<ITrackedStateStore>(static provider =>
             provider.GetRequiredService<ProjectMutationCoordinator>());
