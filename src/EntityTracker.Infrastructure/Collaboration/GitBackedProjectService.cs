@@ -94,6 +94,20 @@ public sealed class GitBackedProjectService(
             : await InspectAsync(registration, cancellationToken);
     }
 
+    public async Task<ProjectRepositoryStatus> GetCachedStatusAsync(
+        ProjectId projectId,
+        CancellationToken cancellationToken = default)
+    {
+        LocalRepositoryRegistration? registration = await registry.GetAsync(projectId, cancellationToken);
+        return registration is null
+            ? new ProjectRepositoryStatus(projectId, ProjectRepositoryStatusKind.SQLiteOnly)
+            : Status(
+                registration,
+                ProjectRepositoryStatusKind.GitRegistered,
+                ProjectSyncState.NeedsSync,
+                "Using the SQLite cache. Repository health is checked before writes and when Sync runs.");
+    }
+
     public async Task LinkAsync(ProjectId projectId, string repositoryPath, CancellationToken cancellationToken = default)
     {
         Project project = await projectRepository.GetAsync(projectId, cancellationToken)

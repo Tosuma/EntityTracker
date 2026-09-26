@@ -66,6 +66,7 @@ public interface IProjectMutationBackend
 public enum ProjectRepositoryStatusKind
 {
     SQLiteOnly,
+    GitRegistered,
     GitClean,
     Unavailable,
     StaleCache,
@@ -86,7 +87,10 @@ public sealed record ProjectRepositoryStatus(
     DateTimeOffset? LastSuccessfulPushAtUtc = null)
 {
     public bool IsGitBacked => Kind != ProjectRepositoryStatusKind.SQLiteOnly;
-    public bool CanUseProject => Kind is ProjectRepositoryStatusKind.SQLiteOnly or ProjectRepositoryStatusKind.GitClean;
+    public bool CanUseProject => Kind is
+        ProjectRepositoryStatusKind.SQLiteOnly or
+        ProjectRepositoryStatusKind.GitRegistered or
+        ProjectRepositoryStatusKind.GitClean;
 }
 
 public enum ProjectSyncState
@@ -142,6 +146,7 @@ public interface IProjectSynchronizationService
 public interface IProjectRepositoryManager
 {
     Task<IReadOnlyList<ProjectRepositoryStatus>> GetStatusesAsync(CancellationToken cancellationToken = default);
+    Task<ProjectRepositoryStatus> GetCachedStatusAsync(ProjectId projectId, CancellationToken cancellationToken = default);
     Task<ProjectRepositoryStatus> GetStatusAsync(ProjectId projectId, CancellationToken cancellationToken = default);
     Task LinkAsync(ProjectId projectId, string repositoryPath, CancellationToken cancellationToken = default);
     Task<ProjectId> OpenAsync(string repositoryPath, CancellationToken cancellationToken = default);

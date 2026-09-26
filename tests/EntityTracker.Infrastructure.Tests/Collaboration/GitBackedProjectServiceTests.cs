@@ -27,6 +27,9 @@ public sealed class GitBackedProjectServiceTests
         Assert.Equal(1, repository.CommitCount());
         Assert.Empty(repository.Lines("remote"));
         Assert.True(File.Exists(Path.Combine(repository.Path, ProjectRepositoryCodec.ManifestPath)));
+        ProjectRepositoryStatus cached = await system.Service.GetCachedStatusAsync(project.Id);
+        Assert.Equal(ProjectRepositoryStatusKind.GitRegistered, cached.Kind);
+        Assert.Contains("SQLite cache", cached.Diagnostic, StringComparison.Ordinal);
         ProjectRepositoryStatus linked = await system.Service.GetStatusAsync(project.Id);
         Assert.Equal(ProjectRepositoryStatusKind.GitClean, linked.Kind);
         Assert.Equal(ProjectSyncState.NoUpstream, linked.SyncState);

@@ -51,6 +51,11 @@ internal sealed class ScreenshotRepositoryManager : IProjectRepositoryManager, I
             ? status
             : new ProjectRepositoryStatus(projectId, ProjectRepositoryStatusKind.SQLiteOnly));
 
+    public Task<ProjectRepositoryStatus> GetCachedStatusAsync(
+        ProjectId projectId,
+        CancellationToken cancellationToken = default) =>
+        GetStatusAsync(projectId, cancellationToken);
+
     public Task LinkAsync(ProjectId projectId, string repositoryPath, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
 

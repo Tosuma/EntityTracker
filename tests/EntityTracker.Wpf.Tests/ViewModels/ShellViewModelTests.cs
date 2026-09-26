@@ -42,6 +42,8 @@ public sealed class ShellViewModelTests
             repositories);
         await shell.InitializeAsync();
 
+        Assert.Equal(1, repositories.CachedStatusCallCount);
+        Assert.Equal(0, repositories.FullStatusCallCount);
         Assert.False(shell.CanSyncRepository);
         Assert.Contains("No upstream", shell.SyncDisabledReason, StringComparison.Ordinal);
 
@@ -87,6 +89,36 @@ public sealed class ShellViewModelTests
 
         Assert.StartsWith("Repository action could not be completed", shell.NotificationMessage);
         Assert.Equal(ShellNotificationSeverity.Error, shell.NotificationSeverity);
+    }
+
+    [Fact]
+    public async Task CachedTrackerNavigationRemainsAvailableWhenRepositoryStatusIsBlocked()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        StubRepositorySynchronization repositories = new(harness.DefaultProject.Id)
+        {
+            Status = new ProjectRepositoryStatus(
+                harness.DefaultProject.Id,
+                ProjectRepositoryStatusKind.Blocked,
+                @"C:\Projects\Shared",
+                "main",
+                "Repository validation is required.")
+        };
+        using ShellViewModel shell = harness.CreateShell(
+            new EntityTrackerSettings(
+                lastProjectId: harness.DefaultProject.Id,
+                lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true),
+            repositories,
+            repositories);
+
+        await shell.InitializeAsync();
+
+        Assert.Equal(harness.DefaultTracker.Id, shell.SelectedTracker?.Id);
+        Assert.NotNull(shell.CurrentWorkspace);
+        Assert.True(shell.CanReadActiveProjectCache);
+        Assert.False(shell.CanUseActiveRepository);
+        Assert.Equal(0, repositories.FullStatusCallCount);
     }
 
     [Fact]
@@ -705,13 +737,24 @@ public sealed class ShellViewModelTests
             ProjectSyncState.NoUpstream);
 
         public int SyncCallCount { get; private set; }
+        public int CachedStatusCallCount { get; private set; }
+        public int FullStatusCallCount { get; private set; }
         public Exception? LinkFailure { get; set; }
 
         public Task<IReadOnlyList<ProjectRepositoryStatus>> GetStatusesAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ProjectRepositoryStatus>>([Status]);
 
-        public Task<ProjectRepositoryStatus> GetStatusAsync(ProjectId id, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Status);
+        public Task<ProjectRepositoryStatus> GetStatusAsync(ProjectId id, CancellationToken cancellationToken = default)
+        {
+            FullStatusCallCount++;
+            return Task.FromResult(Status);
+        }
+
+        public Task<ProjectRepositoryStatus> GetCachedStatusAsync(ProjectId id, CancellationToken cancellationToken = default)
+        {
+            CachedStatusCallCount++;
+            return Task.FromResult(Status);
+        }
 
         public Task<ProjectSyncResult> SyncAsync(ProjectId id, CancellationToken cancellationToken = default)
         {

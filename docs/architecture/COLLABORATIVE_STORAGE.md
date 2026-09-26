@@ -15,6 +15,12 @@ as a local projection. RS-03 adds safe upstream classification and blocks diverg
 RS-04. A repository may have no remote; accepted operations still create local commits and work
 offline.
 
+Normal Project and Tracker navigation, dashboards, reports, and entity reads use the SQLite
+projection without opening or validating the linked repository. The shell reads only lightweight
+registration metadata to identify Git-backed Projects. Full repository and Git checks run before
+authoritative writes and during explicit Link, Open, Locate, Rebuild, and Sync operations. A known
+repository problem can block writes or synchronization without hiding the last valid SQLite cache.
+
 Settings versions 1–3 may contain retired `activeStorage` and `sharePoint` fields. They remain
 readable only so supported appearance and active Project/Tracker context migrate safely. The next
 legitimate settings save writes version 4 without those retired fields.

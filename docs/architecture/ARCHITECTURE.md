@@ -491,6 +491,9 @@ replace them with a generic repository framework.
 SQLite remains the authority for an unlinked Project. For an RS-02 linked Project, committed Git
 HEAD is authoritative and SQLite is its replaceable local projection. A single Application mutation
 coordinator routes existing use cases without making WPF or business services branch on storage.
+Interactive reads and navigation use that SQLite projection directly; they do not validate or parse
+the Git repository. Repository validation remains mandatory at authoritative write boundaries and
+for explicit repository and synchronization operations.
 SharePoint configuration and provider selection were retired in UX-08. Settings versions 1–3
 remain readable so appearance and active Project/Tracker context survive; the next settings save
 writes version 4 without retired provider fields.

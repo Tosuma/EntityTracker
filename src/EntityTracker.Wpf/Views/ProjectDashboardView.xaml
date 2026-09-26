@@ -233,7 +233,7 @@
                 </StackPanel>
             </Border>
 
-            <StackPanel Visibility="{Binding CanUseActiveRepository, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <StackPanel Visibility="{Binding CanReadActiveProjectCache, Converter={StaticResource BooleanToVisibilityConverter}}">
             <Border Margin="0,0,0,12" MaxHeight="120" Style="{StaticResource ErrorMessageStyle}"
                     Visibility="{Binding ProjectReporting.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">

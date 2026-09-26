@@ -174,6 +174,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(CanLinkRepository));
                 OnPropertyChanged(nameof(CanLocateRepository));
                 OnPropertyChanged(nameof(CanRebuildRepositoryCache));
+                OnPropertyChanged(nameof(CanReadActiveProjectCache));
             }
         }
     }
@@ -280,6 +281,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(CanLocateRepository));
                 OnPropertyChanged(nameof(CanRebuildRepositoryCache));
                 OnPropertyChanged(nameof(CanUseActiveRepository));
+                OnPropertyChanged(nameof(CanReadActiveProjectCache));
                 OnPropertyChanged(nameof(ShowSyncRepository));
                 OnPropertyChanged(nameof(CanSyncRepository));
                 OnPropertyChanged(nameof(SyncDisabledReason));
@@ -320,6 +322,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         : "Portfolio";
     public string RepositoryStatusText => ActiveRepositoryStatus?.Kind switch
     {
+        ProjectRepositoryStatusKind.GitRegistered => "Git-backed · using SQLite cache",
         ProjectRepositoryStatusKind.GitClean => ActiveRepositoryStatus.SyncState switch
         {
             ProjectSyncState.NoUpstream => "Git-backed · local only",
@@ -363,11 +366,12 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public bool CanRebuildRepositoryCache => HasProject &&
         ActiveRepositoryStatus?.Kind == ProjectRepositoryStatusKind.StaleCache;
     public bool CanUseActiveRepository => ActiveRepositoryStatus?.CanUseProject != false;
+    public bool CanReadActiveProjectCache => HasProject;
     public bool ShowSyncRepository => ActiveRepositoryStatus?.IsGitBacked == true;
     public bool CanSyncRepository => !IsBusy && _synchronizationService is not null &&
         ActiveRepositoryStatus is
         {
-            Kind: ProjectRepositoryStatusKind.GitClean,
+            Kind: ProjectRepositoryStatusKind.GitRegistered or ProjectRepositoryStatusKind.GitClean,
             SyncState: not ProjectSyncState.NoUpstream and not ProjectSyncState.MergeRequired
         };
     public bool CanCancelSynchronization => _synchronizationCancellation is not null;
@@ -671,8 +675,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public void DismissNotification() => NotificationMessage = null;
 
     private bool CanNavigate(ShellNavigationItem item) =>
-        !IsBusy && (!item.RequiresProject || HasProject) && (!item.RequiresTracker || HasTracker) &&
-        (!item.RequiresTracker || CanUseActiveRepository);
+        !IsBusy && (!item.RequiresProject || HasProject) && (!item.RequiresTracker || HasTracker);
 
     private bool ConfirmLeavingDirtyWorkspace()
     {
@@ -716,8 +719,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 ? null
                 : _repositoryManager is null
                     ? new ProjectRepositoryStatus(project.Id, ProjectRepositoryStatusKind.SQLiteOnly)
-                    : await _repositoryManager.GetStatusAsync(project.Id, cancellationToken);
-            Tracker[] availableTrackers = project is null || !CanUseActiveRepository
+                    : await _repositoryManager.GetCachedStatusAsync(project.Id, cancellationToken);
+            Tracker[] availableTrackers = project is null
                 ? []
                 : (await _trackerRepository.GetByProjectAsync(project.Id, cancellationToken))
                     .Where(static item => item.LifecycleState == CatalogLifecycleState.Active)
@@ -832,13 +835,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         await PortfolioReporting.RefreshAsync(cancellationToken);
         Portfolio = PortfolioReporting.Dashboard;
         if (SelectedProject is null)
-        {
-            ProjectReporting = null;
-            ProjectDashboard = null;
-            return;
-        }
-
-        if (!CanUseActiveRepository)
         {
             ProjectReporting = null;
             ProjectDashboard = null;
