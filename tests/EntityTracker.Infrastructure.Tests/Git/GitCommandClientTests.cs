@@ -90,6 +90,35 @@ public sealed class GitCommandClientTests
     }
 
     [Fact]
+    public async Task ManagedPathOperationsSupportMorePathsThanTheWindowsCommandLineLimit()
+    {
+        using TemporaryGitRepository repository = new();
+        GitCommandClient client = new();
+        string[] paths = Enumerable.Range(0, 800)
+            .Select(index => $"operations/{index:D4}-{Guid.NewGuid():D}.json")
+            .ToArray();
+        foreach (string path in paths)
+        {
+            string fullPath = Path.Combine(
+                repository.Path,
+                path.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+            await File.WriteAllTextAsync(fullPath, "{}\n");
+        }
+
+        GitResult<bool> stage = await client.StageAsync(repository.Path, paths);
+        GitResult<bool> restore = await client.RestoreManagedPathsAsync(
+            repository.Path,
+            paths,
+            headExists: false);
+        GitResult<IReadOnlyList<string>> tracked = await client.GetTrackedPathsAsync(repository.Path);
+
+        Assert.True(stage.IsSuccess, stage.Diagnostic);
+        Assert.True(restore.IsSuccess, restore.Diagnostic);
+        Assert.Empty(tracked.Value!);
+    }
+
+    [Fact]
     public async Task ValidatorAcceptsCleanOwnedRepositoryWithIdentity()
     {
         using TemporaryGitRepository repository = new();

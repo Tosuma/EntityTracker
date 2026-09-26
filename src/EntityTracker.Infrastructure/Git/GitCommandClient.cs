@@ -14,6 +14,8 @@ public sealed partial class GitCommandClient
     private const int MaximumTreeListingCharacters = 4 * 1024 * 1024;
     private const int MaximumRepositoryDocumentBytes = 4 * 1024 * 1024;
     private const int MaximumRepositoryTreeBytes = 64 * 1024 * 1024;
+    private const int MaximumPathArgumentsCharacters = 8 * 1024;
+    private const int MaximumPathArgumentsCount = 128;
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan NetworkTimeout = TimeSpan.FromMinutes(5);
 
@@ -405,7 +407,7 @@ public sealed partial class GitCommandClient
             cancellationToken);
     }
 
-    public Task<GitResult<bool>> StageAsync(string repositoryPath, IEnumerable<string> managedPaths, CancellationToken cancellationToken = default)
+    public async Task<GitResult<bool>> StageAsync(string repositoryPath, IEnumerable<string> managedPaths, CancellationToken cancellationToken = default)
     {
         EnsureNoRepositoryAttributes(repositoryPath);
         string[] paths = managedPaths.Select(ValidateManagedPath).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
@@ -414,7 +416,17 @@ public sealed partial class GitCommandClient
             throw new ArgumentException("At least one managed path is required.", nameof(managedPaths));
         }
 
-        return RunBooleanAsync(repositoryPath, ["add", "--", .. paths], DefaultTimeout, cancellationToken);
+        foreach (string[] batch in BatchPathArguments(paths))
+        {
+            GitResult<bool> result = await RunBooleanAsync(
+                repositoryPath,
+                ["add", "--", .. batch],
+                DefaultTimeout,
+                cancellationToken);
+            if (!result.IsSuccess) return result;
+        }
+
+        return GitResult<bool>.Success(true);
     }
 
     public async Task<GitResult<IReadOnlyList<string>>> GetTrackedPathsAsync(
@@ -428,7 +440,7 @@ public sealed partial class GitCommandClient
             : Failure<IReadOnlyList<string>>(command);
     }
 
-    public Task<GitResult<bool>> RestoreManagedPathsAsync(
+    public async Task<GitResult<bool>> RestoreManagedPathsAsync(
         string repositoryPath,
         IEnumerable<string> managedPaths,
         bool headExists,
@@ -436,14 +448,44 @@ public sealed partial class GitCommandClient
     {
         string[] paths = managedPaths.Select(ValidateManagedPath).Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal).ToArray();
-        if (paths.Length == 0) return Task.FromResult(GitResult<bool>.Success(true));
-        return headExists
-            ? RunBooleanAsync(repositoryPath,
-                ["restore", "--source=HEAD", "--staged", "--worktree", "--", .. paths],
-                DefaultTimeout, cancellationToken)
-            : RunBooleanAsync(repositoryPath,
-                ["rm", "--cached", "--ignore-unmatch", "-r", "--", .. paths],
-                DefaultTimeout, cancellationToken);
+        if (paths.Length == 0) return GitResult<bool>.Success(true);
+
+        foreach (string[] batch in BatchPathArguments(paths))
+        {
+            GitResult<bool> result = headExists
+                ? await RunBooleanAsync(repositoryPath,
+                    ["restore", "--source=HEAD", "--staged", "--worktree", "--", .. batch],
+                    DefaultTimeout, cancellationToken)
+                : await RunBooleanAsync(repositoryPath,
+                    ["rm", "--cached", "--ignore-unmatch", "-r", "--", .. batch],
+                    DefaultTimeout, cancellationToken);
+            if (!result.IsSuccess) return result;
+        }
+
+        return GitResult<bool>.Success(true);
+    }
+
+    private static IEnumerable<string[]> BatchPathArguments(IEnumerable<string> paths)
+    {
+        List<string> batch = [];
+        int characters = 0;
+        foreach (string path in paths)
+        {
+            int pathCharacters = checked(path.Length + 3);
+            if (batch.Count > 0 &&
+                (batch.Count >= MaximumPathArgumentsCount ||
+                 characters + pathCharacters > MaximumPathArgumentsCharacters))
+            {
+                yield return [.. batch];
+                batch.Clear();
+                characters = 0;
+            }
+
+            batch.Add(path);
+            characters += pathCharacters;
+        }
+
+        if (batch.Count > 0) yield return [.. batch];
     }
 
     public async Task<GitResult<string>> GetHeadMessageAsync(
