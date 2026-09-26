@@ -8,7 +8,26 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    internal const int CurrentSchemaVersion = 14;
+    internal const int CurrentSchemaVersion = 15;
+
+    private const string ProjectOperationOutboxSchemaSql = """
+        CREATE TABLE IF NOT EXISTS project_operation_outbox
+        (
+            sequence INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            project_id TEXT NOT NULL,
+            operation_id TEXT NOT NULL UNIQUE
+                CHECK (length(operation_id) = 36 AND operation_id = lower(operation_id)),
+            mutation_type TEXT NOT NULL,
+            mutation_json TEXT NOT NULL,
+            occurred_at_utc TEXT NOT NULL,
+            committed_git_object_id TEXT NULL,
+            committed_at_utc TEXT NULL,
+            CHECK ((committed_git_object_id IS NULL) = (committed_at_utc IS NULL))
+        );
+
+        CREATE INDEX IF NOT EXISTS ix_project_operation_outbox_pending
+            ON project_operation_outbox (project_id, committed_git_object_id, sequence);
+        """;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -847,6 +866,15 @@ public sealed class SqliteDatabase
                 await EnsureNoForeignKeyViolationsAsync(
                     connection,
                     transaction,
+                    cancellationToken);
+            }
+
+            if (schemaVersion < 15)
+            {
+                await ExecuteAsync(
+                    connection,
+                    transaction,
+                    ProjectOperationOutboxSchemaSql,
                     cancellationToken);
             }
 

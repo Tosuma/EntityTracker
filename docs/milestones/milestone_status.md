@@ -55,5 +55,7 @@
 
 The [remote synchronization roadmap](remote-sync/README.md) fixes the authority, repository,
 offline, authentication, merge, deletion, and recovery direction. RS-01 provides the repository
-contract and safe Git tooling; RS-02 adds optional local Git authority and local commits; RS-03
-adds explicit non-diverged HTTPS/SSH synchronization. Semantic merge remains planned for RS-04.
+contract and safe Git tooling; RS-02 adds optional Git-backed Projects; RS-03 adds explicit
+non-diverged HTTPS/SSH synchronization. The current implementation keeps daily work and a durable
+pending-operation outbox in SQLite, then creates one Git commit per operation only when Sync is
+invoked. Semantic merge remains planned for RS-04.

@@ -84,7 +84,8 @@ public sealed record ProjectRepositoryStatus(
     int? AheadCount = null,
     int? BehindCount = null,
     DateTimeOffset? LastSuccessfulFetchAtUtc = null,
-    DateTimeOffset? LastSuccessfulPushAtUtc = null)
+    DateTimeOffset? LastSuccessfulPushAtUtc = null,
+    int PendingOperationCount = 0)
 {
     public bool IsGitBacked => Kind != ProjectRepositoryStatusKind.SQLiteOnly;
     public bool CanUseProject => Kind is
@@ -107,6 +108,7 @@ public enum ProjectSyncState
 public enum ProjectSyncOutcome
 {
     UpToDate,
+    LocalCommitted,
     Pushed,
     FastForwarded,
     MergeRequired,
@@ -134,7 +136,8 @@ public sealed record ProjectSyncResult(
     ProjectSyncOutcome Outcome,
     ProjectSyncFailureKind FailureKind,
     string Message,
-    ProjectRepositoryStatus Status);
+    ProjectRepositoryStatus Status,
+    int LocalCommitCount = 0);
 
 public interface IProjectSynchronizationService
 {

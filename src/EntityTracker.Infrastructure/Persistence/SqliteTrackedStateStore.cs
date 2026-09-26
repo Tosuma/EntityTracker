@@ -29,8 +29,15 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         TrackedStateChangeSet changeSet,
         CancellationToken cancellationToken = default)
     {
-        await ApplyInternalAsync(trackerId, changeSet, null, cancellationToken);
+        await ApplyInternalAsync(trackerId, changeSet, null, null, cancellationToken);
     }
+
+    internal async Task ApplyAsync(
+        TrackerId trackerId,
+        TrackedStateChangeSet changeSet,
+        SqliteBeforeCommit beforeCommit,
+        CancellationToken cancellationToken) =>
+        await ApplyInternalAsync(trackerId, changeSet, null, beforeCommit, cancellationToken);
 
     public async Task<SchemaImportSummary> ApplyAsync(
         TrackerId trackerId,
@@ -39,13 +46,22 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(completion);
-        return (await ApplyInternalAsync(trackerId, changeSet, completion, cancellationToken))!;
+        return (await ApplyInternalAsync(trackerId, changeSet, completion, null, cancellationToken))!;
     }
+
+    internal async Task<SchemaImportSummary> ApplyAsync(
+        TrackerId trackerId,
+        TrackedStateChangeSet changeSet,
+        SchemaImportCompletion completion,
+        SqliteBeforeCommit beforeCommit,
+        CancellationToken cancellationToken) =>
+        (await ApplyInternalAsync(trackerId, changeSet, completion, beforeCommit, cancellationToken))!;
 
     private async Task<SchemaImportSummary?> ApplyInternalAsync(
         TrackerId trackerId,
         TrackedStateChangeSet changeSet,
         SchemaImportCompletion? completion,
+        SqliteBeforeCommit? beforeCommit,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(trackerId);
@@ -255,6 +271,9 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                     operationId,
                     cancellationToken);
             }
+
+            if (beforeCommit is not null)
+                await beforeCommit(connection, transaction, cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);
             return summary;

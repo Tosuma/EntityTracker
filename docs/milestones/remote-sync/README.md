@@ -8,9 +8,12 @@ provider selector.
 
 - Git backing is optional per Project. SQLite-only Projects remain supported.
 - One dedicated, user-selected Git repository represents exactly one Project.
-- Git is authoritative for a linked Project; SQLite is its local query projection/cache.
+- SQLite is the live authority for unsynchronized work. Git is the portable authority through the
+  last successful Sync, and SQLite remains rebuildable from that synchronized history.
 - Repository documents are deterministic and reviewable but are edited only through EntityTracker.
-- Every accepted operation creates one local commit. Offline commits are supported.
+- Every accepted operation is saved atomically with a SQLite outbox record. Explicit Sync creates
+  one ordered local commit per pending operation. Offline editing and local-only repositories are
+  supported.
 - Network access occurs only when the user invokes Sync. Sync fetches, semantically merges, and
   pushes the one managed branch.
 - EntityTracker uses an installed Git CLI and the user's Git credential manager or SSH tooling.
@@ -27,8 +30,10 @@ provider selector.
 4. [RS-04 — Semantic Merge and Conflict Review](rs_04_semantic_merge_and_conflict_review.md)
 5. [RS-05 — Recovery, Security, and Consistency](rs_05_recovery_security_and_consistency.md)
 
-RS-01 through RS-03 are complete. RS-03 synchronizes equal, local-ahead, and remote-ahead histories
-and reports divergence without integrating it. RS-04 and RS-05 remain planned.
+RS-01 through RS-03 are complete. A post-RS-03 responsiveness refinement moved local commit
+creation to explicit Sync so navigation and editing never inspect the repository. RS-03
+synchronizes equal, local-ahead, and remote-ahead histories and reports divergence without
+integrating it. RS-04 and RS-05 remain planned.
 
 Implement the milestones in order. An earlier milestone may safely detect and block a state owned
 by a later milestone, but it must not expose a misleading partial success.

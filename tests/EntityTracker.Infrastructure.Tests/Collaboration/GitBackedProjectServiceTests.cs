@@ -1,6 +1,7 @@
 using System.Diagnostics;
 
 using EntityTracker.Application.Collaboration;
+using EntityTracker.Application.Persistence;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Collaboration;
 using EntityTracker.Infrastructure.Git;
@@ -12,6 +13,58 @@ namespace EntityTracker.Infrastructure.Tests.Collaboration;
 
 public sealed class GitBackedProjectServiceTests
 {
+    [Fact]
+    public async Task DuplicateOutboxOperation_RollsBackTheSqliteMutation()
+    {
+        await using TemporarySqliteFile sqliteFile = new();
+        using TemporaryGitRepository repository = new();
+        SqliteDatabase database = new(sqliteFile.DatabasePath);
+        await database.InitializeAsync();
+        TestSystem system = CreateSystem(database, repository.RegistryPath);
+        Project project = Assert.Single(await system.Projects.GetAllAsync());
+        await system.Service.LinkAsync(project.Id, repository.Path);
+        OperationId operationId = OperationId.New();
+        DateTimeOffset occurred = DateTimeOffset.UtcNow;
+
+        await system.Service.ApplyAsync(new RenameProjectMutation(
+            project.Id, "First queued name", operationId, occurred));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => system.Service.ApplyAsync(
+            new RenameProjectMutation(project.Id, "Must roll back", operationId, occurred)));
+
+        Assert.Equal("First queued name", (await system.Projects.GetAsync(project.Id))!.Name);
+        Assert.Equal(1, (await system.Service.GetCachedStatusAsync(project.Id)).PendingOperationCount);
+        Assert.Equal(1, repository.CommitCount());
+    }
+
+    [Fact]
+    public async Task EntityMutation_StaysInSqliteUntilSyncThenCreatesOneCommit()
+    {
+        await using TemporarySqliteFile sqliteFile = new();
+        using TemporaryGitRepository repository = new();
+        SqliteDatabase database = new(sqliteFile.DatabasePath);
+        await database.InitializeAsync();
+        TestSystem system = CreateSystem(database, repository.RegistryPath);
+        Project project = Assert.Single(await system.Projects.GetAllAsync());
+        Tracker tracker = Assert.Single(await system.Trackers.GetByProjectAsync(project.Id));
+        await system.Service.LinkAsync(project.Id, repository.Path);
+        ProjectMutationCoordinator coordinator = new(system.Service, system.Trackers);
+        TrackedEntity entity = new(EntityId.New(), tracker.Id, "queued_entity");
+
+        await coordinator.ApplyAsync(tracker.Id, new TrackedStateChangeSet(
+            [entity], [], [], [], [], []));
+
+        Assert.Equal(1, repository.CommitCount());
+        Assert.Contains(entity.Id, (await new SqliteEntityRepository(database).GetAllAsync(tracker.Id)).Select(item => item.Id));
+        Assert.Equal(1, (await system.Service.GetCachedStatusAsync(project.Id)).PendingOperationCount);
+
+        ProjectSyncResult result = await system.Service.SyncAsync(project.Id);
+
+        Assert.True(result.Outcome == ProjectSyncOutcome.LocalCommitted, result.Message);
+        Assert.Equal(1, result.LocalCommitCount);
+        Assert.Equal(2, repository.CommitCount());
+        Assert.Equal(0, (await system.Service.GetCachedStatusAsync(project.Id)).PendingOperationCount);
+    }
+
     [Fact]
     public async Task LocalRepositoryWithoutRemote_LinksCommitsMutatesAndRebuildsExactCache()
     {
@@ -29,19 +82,26 @@ public sealed class GitBackedProjectServiceTests
         Assert.True(File.Exists(Path.Combine(repository.Path, ProjectRepositoryCodec.ManifestPath)));
         ProjectRepositoryStatus cached = await system.Service.GetCachedStatusAsync(project.Id);
         Assert.Equal(ProjectRepositoryStatusKind.GitRegistered, cached.Kind);
-        Assert.Contains("SQLite cache", cached.Diagnostic, StringComparison.Ordinal);
+        Assert.Contains("SQLite working copy", cached.Diagnostic, StringComparison.Ordinal);
         ProjectRepositoryStatus linked = await system.Service.GetStatusAsync(project.Id);
         Assert.Equal(ProjectRepositoryStatusKind.GitClean, linked.Kind);
         Assert.Equal(ProjectSyncState.NoUpstream, linked.SyncState);
         ProjectSyncResult localOnlySync = await system.Service.SyncAsync(project.Id);
-        Assert.Equal(ProjectSyncOutcome.MissingUpstream, localOnlySync.Outcome);
+        Assert.Equal(ProjectSyncOutcome.UpToDate, localOnlySync.Outcome);
         Assert.Equal(1, repository.CommitCount());
 
         ProjectMutationCoordinator coordinator = new(system.Service, system.Trackers);
         await coordinator.RenameProjectAsync(project.Id, "Git Project");
 
-        Assert.Equal(2, repository.CommitCount());
+        Assert.Equal(1, repository.CommitCount());
         Assert.Equal("Git Project", (await system.Projects.GetAsync(project.Id))!.Name);
+        Assert.Equal(1, (await system.Service.GetCachedStatusAsync(project.Id)).PendingOperationCount);
+
+        ProjectSyncResult committed = await system.Service.SyncAsync(project.Id);
+
+        Assert.Equal(ProjectSyncOutcome.LocalCommitted, committed.Outcome);
+        Assert.Equal(1, committed.LocalCommitCount);
+        Assert.Equal(2, repository.CommitCount());
         string commitMessage = string.Join("\n", repository.Lines("log", "-1", "--format=%B"));
         Assert.Contains("Rename Project", commitMessage, StringComparison.Ordinal);
         Assert.Contains("EntityTracker-Operation-Id:", commitMessage, StringComparison.Ordinal);
@@ -54,7 +114,7 @@ public sealed class GitBackedProjectServiceTests
     }
 
     [Fact]
-    public async Task DirtyManagedFile_BlocksMutationWithoutCommitOrCacheChange()
+    public async Task DirtyManagedFile_DoesNotBlockSqliteMutationButBlocksExplicitSync()
     {
         await using TemporarySqliteFile sqliteFile = new();
         using TemporaryGitRepository repository = new();
@@ -68,12 +128,15 @@ public sealed class GitBackedProjectServiceTests
             " ");
 
         ProjectMutationCoordinator coordinator = new(system.Service, system.Trackers);
-        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => coordinator.RenameProjectAsync(project.Id, "Must not persist"));
+        await coordinator.RenameProjectAsync(project.Id, "SQLite remains available");
 
-        Assert.Contains("clean", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, repository.CommitCount());
-        Assert.Equal(project.Name, (await system.Projects.GetAsync(project.Id))!.Name);
+        Assert.Equal("SQLite remains available", (await system.Projects.GetAsync(project.Id))!.Name);
+        Assert.Equal(1, (await system.Service.GetCachedStatusAsync(project.Id)).PendingOperationCount);
+        ProjectSyncResult sync = await system.Service.SyncAsync(project.Id);
+        Assert.Equal(ProjectSyncOutcome.Failed, sync.Outcome);
+        Assert.Equal(ProjectSyncFailureKind.RepositoryBlocked, sync.FailureKind);
+        Assert.Contains("clean", sync.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(ProjectRepositoryStatusKind.Blocked,
             (await system.Service.GetStatusAsync(project.Id)).Kind);
     }

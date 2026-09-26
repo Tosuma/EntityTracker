@@ -29,13 +29,13 @@ See [milestone status](milestone_status.md) for the current state of every group
 
 ## Approved storage direction
 
-SQLite remains the working store for SQLite-only Projects and the local projection/cache for a
-Git-backed Project. Git backing is optional per Project. Each linked Project uses one
+SQLite remains the live working store for both SQLite-only and Git-backed Projects. Git backing is
+optional per Project. Each linked Project uses one
 dedicated, user-selected repository and one managed branch. Repository files are app-owned but
-reviewable. Accepted operations create local commits, offline work is allowed, and a future
-user-triggered Sync will fetch, semantically merge, and push through installed Git.
+reviewable. Accepted linked-Project operations enter a durable SQLite outbox; explicit Sync creates
+one local commit per operation and then performs configured remote work. Offline work is allowed.
 
-RS-02 implements local linking, opening, commits, and cache rebuilds. RS-03 implements explicit
+RS-02 implements local linking, opening, repository history, and cache rebuilds. RS-03 implements explicit
 non-diverged Sync while preserving local-only repositories. Implement RS-04 and RS-05 in order;
 do not expose partial remote behavior from a later
 milestone.

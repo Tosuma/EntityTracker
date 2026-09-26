@@ -322,7 +322,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         : "Portfolio";
     public string RepositoryStatusText => ActiveRepositoryStatus?.Kind switch
     {
-        ProjectRepositoryStatusKind.GitRegistered => "Git-backed · using SQLite cache",
+        ProjectRepositoryStatusKind.GitRegistered => ActiveRepositoryStatus.PendingOperationCount > 0
+            ? $"Git-backed · {ActiveRepositoryStatus.PendingOperationCount} pending"
+            : "Git-backed · SQLite working copy",
         ProjectRepositoryStatusKind.GitClean => ActiveRepositoryStatus.SyncState switch
         {
             ProjectSyncState.NoUpstream => "Git-backed · local only",
@@ -353,8 +355,11 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             string upstream = status.Upstream is null ? string.Empty : $"Upstream {status.Upstream}";
             string fetched = FormatSyncTime("Last successful fetch", status.LastSuccessfulFetchAtUtc);
             string pushed = FormatSyncTime("Last successful push", status.LastSuccessfulPushAtUtc);
+            string pending = status.PendingOperationCount == 0
+                ? string.Empty
+                : $"Pending local operations: {status.PendingOperationCount}";
             return string.Join(Environment.NewLine,
-                new[] { location, upstream, graph, fetched, pushed, status.Diagnostic }
+                new[] { location, upstream, graph, pending, fetched, pushed, status.Diagnostic }
                     .Where(static value => !string.IsNullOrWhiteSpace(value)));
         }
     }
@@ -372,7 +377,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         ActiveRepositoryStatus is
         {
             Kind: ProjectRepositoryStatusKind.GitRegistered or ProjectRepositoryStatusKind.GitClean,
-            SyncState: not ProjectSyncState.NoUpstream and not ProjectSyncState.MergeRequired
+            SyncState: not ProjectSyncState.MergeRequired
         };
     public bool CanCancelSynchronization => _synchronizationCancellation is not null;
     public string SyncDisabledReason => ActiveRepositoryStatus switch
@@ -380,7 +385,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         { Kind: ProjectRepositoryStatusKind.StaleCache } => "Rebuild the SQLite cache before synchronizing.",
         { Kind: ProjectRepositoryStatusKind.Unavailable } => "Locate the repository before synchronizing.",
         { Kind: ProjectRepositoryStatusKind.Blocked } => "Resolve the repository validation problem before synchronizing.",
-        { SyncState: ProjectSyncState.NoUpstream } => "No upstream is configured. Local commits continue to work without a remote.",
         { SyncState: ProjectSyncState.MergeRequired } => "The histories diverged. Semantic merge will be available in RS-04.",
         _ => string.Empty
     };
@@ -531,7 +535,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             await RefreshRepositoryStatusAsync(cancellationToken);
             await RefreshDashboardsAsync(cancellationToken);
             SetNotification(
-                $"“{project.Name}” is now Git-backed. Changes create local commits.",
+                $"“{project.Name}” is now Git-backed. Changes are committed when you run Sync.",
                 ShellNotificationSeverity.Success);
         });
     }
@@ -583,6 +587,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             SetNotification(result.Message, result.Outcome switch
             {
                 ProjectSyncOutcome.UpToDate or
+                ProjectSyncOutcome.LocalCommitted or
                 ProjectSyncOutcome.Pushed or
                 ProjectSyncOutcome.FastForwarded => ShellNotificationSeverity.Success,
                 ProjectSyncOutcome.MergeRequired or
@@ -710,8 +715,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         ShellDestination previousDestination = SelectedDestination;
         ProjectRepositoryStatus? previousRepositoryStatus = ActiveRepositoryStatus;
         Tracker[] previousTrackers = Trackers.ToArray();
-        IsBusy = true;
-        BusyMessage = tracker is null ? "Loading project context…" : "Loading tracker workspace…";
         try
         {
             CurrentWorkspace?.PrepareForDeactivation();
@@ -736,6 +739,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             SelectedProject = project;
             Replace(Trackers, availableTrackers);
             SelectedTracker = selectedTracker;
+            ShowDefaultNamePrompt =
+                project?.Name == "Default project" || selectedTracker?.Name == "Default tracker";
 
             if (selectedTracker is null)
             {
@@ -743,14 +748,16 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             }
             else
             {
-                await _historyInitializer.EnsureInitializedAsync(selectedTracker.Id, cancellationToken);
                 if (!_workspaces.TryGetValue(selectedTracker.Id, out MainWindowViewModel? workspace))
                 {
                     workspace = _workspaceFactory.Create(selectedTracker.Id);
                     workspace.PersistedStateChanged += OnWorkspacePersistedStateChanged;
                     workspace.PropertyChanged += OnWorkspacePropertyChanged;
+                    CurrentWorkspace = workspace;
+                    SetDestination(destination);
                     try
                     {
+                        await _historyInitializer.EnsureInitializedAsync(selectedTracker.Id, cancellationToken);
                         await workspace.InitializeAsync(cancellationToken);
                         _workspaces.Add(selectedTracker.Id, workspace);
                     }
@@ -762,18 +769,13 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                         throw;
                     }
                 }
-                else
-                {
-                    await workspace.RefreshAsync(cancellationToken);
-                }
 
                 CurrentWorkspace = workspace;
             }
 
             SetDestination(destination);
-            await RefreshDashboardsAsync(cancellationToken);
-            ShowDefaultNamePrompt =
-                project?.Name == "Default project" || selectedTracker?.Name == "Default tracker";
+            if (destination is ShellDestination.Portfolio or ShellDestination.ProjectDashboard)
+                await RefreshDashboardsAsync(cancellationToken);
             if (persist)
             {
                 await _settingsStore.SaveActiveContextAsync(
@@ -827,7 +829,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     {
         Replace(Projects, (await _projectRepository.GetAllAsync(cancellationToken))
             .Where(static project => project.LifecycleState == CatalogLifecycleState.Active));
-        await RefreshDashboardsAsync(cancellationToken);
     }
 
     private async Task RefreshDashboardsAsync(CancellationToken cancellationToken)
@@ -898,13 +899,18 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     private async void OnWorkspacePersistedStateChanged(object? sender, EventArgs e)
     {
+        // Tracker workspaces update their own SQLite-backed views immediately. Portfolio and
+        // Project reports are refreshed lazily when the user navigates to those destinations.
+        if (_repositoryManager is null || SelectedProject is not { } project)
+            return;
         try
         {
-            await RefreshDashboardsAsync(CancellationToken.None);
+            ActiveRepositoryStatus = await _repositoryManager.GetCachedStatusAsync(
+                project.Id, CancellationToken.None);
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Dashboard summaries could not be refreshed.");
+            _logger.LogWarning(exception, "Pending repository status could not be refreshed from SQLite.");
         }
     }
 

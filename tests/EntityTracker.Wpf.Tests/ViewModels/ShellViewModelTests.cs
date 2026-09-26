@@ -44,8 +44,8 @@ public sealed class ShellViewModelTests
 
         Assert.Equal(1, repositories.CachedStatusCallCount);
         Assert.Equal(0, repositories.FullStatusCallCount);
-        Assert.False(shell.CanSyncRepository);
-        Assert.Contains("No upstream", shell.SyncDisabledReason, StringComparison.Ordinal);
+        Assert.True(shell.CanSyncRepository);
+        Assert.Equal(string.Empty, shell.SyncDisabledReason);
 
         repositories.Status = repositories.Status with
         {
@@ -574,6 +574,7 @@ public sealed class ShellViewModelTests
                 entities,
                 dependencies,
                 overrides,
+                history,
                 stateStore,
                 resolver,
                 snapshots);

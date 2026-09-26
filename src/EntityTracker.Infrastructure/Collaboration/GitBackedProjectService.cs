@@ -26,6 +26,7 @@ public sealed class GitBackedProjectService(
 {
     private readonly ConcurrentDictionary<ProjectId, SemaphoreSlim> _projectGates = [];
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+    private readonly SqliteProjectOperationOutbox _outbox = new(sqliteTrackedStore.Database);
 
     public async Task<ProjectMutationResult> ApplyAsync(
         ProjectMutation mutation,
@@ -39,13 +40,7 @@ public sealed class GitBackedProjectService(
         await gate.WaitAsync(cancellationToken);
         try
         {
-            LinkedContext context = await RequireCleanContextAsync(registration, requireProjectedHead: true, cancellationToken);
-            ProjectRepositoryState proposed = reducer.Apply(context.State, mutation);
-            await CommitAndProjectAsync(registration, context.Head, proposed, mutation, cancellationToken);
-            SchemaImportSummary? summary = mutation is ChangeTrackedStateMutation { ImportCompletion: { } completion }
-                ? new SchemaImportSummary(mutation.OccurredAtUtc, completion)
-                : null;
-            return new ProjectMutationResult(summary);
+            return await ApplySqliteAsync(mutation, enqueueForGit: true, cancellationToken: cancellationToken);
         }
         finally { gate.Release(); }
     }
@@ -99,13 +94,19 @@ public sealed class GitBackedProjectService(
         CancellationToken cancellationToken = default)
     {
         LocalRepositoryRegistration? registration = await registry.GetAsync(projectId, cancellationToken);
+        int pendingCount = registration is null
+            ? 0
+            : await _outbox.CountPendingAsync(projectId, cancellationToken);
         return registration is null
             ? new ProjectRepositoryStatus(projectId, ProjectRepositoryStatusKind.SQLiteOnly)
             : Status(
                 registration,
                 ProjectRepositoryStatusKind.GitRegistered,
-                ProjectSyncState.NeedsSync,
-                "Using the SQLite cache. Repository health is checked before writes and when Sync runs.");
+                pendingCount == 0 ? ProjectSyncState.UpToDate : ProjectSyncState.NeedsSync,
+                pendingCount == 0
+                    ? "Using the SQLite working copy. Git is accessed only by explicit repository actions."
+                    : $"{pendingCount} local change{(pendingCount == 1 ? " is" : "s are")} waiting for Sync.",
+                pendingCount: pendingCount);
     }
 
     public async Task LinkAsync(ProjectId projectId, string repositoryPath, CancellationToken cancellationToken = default)
@@ -226,6 +227,8 @@ public sealed class GitBackedProjectService(
         await gate.WaitAsync(cancellationToken);
         try
         {
+            if (await _outbox.CountPendingAsync(projectId, cancellationToken) > 0)
+                throw new InvalidOperationException("Sync pending local changes before rebuilding the SQLite working copy.");
             LinkedContext context = await RequireCleanContextAsync(registration, requireProjectedHead: false, cancellationToken);
             await projectStateStore.ReplaceAsync(context.State, cancellationToken);
             await registry.UpsertAsync(registration with { LastProjectedCommit = context.Head.CommitId }, cancellationToken);
@@ -250,9 +253,74 @@ public sealed class GitBackedProjectService(
         try
         {
             LinkedContext context;
+            int localCommitCount = 0;
             try
             {
                 context = await RequireCleanContextAsync(registration, requireProjectedHead: true, cancellationToken);
+                int pendingCount = await _outbox.CountPendingAsync(projectId, cancellationToken);
+                if (pendingCount > 0)
+                {
+                    GitResult<GitUpstreamDetails> probeResult = await git.GetUpstreamDetailsAsync(
+                        registration.RepositoryPath, registration.ManagedBranch, cancellationToken);
+                    if (!probeResult.IsSuccess || probeResult.Value is null)
+                        return Failure(registration, probeResult.FailureKind, probeResult.Diagnostic);
+                    GitUpstreamDetails probe = probeResult.Value;
+                    if (probe.IsConfigured)
+                    {
+                        GitResult<bool> probeFetch = await git.FetchAsync(
+                            registration.RepositoryPath,
+                            probe.RemoteName!,
+                            probe.RemoteBranch!,
+                            probe.TrackingReference!,
+                            cancellationToken);
+                        if (!probeFetch.IsSuccess)
+                            return probeFetch.FailureKind == GitFailureKind.Cancelled
+                                ? Cancelled(registration, probe)
+                                : Failure(registration, probeFetch.FailureKind, probeFetch.Diagnostic, probe);
+                        GitResult<GitUpstreamDetails> refreshedProbe = await git.GetUpstreamDetailsAsync(
+                            registration.RepositoryPath, registration.ManagedBranch, cancellationToken);
+                        if (!refreshedProbe.IsSuccess || refreshedProbe.Value is not
+                            { IsConfigured: true, CommitId: not null } remote)
+                        {
+                            return Failure(
+                                registration,
+                                refreshedProbe.IsSuccess ? GitFailureKind.InvalidRepository : refreshedProbe.FailureKind,
+                                refreshedProbe.IsSuccess
+                                    ? "The configured upstream branch does not exist after fetch."
+                                    : refreshedProbe.Diagnostic,
+                                probe);
+                        }
+                        GitResult<GitAheadBehind> pendingGraph = await git.GetAheadBehindAsync(
+                            registration.RepositoryPath,
+                            context.Head.CommitId!,
+                            remote.CommitId,
+                            cancellationToken);
+                        if (!pendingGraph.IsSuccess || pendingGraph.Value is null)
+                            return Failure(registration, pendingGraph.FailureKind, pendingGraph.Diagnostic, remote);
+                        if (pendingGraph.Value.Behind > 0)
+                        {
+                            ProjectRepositoryStatus merge = Status(
+                                registration,
+                                ProjectRepositoryStatusKind.GitClean,
+                                ProjectSyncState.MergeRequired,
+                                "Upstream changes must be semantically merged with pending SQLite operations.",
+                                remote,
+                                pendingGraph.Value.Ahead,
+                                pendingGraph.Value.Behind,
+                                pendingCount);
+                            return new ProjectSyncResult(
+                                ProjectSyncOutcome.MergeRequired,
+                                ProjectSyncFailureKind.None,
+                                "Upstream changes and pending local operations require RS-04 semantic merge; no local commits or cache data were changed.",
+                                merge);
+                        }
+                    }
+                }
+                PendingCommitResult committed = await CommitPendingAsync(
+                    registration, context, cancellationToken);
+                registration = committed.Registration;
+                context = committed.Context;
+                localCommitCount = committed.CommitCount;
             }
             catch (OperationCanceledException)
             {
@@ -272,7 +340,9 @@ public sealed class GitBackedProjectService(
             GitResult<GitUpstreamDetails> upstreamResult = await git.GetUpstreamDetailsAsync(
                 registration.RepositoryPath, registration.ManagedBranch, cancellationToken);
             if (!upstreamResult.IsSuccess || upstreamResult.Value is null)
-                return Failure(registration, upstreamResult.FailureKind, upstreamResult.Diagnostic);
+                return WithLocalCommits(
+                    Failure(registration, upstreamResult.FailureKind, upstreamResult.Diagnostic),
+                    localCommitCount);
             GitUpstreamDetails upstream = upstreamResult.Value;
             if (!upstream.IsConfigured)
             {
@@ -281,8 +351,14 @@ public sealed class GitBackedProjectService(
                     ProjectRepositoryStatusKind.GitClean,
                     ProjectSyncState.NoUpstream,
                     "No upstream is configured for the managed branch.");
-                return new(ProjectSyncOutcome.MissingUpstream, ProjectSyncFailureKind.MissingUpstream,
-                    "Configure an HTTPS or SSH upstream with Git before synchronizing.", noUpstream);
+                return localCommitCount > 0
+                    ? new(ProjectSyncOutcome.LocalCommitted, ProjectSyncFailureKind.None,
+                        localCommitCount == 1
+                            ? "Created 1 local Git commit. No upstream is configured."
+                            : $"Created {localCommitCount} local Git commits. No upstream is configured.",
+                        noUpstream, localCommitCount)
+                    : new(ProjectSyncOutcome.UpToDate, ProjectSyncFailureKind.None,
+                        "The local Git repository is up to date. No upstream is configured.", noUpstream);
             }
 
             GitResult<bool> fetch = await git.FetchAsync(
@@ -292,9 +368,10 @@ public sealed class GitBackedProjectService(
                 upstream.TrackingReference!,
                 cancellationToken);
             if (!fetch.IsSuccess)
-                return fetch.FailureKind == GitFailureKind.Cancelled
+                return WithLocalCommits(fetch.FailureKind == GitFailureKind.Cancelled
                     ? Cancelled(registration, upstream)
-                    : Failure(registration, fetch.FailureKind, fetch.Diagnostic, upstream);
+                    : Failure(registration, fetch.FailureKind, fetch.Diagnostic, upstream),
+                    localCommitCount);
 
             registration = registration with
             {
@@ -306,9 +383,9 @@ public sealed class GitBackedProjectService(
             }
             catch (Exception exception) when (IsRepositoryException(exception))
             {
-                return Failure(registration, GitFailureKind.CommandFailed,
+                return WithLocalCommits(Failure(registration, GitFailureKind.CommandFailed,
                     $"Fetch succeeded, but local synchronization metadata could not be saved: {exception.Message}",
-                    upstream);
+                    upstream), localCommitCount);
             }
 
             GitResult<GitUpstreamDetails> refreshedResult = await git.GetUpstreamDetailsAsync(
@@ -316,34 +393,38 @@ public sealed class GitBackedProjectService(
             if (!refreshedResult.IsSuccess || refreshedResult.Value is not
                 { IsConfigured: true, CommitId: not null } refreshed)
             {
-                return Failure(registration,
+                return WithLocalCommits(Failure(registration,
                     refreshedResult.IsSuccess ? GitFailureKind.InvalidRepository : refreshedResult.FailureKind,
                     refreshedResult.IsSuccess
                         ? "The configured upstream branch does not exist after fetch."
                         : refreshedResult.Diagnostic,
-                    upstream);
+                    upstream), localCommitCount);
             }
             if (!SameUpstream(upstream, refreshed))
-                return Failure(registration, GitFailureKind.InvalidRepository,
-                    "The configured upstream changed while synchronization was running.", refreshed);
+                return WithLocalCommits(Failure(registration, GitFailureKind.InvalidRepository,
+                    "The configured upstream changed while synchronization was running.", refreshed), localCommitCount);
 
             string localCommit = context.Head.CommitId!;
             string remoteCommit = refreshed.CommitId;
             GitResult<GitAheadBehind> graph = await git.GetAheadBehindAsync(
                 registration.RepositoryPath, localCommit, remoteCommit, cancellationToken);
             if (!graph.IsSuccess || graph.Value is null)
-                return Failure(registration, graph.FailureKind, graph.Diagnostic, refreshed);
+                return WithLocalCommits(Failure(registration, graph.FailureKind, graph.Diagnostic, refreshed), localCommitCount);
 
             if (graph.Value is { Ahead: 0, Behind: 0 })
             {
                 ProjectRepositoryStatus current = Status(registration, ProjectRepositoryStatusKind.GitClean,
                     ProjectSyncState.UpToDate, null, refreshed, 0, 0);
                 return new(ProjectSyncOutcome.UpToDate, ProjectSyncFailureKind.None,
-                    "The Project is up to date.", current);
+                    localCommitCount == 0 ? "The Project is up to date." : "Local changes were committed; the Project is up to date.",
+                    current, localCommitCount);
             }
 
             if (graph.Value is { Ahead: > 0, Behind: 0 })
-                return await PushAsync(registration, context, refreshed, graph.Value.Ahead, cancellationToken);
+                return (await PushAsync(registration, context, refreshed, graph.Value.Ahead, cancellationToken)) with
+                {
+                    LocalCommitCount = localCommitCount
+                };
 
             if (graph.Value is { Ahead: 0, Behind: > 0 })
                 return await FastForwardAsync(registration, context, refreshed, graph.Value.Behind, cancellationToken);
@@ -354,7 +435,7 @@ public sealed class GitBackedProjectService(
                 refreshed, graph.Value.Ahead, graph.Value.Behind);
             return new(ProjectSyncOutcome.MergeRequired, ProjectSyncFailureKind.None,
                 "Local and upstream commits have diverged. RS-04 semantic merge is required; no files or cache data were changed.",
-                diverged);
+                diverged, localCommitCount);
         }
         catch (OperationCanceledException)
         {
@@ -362,6 +443,76 @@ public sealed class GitBackedProjectService(
         }
         finally { gate.Release(); }
     }
+
+    private async Task<PendingCommitResult> CommitPendingAsync(
+        LocalRepositoryRegistration registration,
+        LinkedContext context,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<PendingProjectMutation> pending = await _outbox.GetPendingAsync(
+            registration.ProjectId, cancellationToken);
+        int committedCount = 0;
+        foreach (PendingProjectMutation item in pending)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (context.State.Operations.Any(operation => operation.Id == item.Mutation.OperationId))
+            {
+                await _outbox.MarkCommittedAsync(item.Sequence, context.Head.CommitId!, CancellationToken.None);
+                continue;
+            }
+
+            ProjectRepositoryState proposed = reducer.Apply(context.State, item.Mutation);
+            RepositoryFileSnapshot snapshot = await repositoryStore.CaptureAsync(
+                registration.RepositoryPath, cancellationToken);
+            string[] managedPaths = snapshot.Files.Keys.Concat(codec.Serialize(proposed).Keys)
+                .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+            bool committed = false;
+            try
+            {
+                await repositoryStore.WriteAsync(registration.RepositoryPath, proposed, cancellationToken);
+                EnsureSuccess(await git.StageAsync(registration.RepositoryPath, managedPaths, cancellationToken));
+                GitResult<bool> commit = await git.CommitAsync(
+                    registration.RepositoryPath,
+                    CommitSubject(item.Mutation.Kind),
+                    item.Mutation.OperationId,
+                    cancellationToken);
+                EnsureSuccess(commit);
+                committed = true;
+                GitResult<GitHead> afterHead = await git.GetHeadAsync(
+                    registration.RepositoryPath, CancellationToken.None);
+                EnsureSuccess(afterHead);
+                if (afterHead.Value is not { Exists: true, CommitId: not null } head)
+                    throw new InvalidOperationException("Git did not create the expected commit.");
+
+                registration = registration with { LastProjectedCommit = head.CommitId };
+                await registry.UpsertAsync(registration, CancellationToken.None);
+                await _outbox.MarkCommittedAsync(item.Sequence, head.CommitId, CancellationToken.None);
+                context = new LinkedContext(proposed, head);
+                committedCount++;
+            }
+            catch
+            {
+                if (!committed)
+                {
+                    await git.RestoreManagedPathsAsync(
+                        registration.RepositoryPath, managedPaths, context.Head.Exists, CancellationToken.None);
+                    await repositoryStore.RestoreAsync(
+                        registration.RepositoryPath, snapshot, CancellationToken.None);
+                }
+                throw;
+            }
+        }
+        return new PendingCommitResult(registration, context, committedCount);
+    }
+
+    private static ProjectSyncResult WithLocalCommits(ProjectSyncResult result, int count) =>
+        count == 0
+            ? result
+            : result with
+            {
+                LocalCommitCount = count,
+                Message = $"Created {count} local Git commit{(count == 1 ? string.Empty : "s")}. {result.Message}"
+            };
 
     private async Task<ProjectSyncResult> PushAsync(
         LocalRepositoryRegistration registration,
@@ -626,7 +777,8 @@ public sealed class GitBackedProjectService(
         string? diagnostic,
         GitUpstreamDetails? upstream = null,
         int? ahead = null,
-        int? behind = null) =>
+        int? behind = null,
+        int pendingCount = 0) =>
         new(
             registration.ProjectId,
             kind,
@@ -640,33 +792,64 @@ public sealed class GitBackedProjectService(
             ahead,
             behind,
             registration.LastSuccessfulFetchAtUtc,
-            registration.LastSuccessfulPushAtUtc);
+            registration.LastSuccessfulPushAtUtc,
+            pendingCount);
 
-    private async Task<ProjectMutationResult> ApplySqliteAsync(ProjectMutation mutation, CancellationToken cancellationToken)
+    private async Task<ProjectMutationResult> ApplySqliteAsync(
+        ProjectMutation mutation,
+        CancellationToken cancellationToken) =>
+        await ApplySqliteAsync(mutation, enqueueForGit: false, cancellationToken: cancellationToken);
+
+    private async Task<ProjectMutationResult> ApplySqliteAsync(
+        ProjectMutation mutation,
+        bool enqueueForGit,
+        CancellationToken cancellationToken)
     {
+        SqliteBeforeCommit? beforeCommit = enqueueForGit
+            ? (connection, transaction, token) => _outbox.EnqueueAsync(
+                connection, transaction, mutation, token)
+            : null;
         switch (mutation)
         {
             case CreateProjectMutation value:
                 await sqliteCatalogStore.CreateProjectAsync(value.Project, cancellationToken); break;
             case RenameProjectMutation value:
-                await sqliteCatalogStore.RenameProjectAsync(value.ProjectId, value.Name, cancellationToken); break;
+                if (beforeCommit is null) await sqliteCatalogStore.RenameProjectAsync(value.ProjectId, value.Name, cancellationToken);
+                else await sqliteCatalogStore.RenameProjectAsync(value.ProjectId, value.Name, beforeCommit, cancellationToken);
+                break;
             case SetProjectLifecycleMutation value:
-                await sqliteCatalogStore.SetProjectLifecycleAsync(value.ProjectId, value.LifecycleState, cancellationToken); break;
+                if (beforeCommit is null) await sqliteCatalogStore.SetProjectLifecycleAsync(value.ProjectId, value.LifecycleState, cancellationToken);
+                else await sqliteCatalogStore.SetProjectLifecycleAsync(value.ProjectId, value.LifecycleState, beforeCommit, cancellationToken);
+                break;
             case PurgeProjectMutation value:
-                await sqliteCatalogStore.PurgeProjectAsync(value.ProjectId, cancellationToken); break;
+                if (beforeCommit is null) await sqliteCatalogStore.PurgeProjectAsync(value.ProjectId, cancellationToken);
+                else await sqliteCatalogStore.PurgeProjectAsync(value.ProjectId, beforeCommit, cancellationToken);
+                break;
             case CreateTrackerMutation value:
-                await sqliteCatalogStore.CreateTrackerAsync(value.Creation, cancellationToken); break;
+                if (beforeCommit is null) await sqliteCatalogStore.CreateTrackerAsync(value.Creation, cancellationToken);
+                else await sqliteCatalogStore.CreateTrackerAsync(value.Creation, beforeCommit, cancellationToken);
+                break;
             case RenameTrackerMutation value:
-                await sqliteCatalogStore.RenameTrackerAsync(value.TrackerId, value.Name, cancellationToken); break;
+                if (beforeCommit is null) await sqliteCatalogStore.RenameTrackerAsync(value.TrackerId, value.Name, cancellationToken);
+                else await sqliteCatalogStore.RenameTrackerAsync(value.TrackerId, value.Name, beforeCommit, cancellationToken);
+                break;
             case SetTrackerLifecycleMutation value:
-                await sqliteCatalogStore.SetTrackerLifecycleAsync(value.TrackerId, value.LifecycleState, cancellationToken); break;
+                if (beforeCommit is null) await sqliteCatalogStore.SetTrackerLifecycleAsync(value.TrackerId, value.LifecycleState, cancellationToken);
+                else await sqliteCatalogStore.SetTrackerLifecycleAsync(value.TrackerId, value.LifecycleState, beforeCommit, cancellationToken);
+                break;
             case PurgeTrackerMutation value:
-                await sqliteCatalogStore.PurgeTrackerAsync(value.TrackerId, cancellationToken); break;
+                if (beforeCommit is null) await sqliteCatalogStore.PurgeTrackerAsync(value.TrackerId, cancellationToken);
+                else await sqliteCatalogStore.PurgeTrackerAsync(value.TrackerId, beforeCommit, cancellationToken);
+                break;
             case ChangeTrackedStateMutation { ImportCompletion: { } completion } value:
-                SchemaImportSummary summary = await sqliteTrackedStore.ApplyAsync(value.TrackerId, value.ChangeSet, completion, cancellationToken);
+                SchemaImportSummary summary = beforeCommit is null
+                    ? await sqliteTrackedStore.ApplyAsync(value.TrackerId, value.ChangeSet, completion, cancellationToken)
+                    : await sqliteTrackedStore.ApplyAsync(value.TrackerId, value.ChangeSet, completion, beforeCommit, cancellationToken);
                 return new ProjectMutationResult(summary);
             case ChangeTrackedStateMutation value:
-                await sqliteTrackedStore.ApplyAsync(value.TrackerId, value.ChangeSet, cancellationToken); break;
+                if (beforeCommit is null) await sqliteTrackedStore.ApplyAsync(value.TrackerId, value.ChangeSet, cancellationToken);
+                else await sqliteTrackedStore.ApplyAsync(value.TrackerId, value.ChangeSet, beforeCommit, cancellationToken);
+                break;
             default: throw new InvalidOperationException("The Project mutation is not supported.");
         }
         return new ProjectMutationResult();
@@ -869,6 +1052,11 @@ public sealed class GitBackedProjectService(
     };
 
     private sealed record LinkedContext(ProjectRepositoryState State, GitHead Head);
+
+    private sealed record PendingCommitResult(
+        LocalRepositoryRegistration Registration,
+        LinkedContext Context,
+        int CommitCount);
     private sealed record LinkMarkerMutation(ProjectId ProjectId, OperationId OperationId, DateTimeOffset OccurredAtUtc)
         : ProjectMutation(ProjectId, OperationId, RepositoryOperationKind.RepositoryLinked, OccurredAtUtc);
 }

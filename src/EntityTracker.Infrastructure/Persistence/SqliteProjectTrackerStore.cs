@@ -29,7 +29,13 @@ public sealed class SqliteProjectTrackerStore(
 
     public async Task CreateTrackerAsync(
         TrackerCreationState creation,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        await CreateTrackerAsync(creation, null, cancellationToken);
+
+    internal async Task CreateTrackerAsync(
+        TrackerCreationState creation,
+        SqliteBeforeCommit? beforeCommit,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(creation);
         Tracker tracker = creation.Tracker;
@@ -163,6 +169,9 @@ public sealed class SqliteProjectTrackerStore(
                     cancellationToken);
             }
 
+            if (beforeCommit is not null)
+                await beforeCommit(connection, transaction, cancellationToken);
+
             await transaction.CommitAsync(cancellationToken);
         }
         catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
@@ -174,39 +183,61 @@ public sealed class SqliteProjectTrackerStore(
     }
 
     public Task RenameProjectAsync(ProjectId projectId, string name, CancellationToken cancellationToken = default) =>
-        UpdateNameAsync("projects", SqlitePersistenceValues.Format(projectId), name, cancellationToken);
+        UpdateNameAsync("projects", SqlitePersistenceValues.Format(projectId), name, null, cancellationToken);
+
+    internal Task RenameProjectAsync(ProjectId projectId, string name, SqliteBeforeCommit beforeCommit, CancellationToken cancellationToken) =>
+        UpdateNameAsync("projects", SqlitePersistenceValues.Format(projectId), name, beforeCommit, cancellationToken);
 
     public Task RenameTrackerAsync(TrackerId trackerId, string name, CancellationToken cancellationToken = default) =>
-        UpdateNameAsync("trackers", SqlitePersistenceValues.Format(trackerId), name, cancellationToken);
+        UpdateNameAsync("trackers", SqlitePersistenceValues.Format(trackerId), name, null, cancellationToken);
+
+    internal Task RenameTrackerAsync(TrackerId trackerId, string name, SqliteBeforeCommit beforeCommit, CancellationToken cancellationToken) =>
+        UpdateNameAsync("trackers", SqlitePersistenceValues.Format(trackerId), name, beforeCommit, cancellationToken);
 
     public Task SetProjectLifecycleAsync(
         ProjectId projectId,
         CatalogLifecycleState lifecycleState,
         CancellationToken cancellationToken = default) =>
-        SetLifecycleAsync("projects", SqlitePersistenceValues.Format(projectId), lifecycleState, cancellationToken);
+        SetLifecycleAsync("projects", SqlitePersistenceValues.Format(projectId), lifecycleState, null, cancellationToken);
+
+    internal Task SetProjectLifecycleAsync(ProjectId projectId, CatalogLifecycleState lifecycleState, SqliteBeforeCommit beforeCommit, CancellationToken cancellationToken) =>
+        SetLifecycleAsync("projects", SqlitePersistenceValues.Format(projectId), lifecycleState, beforeCommit, cancellationToken);
 
     public Task SetTrackerLifecycleAsync(
         TrackerId trackerId,
         CatalogLifecycleState lifecycleState,
         CancellationToken cancellationToken = default) =>
-        SetLifecycleAsync("trackers", SqlitePersistenceValues.Format(trackerId), lifecycleState, cancellationToken);
+        SetLifecycleAsync("trackers", SqlitePersistenceValues.Format(trackerId), lifecycleState, null, cancellationToken);
+
+    internal Task SetTrackerLifecycleAsync(TrackerId trackerId, CatalogLifecycleState lifecycleState, SqliteBeforeCommit beforeCommit, CancellationToken cancellationToken) =>
+        SetLifecycleAsync("trackers", SqlitePersistenceValues.Format(trackerId), lifecycleState, beforeCommit, cancellationToken);
 
     public Task PurgeProjectAsync(ProjectId projectId, CancellationToken cancellationToken = default) =>
-        PurgeAsync(SqlitePersistenceValues.Format(projectId), true, cancellationToken);
+        PurgeAsync(SqlitePersistenceValues.Format(projectId), true, null, cancellationToken);
+
+    internal Task PurgeProjectAsync(ProjectId projectId, SqliteBeforeCommit beforeCommit, CancellationToken cancellationToken) =>
+        PurgeAsync(SqlitePersistenceValues.Format(projectId), true, beforeCommit, cancellationToken);
 
     public Task PurgeTrackerAsync(TrackerId trackerId, CancellationToken cancellationToken = default) =>
-        PurgeAsync(SqlitePersistenceValues.Format(trackerId), false, cancellationToken);
+        PurgeAsync(SqlitePersistenceValues.Format(trackerId), false, null, cancellationToken);
+
+    internal Task PurgeTrackerAsync(TrackerId trackerId, SqliteBeforeCommit beforeCommit, CancellationToken cancellationToken) =>
+        PurgeAsync(SqlitePersistenceValues.Format(trackerId), false, beforeCommit, cancellationToken);
 
     private async Task UpdateNameAsync(
         string table,
         string id,
         string name,
+        SqliteBeforeCommit? beforeCommit,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         string normalized = name.Trim();
         await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = $"""
             UPDATE {table}
             SET name_key = $nameKey, name = $name, updated_at_utc = $timestamp
@@ -222,6 +253,9 @@ public sealed class SqliteProjectTrackerStore(
             {
                 throw new InvalidOperationException("The catalog item no longer exists.");
             }
+            if (beforeCommit is not null)
+                await beforeCommit(connection, transaction, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
         }
         catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
         {
@@ -233,6 +267,7 @@ public sealed class SqliteProjectTrackerStore(
         string table,
         string id,
         CatalogLifecycleState lifecycleState,
+        SqliteBeforeCommit? beforeCommit,
         CancellationToken cancellationToken)
     {
         if (!Enum.IsDefined(lifecycleState))
@@ -242,7 +277,10 @@ public sealed class SqliteProjectTrackerStore(
 
         string timestamp = SqlitePersistenceValues.FormatTimestamp(database.TimeProvider.GetUtcNow());
         await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = $"""
             UPDATE {table}
             SET lifecycle_state = $state,
@@ -257,9 +295,16 @@ public sealed class SqliteProjectTrackerStore(
         {
             throw new InvalidOperationException("The catalog item no longer exists.");
         }
+        if (beforeCommit is not null)
+            await beforeCommit(connection, transaction, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
-    private async Task PurgeAsync(string id, bool project, CancellationToken cancellationToken)
+    private async Task PurgeAsync(
+        string id,
+        bool project,
+        SqliteBeforeCommit? beforeCommit,
+        CancellationToken cancellationToken)
     {
         await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken);
         await using SqliteTransaction transaction =
@@ -282,6 +327,9 @@ public sealed class SqliteProjectTrackerStore(
         {
             await ExecuteDeleteAsync(connection, transaction, "DELETE FROM projects WHERE id = $id;", id, cancellationToken);
         }
+
+        if (beforeCommit is not null)
+            await beforeCommit(connection, transaction, cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
     }

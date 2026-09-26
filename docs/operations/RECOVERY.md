@@ -39,9 +39,13 @@ external Git tooling on Windows, configure that dedicated checkout with `core.au
 before checkout. EntityTracker blocks a checkout whose managed files were transformed or are dirty;
 it does not reset or normalize user files automatically.
 
-Sync fetches first. Equal tips require no change, local-ahead work is pushed normally, and a
-remote-ahead Project is validated before HEAD fast-forwards and SQLite is rebuilt. Failed fetches,
-authentication failures, cancellation, and rejected pushes preserve local commits. If a push may
+When an upstream is configured, Sync first fetches and verifies that pending SQLite operations can
+be committed without concealing incoming work. It then converts the durable outbox into one ordered
+local commit per accepted operation. A repository without an upstream skips that preflight and
+creates the local commits directly. Equal tips require no change, local-ahead work is pushed
+normally, and a remote-ahead Project is validated before HEAD fast-forwards and SQLite is rebuilt.
+Failed fetches, authentication failures, cancellation, and rejected pushes preserve SQLite work and
+any local commits already created. If a push may
 have raced with another client, run Sync again; never force-push. Diverged histories are reported
 as **Merge required** and remain untouched until RS-04 semantic merge is implemented.
 
@@ -75,8 +79,10 @@ to downgrade the schema manually.
 
 ## Rebuild a Git-backed Project cache
 
-For a Git-backed Project, committed repository HEAD is authoritative. If EntityTracker reports a
-stale cache, choose **Rebuild cache** on the Project dashboard. If the repository folder moved,
+For a Git-backed Project, committed repository HEAD is authoritative through the last successful
+Sync, while unsynchronized work is authoritative in SQLite. If EntityTracker reports a stale cache,
+choose **Rebuild cache** on the Project dashboard. Rebuild is blocked until all pending SQLite
+operations have been synchronized. If the repository folder moved,
 choose **Locate repository** and select the same Project repository at the registered branch and
 commit. Rebuild replaces only that Project's SQLite projection and does not create a commit or
 contact a remote.

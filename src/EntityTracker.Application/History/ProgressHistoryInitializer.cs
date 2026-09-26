@@ -10,6 +10,7 @@ public sealed class ProgressHistoryInitializer
     private readonly IEntityRepository _entityRepository;
     private readonly IDependencyRepository _dependencyRepository;
     private readonly IManualDependencyOverrideRepository _overrideRepository;
+    private readonly IProgressHistoryRepository _historyRepository;
     private readonly ITrackedStateStore _store;
     private readonly EffectiveDependencyResolver _effectiveDependencyResolver;
     private readonly ProgressSnapshotCalculator _snapshotCalculator;
@@ -18,6 +19,7 @@ public sealed class ProgressHistoryInitializer
         IEntityRepository entityRepository,
         IDependencyRepository dependencyRepository,
         IManualDependencyOverrideRepository overrideRepository,
+        IProgressHistoryRepository historyRepository,
         ITrackedStateStore store,
         EffectiveDependencyResolver effectiveDependencyResolver,
         ProgressSnapshotCalculator snapshotCalculator)
@@ -25,12 +27,14 @@ public sealed class ProgressHistoryInitializer
         ArgumentNullException.ThrowIfNull(entityRepository);
         ArgumentNullException.ThrowIfNull(dependencyRepository);
         ArgumentNullException.ThrowIfNull(overrideRepository);
+        ArgumentNullException.ThrowIfNull(historyRepository);
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(effectiveDependencyResolver);
         ArgumentNullException.ThrowIfNull(snapshotCalculator);
         _entityRepository = entityRepository;
         _dependencyRepository = dependencyRepository;
         _overrideRepository = overrideRepository;
+        _historyRepository = historyRepository;
         _store = store;
         _effectiveDependencyResolver = effectiveDependencyResolver;
         _snapshotCalculator = snapshotCalculator;
@@ -41,6 +45,8 @@ public sealed class ProgressHistoryInitializer
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(trackerId);
+        if (await _historyRepository.GetLatestProgressSnapshotAsync(trackerId, cancellationToken) is not null)
+            return;
         Task<IReadOnlyList<TrackedEntity>> entitiesTask =
             _entityRepository.GetAllAsync(trackerId, cancellationToken);
         Task<IReadOnlyList<PersistedDependency>> resolvedTask =
