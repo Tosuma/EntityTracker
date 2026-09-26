@@ -4,7 +4,7 @@ The `UX-` category modernizes EntityTracker around Microsoft's Fluent design lan
 its information architecture for Team Leads and Project Managers. It is separate from the numbered
 core roadmap, corrective milestones, Product Feedback milestones, and CI milestones.
 
-Read [`../design/FLUENT_UI_DIRECTION.md`](../design/FLUENT_UI_DIRECTION.md) before planning or
+Read [`../../design/FLUENT_UI_DIRECTION.md`](../../design/FLUENT_UI_DIRECTION.md) before planning or
 implementing any UX milestone.
 
 ## Design baseline

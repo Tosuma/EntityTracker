@@ -5,6 +5,7 @@ using System.Windows.Data;
 
 using EntityTracker.Application.Projects;
 using EntityTracker.Wpf.ViewModels;
+using Microsoft.Win32;
 
 namespace EntityTracker.Wpf.Views;
 
@@ -125,6 +126,34 @@ public partial class ProjectDashboardView : UserControl
     private void OnCreateTracker(object sender, RoutedEventArgs e)
     {
         if (Shell.SelectedProject is not null) Shell.Catalog.OpenCreateTracker(Shell.SelectedProject);
+    }
+
+    private async void OnLinkRepository(object sender, RoutedEventArgs e)
+    {
+        string? path = SelectRepositoryFolder("Link an existing empty Git repository");
+        if (path is not null) await Shell.LinkSelectedProjectAsync(path);
+    }
+
+    private async void OnLocateRepository(object sender, RoutedEventArgs e)
+    {
+        string? path = SelectRepositoryFolder("Locate the registered EntityTracker repository");
+        if (path is not null) await Shell.LocateSelectedRepositoryAsync(path);
+    }
+
+    private async void OnRebuildRepositoryCache(object sender, RoutedEventArgs e) =>
+        await Shell.RebuildSelectedRepositoryCacheAsync();
+
+    private async void OnSyncRepository(object sender, RoutedEventArgs e)
+    {
+        await Shell.SyncSelectedProjectAsync();
+        if (sender is Button { IsVisible: true, IsEnabled: true } button)
+            button.Focus();
+    }
+
+    private string? SelectRepositoryFolder(string title)
+    {
+        OpenFolderDialog dialog = new() { Title = title, Multiselect = false };
+        return dialog.ShowDialog(Window.GetWindow(this)) == true ? dialog.FolderName : null;
     }
 
     private void OnRenameProject(object sender, RoutedEventArgs e)

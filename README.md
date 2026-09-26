@@ -44,7 +44,10 @@ EntityTracker keeps those concerns separate:
   normalized entity differences without opening another window or database.
 - **Safe catalog management** — create blank, CSV-backed, or copied Trackers and rename, recycle,
   restore, or guardedly purge Projects and Trackers.
-- **Local-first reliability** — SQLite persistence, automatic daily and pre-migration backups,
+- **Optional Git collaboration** — retain SQLite-only or local-only Projects, or explicitly Sync a
+  dedicated repository through its configured HTTPS/SSH upstream; non-diverged work pushes or
+  fast-forwards while divergence is blocked without data loss.
+- **Local-first reliability** — SQLite projections, automatic daily and pre-migration backups,
   rolling logs, and documented recovery procedures.
 - **Accessible Fluent workflow** — built-in .NET 10 WPF Fluent controls, Light/Dark/System themes,
   keyboard-safe dialogs, visible focus, labeled status, and automation names for repeated actions.
@@ -58,6 +61,8 @@ EntityTracker keeps those concerns separate:
 3. Apply the reviewed schema while EntityTracker preserves stable progress, notes, and history.
 4. Use dependency-safe rank, readiness, blockers, filters, and search to choose the next work item.
 5. Update work status and use Reports to communicate delivery trends.
+6. Optionally link a Project to an existing empty Git repository for committed history. A remote
+   is not required; when an upstream is configured, use the Project-scoped Sync action explicitly.
 
 ## Screenshots
 
@@ -78,6 +83,42 @@ for consistency.
       <strong>Compare related Trackers</strong><br />
       Review aggregate history, per-Tracker context, and actionable entity differences.<br /><br />
       <img src="images/light/project-dashboard.png" alt="EntityTracker project dashboard with tracker summary cards" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <strong>Synchronize an upstream explicitly</strong><br />
+      Fetch or push only the managed Project branch through configured HTTPS or SSH tooling.<br /><br />
+      <img src="images/light/repository-sync-up-to-date.png" alt="Git-backed Project showing an up-to-date configured upstream and Sync action" />
+    </td>
+    <td width="50%">
+      <strong>Keep repositories local-only</strong><br />
+      Continue creating local commits when no upstream is configured.<br /><br />
+      <img src="images/light/repository-local-only.png" alt="Local-only Git-backed Project with Sync disabled and an explanatory message" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <strong>Publish offline commits</strong><br />
+      See ahead/behind state before pushing local work normally.<br /><br />
+      <img src="images/light/repository-sync-ahead.png" alt="Git-backed Project showing three local commits ahead of its upstream" />
+    </td>
+    <td width="50%">
+      <strong>Block unsafe divergence</strong><br />
+      Preserve local HEAD and SQLite when semantic merge is required.<br /><br />
+      <img src="images/light/repository-merge-required.png" alt="Git-backed Project showing merge-required state with Sync safely disabled" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <strong>Recover a stale local cache</strong><br />
+      Rebuild one Git-backed Project from authoritative repository HEAD without contacting a remote.<br /><br />
+      <img src="images/light/repository-stale-cache.png" alt="Git-backed Project showing a stale-cache status and Rebuild cache action" />
+    </td>
+    <td width="50%">
+      <strong>Locate a moved repository</strong><br />
+      Restore a Project-scoped repository association while keeping other Projects available.<br /><br />
+      <img src="images/light/repository-unavailable.png" alt="Git-backed Project showing an unavailable repository and Locate repository action" />
     </td>
   </tr>
   <tr>
@@ -206,21 +247,23 @@ compatible schema CSV without requiring a live database connection inside Entity
 
 ## Project status
 
-Product Milestones 1–12 and UX Milestones UX-01 through UX-08 are complete. EntityTracker uses
-SQLite as its local catalog and working store. Obsolete SharePoint presentation and runtime
+Product Milestones 1–12 and UX Milestones UX-01 through UX-08 are complete. EntityTracker currently
+uses SQLite as its local catalog and working store. Obsolete SharePoint presentation and runtime
 configuration have been retired, and the application exposes no remote synchronization control.
 
 A separate
-[PF-01–PF-05 product feedback milestone group](docs/milestones/00_README.md#product-feedback-milestones)
+[PF-01–PF-05 product feedback milestone group](docs/milestones/feedback/README.md)
 plans bulk status updates, customer priority, responsible-developer and group metadata, and
 column filtering with status-order sorting without extending the numbered roadmap. The independent
-[CI-01 engineering milestone](docs/milestones/ci_01_continuous_integration.md) now validates pull
+[CI-01 engineering milestone](docs/milestones/engineering/ci_01_continuous_integration.md) now validates pull
 requests and pushes to `main` and packages successful `main` builds. The live badge above reports
 the current `main` build status; CI-01 remains in progress until the `main` package artifact is
 verified.
 
 See the [milestone status](docs/milestones/milestone_status.md) and complete
-[roadmap](docs/milestones/00_README.md) for details.
+[roadmap](docs/milestones/README.md) for details. RS-01 through RS-03 of the
+[remote-sync roadmap](docs/milestones/remote-sync/README.md) are implemented. Semantic merge and
+final recovery/security hardening remain planned as RS-04 and RS-05.
 
 ## Technology and architecture
 
@@ -239,9 +282,9 @@ Domain model
 
 Business rules do not depend on WPF or infrastructure technologies. Read the
 [architecture rules](docs/architecture/ARCHITECTURE.md) and
-[collaborative storage contract](docs/architecture/COLLABORATIVE_STORAGE.md) for the historical
-storage boundary. Any future Project-level Git synchronization requires a separately approved
-design and is not exposed by this release.
+[collaborative storage direction](docs/architecture/COLLABORATIVE_STORAGE.md) for the preserved
+boundary and approved Git roadmap. Explicit non-diverged synchronization is implemented; semantic
+merge remains deliberately unavailable.
 
 ## Getting started
 
@@ -258,7 +301,7 @@ application data.
 - [PostgreSQL schema CSV contract](docs/importing/schema-csv-contract-v1.md)
 - [Local backup, logs, and recovery](docs/operations/RECOVERY.md)
 - [Architecture rules](docs/architecture/ARCHITECTURE.md)
-- [Roadmap and milestones](docs/milestones/00_README.md)
+- [Roadmap and milestones](docs/milestones/README.md)
 
 ## Contributing
 

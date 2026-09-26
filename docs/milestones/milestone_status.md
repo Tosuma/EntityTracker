@@ -14,7 +14,10 @@
 - 10
 - 11
 - 12
-- CI-01
+
+## Completed engineering milestones
+
+- CI-01 — Continuous integration
 
 ## Retired product milestones
 
@@ -39,5 +42,20 @@
 - UX-07 — Reporting and Tracker Comparison
 - UX-08 — Accessibility and Consistency
 
-Future Project-level Git synchronization will be planned separately after its data format, merge,
-authentication, and recovery requirements are decided.
+## Planned remote synchronization milestones
+
+- RS-04 — Semantic Merge and Conflict Review
+- RS-05 — Recovery, Security, and Consistency
+
+## Completed remote synchronization milestones
+
+- RS-01 — Repository Contract and Git Tooling
+- RS-02 — Local Git-Backed Projects
+- RS-03 — Remote Synchronization
+
+The [remote synchronization roadmap](remote-sync/README.md) fixes the authority, repository,
+offline, authentication, merge, deletion, and recovery direction. RS-01 provides the repository
+contract and safe Git tooling; RS-02 adds optional Git-backed Projects; RS-03 adds explicit
+non-diverged HTTPS/SSH synchronization. The current implementation keeps daily work and a durable
+pending-operation outbox in SQLite, then creates one Git commit per operation only when Sync is
+invoked. Semantic merge remains planned for RS-04.

@@ -29,8 +29,15 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         TrackedStateChangeSet changeSet,
         CancellationToken cancellationToken = default)
     {
-        await ApplyInternalAsync(trackerId, changeSet, null, cancellationToken);
+        await ApplyInternalAsync(trackerId, changeSet, null, null, cancellationToken);
     }
+
+    internal async Task ApplyAsync(
+        TrackerId trackerId,
+        TrackedStateChangeSet changeSet,
+        SqliteBeforeCommit beforeCommit,
+        CancellationToken cancellationToken) =>
+        await ApplyInternalAsync(trackerId, changeSet, null, beforeCommit, cancellationToken);
 
     public async Task<SchemaImportSummary> ApplyAsync(
         TrackerId trackerId,
@@ -39,13 +46,22 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(completion);
-        return (await ApplyInternalAsync(trackerId, changeSet, completion, cancellationToken))!;
+        return (await ApplyInternalAsync(trackerId, changeSet, completion, null, cancellationToken))!;
     }
+
+    internal async Task<SchemaImportSummary> ApplyAsync(
+        TrackerId trackerId,
+        TrackedStateChangeSet changeSet,
+        SchemaImportCompletion completion,
+        SqliteBeforeCommit beforeCommit,
+        CancellationToken cancellationToken) =>
+        (await ApplyInternalAsync(trackerId, changeSet, completion, beforeCommit, cancellationToken))!;
 
     private async Task<SchemaImportSummary?> ApplyInternalAsync(
         TrackerId trackerId,
         TrackedStateChangeSet changeSet,
         SchemaImportCompletion? completion,
+        SqliteBeforeCommit? beforeCommit,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(trackerId);
@@ -53,6 +69,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
 
         DateTimeOffset appliedAtUtc = _database.TimeProvider.GetUtcNow();
         string timestamp = SqlitePersistenceValues.FormatTimestamp(appliedAtUtc);
+        string operationId = SqlitePersistenceValues.Format(changeSet.OperationId);
         await using SqliteConnection connection =
             await _database.OpenConnectionAsync(cancellationToken);
         await using SqliteTransaction transaction =
@@ -83,6 +100,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                     entity.Status,
                     StatusHistoryEntryKind.Created,
                     timestamp,
+                    operationId,
                     cancellationToken);
             }
 
@@ -103,6 +121,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                     transaction,
                     entity,
                     timestamp,
+                    operationId,
                     cancellationToken);
                 await UpdateProgressAsync(
                     connection,
@@ -236,6 +255,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                     trackerId,
                     changeSet.ProgressSnapshotAfterChanges,
                     timestamp,
+                    operationId,
                     cancellationToken);
             }
 
@@ -248,8 +268,12 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                     transaction,
                     trackerId,
                     summary,
+                    operationId,
                     cancellationToken);
             }
+
+            if (beforeCommit is not null)
+                await beforeCommit(connection, transaction, cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);
             return summary;
@@ -314,6 +338,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         }
         string timestamp = SqlitePersistenceValues.FormatTimestamp(
             _database.TimeProvider.GetUtcNow());
+        string operationId = SqlitePersistenceValues.Format(OperationId.New());
         await using SqliteConnection connection =
             await _database.OpenConnectionAsync(cancellationToken);
         await using SqliteTransaction transaction =
@@ -360,6 +385,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                 entity.Status,
                 StatusHistoryEntryKind.Baseline,
                 timestamp,
+                operationId,
                 cancellationToken);
         }
 
@@ -369,6 +395,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
             trackerId,
             snapshot,
             timestamp,
+            operationId,
             cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
@@ -437,23 +464,25 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         SqliteTransaction transaction,
         TrackerId trackerId,
         SchemaImportSummary summary,
+        string operationId,
         CancellationToken cancellationToken)
     {
         using SqliteCommand command = CreateCommand(connection, transaction, """
             INSERT INTO schema_import_summary
             (
-                tracker_id, applied_at_utc, source_file_name, import_mode,
+                tracker_id, operation_id, applied_at_utc, source_file_name, import_mode,
                 new_entity_count, changed_entity_count, archived_entity_count,
                 unchanged_entity_count, unresolved_entity_count
             )
             VALUES
             (
-                $trackerId, $appliedAtUtc, $sourceFileName, $importMode,
+                $trackerId, $operationId, $appliedAtUtc, $sourceFileName, $importMode,
                 $newCount, $changedCount, $archivedCount,
                 $unchangedCount, $unresolvedCount
             )
             ON CONFLICT (tracker_id)
             DO UPDATE SET
+                operation_id = excluded.operation_id,
                 applied_at_utc = excluded.applied_at_utc,
                 source_file_name = excluded.source_file_name,
                 import_mode = excluded.import_mode,
@@ -464,6 +493,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                 unresolved_entity_count = excluded.unresolved_entity_count;
             """);
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
+        command.Parameters.AddWithValue("$operationId", operationId);
         command.Parameters.AddWithValue(
             "$appliedAtUtc",
             SqlitePersistenceValues.FormatTimestamp(summary.AppliedAtUtc));
@@ -503,20 +533,22 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         SqliteTransaction transaction,
         TrackedEntity entity,
         string timestamp,
+        string operationId,
         CancellationToken cancellationToken)
     {
         using SqliteCommand command = CreateCommand(connection, transaction, """
             INSERT INTO entity_status_history
             (
-                entity_id, previous_status, new_status, entry_kind, occurred_at_utc
+                operation_id, entity_id, previous_status, new_status, entry_kind, occurred_at_utc
             )
-            SELECT id, development_status, $newStatus, 'Transition', $timestamp
+            SELECT $operationId, id, development_status, $newStatus, 'Transition', $timestamp
             FROM tracked_entities
             WHERE id = $id AND development_status <> $newStatus;
             """);
         command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
         command.Parameters.AddWithValue("$newStatus", entity.Status.ToString());
         command.Parameters.AddWithValue("$timestamp", timestamp);
+        command.Parameters.AddWithValue("$operationId", operationId);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -528,14 +560,15 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         DevelopmentStatus newStatus,
         StatusHistoryEntryKind kind,
         string timestamp,
+        string operationId,
         CancellationToken cancellationToken)
     {
         using SqliteCommand command = CreateCommand(connection, transaction, """
             INSERT INTO entity_status_history
             (
-                entity_id, previous_status, new_status, entry_kind, occurred_at_utc
+                operation_id, entity_id, previous_status, new_status, entry_kind, occurred_at_utc
             )
-            VALUES ($entityId, $previousStatus, $newStatus, $kind, $timestamp);
+            VALUES ($operationId, $entityId, $previousStatus, $newStatus, $kind, $timestamp);
             """);
         command.Parameters.AddWithValue("$entityId", SqlitePersistenceValues.Format(entityId));
         command.Parameters.AddWithValue(
@@ -544,6 +577,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         command.Parameters.AddWithValue("$newStatus", newStatus.ToString());
         command.Parameters.AddWithValue("$kind", kind.ToString());
         command.Parameters.AddWithValue("$timestamp", timestamp);
+        command.Parameters.AddWithValue("$operationId", operationId);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -553,6 +587,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         TrackerId trackerId,
         ProgressSnapshotState snapshot,
         string timestamp,
+        string operationId,
         CancellationToken cancellationToken)
     {
         using SqliteCommand command = CreateCommand(connection, transaction, """
@@ -585,6 +620,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                 trackerId,
                 snapshot,
                 timestamp,
+                operationId,
                 cancellationToken);
         }
     }
@@ -595,21 +631,23 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         TrackerId trackerId,
         ProgressSnapshotState snapshot,
         string timestamp,
+        string operationId,
         CancellationToken cancellationToken)
     {
         using SqliteCommand command = CreateCommand(connection, transaction, """
             INSERT INTO progress_snapshots
             (
-                tracker_id, recorded_at_utc, ready_count, blocked_count, in_progress_count,
+                tracker_id, operation_id, recorded_at_utc, ready_count, blocked_count, in_progress_count,
                 rework_needed_count, development_completed_count, reconciled_count
             )
             VALUES
             (
-                $trackerId, $timestamp, $ready, $blocked, $inProgress, $rework,
+                $trackerId, $operationId, $timestamp, $ready, $blocked, $inProgress, $rework,
                 $developmentCompleted, $reconciled
             );
             """);
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
+        command.Parameters.AddWithValue("$operationId", operationId);
         command.Parameters.AddWithValue("$timestamp", timestamp);
         command.Parameters.AddWithValue("$ready", snapshot.ReadyCount);
         command.Parameters.AddWithValue("$blocked", snapshot.BlockedCount);

@@ -1,5 +1,6 @@
 using System.IO;
 
+using EntityTracker.Application.Collaboration;
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
@@ -30,6 +31,97 @@ namespace EntityTracker.Wpf.Tests.ViewModels;
 public sealed class ShellViewModelTests
 {
     [Fact]
+    public async Task ProjectSyncPresentation_DisablesLocalOnlyAndReportsSuccessfulPush()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        StubRepositorySynchronization repositories = new(harness.DefaultProject.Id);
+        using ShellViewModel shell = harness.CreateShell(
+            new EntityTrackerSettings(lastProjectId: harness.DefaultProject.Id),
+            new RecordingDiscardConfirmation(true),
+            repositories,
+            repositories);
+        await shell.InitializeAsync();
+
+        Assert.Equal(1, repositories.CachedStatusCallCount);
+        Assert.Equal(0, repositories.FullStatusCallCount);
+        Assert.True(shell.CanSyncRepository);
+        Assert.Equal(string.Empty, shell.SyncDisabledReason);
+
+        repositories.Status = repositories.Status with
+        {
+            SyncState = ProjectSyncState.Ahead,
+            Upstream = "team/main",
+            AheadCount = 2,
+            BehindCount = 0,
+            Diagnostic = null
+        };
+        await shell.SelectProjectAsync(null);
+        await shell.OpenProjectAsync(harness.DefaultProject.Id);
+        Assert.True(shell.CanSyncRepository);
+
+        await shell.SyncSelectedProjectAsync();
+
+        Assert.Equal(1, repositories.SyncCallCount);
+        Assert.Equal(ProjectSyncState.UpToDate, shell.ActiveRepositoryStatus?.SyncState);
+        Assert.Equal("Pushed 2 local commits.", shell.NotificationMessage);
+        Assert.Equal(ShellNotificationSeverity.Success, shell.NotificationSeverity);
+    }
+
+    [Fact]
+    public async Task RepositoryLinkNotificationsDistinguishSuccessAndFailure()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        StubRepositorySynchronization repositories = new(harness.DefaultProject.Id);
+        using ShellViewModel shell = harness.CreateShell(
+            new EntityTrackerSettings(lastProjectId: harness.DefaultProject.Id),
+            new RecordingDiscardConfirmation(true),
+            repositories,
+            repositories);
+        await shell.InitializeAsync();
+
+        await shell.LinkSelectedProjectAsync(@"C:\Projects\Shared");
+
+        Assert.Contains("is now Git-backed", shell.NotificationMessage, StringComparison.Ordinal);
+        Assert.Equal(ShellNotificationSeverity.Success, shell.NotificationSeverity);
+
+        repositories.LinkFailure = new InvalidOperationException("Repository is unavailable.");
+        await shell.LinkSelectedProjectAsync(@"C:\Projects\Unavailable");
+
+        Assert.StartsWith("Repository action could not be completed", shell.NotificationMessage);
+        Assert.Equal(ShellNotificationSeverity.Error, shell.NotificationSeverity);
+    }
+
+    [Fact]
+    public async Task CachedTrackerNavigationRemainsAvailableWhenRepositoryStatusIsBlocked()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        StubRepositorySynchronization repositories = new(harness.DefaultProject.Id)
+        {
+            Status = new ProjectRepositoryStatus(
+                harness.DefaultProject.Id,
+                ProjectRepositoryStatusKind.Blocked,
+                @"C:\Projects\Shared",
+                "main",
+                "Repository validation is required.")
+        };
+        using ShellViewModel shell = harness.CreateShell(
+            new EntityTrackerSettings(
+                lastProjectId: harness.DefaultProject.Id,
+                lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true),
+            repositories,
+            repositories);
+
+        await shell.InitializeAsync();
+
+        Assert.Equal(harness.DefaultTracker.Id, shell.SelectedTracker?.Id);
+        Assert.NotNull(shell.CurrentWorkspace);
+        Assert.True(shell.CanReadActiveProjectCache);
+        Assert.False(shell.CanUseActiveRepository);
+        Assert.Equal(0, repositories.FullStatusCallCount);
+    }
+
+    [Fact]
     public async Task InitializeAsync_RestoresValidContextAndUsesTypedNavigation()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
@@ -46,6 +138,8 @@ public sealed class ShellViewModelTests
         Assert.Equal(harness.DefaultTracker.Id, shell.SelectedTracker?.Id);
         Assert.Equal(ShellDestination.Overview, shell.SelectedDestination);
         Assert.True(shell.IsTrackerWorkspace);
+        Assert.Equal(ProjectRepositoryStatusKind.SQLiteOnly, shell.ActiveRepositoryStatus?.Kind);
+        Assert.True(shell.CanLinkRepository);
         Assert.True(shell.NavigateCommand.CanExecute(ShellDestination.Reports));
 
         Assert.True(await shell.NavigateAsync(ShellDestination.Reports));
@@ -480,6 +574,7 @@ public sealed class ShellViewModelTests
                 entities,
                 dependencies,
                 overrides,
+                history,
                 stateStore,
                 resolver,
                 snapshots);
@@ -573,7 +668,9 @@ public sealed class ShellViewModelTests
 
         public ShellViewModel CreateShell(
             EntityTrackerSettings initialSettings,
-            IContextDiscardConfirmation confirmation) => new(
+            IContextDiscardConfirmation confirmation,
+            IProjectRepositoryManager? repositoryManager = null,
+            IProjectSynchronizationService? synchronizationService = null) => new(
                 _projects,
                 _trackers,
                 _dashboardFactory,
@@ -584,7 +681,9 @@ public sealed class ShellViewModelTests
                 _catalog,
                 _appearance,
                 _clipboard,
-                initialSettings);
+                initialSettings,
+                repositoryManager,
+                synchronizationService);
 
         public Task AddEntityAsync(TrackerId trackerId, string name) =>
             _stateStore.ApplyAsync(
@@ -624,6 +723,72 @@ public sealed class ShellViewModelTests
             CallCount++;
             return Result;
         }
+    }
+
+    private sealed class StubRepositorySynchronization(ProjectId projectId) :
+        IProjectRepositoryManager,
+        IProjectSynchronizationService
+    {
+        public ProjectRepositoryStatus Status { get; set; } = new(
+            projectId,
+            ProjectRepositoryStatusKind.GitClean,
+            @"C:\Projects\Shared",
+            "main",
+            "No upstream is configured for the managed branch.",
+            ProjectSyncState.NoUpstream);
+
+        public int SyncCallCount { get; private set; }
+        public int CachedStatusCallCount { get; private set; }
+        public int FullStatusCallCount { get; private set; }
+        public Exception? LinkFailure { get; set; }
+
+        public Task<IReadOnlyList<ProjectRepositoryStatus>> GetStatusesAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ProjectRepositoryStatus>>([Status]);
+
+        public Task<ProjectRepositoryStatus> GetStatusAsync(ProjectId id, CancellationToken cancellationToken = default)
+        {
+            FullStatusCallCount++;
+            return Task.FromResult(Status);
+        }
+
+        public Task<ProjectRepositoryStatus> GetCachedStatusAsync(ProjectId id, CancellationToken cancellationToken = default)
+        {
+            CachedStatusCallCount++;
+            return Task.FromResult(Status);
+        }
+
+        public Task<ProjectSyncResult> SyncAsync(ProjectId id, CancellationToken cancellationToken = default)
+        {
+            SyncCallCount++;
+            Status = Status with
+            {
+                SyncState = ProjectSyncState.UpToDate,
+                AheadCount = 0,
+                BehindCount = 0,
+                LastSuccessfulFetchAtUtc = DateTimeOffset.UtcNow,
+                LastSuccessfulPushAtUtc = DateTimeOffset.UtcNow
+            };
+            return Task.FromResult(new ProjectSyncResult(
+                ProjectSyncOutcome.Pushed,
+                ProjectSyncFailureKind.None,
+                "Pushed 2 local commits.",
+                Status));
+        }
+
+        public Task LinkAsync(ProjectId id, string repositoryPath, CancellationToken cancellationToken = default)
+        {
+            if (LinkFailure is not null) throw LinkFailure;
+            Status = Status with
+            {
+                RepositoryPath = repositoryPath,
+                Kind = ProjectRepositoryStatusKind.GitClean,
+                SyncState = ProjectSyncState.NoUpstream
+            };
+            return Task.CompletedTask;
+        }
+        public Task<ProjectId> OpenAsync(string repositoryPath, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task LocateAsync(ProjectId id, string repositoryPath, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task RebuildCacheAsync(ProjectId id, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class TestAdapters :

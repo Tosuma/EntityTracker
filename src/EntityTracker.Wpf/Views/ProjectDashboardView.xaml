@@ -176,19 +176,64 @@
         <StackPanel>
             <DockPanel Margin="0,0,0,18">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Margin="0,0,8,0" Click="OnRenameProject" Content="Rename project" />
-                    <Button Margin="0,0,8,0" Click="OnOpenRecycleBin" Content="Tracker recycle bin" />
+                    <Button Margin="0,0,8,0" Click="OnRenameProject" Content="Rename project"
+                            IsEnabled="{Binding CanUseActiveRepository}" />
+                    <Button Margin="0,0,8,0" Click="OnOpenRecycleBin" Content="Tracker recycle bin"
+                            IsEnabled="{Binding CanUseActiveRepository}" />
                     <Button Click="OnCreateTracker" Content="Create tracker"
+                            IsEnabled="{Binding CanUseActiveRepository}"
                             Style="{StaticResource PrimaryButtonStyle}" />
                 </StackPanel>
                 <StackPanel>
                     <TextBlock Style="{StaticResource PageHeadingTextStyle}"
-                               Text="{Binding ProjectReporting.Dashboard.Project.Name}" />
+                               Text="{Binding SelectedProject.Name}" />
                     <TextBlock Margin="0,4,0,0" Style="{StaticResource PageDescriptionTextStyle}"
                                Text="Aggregate progress, comparable trackers, and entity-level differences." />
                 </StackPanel>
             </DockPanel>
 
+            <Border Margin="0,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                <StackPanel>
+                        <TextBlock AutomationProperties.LiveSetting="Polite"
+                                   FontWeight="SemiBold" Text="{Binding RepositoryStatusText}" />
+                        <TextBlock Margin="0,5,16,0"
+                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Text="{Binding RepositoryStatusDetails}"
+                                   TextWrapping="Wrap"
+                                   Visibility="{Binding HasRepositoryStatusDetails, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <TextBlock Margin="0,5,16,0"
+                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Text="A local repository is optional. Changes are committed locally; only an explicit Sync contacts a configured upstream."
+                                   TextWrapping="Wrap" />
+                        <TextBlock Margin="0,5,16,0"
+                                   AutomationProperties.LiveSetting="Polite"
+                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Text="{Binding SyncDisabledReason}"
+                                   TextWrapping="Wrap"
+                                   Visibility="{Binding HasSyncDisabledReason, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
+                        <Button Margin="0,0,8,0"
+                                AutomationProperties.HelpText="Fetch, fast-forward, or push the configured upstream for this Project."
+                                AutomationProperties.Name="Synchronize project repository"
+                                Click="OnSyncRepository"
+                                Content="Sync"
+                                IsEnabled="{Binding CanSyncRepository}"
+                                Style="{StaticResource PrimaryButtonStyle}"
+                                Visibility="{Binding ShowSyncRepository, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <Button Click="OnLinkRepository" Content="Link repository"
+                                AutomationProperties.HelpText="Link this Project to an existing empty Git repository."
+                                Visibility="{Binding CanLinkRepository, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <Button Click="OnLocateRepository" Content="Locate repository"
+                                AutomationProperties.HelpText="Locate the registered repository after its folder moved."
+                                Visibility="{Binding CanLocateRepository, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <Button Click="OnRebuildRepositoryCache" Content="Rebuild cache"
+                                AutomationProperties.HelpText="Replace this Project's SQLite cache from repository HEAD."
+                                Visibility="{Binding CanRebuildRepositoryCache, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <StackPanel Visibility="{Binding CanReadActiveProjectCache, Converter={StaticResource BooleanToVisibilityConverter}}">
             <Border Margin="0,0,0,12" MaxHeight="120" Style="{StaticResource ErrorMessageStyle}"
                     Visibility="{Binding ProjectReporting.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -447,6 +492,7 @@
                     </DataGrid>
                 </StackPanel>
             </Border>
+            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

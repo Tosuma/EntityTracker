@@ -146,7 +146,8 @@ unrelated image assets are preserved. Each open screenshot window switches to th
 appearance and back before capture, exercising live Light-to-Dark and Dark-to-Light transitions.
 The utility imports the repository's 125-entity synthetic schema, creates two Projects and three
 related Trackers, creates fixed status and 90-day history data, and captures the portfolio, Project
-dashboard, Tracker copy review, overview, synchronization, entity, progress, archive, destructive
+dashboard, local and synchronized repository states, Tracker copy review, overview,
+synchronization, entity, progress, archive, destructive
 confirmation, Help &amp; SQL, SQL-query, and Settings states. It uses a new SQLite database below the
 operating-system temporary directory for each appearance and never reads or changes
 `%LOCALAPPDATA%\EntityTracker`. The application may remain open while the screenshots are

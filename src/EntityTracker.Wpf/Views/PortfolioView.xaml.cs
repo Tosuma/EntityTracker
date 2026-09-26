@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using EntityTracker.Application.Projects;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.ViewModels;
+using Microsoft.Win32;
 
 namespace EntityTracker.Wpf.Views;
 
@@ -14,6 +15,17 @@ public partial class PortfolioView : UserControl
     private ShellViewModel Shell => (ShellViewModel)DataContext;
 
     private void OnCreateProject(object sender, RoutedEventArgs e) => Shell.Catalog.OpenCreateProject();
+
+    private async void OnOpenRepository(object sender, RoutedEventArgs e)
+    {
+        OpenFolderDialog dialog = new()
+        {
+            Title = "Open an EntityTracker Project repository",
+            Multiselect = false
+        };
+        if (dialog.ShowDialog(Window.GetWindow(this)) == true)
+            await Shell.OpenRepositoryAsync(dialog.FolderName);
+    }
 
     private async void OnOpenRecycleBins(object sender, RoutedEventArgs e) =>
         await Shell.Catalog.OpenRecycleBinAsync();

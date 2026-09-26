@@ -17,6 +17,9 @@ internal static class SqlitePersistenceValues
     public static string Format(TrackerId trackerId) =>
         trackerId.Value.ToString("D", CultureInfo.InvariantCulture);
 
+    public static string Format(OperationId operationId) =>
+        operationId.Value.ToString("D", CultureInfo.InvariantCulture).ToLowerInvariant();
+
     public static EntityId ParseEntityId(string value)
     {
         if (!Guid.TryParseExact(value, "D", out Guid id))
@@ -32,6 +35,9 @@ internal static class SqlitePersistenceValues
 
     public static TrackerId ParseTrackerId(string value) =>
         new(ParseGuid(value, "tracker"));
+
+    public static OperationId ParseOperationId(string value) =>
+        new(ParseGuid(value, "operation"));
 
     private static Guid ParseGuid(string value, string kind)
     {

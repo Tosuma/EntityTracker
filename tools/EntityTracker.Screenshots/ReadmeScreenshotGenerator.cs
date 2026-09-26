@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
 
+using EntityTracker.Application.Collaboration;
 using EntityTracker.Application.History;
 using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
@@ -84,6 +85,7 @@ internal sealed class ReadmeScreenshotGenerator
                 "The project dashboard did not finish loading.",
                 cancellationToken);
             await renderer.CaptureAsync("project-dashboard.png", settleMilliseconds: 900);
+            await CaptureRepositoryStatesAsync(provider, shell, project, renderer, cancellationToken);
             await renderer.BringNamedElementIntoViewAndCaptureAsync(
                 "ComparisonGrid",
                 "project-comparison.png");
@@ -177,6 +179,58 @@ internal sealed class ReadmeScreenshotGenerator
                 System.Windows.Application.Current.MainWindow = null;
             }
         }
+    }
+
+    private static async Task CaptureRepositoryStatesAsync(
+        ServiceProvider provider,
+        ShellViewModel shell,
+        Project project,
+        WpfScreenshotRenderer renderer,
+        CancellationToken cancellationToken)
+    {
+        ScreenshotRepositoryManager repositories =
+            provider.GetRequiredService<ScreenshotRepositoryManager>();
+        repositories.SetStatus(project.Id, ProjectRepositoryStatusKind.StaleCache,
+            "Repository HEAD has not been projected into SQLite.");
+        await shell.SelectProjectAsync(null, cancellationToken);
+        await shell.OpenProjectAsync(project.Id);
+        await renderer.CaptureAsync("repository-stale-cache.png");
+
+        repositories.SetStatus(project.Id, ProjectRepositoryStatusKind.Unavailable,
+            "The repository folder is unavailable.");
+        await shell.SelectProjectAsync(null, cancellationToken);
+        await shell.OpenProjectAsync(project.Id);
+        await renderer.CaptureAsync("repository-unavailable.png");
+
+        repositories.SetSyncStatus(project.Id, ProjectSyncState.UpToDate);
+        await shell.SelectProjectAsync(null, cancellationToken);
+        await shell.OpenProjectAsync(project.Id);
+        await renderer.CaptureAsync("repository-sync-up-to-date.png");
+
+        repositories.SetSyncStatus(project.Id, ProjectSyncState.NoUpstream,
+            "No upstream is configured for the managed branch.");
+        await shell.SelectProjectAsync(null, cancellationToken);
+        await shell.OpenProjectAsync(project.Id);
+        await renderer.CaptureAsync("repository-local-only.png");
+
+        repositories.SetSyncStatus(project.Id, ProjectSyncState.Ahead, ahead: 3, behind: 0);
+        await shell.SelectProjectAsync(null, cancellationToken);
+        await shell.OpenProjectAsync(project.Id);
+        await renderer.CaptureAsync("repository-sync-ahead.png");
+
+        repositories.SetSyncStatus(project.Id, ProjectSyncState.MergeRequired,
+            "Local and upstream commits have diverged. Semantic merge is required.", 2, 1);
+        await shell.SelectProjectAsync(null, cancellationToken);
+        await shell.OpenProjectAsync(project.Id);
+        await renderer.CaptureAsync("repository-merge-required.png");
+
+        repositories.ClearStatus(project.Id);
+        await shell.SelectProjectAsync(null, cancellationToken);
+        await shell.OpenProjectAsync(project.Id);
+        await WaitUntilAsync(
+            () => shell.ProjectReporting?.Dashboard?.Trackers.Count == 2,
+            "The Project dashboard did not recover after repository-state screenshots.",
+            cancellationToken);
     }
 
     private static async Task CaptureChangedReviewAsync(

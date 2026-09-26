@@ -103,7 +103,7 @@ minimum-window layout, and ordinary DPI scaling.
 ```text
 Plan UX-02 — Fluent Foundation and Theme.
 
-Read the architecture document, both design guides, ux_00_README.md, UX-01, and this milestone.
+Read the architecture document, both design guides, `ux/README.md`, UX-01, and this milestone.
 Inspect App.xaml, the current theme dictionary, MainWindow XAML, settings persistence, charts, and
 presentation tests. Produce a repository-specific plan for UX-02 only. Verify the exact built-in
 .NET 10 WPF Fluent APIs available locally. Do not modify the repository and do not plan the new

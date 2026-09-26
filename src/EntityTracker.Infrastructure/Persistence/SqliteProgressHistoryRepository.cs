@@ -29,7 +29,7 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
             await _database.OpenConnectionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT entity_id, previous_status, new_status, occurred_at_utc, entry_kind
+            SELECT operation_id, entity_id, previous_status, new_status, occurred_at_utc, entry_kind
             FROM entity_status_history history
             INNER JOIN tracked_entities entity ON entity.id = history.entity_id
             WHERE entity.tracker_id = $trackerId
@@ -42,18 +42,19 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
         while (await reader.ReadAsync(cancellationToken))
         {
             entries.Add(new EntityStatusHistoryEntry(
-                SqlitePersistenceValues.ParseEntityId(reader.GetString(0)),
-                reader.IsDBNull(1)
+                SqlitePersistenceValues.ParseOperationId(reader.GetString(0)),
+                SqlitePersistenceValues.ParseEntityId(reader.GetString(1)),
+                reader.IsDBNull(2)
                     ? null
                     : SqlitePersistenceValues.ParseEnum<DevelopmentStatus>(
-                        reader.GetString(1),
+                        reader.GetString(2),
                         "previous development status"),
                 SqlitePersistenceValues.ParseEnum<DevelopmentStatus>(
-                    reader.GetString(2),
+                    reader.GetString(3),
                     "development status"),
-                ParseTimestamp(reader.GetString(3)),
+                ParseTimestamp(reader.GetString(4)),
                 SqlitePersistenceValues.ParseEnum<StatusHistoryEntryKind>(
-                    reader.GetString(4),
+                    reader.GetString(5),
                     "status history entry kind")));
         }
 

@@ -29,7 +29,13 @@ public sealed class SqliteProjectTrackerStore(
 
     public async Task CreateTrackerAsync(
         TrackerCreationState creation,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        await CreateTrackerAsync(creation, null, cancellationToken);
+
+    internal async Task CreateTrackerAsync(
+        TrackerCreationState creation,
+        SqliteBeforeCommit? beforeCommit,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(creation);
         Tracker tracker = creation.Tracker;
@@ -87,7 +93,13 @@ public sealed class SqliteProjectTrackerStore(
 
             foreach (TrackedEntity entity in changeSet.EntitiesToAdd)
             {
-                await InsertEntityAsync(connection, transaction, entity, timestamp, cancellationToken);
+                await InsertEntityAsync(
+                    connection,
+                    transaction,
+                    entity,
+                    timestamp,
+                    SqlitePersistenceValues.Format(changeSet.OperationId),
+                    cancellationToken);
             }
 
             foreach (PersistedDependency dependency in changeSet.ResolvedDependencies)
@@ -142,6 +154,7 @@ public sealed class SqliteProjectTrackerStore(
                 tracker.Id,
                 creation.InitialSnapshot,
                 timestamp,
+                SqlitePersistenceValues.Format(changeSet.OperationId),
                 cancellationToken);
 
             if (creation.ImportCompletion is { } completion)
@@ -152,8 +165,12 @@ public sealed class SqliteProjectTrackerStore(
                     tracker.Id,
                     completion,
                     timestamp,
+                    SqlitePersistenceValues.Format(changeSet.OperationId),
                     cancellationToken);
             }
+
+            if (beforeCommit is not null)
+                await beforeCommit(connection, transaction, cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);
         }
@@ -166,39 +183,61 @@ public sealed class SqliteProjectTrackerStore(
     }
 
     public Task RenameProjectAsync(ProjectId projectId, string name, CancellationToken cancellationToken = default) =>
-        UpdateNameAsync("projects", SqlitePersistenceValues.Format(projectId), name, cancellationToken);
+        UpdateNameAsync("projects", SqlitePersistenceValues.Format(projectId), name, null, cancellationToken);
+
+    internal Task RenameProjectAsync(ProjectId projectId, string name, SqliteBeforeCommit beforeCommit, CancellationToken cancellationToken) =>
+        UpdateNameAsync("projects", SqlitePersistenceValues.Format(projectId), name, beforeCommit, cancellationToken);
 
     public Task RenameTrackerAsync(TrackerId trackerId, string name, CancellationToken cancellationToken = default) =>
-        UpdateNameAsync("trackers", SqlitePersistenceValues.Format(trackerId), name, cancellationToken);
+        UpdateNameAsync("trackers", SqlitePersistenceValues.Format(trackerId), name, null, cancellationToken);
+
+    internal Task RenameTrackerAsync(TrackerId trackerId, string name, SqliteBeforeCommit beforeCommit, CancellationToken cancellationToken) =>
+        UpdateNameAsync("trackers", SqlitePersistenceValues.Format(trackerId), name, beforeCommit, cancellationToken);
 
     public Task SetProjectLifecycleAsync(
         ProjectId projectId,
         CatalogLifecycleState lifecycleState,
         CancellationToken cancellationToken = default) =>
-        SetLifecycleAsync("projects", SqlitePersistenceValues.Format(projectId), lifecycleState, cancellationToken);
+        SetLifecycleAsync("projects", SqlitePersistenceValues.Format(projectId), lifecycleState, null, cancellationToken);
+
+    internal Task SetProjectLifecycleAsync(ProjectId projectId, CatalogLifecycleState lifecycleState, SqliteBeforeCommit beforeCommit, CancellationToken cancellationToken) =>
+        SetLifecycleAsync("projects", SqlitePersistenceValues.Format(projectId), lifecycleState, beforeCommit, cancellationToken);
 
     public Task SetTrackerLifecycleAsync(
         TrackerId trackerId,
         CatalogLifecycleState lifecycleState,
         CancellationToken cancellationToken = default) =>
-        SetLifecycleAsync("trackers", SqlitePersistenceValues.Format(trackerId), lifecycleState, cancellationToken);
+        SetLifecycleAsync("trackers", SqlitePersistenceValues.Format(trackerId), lifecycleState, null, cancellationToken);
+
+    internal Task SetTrackerLifecycleAsync(TrackerId trackerId, CatalogLifecycleState lifecycleState, SqliteBeforeCommit beforeCommit, CancellationToken cancellationToken) =>
+        SetLifecycleAsync("trackers", SqlitePersistenceValues.Format(trackerId), lifecycleState, beforeCommit, cancellationToken);
 
     public Task PurgeProjectAsync(ProjectId projectId, CancellationToken cancellationToken = default) =>
-        PurgeAsync(SqlitePersistenceValues.Format(projectId), true, cancellationToken);
+        PurgeAsync(SqlitePersistenceValues.Format(projectId), true, null, cancellationToken);
+
+    internal Task PurgeProjectAsync(ProjectId projectId, SqliteBeforeCommit beforeCommit, CancellationToken cancellationToken) =>
+        PurgeAsync(SqlitePersistenceValues.Format(projectId), true, beforeCommit, cancellationToken);
 
     public Task PurgeTrackerAsync(TrackerId trackerId, CancellationToken cancellationToken = default) =>
-        PurgeAsync(SqlitePersistenceValues.Format(trackerId), false, cancellationToken);
+        PurgeAsync(SqlitePersistenceValues.Format(trackerId), false, null, cancellationToken);
+
+    internal Task PurgeTrackerAsync(TrackerId trackerId, SqliteBeforeCommit beforeCommit, CancellationToken cancellationToken) =>
+        PurgeAsync(SqlitePersistenceValues.Format(trackerId), false, beforeCommit, cancellationToken);
 
     private async Task UpdateNameAsync(
         string table,
         string id,
         string name,
+        SqliteBeforeCommit? beforeCommit,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         string normalized = name.Trim();
         await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = $"""
             UPDATE {table}
             SET name_key = $nameKey, name = $name, updated_at_utc = $timestamp
@@ -214,6 +253,9 @@ public sealed class SqliteProjectTrackerStore(
             {
                 throw new InvalidOperationException("The catalog item no longer exists.");
             }
+            if (beforeCommit is not null)
+                await beforeCommit(connection, transaction, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
         }
         catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
         {
@@ -225,6 +267,7 @@ public sealed class SqliteProjectTrackerStore(
         string table,
         string id,
         CatalogLifecycleState lifecycleState,
+        SqliteBeforeCommit? beforeCommit,
         CancellationToken cancellationToken)
     {
         if (!Enum.IsDefined(lifecycleState))
@@ -234,7 +277,10 @@ public sealed class SqliteProjectTrackerStore(
 
         string timestamp = SqlitePersistenceValues.FormatTimestamp(database.TimeProvider.GetUtcNow());
         await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = $"""
             UPDATE {table}
             SET lifecycle_state = $state,
@@ -249,9 +295,16 @@ public sealed class SqliteProjectTrackerStore(
         {
             throw new InvalidOperationException("The catalog item no longer exists.");
         }
+        if (beforeCommit is not null)
+            await beforeCommit(connection, transaction, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
-    private async Task PurgeAsync(string id, bool project, CancellationToken cancellationToken)
+    private async Task PurgeAsync(
+        string id,
+        bool project,
+        SqliteBeforeCommit? beforeCommit,
+        CancellationToken cancellationToken)
     {
         await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken);
         await using SqliteTransaction transaction =
@@ -275,6 +328,9 @@ public sealed class SqliteProjectTrackerStore(
             await ExecuteDeleteAsync(connection, transaction, "DELETE FROM projects WHERE id = $id;", id, cancellationToken);
         }
 
+        if (beforeCommit is not null)
+            await beforeCommit(connection, transaction, cancellationToken);
+
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -283,6 +339,7 @@ public sealed class SqliteProjectTrackerStore(
         SqliteTransaction transaction,
         TrackedEntity entity,
         string timestamp,
+        string operationId,
         CancellationToken cancellationToken)
     {
         using SqliteCommand command = CreateCommand(connection, transaction, """
@@ -296,8 +353,8 @@ public sealed class SqliteProjectTrackerStore(
              $timestamp, $timestamp, $timestamp);
 
             INSERT INTO entity_status_history
-            (entity_id, previous_status, new_status, entry_kind, occurred_at_utc)
-            VALUES ($id, NULL, $status, 'Baseline', $timestamp);
+            (operation_id, entity_id, previous_status, new_status, entry_kind, occurred_at_utc)
+            VALUES ($operationId, $id, NULL, $status, 'Baseline', $timestamp);
             """);
         command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(entity.TrackerId));
@@ -311,6 +368,7 @@ public sealed class SqliteProjectTrackerStore(
         command.Parameters.AddWithValue("$developer", entity.ResponsibleDeveloper);
         command.Parameters.AddWithValue("$group", entity.GroupName);
         command.Parameters.AddWithValue("$timestamp", timestamp);
+        command.Parameters.AddWithValue("$operationId", operationId);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -320,15 +378,17 @@ public sealed class SqliteProjectTrackerStore(
         TrackerId trackerId,
         ProgressSnapshotState snapshot,
         string timestamp,
+        string operationId,
         CancellationToken cancellationToken)
     {
         using SqliteCommand command = CreateCommand(connection, transaction, """
             INSERT INTO progress_snapshots
-            (tracker_id, recorded_at_utc, ready_count, blocked_count, in_progress_count,
+            (tracker_id, operation_id, recorded_at_utc, ready_count, blocked_count, in_progress_count,
              rework_needed_count, development_completed_count, reconciled_count)
-            VALUES ($trackerId, $timestamp, $ready, $blocked, $inProgress, $rework, $completed, $reconciled);
+            VALUES ($trackerId, $operationId, $timestamp, $ready, $blocked, $inProgress, $rework, $completed, $reconciled);
             """);
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
+        command.Parameters.AddWithValue("$operationId", operationId);
         command.Parameters.AddWithValue("$timestamp", timestamp);
         command.Parameters.AddWithValue("$ready", snapshot.ReadyCount);
         command.Parameters.AddWithValue("$blocked", snapshot.BlockedCount);
@@ -345,16 +405,18 @@ public sealed class SqliteProjectTrackerStore(
         TrackerId trackerId,
         SchemaImportCompletion completion,
         string timestamp,
+        string operationId,
         CancellationToken cancellationToken)
     {
         using SqliteCommand command = CreateCommand(connection, transaction, """
             INSERT INTO schema_import_summary
-            (tracker_id, applied_at_utc, source_file_name, import_mode, new_entity_count,
+            (tracker_id, operation_id, applied_at_utc, source_file_name, import_mode, new_entity_count,
              changed_entity_count, archived_entity_count, unchanged_entity_count,
              unresolved_entity_count)
-            VALUES ($trackerId, $timestamp, $file, $mode, $new, $changed, $archived, $unchanged, $unresolved);
+            VALUES ($trackerId, $operationId, $timestamp, $file, $mode, $new, $changed, $archived, $unchanged, $unresolved);
             """);
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
+        command.Parameters.AddWithValue("$operationId", operationId);
         command.Parameters.AddWithValue("$timestamp", timestamp);
         command.Parameters.AddWithValue("$file", completion.SourceFileName);
         command.Parameters.AddWithValue("$mode", completion.Mode.ToString());

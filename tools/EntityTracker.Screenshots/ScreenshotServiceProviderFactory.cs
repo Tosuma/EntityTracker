@@ -1,4 +1,5 @@
 using EntityTracker.Application.Dependencies;
+using EntityTracker.Application.Collaboration;
 using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Lifecycle;
@@ -13,8 +14,11 @@ using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Infrastructure.Configuration;
+using EntityTracker.Infrastructure.Collaboration;
+using EntityTracker.Infrastructure.Git;
 using EntityTracker.Infrastructure.Importing;
 using EntityTracker.Infrastructure.Persistence;
+using EntityTracker.Infrastructure.RepositoryFormat;
 using EntityTracker.Reporting;
 using EntityTracker.Wpf;
 using EntityTracker.Wpf.Services;
@@ -62,14 +66,33 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<IManualDependencyOverrideRepository,
             SqliteManualDependencyOverrideRepository>();
         services.AddSingleton<SqliteTrackedStateStore>();
-        services.AddSingleton<ITrackedStateStore>(static provider =>
-            provider.GetRequiredService<SqliteTrackedStateStore>());
-        services.AddSingleton<ISchemaSynchronizationStore>(static provider =>
-            provider.GetRequiredService<SqliteTrackedStateStore>());
         services.AddSingleton<IProgressHistoryRepository, SqliteProgressHistoryRepository>();
         services.AddSingleton<IProjectRepository, SqliteProjectRepository>();
         services.AddSingleton<ITrackerRepository, SqliteTrackerRepository>();
-        services.AddSingleton<IProjectTrackerStore, SqliteProjectTrackerStore>();
+        services.AddSingleton<SqliteProjectTrackerStore>();
+        services.AddSingleton(new LocalRepositoryRegistry(
+            Path.Combine(paths.RootDirectory, "repositories.json")));
+        services.AddSingleton<GitCommandClient>();
+        services.AddSingleton<GitRepositoryValidator>();
+        services.AddSingleton<ProjectRepositoryCodec>();
+        services.AddSingleton<ProjectRepositoryStore>();
+        services.AddSingleton<SqliteProjectStateStore>();
+        services.AddSingleton<ProjectRepositoryStateReducer>();
+        services.AddSingleton<GitBackedProjectService>();
+        services.AddSingleton<IProjectMutationBackend>(static provider =>
+            provider.GetRequiredService<GitBackedProjectService>());
+        services.AddSingleton<ScreenshotRepositoryManager>();
+        services.AddSingleton<IProjectRepositoryManager>(static provider =>
+            provider.GetRequiredService<ScreenshotRepositoryManager>());
+        services.AddSingleton<IProjectSynchronizationService>(static provider =>
+            provider.GetRequiredService<ScreenshotRepositoryManager>());
+        services.AddSingleton<ProjectMutationCoordinator>();
+        services.AddSingleton<ITrackedStateStore>(static provider =>
+            provider.GetRequiredService<ProjectMutationCoordinator>());
+        services.AddSingleton<ISchemaSynchronizationStore>(static provider =>
+            provider.GetRequiredService<ProjectMutationCoordinator>());
+        services.AddSingleton<IProjectTrackerStore>(static provider =>
+            provider.GetRequiredService<ProjectMutationCoordinator>());
 
         services.AddSingleton<ISchemaImportParser, CsvSchemaImportParser>();
         services.AddSingleton<ISchemaImportFileParser, CsvSchemaImportFileParser>();
