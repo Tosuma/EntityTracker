@@ -62,6 +62,31 @@ public sealed class ShellViewModelTests
         Assert.Equal(1, repositories.SyncCallCount);
         Assert.Equal(ProjectSyncState.UpToDate, shell.ActiveRepositoryStatus?.SyncState);
         Assert.Equal("Pushed 2 local commits.", shell.NotificationMessage);
+        Assert.Equal(ShellNotificationSeverity.Success, shell.NotificationSeverity);
+    }
+
+    [Fact]
+    public async Task RepositoryLinkNotificationsDistinguishSuccessAndFailure()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        StubRepositorySynchronization repositories = new(harness.DefaultProject.Id);
+        using ShellViewModel shell = harness.CreateShell(
+            new EntityTrackerSettings(lastProjectId: harness.DefaultProject.Id),
+            new RecordingDiscardConfirmation(true),
+            repositories,
+            repositories);
+        await shell.InitializeAsync();
+
+        await shell.LinkSelectedProjectAsync(@"C:\Projects\Shared");
+
+        Assert.Contains("is now Git-backed", shell.NotificationMessage, StringComparison.Ordinal);
+        Assert.Equal(ShellNotificationSeverity.Success, shell.NotificationSeverity);
+
+        repositories.LinkFailure = new InvalidOperationException("Repository is unavailable.");
+        await shell.LinkSelectedProjectAsync(@"C:\Projects\Unavailable");
+
+        Assert.StartsWith("Repository action could not be completed", shell.NotificationMessage);
+        Assert.Equal(ShellNotificationSeverity.Error, shell.NotificationSeverity);
     }
 
     [Fact]
@@ -680,6 +705,7 @@ public sealed class ShellViewModelTests
             ProjectSyncState.NoUpstream);
 
         public int SyncCallCount { get; private set; }
+        public Exception? LinkFailure { get; set; }
 
         public Task<IReadOnlyList<ProjectRepositoryStatus>> GetStatusesAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ProjectRepositoryStatus>>([Status]);
@@ -705,7 +731,17 @@ public sealed class ShellViewModelTests
                 Status));
         }
 
-        public Task LinkAsync(ProjectId id, string repositoryPath, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task LinkAsync(ProjectId id, string repositoryPath, CancellationToken cancellationToken = default)
+        {
+            if (LinkFailure is not null) throw LinkFailure;
+            Status = Status with
+            {
+                RepositoryPath = repositoryPath,
+                Kind = ProjectRepositoryStatusKind.GitClean,
+                SyncState = ProjectSyncState.NoUpstream
+            };
+            return Task.CompletedTask;
+        }
         public Task<ProjectId> OpenAsync(string repositoryPath, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task LocateAsync(ProjectId id, string repositoryPath, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task RebuildCacheAsync(ProjectId id, CancellationToken cancellationToken = default) => throw new NotSupportedException();

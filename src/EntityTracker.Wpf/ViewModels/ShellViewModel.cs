@@ -18,6 +18,14 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace EntityTracker.Wpf.ViewModels;
 
+public enum ShellNotificationSeverity
+{
+    Information,
+    Success,
+    Warning,
+    Error
+}
+
 public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly IProjectRepository _projectRepository;
@@ -45,6 +53,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private bool _isBusy;
     private string _busyMessage = string.Empty;
     private string? _notificationMessage;
+    private ShellNotificationSeverity _notificationSeverity = ShellNotificationSeverity.Information;
     private bool _showDefaultNamePrompt;
     private ProjectRepositoryStatus? _activeRepositoryStatus;
     private CancellationTokenSource? _synchronizationCancellation;
@@ -280,6 +289,12 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    public ShellNotificationSeverity NotificationSeverity
+    {
+        get => _notificationSeverity;
+        private set => SetField(ref _notificationSeverity, value);
+    }
+
     public string DefaultNamePromptMessage =>
         SelectedTracker?.Name == "Default tracker"
             ? "Give the migrated default Tracker a name your team will recognize."
@@ -499,7 +514,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             await ReloadCatalogAsync(cancellationToken);
             Project project = Projects.Single(item => item.Id == projectId);
             if (await ApplyContextAsync(project, null, ShellDestination.ProjectDashboard, true, cancellationToken))
-                NotificationMessage = $"Opened Git-backed Project “{project.Name}”.";
+                SetNotification($"Opened Git-backed Project “{project.Name}”.", ShellNotificationSeverity.Success);
         });
     }
 
@@ -511,7 +526,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             await _repositoryManager.LinkAsync(project.Id, repositoryPath, cancellationToken);
             await RefreshRepositoryStatusAsync(cancellationToken);
             await RefreshDashboardsAsync(cancellationToken);
-            NotificationMessage = $"“{project.Name}” is now Git-backed. Changes create local commits.";
+            SetNotification(
+                $"“{project.Name}” is now Git-backed. Changes create local commits.",
+                ShellNotificationSeverity.Success);
         });
     }
 
@@ -522,7 +539,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         {
             await _repositoryManager.LocateAsync(project.Id, repositoryPath, cancellationToken);
             await RefreshRepositoryStatusAsync(cancellationToken);
-            NotificationMessage = "Repository location updated.";
+            SetNotification("Repository location updated.", ShellNotificationSeverity.Success);
         });
     }
 
@@ -535,7 +552,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             await ReloadCatalogAsync(cancellationToken);
             Project refreshed = Projects.Single(item => item.Id == project.Id);
             if (await ApplyContextAsync(refreshed, null, ShellDestination.ProjectDashboard, true, cancellationToken))
-                NotificationMessage = "SQLite cache rebuilt from repository HEAD.";
+                SetNotification(
+                    "SQLite cache rebuilt from repository HEAD.",
+                    ShellNotificationSeverity.Success);
         });
     }
 
@@ -557,7 +576,17 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 result.Outcome,
                 result.FailureKind);
             ActiveRepositoryStatus = result.Status;
-            NotificationMessage = result.Message;
+            SetNotification(result.Message, result.Outcome switch
+            {
+                ProjectSyncOutcome.UpToDate or
+                ProjectSyncOutcome.Pushed or
+                ProjectSyncOutcome.FastForwarded => ShellNotificationSeverity.Success,
+                ProjectSyncOutcome.MergeRequired or
+                ProjectSyncOutcome.NeedsSync => ShellNotificationSeverity.Warning,
+                ProjectSyncOutcome.MissingUpstream or
+                ProjectSyncOutcome.Cancelled => ShellNotificationSeverity.Information,
+                _ => ShellNotificationSeverity.Error
+            });
             if (result.Outcome == ProjectSyncOutcome.FastForwarded &&
                 result.Status.Kind == ProjectRepositoryStatusKind.GitClean)
             {
@@ -588,7 +617,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         catch (Exception exception)
         {
             _logger.LogWarning(exception, "Project synchronization failed.");
-            NotificationMessage = $"Synchronization could not be completed: {exception.Message}";
+            SetNotification(
+                $"Synchronization could not be completed: {exception.Message}",
+                ShellNotificationSeverity.Error);
             await RefreshRepositoryStatusAsync(CancellationToken.None);
         }
         finally
@@ -760,7 +791,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             Replace(Trackers, previousTrackers);
             SetDestination(previousDestination);
             _logger.LogError(exception, "Application context could not be changed.");
-            NotificationMessage = $"The application context could not be changed: {exception.Message}";
+            SetNotification(
+                $"The application context could not be changed: {exception.Message}",
+                ShellNotificationSeverity.Error);
             return false;
         }
         finally
@@ -849,7 +882,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                                           IOException or UnauthorizedAccessException)
         {
             _logger.LogWarning(exception, "Project repository action failed.");
-            NotificationMessage = $"Repository action could not be completed: {exception.Message}";
+            SetNotification(
+                $"Repository action could not be completed: {exception.Message}",
+                ShellNotificationSeverity.Error);
             await RefreshRepositoryStatusAsync(CancellationToken.None);
         }
         finally
@@ -857,6 +892,12 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             IsBusy = false;
             BusyMessage = string.Empty;
         }
+    }
+
+    private void SetNotification(string message, ShellNotificationSeverity severity)
+    {
+        NotificationSeverity = severity;
+        NotificationMessage = message;
     }
 
     private async void OnWorkspacePersistedStateChanged(object? sender, EventArgs e)
