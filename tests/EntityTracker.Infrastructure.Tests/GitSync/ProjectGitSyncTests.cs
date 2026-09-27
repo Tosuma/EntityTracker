@@ -31,7 +31,8 @@ public sealed class ProjectGitSyncTests
         ProjectSyncLink synced = await service.SyncNowAsync(projectId,
             progress: new RecordingProgress(phases));
         Assert.Equal([ProjectSyncPhase.CheckingEdits, ProjectSyncPhase.Inspecting,
-            ProjectSyncPhase.Committing], phases);
+            ProjectSyncPhase.Exporting, ProjectSyncPhase.Validating,
+            ProjectSyncPhase.Committing, ProjectSyncPhase.Validating], phases);
         Assert.NotEqual(before, synced.LastCommonCommit);
         Assert.Equal("Current", synced.SyncStatus);
         Assert.Contains(".entitytracker/manifest.json", repo.Git("show", "--pretty=format:", "--name-only", "HEAD"));

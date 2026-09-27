@@ -5,6 +5,7 @@ using EntityTracker.Application.GitSync;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.ViewModels;
 
@@ -15,10 +16,13 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
     private readonly IProjectRepositoryFolderPicker _picker;
     private readonly WpfProjectUnsavedEditsGate? _editGate;
     private readonly NotificationCenter? _notifications;
+    private readonly ILogger<ProjectRepositoryCardViewModel>? _logger;
+    private readonly Action<ProjectSyncTiming?>? _saveTiming;
     private CancellationTokenSource? _syncCancellation;
     private ProjectSyncLink? _link;
     private string? _message;
     private bool _busy;
+    private ProjectSyncTiming? _lastTiming;
     private readonly AsyncCommand _linkCommand;
     private readonly AsyncCommand _syncCommand;
     private readonly AsyncCommand _unlinkCommand;
@@ -26,13 +30,19 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
 
     public ProjectRepositoryCardViewModel(ProjectId projectId, ProjectGitSyncService service,
         IProjectRepositoryFolderPicker picker, WpfProjectUnsavedEditsGate? editGate = null,
-        NotificationCenter? notifications = null)
+        NotificationCenter? notifications = null,
+        ILogger<ProjectRepositoryCardViewModel>? logger = null,
+        ProjectSyncTiming? initialTiming = null,
+        Action<ProjectSyncTiming?>? saveTiming = null)
     {
         _projectId = projectId;
         _service = service;
         _picker = picker;
         _editGate = editGate;
         _notifications = notifications;
+        _logger = logger;
+        _lastTiming = initialTiming;
+        _saveTiming = saveTiming;
         if (_editGate is not null) _editGate.WaitingChanged += (_, _) => Notify();
         _linkCommand = new AsyncCommand(LinkAsync, () => !_busy && !IsLinked);
         _syncCommand = new AsyncCommand(() => SyncAsync(), () => !_busy && IsLinked);
@@ -54,6 +64,15 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
     public string Upstream => !IsLinked ? string.Empty : _link!.UpstreamIdentity is null
         ? "Local only (no upstream)" : "Upstream: " + _link.UpstreamIdentity.Split(':', 2)[0];
     public string LastResult => _link?.LastResult ?? "Select an existing clean repository to link this Project.";
+    public bool HasLastSyncTiming => _lastTiming is not null;
+    public string LastSyncTiming
+    {
+        get
+        {
+            if (_lastTiming is null) return string.Empty;
+            return $"Last sync: {_lastTiming.Total.TotalSeconds:0.0}s.";
+        }
+    }
     public string PendingAction => _link?.SyncStatus switch
     {
         _ when _editGate?.WaitingProjectId == _projectId.Value =>
@@ -112,7 +131,8 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
             IProgress<ProjectSyncPhase>? progress = notice is null ? null :
                 new ProjectSyncProgressReporter(phase =>
                     _notifications?.Progress(notice, NotificationCenter.DescribeProjectSyncPhase(phase)));
-            try { _link = await _service.SyncNowAsync(_projectId, cancellation.Token, progress); }
+            IProgress<ProjectSyncTiming> timing = new ProjectSyncTimingReporter(RecordTiming);
+            try { _link = await _service.SyncNowAsync(_projectId, cancellation.Token, progress, timing); }
             catch (ProjectNameCollisionException collision)
             {
                 string? name = ProjectLocalNameDialog.Prompt(System.Windows.Application.Current.MainWindow,
@@ -124,7 +144,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
                         NotificationKind.Information);
                     return;
                 }
-                _link = await _service.SyncNowAsync(_projectId, name, cancellation.Token, progress);
+                _link = await _service.SyncNowAsync(_projectId, name, cancellation.Token, progress, timing);
             }
             if (notice is not null)
             {
@@ -174,10 +194,31 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
         }
     }
 
+    private void RecordTiming(ProjectSyncTiming timing)
+    {
+        _logger?.LogInformation(
+            "Project sync timing: outcome={Outcome} totalMs={TotalMs} stages={Stages} networkFetchMs={NetworkMs} gitSnapshotReadMs={SnapshotReadMs} snapshotFiles={SnapshotFiles} reusedSnapshots={ReusedSnapshots} blobReadProcesses={BlobReadProcesses}",
+            timing.Outcome, timing.Total.TotalMilliseconds,
+            string.Join(", ", timing.Stages.OrderBy(stage => stage.Key)
+                .Select(stage => $"{stage.Key}={stage.Value.TotalMilliseconds:0}")),
+            timing.NetworkFetch.TotalMilliseconds, timing.GitSnapshotRead.TotalMilliseconds,
+            timing.GitSnapshotFileCount, timing.ReusedSnapshots, timing.BlobReadProcesses);
+        ShowTiming(timing);
+    }
+
+    internal void ShowTiming(ProjectSyncTiming timing)
+    {
+        _lastTiming = timing;
+        _saveTiming?.Invoke(timing);
+        Notify();
+    }
+
     private Task UnlinkAsync() => ExecuteAsync(async () =>
     {
         await _service.UnlinkAsync(_projectId);
         _link = null;
+        _lastTiming = null;
+        _saveTiming?.Invoke(null);
         _notifications?.DismissProjectActions(_projectId);
     });
 
@@ -194,7 +235,8 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
     private void Notify()
     {
         foreach (string name in new[] { nameof(IsLinked), nameof(IsBusy), nameof(RepositoryPath),
-                     nameof(Branch), nameof(Upstream), nameof(LastResult), nameof(PendingAction), nameof(Message),
+                     nameof(Branch), nameof(Upstream), nameof(LastResult), nameof(LastSyncTiming),
+                     nameof(HasLastSyncTiming), nameof(PendingAction), nameof(Message),
                      nameof(HasPendingAction), nameof(HasMessage), nameof(CanCancelSync) })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         _linkCommand.NotifyCanExecuteChanged();
@@ -206,8 +248,27 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
 
 public sealed class ProjectRepositoryCardViewModelFactory(
     ProjectGitSyncService service, IProjectRepositoryFolderPicker picker,
-    WpfProjectUnsavedEditsGate? editGate = null, NotificationCenter? notifications = null)
+    WpfProjectUnsavedEditsGate? editGate = null, NotificationCenter? notifications = null,
+    ILogger<ProjectRepositoryCardViewModel>? logger = null)
 {
+    private readonly Dictionary<Guid, ProjectSyncTiming> _timings = [];
+
     public ProjectRepositoryCardViewModel Create(ProjectId projectId) =>
-        new(projectId, service, picker, editGate, notifications);
+        new(projectId, service, picker, editGate, notifications, logger,
+            _timings.GetValueOrDefault(projectId.Value), timing =>
+            {
+                if (timing is null) _timings.Remove(projectId.Value);
+                else _timings[projectId.Value] = timing;
+            });
+}
+
+internal sealed class ProjectSyncTimingReporter(Action<ProjectSyncTiming> report)
+    : IProgress<ProjectSyncTiming>
+{
+    public void Report(ProjectSyncTiming value)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess()) report(value);
+        else dispatcher.BeginInvoke(() => report(value));
+    }
 }

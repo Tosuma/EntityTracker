@@ -71,13 +71,21 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
             """, id, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
+        var entitiesByTracker = entityRows.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
+        var dependenciesByEntity = dependencies.ToLookup(row => row.Str("dependent_entity_id"), StringComparer.Ordinal);
+        var unresolvedByEntity = unresolved.ToLookup(row => row.Str("dependent_entity_id"), StringComparer.Ordinal);
+        var overridesByEntity = overrides.ToLookup(row => row.Str("dependent_entity_id"), StringComparer.Ordinal);
+        var historyByTracker = history.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
+        var progressByTracker = progress.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
+        var summariesByTracker = summaries.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
+
         SnapshotProject projectModel = new(project.Guid("id"), canonicalName ?? project.Str("name"),
             project.Str("lifecycle_state"), project.Time("created_at_utc"),
             project.Time("updated_at_utc"), project.TimeOrNull("recycled_at_utc"));
         SnapshotTracker[] trackers = trackerRows.Select(tracker =>
         {
             string trackerId = tracker.Str("id");
-            SnapshotEntity[] entities = entityRows.Where(e => e.Str("tracker_id") == trackerId)
+            SnapshotEntity[] entities = entitiesByTracker[trackerId]
                 .Select(entity =>
                 {
                     string entityId = entity.Str("id");
@@ -87,30 +95,30 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                         entity.Str("responsible_developer"), entity.Str("group_name"),
                         entity.Time("created_at_utc"), entity.Time("schema_updated_at_utc"),
                         entity.Time("progress_updated_at_utc"),
-                        dependencies.Where(d => d.Str("dependent_entity_id") == entityId)
+                        dependenciesByEntity[entityId]
                             .Select(d => new SnapshotDependency(d.Guid("dependent_entity_id"),
                                 d.Guid("dependency_entity_id"), d.Str("dependency_kind"),
                                 d.Time("created_at_utc"), d.Time("updated_at_utc"))).ToArray(),
-                        unresolved.Where(d => d.Str("dependent_entity_id") == entityId)
+                        unresolvedByEntity[entityId]
                             .Select(d => new SnapshotUnresolvedDependency(d.Guid("dependent_entity_id"),
                                 d.Str("dependency_source_name"), d.Str("dependency_kind"),
                                 d.Time("created_at_utc"), d.Time("updated_at_utc"))).ToArray(),
-                        overrides.Where(d => d.Str("dependent_entity_id") == entityId)
+                        overridesByEntity[entityId]
                             .Select(d => new SnapshotOverride(d.Guid("dependent_entity_id"),
                                 d.Str("dependency_source_name"), d.Str("override_action"),
                                 d.Time("created_at_utc"), d.Time("updated_at_utc"))).ToArray());
                 }).ToArray();
-            Row? summary = summaries.SingleOrDefault(s => s.Str("tracker_id") == trackerId);
+            Row? summary = summariesByTracker[trackerId].SingleOrDefault();
             return new SnapshotTracker(tracker.Guid("id"), tracker.Guid("project_id"),
                 tracker.Str("name"), tracker.Str("lifecycle_state"),
                 tracker.Time("created_at_utc"), tracker.Time("updated_at_utc"),
                 tracker.TimeOrNull("recycled_at_utc"), tracker.GuidOrNull("copied_from_tracker_id"),
                 entities,
-                history.Where(h => h.Str("tracker_id") == trackerId)
+                historyByTracker[trackerId]
                     .Select((h, order) => new SnapshotStatusEvent(h.Guid("event_id"), h.Guid("entity_id"),
                         h.GuidOrNull("previous_event_id"), h.StrOrNull("previous_status"),
                         h.Str("new_status"), h.Str("entry_kind"), h.Time("occurred_at_utc"), order)).ToArray(),
-                progress.Where(p => p.Str("tracker_id") == trackerId)
+                progressByTracker[trackerId]
                     .Select((p, order) => new SnapshotProgress(p.Guid("snapshot_id"), p.Time("recorded_at_utc"),
                         p.Int("ready_count"), p.Int("blocked_count"), p.Int("in_progress_count"),
                         p.Int("rework_needed_count"), p.Int("development_completed_count"),

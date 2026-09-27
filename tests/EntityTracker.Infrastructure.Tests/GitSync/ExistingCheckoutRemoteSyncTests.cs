@@ -13,6 +13,98 @@ namespace EntityTracker.Infrastructure.Tests.GitSync;
 public sealed class ExistingCheckoutRemoteSyncTests
 {
     [Fact]
+    public async Task RemoteSnapshotBlobsAreBatchedAndOnlyReusedForTheSameCommit()
+    {
+        using GitWorkspace workspace = new();
+        string publisher = workspace.CreateRemoteCheckout("publisher", Snapshot(Guid.NewGuid(), "Project"));
+        Dictionary<string, byte[]> expected = new(StringComparer.Ordinal);
+        for (int i = 0; i < 240; i++)
+        {
+            string relative = $".entitytracker/extra/{i:D4}.json";
+            byte[] bytes = [0, 10, 255, (byte)i];
+            string full = Path.Combine(publisher, relative.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            File.WriteAllBytes(full, bytes);
+            expected.Add(relative, bytes);
+        }
+        workspace.Git(publisher, "add", ".entitytracker");
+        workspace.Git(publisher, "commit", "-m", "Add many snapshot blobs");
+        workspace.Git(publisher, "push", "origin", "main");
+        string checkout = workspace.Clone("reader");
+        SystemGitTransport transport = new();
+        List<GitFetchTiming> timings = [];
+        ImmediateProgress<GitFetchTiming> report = new(timings.Add);
+
+        GitRemoteState first = await transport.FetchAsync(checkout, null, default, report);
+        Assert.Equal(1, Assert.Single(timings).BlobReadProcesses);
+        Assert.True(first.SnapshotFiles.Count >= expected.Count);
+        foreach ((string path, byte[] bytes) in expected)
+            Assert.Equal(bytes, first.SnapshotFiles[path]);
+        IReadOnlyDictionary<string, byte[]> historical =
+            await transport.ReadSnapshotAtCommitAsync(checkout, first.Head);
+        foreach ((string path, byte[] bytes) in expected)
+            Assert.Equal(bytes, historical[path]);
+
+        timings.Clear();
+        GitRemoteState reused = await transport.FetchAsync(checkout, first, default, report);
+        Assert.Same(first, reused);
+        Assert.True(Assert.Single(timings).ReusedSnapshot);
+        Assert.Equal(0, timings[0].BlobReadProcesses);
+
+        File.WriteAllText(Path.Combine(publisher, "README.md"), "New revision\n");
+        workspace.Git(publisher, "add", "README.md");
+        workspace.Git(publisher, "commit", "-m", "Advance remote");
+        workspace.Git(publisher, "push", "origin", "main");
+        timings.Clear();
+        GitRemoteState changed = await transport.FetchAsync(checkout, first, default, report);
+        Assert.NotEqual(first.Head, changed.Head);
+        Assert.False(Assert.Single(timings).ReusedSnapshot);
+        Assert.Equal(1, timings[0].BlobReadProcesses);
+        foreach ((string path, byte[] bytes) in expected)
+            Assert.Equal(bytes, changed.SnapshotFiles[path]);
+    }
+
+    [Fact]
+    public async Task BatchReadRejectsOversizedSnapshotBlob()
+    {
+        using GitWorkspace workspace = new();
+        string publisher = workspace.CreateRemoteCheckout("publisher", Snapshot(Guid.NewGuid(), "Project"));
+        string full = Path.Combine(publisher, ".entitytracker", "oversized.json");
+        File.WriteAllBytes(full, new byte[1024 * 1024 + 1]);
+        workspace.Git(publisher, "add", ".entitytracker");
+        workspace.Git(publisher, "commit", "-m", "Oversized blob");
+        workspace.Git(publisher, "push", "origin", "main");
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            new SystemGitTransport().FetchAsync(workspace.Clone("reader")));
+    }
+
+    [Fact]
+    public async Task SyncReportsStageTimingAndSkipsUnchangedRemoteBlobs()
+    {
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        string checkout = workspace.CreateRemoteCheckout("reader", Snapshot(id, "Project"));
+        await using TestCatalog catalog = await TestCatalog.CreateAsync(workspace, "catalog");
+        ProjectGitSyncService sync = catalog.Sync(checkout);
+        await sync.ImportAsync(checkout);
+        List<ProjectSyncTiming> timings = [];
+
+        ProjectSyncLink result = await sync.SyncNowAsync(new ProjectId(id),
+            timing: new ImmediateProgress<ProjectSyncTiming>(timings.Add));
+
+        Assert.Equal("Current", result.SyncStatus);
+        ProjectSyncTiming timing = Assert.Single(timings);
+        Assert.Equal("Completed", timing.Outcome);
+        Assert.True(timing.Total > TimeSpan.Zero);
+        Assert.Contains(ProjectSyncPhase.Exporting, timing.Stages.Keys);
+        Assert.Contains(ProjectSyncPhase.Rechecking, timing.Stages.Keys);
+        Assert.True(timing.GitSnapshotFileCount > 0);
+        Assert.True(timing.ReusedSnapshots >= 2);
+        Assert.Equal(0, timing.BlobReadProcesses);
+    }
+
+    [Fact]
     public async Task IndependentCollaboratorsConvergeWithTwoParentCanonicalCommit()
     {
         using GitWorkspace workspace = new();
@@ -207,18 +299,25 @@ public sealed class ExistingCheckoutRemoteSyncTests
         BlockingEditGate gate = new();
         ProjectGitSyncService receiving = receiver.Sync(second, editGate: gate);
         using CancellationTokenSource cancel = new();
-        Task<ProjectSyncLink> cancelled = receiving.SyncNowAsync(projectId, cancel.Token);
+        List<ProjectSyncTiming> cancelledTimings = [];
+        Task<ProjectSyncLink> cancelled = receiving.SyncNowAsync(projectId, cancel.Token,
+            timing: new ImmediateProgress<ProjectSyncTiming>(cancelledTimings.Add));
         await gate.Entered;
         Assert.Equal(before, workspace.Git(second, "rev-parse", "HEAD"));
         Assert.Equal("Project", (await receiver.Snapshots.ReadAsync(projectId)).Snapshot!.Project.Name);
         cancel.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancelled);
+        Assert.Equal("Cancelled", Assert.Single(cancelledTimings).Outcome);
+        Assert.Contains(ProjectSyncPhase.CheckingEdits, cancelledTimings[0].Stages.Keys);
 
         BlockingEditGate released = new();
-        Task<ProjectSyncLink> resumed = receiver.Sync(second, editGate: released).SyncNowAsync(projectId);
+        List<ProjectSyncTiming> resumedTimings = [];
+        Task<ProjectSyncLink> resumed = receiver.Sync(second, editGate: released).SyncNowAsync(projectId,
+            timing: new ImmediateProgress<ProjectSyncTiming>(resumedTimings.Add));
         await released.Entered;
         released.Release();
         Assert.Equal("Current", (await resumed).SyncStatus);
+        Assert.Equal("Completed", Assert.Single(resumedTimings).Outcome);
         Assert.Equal("Incoming edit", (await receiver.Snapshots.ReadAsync(projectId)).Snapshot!.Project.Name);
     }
 
@@ -540,8 +639,20 @@ public sealed class ExistingCheckoutRemoteSyncTests
     [InlineData("push", "--force")]
     [InlineData("merge", "--no-ff")]
     [InlineData("config", "user.name")]
+    [InlineData("cat-file", "--batch-all-objects")]
     public void GitAdapterRejectsRepositoryManagementCommands(string verb, string argument) =>
         Assert.Throws<InvalidOperationException>(() => SystemGitTransport.ValidateCommand([verb, argument]));
+
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa tree 4")]
+    [InlineData("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb blob 4")]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa blob -1")]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa blob 1048577")]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa blob unknown")]
+    public void BatchReaderRejectsMalformedBlobHeaders(string header) =>
+        Assert.Throws<InvalidDataException>(() => SystemGitTransport.ParseBatchHeader(
+            header, new string('a', 40)));
 
     [Fact]
     public async Task ExistingVersion13DatabaseMigratesLocalNameStorage()
@@ -1208,6 +1319,11 @@ public sealed class ExistingCheckoutRemoteSyncTests
     private sealed class RecordingProgress(List<ProjectSyncPhase> phases) : IProgress<ProjectSyncPhase>
     {
         public void Report(ProjectSyncPhase value) => phases.Add(value);
+    }
+
+    private sealed class ImmediateProgress<T>(Action<T> report) : IProgress<T>
+    {
+        public void Report(T value) => report(value);
     }
 
     private sealed class GitWorkspace : IDisposable

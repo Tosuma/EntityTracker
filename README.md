@@ -113,8 +113,9 @@ choose **Import checkout** and select its clean working-tree root. EntityTracker
 snapshot with its stable IDs and history. If its Project name is already used locally, choose a
 private name for this installation; the shared snapshot keeps its original name.
 
-The Project dashboard shows the linked repository, checked-out branch, upstream, and last manual
-sync result. **Sync now** fetches and applies upstream changes, merges independent Project edits,
+The Project dashboard shows the linked repository, checked-out branch, upstream, last manual
+sync result and the latest sync duration for this session. **Sync now** fetches
+and applies upstream changes, merges independent Project edits,
 and asks you to review competing changes before committing and pushing. It waits for an unfinished
 edit to be saved or closed before applying incoming data. A checkout without an upstream keeps
 local commits only. Permanent deletion of a linked Project publishes a tombstone; a member with
@@ -122,7 +123,11 @@ concurrent local changes can keep the Project locally as an unlinked copy. Unlin
 leaves both the repository and SQLite data in place. EntityTracker does not clone repositories,
 configure Git, or manage credentials.
 
-![Illustrative Project dashboard state with an upstream Git link and manual Sync now control](images/light/project-git-repository.png)
+For slow syncs, the daily application log records stage durations, fetch time, snapshot read time,
+and the number of snapshot files read or reused. The remote may still take time to fetch or push;
+the application keeps its validation and remote recheck steps in order.
+
+![Illustrative Project dashboard with an upstream Git link, last sync timing, and manual Sync now control](images/light/project-git-repository.png)
 
 The sidebar notification center shows the current sync phase. A completed sync disappears after
 a short display time. A sync that needs attention stays visible with a contextual action; the

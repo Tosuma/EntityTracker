@@ -210,6 +210,9 @@
                     <TextBlock Margin="0,4,0,0" Text="{Binding Upstream}"
                                Visibility="{Binding IsLinked, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <TextBlock Margin="0,6,0,0" Text="{Binding LastResult}" TextWrapping="Wrap" />
+                    <TextBlock Margin="0,4,0,0" Text="{Binding LastSyncTiming}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Brush.Text.Secondary}"
+                               Visibility="{Binding HasLastSyncTiming, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <TextBlock Margin="0,4,0,0" Text="{Binding PendingAction}" TextWrapping="Wrap"
                                Foreground="{DynamicResource Brush.Text.Secondary}"
                                Visibility="{Binding HasPendingAction, Converter={StaticResource BooleanToVisibilityConverter}}" />

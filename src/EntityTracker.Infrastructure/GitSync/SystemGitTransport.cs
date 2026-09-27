@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using EntityTracker.Application.GitSync;
@@ -105,23 +106,33 @@ public sealed class SystemGitTransport : ILocalGitTransport
         return (await RunAsync(root, ["rev-parse", "--verify", "HEAD"], cancellationToken)).Trim();
     }
 
-    public async Task<GitRemoteState> FetchAsync(string path, CancellationToken cancellationToken = default)
+    public Task<GitRemoteState> FetchAsync(string path, CancellationToken cancellationToken = default) =>
+        FetchAsync(path, null, cancellationToken, null);
+
+    public Task<GitRemoteState> FetchAsync(string path, GitRemoteState? reusableSnapshot,
+        CancellationToken cancellationToken = default) =>
+        FetchAsync(path, reusableSnapshot, cancellationToken, null);
+
+    public async Task<GitRemoteState> FetchAsync(string path, GitRemoteState? reusableSnapshot,
+        CancellationToken cancellationToken, IProgress<GitFetchTiming>? timing)
     {
+        Stopwatch clock = Stopwatch.StartNew();
         string root = Path.GetFullPath(path);
         string branch = (await RunAsync(root, ["symbolic-ref", "--quiet", "--short", "HEAD"], cancellationToken)).Trim();
         (string remote, string upstream) = await UpstreamAsync(root, branch, cancellationToken);
         await RunRemoteAsync(root, ["fetch", "--no-tags", "--", remote], cancellationToken);
         string head = (await RunAsync(root, ["rev-parse", "--verify", upstream], cancellationToken)).Trim();
-        string[] paths = SplitNull(await RunBytesAsync(root,
-            ["ls-tree", "-r", "--name-only", "-z", head], cancellationToken));
-        Dictionary<string, byte[]> files = new(StringComparer.Ordinal);
-        foreach (string trackedPath in paths)
+        TimeSpan network = clock.Elapsed;
+        if (reusableSnapshot is not null &&
+            string.Equals(reusableSnapshot.Head, head, StringComparison.Ordinal))
         {
-            if (!IsAllowed(trackedPath))
-                throw new InvalidOperationException($"Unsupported tracked path in upstream: {trackedPath}.");
-            if (IsSnapshotPath(trackedPath))
-                files.Add(trackedPath, await RunBytesAsync(root, ["show", head + ":" + trackedPath], cancellationToken));
+            timing?.Report(new GitFetchTiming(network, TimeSpan.Zero,
+                reusableSnapshot.SnapshotFiles.Count, true, 0));
+            return reusableSnapshot;
         }
+        IReadOnlyDictionary<string, byte[]> files = await ReadSnapshotTreeAsync(root, head, cancellationToken);
+        timing?.Report(new GitFetchTiming(network, clock.Elapsed - network, files.Count, false,
+            files.Count == 0 ? 0 : 1));
         return new GitRemoteState(head, files);
     }
 
@@ -145,18 +156,130 @@ public sealed class SystemGitTransport : ILocalGitTransport
     {
         if (commit.Length is not (40 or 64) || !commit.All(Uri.IsHexDigit))
             throw new ArgumentException("A full Git commit ID is required.", nameof(commit));
-        string[] paths = SplitNull(await RunBytesAsync(path,
-            ["ls-tree", "-r", "--name-only", "-z", commit], cancellationToken));
-        Dictionary<string, byte[]> files = new(StringComparer.Ordinal);
-        foreach (string trackedPath in paths)
+        return await ReadSnapshotTreeAsync(path, commit, cancellationToken);
+    }
+
+    private static async Task<IReadOnlyDictionary<string, byte[]>> ReadSnapshotTreeAsync(
+        string path, string commit, CancellationToken token)
+    {
+        string[] entries = SplitNull(await RunBytesAsync(path,
+            ["ls-tree", "-r", "-z", commit], token));
+        List<(string Path, string ObjectId)> blobs = [];
+        foreach (string entry in entries)
         {
+            int tab = entry.IndexOf('\t');
+            if (tab < 0) throw new InvalidDataException("Git tree entry is invalid.");
+            string[] metadata = entry[..tab].Split(' ');
+            string trackedPath = entry[(tab + 1)..];
+            if (metadata.Length != 3 || metadata[1] != "blob" ||
+                metadata[0] == "120000" || metadata[2].Length is not (40 or 64) ||
+                !metadata[2].All(Uri.IsHexDigit))
+                throw new InvalidDataException("Git tree entry is invalid or unsupported.");
             if (!IsAllowed(trackedPath))
                 throw new InvalidOperationException($"Unsupported tracked path: {trackedPath}.");
-            if (IsSnapshotPath(trackedPath))
-                files.Add(trackedPath, await RunBytesAsync(path,
-                    ["show", commit + ":" + trackedPath], cancellationToken));
+            if (IsSnapshotPath(trackedPath)) blobs.Add((trackedPath, metadata[2]));
         }
-        return files;
+        return await ReadBlobsAsync(path, blobs, token);
+    }
+
+    private static async Task<IReadOnlyDictionary<string, byte[]>> ReadBlobsAsync(
+        string path, IReadOnlyList<(string Path, string ObjectId)> blobs, CancellationToken token)
+    {
+        Dictionary<string, byte[]> files = new(StringComparer.Ordinal);
+        if (blobs.Count == 0) return files;
+        string[] args = ["cat-file", "--batch"];
+        ValidateCommand(args);
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(60));
+        ProcessStartInfo start = new("git")
+        {
+            WorkingDirectory = path,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        start.ArgumentList.Add("-C");
+        start.ArgumentList.Add(path);
+        foreach (string arg in args) start.ArgumentList.Add(arg);
+        start.Environment["GIT_TERMINAL_PROMPT"] = "0";
+        start.Environment["GCM_INTERACTIVE"] = "Never";
+        using Process process = new() { StartInfo = start };
+        try
+        {
+            if (!process.Start()) throw new InvalidOperationException("System Git could not start.");
+            Task writer = WriteObjectIdsAsync(process.StandardInput, blobs, timeout.Token);
+            Task<byte[]> error = ReadBoundedAsync(process.StandardError.BaseStream, timeout.Token);
+            Stream output = process.StandardOutput.BaseStream;
+            foreach ((string relative, string objectId) in blobs)
+            {
+                string header = await ReadBatchHeaderAsync(output, timeout.Token);
+                int length = ParseBatchHeader(header, objectId);
+                byte[] bytes = new byte[length];
+                await output.ReadExactlyAsync(bytes, timeout.Token);
+                byte[] terminator = new byte[1];
+                await output.ReadExactlyAsync(terminator, timeout.Token);
+                if (terminator[0] != (byte)'\n')
+                    throw new InvalidDataException("Git returned an invalid snapshot blob terminator.");
+                files.Add(relative, bytes);
+            }
+            await writer;
+            await process.WaitForExitAsync(timeout.Token);
+            _ = await error; // Never expose Git stderr; it can contain remote URLs or credentials.
+            if (process.ExitCode != 0 || await output.ReadAsync(new byte[1], timeout.Token) != 0)
+                throw new InvalidDataException("Git returned unexpected snapshot data.");
+            return files;
+        }
+        catch (OperationCanceledException)
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            if (token.IsCancellationRequested) throw;
+            throw new TimeoutException("Git cat-file timed out. Check the repository and retry.");
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            throw new InvalidOperationException("System Git is unavailable. Install Git 2.30 or later.");
+        }
+        catch
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            throw;
+        }
+    }
+
+    private static async Task WriteObjectIdsAsync(StreamWriter writer,
+        IReadOnlyList<(string Path, string ObjectId)> blobs, CancellationToken token)
+    {
+        writer.NewLine = "\n";
+        foreach (var blob in blobs)
+            await writer.WriteLineAsync(blob.ObjectId.AsMemory(), token);
+        await writer.FlushAsync(token);
+        writer.Close();
+    }
+
+    private static async Task<string> ReadBatchHeaderAsync(Stream output, CancellationToken token)
+    {
+        byte[] single = new byte[1];
+        using MemoryStream line = new();
+        while (line.Length < 128)
+        {
+            if (await output.ReadAsync(single, token) == 0)
+                throw new EndOfStreamException("Git stopped before returning all snapshot blobs.");
+            if (single[0] == (byte)'\n') return Encoding.ASCII.GetString(line.ToArray());
+            line.WriteByte(single[0]);
+        }
+        throw new InvalidDataException("Git returned an invalid snapshot blob header.");
+    }
+
+    internal static int ParseBatchHeader(string header, string objectId)
+    {
+        string[] parts = header.Split(' ');
+        if (parts.Length != 3 || parts[0] != objectId || parts[1] != "blob" ||
+            !int.TryParse(parts[2], NumberStyles.None, CultureInfo.InvariantCulture,
+                out int length) || length > MaxOutput)
+            throw new InvalidDataException("Git returned an invalid or oversized snapshot blob.");
+        return length;
     }
 
     public async Task ValidateMergeScopeAsync(string path, string localHead,
@@ -339,7 +462,7 @@ public sealed class SystemGitTransport : ILocalGitTransport
     {
         "--version", "rev-parse", "symbolic-ref", "config", "status", "ls-files",
         "for-each-ref", "add", "diff", "commit", "fetch", "merge-base", "merge", "push", "ls-tree", "show",
-        "write-tree", "commit-tree", "update-ref"
+        "write-tree", "commit-tree", "update-ref", "cat-file"
     };
 
     internal static void ValidateCommand(IReadOnlyList<string> args)
@@ -351,6 +474,7 @@ public sealed class SystemGitTransport : ILocalGitTransport
             (args[0] == "push" && (args.Count != 4 || args[1] != "--" ||
                                     !args[3].StartsWith("HEAD:refs/heads/", StringComparison.Ordinal))) ||
             (args[0] == "merge" && (args.Count != 3 || args[1] != "--ff-only")) ||
+            (args[0] == "cat-file" && (args.Count != 2 || args[1] != "--batch")) ||
             (args[0] == "write-tree" && args.Count != 1) ||
             (args[0] == "commit-tree" && (args.Count != 8 || args[2] != "-p" ||
                 args[4] != "-p" || args[6] != "-m")) ||

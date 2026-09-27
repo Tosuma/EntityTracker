@@ -413,9 +413,18 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         if (existingNotice is not null) Notifications.Restart(notice, "Checking the linked checkout…");
         IProgress<ProjectSyncPhase> progress = new ProjectSyncProgressReporter(phase =>
             Notifications.Progress(notice, NotificationCenter.DescribeProjectSyncPhase(phase)));
+        IProgress<ProjectSyncTiming> timing = new ProjectSyncTimingReporter(result =>
+            _logger.LogInformation(
+                "Project deletion sync timing: outcome={Outcome} totalMs={TotalMs} stages={Stages} networkFetchMs={NetworkMs} gitSnapshotReadMs={SnapshotReadMs} snapshotFiles={SnapshotFiles} reusedSnapshots={ReusedSnapshots} blobReadProcesses={BlobReadProcesses}",
+                result.Outcome, result.Total.TotalMilliseconds,
+                string.Join(", ", result.Stages.OrderBy(stage => stage.Key)
+                    .Select(stage => $"{stage.Key}={stage.Value.TotalMilliseconds:0}")),
+                result.NetworkFetch.TotalMilliseconds, result.GitSnapshotRead.TotalMilliseconds,
+                result.GitSnapshotFileCount, result.ReusedSnapshots, result.BlobReadProcesses));
         try
         {
-            await _gitSync.SyncNowAsync(new ProjectId(link.ProjectId), progress: progress);
+            await _gitSync.SyncNowAsync(new ProjectId(link.ProjectId), progress: progress,
+                timing: timing);
             Notifications.DismissProjectActions(new ProjectId(link.ProjectId), notice);
             Notifications.Complete(notice, "Project deletion published to the linked repository.");
         }

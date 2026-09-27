@@ -81,11 +81,14 @@ public sealed class NotificationCenter : INotifyPropertyChanged
     {
         ProjectSyncPhase.CheckingEdits => "Checking for unfinished edits…",
         ProjectSyncPhase.Inspecting => "Checking the linked checkout…",
+        ProjectSyncPhase.Exporting => "Reading the local Project snapshot…",
         ProjectSyncPhase.Fetching => "Fetching upstream changes…",
         ProjectSyncPhase.Reviewing => "Reviewing concurrent changes…",
         ProjectSyncPhase.Applying => "Applying validated Project changes…",
         ProjectSyncPhase.Committing => "Committing the Project snapshot…",
         ProjectSyncPhase.Pushing => "Pushing the Project snapshot…",
+        ProjectSyncPhase.Validating => "Validating the Project snapshot…",
+        ProjectSyncPhase.Rechecking => "Checking the latest upstream state…",
         _ => "Synchronizing Project…"
     };
     private readonly TimeProvider _timeProvider;

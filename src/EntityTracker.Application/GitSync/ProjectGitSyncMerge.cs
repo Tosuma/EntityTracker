@@ -119,7 +119,9 @@ public sealed partial class ProjectGitSyncService
         string head = state.Head ?? throw new InvalidOperationException("A committed Project base is required.");
         if (state.UpstreamIdentity is not null) progress?.Report(ProjectSyncPhase.Fetching);
         GitRemoteState? remote = state.UpstreamIdentity is null ? null :
-            await git.FetchAsync(link.RepositoryPath, token);
+            await git.FetchAsync(link.RepositoryPath,
+                new GitRemoteState(head, state.SnapshotFiles), token,
+                progress as IProgress<GitFetchTiming>);
         if (remote is not null && remote.Head != head)
         {
             await git.ValidateMergeScopeAsync(link.RepositoryPath, head, remote.Head, token);
@@ -143,7 +145,9 @@ public sealed partial class ProjectGitSyncService
                     throw new InvalidDataException("The upstream belongs to another Project.");
                 if (!await deletionApproval.ApproveAsync(FullDeletionSet(remoteSnapshot), token))
                     throw new InvalidOperationException("Updated upstream deletion was not approved.");
-                GitRemoteState recheck = await git.FetchAsync(link.RepositoryPath, token);
+                progress?.Report(ProjectSyncPhase.Rechecking);
+                GitRemoteState recheck = await git.FetchAsync(link.RepositoryPath, remote,
+                    token, progress as IProgress<GitFetchTiming>);
                 GitWorkingTreeState checkout = await git.InspectAsync(link.RepositoryPath, token);
                 if (recheck.Head != remote.Head || checkout.Head != state.Head ||
                     !PackagesEqual(checkout.SnapshotFiles, state.SnapshotFiles))
@@ -217,7 +221,9 @@ public sealed partial class ProjectGitSyncService
             }
         }
         ProjectSnapshotRead current = await snapshots.ReadAsync(projectId, token);
-        GitRemoteState head = await git.FetchAsync(link.RepositoryPath, token);
+        progress?.Report(ProjectSyncPhase.Rechecking);
+        GitRemoteState head = await git.FetchAsync(link.RepositoryPath, remote,
+            token, progress as IProgress<GitFetchTiming>);
         if (current.Revision != read.Revision || head.Head != remote.Head)
             throw new InvalidOperationException("The deletion review became stale. Retry sync.");
         if (editGate is not null) await editGate.WaitUntilReadyAsync(projectId, token);
@@ -287,7 +293,9 @@ public sealed partial class ProjectGitSyncService
         if (latest.Revision != read.Revision || latest.Snapshot is null ||
             codec.Encode(latest.Snapshot).Sha256 != codec.Encode(read.Snapshot).Sha256)
             throw new InvalidOperationException("The SQLite Project changed during review. Retry sync.");
-        GitRemoteState recheck = await git.FetchAsync(link.RepositoryPath, token);
+        progress?.Report(ProjectSyncPhase.Rechecking);
+        GitRemoteState recheck = await git.FetchAsync(link.RepositoryPath, remote,
+            token, progress as IProgress<GitFetchTiming>);
         GitWorkingTreeState checkout = await git.InspectAsync(link.RepositoryPath, token);
         if (recheck.Head != remote.Head || checkout.Head != state.Head ||
             checkout.Branch != link.Branch || checkout.UpstreamIdentity != link.UpstreamIdentity ||
@@ -299,7 +307,9 @@ public sealed partial class ProjectGitSyncService
             if (!await deletionApproval.ApproveAsync(deletions, token))
                 throw new InvalidOperationException("Outbound deletions were not approved.");
             latest = await snapshots.ReadAsync(projectId, token);
-            recheck = await git.FetchAsync(link.RepositoryPath, token);
+            progress?.Report(ProjectSyncPhase.Rechecking);
+            recheck = await git.FetchAsync(link.RepositoryPath, remote,
+                token, progress as IProgress<GitFetchTiming>);
             if (latest.Revision != read.Revision || recheck.Head != remote.Head)
                 throw new InvalidOperationException("Deletion approval became stale. Retry sync.");
         }
@@ -329,7 +339,10 @@ public sealed partial class ProjectGitSyncService
         try { await git.PushAsync(link.RepositoryPath, token); }
         catch (InvalidOperationException)
         {
-            GitRemoteState advanced = await git.FetchAsync(link.RepositoryPath, token);
+            progress?.Report(ProjectSyncPhase.Rechecking);
+            GitRemoteState advanced = await git.FetchAsync(link.RepositoryPath,
+                new GitRemoteState(head, canonical.Files), token,
+                progress as IProgress<GitFetchTiming>);
             if (advanced.Head == head) return await CompleteMergeAsync(pending, token);
             GitWorkingTreeState next = await git.InspectAsync(link.RepositoryPath, token);
             return await SyncConcurrentAsync(projectId, pending, next, advanced,

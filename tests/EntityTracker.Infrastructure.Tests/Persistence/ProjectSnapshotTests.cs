@@ -64,6 +64,49 @@ public sealed class ProjectSnapshotTests
     }
 
     [Fact]
+    public async Task LargerSnapshotExportPreservesEntityRelationshipsAndCanonicalHash()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase db = new(file.DatabasePath);
+        await db.InitializeAsync();
+        ProjectSnapshot seed = CompleteSnapshot();
+        SnapshotTracker tracker = seed.Trackers[0];
+        SnapshotEntity template = tracker.Entities[0];
+        SnapshotEntity[] additions = Enumerable.Range(0, 100).Select(index =>
+        {
+            Guid id = Guid.NewGuid();
+            return template with
+            {
+                Id = id,
+                SourceName = $"Extra entity {index:D3}",
+                Dependencies = [new SnapshotDependency(id, tracker.Entities[1].Id, "Mandatory", T0, T1)],
+                UnresolvedDependencies = [new SnapshotUnresolvedDependency(id,
+                    $"External {index:D3}", "Optional", T0, T2)],
+                ManualOverrides = [new SnapshotOverride(id,
+                    $"External {index:D3}", "Suppress", T1, T2)]
+            };
+        }).ToArray();
+        ProjectSnapshot expanded = seed with { Trackers =
+            [tracker with { Entities = tracker.Entities.Concat(additions).ToArray() }, seed.Trackers[1]] };
+        SqliteProjectSnapshotStore store = new(db);
+        await store.ApplyAsync(expanded, 0);
+
+        ProjectSnapshot actual = Assert.IsType<ProjectSnapshot>(
+            (await store.ReadAsync(new ProjectId(seed.Project.Id))).Snapshot);
+        SnapshotTracker exported = actual.Trackers.Single(item => item.Id == tracker.Id);
+        Assert.Equal(102, exported.Entities.Count);
+        Assert.All(exported.Entities, entity =>
+        {
+            if (entity.Id == tracker.Entities[1].Id) return;
+            Assert.Single(entity.Dependencies);
+            Assert.Single(entity.UnresolvedDependencies);
+            Assert.Single(entity.ManualOverrides);
+        });
+        ProjectSnapshotJsonCodec codec = new();
+        Assert.Equal(codec.Encode(expanded).Sha256, codec.Encode(actual).Sha256);
+    }
+
+    [Fact]
     public async Task InvalidSnapshotsAndRevisionMismatchLeaveDatabaseUnchanged()
     {
         await using TemporarySqliteFile file = new();

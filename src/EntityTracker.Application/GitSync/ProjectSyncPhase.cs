@@ -4,11 +4,14 @@ public enum ProjectSyncPhase
 {
     CheckingEdits,
     Inspecting,
+    Exporting,
     Fetching,
     Reviewing,
     Applying,
     Committing,
-    Pushing
+    Pushing,
+    Validating,
+    Rechecking
 }
 
 public sealed class ProjectSyncReviewCancelledException(string message) : InvalidOperationException(message);

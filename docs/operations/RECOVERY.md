@@ -54,7 +54,8 @@ to downgrade the schema manually.
 
 EntityTracker writes UTC daily logs to `logs\entity-tracker-yyyyMMdd.log` and retains the newest
 14 daily files. Logs cover startup/provider selection, backup and migration failures, import/save
-failures, and unhandled UI exceptions.
+failures, unhandled UI exceptions, and Project sync stage timings. Sync timing entries include
+fetch and Git snapshot read durations and file counts, without repository paths or snapshot content.
 
 Logs intentionally do not include entity notes, CSV contents, SQL query contents, authentication
 material, or the complete settings document. Review a log before sharing it because exception

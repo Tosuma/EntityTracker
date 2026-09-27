@@ -102,6 +102,16 @@ internal sealed class ReadmeScreenshotGenerator
                 "Current");
             await linkStore.SaveAsync(repositoryFixture, cancellationToken);
             await shell.ProjectReporting!.RepositoryCard!.RefreshAsync(cancellationToken);
+            shell.ProjectReporting.RepositoryCard.ShowTiming(new ProjectSyncTiming(
+                TimeSpan.FromSeconds(18.4),
+                new Dictionary<ProjectSyncPhase, TimeSpan>
+                {
+                    [ProjectSyncPhase.Fetching] = TimeSpan.FromSeconds(11.7),
+                    [ProjectSyncPhase.Exporting] = TimeSpan.FromSeconds(2.1),
+                    [ProjectSyncPhase.Validating] = TimeSpan.FromSeconds(4.6)
+                },
+                TimeSpan.FromSeconds(8.2), TimeSpan.FromSeconds(3.5), 142, 1, 0,
+                "Completed"));
             await renderer.CaptureWithTextOverrideAsync(
                 "project-git-repository.png", repositoryFixturePath,
                 @"C:\Projects\order-platform", settleMilliseconds: 900);
@@ -117,6 +127,16 @@ internal sealed class ReadmeScreenshotGenerator
                 SyncStatus = "PendingRemote"
             }, cancellationToken);
             await shell.ProjectReporting.RepositoryCard.RefreshAsync(cancellationToken);
+            shell.ProjectReporting.RepositoryCard.ShowTiming(new ProjectSyncTiming(
+                TimeSpan.FromSeconds(21.2),
+                new Dictionary<ProjectSyncPhase, TimeSpan>
+                {
+                    [ProjectSyncPhase.Rechecking] = TimeSpan.FromSeconds(15.2),
+                    [ProjectSyncPhase.Fetching] = TimeSpan.FromSeconds(4.0),
+                    [ProjectSyncPhase.Validating] = TimeSpan.FromSeconds(2.0)
+                },
+                TimeSpan.FromSeconds(18.0), TimeSpan.FromSeconds(1.2), 142, 1, 0,
+                "Action needed"));
             notifications.NeedAction(syncNotice,
                 "The upstream advanced during sync. Retry to validate its changes.",
                 "Retry", () => Task.CompletedTask);

@@ -48,6 +48,11 @@ public interface ILocalGitTransport
 
     Task<GitRemoteState> FetchAsync(string path, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("Remote Git operations are unavailable.");
+    Task<GitRemoteState> FetchAsync(string path, GitRemoteState? reusableSnapshot,
+        CancellationToken cancellationToken = default) => FetchAsync(path, cancellationToken);
+    Task<GitRemoteState> FetchAsync(string path, GitRemoteState? reusableSnapshot,
+        CancellationToken cancellationToken, IProgress<GitFetchTiming>? timing) =>
+        FetchAsync(path, reusableSnapshot, cancellationToken);
     Task<bool> IsAncestorAsync(string path, string ancestor, string descendant,
         CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("Remote Git operations are unavailable.");
@@ -233,11 +238,29 @@ public sealed partial class ProjectGitSyncService(
     }
 
     public Task<ProjectSyncLink> SyncNowAsync(ProjectId projectId, CancellationToken token = default,
-        IProgress<ProjectSyncPhase>? progress = null) =>
-        SyncNowAsync(projectId, null, token, progress);
+        IProgress<ProjectSyncPhase>? progress = null, IProgress<ProjectSyncTiming>? timing = null) =>
+        SyncNowAsync(projectId, null, token, progress, timing);
 
     public async Task<ProjectSyncLink> SyncNowAsync(ProjectId projectId, string? localName,
-        CancellationToken token = default, IProgress<ProjectSyncPhase>? progress = null)
+        CancellationToken token = default, IProgress<ProjectSyncPhase>? progress = null,
+        IProgress<ProjectSyncTiming>? timing = null)
+    {
+        ProjectSyncTimingCollector collector = new(progress);
+        string outcome = "Completed";
+        try
+        {
+            ProjectSyncLink result = await SyncCoreAsync(projectId, localName, token, collector);
+            if (result.SyncStatus is "PendingPush" or "PendingRemote") outcome = "Action needed";
+            return result;
+        }
+        catch (OperationCanceledException) { outcome = "Cancelled"; throw; }
+        catch (ProjectSyncReviewCancelledException) { outcome = "Cancelled"; throw; }
+        catch { outcome = "Failed"; throw; }
+        finally { timing?.Report(collector.Finish(outcome)); }
+    }
+
+    private async Task<ProjectSyncLink> SyncCoreAsync(ProjectId projectId, string? localName,
+        CancellationToken token, IProgress<ProjectSyncPhase>? progress)
     {
         progress?.Report(ProjectSyncPhase.CheckingEdits);
         if (editGate is not null) await editGate.WaitUntilReadyAsync(projectId, token);
@@ -251,6 +274,7 @@ public sealed partial class ProjectGitSyncService(
         if (!PathEquals(state.RootPath, link.RepositoryPath) || state.Branch != link.Branch ||
             state.UpstreamIdentity != link.UpstreamIdentity)
             throw new InvalidOperationException("Repository root, branch, or upstream changed. Restore the linked configuration externally or unlink and relink.");
+        progress?.Report(ProjectSyncPhase.Exporting);
         ProjectSnapshotRead read = await snapshots.ReadAsync(projectId, token);
         if (read.Snapshot is not null && link.PendingDeletion is not null)
             throw new InvalidOperationException(
@@ -261,7 +285,9 @@ public sealed partial class ProjectGitSyncService(
             {
                 if (state.UpstreamIdentity is not null)
                 {
-                    GitRemoteState published = await git.FetchAsync(link.RepositoryPath, token);
+                    GitRemoteState published = await git.FetchAsync(link.RepositoryPath,
+                        state.Head is null ? null : new GitRemoteState(state.Head, state.SnapshotFiles),
+                        token, progress as IProgress<GitFetchTiming>);
                     if (codec.TryDecodeTombstone(published.SnapshotFiles, out ProjectTombstone? received) &&
                         received!.ProjectId == projectId.Value)
                     {
@@ -301,7 +327,9 @@ public sealed partial class ProjectGitSyncService(
         if (state.UpstreamIdentity is not null)
         {
             progress?.Report(ProjectSyncPhase.Fetching);
-            remote = await git.FetchAsync(link.RepositoryPath, token);
+            remote = await git.FetchAsync(link.RepositoryPath,
+                state.Head is null ? null : new GitRemoteState(state.Head, state.SnapshotFiles),
+                token, progress as IProgress<GitFetchTiming>);
             if (codec.TryDecodeTombstone(remote.SnapshotFiles, out ProjectTombstone? tombstone))
                 return await ReceiveTombstoneAsync(projectId, link, state, remote,
                     tombstone!, read, token, progress);
@@ -410,6 +438,7 @@ public sealed partial class ProjectGitSyncService(
         }
         if (state.Head != link.LastCommonCommit)
             throw new InvalidOperationException("Repository HEAD changed since the last sync. Review it outside EntityTracker before relinking.");
+        progress?.Report(ProjectSyncPhase.Validating);
         if (state.SnapshotFiles.Count > 0)
         {
             ProjectSnapshot repositorySnapshot = codec.Decode(state.SnapshotFiles);
@@ -450,6 +479,7 @@ public sealed partial class ProjectGitSyncService(
             progress?.Report(ProjectSyncPhase.Committing);
             head = await git.CommitSnapshotAsync(link.RepositoryPath, state.SnapshotFiles, local, token);
         }
+        progress?.Report(ProjectSyncPhase.Validating);
         ProjectSnapshotRead finalRead = await snapshots.ReadAsync(projectId, token);
         if (finalRead.Snapshot is null || finalRead.Revision != read.Revision ||
             codec.Encode(finalRead.Snapshot).Sha256 != local.Sha256)
@@ -476,7 +506,9 @@ public sealed partial class ProjectGitSyncService(
                 try { await git.PushAsync(link.RepositoryPath, token); }
                 catch (InvalidOperationException)
                 {
-                    GitRemoteState refreshed = await git.FetchAsync(link.RepositoryPath, token);
+                    progress?.Report(ProjectSyncPhase.Rechecking);
+                    GitRemoteState refreshed = await git.FetchAsync(link.RepositoryPath, remote,
+                        token, progress as IProgress<GitFetchTiming>);
                     if (refreshed.Head != head &&
                         await git.IsAncestorAsync(link.RepositoryPath, refreshed.Head, head, token))
                         await git.PushAsync(link.RepositoryPath, token);
@@ -513,7 +545,9 @@ public sealed partial class ProjectGitSyncService(
                             SyncStatus = "PendingRemote",
                             LastResult = "Upstream advanced after push; validating latest state." };
                         await links.SaveAsync(updated, token);
-                        GitRemoteState rechecked = await git.FetchAsync(link.RepositoryPath, token);
+                        progress?.Report(ProjectSyncPhase.Rechecking);
+                        GitRemoteState rechecked = await git.FetchAsync(link.RepositoryPath, refreshed,
+                            token, progress as IProgress<GitFetchTiming>);
                         ProjectSnapshotRead latestRead = await snapshots.ReadAsync(projectId, token);
                         if (rechecked.Head != refreshed.Head || latestRead.Revision != read.Revision)
                             return updated;
@@ -532,8 +566,9 @@ public sealed partial class ProjectGitSyncService(
             }
             else
             {
-                progress?.Report(ProjectSyncPhase.Fetching);
-                GitRemoteState rechecked = await git.FetchAsync(link.RepositoryPath, token);
+                progress?.Report(ProjectSyncPhase.Rechecking);
+                GitRemoteState rechecked = await git.FetchAsync(link.RepositoryPath,
+                    new GitRemoteState(head, local.Files), token, progress as IProgress<GitFetchTiming>);
                 if (rechecked.Head != head)
                 {
                     updated = updated with { SyncStatus = "PendingRemote",
