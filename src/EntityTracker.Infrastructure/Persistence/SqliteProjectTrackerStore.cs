@@ -296,8 +296,9 @@ public sealed class SqliteProjectTrackerStore(
              $timestamp, $timestamp, $timestamp);
 
             INSERT INTO entity_status_history
-            (entity_id, previous_status, new_status, entry_kind, occurred_at_utc)
-            VALUES ($id, NULL, $status, 'Baseline', $timestamp);
+            (entity_id, previous_status, new_status, entry_kind, occurred_at_utc,
+             event_id, previous_event_id)
+            VALUES ($id, NULL, $status, 'Baseline', $timestamp, $eventId, NULL);
             """);
         command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(entity.TrackerId));
@@ -311,6 +312,7 @@ public sealed class SqliteProjectTrackerStore(
         command.Parameters.AddWithValue("$developer", entity.ResponsibleDeveloper);
         command.Parameters.AddWithValue("$group", entity.GroupName);
         command.Parameters.AddWithValue("$timestamp", timestamp);
+        command.Parameters.AddWithValue("$eventId", Guid.NewGuid().ToString("D"));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -325,8 +327,8 @@ public sealed class SqliteProjectTrackerStore(
         using SqliteCommand command = CreateCommand(connection, transaction, """
             INSERT INTO progress_snapshots
             (tracker_id, recorded_at_utc, ready_count, blocked_count, in_progress_count,
-             rework_needed_count, development_completed_count, reconciled_count)
-            VALUES ($trackerId, $timestamp, $ready, $blocked, $inProgress, $rework, $completed, $reconciled);
+             rework_needed_count, development_completed_count, reconciled_count, snapshot_id)
+            VALUES ($trackerId, $timestamp, $ready, $blocked, $inProgress, $rework, $completed, $reconciled, $snapshotId);
             """);
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
         command.Parameters.AddWithValue("$timestamp", timestamp);
@@ -336,6 +338,7 @@ public sealed class SqliteProjectTrackerStore(
         command.Parameters.AddWithValue("$rework", snapshot.ReworkNeededCount);
         command.Parameters.AddWithValue("$completed", snapshot.DevelopmentCompletedCount);
         command.Parameters.AddWithValue("$reconciled", snapshot.ReconciledCount);
+        command.Parameters.AddWithValue("$snapshotId", Guid.NewGuid().ToString("D"));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

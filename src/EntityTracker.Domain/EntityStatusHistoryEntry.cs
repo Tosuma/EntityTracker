@@ -7,7 +7,9 @@ public sealed record EntityStatusHistoryEntry
         DevelopmentStatus? previousStatus,
         DevelopmentStatus newStatus,
         DateTimeOffset occurredAtUtc,
-        StatusHistoryEntryKind kind)
+        StatusHistoryEntryKind kind,
+        Guid eventId = default,
+        Guid? previousEventId = null)
     {
         ArgumentNullException.ThrowIfNull(entityId);
         if (previousStatus is { } oldStatus && !Enum.IsDefined(oldStatus))
@@ -45,6 +47,12 @@ public sealed record EntityStatusHistoryEntry
         }
 
         EntityId = entityId;
+        EventId = eventId == Guid.Empty ? Guid.NewGuid() : eventId;
+        if (previousEventId == Guid.Empty || previousEventId == EventId)
+        {
+            throw new ArgumentException("The causal predecessor must be a different nonempty event ID.", nameof(previousEventId));
+        }
+        PreviousEventId = previousEventId;
         PreviousStatus = previousStatus;
         NewStatus = newStatus;
         OccurredAtUtc = occurredAtUtc;
@@ -52,6 +60,8 @@ public sealed record EntityStatusHistoryEntry
     }
 
     public EntityId EntityId { get; }
+    public Guid EventId { get; }
+    public Guid? PreviousEventId { get; }
 
     public DevelopmentStatus? PreviousStatus { get; }
 

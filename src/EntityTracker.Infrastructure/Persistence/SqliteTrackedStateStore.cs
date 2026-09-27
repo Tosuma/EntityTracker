@@ -508,15 +508,20 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         using SqliteCommand command = CreateCommand(connection, transaction, """
             INSERT INTO entity_status_history
             (
-                entity_id, previous_status, new_status, entry_kind, occurred_at_utc
+                entity_id, previous_status, new_status, entry_kind, occurred_at_utc,
+                event_id, previous_event_id
             )
-            SELECT id, development_status, $newStatus, 'Transition', $timestamp
+            SELECT id, development_status, $newStatus, 'Transition', $timestamp,
+                   $eventId,
+                   (SELECT event_id FROM entity_status_history
+                    WHERE entity_id = $id ORDER BY occurred_at_utc DESC, id DESC LIMIT 1)
             FROM tracked_entities
             WHERE id = $id AND development_status <> $newStatus;
             """);
         command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
         command.Parameters.AddWithValue("$newStatus", entity.Status.ToString());
         command.Parameters.AddWithValue("$timestamp", timestamp);
+        command.Parameters.AddWithValue("$eventId", Guid.NewGuid().ToString("D"));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -533,9 +538,13 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         using SqliteCommand command = CreateCommand(connection, transaction, """
             INSERT INTO entity_status_history
             (
-                entity_id, previous_status, new_status, entry_kind, occurred_at_utc
+                entity_id, previous_status, new_status, entry_kind, occurred_at_utc,
+                event_id, previous_event_id
             )
-            VALUES ($entityId, $previousStatus, $newStatus, $kind, $timestamp);
+            VALUES ($entityId, $previousStatus, $newStatus, $kind, $timestamp,
+                    $eventId,
+                    (SELECT event_id FROM entity_status_history
+                     WHERE entity_id = $entityId ORDER BY occurred_at_utc DESC, id DESC LIMIT 1));
             """);
         command.Parameters.AddWithValue("$entityId", SqlitePersistenceValues.Format(entityId));
         command.Parameters.AddWithValue(
@@ -544,6 +553,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         command.Parameters.AddWithValue("$newStatus", newStatus.ToString());
         command.Parameters.AddWithValue("$kind", kind.ToString());
         command.Parameters.AddWithValue("$timestamp", timestamp);
+        command.Parameters.AddWithValue("$eventId", Guid.NewGuid().ToString("D"));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -601,12 +611,12 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
             INSERT INTO progress_snapshots
             (
                 tracker_id, recorded_at_utc, ready_count, blocked_count, in_progress_count,
-                rework_needed_count, development_completed_count, reconciled_count
+                rework_needed_count, development_completed_count, reconciled_count, snapshot_id
             )
             VALUES
             (
                 $trackerId, $timestamp, $ready, $blocked, $inProgress, $rework,
-                $developmentCompleted, $reconciled
+                $developmentCompleted, $reconciled, $snapshotId
             );
             """);
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
@@ -619,6 +629,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
             "$developmentCompleted",
             snapshot.DevelopmentCompletedCount);
         command.Parameters.AddWithValue("$reconciled", snapshot.ReconciledCount);
+        command.Parameters.AddWithValue("$snapshotId", Guid.NewGuid().ToString("D"));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

@@ -197,6 +197,9 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IProjectRepository, SqliteProjectRepository>();
         services.AddSingleton<ITrackerRepository, SqliteTrackerRepository>();
         services.AddSingleton<IProjectTrackerStore, SqliteProjectTrackerStore>();
+        services.AddSingleton<EntityTracker.Application.Snapshots.IProjectSnapshotStore, SqliteProjectSnapshotStore>();
+        services.AddSingleton<EntityTracker.Application.Snapshots.IProjectSnapshotCodec,
+            EntityTracker.Infrastructure.Snapshots.ProjectSnapshotJsonCodec>();
     }
 
     private void OnDispatcherUnhandledException(

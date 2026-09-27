@@ -1,6 +1,6 @@
 # GS-01 — Portable Project Snapshot
 
-**Status: planned.** Implement this milestone separately after approving its implementation plan. This document does not authorize GS-02 or Git operations.
+**Status: completed.** GS-01 provides portable Project snapshots without Git operations. This milestone does not authorize GS-02.
 
 ## Goal and user-facing outcome
 
@@ -30,6 +30,10 @@ Domain owns stable history identity and causal linkage. Application owns snapsho
 - Verify canonical byte equality for logically equal snapshots and stable hash across repeated exports.
 - Reject malformed JSON, duplicate IDs, invalid references, unsupported newer versions, and revision mismatch without changing SQLite. Verify transactional rollback on an injected apply failure.
 - Build the complete solution and run its regression suite. No Git process is needed for GS-01 acceptance.
+
+## Completion record
+
+Schema version 13 adds deterministic legacy history IDs, causal links, portable copy origins, Project revisions, WAL, and bounded busy handling. Application snapshot models and validation, canonical version 1 JSON encoding, and revision-checked transactional SQLite application are implemented. Tests cover migration repeatability, complete cross-catalog round trips, canonical bytes and hash, invalid input, revisions, rollback, and WAL responsiveness. The complete solution builds and all 532 regression tests pass.
 
 ## Agent planning prompt
 

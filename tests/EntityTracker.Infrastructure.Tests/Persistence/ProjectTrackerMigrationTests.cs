@@ -82,12 +82,28 @@ public sealed class ProjectTrackerMigrationTests
         SqliteProgressHistoryRepository history = new(database);
         IReadOnlyList<EntityStatusHistoryEntry> entries = await history.GetStatusHistoryAsync(tracker.Id);
         Assert.Equal(3, entries.Count);
+        Assert.Equal(3, entries.Select(entry => entry.EventId).Distinct().Count());
+        EntityStatusHistoryEntry baseline = Assert.Single(entries, entry =>
+            entry.EntityId == ActiveId && entry.Kind == StatusHistoryEntryKind.Baseline);
+        EntityStatusHistoryEntry transition = Assert.Single(entries, entry =>
+            entry.EntityId == ActiveId && entry.Kind == StatusHistoryEntryKind.Transition);
+        Assert.Null(baseline.PreviousEventId);
+        Assert.Equal(baseline.EventId, transition.PreviousEventId);
+        Assert.Equal(DevelopmentStatus.NotStarted, baseline.NewStatus);
         Assert.Contains(entries, entry =>
             entry.EntityId == ActiveId &&
             entry.PreviousStatus == DevelopmentStatus.NotStarted &&
             entry.NewStatus == DevelopmentStatus.InProgress &&
             entry.Kind == StatusHistoryEntryKind.Transition);
         ProgressSnapshot snapshot = Assert.Single(await history.GetProgressSnapshotsAsync(tracker.Id));
+        Assert.NotEqual(Guid.Empty, snapshot.SnapshotId);
+        Guid[] migratedEventIds = entries.Select(entry => entry.EventId).ToArray();
+        Guid migratedSnapshotId = snapshot.SnapshotId;
+        await database.InitializeAsync();
+        Assert.Equal(migratedEventIds,
+            (await history.GetStatusHistoryAsync(tracker.Id)).Select(entry => entry.EventId));
+        Assert.Equal(migratedSnapshotId,
+            Assert.Single(await history.GetProgressSnapshotsAsync(tracker.Id)).SnapshotId);
         Assert.Equal(new DateTimeOffset(2025, 1, 6, 0, 0, 0, TimeSpan.Zero), snapshot.RecordedAtUtc);
         Assert.Equal(2, snapshot.State.ReadyCount);
         Assert.Equal(3, snapshot.State.BlockedCount);
@@ -107,7 +123,7 @@ public sealed class ProjectTrackerMigrationTests
         Assert.Equal(5, summary.UnresolvedEntityCount);
 
         await using SqliteConnection connection = await OpenAsync(file.DatabasePath);
-        Assert.Equal(12L, await ScalarInt64Async(connection, "PRAGMA user_version;"));
+        Assert.Equal(13L, await ScalarInt64Async(connection, "PRAGMA user_version;"));
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT source_key, created_at_utc, schema_updated_at_utc, progress_updated_at_utc

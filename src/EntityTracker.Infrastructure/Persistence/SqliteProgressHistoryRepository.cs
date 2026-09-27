@@ -29,7 +29,8 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
             await _database.OpenConnectionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT entity_id, previous_status, new_status, occurred_at_utc, entry_kind
+            SELECT entity_id, previous_status, new_status, occurred_at_utc, entry_kind,
+                   event_id, previous_event_id
             FROM entity_status_history history
             INNER JOIN tracked_entities entity ON entity.id = history.entity_id
             WHERE entity.tracker_id = $trackerId
@@ -54,7 +55,9 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
                 ParseTimestamp(reader.GetString(3)),
                 SqlitePersistenceValues.ParseEnum<StatusHistoryEntryKind>(
                     reader.GetString(4),
-                    "status history entry kind")));
+                    "status history entry kind"),
+                Guid.Parse(reader.GetString(5)),
+                reader.IsDBNull(6) ? null : Guid.Parse(reader.GetString(6))));
         }
 
         return entries;
@@ -70,7 +73,7 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT recorded_at_utc, ready_count, blocked_count, in_progress_count,
-                   rework_needed_count, development_completed_count, reconciled_count
+                   rework_needed_count, development_completed_count, reconciled_count, snapshot_id
             FROM progress_snapshots
             WHERE tracker_id = $trackerId
             ORDER BY recorded_at_utc, id;
@@ -89,7 +92,7 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
                     reader.GetInt32(3),
                     reader.GetInt32(4),
                     reader.GetInt32(5),
-                    reader.GetInt32(6))));
+                    reader.GetInt32(6)), Guid.Parse(reader.GetString(7))));
         }
 
         return snapshots;
@@ -105,7 +108,7 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT recorded_at_utc, ready_count, blocked_count, in_progress_count,
-                   rework_needed_count, development_completed_count, reconciled_count
+                   rework_needed_count, development_completed_count, reconciled_count, snapshot_id
             FROM progress_snapshots
             WHERE tracker_id = $trackerId
             ORDER BY recorded_at_utc DESC, id DESC
@@ -127,7 +130,7 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
                 reader.GetInt32(3),
                 reader.GetInt32(4),
                 reader.GetInt32(5),
-                reader.GetInt32(6)));
+                reader.GetInt32(6)), Guid.Parse(reader.GetString(7)));
     }
 
     private static DateTimeOffset ParseTimestamp(string value)

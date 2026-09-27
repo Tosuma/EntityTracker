@@ -20,8 +20,8 @@ Build a Windows C#/.NET WPF application that imports database relationships from
 | Product feedback | [PF-01–PF-05](product-feedback/00_README.md) | Planned | Independent workflow improvements on the product foundation. |
 | Engineering | [CI-01](engineering/00_README.md) | Completed | Repository engineering independent of the product sequence. |
 | UI/UX | [UX-01–UX-08](ux/00_README.md) | Completed | Projects/Trackers and Fluent presentation, building on the product foundation. |
-| Git sync | [GS-01–GS-05](git-sync/00_README.md) | Planned; no GS implementation started | Project-level collaboration after the existing Project/Tracker model. |
+| Git sync | [GS-01–GS-05](git-sync/00_README.md) | GS-01 completed; GS-02–GS-05 planned | Portable snapshots are implemented; Project-level Git collaboration remains planned. |
 
 See the [cross-category milestone status](milestone_status.md) for the recorded state of each series. A planned milestone document describes future work; it does not make the feature available in the current application.
 
-The live SharePoint integration formerly called Milestone 13 is retired. SQLite is currently the only runtime store. The GS roadmap specifies a future user-managed Git repository workflow while retaining SQLite as the application's runtime source of truth.
+The live SharePoint integration formerly called Milestone 13 is retired. SQLite is currently the only runtime store. GS-01 adds portable snapshots; later GS milestones specify a user-managed Git repository workflow while retaining SQLite as the application's runtime source of truth.

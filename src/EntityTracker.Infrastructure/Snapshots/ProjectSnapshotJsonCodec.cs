@@ -1,0 +1,166 @@
+using System.Buffers.Binary;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using EntityTracker.Application.Snapshots;
+
+namespace EntityTracker.Infrastructure.Snapshots;
+
+public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
+{
+    private const string Root = ".entitytracker/";
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false,
+        RespectRequiredConstructorParameters = true,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
+    };
+
+    public ProjectSnapshotPackage Encode(ProjectSnapshot snapshot)
+    {
+        ProjectSnapshotValidator.Validate(snapshot);
+        SortedDictionary<string, byte[]> files = new(StringComparer.Ordinal)
+        {
+            [Root + "manifest.json"] = JsonSerializer.SerializeToUtf8Bytes(
+                new Manifest(snapshot.FormatVersion, snapshot.Project.Id), JsonOptions),
+            [Root + "project.json"] = JsonSerializer.SerializeToUtf8Bytes(snapshot.Project, JsonOptions)
+        };
+
+        foreach (SnapshotTracker tracker in snapshot.Trackers.OrderBy(t => t.Id))
+        {
+            string prefix = TrackerPrefix(tracker.Id);
+            files[prefix + "tracker.json"] = JsonSerializer.SerializeToUtf8Bytes(
+                new TrackerDocument(tracker.Id, tracker.ProjectId, tracker.Name,
+                    tracker.LifecycleState, tracker.CreatedAtUtc, tracker.UpdatedAtUtc,
+                    tracker.RecycledAtUtc, tracker.CopiedFromTrackerId), JsonOptions);
+            foreach (SnapshotEntity entity in tracker.Entities.OrderBy(e => e.Id))
+            {
+                SnapshotEntity ordered = entity with
+                {
+                    Dependencies = entity.Dependencies.OrderBy(d => d.DependencyEntityId).ToArray(),
+                    UnresolvedDependencies = entity.UnresolvedDependencies.OrderBy(
+                        d => d.DependencySourceName, StringComparer.Ordinal).ToArray(),
+                    ManualOverrides = entity.ManualOverrides.OrderBy(
+                        d => d.DependencySourceName, StringComparer.Ordinal).ToArray()
+                };
+                files[prefix + $"entities/{entity.Id:D}.json"] =
+                    JsonSerializer.SerializeToUtf8Bytes(ordered, JsonOptions);
+            }
+            foreach (SnapshotStatusEvent entry in tracker.StatusHistory.OrderBy(e => e.EventId))
+                files[prefix + $"status-history/{entry.EventId:D}.json"] =
+                    JsonSerializer.SerializeToUtf8Bytes(entry, JsonOptions);
+            foreach (SnapshotProgress progress in tracker.ProgressHistory.OrderBy(p => p.SnapshotId))
+                files[prefix + $"progress-history/{progress.SnapshotId:D}.json"] =
+                    JsonSerializer.SerializeToUtf8Bytes(progress, JsonOptions);
+            if (tracker.ImportSummary is { } summary)
+                files[prefix + "schema-import-summary.json"] =
+                    JsonSerializer.SerializeToUtf8Bytes(summary, JsonOptions);
+        }
+        return new ProjectSnapshotPackage(files, Hash(files));
+    }
+
+    public ProjectSnapshot Decode(IReadOnlyDictionary<string, byte[]> files)
+    {
+        ArgumentNullException.ThrowIfNull(files);
+        Manifest manifest = Read<Manifest>(files, Root + "manifest.json");
+        if (manifest.FormatVersion != ProjectSnapshot.CurrentFormatVersion)
+            throw new InvalidDataException($"Unsupported Project snapshot format version {manifest.FormatVersion}.");
+        SnapshotProject project = Read<SnapshotProject>(files, Root + "project.json");
+        if (project.Id != manifest.ProjectId)
+            throw new InvalidDataException("The manifest Project ID does not match project.json.");
+
+        List<SnapshotTracker> trackers = [];
+        foreach (string trackerPath in files.Keys.Where(p => p.EndsWith("/tracker.json", StringComparison.Ordinal))
+                     .Order(StringComparer.Ordinal))
+        {
+            TrackerDocument doc = Read<TrackerDocument>(files, trackerPath);
+            string prefix = TrackerPrefix(doc.Id);
+            if (trackerPath != prefix + "tracker.json")
+                throw new InvalidDataException("A Tracker document path does not match its ID.");
+            SnapshotEntity[] entities = files.Keys.Where(p => p.StartsWith(prefix + "entities/", StringComparison.Ordinal))
+                .Order(StringComparer.Ordinal).Select(p => Read<SnapshotEntity>(files, p)).ToArray();
+            SnapshotStatusEvent[] events = files.Keys.Where(p => p.StartsWith(prefix + "status-history/", StringComparison.Ordinal))
+                .Order(StringComparer.Ordinal).Select(p => Read<SnapshotStatusEvent>(files, p)).ToArray();
+            SnapshotProgress[] progress = files.Keys.Where(p => p.StartsWith(prefix + "progress-history/", StringComparison.Ordinal))
+                .Order(StringComparer.Ordinal).Select(p => Read<SnapshotProgress>(files, p)).ToArray();
+            string summaryPath = prefix + "schema-import-summary.json";
+            SnapshotImportSummary? summary = files.ContainsKey(summaryPath)
+                ? Read<SnapshotImportSummary>(files, summaryPath) : null;
+            trackers.Add(new SnapshotTracker(doc.Id, doc.ProjectId, doc.Name, doc.LifecycleState,
+                doc.CreatedAtUtc, doc.UpdatedAtUtc, doc.RecycledAtUtc, doc.CopiedFromTrackerId,
+                entities, events, progress, summary));
+        }
+        ProjectSnapshot snapshot = new(manifest.FormatVersion, project, trackers);
+        ProjectSnapshotValidator.Validate(snapshot);
+
+        ProjectSnapshotPackage canonical = Encode(snapshot);
+        if (!files.Keys.Order(StringComparer.Ordinal).SequenceEqual(canonical.Files.Keys, StringComparer.Ordinal))
+            throw new InvalidDataException("The snapshot contains an unknown, missing, or misnamed document.");
+        foreach (string path in files.Keys)
+        {
+            if (!path.StartsWith(Root, StringComparison.Ordinal) ||
+                path.Contains("..", StringComparison.Ordinal) || path.Contains('\\'))
+                throw new InvalidDataException("A snapshot path is invalid.");
+        }
+        return snapshot;
+    }
+
+    private static T Read<T>(IReadOnlyDictionary<string, byte[]> files, string path)
+    {
+        if (!files.TryGetValue(path, out byte[]? bytes) || bytes is null)
+            throw new InvalidDataException($"The snapshot is missing {path}.");
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(bytes);
+            RejectDuplicateProperties(document.RootElement);
+            return JsonSerializer.Deserialize<T>(bytes, JsonOptions) ??
+                throw new InvalidDataException($"The snapshot document {path} is empty.");
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException($"The snapshot document {path} is malformed.", exception);
+        }
+    }
+
+    private static void RejectDuplicateProperties(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            HashSet<string> names = new(StringComparer.Ordinal);
+            foreach (JsonProperty property in element.EnumerateObject())
+            {
+                if (!names.Add(property.Name)) throw new InvalidDataException("A JSON property is duplicated.");
+                RejectDuplicateProperties(property.Value);
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+            foreach (JsonElement child in element.EnumerateArray()) RejectDuplicateProperties(child);
+    }
+
+    private static string TrackerPrefix(Guid id) => Root + $"trackers/{id:D}/";
+
+    private static string Hash(IReadOnlyDictionary<string, byte[]> files)
+    {
+        using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        Span<byte> length = stackalloc byte[8];
+        foreach ((string path, byte[] value) in files.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            byte[] pathBytes = Encoding.UTF8.GetBytes(path);
+            BinaryPrimitives.WriteInt64BigEndian(length, pathBytes.Length);
+            hash.AppendData(length);
+            hash.AppendData(pathBytes);
+            BinaryPrimitives.WriteInt64BigEndian(length, value.Length);
+            hash.AppendData(length);
+            hash.AppendData(value);
+        }
+        return Convert.ToHexStringLower(hash.GetHashAndReset());
+    }
+
+    private sealed record Manifest(int FormatVersion, Guid ProjectId);
+    private sealed record TrackerDocument(
+        Guid Id, Guid ProjectId, string Name, string LifecycleState,
+        DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc,
+        DateTimeOffset? RecycledAtUtc, Guid? CopiedFromTrackerId);
+}
