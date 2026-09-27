@@ -25,4 +25,8 @@ prefix_rule(
     justification = "Allow staging explicitly reviewed changes in this repository.",
 )
 
-
+prefix_rule(
+    pattern = ["git", "commit"],
+    decision = "allow",
+    justification = "Allow commits in this repository when explicitly requested or authorized.",
+)
