@@ -42,7 +42,13 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
     public string Upstream => _link is null ? string.Empty : _link.UpstreamIdentity is null
         ? "Local only (no upstream)" : "Upstream: " + _link.UpstreamIdentity.Split(':', 2)[0];
     public string LastResult => _link?.LastResult ?? "Select an existing clean repository to link this Project.";
-    public string PendingAction => _link?.SyncStatus == "Pending" ? "Sync now to create the initial snapshot commit." : string.Empty;
+    public string PendingAction => _link?.SyncStatus switch
+    {
+        "Pending" => "Sync now to create the initial snapshot commit.",
+        "PendingPush" => "A local commit is waiting for push. Retry sync after checking Git access.",
+        "PendingRemote" => "The upstream advanced during sync. Retry to validate its changes.",
+        _ => string.Empty
+    };
     public string? Message => _message;
     public bool HasPendingAction => !string.IsNullOrEmpty(PendingAction);
     public bool HasMessage => !string.IsNullOrWhiteSpace(Message);
@@ -68,7 +74,16 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
         await ExecuteAsync(async () => _link = await _service.LinkAsync(_projectId, path));
     }
 
-    private Task SyncAsync() => ExecuteAsync(async () => _link = await _service.SyncNowAsync(_projectId));
+    private Task SyncAsync() => ExecuteAsync(async () =>
+    {
+        try { _link = await _service.SyncNowAsync(_projectId); }
+        catch (ProjectNameCollisionException collision)
+        {
+            string? name = ProjectLocalNameDialog.Prompt(System.Windows.Application.Current.MainWindow,
+                collision.ConflictingName);
+            if (name is not null) _link = await _service.SyncNowAsync(_projectId, name);
+        }
+    });
 
     private Task UnlinkAsync() => ExecuteAsync(async () =>
     {

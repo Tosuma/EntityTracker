@@ -6,7 +6,7 @@ using EntityTracker.Application.Snapshots;
 
 namespace EntityTracker.Infrastructure.GitSync;
 
-/// <summary>Runs only the Git verbs needed for inspecting and committing a local snapshot.</summary>
+/// <summary>Runs the fixed Git operations needed for a user-managed Project checkout.</summary>
 public sealed class SystemGitTransport : ILocalGitTransport
 {
     private const int MaxOutput = 1024 * 1024;
@@ -105,6 +105,78 @@ public sealed class SystemGitTransport : ILocalGitTransport
         return (await RunAsync(root, ["rev-parse", "--verify", "HEAD"], cancellationToken)).Trim();
     }
 
+    public async Task<GitRemoteState> FetchAsync(string path, CancellationToken cancellationToken = default)
+    {
+        string root = Path.GetFullPath(path);
+        string branch = (await RunAsync(root, ["symbolic-ref", "--quiet", "--short", "HEAD"], cancellationToken)).Trim();
+        (string remote, string upstream) = await UpstreamAsync(root, branch, cancellationToken);
+        await RunRemoteAsync(root, ["fetch", "--no-tags", "--", remote], cancellationToken);
+        string head = (await RunAsync(root, ["rev-parse", "--verify", upstream], cancellationToken)).Trim();
+        string[] paths = SplitNull(await RunBytesAsync(root,
+            ["ls-tree", "-r", "--name-only", "-z", head], cancellationToken));
+        Dictionary<string, byte[]> files = new(StringComparer.Ordinal);
+        foreach (string trackedPath in paths)
+        {
+            if (!IsAllowed(trackedPath))
+                throw new InvalidOperationException($"Unsupported tracked path in upstream: {trackedPath}.");
+            if (IsSnapshotPath(trackedPath))
+                files.Add(trackedPath, await RunBytesAsync(root, ["show", head + ":" + trackedPath], cancellationToken));
+        }
+        return new GitRemoteState(head, files);
+    }
+
+    public async Task<bool> IsAncestorAsync(string path, string ancestor, string descendant,
+        CancellationToken cancellationToken = default)
+    {
+        string mergeBase = (await RunAsync(path, ["merge-base", ancestor, descendant], cancellationToken, true)).Trim();
+        return string.Equals(mergeBase, ancestor, StringComparison.Ordinal);
+    }
+
+    public async Task FastForwardAsync(string path, string expectedHead, string remoteHead,
+        CancellationToken cancellationToken = default)
+    {
+        GitWorkingTreeState current = await InspectAsync(path, cancellationToken);
+        if (current.Head != expectedHead || !await IsAncestorAsync(path, expectedHead, remoteHead, cancellationToken))
+            throw new InvalidOperationException("The checkout changed or cannot fast-forward. Review it outside EntityTracker.");
+        await RunAsync(path, ["merge", "--ff-only", remoteHead], cancellationToken);
+        GitWorkingTreeState updated = await InspectAsync(path, cancellationToken);
+        if (updated.Head != remoteHead)
+            throw new InvalidOperationException("The checkout did not reach the expected upstream commit.");
+    }
+
+    public async Task PushAsync(string path, CancellationToken cancellationToken = default)
+    {
+        string root = Path.GetFullPath(path);
+        string branch = (await RunAsync(root, ["symbolic-ref", "--quiet", "--short", "HEAD"], cancellationToken)).Trim();
+        (string remote, _) = await UpstreamAsync(root, branch, cancellationToken);
+        string mergeRef = (await RunAsync(root, ["config", "--get", "branch." + branch + ".merge"], cancellationToken)).Trim();
+        if (!mergeRef.StartsWith("refs/heads/", StringComparison.Ordinal))
+            throw new InvalidOperationException("The upstream must be a branch configured outside EntityTracker.");
+        await RunRemoteAsync(root, ["push", "--", remote, "HEAD:" + mergeRef], cancellationToken);
+    }
+
+    private static async Task<(string Remote, string Upstream)> UpstreamAsync(
+        string root, string branch, CancellationToken token)
+    {
+        string remote = (await RunAsync(root, ["config", "--get", "branch." + branch + ".remote"], token)).Trim();
+        string upstream = (await RunAsync(root,
+            ["for-each-ref", "--format=%(upstream:short)", "refs/heads/" + branch], token)).Trim();
+        if (remote.Length == 0 || remote == "." || upstream.Length == 0)
+            throw new InvalidOperationException("Configure a remote branch upstream with command-line Git, then relink.");
+        return (remote, upstream);
+    }
+
+    private static async Task RunRemoteAsync(string root, string[] args, CancellationToken token)
+    {
+        try { await RunAsync(root, args, token); }
+        catch (InvalidOperationException error)
+        {
+            throw new InvalidOperationException(
+                $"Git {args[0]} failed. Verify remote access with command-line Git outside EntityTracker, then retry. " +
+                "If the remote advanced, retry sync to fetch and validate its changes.", error);
+        }
+    }
+
     private static bool IsAllowed(string p) => IsSnapshotPath(p) ||
         p is ".gitignore" or ".gitattributes" ||
         (!p.Contains('/') && (p.StartsWith("README", StringComparison.OrdinalIgnoreCase) ||
@@ -134,10 +206,9 @@ public sealed class SystemGitTransport : ILocalGitTransport
 
     private static async Task<byte[]> RunBytesAsync(string? root, string[] args, CancellationToken token, bool allowFailure = false)
     {
-        if (args.Length == 0 || !AllowedVerbs.Contains(args[0]))
-            throw new InvalidOperationException("This Git operation is outside the local snapshot transport boundary.");
+        ValidateCommand(args);
         using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
-        timeout.CancelAfter(TimeSpan.FromSeconds(args[0] == "commit" ? 60 : 15));
+        timeout.CancelAfter(TimeSpan.FromSeconds(args[0] is "commit" or "fetch" or "push" ? 60 : 15));
         ProcessStartInfo start = new("git")
         {
             WorkingDirectory = root ?? Environment.CurrentDirectory,
@@ -180,8 +251,20 @@ public sealed class SystemGitTransport : ILocalGitTransport
     private static readonly HashSet<string> AllowedVerbs = new(StringComparer.Ordinal)
     {
         "--version", "rev-parse", "symbolic-ref", "config", "status", "ls-files",
-        "for-each-ref", "add", "diff", "commit"
+        "for-each-ref", "add", "diff", "commit", "fetch", "merge-base", "merge", "push", "ls-tree", "show"
     };
+
+    internal static void ValidateCommand(IReadOnlyList<string> args)
+    {
+        if (args.Count == 0 || !AllowedVerbs.Contains(args[0]) ||
+            args.Any(arg => arg is "--force" or "--force-with-lease" or "-f" or "--no-ff") ||
+            (args[0] == "config" && (args.Count < 2 || args[1] != "--get")) ||
+            (args[0] == "fetch" && (args.Count != 4 || args[1] != "--no-tags" || args[2] != "--")) ||
+            (args[0] == "push" && (args.Count != 4 || args[1] != "--" ||
+                                    !args[3].StartsWith("HEAD:refs/heads/", StringComparison.Ordinal))) ||
+            (args[0] == "merge" && (args.Count != 3 || args[1] != "--ff-only")))
+            throw new InvalidOperationException("This Git command is outside the Project sync transport boundary.");
+    }
 
     private static async Task<byte[]> ReadBoundedAsync(Stream stream, CancellationToken token)
     {

@@ -2,7 +2,9 @@ using System.Windows;
 using System.Windows.Controls;
 
 using EntityTracker.Application.Projects;
+using EntityTracker.Application.GitSync;
 using EntityTracker.Domain;
+using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels;
 
 namespace EntityTracker.Wpf.Views;
@@ -14,6 +16,21 @@ public partial class PortfolioView : UserControl
     private ShellViewModel Shell => (ShellViewModel)DataContext;
 
     private void OnCreateProject(object sender, RoutedEventArgs e) => Shell.Catalog.OpenCreateProject();
+
+    private async void OnImportProject(object sender, RoutedEventArgs e)
+    {
+        string? path = new ProjectRepositoryFolderPicker().Pick();
+        if (path is null) return;
+        try { await Shell.ImportProjectAsync(path); }
+        catch (ProjectNameCollisionException collision)
+        {
+            string? name = ProjectLocalNameDialog.Prompt(Window.GetWindow(this), collision.ConflictingName);
+            if (name is null) return;
+            try { await Shell.ImportProjectAsync(path, name); }
+            catch (Exception error) { Shell.ShowNotification(error.Message); }
+        }
+        catch (Exception error) { Shell.ShowNotification(error.Message); }
+    }
 
     private async void OnOpenRecycleBins(object sender, RoutedEventArgs e) =>
         await Shell.Catalog.OpenRecycleBinAsync();

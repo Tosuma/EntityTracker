@@ -11,6 +11,11 @@ public interface IProjectSnapshotStore
     Task<long> ApplyAsync(
         ProjectSnapshot snapshot, long expectedRevision,
         CancellationToken cancellationToken = default);
+
+    Task<long> ApplyAsync(ProjectSnapshot snapshot, long expectedRevision, string? localName,
+        CancellationToken cancellationToken = default) => localName is null
+            ? ApplyAsync(snapshot, expectedRevision, cancellationToken)
+            : throw new NotSupportedException("This snapshot store does not support local Project names.");
 }
 
 public sealed record ProjectSnapshotPackage(

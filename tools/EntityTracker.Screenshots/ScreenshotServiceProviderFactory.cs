@@ -59,6 +59,7 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton(provider => new SqliteBackupService(
             provider.GetRequiredService<SqliteDatabase>(),
             paths.BackupsDirectory));
+        services.AddSingleton<IProjectSyncBackup>(provider => provider.GetRequiredService<SqliteBackupService>());
         services.AddSingleton<IPersistenceInitializer, SqlitePersistenceInitializer>();
         services.AddSingleton<IEntityRepository, SqliteEntityRepository>();
         services.AddSingleton<IEntityAuditReader, SqliteEntityAuditReader>();

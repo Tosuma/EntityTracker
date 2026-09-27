@@ -1,6 +1,6 @@
 # GS-03 — Existing Checkout Import and Remote Sync
 
-**Status: planned.** GS-01 and GS-02 must be complete and verified before this milestone begins.
+**Status: completed.** GS-01 and GS-02 were complete and verified before implementation.
 
 ## Goal and user-facing outcome
 
@@ -28,6 +28,14 @@ Application coordinates snapshot validation, Project ID/name decisions, revision
 - Verify exact IDs and full history after importing into an empty catalog. Cover same-ID and same-name collisions, invalid snapshots, unsupported versions, tombstones, atomic rollback, and pre-apply backup behavior.
 - Verify no clone, init, remote-add, branch-checkout, reset, stash, or force-push command can be issued by the Git adapter.
 - Verify a stalled Git transport cannot delay ordinary SQLite reads, writes, or navigation. Build the complete solution and run its regression suite.
+
+## Completion record
+
+GS-03 adds Portfolio import from an existing clean checkout, with exact snapshot IDs and history preserved in SQLite. A version 14 SQLite migration stores a private display name when the shared Project name collides locally. Import and inbound changes use expected-revision transactions and retained pre-apply backups; unchanged snapshots do not create sync backups. Same-ID identical snapshots link without duplication, while differing state and divergent Git histories stop for GS-04 review.
+
+Manual Sync now fetches the configured upstream, fast-forwards non-divergent changes, commits canonical local snapshots, and pushes without changing repository configuration or credentials. Pending push and interrupted inbound states can be retried. Rejected pushes are fetched and revalidated; non-divergent results are retried or applied, and divergent results remain pending review. Repositories without an upstream keep the GS-02 local commit behavior. The Git adapter runs only fixed operations and prohibits clone, init, remote configuration, checkout, reset, stash, and force-push.
+
+Temporary checkout and bare remote tests cover full snapshot fidelity, name and ID collisions, invalid versions and references, tombstones, detached and dirty trees, branch changes, migration, rollback and backup behavior, remote access failures, push races, retry recovery, and SQLite responsiveness during a stalled Git operation. README light and dark screenshots were regenerated and reviewed with generic displayed paths. `dotnet build EntityTracker.slnx --no-restore` passed with zero warnings, and `dotnet test EntityTracker.slnx --no-restore --no-build` passed all 564 tests on 2026-09-27.
 
 ## Agent planning prompt
 

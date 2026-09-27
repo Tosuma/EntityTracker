@@ -161,6 +161,13 @@ public sealed class ProjectGitSyncTests
             await transport.Entered.WaitAsync(TimeSpan.FromSeconds(3));
             ProjectSnapshotRead read = await snapshots.ReadAsync(new ProjectId(id)).WaitAsync(TimeSpan.FromSeconds(3));
             Assert.NotNull(read.Snapshot);
+            long written = await snapshots.ApplyAsync(read.Snapshot with
+            {
+                Project = read.Snapshot.Project with { Name = "Updated during Git wait" }
+            }, read.Revision).WaitAsync(TimeSpan.FromSeconds(3));
+            Assert.True(written > read.Revision);
+            Assert.Contains(await new SqliteProjectRepository(database).GetAllAsync().WaitAsync(TimeSpan.FromSeconds(3)),
+                project => project.Name == "Updated during Git wait");
             transport.Release();
             await linking;
         }

@@ -92,12 +92,12 @@ internal sealed class ReadmeScreenshotGenerator
                 project.Id.Value,
                 repositoryFixturePath,
                 "main",
-                null,
+                "origin/main:illustrative-upstream",
                 null,
                 0,
                 null,
-                "Linked; initial snapshot pending",
-                "Pending"), cancellationToken);
+                "Snapshot pushed",
+                "Current"), cancellationToken);
             await shell.ProjectReporting!.RepositoryCard!.RefreshAsync(cancellationToken);
             await renderer.CaptureWithTextOverrideAsync(
                 "project-git-repository.png", repositoryFixturePath,

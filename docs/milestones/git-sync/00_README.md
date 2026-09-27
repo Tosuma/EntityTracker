@@ -1,6 +1,6 @@
 # GS roadmap — Project Git synchronization
 
-**Status: GS-01–GS-02 completed; GS-03–GS-05 planned.** Portable Project snapshots and manual local repository linking are available. Remote synchronization and conflict review remain planned.
+**Status: GS-01–GS-03 completed; GS-04–GS-05 planned.** Portable snapshots, existing-checkout import, and manual non-divergent remote synchronization are available. Divergent conflict review and automatic sync remain planned.
 
 The GS series adds full-fidelity Project collaboration through one user-managed, dedicated Git working tree per Project. SQLite remains the application's only runtime store: editing, reporting, navigation, and queries use SQLite. Git work runs asynchronously, outside interactive save and read paths. The completed [product](../product/00_README.md) and [UX](../ux/00_README.md) series provide the existing Project/Tracker foundation; the planned [product feedback](../product-feedback/00_README.md) series adds fields that snapshots must preserve when those fields exist.
 
@@ -8,7 +8,7 @@ The GS series adds full-fidelity Project collaboration through one user-managed,
 
 1. [GS-01 — Portable Project Snapshot](gs_01_portable_project_snapshot.md) — completed: stable history identity, complete snapshot, validation, revision-aware SQLite application.
 2. [GS-02 — Existing Local Repository Linking](gs_02_local_git_linking.md) — completed: select and link an existing clean working tree; commit locally by manual sync.
-3. [GS-03 — Existing Checkout Import and Remote Sync](gs_03_existing_checkout_remote_sync.md): import from an externally cloned checkout; fetch and push non-divergent branches.
+3. [GS-03 — Existing Checkout Import and Remote Sync](gs_03_existing_checkout_remote_sync.md) — completed: import from an externally cloned checkout; fetch and push non-divergent branches.
 4. [GS-04 — Collaborative Merge and Conflict Review](gs_04_collaborative_merge.md): reconcile divergence, review conflicts, and publish or consume Project tombstones.
 5. [GS-05 — Automatic Sync and Hardening](gs_05_automatic_sync_and_hardening.md): background scheduling, status, recovery, and defensive limits.
 
@@ -18,7 +18,7 @@ Complete and verify each milestone before beginning the next. Manual sync remain
 
 Users install and configure system Git, clone remote repositories or run `git init`, set remotes and upstreams, configure keys, host trust, credential helpers, and commit identity, and check out the desired branch **outside EntityTracker**. Linking or importing starts with a folder picker pointed at an existing non-bare Git working tree. EntityTracker does not accept remote URLs, clone, initialize repositories, add remotes, change Git configuration, switch branches, or manage credentials.
 
-The future link flow resolves the selected repository root; requires a checked-out branch, clean working tree, and a unique Project association; detects an existing upstream; and rejects bare, detached, unsupported shared, or already-linked repositories. If branch, upstream, or configuration later changes externally, sync pauses with corrective guidance. A branch without an upstream receives local commits only. All Git operations are noninteractive; users repair authentication with Git outside the application.
+The link and import flows resolve the selected repository root; require a checked-out branch, clean working tree, and a unique Project association; detect an existing upstream; and reject bare, detached, unsupported shared, or already-linked repositories. If branch, upstream, or configuration later changes externally, sync pauses with corrective guidance. A branch without an upstream receives local commits only. All Git operations are noninteractive; users repair authentication with Git outside the application.
 
 ## Version 1 repository format
 
@@ -46,8 +46,8 @@ One-sided changes win and identical changes collapse. Independent additions and 
 
 Permanent deletion relative to the sync base requires approval from the member publishing the exact deletion set. Auto-sync pauses until approval, and subsequent local changes invalidate it. Other members apply published deletions unless they concurrently modified the object. Project deletion uses a terminal tombstone that survives local purge long enough to publish and that receiving clients apply transactionally.
 
-## Shared future architecture and verification
+## Architecture and remaining verification
 
-The planned design adds stable status-event and progress-snapshot IDs, causal status-history links, Project snapshots and revisions, sync results and state, typed conflicts and resolutions, and deletion approvals. Application owns `IProjectSnapshotStore`, `IProjectSyncLinkStore`, transport boundaries, and `ProjectSyncCoordinator`; Git, JSON, and SQLite implementations remain in Infrastructure. WPF owns repository selection and review presentation, never Git or merge rules. Settings version 5 holds only global auto-sync configuration; local link state is separate and credentials stay external.
+GS-01–GS-03 provide stable history IDs, Project snapshots and revisions, sync-link state, exact import, deletion approval, and manual non-divergent remote sync. Application owns snapshot, link, backup, and transport interfaces; Git, JSON, and SQLite implementations remain in Infrastructure. WPF owns folder selection and user decisions, never Git commands. Local link state is separate from SQLite and credentials stay external. GS-04 adds typed conflict review and reconciliation; GS-05 adds automatic scheduling and its global settings.
 
-Each future milestone must build the full solution and pass its relevant tests before the next starts. The series must cover exact snapshot round trips and migration; invalid data and tombstones; temporary local working trees and bare test remotes; non-fast-forward retry; merge and deletion matrices; revision-bound review; atomic import and rollback; scheduler behavior; accessible UI; and a stalled Git operation that leaves ordinary SQLite and UI work responsive. These are **future acceptance requirements**, not verification performed by this documentation task.
+Each remaining milestone must build the full solution and pass its relevant tests before the next starts. GS-01–GS-03 tests cover snapshot round trips, migration, invalid data, temporary working trees and bare remotes, non-divergent push retries, atomic import and rollback, and SQLite responsiveness during stalled Git. Merge and deletion matrices, revision-bound conflict review, and scheduler behavior belong to GS-04–GS-05.

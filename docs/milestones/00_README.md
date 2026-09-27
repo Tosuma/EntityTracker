@@ -20,8 +20,8 @@ Build a Windows C#/.NET WPF application that imports database relationships from
 | Product feedback | [PF-01–PF-05](product-feedback/00_README.md) | Planned | Independent workflow improvements on the product foundation. |
 | Engineering | [CI-01](engineering/00_README.md) | Completed | Repository engineering independent of the product sequence. |
 | UI/UX | [UX-01–UX-08](ux/00_README.md) | Completed | Projects/Trackers and Fluent presentation, building on the product foundation. |
-| Git sync | [GS-01–GS-05](git-sync/00_README.md) | GS-01–GS-02 completed; GS-03–GS-05 planned | Portable snapshots and manual local repository commits are implemented. |
+| Git sync | [GS-01–GS-05](git-sync/00_README.md) | GS-01–GS-03 completed; GS-04–GS-05 planned | Portable snapshots, existing-checkout import, and manual non-divergent remote sync are implemented. |
 
 See the [cross-category milestone status](milestone_status.md) for the recorded state of each series. A planned milestone document describes future work; it does not make the feature available in the current application.
 
-The live SharePoint integration formerly called Milestone 13 is retired. SQLite is currently the only runtime store. GS-01 adds portable snapshots, and GS-02 adds manual local commits in a user-managed repository while retaining SQLite as the application's runtime source of truth.
+The live SharePoint integration formerly called Milestone 13 is retired. SQLite is currently the only runtime store. GS-01 adds portable snapshots, GS-02 adds manual local commits, and GS-03 adds existing-checkout import and manual non-divergent remote sync while retaining SQLite as the application's runtime source of truth.

@@ -106,13 +106,21 @@ for consistency.
   </tr>
 </table>
 
-### Commit a Project snapshot locally
+### Import and synchronize an existing Git checkout
 
-The Project dashboard shows its linked repository, checked-out branch, upstream status, and the
-last manual sync result. **Sync now** commits the Project snapshot to the existing working tree;
-unlinking leaves the repository and SQLite data in place.
+Clone and configure a dedicated Project repository with command-line Git first. On the Portfolio,
+choose **Import checkout** and select its clean working-tree root. EntityTracker imports the
+snapshot with its stable IDs and history. If its Project name is already used locally, choose a
+private name for this installation; the shared snapshot keeps its original name.
 
-![Illustrative Project dashboard state with a local Git link and manual Sync now control](images/light/project-git-repository.png)
+The Project dashboard shows the linked repository, checked-out branch, upstream, and last manual
+sync result. **Sync now** fetches and applies a fast-forward upstream update, commits local Project
+changes, and pushes when an upstream is configured. A checkout without an upstream keeps local
+commits only. Divergent histories wait for review in a later milestone. Unlinking leaves both the
+repository and SQLite data in place. EntityTracker does not clone repositories, configure Git, or
+manage credentials.
+
+![Illustrative Project dashboard state with an upstream Git link and manual Sync now control](images/light/project-git-repository.png)
 
 ### Compare sibling Trackers
 
@@ -216,7 +224,7 @@ compatible schema CSV without requiring a live database connection inside Entity
 
 Product Milestones 1–12 and UX Milestones UX-01 through UX-08 are complete. EntityTracker uses
 SQLite as its local catalog and working store. Obsolete SharePoint presentation and runtime
-configuration have been retired, and the application exposes no remote synchronization control.
+configuration have been retired. Manual Git synchronization is available for existing checkouts.
 
 A separate
 [PF-01–PF-05 product feedback milestone group](docs/milestones/product-feedback/00_README.md)
@@ -226,13 +234,13 @@ column filtering with status-order sorting without extending the numbered roadma
 CI validation for pull requests and pushes to `main` and packaging for successful `main` builds.
 The live badge above reports the current `main` build status.
 
-The [GS-01–GS-05 Git-sync roadmap](docs/milestones/git-sync/00_README.md) starts with portable
-Project snapshots and manual local commits. Prepare an existing Git repository and configure its
-branch and commit identity outside EntityTracker. In the Project dashboard, choose **Link repository**
-and select its root folder, then choose **Sync now** to commit the Project snapshot. The repository
-must be clean and dedicated to the Project. A repository without an upstream works locally. **Unlink**
-removes only the local association. Remote fetch, push, import, and conflict review are planned for
-later milestones.
+The [GS-01–GS-05 Git-sync roadmap](docs/milestones/git-sync/00_README.md) now includes portable
+snapshots, local linking, existing-checkout import, and manual non-divergent fetch and push. Prepare
+and configure a clean dedicated repository outside EntityTracker. Use **Import checkout** on the
+Portfolio for a Project already present in the repository, or **Link repository** on an existing
+Project dashboard. **Sync now** commits locally and uses the configured upstream when present.
+**Unlink** removes only the local association. Divergent conflict review and automatic sync remain
+planned for later milestones.
 
 See the [milestone status](docs/milestones/milestone_status.md) and complete
 [roadmap](docs/milestones/00_README.md) for details.

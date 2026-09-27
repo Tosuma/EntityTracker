@@ -24,6 +24,8 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
             return new ProjectSnapshotRead(null, revision);
         }
 
+        string? canonicalName = await CanonicalNameAsync(connection, transaction, id, cancellationToken);
+
         List<Row> trackerRows = await RowsAsync(connection, transaction,
             "SELECT * FROM trackers WHERE project_id = $projectId;", id, cancellationToken);
         List<Row> entityRows = await RowsAsync(connection, transaction, """
@@ -69,7 +71,7 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
             """, id, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        SnapshotProject projectModel = new(project.Guid("id"), project.Str("name"),
+        SnapshotProject projectModel = new(project.Guid("id"), canonicalName ?? project.Str("name"),
             project.Str("lifecycle_state"), project.Time("created_at_utc"),
             project.Time("updated_at_utc"), project.TimeOrNull("recycled_at_utc"));
         SnapshotTracker[] trackers = trackerRows.Select(tracker =>
@@ -126,6 +128,11 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
 
     public async Task<long> ApplyAsync(
         ProjectSnapshot snapshot, long expectedRevision,
+        CancellationToken cancellationToken = default) =>
+        await ApplyAsync(snapshot, expectedRevision, null, cancellationToken);
+
+    public async Task<long> ApplyAsync(
+        ProjectSnapshot snapshot, long expectedRevision, string? localName,
         CancellationToken cancellationToken = default)
     {
         ProjectSnapshotValidator.Validate(snapshot);
@@ -138,14 +145,27 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         if (current != expectedRevision)
             throw new InvalidOperationException("The Project changed since its snapshot was read.");
 
+        if (localName is null && await CanonicalNameAsync(connection, transaction, projectId, cancellationToken) is not null)
+        {
+            using SqliteCommand existingName = Command(connection, transaction,
+                "SELECT name FROM projects WHERE id = $projectId;");
+            existingName.Parameters.AddWithValue("$projectId", projectId);
+            localName = (string?)await existingName.ExecuteScalarAsync(cancellationToken);
+        }
+        string storedName = localName?.Trim() ?? snapshot.Project.Name;
+        if (storedName.Length == 0) throw new ArgumentException("A local Project name is required.", nameof(localName));
+
         await RemovePristineDefaultNameConflictAsync(
-            connection, transaction, snapshot.Project.Name, projectId, cancellationToken);
+            connection, transaction, storedName, projectId, cancellationToken);
         await DeleteProjectAsync(connection, transaction, projectId, cancellationToken);
         await InsertAsync(connection, transaction, "projects",
             ["id", "name_key", "name", "lifecycle_state", "created_at_utc", "updated_at_utc", "recycled_at_utc"],
-            [projectId, Key(snapshot.Project.Name), snapshot.Project.Name, snapshot.Project.LifecycleState,
+            [projectId, Key(storedName), storedName, snapshot.Project.LifecycleState,
              Time(snapshot.Project.CreatedAtUtc), Time(snapshot.Project.UpdatedAtUtc),
              TimeOrNull(snapshot.Project.RecycledAtUtc)], cancellationToken);
+        if (!string.Equals(storedName, snapshot.Project.Name, StringComparison.Ordinal))
+            await InsertAsync(connection, transaction, "project_snapshot_names",
+                ["project_id", "canonical_name"], [projectId, snapshot.Project.Name], cancellationToken);
         foreach (SnapshotTracker tracker in snapshot.Trackers)
         {
             await InsertAsync(connection, transaction, "trackers",
@@ -279,6 +299,16 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         command.Parameters.AddWithValue("$projectId", id);
         return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken) ?? 0L,
             CultureInfo.InvariantCulture);
+    }
+
+    private static async Task<string?> CanonicalNameAsync(
+        SqliteConnection connection, SqliteTransaction transaction, string id,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = Command(connection, transaction,
+            "SELECT canonical_name FROM project_snapshot_names WHERE project_id = $projectId;");
+        command.Parameters.AddWithValue("$projectId", id);
+        return (string?)await command.ExecuteScalarAsync(cancellationToken);
     }
 
     private static async Task<List<Row>> RowsAsync(

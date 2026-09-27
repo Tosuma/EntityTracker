@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Windows.Input;
 
 using EntityTracker.Application.History;
+using EntityTracker.Application.GitSync;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Projects;
 using EntityTracker.Domain;
@@ -25,6 +26,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private readonly EntityTrackerSettingsStore _settingsStore;
     private readonly TrackerWorkspaceViewModelFactory _workspaceFactory;
     private readonly IContextDiscardConfirmation _discardConfirmation;
+    private readonly ProjectGitSyncService? _gitSync;
     private readonly ILogger<ShellViewModel> _logger;
     private readonly Dictionary<TrackerId, MainWindowViewModel> _workspaces = [];
     private readonly Dictionary<ProjectId, ProjectDashboardViewModel> _projectDashboards = [];
@@ -55,7 +57,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         AppearanceViewModel appearance,
         IClipboardService clipboard,
         EntityTrackerSettings initialSettings,
-        ILogger<ShellViewModel>? logger = null)
+        ILogger<ShellViewModel>? logger = null,
+        ProjectGitSyncService? gitSync = null)
     {
         _projectRepository = projectRepository;
         _trackerRepository = trackerRepository;
@@ -64,6 +67,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         _settingsStore = settingsStore;
         _workspaceFactory = workspaceFactory;
         _discardConfirmation = discardConfirmation;
+        _gitSync = gitSync;
         Catalog = catalogManagement;
         Appearance = appearance;
         Help = new SqlQueryHelpViewModel(
@@ -389,6 +393,17 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    public async Task<ProjectSyncLink> ImportProjectAsync(string repositoryPath, string? localName = null)
+    {
+        if (_gitSync is null) throw new InvalidOperationException("Project import is unavailable.");
+        ProjectSyncLink link = await _gitSync.ImportAsync(repositoryPath, localName);
+        await ReloadCatalogAsync(CancellationToken.None);
+        if (Projects.Any(project => project.Id.Value == link.ProjectId))
+            await OpenProjectAsync(new ProjectId(link.ProjectId));
+        NotificationMessage = "Imported the existing Project checkout.";
+        return link;
+    }
+
     public async Task OpenTrackerAsync(TrackerId trackerId)
     {
         Tracker? tracker = Trackers.FirstOrDefault(item => item.Id == trackerId);
@@ -424,6 +439,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public void DismissDefaultNamePrompt() => ShowDefaultNamePrompt = false;
 
     public void DismissNotification() => NotificationMessage = null;
+
+    public void ShowNotification(string message) => NotificationMessage = message;
 
     private bool CanNavigate(ShellNavigationItem item) =>
         !IsBusy && (!item.RequiresProject || HasProject) && (!item.RequiresTracker || HasTracker);

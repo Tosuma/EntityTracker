@@ -191,6 +191,8 @@ public partial class App : System.Windows.Application
         services.AddSingleton(provider => new SqliteBackupService(
             provider.GetRequiredService<SqliteDatabase>(),
             dataPaths.BackupsDirectory));
+        services.AddSingleton<IProjectSyncBackup>(provider => provider.GetRequiredService<SqliteBackupService>());
+        services.AddSingleton<IProjectSyncBackup>(provider => provider.GetRequiredService<SqliteBackupService>());
         services.AddSingleton<IPersistenceInitializer, SqlitePersistenceInitializer>();
         services.AddSingleton<IEntityRepository, SqliteEntityRepository>();
         services.AddSingleton<IEntityAuditReader, SqliteEntityAuditReader>();
