@@ -1,0 +1,71 @@
+<Window x:Class="EntityTracker.Wpf.Views.ProjectMergeReviewDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Review Project merge" Width="820" Height="680" MinWidth="620" MinHeight="480"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
+        Background="{DynamicResource Brush.Surface.Page}"
+        Foreground="{DynamicResource Brush.Text.Primary}">
+    <Grid Margin="20" FocusManager.IsFocusScope="True"
+          KeyboardNavigation.TabNavigation="Cycle" KeyboardNavigation.ControlTabNavigation="Cycle">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <TextBlock FontSize="22" FontWeight="SemiBold" Text="Review Project merge conflicts"
+                   AutomationProperties.HeadingLevel="Level1" />
+        <StackPanel Grid.Row="1" Margin="0,10,0,14">
+            <TextBlock Text="Choose which version to keep for every conflict. Nothing is applied until all choices are reviewed."
+                       TextWrapping="Wrap" />
+            <StackPanel Margin="0,10,0,0" Orientation="Horizontal">
+                <Button x:Name="ChooseLocalButton" Content="Choose local for all" Click="OnChooseLocal"
+                        AutomationProperties.Name="Choose local for all conflicts" />
+                <Button Margin="8,0,0,0" Content="Choose remote for all" Click="OnChooseRemote"
+                        AutomationProperties.Name="Choose remote for all conflicts" />
+            </StackPanel>
+        </StackPanel>
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl ItemsSource="{Binding Rows}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Margin="0,0,0,10" Padding="12" BorderThickness="1"
+                                BorderBrush="{DynamicResource Brush.Border.Default}"
+                                Background="{DynamicResource Brush.Surface.Card}">
+                            <StackPanel>
+                                <TextBlock FontWeight="SemiBold" Text="{Binding Path}" TextWrapping="Wrap" />
+                                <TextBlock Margin="0,2,0,8" Text="{Binding Kind}" />
+                                <TextBlock FontWeight="SemiBold" Text="Base" />
+                                <TextBox Text="{Binding BaseValue, Mode=OneWay}" IsReadOnly="True"
+                                         TextWrapping="Wrap" MaxHeight="75" VerticalScrollBarVisibility="Auto"
+                                         AutomationProperties.Name="Base value" />
+                                <TextBlock Margin="0,7,0,0" FontWeight="SemiBold" Text="Local" />
+                                <TextBox Text="{Binding LocalValue, Mode=OneWay}" IsReadOnly="True"
+                                         TextWrapping="Wrap" MaxHeight="75" VerticalScrollBarVisibility="Auto"
+                                         AutomationProperties.Name="Local value" />
+                                <TextBlock Margin="0,7,0,0" FontWeight="SemiBold" Text="Remote" />
+                                <TextBox Text="{Binding RemoteValue, Mode=OneWay}" IsReadOnly="True"
+                                         TextWrapping="Wrap" MaxHeight="75" VerticalScrollBarVisibility="Auto"
+                                         AutomationProperties.Name="Remote value" />
+                                <StackPanel Margin="0,10,0,0" Orientation="Horizontal">
+                                    <RadioButton Content="Keep local" GroupName="{Binding Path}"
+                                                 IsChecked="{Binding IsLocal, Mode=TwoWay}"
+                                                 AutomationProperties.Name="Keep local value for this conflict" />
+                                    <RadioButton Margin="16,0,0,0" Content="Keep remote"
+                                                 GroupName="{Binding Path}" IsChecked="{Binding IsRemote, Mode=TwoWay}"
+                                                 AutomationProperties.Name="Keep remote value for this conflict" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+        <StackPanel Grid.Row="3" Margin="0,14,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="CancelButton" Content="Cancel sync" IsCancel="True" MinWidth="105" />
+            <Button Margin="8,0,0,0" Content="Apply choices" IsDefault="True" MinWidth="105"
+                    IsEnabled="{Binding AllResolved}" Click="OnApply"
+                    AutomationProperties.Name="Apply all reviewed merge choices" />
+        </StackPanel>
+    </Grid>
+</Window>

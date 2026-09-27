@@ -10,6 +10,7 @@ using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Application.GitSync;
+using EntityTracker.Wpf.Views;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Wpf;
@@ -102,6 +103,27 @@ internal sealed class ReadmeScreenshotGenerator
             await renderer.CaptureWithTextOverrideAsync(
                 "project-git-repository.png", repositoryFixturePath,
                 @"C:\Projects\order-platform", settleMilliseconds: 900);
+            ProjectMergeReviewDialog mergeDialog = new(new ProjectMergeReviewViewModel([
+                new ProjectMergeConflict("Tracker Delivery / Entity Orders / Notes",
+                    ProjectConflictKind.Field, "Review the order mapping",
+                    "Add invoice validation before release",
+                    "Coordinate rollout with the fulfillment team")
+            ]))
+            {
+                Owner = window,
+                Height = 550
+            };
+            Grid mergeContent = (Grid)mergeDialog.Content;
+            mergeDialog.Content = null;
+            mergeContent.Margin = new Thickness(0);
+            mergeDialog.Content = new Border { Padding = new Thickness(20), Child = mergeContent };
+            mergeDialog.Show();
+            try
+            {
+                await new WpfScreenshotRenderer(mergeDialog, workspace.StagingDirectory)
+                    .CaptureAsync("project-merge-review.png", settleMilliseconds: 900);
+            }
+            finally { mergeDialog.Close(); }
             await renderer.BringNamedElementIntoViewAndCaptureAsync(
                 "ComparisonGrid",
                 "project-comparison.png");

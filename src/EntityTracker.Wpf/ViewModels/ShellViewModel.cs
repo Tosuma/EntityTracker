@@ -27,6 +27,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private readonly TrackerWorkspaceViewModelFactory _workspaceFactory;
     private readonly IContextDiscardConfirmation _discardConfirmation;
     private readonly ProjectGitSyncService? _gitSync;
+    private readonly WpfProjectUnsavedEditsGate? _syncEditGate;
     private readonly ILogger<ShellViewModel> _logger;
     private readonly Dictionary<TrackerId, MainWindowViewModel> _workspaces = [];
     private readonly Dictionary<ProjectId, ProjectDashboardViewModel> _projectDashboards = [];
@@ -40,6 +41,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private PortfolioDashboard? _portfolio;
     private ProjectDashboard? _projectDashboard;
     private ProjectDashboardViewModel? _projectReporting;
+    private IReadOnlyList<ProjectSyncLink> _pendingProjectDeletions = [];
     private bool _isBusy;
     private string _busyMessage = string.Empty;
     private string? _notificationMessage;
@@ -58,7 +60,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         IClipboardService clipboard,
         EntityTrackerSettings initialSettings,
         ILogger<ShellViewModel>? logger = null,
-        ProjectGitSyncService? gitSync = null)
+        ProjectGitSyncService? gitSync = null,
+        WpfProjectUnsavedEditsGate? syncEditGate = null)
     {
         _projectRepository = projectRepository;
         _trackerRepository = trackerRepository;
@@ -68,6 +71,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         _workspaceFactory = workspaceFactory;
         _discardConfirmation = discardConfirmation;
         _gitSync = gitSync;
+        _syncEditGate = syncEditGate;
+        _syncEditGate?.Attach(this);
         Catalog = catalogManagement;
         Appearance = appearance;
         Help = new SqlQueryHelpViewModel(
@@ -105,6 +110,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public ObservableCollection<Tracker> Trackers { get; }
 
     public IReadOnlyList<ShellNavigationItem> NavigationItems { get; }
+    public IReadOnlyList<ProjectSyncLink> PendingProjectDeletions => _pendingProjectDeletions;
 
     public CatalogManagementViewModel Catalog { get; }
 
@@ -404,6 +410,21 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         return link;
     }
 
+    public async Task PublishPendingDeletionAsync(ProjectSyncLink link)
+    {
+        if (_gitSync is null) throw new InvalidOperationException("Project sync is unavailable.");
+        try
+        {
+            await _gitSync.SyncNowAsync(new ProjectId(link.ProjectId));
+            NotificationMessage = "Project deletion published to the linked repository.";
+        }
+        catch (Exception error)
+        {
+            NotificationMessage = error.Message;
+        }
+        await ReloadCatalogAsync(CancellationToken.None);
+    }
+
     public async Task OpenTrackerAsync(TrackerId trackerId)
     {
         Tracker? tracker = Trackers.FirstOrDefault(item => item.Id == trackerId);
@@ -584,6 +605,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     private async Task ReloadCatalogAsync(CancellationToken cancellationToken)
     {
+        _pendingProjectDeletions = _gitSync is null ? [] :
+            await _gitSync.ListPendingDeletionsAsync(cancellationToken);
+        OnPropertyChanged(nameof(PendingProjectDeletions));
         Replace(Projects, (await _projectRepository.GetAllAsync(cancellationToken))
             .Where(static project => project.LifecycleState == CatalogLifecycleState.Active));
         await RefreshDashboardsAsync(cancellationToken);

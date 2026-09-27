@@ -132,6 +132,93 @@ public sealed class SystemGitTransport : ILocalGitTransport
         return string.Equals(mergeBase, ancestor, StringComparison.Ordinal);
     }
 
+    public async Task<string?> MergeBaseAsync(string path, string localHead, string remoteHead,
+        CancellationToken cancellationToken = default)
+    {
+        string value = (await RunAsync(path, ["merge-base", localHead, remoteHead],
+            cancellationToken, true)).Trim();
+        return value.Length == 0 ? null : value;
+    }
+
+    public async Task<IReadOnlyDictionary<string, byte[]>> ReadSnapshotAtCommitAsync(
+        string path, string commit, CancellationToken cancellationToken = default)
+    {
+        if (commit.Length is not (40 or 64) || !commit.All(Uri.IsHexDigit))
+            throw new ArgumentException("A full Git commit ID is required.", nameof(commit));
+        string[] paths = SplitNull(await RunBytesAsync(path,
+            ["ls-tree", "-r", "--name-only", "-z", commit], cancellationToken));
+        Dictionary<string, byte[]> files = new(StringComparer.Ordinal);
+        foreach (string trackedPath in paths)
+        {
+            if (!IsAllowed(trackedPath))
+                throw new InvalidOperationException($"Unsupported tracked path: {trackedPath}.");
+            if (IsSnapshotPath(trackedPath))
+                files.Add(trackedPath, await RunBytesAsync(path,
+                    ["show", commit + ":" + trackedPath], cancellationToken));
+        }
+        return files;
+    }
+
+    public async Task ValidateMergeScopeAsync(string path, string localHead,
+        string remoteHead, CancellationToken cancellationToken = default)
+    {
+        string[] changedPaths = SplitNull(await RunBytesAsync(path,
+            ["diff", "--name-only", "-z", localHead, remoteHead], cancellationToken));
+        if (changedPaths.Any(changed => !IsSnapshotPath(changed)))
+            throw new InvalidOperationException(
+                "The checkout and upstream changed repository files outside .entitytracker. Merge those files with command-line Git, then retry Project sync.");
+    }
+
+    public async Task<string> CommitMergeSnapshotAsync(string path, string localHead,
+        string remoteHead, IReadOnlyDictionary<string, byte[]> oldFiles,
+        ProjectSnapshotPackage package, CancellationToken cancellationToken = default)
+    {
+        await ValidateMergeScopeAsync(path, localHead, remoteHead, cancellationToken);
+        GitWorkingTreeState current = await InspectAsync(path, cancellationToken);
+        if (current.Head != localHead ||
+            current.SnapshotFiles.Count != oldFiles.Count ||
+            oldFiles.Any(pair => !current.SnapshotFiles.TryGetValue(pair.Key, out byte[]? bytes) ||
+                                 !bytes.AsSpan().SequenceEqual(pair.Value)))
+            throw new InvalidOperationException("The checkout changed before the merge commit. Retry.");
+        await WriteSnapshotFilesAsync(path, oldFiles, package, cancellationToken);
+        string tree = (await RunAsync(path, ["write-tree"], cancellationToken)).Trim();
+        string commit = (await RunAsync(path,
+            ["commit-tree", tree, "-p", localHead, "-p", remoteHead,
+             "-m", "Merge EntityTracker project snapshots"], cancellationToken)).Trim();
+        await RunAsync(path, ["update-ref", "refs/heads/" + current.Branch,
+            commit, localHead], cancellationToken);
+        GitWorkingTreeState finished = await InspectAsync(path, cancellationToken);
+        if (finished.Head != commit || finished.SnapshotFiles.Count != package.Files.Count ||
+            package.Files.Any(pair => !finished.SnapshotFiles.TryGetValue(pair.Key, out byte[]? bytes) ||
+                                      !bytes.AsSpan().SequenceEqual(pair.Value)))
+            throw new InvalidOperationException("The merge commit did not match the canonical snapshot.");
+        return commit;
+    }
+
+    private static async Task WriteSnapshotFilesAsync(string path,
+        IReadOnlyDictionary<string, byte[]> oldFiles, ProjectSnapshotPackage package,
+        CancellationToken cancellationToken)
+    {
+        string root = Path.GetFullPath(path);
+        foreach (string oldPath in oldFiles.Keys.Except(package.Files.Keys, StringComparer.Ordinal))
+        {
+            if (!IsSnapshotPath(oldPath)) throw new InvalidDataException("An existing snapshot path is invalid.");
+            File.Delete(Path.Combine(root, oldPath.Replace('/', Path.DirectorySeparatorChar)));
+        }
+        foreach ((string relative, byte[] bytes) in package.Files)
+        {
+            if (!IsSnapshotPath(relative)) throw new InvalidDataException("A snapshot path is invalid.");
+            string destination = Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            EnsureNoLinks(root, relative);
+            await File.WriteAllBytesAsync(destination, bytes, cancellationToken);
+        }
+        await RunAsync(root, ["add", "-A", "--", ".entitytracker"], cancellationToken);
+        string staged = await RunAsync(root, ["diff", "--cached", "--name-only", "-z"], cancellationToken);
+        if (SplitNull(Encoding.UTF8.GetBytes(staged)).Any(p => !IsSnapshotPath(p)))
+            throw new InvalidOperationException("Unexpected staged paths. Unstage them outside EntityTracker before retrying.");
+    }
+
     public async Task FastForwardAsync(string path, string expectedHead, string remoteHead,
         CancellationToken cancellationToken = default)
     {
@@ -251,7 +338,8 @@ public sealed class SystemGitTransport : ILocalGitTransport
     private static readonly HashSet<string> AllowedVerbs = new(StringComparer.Ordinal)
     {
         "--version", "rev-parse", "symbolic-ref", "config", "status", "ls-files",
-        "for-each-ref", "add", "diff", "commit", "fetch", "merge-base", "merge", "push", "ls-tree", "show"
+        "for-each-ref", "add", "diff", "commit", "fetch", "merge-base", "merge", "push", "ls-tree", "show",
+        "write-tree", "commit-tree", "update-ref"
     };
 
     internal static void ValidateCommand(IReadOnlyList<string> args)
@@ -262,7 +350,12 @@ public sealed class SystemGitTransport : ILocalGitTransport
             (args[0] == "fetch" && (args.Count != 4 || args[1] != "--no-tags" || args[2] != "--")) ||
             (args[0] == "push" && (args.Count != 4 || args[1] != "--" ||
                                     !args[3].StartsWith("HEAD:refs/heads/", StringComparison.Ordinal))) ||
-            (args[0] == "merge" && (args.Count != 3 || args[1] != "--ff-only")))
+            (args[0] == "merge" && (args.Count != 3 || args[1] != "--ff-only")) ||
+            (args[0] == "write-tree" && args.Count != 1) ||
+            (args[0] == "commit-tree" && (args.Count != 8 || args[2] != "-p" ||
+                args[4] != "-p" || args[6] != "-m")) ||
+            (args[0] == "update-ref" && (args.Count != 4 ||
+                !args[1].StartsWith("refs/heads/", StringComparison.Ordinal))))
             throw new InvalidOperationException("This Git command is outside the Project sync transport boundary.");
     }
 

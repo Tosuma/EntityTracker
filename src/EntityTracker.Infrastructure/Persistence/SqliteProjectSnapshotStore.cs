@@ -191,6 +191,37 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         return await CommitRevisionAsync(connection, transaction, projectId, cancellationToken);
     }
 
+    public async Task PurgeAsync(ProjectId projectId, long expectedRevision,
+        CancellationToken cancellationToken = default)
+    {
+        string id = SqlitePersistenceValues.Format(projectId);
+        await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        if (await RevisionAsync(connection, transaction, id, cancellationToken) != expectedRevision)
+            throw new InvalidOperationException("The Project changed before permanent deletion.");
+        using SqliteCommand state = Command(connection, transaction,
+            "SELECT lifecycle_state FROM projects WHERE id = $projectId;");
+        state.Parameters.AddWithValue("$projectId", id);
+        if ((string?)await state.ExecuteScalarAsync(cancellationToken) != "Recycled")
+            throw new InvalidOperationException("Only a recycled Project can be permanently deleted.");
+        await DeleteProjectAsync(connection, transaction, id, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task ApplyTombstoneAsync(ProjectId projectId, long expectedRevision,
+        CancellationToken cancellationToken = default)
+    {
+        string id = SqlitePersistenceValues.Format(projectId);
+        await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        if (await RevisionAsync(connection, transaction, id, cancellationToken) != expectedRevision)
+            throw new InvalidOperationException("The Project changed before inbound deletion.");
+        await DeleteProjectAsync(connection, transaction, id, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     private static async Task InsertTrackerContentsAsync(
         SqliteConnection connection, SqliteTransaction transaction, SnapshotTracker tracker,
         CancellationToken cancellationToken)

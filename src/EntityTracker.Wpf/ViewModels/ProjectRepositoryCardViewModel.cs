@@ -13,40 +13,52 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
     private readonly ProjectId _projectId;
     private readonly ProjectGitSyncService _service;
     private readonly IProjectRepositoryFolderPicker _picker;
+    private readonly WpfProjectUnsavedEditsGate? _editGate;
+    private CancellationTokenSource? _syncCancellation;
     private ProjectSyncLink? _link;
     private string? _message;
     private bool _busy;
     private readonly AsyncCommand _linkCommand;
     private readonly AsyncCommand _syncCommand;
     private readonly AsyncCommand _unlinkCommand;
+    private readonly RelayCommand _cancelSyncCommand;
 
     public ProjectRepositoryCardViewModel(ProjectId projectId, ProjectGitSyncService service,
-        IProjectRepositoryFolderPicker picker)
+        IProjectRepositoryFolderPicker picker, WpfProjectUnsavedEditsGate? editGate = null)
     {
         _projectId = projectId;
         _service = service;
         _picker = picker;
-        _linkCommand = new AsyncCommand(LinkAsync, () => !_busy && _link is null);
-        _syncCommand = new AsyncCommand(SyncAsync, () => !_busy && _link is not null);
+        _editGate = editGate;
+        if (_editGate is not null) _editGate.WaitingChanged += (_, _) => Notify();
+        _linkCommand = new AsyncCommand(LinkAsync, () => !_busy && !IsLinked);
+        _syncCommand = new AsyncCommand(SyncAsync, () => !_busy && IsLinked);
         _unlinkCommand = new AsyncCommand(UnlinkAsync, () => !_busy && _link is not null);
+        _cancelSyncCommand = new RelayCommand(() => _syncCancellation?.Cancel(),
+            () => _syncCancellation is not null);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
     public ICommand LinkCommand => _linkCommand;
     public ICommand SyncCommand => _syncCommand;
     public ICommand UnlinkCommand => _unlinkCommand;
-    public bool IsLinked => _link is not null;
+    public ICommand CancelSyncCommand => _cancelSyncCommand;
+    public bool CanCancelSync => _syncCancellation is not null;
+    public bool IsLinked => _link is not null && _link.SyncStatus != "RemoteDeletedLocalKept";
     public bool IsBusy => _busy;
-    public string RepositoryPath => _link?.RepositoryPath ?? "No repository linked";
-    public string Branch => _link is null ? string.Empty : "Branch: " + _link.Branch;
-    public string Upstream => _link is null ? string.Empty : _link.UpstreamIdentity is null
+    public string RepositoryPath => IsLinked ? _link!.RepositoryPath : "No repository linked";
+    public string Branch => !IsLinked ? string.Empty : "Branch: " + _link!.Branch;
+    public string Upstream => !IsLinked ? string.Empty : _link!.UpstreamIdentity is null
         ? "Local only (no upstream)" : "Upstream: " + _link.UpstreamIdentity.Split(':', 2)[0];
     public string LastResult => _link?.LastResult ?? "Select an existing clean repository to link this Project.";
     public string PendingAction => _link?.SyncStatus switch
     {
+        _ when _editGate?.WaitingProjectId == _projectId.Value =>
+            "Sync is waiting for the unfinished edit to be saved or closed.",
         "Pending" => "Sync now to create the initial snapshot commit.",
         "PendingPush" => "A local commit is waiting for push. Retry sync after checking Git access.",
         "PendingRemote" => "The upstream advanced during sync. Retry to validate its changes.",
+        "RemoteDeletedLocalKept" => "The shared repository Project was deleted. Local changes were kept; this Project is unlinked.",
         _ => string.Empty
     };
     public string? Message => _message;
@@ -76,13 +88,17 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
 
     private Task SyncAsync() => ExecuteAsync(async () =>
     {
-        try { _link = await _service.SyncNowAsync(_projectId); }
+        using CancellationTokenSource cancellation = new();
+        _syncCancellation = cancellation;
+        Notify();
+        try { _link = await _service.SyncNowAsync(_projectId, cancellation.Token); }
         catch (ProjectNameCollisionException collision)
         {
             string? name = ProjectLocalNameDialog.Prompt(System.Windows.Application.Current.MainWindow,
                 collision.ConflictingName);
-            if (name is not null) _link = await _service.SyncNowAsync(_projectId, name);
+            if (name is not null) _link = await _service.SyncNowAsync(_projectId, name, cancellation.Token);
         }
+        finally { _syncCancellation = null; Notify(); }
     });
 
     private Task UnlinkAsync() => ExecuteAsync(async () =>
@@ -105,16 +121,18 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
     {
         foreach (string name in new[] { nameof(IsLinked), nameof(IsBusy), nameof(RepositoryPath),
                      nameof(Branch), nameof(Upstream), nameof(LastResult), nameof(PendingAction), nameof(Message),
-                     nameof(HasPendingAction), nameof(HasMessage) })
+                     nameof(HasPendingAction), nameof(HasMessage), nameof(CanCancelSync) })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         _linkCommand.NotifyCanExecuteChanged();
         _syncCommand.NotifyCanExecuteChanged();
         _unlinkCommand.NotifyCanExecuteChanged();
+        _cancelSyncCommand.NotifyCanExecuteChanged();
     }
 }
 
 public sealed class ProjectRepositoryCardViewModelFactory(
-    ProjectGitSyncService service, IProjectRepositoryFolderPicker picker)
+    ProjectGitSyncService service, IProjectRepositoryFolderPicker picker,
+    WpfProjectUnsavedEditsGate? editGate = null)
 {
-    public ProjectRepositoryCardViewModel Create(ProjectId projectId) => new(projectId, service, picker);
+    public ProjectRepositoryCardViewModel Create(ProjectId projectId) => new(projectId, service, picker, editGate);
 }

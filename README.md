@@ -114,13 +114,20 @@ snapshot with its stable IDs and history. If its Project name is already used lo
 private name for this installation; the shared snapshot keeps its original name.
 
 The Project dashboard shows the linked repository, checked-out branch, upstream, and last manual
-sync result. **Sync now** fetches and applies a fast-forward upstream update, commits local Project
-changes, and pushes when an upstream is configured. A checkout without an upstream keeps local
-commits only. Divergent histories wait for review in a later milestone. Unlinking leaves both the
-repository and SQLite data in place. EntityTracker does not clone repositories, configure Git, or
-manage credentials.
+sync result. **Sync now** fetches and applies upstream changes, merges independent Project edits,
+and asks you to review competing changes before committing and pushing. It waits for an unfinished
+edit to be saved or closed before applying incoming data. A checkout without an upstream keeps
+local commits only. Permanent deletion of a linked Project publishes a tombstone; a member with
+concurrent local changes can keep the Project locally as an unlinked copy. Unlinking by itself
+leaves both the repository and SQLite data in place. EntityTracker does not clone repositories,
+configure Git, or manage credentials.
 
 ![Illustrative Project dashboard state with an upstream Git link and manual Sync now control](images/light/project-git-repository.png)
+
+The merge review shows each conflicting object with its base, local, and remote values. Choose a
+side for each conflict or apply one choice to all, then confirm the resolved Project state.
+
+![Project merge review with base, local, and remote values and per-conflict choices](images/light/project-merge-review.png)
 
 ### Compare sibling Trackers
 
@@ -235,12 +242,12 @@ CI validation for pull requests and pushes to `main` and packaging for successfu
 The live badge above reports the current `main` build status.
 
 The [GS-01–GS-05 Git-sync roadmap](docs/milestones/git-sync/00_README.md) now includes portable
-snapshots, local linking, existing-checkout import, and manual non-divergent fetch and push. Prepare
+snapshots, local linking, existing-checkout import, and manual collaborative merge. Prepare
 and configure a clean dedicated repository outside EntityTracker. Use **Import checkout** on the
 Portfolio for a Project already present in the repository, or **Link repository** on an existing
-Project dashboard. **Sync now** commits locally and uses the configured upstream when present.
-**Unlink** removes only the local association. Divergent conflict review and automatic sync remain
-planned for later milestones.
+Project dashboard. **Sync now** merges independent edits, offers conflict review when needed,
+commits locally, and uses the configured upstream when present. **Unlink** removes only the local
+association. Automatic sync remains planned for GS-05.
 
 See the [milestone status](docs/milestones/milestone_status.md) and complete
 [roadmap](docs/milestones/00_README.md) for details.

@@ -122,6 +122,10 @@ public partial class App : System.Windows.Application
                 System.IO.Path.Combine(dataPaths.RootDirectory, "git-sync-links.v1.json")));
             services.AddSingleton<ILocalGitTransport, SystemGitTransport>();
             services.AddSingleton<IOutboundDeletionApproval, WpfOutboundDeletionApproval>();
+            services.AddSingleton<IProjectMergeReview, WpfProjectMergeReview>();
+            services.AddSingleton<WpfProjectUnsavedEditsGate>();
+            services.AddSingleton<IProjectUnsavedEditsGate>(provider =>
+                provider.GetRequiredService<WpfProjectUnsavedEditsGate>());
             services.AddSingleton<IProjectRepositoryFolderPicker, ProjectRepositoryFolderPicker>();
             services.AddSingleton<ProjectGitSyncService>();
             services.AddSingleton<ProjectRepositoryCardViewModelFactory>();

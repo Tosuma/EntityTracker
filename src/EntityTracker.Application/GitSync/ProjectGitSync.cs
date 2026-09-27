@@ -7,7 +7,13 @@ namespace EntityTracker.Application.GitSync;
 public sealed record ProjectSyncLink(
     Guid ProjectId, string RepositoryPath, string Branch, string? UpstreamIdentity,
     string? LastCommonCommit, long LastRevision, string? LastSnapshotHash,
-    string LastResult, string SyncStatus);
+    string LastResult, string SyncStatus, ProjectDeletionIntent? PendingDeletion = null);
+
+public sealed record ProjectDeletionIntent(Guid ProjectId, string BaseSnapshotHash,
+    DateTimeOffset DeletedAtUtc, long ApprovedRevision);
+
+public sealed record ProjectTombstone(int FormatVersion, Guid ProjectId,
+    string BaseSnapshotHash, DateTimeOffset DeletedAtUtc);
 
 public sealed record GitRemoteState(string Head, IReadOnlyDictionary<string, byte[]> SnapshotFiles);
 
@@ -50,6 +56,19 @@ public interface ILocalGitTransport
         throw new NotSupportedException("Remote Git operations are unavailable.");
     Task PushAsync(string path, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("Remote Git operations are unavailable.");
+    Task<string?> MergeBaseAsync(string path, string localHead, string remoteHead,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Git merge-base inspection is unavailable.");
+    Task<IReadOnlyDictionary<string, byte[]>> ReadSnapshotAtCommitAsync(string path, string commit,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Historical Git snapshot reads are unavailable.");
+    Task ValidateMergeScopeAsync(string path, string localHead, string remoteHead,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Git merge scope validation is unavailable.");
+    Task<string> CommitMergeSnapshotAsync(string path, string localHead, string remoteHead,
+        IReadOnlyDictionary<string, byte[]> oldFiles, ProjectSnapshotPackage package,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Canonical merge commits are unavailable.");
 }
 
 public interface IOutboundDeletionApproval
@@ -57,10 +76,17 @@ public interface IOutboundDeletionApproval
     Task<bool> ApproveAsync(IReadOnlyList<string> deletedObjects, CancellationToken cancellationToken = default);
 }
 
-public sealed class ProjectGitSyncService(
+public interface IProjectUnsavedEditsGate
+{
+    Task WaitUntilReadyAsync(ProjectId projectId, CancellationToken cancellationToken = default);
+}
+
+public sealed partial class ProjectGitSyncService(
     IProjectSyncLinkStore links, ILocalGitTransport git, IProjectSnapshotStore snapshots,
     IProjectSnapshotCodec codec, IOutboundDeletionApproval deletionApproval,
-    IProjectRepository? projects = null, IProjectSyncBackup? backup = null)
+    IProjectRepository? projects = null, IProjectSyncBackup? backup = null,
+    IProjectMergeReview? mergeReview = null,
+    IProjectUnsavedEditsGate? editGate = null)
 {
     public async Task<ProjectSyncLink?> GetLinkAsync(ProjectId projectId, CancellationToken token = default) =>
         (await links.ReadAllAsync(token)).SingleOrDefault(link => link.ProjectId == projectId.Value);
@@ -71,9 +97,11 @@ public sealed class ProjectGitSyncService(
         await using IAsyncDisposable guard = await git.LockAsync(path, token);
         GitWorkingTreeState state = await git.InspectAsync(path, token);
         IReadOnlyList<ProjectSyncLink> existing = await links.ReadAllAsync(token);
-        if (existing.Any(link => link.ProjectId == projectId.Value))
+        if (existing.Any(link => link.ProjectId == projectId.Value &&
+                                 link.SyncStatus != "RemoteDeletedLocalKept"))
             throw new InvalidOperationException("This Project is already linked. Unlink it before selecting another repository.");
-        if (existing.Any(link => PathEquals(link.RepositoryPath, state.RootPath)))
+        if (existing.Any(link => link.SyncStatus != "RemoteDeletedLocalKept" &&
+                                 PathEquals(link.RepositoryPath, state.RootPath)))
             throw new InvalidOperationException("This repository is already linked to another Project.");
 
         ProjectSnapshotRead read = await snapshots.ReadAsync(projectId, token);
@@ -86,10 +114,13 @@ public sealed class ProjectGitSyncService(
             if (remote.Project.Id != projectId.Value)
                 throw new InvalidOperationException("This repository contains a different Project. Use Import checkout on the Portfolio to add it separately.");
             if (!PackagesEqual(local.Files, codec.Encode(remote).Files))
-                throw new InvalidOperationException("The repository snapshot differs from this Project. Conflict review is required before linking.");
+            {
+                read = await ReviewTwoWayAsync(projectId, read, remote, state, token);
+                local = codec.Encode(read.Snapshot!);
+            }
         }
         ProjectSyncLink link = NewLink(projectId, state, read.Revision,
-            state.SnapshotFiles.Count == 0 ? null : local.Sha256);
+            state.SnapshotFiles.Count == 0 ? null : codec.Encode(codec.Decode(state.SnapshotFiles)).Sha256);
         await links.SaveAsync(link, token);
         return link;
     }
@@ -103,10 +134,15 @@ public sealed class ProjectGitSyncService(
         await using IAsyncDisposable guard = await git.LockAsync(path, token);
         GitWorkingTreeState state = await git.InspectAsync(path, token);
         IReadOnlyList<ProjectSyncLink> existingLinks = await links.ReadAllAsync(token);
-        if (existingLinks.Any(link => PathEquals(link.RepositoryPath, state.RootPath)))
+        if (existingLinks.Any(link => link.SyncStatus != "RemoteDeletedLocalKept" &&
+                                      PathEquals(link.RepositoryPath, state.RootPath)))
             throw new InvalidOperationException("This repository is already linked to a Project.");
         ProjectSnapshot? checkoutSnapshot = state.SnapshotFiles.Count == 0
             ? null : codec.Decode(state.SnapshotFiles);
+        if (checkoutSnapshot is not null && existingLinks.Any(link =>
+                link.ProjectId == checkoutSnapshot.Project.Id &&
+                link.SyncStatus != "RemoteDeletedLocalKept"))
+            throw new InvalidOperationException("This Project is already linked. Unlink it before selecting another repository.");
         if (state.UpstreamIdentity is not null)
         {
             GitRemoteState remote = await git.FetchAsync(path, token);
@@ -115,7 +151,8 @@ public sealed class ProjectGitSyncService(
                 if (state.Head is null || !await git.IsAncestorAsync(path, state.Head, remote.Head, token))
                 {
                     if (!await git.IsAncestorAsync(path, remote.Head, state.Head ?? string.Empty, token))
-                        throw new InvalidOperationException("The checkout and upstream diverged. GS-04 review is required.");
+                        throw new InvalidOperationException(
+                            "The checkout and upstream diverged before import. Reconcile the user-managed checkout with command-line Git, then retry.");
                 }
                 else
                 {
@@ -137,10 +174,11 @@ public sealed class ProjectGitSyncService(
         string hash = codec.Encode(incoming).Sha256;
         if (current.Snapshot is not null)
         {
-            if (codec.Encode(current.Snapshot).Sha256 != hash)
-                throw new InvalidOperationException("This Project ID already exists with different data. GS-04 reconciliation is required.");
-            if (existingLinks.Any(link => link.ProjectId == projectId.Value))
+            if (existingLinks.Any(link => link.ProjectId == projectId.Value &&
+                                          link.SyncStatus != "RemoteDeletedLocalKept"))
                 throw new InvalidOperationException("This Project is already linked. Unlink it before selecting another repository.");
+            if (codec.Encode(current.Snapshot).Sha256 != hash)
+                current = await ReviewTwoWayAsync(projectId, current, incoming, state, token);
             ProjectSyncLink matching = NewLink(projectId, state, current.Revision, hash);
             await links.SaveAsync(matching, token);
             return matching;
@@ -200,16 +238,55 @@ public sealed class ProjectGitSyncService(
     public async Task<ProjectSyncLink> SyncNowAsync(ProjectId projectId, string? localName,
         CancellationToken token = default)
     {
+        if (editGate is not null) await editGate.WaitUntilReadyAsync(projectId, token);
         ProjectSyncLink link = await GetLinkAsync(projectId, token) ??
             throw new InvalidOperationException("This Project is not linked to a repository.");
+        if (link.SyncStatus == "RemoteDeletedLocalKept")
+            throw new InvalidOperationException("The shared Project was deleted; this local Project is unlinked.");
         await using IAsyncDisposable guard = await git.LockAsync(link.RepositoryPath, token);
         GitWorkingTreeState state = await git.InspectAsync(link.RepositoryPath, token);
         if (!PathEquals(state.RootPath, link.RepositoryPath) || state.Branch != link.Branch ||
             state.UpstreamIdentity != link.UpstreamIdentity)
             throw new InvalidOperationException("Repository root, branch, or upstream changed. Restore the linked configuration externally or unlink and relink.");
         ProjectSnapshotRead read = await snapshots.ReadAsync(projectId, token);
+        if (read.Snapshot is not null && link.PendingDeletion is not null)
+            throw new InvalidOperationException(
+                "Project deletion is pending but the Project still exists. Retry permanent deletion from the recycle bin.");
         if (read.Snapshot is null)
-            throw new InvalidOperationException("The Project was purged. Publishing a deletion requires a later milestone.");
+        {
+            if (link.PendingDeletion is null)
+            {
+                if (state.UpstreamIdentity is not null)
+                {
+                    GitRemoteState published = await git.FetchAsync(link.RepositoryPath, token);
+                    if (codec.TryDecodeTombstone(published.SnapshotFiles, out ProjectTombstone? received) &&
+                        received!.ProjectId == projectId.Value)
+                    {
+                        if (state.Head != published.Head)
+                        {
+                            if (state.Head is null)
+                                throw new InvalidOperationException("The checkout has no committed Project base.");
+                            if (await git.IsAncestorAsync(link.RepositoryPath, state.Head,
+                                    published.Head, token))
+                                await git.FastForwardAsync(link.RepositoryPath, state.Head,
+                                    published.Head, token);
+                            else
+                            {
+                                await git.CommitMergeSnapshotAsync(link.RepositoryPath,
+                                    state.Head, published.Head, state.SnapshotFiles,
+                                    codec.EncodeTombstone(received), token);
+                                await git.PushAsync(link.RepositoryPath, token);
+                            }
+                        }
+                        await links.RemoveAsync(projectId.Value, token);
+                        return link with { SyncStatus = "Deleted",
+                            LastResult = "Published deletion received" };
+                    }
+                }
+                throw new InvalidOperationException("The Project was purged without a pending tombstone.");
+            }
+            return await PublishTombstoneAsync(link, state, token);
+        }
         ProjectSnapshotPackage local = codec.Encode(read.Snapshot);
         if (localName is not null &&
             (string.IsNullOrWhiteSpace(localName) ||
@@ -219,6 +296,23 @@ public sealed class ProjectGitSyncService(
         if (state.UpstreamIdentity is not null)
         {
             remote = await git.FetchAsync(link.RepositoryPath, token);
+            if (codec.TryDecodeTombstone(remote.SnapshotFiles, out ProjectTombstone? tombstone))
+                return await ReceiveTombstoneAsync(projectId, link, state, remote,
+                    tombstone!, read, token);
+            if (state.Head is not null && state.Head != remote.Head)
+            {
+                bool localAncestor = await git.IsAncestorAsync(
+                    link.RepositoryPath, state.Head, remote.Head, token);
+                bool remoteAncestor = await git.IsAncestorAsync(
+                    link.RepositoryPath, remote.Head, state.Head, token);
+                bool localChanges = state.SnapshotFiles.Count == 0 ||
+                    !PackagesEqual(state.SnapshotFiles, local.Files);
+                bool remoteChanges = !PackagesEqual(state.SnapshotFiles, remote.SnapshotFiles);
+                if ((!localAncestor && !remoteAncestor) ||
+                    (localAncestor && localChanges && remoteChanges))
+                    return await SyncConcurrentAsync(projectId, link, state, remote,
+                        read, localName, token);
+            }
             if (state.Head != link.LastCommonCommit && state.Head != remote.Head &&
                 state.Head is not null && link.LastCommonCommit is not null &&
                 await git.IsAncestorAsync(link.RepositoryPath, link.LastCommonCommit, state.Head, token) &&
@@ -239,6 +333,7 @@ public sealed class ProjectGitSyncService(
                 if (read.Revision == link.LastRevision && local.Sha256 == link.LastSnapshotHash &&
                     resumedHash != local.Sha256)
                 {
+                    if (editGate is not null) await editGate.WaitUntilReadyAsync(projectId, token);
                     if (backup is null)
                         throw new InvalidOperationException("A pre-apply backup service is required for inbound sync.");
                     await backup.CreatePreApplyBackupAsync(token);
@@ -247,7 +342,8 @@ public sealed class ProjectGitSyncService(
                     local = codec.Encode(resumed);
                 }
                 else if (resumedHash != local.Sha256)
-                    throw new InvalidOperationException("Local and upstream Project changes need GS-04 review.");
+                    return await SyncConcurrentAsync(projectId, link, state, remote,
+                        read, localName, token);
                 link = link with { LastCommonCommit = state.Head, LastRevision = read.Revision,
                     LastSnapshotHash = resumedHash };
             }
@@ -263,7 +359,8 @@ public sealed class ProjectGitSyncService(
                 bool remoteChanged = inboundHash != link.LastSnapshotHash;
                 bool localChanged = local.Sha256 != link.LastSnapshotHash;
                 if (remoteChanged && localChanged && inboundHash != local.Sha256)
-                    throw new InvalidOperationException("Local and upstream Project changes need GS-04 review.");
+                    return await SyncConcurrentAsync(projectId, link, state, remote,
+                        read, localName, token);
                 if (inbound is null && link.LastSnapshotHash is not null)
                     throw new InvalidOperationException("The upstream Project snapshot is missing.");
                 if (remoteChanged && !localChanged && inbound is not null)
@@ -276,6 +373,10 @@ public sealed class ProjectGitSyncService(
                         !string.Equals(inbound.Project.Name, read.Snapshot!.Project.Name, StringComparison.Ordinal))
                         throw new ProjectNameCollisionException(inbound.Project.Name);
                 }
+                if (editGate is not null) await editGate.WaitUntilReadyAsync(projectId, token);
+                ProjectSnapshotRead beforeFastForward = await snapshots.ReadAsync(projectId, token);
+                if (beforeFastForward.Revision != read.Revision)
+                    throw new InvalidOperationException("The Project changed while waiting to sync. Retry.");
                 await git.FastForwardAsync(link.RepositoryPath, state.Head, remote.Head, token);
                 state = await git.InspectAsync(link.RepositoryPath, token);
                 if (inbound is not null && remoteChanged && !localChanged)
@@ -292,7 +393,12 @@ public sealed class ProjectGitSyncService(
             }
             else if (state.Head != remote.Head && (state.Head is null ||
                      !await git.IsAncestorAsync(link.RepositoryPath, remote.Head, state.Head, token)))
-                throw new InvalidOperationException("The checkout and upstream diverged. GS-04 review is required.");
+            {
+                if (state.Head is null)
+                    throw new InvalidOperationException("The checkout has no committed Project base for merge.");
+                return await SyncConcurrentAsync(projectId, link, state, remote,
+                    read, localName, token);
+            }
         }
         if (state.Head != link.LastCommonCommit)
             throw new InvalidOperationException("Repository HEAD changed since the last sync. Review it outside EntityTracker before relinking.");
@@ -383,6 +489,7 @@ public sealed class ProjectGitSyncService(
                         await git.FastForwardAsync(link.RepositoryPath, head, refreshed.Head, token);
                         if (advancedHash != local.Sha256)
                         {
+                            if (editGate is not null) await editGate.WaitUntilReadyAsync(projectId, token);
                             if (backup is null)
                                 throw new InvalidOperationException("A pre-apply backup service is required for inbound sync.");
                             await backup.CreatePreApplyBackupAsync(token);
@@ -404,7 +511,11 @@ public sealed class ProjectGitSyncService(
                         return updated;
                     }
                     else if (refreshed.Head != head)
-                        throw new InvalidOperationException("The upstream advanced. GS-04 review is required; the local commit remains pending push.");
+                    {
+                        GitWorkingTreeState pendingState = await git.InspectAsync(link.RepositoryPath, token);
+                        return await SyncConcurrentAsync(projectId, updated, pendingState,
+                            refreshed, await snapshots.ReadAsync(projectId, token), localName, token);
+                    }
                 }
             }
             else
@@ -441,11 +552,28 @@ public sealed class ProjectGitSyncService(
         HashSet<Guid> trackerIds = current.Trackers.Select(t => t.Id).ToHashSet();
         foreach (SnapshotTracker tracker in previous.Trackers)
         {
-            if (!trackerIds.Contains(tracker.Id)) { deleted.Add($"Tracker {tracker.Id:D}"); continue; }
+            if (!trackerIds.Contains(tracker.Id))
+            {
+                deleted.Add($"Tracker {tracker.Id:D}");
+                deleted.AddRange(tracker.Entities.Select(e => $"Entity {e.Id:D}"));
+                deleted.AddRange(tracker.StatusHistory.Select(e => $"Status event {e.EventId:D}"));
+                deleted.AddRange(tracker.ProgressHistory.Select(e => $"Progress record {e.SnapshotId:D}"));
+                if (tracker.ImportSummary is not null)
+                    deleted.Add($"Import summary {tracker.Id:D}");
+                deleted.AddRange(tracker.Entities.SelectMany(RelationshipDeletions));
+                continue;
+            }
             SnapshotTracker next = current.Trackers.Single(t => t.Id == tracker.Id);
-            deleted.AddRange(tracker.Entities.Select(e => e.Id).Except(next.Entities.Select(e => e.Id)).Select(id => $"Entity {id:D}"));
+            foreach (SnapshotEntity removed in tracker.Entities.Where(e =>
+                         next.Entities.All(n => n.Id != e.Id)))
+            {
+                deleted.Add($"Entity {removed.Id:D}");
+                deleted.AddRange(RelationshipDeletions(removed));
+            }
             deleted.AddRange(tracker.StatusHistory.Select(e => e.EventId).Except(next.StatusHistory.Select(e => e.EventId)).Select(id => $"Status event {id:D}"));
             deleted.AddRange(tracker.ProgressHistory.Select(e => e.SnapshotId).Except(next.ProgressHistory.Select(e => e.SnapshotId)).Select(id => $"Progress record {id:D}"));
+            if (tracker.ImportSummary is not null && next.ImportSummary is null)
+                deleted.Add($"Import summary {tracker.Id:D}");
             foreach (SnapshotEntity entity in tracker.Entities)
             {
                 SnapshotEntity? updated = next.Entities.SingleOrDefault(e => e.Id == entity.Id);
@@ -462,4 +590,12 @@ public sealed class ProjectGitSyncService(
         }
         return deleted.Order(StringComparer.Ordinal).ToArray();
     }
+
+    private static IEnumerable<string> RelationshipDeletions(SnapshotEntity entity) =>
+        entity.Dependencies.Select(d =>
+                $"Dependency {d.DependentEntityId:D} → {d.DependencyEntityId:D}")
+            .Concat(entity.UnresolvedDependencies.Select(d =>
+                $"Unresolved dependency {d.DependentEntityId:D} → {d.DependencySourceName}"))
+            .Concat(entity.ManualOverrides.Select(d =>
+                $"Manual override {d.DependentEntityId:D} → {d.DependencySourceName}"));
 }

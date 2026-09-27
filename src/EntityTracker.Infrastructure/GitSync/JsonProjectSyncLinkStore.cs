@@ -22,6 +22,7 @@ public sealed class JsonProjectSyncLinkStore(string path) : IProjectSyncLinkStor
         {
             List<ProjectSyncLink> all = await ReadUnsafeAsync(cancellationToken);
             if (all.Any(x => x.ProjectId != link.ProjectId &&
+                x.SyncStatus != "RemoteDeletedLocalKept" &&
                 string.Equals(x.RepositoryPath, link.RepositoryPath,
                     OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)))
                 throw new InvalidOperationException("This repository is already linked to another Project.");

@@ -214,6 +214,25 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void MergeReviewDialog_ProvidesKeyboardAndScreenReaderContext()
+    {
+        XDocument review = LoadWpfXaml("Views", "ProjectMergeReviewDialog.xaml");
+        Assert.Equal("Review Project merge", (string?)review.Root?.Attribute("Title"));
+        XElement root = Assert.Single(review.Root!.Elements(), e => e.Name.LocalName == "Grid");
+        Assert.Equal("Cycle", (string?)root.Attribute("KeyboardNavigation.TabNavigation"));
+        Assert.Contains(review.Descendants(), e =>
+            (string?)e.Attribute("AutomationProperties.HeadingLevel") == "Level1");
+        Assert.Contains(review.Descendants(), e =>
+            (string?)e.Attribute("AutomationProperties.Name") == "Base value");
+        Assert.Contains(review.Descendants(), e =>
+            (string?)e.Attribute("AutomationProperties.Name") == "Local value");
+        Assert.Contains(review.Descendants(), e =>
+            (string?)e.Attribute("AutomationProperties.Name") == "Remote value");
+        Assert.Contains(review.Descendants(), e =>
+            (string?)e.Attribute("IsCancel") == "True");
+    }
+
+    [Fact]
     public void CatalogModal_TrapsKeyboardFocusAndExposesSafeCancelAction()
     {
         XDocument document = LoadWpfXaml("Views", "CatalogModalView.xaml");

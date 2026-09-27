@@ -225,6 +225,10 @@
                                 Style="{StaticResource PrimaryButtonStyle}" />
                         <Button Content="Unlink" Command="{Binding UnlinkCommand}"
                                 AutomationProperties.Name="Unlink Git repository" />
+                        <Button Margin="8,0,0,0" Content="Cancel sync"
+                                Command="{Binding CancelSyncCommand}"
+                                IsEnabled="{Binding CanCancelSync}"
+                                AutomationProperties.Name="Cancel waiting or running Project sync" />
                     </StackPanel>
                 </StackPanel>
             </Border>

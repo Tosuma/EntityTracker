@@ -2,6 +2,7 @@ using System.Diagnostics;
 using EntityTracker.Application.GitSync;
 using EntityTracker.Application.Snapshots;
 using EntityTracker.Domain;
+using EntityTracker.Domain.Collaboration;
 using EntityTracker.Infrastructure.GitSync;
 using EntityTracker.Infrastructure.Persistence;
 using EntityTracker.Infrastructure.Snapshots;
@@ -11,6 +12,516 @@ namespace EntityTracker.Infrastructure.Tests.GitSync;
 
 public sealed class ExistingCheckoutRemoteSyncTests
 {
+    [Fact]
+    public async Task IndependentCollaboratorsConvergeWithTwoParentCanonicalCommit()
+    {
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        string first = workspace.CreateRemoteCheckout("first", Snapshot(id, "Project"));
+        string second = workspace.Clone("second");
+        await using TestCatalog left = await TestCatalog.CreateAsync(workspace, "left");
+        await using TestCatalog right = await TestCatalog.CreateAsync(workspace, "right");
+        ProjectGitSyncService leftSync = left.Sync(first, review: new ChooseRemoteReview());
+        ProjectGitSyncService rightSync = right.Sync(second, review: new ChooseRemoteReview());
+        await leftSync.ImportAsync(first);
+        await rightSync.ImportAsync(second);
+        ProjectId projectId = new(id);
+        ProjectSnapshotRead leftRead = await left.Snapshots.ReadAsync(projectId);
+        SnapshotTracker leftTracker = leftRead.Snapshot!.Trackers[0];
+        SnapshotEntity leftEntity = leftTracker.Entities[0];
+        await left.Snapshots.ApplyAsync(leftRead.Snapshot with
+        {
+            Trackers = [leftTracker with { Entities = leftTracker.Entities
+                .Select(e => e.Id == leftEntity.Id ? e with { Notes = "Collaborator note" } : e).ToArray() },
+                leftRead.Snapshot.Trackers[1]]
+        }, leftRead.Revision);
+        ProjectSnapshotRead rightRead = await right.Snapshots.ReadAsync(projectId);
+        SnapshotTracker rightTracker = rightRead.Snapshot!.Trackers[0];
+        await right.Snapshots.ApplyAsync(rightRead.Snapshot with
+        {
+            Trackers = [rightTracker with { Entities = rightTracker.Entities
+                .Select(e => e.Id == leftEntity.Id ? e with { GroupName = "Shared team" } : e).ToArray() },
+                rightRead.Snapshot.Trackers[1]]
+        }, rightRead.Revision);
+        string baseHead = workspace.Git(second, "rev-parse", "HEAD");
+        await leftSync.SyncNowAsync(projectId);
+        string remoteHead = workspace.Git(first, "rev-parse", "HEAD");
+        ProjectSyncLink merged = await rightSync.SyncNowAsync(projectId);
+        Assert.Equal("Current", merged.SyncStatus);
+        string mergeHead = workspace.Git(second, "rev-parse", "HEAD");
+        Assert.Equal($"{baseHead} {remoteHead}", workspace.Git(second,
+            "show", "-s", "--format=%P", mergeHead));
+        await leftSync.SyncNowAsync(projectId);
+        Assert.Equal(mergeHead, workspace.Git(first, "rev-parse", "HEAD"));
+        ProjectSnapshotJsonCodec codec = new();
+        ProjectSnapshot leftSnapshot = (await left.Snapshots.ReadAsync(projectId)).Snapshot!;
+        ProjectSnapshot rightSnapshot = (await right.Snapshots.ReadAsync(projectId)).Snapshot!;
+        Assert.Equal(codec.Encode(leftSnapshot).Sha256, codec.Encode(rightSnapshot).Sha256);
+        Assert.Equal(3, rightSnapshot.Trackers[0].ProgressHistory.Count);
+        SnapshotEntity entity = rightSnapshot.Trackers[0].Entities.Single(e => e.Id == leftEntity.Id);
+        Assert.Equal("Collaborator note", entity.Notes);
+        Assert.Equal("Shared team", entity.GroupName);
+    }
+
+    [Fact]
+    public async Task AlreadyFastForwardedCheckoutMergesSeparateSqliteEditAgainstRecordedBase()
+    {
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        string first = workspace.CreateRemoteCheckout("first", Snapshot(id, "Project"));
+        string second = workspace.Clone("second");
+        await using TestCatalog catalog = await TestCatalog.CreateAsync(workspace, "catalog");
+        ProjectGitSyncService sync = catalog.Sync(second);
+        await sync.ImportAsync(second);
+        ProjectId projectId = new(id);
+        ProjectSnapshotRead local = await catalog.Snapshots.ReadAsync(projectId);
+        await catalog.Snapshots.ApplyAsync(local.Snapshot! with
+        {
+            Project = local.Snapshot.Project with { Name = "Local edit" }
+        }, local.Revision);
+        ProjectSnapshot remote = Snapshot(id, "Project");
+        SnapshotTracker tracker = remote.Trackers[0];
+        remote = remote with { Trackers = [tracker with
+        {
+            Entities = tracker.Entities.Select(e => e with
+            {
+                GroupName = e.SourceName == "Orders" ? "Remote team" : e.GroupName
+            }).ToArray()
+        }, remote.Trackers[1]] };
+        foreach ((string relative, byte[] bytes) in new ProjectSnapshotJsonCodec().Encode(remote).Files)
+            File.WriteAllBytes(Path.Combine(first,
+                relative.Replace('/', Path.DirectorySeparatorChar)), bytes);
+        workspace.Git(first, "add", ".entitytracker");
+        workspace.Git(first, "commit", "-m", "Remote entity edit");
+        workspace.Git(first, "push", "origin", "main");
+        workspace.Git(second, "pull", "--ff-only");
+        string remoteHead = workspace.Git(second, "rev-parse", "HEAD");
+
+        Assert.Equal("Current", (await sync.SyncNowAsync(projectId)).SyncStatus);
+
+        Assert.Equal(remoteHead, workspace.Git(second, "rev-parse", "HEAD^"));
+        ProjectSnapshot merged = (await catalog.Snapshots.ReadAsync(projectId)).Snapshot!;
+        Assert.Equal("Local edit", merged.Project.Name);
+        Assert.Equal("Remote team", merged.Trackers[0].Entities.Single(e => e.SourceName == "Orders").GroupName);
+        Assert.Equal(workspace.Git(second, "rev-parse", "HEAD"),
+            workspace.Git(workspace.Root, "--git-dir", Path.Combine(workspace.Root, "remote.git"),
+                "rev-parse", "refs/heads/main"));
+    }
+
+    [Fact]
+    public async Task DivergentReadmeIsRejectedBeforeSqliteMerge()
+    {
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        string first = workspace.CreateRemoteCheckout("first", Snapshot(id, "Project"));
+        string second = workspace.Clone("second");
+        await using TestCatalog catalog = await TestCatalog.CreateAsync(workspace, "catalog");
+        await catalog.Sync(second).ImportAsync(second);
+        ProjectId projectId = new(id);
+        ProjectSnapshotRead read = await catalog.Snapshots.ReadAsync(projectId);
+        await catalog.Snapshots.ApplyAsync(read.Snapshot! with
+        {
+            Project = read.Snapshot.Project with { Name = "Local edit" }
+        }, read.Revision);
+        File.WriteAllText(Path.Combine(first, "README.md"), "Remote documentation\n");
+        foreach ((string relative, byte[] bytes) in new ProjectSnapshotJsonCodec()
+            .Encode(Snapshot(id, "Remote edit")).Files)
+            File.WriteAllBytes(Path.Combine(first,
+                relative.Replace('/', Path.DirectorySeparatorChar)), bytes);
+        workspace.Git(first, "add", "README.md", ".entitytracker");
+        workspace.Git(first, "commit", "-m", "Edit documentation");
+        workspace.Git(first, "push", "origin", "main");
+        string localHead = workspace.Git(second, "rev-parse", "HEAD");
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => catalog.Sync(second).SyncNowAsync(projectId));
+
+        Assert.Contains("command-line Git", error.Message, StringComparison.Ordinal);
+        Assert.Equal(localHead, workspace.Git(second, "rev-parse", "HEAD"));
+        Assert.Equal("Local edit", (await catalog.Snapshots.ReadAsync(projectId)).Snapshot!.Project.Name);
+    }
+
+    [Fact]
+    public async Task MergeRevisionRaceRollsBackWithoutCommittingGit()
+    {
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        string first = workspace.CreateRemoteCheckout("first", Snapshot(id, "Project"));
+        string second = workspace.Clone("second");
+        await using TestCatalog catalog = await TestCatalog.CreateAsync(workspace, "catalog");
+        await catalog.Sync(second).ImportAsync(second);
+        ProjectId projectId = new(id);
+        ProjectSnapshotRead read = await catalog.Snapshots.ReadAsync(projectId);
+        ProjectSnapshot local = read.Snapshot! with
+        {
+            Project = read.Snapshot.Project with { Name = "Local edit" }
+        };
+        await catalog.Snapshots.ApplyAsync(local, read.Revision);
+        foreach ((string relative, byte[] bytes) in new ProjectSnapshotJsonCodec()
+            .Encode(Snapshot(id, "Remote edit")).Files)
+            File.WriteAllBytes(Path.Combine(first,
+                relative.Replace('/', Path.DirectorySeparatorChar)), bytes);
+        workspace.Git(first, "add", ".entitytracker");
+        workspace.Git(first, "commit", "-m", "Remote change");
+        workspace.Git(first, "push", "origin", "main");
+        string localHead = workspace.Git(second, "rev-parse", "HEAD");
+        IProjectSyncBackup racing = new RevisionChangingBackup(catalog.Backup(),
+            catalog.Snapshots, projectId);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            catalog.Sync(second, backup: racing, review: new ChooseRemoteReview())
+                .SyncNowAsync(projectId));
+
+        Assert.Equal(localHead, workspace.Git(second, "rev-parse", "HEAD"));
+        Assert.Equal("Competing edit", (await catalog.Snapshots.ReadAsync(projectId)).Snapshot!.Project.Name);
+    }
+
+    [Fact]
+    public async Task SyncWaitsForUnfinishedEditThenResumesAndCanBeCancelled()
+    {
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        string first = workspace.CreateRemoteCheckout("publisher", Snapshot(id, "Project"));
+        string second = workspace.Clone("receiver");
+        await using TestCatalog publisher = await TestCatalog.CreateAsync(workspace, "publisher-db");
+        await using TestCatalog receiver = await TestCatalog.CreateAsync(workspace, "receiver-db");
+        ProjectGitSyncService publishing = publisher.Sync(first);
+        await publishing.ImportAsync(first);
+        await receiver.Sync(second).ImportAsync(second);
+        ProjectId projectId = new(id);
+        ProjectSnapshotRead source = await publisher.Snapshots.ReadAsync(projectId);
+        await publisher.Snapshots.ApplyAsync(source.Snapshot! with
+        {
+            Project = source.Snapshot.Project with { Name = "Incoming edit" }
+        }, source.Revision);
+        await publishing.SyncNowAsync(projectId);
+        string before = workspace.Git(second, "rev-parse", "HEAD");
+        BlockingEditGate gate = new();
+        ProjectGitSyncService receiving = receiver.Sync(second, editGate: gate);
+        using CancellationTokenSource cancel = new();
+        Task<ProjectSyncLink> cancelled = receiving.SyncNowAsync(projectId, cancel.Token);
+        await gate.Entered;
+        Assert.Equal(before, workspace.Git(second, "rev-parse", "HEAD"));
+        Assert.Equal("Project", (await receiver.Snapshots.ReadAsync(projectId)).Snapshot!.Project.Name);
+        cancel.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancelled);
+
+        BlockingEditGate released = new();
+        Task<ProjectSyncLink> resumed = receiver.Sync(second, editGate: released).SyncNowAsync(projectId);
+        await released.Entered;
+        released.Release();
+        Assert.Equal("Current", (await resumed).SyncStatus);
+        Assert.Equal("Incoming edit", (await receiver.Snapshots.ReadAsync(projectId)).Snapshot!.Project.Name);
+    }
+
+    [Fact]
+    public async Task TrackerDeletionApprovalListsItsNestedObjects()
+    {
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        string checkout = workspace.CreateLocalCheckout("project", Snapshot(id, "Project"));
+        await using TestCatalog catalog = await TestCatalog.CreateAsync(workspace, "catalog");
+        RecordingApproval approval = new();
+        ProjectGitSyncService sync = catalog.Sync(checkout, approval: approval);
+        await sync.ImportAsync(checkout);
+        ProjectId projectId = new(id);
+        ProjectSnapshotRead read = await catalog.Snapshots.ReadAsync(projectId);
+        SnapshotTracker removed = read.Snapshot!.Trackers[1];
+        await catalog.Snapshots.ApplyAsync(read.Snapshot with
+        {
+            Trackers = [read.Snapshot.Trackers[0]]
+        }, read.Revision);
+
+        await sync.SyncNowAsync(projectId);
+
+        IReadOnlyList<string> deletionSet = Assert.Single(approval.Calls);
+        Assert.Contains($"Tracker {removed.Id:D}", deletionSet);
+        Assert.Contains($"Entity {removed.Entities[0].Id:D}", deletionSet);
+        Assert.Contains($"Progress record {removed.ProgressHistory[0].SnapshotId:D}", deletionSet);
+    }
+
+    [Fact]
+    public async Task PendingDeletionCannotPublishWhileSqliteProjectStillExists()
+    {
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        string checkout = workspace.CreateLocalCheckout("project", Snapshot(id, "Project"));
+        await using TestCatalog catalog = await TestCatalog.CreateAsync(workspace, "catalog");
+        ProjectGitSyncService sync = catalog.Sync(checkout);
+        ProjectSyncLink link = await sync.ImportAsync(checkout);
+        ProjectSnapshotRead read = await catalog.Snapshots.ReadAsync(new ProjectId(id));
+        await catalog.Links.SaveAsync(link with
+        {
+            PendingDeletion = new ProjectDeletionIntent(id,
+                new ProjectSnapshotJsonCodec().Encode(read.Snapshot!).Sha256,
+                DateTimeOffset.UtcNow, read.Revision)
+        });
+        string before = workspace.Git(checkout, "rev-parse", "HEAD");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sync.SyncNowAsync(new ProjectId(id)));
+
+        Assert.Equal(before, workspace.Git(checkout, "rev-parse", "HEAD"));
+        Assert.NotNull((await catalog.Snapshots.ReadAsync(new ProjectId(id))).Snapshot);
+    }
+
+    [Fact]
+    public async Task ProjectTombstoneSurvivesLocalPurgeAndDeletesReceivingCatalog()
+    {
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        string first = workspace.CreateRemoteCheckout("publisher", Snapshot(id, "Project"));
+        string second = workspace.Clone("receiver");
+        await using TestCatalog publisher = await TestCatalog.CreateAsync(workspace, "publisher-db");
+        await using TestCatalog receiver = await TestCatalog.CreateAsync(workspace, "receiver-db");
+        ProjectGitSyncService publish = publisher.Sync(first, review: new ChooseRemoteReview());
+        ProjectGitSyncService receive = receiver.Sync(second, review: new ChooseRemoteReview());
+        await publish.ImportAsync(first);
+        await receive.ImportAsync(second);
+        ProjectId projectId = new(id);
+        ProjectSnapshotRead read = await publisher.Snapshots.ReadAsync(projectId);
+        await publisher.Snapshots.ApplyAsync(read.Snapshot! with
+        {
+            Project = read.Snapshot.Project with
+            {
+                LifecycleState = "Recycled",
+                RecycledAtUtc = read.Snapshot.Project.UpdatedAtUtc.AddDays(1)
+            }
+        }, read.Revision);
+        Assert.True(await publish.PurgeLinkedProjectAsync(projectId));
+        Assert.Null((await publisher.Snapshots.ReadAsync(projectId)).Snapshot);
+        Assert.Single(await publish.ListPendingDeletionsAsync());
+        Assert.NotNull((await publish.GetLinkAsync(projectId))!.PendingDeletion);
+
+        await publish.SyncNowAsync(projectId);
+        Assert.Null(await publish.GetLinkAsync(projectId));
+        Assert.True(File.Exists(Path.Combine(first, ".entitytracker", "deleted-project.json")));
+        await receive.SyncNowAsync(projectId);
+        Assert.Null((await receiver.Snapshots.ReadAsync(projectId)).Snapshot);
+        Assert.Null(await receive.GetLinkAsync(projectId));
+        Assert.Equal(workspace.Git(first, "rev-parse", "HEAD"),
+            workspace.Git(second, "rev-parse", "HEAD"));
+    }
+
+    [Fact]
+    public async Task RemoteProjectAdvanceRequiresFreshDeletionApprovalBeforeTombstoneMerge()
+    {
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        string publisherCheckout = workspace.CreateRemoteCheckout("publisher", Snapshot(id, "Project"));
+        string other = workspace.Clone("other");
+        await using TestCatalog catalog = await TestCatalog.CreateAsync(workspace, "publisher-db");
+        RecordingApproval approval = new();
+        ProjectGitSyncService sync = catalog.Sync(publisherCheckout, approval: approval);
+        await sync.ImportAsync(publisherCheckout);
+        ProjectId projectId = new(id);
+        ProjectSnapshotRead read = await catalog.Snapshots.ReadAsync(projectId);
+        await catalog.Snapshots.ApplyAsync(read.Snapshot! with
+        {
+            Project = read.Snapshot.Project with
+            {
+                LifecycleState = "Recycled",
+                RecycledAtUtc = read.Snapshot.Project.UpdatedAtUtc.AddDays(1)
+            }
+        }, read.Revision);
+        Assert.True(await sync.PurgeLinkedProjectAsync(projectId));
+        string localHead = workspace.Git(publisherCheckout, "rev-parse", "HEAD");
+        foreach ((string relative, byte[] bytes) in new ProjectSnapshotJsonCodec()
+            .Encode(Snapshot(id, "Remote update")).Files)
+            File.WriteAllBytes(Path.Combine(other,
+                relative.Replace('/', Path.DirectorySeparatorChar)), bytes);
+        workspace.Git(other, "add", ".entitytracker");
+        workspace.Git(other, "commit", "-m", "Advance Project");
+        workspace.Git(other, "push", "origin", "main");
+        string remoteHead = workspace.Git(other, "rev-parse", "HEAD");
+
+        ProjectSyncLink result = await sync.SyncNowAsync(projectId);
+
+        Assert.Equal("Deleted", result.SyncStatus);
+        Assert.Equal(2, approval.Calls.Count);
+        Assert.Contains($"Project {id:D}", approval.Calls[1]);
+        Assert.Equal($"{localHead} {remoteHead}", workspace.Git(publisherCheckout,
+            "show", "-s", "--format=%P", "HEAD"));
+        Assert.Null(await sync.GetLinkAsync(projectId));
+    }
+
+    [Fact]
+    public async Task InboundTombstoneRecoversIfCheckoutUpdateFailsAfterSqlitePurge()
+    {
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        string first = workspace.CreateRemoteCheckout("publisher", Snapshot(id, "Project"));
+        string second = workspace.Clone("receiver");
+        await using TestCatalog publisher = await TestCatalog.CreateAsync(workspace, "publisher-db");
+        await using TestCatalog receiver = await TestCatalog.CreateAsync(workspace, "receiver-db");
+        ProjectGitSyncService publishing = publisher.Sync(first);
+        await publishing.ImportAsync(first);
+        await receiver.Sync(second).ImportAsync(second);
+        ProjectId projectId = new(id);
+        ProjectSnapshotRead read = await publisher.Snapshots.ReadAsync(projectId);
+        await publisher.Snapshots.ApplyAsync(read.Snapshot! with
+        {
+            Project = read.Snapshot.Project with
+            {
+                LifecycleState = "Recycled",
+                RecycledAtUtc = read.Snapshot.Project.UpdatedAtUtc.AddDays(1)
+            }
+        }, read.Revision);
+        await publishing.PurgeLinkedProjectAsync(projectId);
+        await publishing.SyncNowAsync(projectId);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => receiver.Sync(second,
+            transport: new FailFastForwardTransport()).SyncNowAsync(projectId));
+        Assert.Null((await receiver.Snapshots.ReadAsync(projectId)).Snapshot);
+        Assert.NotNull(await receiver.Sync(second).GetLinkAsync(projectId));
+
+        Assert.Equal("Deleted", (await receiver.Sync(second).SyncNowAsync(projectId)).SyncStatus);
+        Assert.Null(await receiver.Sync(second).GetLinkAsync(projectId));
+        Assert.Equal(workspace.Git(first, "rev-parse", "HEAD"),
+            workspace.Git(second, "rev-parse", "HEAD"));
+    }
+
+    [Fact]
+    public async Task ConcurrentLocalChangeCanBeKeptUnlinkedAfterRemoteDeletion()
+    {
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        string first = workspace.CreateRemoteCheckout("publisher", Snapshot(id, "Project"));
+        string second = workspace.Clone("receiver");
+        await using TestCatalog publisher = await TestCatalog.CreateAsync(workspace, "publisher-db");
+        await using TestCatalog receiver = await TestCatalog.CreateAsync(workspace, "receiver-db");
+        ProjectGitSyncService publish = publisher.Sync(first);
+        ProjectGitSyncService receive = receiver.Sync(second, review: new ChooseLocalReview());
+        await publish.ImportAsync(first);
+        await receive.ImportAsync(second);
+        ProjectId projectId = new(id);
+        ProjectSnapshotRead original = await receiver.Snapshots.ReadAsync(projectId);
+        await receiver.Snapshots.ApplyAsync(original.Snapshot! with
+        {
+            Project = original.Snapshot.Project with { Name = "Local work" }
+        }, original.Revision);
+        ProjectSnapshotRead read = await publisher.Snapshots.ReadAsync(projectId);
+        await publisher.Snapshots.ApplyAsync(read.Snapshot! with
+        {
+            Project = read.Snapshot.Project with
+            {
+                LifecycleState = "Recycled",
+                RecycledAtUtc = read.Snapshot.Project.UpdatedAtUtc.AddDays(1)
+            }
+        }, read.Revision);
+        await publish.PurgeLinkedProjectAsync(projectId);
+        await publish.SyncNowAsync(projectId);
+
+        ProjectSyncLink kept = await receive.SyncNowAsync(projectId);
+        Assert.Equal("RemoteDeletedLocalKept", kept.SyncStatus);
+        Assert.Equal("Local work", (await receiver.Snapshots.ReadAsync(projectId)).Snapshot!.Project.Name);
+        Assert.Contains("deleted", kept.LastResult, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TombstoneCodecRejectsInvalidDocumentsAndPreservesCanonicalBytes()
+    {
+        ProjectSnapshotJsonCodec codec = new();
+        ProjectTombstone tombstone = new(1, Guid.NewGuid(), new string('a', 64),
+            new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        ProjectSnapshotPackage encoded = codec.EncodeTombstone(tombstone);
+        Assert.True(codec.TryDecodeTombstone(encoded.Files, out ProjectTombstone? decoded));
+        Assert.Equal(tombstone, decoded);
+        Assert.Equal(encoded.Sha256, codec.EncodeTombstone(decoded!).Sha256);
+        Dictionary<string, byte[]> invalid = encoded.Files.ToDictionary(pair => pair.Key, pair => pair.Value);
+        invalid[".entitytracker/project.json"] = [];
+        Assert.Throws<InvalidDataException>(() => codec.TryDecodeTombstone(invalid, out _));
+        Assert.Throws<InvalidDataException>(() => codec.EncodeTombstone(tombstone with
+        {
+            FormatVersion = 2
+        }));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StaleSqliteRevisionOrRemoteHeadInvalidatesMergeReview(bool advanceRemote)
+    {
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        string first = workspace.CreateRemoteCheckout("first", Snapshot(id, "Project"));
+        string second = workspace.Clone("second");
+        await using TestCatalog left = await TestCatalog.CreateAsync(workspace, "left");
+        await using TestCatalog right = await TestCatalog.CreateAsync(workspace, "right");
+        ProjectGitSyncService leftSync = left.Sync(first);
+        await leftSync.ImportAsync(first);
+        await right.Sync(second).ImportAsync(second);
+        ProjectId projectId = new(id);
+        ProjectSnapshotRead leftRead = await left.Snapshots.ReadAsync(projectId);
+        SnapshotTracker lt = leftRead.Snapshot!.Trackers[0];
+        await left.Snapshots.ApplyAsync(leftRead.Snapshot with
+        {
+            Trackers = [lt with { Entities = lt.Entities.Select(e =>
+                e with { Notes = "Remote note" }).ToArray() }, leftRead.Snapshot.Trackers[1]]
+        }, leftRead.Revision);
+        await leftSync.SyncNowAsync(projectId);
+        ProjectSnapshotRead rightRead = await right.Snapshots.ReadAsync(projectId);
+        SnapshotTracker rt = rightRead.Snapshot!.Trackers[0];
+        await right.Snapshots.ApplyAsync(rightRead.Snapshot with
+        {
+            Trackers = [rt with { Entities = rt.Entities.Select(e =>
+                e with { Notes = "Local note" }).ToArray() }, rightRead.Snapshot.Trackers[1]]
+        }, rightRead.Revision);
+        string originalHead = workspace.Git(second, "rev-parse", "HEAD");
+        IProjectMergeReview review = new MutatingReview(async () =>
+        {
+            if (advanceRemote)
+            {
+                workspace.Git(first, "commit", "--allow-empty", "-m", "Advance during review");
+                workspace.Git(first, "push", "origin", "main");
+            }
+            else
+            {
+                ProjectSnapshotRead changed = await right.Snapshots.ReadAsync(projectId);
+                await right.Snapshots.ApplyAsync(changed.Snapshot! with
+                {
+                    Project = changed.Snapshot.Project with { Name = "Changed during review" }
+                }, changed.Revision);
+            }
+        });
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            right.Sync(second, review: review).SyncNowAsync(projectId));
+        Assert.Equal(originalHead, workspace.Git(second, "rev-parse", "HEAD"));
+        Assert.Equal("Local note", (await right.Snapshots.ReadAsync(projectId))
+            .Snapshot!.Trackers[0].Entities[0].Notes);
+    }
+
+    [Fact]
+    public async Task ProjectDeletionApprovalIsBoundToExactProjectRevision()
+    {
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        string checkout = workspace.CreateRemoteCheckout("first", Snapshot(id, "Project"));
+        await using TestCatalog catalog = await TestCatalog.CreateAsync(workspace, "catalog");
+        await catalog.Sync(checkout).ImportAsync(checkout);
+        ProjectId projectId = new(id);
+        ProjectSnapshotRead read = await catalog.Snapshots.ReadAsync(projectId);
+        await catalog.Snapshots.ApplyAsync(read.Snapshot! with
+        {
+            Project = read.Snapshot.Project with
+            {
+                LifecycleState = "Recycled",
+                RecycledAtUtc = read.Snapshot.Project.UpdatedAtUtc.AddDays(1)
+            }
+        }, read.Revision);
+        IOutboundDeletionApproval approval = new MutatingApproval(async () =>
+        {
+            ProjectSnapshotRead changed = await catalog.Snapshots.ReadAsync(projectId);
+            await catalog.Snapshots.ApplyAsync(changed.Snapshot! with
+            {
+                Project = changed.Snapshot.Project with { Name = "Changed after approval" }
+            }, changed.Revision);
+        });
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            catalog.Sync(checkout, approval: approval).PurgeLinkedProjectAsync(projectId));
+        Assert.Equal("Changed after approval",
+            (await catalog.Snapshots.ReadAsync(projectId)).Snapshot!.Project.Name);
+        Assert.Empty(await catalog.Sync(checkout).ListPendingDeletionsAsync());
+    }
     [Theory]
     [InlineData("clone", "https://example.invalid/repo.git")]
     [InlineData("init", "--bare")]
@@ -144,6 +655,9 @@ public sealed class ExistingCheckoutRemoteSyncTests
         await using TestCatalog catalog = await TestCatalog.CreateAsync(workspace, "catalog");
         ProjectGitSyncService sync = catalog.Sync(first);
         await sync.ImportAsync(first);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            catalog.Sync(differing, review: new ChooseRemoteReview()).ImportAsync(differing));
+        Assert.Equal("Project", (await catalog.Snapshots.ReadAsync(new ProjectId(id))).Snapshot!.Project.Name);
         await sync.UnlinkAsync(new ProjectId(id));
         ProjectSyncLink linked = await sync.ImportAsync(identical);
         Assert.Equal(id, linked.ProjectId);
@@ -251,7 +765,7 @@ public sealed class ExistingCheckoutRemoteSyncTests
     }
 
     [Fact]
-    public async Task PushRaceKeepsLocalCommitPendingForReview()
+    public async Task PushRaceFetchesAndMergesAdvancedUpstream()
     {
         using GitWorkspace workspace = new();
         Guid id = Guid.NewGuid();
@@ -271,12 +785,14 @@ public sealed class ExistingCheckoutRemoteSyncTests
             workspace.Git(other, "push", "origin", "main");
         });
         ProjectGitSyncService sync = catalog.Sync(first, transport);
-        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => sync.SyncNowAsync(projectId));
-        Assert.Contains("GS-04", error.Message);
-        Assert.Equal("PendingPush", (await sync.GetLinkAsync(projectId))!.SyncStatus);
+        ProjectSyncLink result = await sync.SyncNowAsync(projectId);
+        Assert.Equal("Current", result.SyncStatus);
         Assert.Equal("Local edit", (await catalog.Snapshots.ReadAsync(projectId)).Snapshot!.Project.Name);
-        Assert.NotEqual(workspace.Git(first, "rev-parse", "HEAD"), workspace.Git(other, "rev-parse", "HEAD"));
+        Assert.Equal(workspace.Git(first, "rev-parse", "HEAD"),
+            workspace.Git(workspace.Root, "--git-dir", Path.Combine(workspace.Root, "remote.git"),
+                "rev-parse", "refs/heads/main"));
+        Assert.Equal(2, workspace.Git(first, "show", "-s", "--format=%P", "HEAD")
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries).Length);
     }
 
     [Fact]
@@ -477,10 +993,12 @@ public sealed class ExistingCheckoutRemoteSyncTests
         public SqliteBackupService Backup() => new(_database, BackupDirectory);
 
         public ProjectGitSyncService Sync(string checkout, ILocalGitTransport? transport = null,
-            IProjectSyncBackup? backup = null, IProjectSyncLinkStore? linkStore = null) => new(
+            IProjectSyncBackup? backup = null, IProjectSyncLinkStore? linkStore = null,
+            IProjectMergeReview? review = null, IOutboundDeletionApproval? approval = null,
+            IProjectUnsavedEditsGate? editGate = null) => new(
             linkStore ?? _links, transport ?? new SystemGitTransport(), Snapshots,
-            new ProjectSnapshotJsonCodec(), new ApproveDeletions(), Projects,
-            backup ?? Backup());
+            new ProjectSnapshotJsonCodec(), approval ?? new ApproveDeletions(), Projects,
+            backup ?? Backup(), review, editGate);
 
         public ValueTask DisposeAsync()
         {
@@ -495,6 +1013,68 @@ public sealed class ExistingCheckoutRemoteSyncTests
             Task.FromResult(true);
     }
 
+    private sealed class RecordingApproval : IOutboundDeletionApproval
+    {
+        public List<IReadOnlyList<string>> Calls { get; } = [];
+        public Task<bool> ApproveAsync(IReadOnlyList<string> deletedObjects,
+            CancellationToken cancellationToken = default)
+        {
+            Calls.Add(deletedObjects.ToArray());
+            return Task.FromResult(true);
+        }
+    }
+
+    private sealed class BlockingEditGate : IProjectUnsavedEditsGate
+    {
+        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task Entered => _entered.Task;
+        public Task WaitUntilReadyAsync(ProjectId projectId,
+            CancellationToken cancellationToken = default)
+        {
+            _entered.TrySetResult();
+            return _release.Task.WaitAsync(cancellationToken);
+        }
+        public void Release() => _release.TrySetResult();
+    }
+
+    private sealed class ChooseRemoteReview : IProjectMergeReview
+    {
+        public Task<IReadOnlyDictionary<string, MergeSide>?> ReviewAsync(
+            IReadOnlyList<ProjectMergeConflict> conflicts, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, MergeSide>?>(
+                conflicts.ToDictionary(c => c.Path, _ => MergeSide.Remote));
+    }
+
+    private sealed class ChooseLocalReview : IProjectMergeReview
+    {
+        public Task<IReadOnlyDictionary<string, MergeSide>?> ReviewAsync(
+            IReadOnlyList<ProjectMergeConflict> conflicts, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, MergeSide>?>(
+                conflicts.ToDictionary(c => c.Path, _ => MergeSide.Local));
+    }
+
+    private sealed class MutatingReview(Func<Task> mutate) : IProjectMergeReview
+    {
+        public async Task<IReadOnlyDictionary<string, MergeSide>?> ReviewAsync(
+            IReadOnlyList<ProjectMergeConflict> conflicts, CancellationToken cancellationToken = default)
+        {
+            await mutate();
+            return conflicts.ToDictionary(c => c.Path, _ => MergeSide.Remote);
+        }
+    }
+
+    private sealed class MutatingApproval(Func<Task> mutate) : IOutboundDeletionApproval
+    {
+        public async Task<bool> ApproveAsync(IReadOnlyList<string> deletedObjects,
+            CancellationToken cancellationToken = default)
+        {
+            Assert.Contains(deletedObjects, name => name.StartsWith("Project ", StringComparison.Ordinal));
+            await mutate();
+            return true;
+        }
+    }
+
     private sealed class RacyBackup(SqliteBackupService backup, SqliteProjectSnapshotStore snapshots,
         ProjectSnapshot competing) : IProjectSyncBackup
     {
@@ -502,6 +1082,22 @@ public sealed class ExistingCheckoutRemoteSyncTests
         {
             string path = await backup.CreatePreApplyBackupAsync(cancellationToken);
             await snapshots.ApplyAsync(competing, 0, cancellationToken);
+            return path;
+        }
+    }
+
+    private sealed class RevisionChangingBackup(SqliteBackupService backup,
+        SqliteProjectSnapshotStore snapshots, ProjectId projectId) : IProjectSyncBackup
+    {
+        public async Task<string> CreatePreApplyBackupAsync(
+            CancellationToken cancellationToken = default)
+        {
+            string path = await backup.CreatePreApplyBackupAsync(cancellationToken);
+            ProjectSnapshotRead current = await snapshots.ReadAsync(projectId, cancellationToken);
+            await snapshots.ApplyAsync(current.Snapshot! with
+            {
+                Project = current.Snapshot.Project with { Name = "Competing edit" }
+            }, current.Revision, cancellationToken);
             return path;
         }
     }
@@ -550,6 +1146,20 @@ public sealed class ExistingCheckoutRemoteSyncTests
         public Task FastForwardAsync(string path, string expectedHead, string remoteHead,
             CancellationToken cancellationToken = default) =>
             _inner.FastForwardAsync(path, expectedHead, remoteHead, cancellationToken);
+        public Task<string?> MergeBaseAsync(string path, string localHead, string remoteHead,
+            CancellationToken cancellationToken = default) =>
+            _inner.MergeBaseAsync(path, localHead, remoteHead, cancellationToken);
+        public Task<IReadOnlyDictionary<string, byte[]>> ReadSnapshotAtCommitAsync(
+            string path, string commit, CancellationToken cancellationToken = default) =>
+            _inner.ReadSnapshotAtCommitAsync(path, commit, cancellationToken);
+        public Task ValidateMergeScopeAsync(string path, string localHead, string remoteHead,
+            CancellationToken cancellationToken = default) =>
+            _inner.ValidateMergeScopeAsync(path, localHead, remoteHead, cancellationToken);
+        public Task<string> CommitMergeSnapshotAsync(string path, string localHead,
+            string remoteHead, IReadOnlyDictionary<string, byte[]> oldFiles,
+            ProjectSnapshotPackage package, CancellationToken cancellationToken = default) =>
+            _inner.CommitMergeSnapshotAsync(path, localHead, remoteHead, oldFiles,
+                package, cancellationToken);
         public async Task PushAsync(string path, CancellationToken cancellationToken = default)
         {
             if (!_raced)
@@ -565,6 +1175,26 @@ public sealed class ExistingCheckoutRemoteSyncTests
             }
             await _inner.PushAsync(path, cancellationToken);
         }
+    }
+
+    private sealed class FailFastForwardTransport : ILocalGitTransport
+    {
+        private readonly SystemGitTransport _inner = new();
+        public Task<IAsyncDisposable> LockAsync(string path, CancellationToken cancellationToken = default) =>
+            _inner.LockAsync(path, cancellationToken);
+        public Task<GitWorkingTreeState> InspectAsync(string path, CancellationToken cancellationToken = default) =>
+            _inner.InspectAsync(path, cancellationToken);
+        public Task<string> CommitSnapshotAsync(string path, IReadOnlyDictionary<string, byte[]> oldFiles,
+            ProjectSnapshotPackage package, CancellationToken cancellationToken = default) =>
+            _inner.CommitSnapshotAsync(path, oldFiles, package, cancellationToken);
+        public Task<GitRemoteState> FetchAsync(string path, CancellationToken cancellationToken = default) =>
+            _inner.FetchAsync(path, cancellationToken);
+        public Task<bool> IsAncestorAsync(string path, string ancestor, string descendant,
+            CancellationToken cancellationToken = default) =>
+            _inner.IsAncestorAsync(path, ancestor, descendant, cancellationToken);
+        public Task FastForwardAsync(string path, string expectedHead, string remoteHead,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Simulated checkout update failure.");
     }
 
     private sealed class GitWorkspace : IDisposable

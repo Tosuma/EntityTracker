@@ -35,9 +35,15 @@ public partial class PortfolioView : UserControl
     private async void OnOpenRecycleBins(object sender, RoutedEventArgs e) =>
         await Shell.Catalog.OpenRecycleBinAsync();
 
+    private async void OnPublishDeletion(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: ProjectSyncLink link })
+            await Shell.PublishPendingDeletionAsync(link);
+    }
+
     private async void OnOpenProject(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is ProjectPortfolioSummary item)
+        if (sender is FrameworkElement { DataContext: ProjectPortfolioSummary item })
         {
             await Shell.OpenProjectAsync(item.ProjectId);
         }
@@ -45,7 +51,7 @@ public partial class PortfolioView : UserControl
 
     private void OnRenameProject(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is ProjectPortfolioSummary item &&
+        if (sender is FrameworkElement { DataContext: ProjectPortfolioSummary item } &&
             Shell.Projects.FirstOrDefault(project => project.Id == item.ProjectId) is Project project)
         {
             Shell.Catalog.OpenRenameProject(project);
@@ -54,7 +60,7 @@ public partial class PortfolioView : UserControl
 
     private void OnRecycleProject(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is ProjectPortfolioSummary item &&
+        if (sender is FrameworkElement { DataContext: ProjectPortfolioSummary item } &&
             Shell.Projects.FirstOrDefault(project => project.Id == item.ProjectId) is Project project)
         {
             Shell.Catalog.RequestRecycle(project);

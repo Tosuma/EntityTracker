@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using EntityTracker.Application.Snapshots;
+using EntityTracker.Application.GitSync;
 
 namespace EntityTracker.Infrastructure.Snapshots;
 
@@ -105,6 +106,45 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                 throw new InvalidDataException("A snapshot path is invalid.");
         }
         return snapshot;
+    }
+
+    public ProjectSnapshotPackage EncodeTombstone(ProjectTombstone tombstone)
+    {
+        ValidateTombstone(tombstone);
+        SortedDictionary<string, byte[]> files = new(StringComparer.Ordinal)
+        {
+            [Root + "manifest.json"] = JsonSerializer.SerializeToUtf8Bytes(
+                new Manifest(tombstone.FormatVersion, tombstone.ProjectId), JsonOptions),
+            [Root + "deleted-project.json"] = JsonSerializer.SerializeToUtf8Bytes(tombstone, JsonOptions)
+        };
+        return new ProjectSnapshotPackage(files, Hash(files));
+    }
+
+    public bool TryDecodeTombstone(IReadOnlyDictionary<string, byte[]> files,
+        out ProjectTombstone? tombstone)
+    {
+        tombstone = null;
+        if (!files.ContainsKey(Root + "deleted-project.json")) return false;
+        if (files.Count != 2 || files.Keys.Any(p => p is not
+            (Root + "manifest.json" or Root + "deleted-project.json")))
+            throw new InvalidDataException("A Project tombstone contains unexpected documents.");
+        Manifest manifest = Read<Manifest>(files, Root + "manifest.json");
+        ProjectTombstone candidate = Read<ProjectTombstone>(files, Root + "deleted-project.json");
+        ValidateTombstone(candidate);
+        if (manifest.FormatVersion != candidate.FormatVersion ||
+            manifest.ProjectId != candidate.ProjectId)
+            throw new InvalidDataException("The Project tombstone does not match its manifest.");
+        tombstone = candidate;
+        return true;
+    }
+
+    private static void ValidateTombstone(ProjectTombstone tombstone)
+    {
+        if (tombstone.FormatVersion != ProjectSnapshot.CurrentFormatVersion ||
+            tombstone.ProjectId == Guid.Empty || tombstone.DeletedAtUtc.Offset != TimeSpan.Zero ||
+            tombstone.BaseSnapshotHash.Length != 64 ||
+            !tombstone.BaseSnapshotHash.All(Uri.IsHexDigit))
+            throw new InvalidDataException("The Project tombstone is invalid or unsupported.");
     }
 
     private static T Read<T>(IReadOnlyDictionary<string, byte[]> files, string path)
