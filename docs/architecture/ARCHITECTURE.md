@@ -493,5 +493,9 @@ context survive; the next settings save writes version 4 without retired provide
 Backend-neutral collaborative conflict value types are currently inactive historical seams, as
 described in [COLLABORATIVE_STORAGE.md](COLLABORATIVE_STORAGE.md).
 
+The [GS milestone roadmap](../milestones/git-sync/00_README.md) documents future Project-level
+Git synchronization through user-managed existing working trees. It does not change the current
+SQLite-only architecture or authorize implementation outside an approved GS milestone.
+
 Local backup, logging, retention, and restore procedures are defined in
 [RECOVERY.md](../operations/RECOVERY.md).

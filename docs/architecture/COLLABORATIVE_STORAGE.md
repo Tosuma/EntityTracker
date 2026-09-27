@@ -28,9 +28,12 @@ and `CollaborativeConflictSet` value types from the retired provider investigati
 backend produces them and no conflict-review UI consumes them. They are inactive historical seams,
 not a commitment to a particular provider or synchronization model.
 
-## Future work
+## Planned Git-sync work
 
-Any collaborative provider or Git synchronization requires a separately approved product
-milestone covering authority, data format, authentication, concurrency, merge behavior, offline
-behavior, recovery, migration, and user-visible conflict handling. It must preserve the inward
-dependency direction and must not be inferred from the inactive conflict value types.
+The [GS-01–GS-05 roadmap](../milestones/git-sync/00_README.md) now specifies a future Project-level
+Git synchronization series, including snapshot format, user-managed repository setup, concurrency,
+merge, deletion, recovery, and conflict review. Users would clone or initialize and configure
+repositories outside EntityTracker, then select an existing working tree. These are planned
+milestones, not active application behavior. Each requires separate implementation and verification.
+The roadmap preserves SQLite as the only runtime store and the inward dependency direction; it
+does not infer an implementation from the inactive conflict value types above.
