@@ -29,7 +29,8 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
         PortfolioQueryService queryService,
         ProjectEntityComparisonQueryService comparisonService,
         AggregateProgressReportingService reportingService,
-        ProgressChartPresentationBuilder presentationBuilder)
+        ProgressChartPresentationBuilder presentationBuilder,
+        ProjectRepositoryCardViewModel? repositoryCard = null)
     {
         ArgumentNullException.ThrowIfNull(projectId);
         ArgumentNullException.ThrowIfNull(queryService);
@@ -37,6 +38,7 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
         ProjectId = projectId;
         _queryService = queryService;
         _comparisonService = comparisonService;
+        RepositoryCard = repositoryCard;
         _selectCategoryCommand = new AsyncCommand<ProjectComparisonCategory>(
             SelectCategoryAsync,
             category => GetCategoryCount(category) > 0);
@@ -54,6 +56,8 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public ProjectId ProjectId { get; }
+
+    public ProjectRepositoryCardViewModel? RepositoryCard { get; }
 
     public AggregateProgressDashboardViewModel Progress { get; }
 
@@ -202,7 +206,8 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
                 _queryService.GetProjectAsync(ProjectId, cancellationToken);
             Task progressTask = Progress.LoadAsync(cancellationToken);
             Task comparisonTask = LoadComparisonAsync(cancellationToken);
-            await Task.WhenAll(dashboardTask, progressTask, comparisonTask);
+            Task repositoryTask = RepositoryCard?.RefreshAsync(cancellationToken) ?? Task.CompletedTask;
+            await Task.WhenAll(dashboardTask, progressTask, comparisonTask, repositoryTask);
             Dashboard = await dashboardTask;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

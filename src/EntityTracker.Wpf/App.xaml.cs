@@ -14,10 +14,12 @@ using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Application.Workflow;
+using EntityTracker.Application.GitSync;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Infrastructure.Importing;
 using EntityTracker.Infrastructure.Persistence;
+using EntityTracker.Infrastructure.GitSync;
 using EntityTracker.Reporting;
 using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels;
@@ -116,6 +118,13 @@ public partial class App : System.Windows.Application
             services.AddSingleton<ICsvFilePicker, CsvFilePicker>();
             services.AddSingleton<TrackerWorkspaceViewModelFactory>();
             services.AddSingleton<DashboardViewModelFactory>();
+            services.AddSingleton<IProjectSyncLinkStore>(new JsonProjectSyncLinkStore(
+                System.IO.Path.Combine(dataPaths.RootDirectory, "git-sync-links.v1.json")));
+            services.AddSingleton<ILocalGitTransport, SystemGitTransport>();
+            services.AddSingleton<IOutboundDeletionApproval, WpfOutboundDeletionApproval>();
+            services.AddSingleton<IProjectRepositoryFolderPicker, ProjectRepositoryFolderPicker>();
+            services.AddSingleton<ProjectGitSyncService>();
+            services.AddSingleton<ProjectRepositoryCardViewModelFactory>();
             services.AddSingleton<CatalogManagementViewModel>();
             services.AddSingleton<ShellViewModel>();
 

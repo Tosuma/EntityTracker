@@ -1,13 +1,13 @@
 # GS roadmap — Project Git synchronization
 
-**Status: GS-01 completed; GS-02–GS-05 planned.** Portable Project snapshots are available through the application and infrastructure boundary. No Git synchronization feature is currently available.
+**Status: GS-01–GS-02 completed; GS-03–GS-05 planned.** Portable Project snapshots and manual local repository linking are available. Remote synchronization and conflict review remain planned.
 
 The GS series adds full-fidelity Project collaboration through one user-managed, dedicated Git working tree per Project. SQLite remains the application's only runtime store: editing, reporting, navigation, and queries use SQLite. Git work runs asynchronously, outside interactive save and read paths. The completed [product](../product/00_README.md) and [UX](../ux/00_README.md) series provide the existing Project/Tracker foundation; the planned [product feedback](../product-feedback/00_README.md) series adds fields that snapshots must preserve when those fields exist.
 
 ## Execution order
 
 1. [GS-01 — Portable Project Snapshot](gs_01_portable_project_snapshot.md) — completed: stable history identity, complete snapshot, validation, revision-aware SQLite application.
-2. [GS-02 — Existing Local Repository Linking](gs_02_local_git_linking.md): select and link an existing clean working tree; commit locally by manual sync.
+2. [GS-02 — Existing Local Repository Linking](gs_02_local_git_linking.md) — completed: select and link an existing clean working tree; commit locally by manual sync.
 3. [GS-03 — Existing Checkout Import and Remote Sync](gs_03_existing_checkout_remote_sync.md): import from an externally cloned checkout; fetch and push non-divergent branches.
 4. [GS-04 — Collaborative Merge and Conflict Review](gs_04_collaborative_merge.md): reconcile divergence, review conflicts, and publish or consume Project tombstones.
 5. [GS-05 — Automatic Sync and Hardening](gs_05_automatic_sync_and_hardening.md): background scheduling, status, recovery, and defensive limits.

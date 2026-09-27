@@ -1,6 +1,6 @@
 # GS-02 — Existing Local Repository Linking
 
-**Status: planned.** GS-01 must be complete and verified before this milestone begins.
+**Status: completed.** GS-01 was verified before implementation. The full solution builds and its regression suite passes.
 
 ## Goal and user-facing outcome
 
@@ -30,6 +30,12 @@ Application owns `IProjectSyncLinkStore`, sync-link state and result models, and
 - Verify the adapter cannot issue clone, init, remote-add, branch-checkout, reset, stash, or force-push commands.
 - Verify differing or invalid snapshots and unapproved outbound deletions stop without changing SQLite or overwriting the repository.
 - Build the complete solution and run its regression suite.
+
+## Completion record
+
+GS-02 adds Project dashboard controls for linking an existing clean repository, manual local snapshot commits, and unlinking. Link state is stored in `%LOCALAPPDATA%\EntityTracker\git-sync-links.v1.json`, separately from SQLite and the older `repositories.json` file. The system Git adapter enforces a command allowlist, timeouts, bounded output, noninteractive execution, and a per-folder lock. It records branch and upstream identity but does not fetch or push. A repository with a differing or invalid snapshot is rejected; permanent outbound deletions require approval bound to a rechecked Project revision and repository state. SQLite editing and reporting do not invoke Git.
+
+Temporary-repository tests cover clean and dirty linking, identity, unsupported paths, duplicate association, changed branch, identical and differing snapshots, invalid data, local-only and idempotent commits, stage scope, unlink, deletion rejection, and a stalled Git inspection concurrent with SQLite reading. `dotnet build EntityTracker.slnx --no-restore` and `dotnet test EntityTracker.slnx --no-restore --no-build` passed on 2026-09-27 (538 tests).
 
 ## Agent planning prompt
 

@@ -200,6 +200,31 @@
                 <TextBlock AutomationProperties.LiveSetting="Polite" Text="Loading Project dashboard…" />
             </Border>
 
+            <Border Margin="0,0,0,18" Padding="16" Style="{StaticResource EntityTrackerCardStyle}"
+                    DataContext="{Binding ProjectReporting.RepositoryCard}">
+                <StackPanel>
+                    <TextBlock FontSize="20" FontWeight="SemiBold" Text="Git repository" />
+                    <TextBlock Margin="0,5,0,0" Text="{Binding RepositoryPath}" TextWrapping="Wrap" />
+                    <TextBlock Margin="0,4,0,0" Text="{Binding Branch}" />
+                    <TextBlock Margin="0,4,0,0" Text="{Binding Upstream}" />
+                    <TextBlock Margin="0,6,0,0" Text="{Binding LastResult}" TextWrapping="Wrap" />
+                    <TextBlock Margin="0,4,0,0" Text="{Binding PendingAction}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Brush.Text.Secondary}" />
+                    <TextBlock Margin="0,6,0,0" Text="{Binding Message}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Brush.Status.ReworkNeeded}"
+                               AutomationProperties.LiveSetting="Assertive" />
+                    <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
+                        <Button Margin="0,0,8,0" Content="Link repository" Command="{Binding LinkCommand}"
+                                AutomationProperties.Name="Link existing Git repository" />
+                        <Button Margin="0,0,8,0" Content="Sync now" Command="{Binding SyncCommand}"
+                                AutomationProperties.Name="Commit Project snapshot now"
+                                Style="{StaticResource PrimaryButtonStyle}" />
+                        <Button Content="Unlink" Command="{Binding UnlinkCommand}"
+                                AutomationProperties.Name="Unlink Git repository" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
             <TextBlock Margin="0,0,0,10" FontSize="20" FontWeight="SemiBold" Text="Trackers" />
             <Border Margin="0,0,0,16" Padding="20">
                 <Border.Style>

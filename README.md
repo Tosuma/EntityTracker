@@ -218,10 +218,13 @@ column filtering with status-order sorting without extending the numbered roadma
 CI validation for pull requests and pushes to `main` and packaging for successful `main` builds.
 The live badge above reports the current `main` build status.
 
-The [GS-01–GS-05 Git-sync roadmap](docs/milestones/git-sync/00_README.md) is documentation for a
-future capability. It specifies user-managed Git working trees: users clone or initialize and
-configure repositories outside EntityTracker before selecting a local directory. None of the GS
-milestones has been implemented.
+The [GS-01–GS-05 Git-sync roadmap](docs/milestones/git-sync/00_README.md) starts with portable
+Project snapshots and manual local commits. Prepare an existing Git repository and configure its
+branch and commit identity outside EntityTracker. In the Project dashboard, choose **Link repository**
+and select its root folder, then choose **Sync now** to commit the Project snapshot. The repository
+must be clean and dedicated to the Project. A repository without an upstream works locally. **Unlink**
+removes only the local association. Remote fetch, push, import, and conflict review are planned for
+later milestones.
 
 See the [milestone status](docs/milestones/milestone_status.md) and complete
 [roadmap](docs/milestones/00_README.md) for details.
@@ -244,7 +247,8 @@ Domain model
 Business rules do not depend on WPF or infrastructure technologies. Read the
 [architecture rules](docs/architecture/ARCHITECTURE.md) and
 [collaborative storage status](docs/architecture/COLLABORATIVE_STORAGE.md) for the current storage
-boundary. The planned Project-level Git synchronization is not exposed by this release.
+boundary. Git is used only for explicit Project dashboard link and sync actions; SQLite remains the
+runtime store for editing, reporting, and navigation.
 
 ## Getting started
 

@@ -209,6 +209,7 @@ The active files and directories are:
 
 ```text
 entity-tracker.db    SQLite database
+git-sync-links.v1.json  local Project-to-repository associations (when used)
 settings.json        optional local appearance and last active Project/Tracker context
 backups\             automatic SQLite backups
 logs\                daily application logs

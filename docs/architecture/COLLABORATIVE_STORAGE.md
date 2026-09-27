@@ -5,7 +5,8 @@
 EntityTracker uses SQLite as its only persistence provider. UX-08 retired the unused SharePoint
 configuration model, provider selector, and associated application composition branch. The
 application does not authenticate with, read from, write to, or synchronize with any remote
-service, and the shell exposes no remote connection or Sync control.
+service. GS-02 adds manual local Git repository linking and snapshot commits from the Project
+dashboard; ordinary SQLite operations do not invoke Git.
 
 Settings versions 1–3 may contain retired `activeStorage` and `sharePoint` fields. They remain
 readable only for a safe migration of supported appearance and active Project/Tracker context.
@@ -28,12 +29,11 @@ and `CollaborativeConflictSet` value types from the retired provider investigati
 backend produces them and no conflict-review UI consumes them. They are inactive historical seams,
 not a commitment to a particular provider or synchronization model.
 
-## Planned Git-sync work
+## Git-sync status
 
-The [GS-01–GS-05 roadmap](../milestones/git-sync/00_README.md) now specifies a future Project-level
-Git synchronization series, including snapshot format, user-managed repository setup, concurrency,
-merge, deletion, recovery, and conflict review. Users would clone or initialize and configure
-repositories outside EntityTracker, then select an existing working tree. These are planned
-milestones, not active application behavior. Each requires separate implementation and verification.
-The roadmap preserves SQLite as the only runtime store and the inward dependency direction; it
-does not infer an implementation from the inactive conflict value types above.
+The [GS-01–GS-05 roadmap](../milestones/git-sync/00_README.md) records GS-01 portable snapshots
+and GS-02 local repository linking as completed. Users prepare and configure repositories outside
+EntityTracker, then select an existing clean working tree. The local association is stored outside
+SQLite so a later deletion tombstone can survive Project purge. Remote fetch and push, import,
+merge, recovery, and conflict review remain planned. SQLite stays the runtime store and the inward
+dependency direction remains intact.
