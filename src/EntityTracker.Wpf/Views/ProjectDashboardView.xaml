@@ -205,13 +205,17 @@
                 <StackPanel>
                     <TextBlock FontSize="20" FontWeight="SemiBold" Text="Git repository" />
                     <TextBlock Margin="0,5,0,0" Text="{Binding RepositoryPath}" TextWrapping="Wrap" />
-                    <TextBlock Margin="0,4,0,0" Text="{Binding Branch}" />
-                    <TextBlock Margin="0,4,0,0" Text="{Binding Upstream}" />
+                    <TextBlock Margin="0,4,0,0" Text="{Binding Branch}"
+                               Visibility="{Binding IsLinked, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <TextBlock Margin="0,4,0,0" Text="{Binding Upstream}"
+                               Visibility="{Binding IsLinked, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <TextBlock Margin="0,6,0,0" Text="{Binding LastResult}" TextWrapping="Wrap" />
                     <TextBlock Margin="0,4,0,0" Text="{Binding PendingAction}" TextWrapping="Wrap"
-                               Foreground="{DynamicResource Brush.Text.Secondary}" />
+                               Foreground="{DynamicResource Brush.Text.Secondary}"
+                               Visibility="{Binding HasPendingAction, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <TextBlock Margin="0,6,0,0" Text="{Binding Message}" TextWrapping="Wrap"
-                               Foreground="{DynamicResource Brush.Status.ReworkNeeded}"
+                               Foreground="{DynamicResource Brush.Text.Primary}"
+                               Visibility="{Binding HasMessage, Converter={StaticResource BooleanToVisibilityConverter}}"
                                AutomationProperties.LiveSetting="Assertive" />
                     <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
                         <Button Margin="0,0,8,0" Content="Link repository" Command="{Binding LinkCommand}"

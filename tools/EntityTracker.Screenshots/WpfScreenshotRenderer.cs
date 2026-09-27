@@ -28,6 +28,23 @@ internal sealed class WpfScreenshotRenderer(MainWindow window, string outputDire
         Save(RenderVisual(Root, includePageBackground: true), Path.Combine(_outputDirectory, fileName));
     }
 
+    internal async Task CaptureWithTextOverrideAsync(
+        string fileName, string actualText, string screenshotText, int settleMilliseconds = 150)
+    {
+        TextBlock pathLabel = FindVisualDescendants<TextBlock>(Root)
+            .SingleOrDefault(label => label.Text == actualText)
+            ?? throw new InvalidOperationException("The repository path label was not rendered.");
+        pathLabel.SetCurrentValue(TextBlock.TextProperty, screenshotText);
+        try
+        {
+            await CaptureAsync(fileName, settleMilliseconds);
+        }
+        finally
+        {
+            pathLabel.SetCurrentValue(TextBlock.TextProperty, actualText);
+        }
+    }
+
     internal async Task CaptureGraphIssueAsync(string fileName)
     {
         await SettleAsync();

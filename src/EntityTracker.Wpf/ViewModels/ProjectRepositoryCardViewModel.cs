@@ -44,6 +44,8 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
     public string LastResult => _link?.LastResult ?? "Select an existing clean repository to link this Project.";
     public string PendingAction => _link?.SyncStatus == "Pending" ? "Sync now to create the initial snapshot commit." : string.Empty;
     public string? Message => _message;
+    public bool HasPendingAction => !string.IsNullOrEmpty(PendingAction);
+    public bool HasMessage => !string.IsNullOrWhiteSpace(Message);
 
     public async Task RefreshAsync(CancellationToken token = default)
     {
@@ -87,7 +89,8 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
     private void Notify()
     {
         foreach (string name in new[] { nameof(IsLinked), nameof(IsBusy), nameof(RepositoryPath),
-                     nameof(Branch), nameof(Upstream), nameof(LastResult), nameof(PendingAction), nameof(Message) })
+                     nameof(Branch), nameof(Upstream), nameof(LastResult), nameof(PendingAction), nameof(Message),
+                     nameof(HasPendingAction), nameof(HasMessage) })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         _linkCommand.NotifyCanExecuteChanged();
         _syncCommand.NotifyCanExecuteChanged();

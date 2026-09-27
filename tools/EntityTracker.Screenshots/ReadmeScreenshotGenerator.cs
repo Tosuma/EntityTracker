@@ -9,6 +9,7 @@ using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Tracking;
+using EntityTracker.Application.GitSync;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Wpf;
@@ -84,6 +85,23 @@ internal sealed class ReadmeScreenshotGenerator
                 "The project dashboard did not finish loading.",
                 cancellationToken);
             await renderer.CaptureAsync("project-dashboard.png", settleMilliseconds: 900);
+            // Presentation fixture only. The real folder stays in the disposable workspace.
+            string repositoryFixturePath = Directory.CreateDirectory(
+                Path.Combine(workspace.RootDirectory, "example-repository")).FullName;
+            await provider.GetRequiredService<IProjectSyncLinkStore>().SaveAsync(new ProjectSyncLink(
+                project.Id.Value,
+                repositoryFixturePath,
+                "main",
+                null,
+                null,
+                0,
+                null,
+                "Linked; initial snapshot pending",
+                "Pending"), cancellationToken);
+            await shell.ProjectReporting!.RepositoryCard!.RefreshAsync(cancellationToken);
+            await renderer.CaptureWithTextOverrideAsync(
+                "project-git-repository.png", repositoryFixturePath,
+                @"C:\Projects\order-platform", settleMilliseconds: 900);
             await renderer.BringNamedElementIntoViewAndCaptureAsync(
                 "ComparisonGrid",
                 "project-comparison.png");

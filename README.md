@@ -106,6 +106,14 @@ for consistency.
   </tr>
 </table>
 
+### Commit a Project snapshot locally
+
+The Project dashboard shows its linked repository, checked-out branch, upstream status, and the
+last manual sync result. **Sync now** commits the Project snapshot to the existing working tree;
+unlinking leaves the repository and SQLite data in place.
+
+![Illustrative Project dashboard state with a local Git link and manual Sync now control](images/light/project-git-repository.png)
+
 ### Compare sibling Trackers
 
 The Project matrix aligns active entities by normalized source key. It starts with actionable

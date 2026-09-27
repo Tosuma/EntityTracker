@@ -12,9 +12,13 @@ using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Application.Workflow;
+using EntityTracker.Application.GitSync;
+using EntityTracker.Application.Snapshots;
 using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Infrastructure.Importing;
 using EntityTracker.Infrastructure.Persistence;
+using EntityTracker.Infrastructure.GitSync;
+using EntityTracker.Infrastructure.Snapshots;
 using EntityTracker.Reporting;
 using EntityTracker.Wpf;
 using EntityTracker.Wpf.Services;
@@ -70,6 +74,15 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<IProjectRepository, SqliteProjectRepository>();
         services.AddSingleton<ITrackerRepository, SqliteTrackerRepository>();
         services.AddSingleton<IProjectTrackerStore, SqliteProjectTrackerStore>();
+        services.AddSingleton<IProjectSnapshotStore, SqliteProjectSnapshotStore>();
+        services.AddSingleton<IProjectSnapshotCodec, ProjectSnapshotJsonCodec>();
+        services.AddSingleton<IProjectSyncLinkStore>(new JsonProjectSyncLinkStore(
+            Path.Combine(paths.RootDirectory, "git-sync-links.v1.json")));
+        services.AddSingleton<ILocalGitTransport, SystemGitTransport>();
+        services.AddSingleton<IOutboundDeletionApproval, ScreenshotOutboundDeletionApproval>();
+        services.AddSingleton<IProjectRepositoryFolderPicker, ScreenshotRepositoryFolderPicker>();
+        services.AddSingleton<ProjectGitSyncService>();
+        services.AddSingleton<ProjectRepositoryCardViewModelFactory>();
 
         services.AddSingleton<ISchemaImportParser, CsvSchemaImportParser>();
         services.AddSingleton<ISchemaImportFileParser, CsvSchemaImportFileParser>();
