@@ -44,7 +44,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private IReadOnlyList<ProjectSyncLink> _pendingProjectDeletions = [];
     private bool _isBusy;
     private string _busyMessage = string.Empty;
-    private string? _notificationMessage;
     private bool _showDefaultNamePrompt;
 
     public ShellViewModel(
@@ -61,7 +60,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         EntityTrackerSettings initialSettings,
         ILogger<ShellViewModel>? logger = null,
         ProjectGitSyncService? gitSync = null,
-        WpfProjectUnsavedEditsGate? syncEditGate = null)
+        WpfProjectUnsavedEditsGate? syncEditGate = null,
+        NotificationCenter? notifications = null)
     {
         _projectRepository = projectRepository;
         _trackerRepository = trackerRepository;
@@ -72,6 +72,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         _discardConfirmation = discardConfirmation;
         _gitSync = gitSync;
         _syncEditGate = syncEditGate;
+        Notifications = notifications ?? new NotificationCenter();
+        Notifications.NavigateToProjectAsync = OpenProjectAsync;
         _syncEditGate?.Attach(this);
         Catalog = catalogManagement;
         Appearance = appearance;
@@ -115,6 +117,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public CatalogManagementViewModel Catalog { get; }
 
     public AppearanceViewModel Appearance { get; }
+    public NotificationCenter Notifications { get; }
 
     public SqlQueryHelpViewModel Help { get; }
 
@@ -234,18 +237,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         private set => SetField(ref _busyMessage, value);
     }
 
-    public string? NotificationMessage
-    {
-        get => _notificationMessage;
-        private set
-        {
-            if (SetField(ref _notificationMessage, value))
-            {
-                OnPropertyChanged(nameof(HasNotification));
-            }
-        }
-    }
-
     public bool ShowDefaultNamePrompt
     {
         get => _showDefaultNamePrompt;
@@ -269,7 +260,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         CurrentWorkspace is not null && IsTrackerDestination(SelectedDestination);
     public bool HasPortfolioProjects => Portfolio?.Projects.Count > 0;
     public bool HasProjectTrackers => ProjectDashboard?.Trackers.Count > 0;
-    public bool HasNotification => !string.IsNullOrWhiteSpace(NotificationMessage);
     public string ProjectContextName => SelectedProject?.Name ?? "No project selected";
     public string TrackerContextName => SelectedTracker?.Name ?? "No tracker selected";
     public string ContextSummary => HasProject
@@ -406,21 +396,34 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         await ReloadCatalogAsync(CancellationToken.None);
         if (Projects.Any(project => project.Id.Value == link.ProjectId))
             await OpenProjectAsync(new ProjectId(link.ProjectId));
-        NotificationMessage = "Imported the existing Project checkout.";
+        Notifications.Show("Project imported", "Imported the existing Project checkout.",
+            NotificationKind.Success);
         return link;
     }
 
-    public async Task PublishPendingDeletionAsync(ProjectSyncLink link)
+    public Task PublishPendingDeletionAsync(ProjectSyncLink link) =>
+        PublishPendingDeletionAsync(link, null);
+
+    private async Task PublishPendingDeletionAsync(ProjectSyncLink link,
+        NotificationItem? existingNotice)
     {
         if (_gitSync is null) throw new InvalidOperationException("Project sync is unavailable.");
+        NotificationItem notice = existingNotice ?? Notifications.BeginProgress(
+            "Project deletion", "Checking the linked checkout…", new ProjectId(link.ProjectId));
+        if (existingNotice is not null) Notifications.Restart(notice, "Checking the linked checkout…");
+        IProgress<ProjectSyncPhase> progress = new ProjectSyncProgressReporter(phase =>
+            Notifications.Progress(notice, NotificationCenter.DescribeProjectSyncPhase(phase)));
         try
         {
-            await _gitSync.SyncNowAsync(new ProjectId(link.ProjectId));
-            NotificationMessage = "Project deletion published to the linked repository.";
+            await _gitSync.SyncNowAsync(new ProjectId(link.ProjectId), progress: progress);
+            Notifications.DismissProjectActions(new ProjectId(link.ProjectId), notice);
+            Notifications.Complete(notice, "Project deletion published to the linked repository.");
         }
+        catch (OperationCanceledException) { Notifications.Complete(notice, "Sync cancelled.", NotificationKind.Information); }
         catch (Exception error)
         {
-            NotificationMessage = error.Message;
+            Notifications.NeedAction(notice, error.Message, "Retry",
+                () => PublishPendingDeletionAsync(link, notice));
         }
         await ReloadCatalogAsync(CancellationToken.None);
     }
@@ -459,9 +462,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     public void DismissDefaultNamePrompt() => ShowDefaultNamePrompt = false;
 
-    public void DismissNotification() => NotificationMessage = null;
-
-    public void ShowNotification(string message) => NotificationMessage = message;
+    public void ShowNotification(string message) =>
+        Notifications.Show("EntityTracker", message, NotificationKind.Failure);
 
     private bool CanNavigate(ShellNavigationItem item) =>
         !IsBusy && (!item.RequiresProject || HasProject) && (!item.RequiresTracker || HasTracker);
@@ -576,7 +578,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             Replace(Trackers, previousTrackers);
             SetDestination(previousDestination);
             _logger.LogError(exception, "Application context could not be changed.");
-            NotificationMessage = $"The application context could not be changed: {exception.Message}";
+            Notifications.Show("Context could not be changed", exception.Message,
+                NotificationKind.Failure);
             return false;
         }
         finally

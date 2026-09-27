@@ -27,7 +27,11 @@ public sealed class ProjectGitSyncTests
         Assert.Null(link.UpstreamIdentity);
         Assert.Equal("Pending", link.SyncStatus);
         string before = repo.Git("rev-parse", "HEAD");
-        ProjectSyncLink synced = await service.SyncNowAsync(projectId);
+        List<ProjectSyncPhase> phases = [];
+        ProjectSyncLink synced = await service.SyncNowAsync(projectId,
+            progress: new RecordingProgress(phases));
+        Assert.Equal([ProjectSyncPhase.CheckingEdits, ProjectSyncPhase.Inspecting,
+            ProjectSyncPhase.Committing], phases);
         Assert.NotEqual(before, synced.LastCommonCommit);
         Assert.Equal("Current", synced.SyncStatus);
         Assert.Contains(".entitytracker/manifest.json", repo.Git("show", "--pretty=format:", "--name-only", "HEAD"));
@@ -222,6 +226,11 @@ public sealed class ProjectGitSyncTests
         {
             public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         }
+    }
+
+    private sealed class RecordingProgress(List<ProjectSyncPhase> phases) : IProgress<ProjectSyncPhase>
+    {
+        public void Report(ProjectSyncPhase value) => phases.Add(value);
     }
 
     private sealed class TestRepository : IDisposable

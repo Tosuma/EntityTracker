@@ -128,6 +128,7 @@ public partial class App : System.Windows.Application
                 provider.GetRequiredService<WpfProjectUnsavedEditsGate>());
             services.AddSingleton<IProjectRepositoryFolderPicker, ProjectRepositoryFolderPicker>();
             services.AddSingleton<ProjectGitSyncService>();
+            services.AddSingleton<NotificationCenter>();
             services.AddSingleton<ProjectRepositoryCardViewModelFactory>();
             services.AddSingleton<CatalogManagementViewModel>();
             services.AddSingleton<ShellViewModel>();

@@ -89,7 +89,8 @@ internal sealed class ReadmeScreenshotGenerator
             // Presentation fixture only. The real folder stays in the disposable workspace.
             string repositoryFixturePath = Directory.CreateDirectory(
                 Path.Combine(workspace.RootDirectory, "example-repository")).FullName;
-            await provider.GetRequiredService<IProjectSyncLinkStore>().SaveAsync(new ProjectSyncLink(
+            IProjectSyncLinkStore linkStore = provider.GetRequiredService<IProjectSyncLinkStore>();
+            ProjectSyncLink repositoryFixture = new(
                 project.Id.Value,
                 repositoryFixturePath,
                 "main",
@@ -98,11 +99,33 @@ internal sealed class ReadmeScreenshotGenerator
                 0,
                 null,
                 "Snapshot pushed",
-                "Current"), cancellationToken);
+                "Current");
+            await linkStore.SaveAsync(repositoryFixture, cancellationToken);
             await shell.ProjectReporting!.RepositoryCard!.RefreshAsync(cancellationToken);
             await renderer.CaptureWithTextOverrideAsync(
                 "project-git-repository.png", repositoryFixturePath,
                 @"C:\Projects\order-platform", settleMilliseconds: 900);
+            NotificationCenter notifications = provider.GetRequiredService<NotificationCenter>();
+            NotificationItem syncNotice = notifications.BeginProgress("Project sync",
+                "Fetching upstream changes…");
+            await renderer.CaptureWithTextOverrideAsync(
+                "project-sync-progress.png", repositoryFixturePath,
+                @"C:\Projects\order-platform", settleMilliseconds: 900);
+            await linkStore.SaveAsync(repositoryFixture with
+            {
+                LastResult = "Upstream advanced during sync; validation pending",
+                SyncStatus = "PendingRemote"
+            }, cancellationToken);
+            await shell.ProjectReporting.RepositoryCard.RefreshAsync(cancellationToken);
+            notifications.NeedAction(syncNotice,
+                "The upstream advanced during sync. Retry to validate its changes.",
+                "Retry", () => Task.CompletedTask);
+            await renderer.CaptureWithTextOverrideAsync(
+                "project-sync-action-needed.png", repositoryFixturePath,
+                @"C:\Projects\order-platform", settleMilliseconds: 900);
+            notifications.Dismiss(syncNotice);
+            await linkStore.SaveAsync(repositoryFixture, cancellationToken);
+            await shell.ProjectReporting.RepositoryCard.RefreshAsync(cancellationToken);
             ProjectMergeReviewDialog mergeDialog = new(new ProjectMergeReviewViewModel([
                 new ProjectMergeConflict("Tracker Delivery / Entity Orders / Notes",
                     ProjectConflictKind.Field, "Review the order mapping",

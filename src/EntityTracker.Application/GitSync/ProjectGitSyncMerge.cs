@@ -27,7 +27,7 @@ public sealed partial class ProjectGitSyncService
         ProjectMergeResult proposal = new ProjectSnapshotMerger().Merge(null, read.Snapshot, incoming);
         IReadOnlyDictionary<string, MergeSide>? decisions = await mergeReview.ReviewAsync(proposal.Conflicts, token);
         if (decisions is null || proposal.Conflicts.Any(c => !decisions.ContainsKey(c.Path)))
-            throw new InvalidOperationException("Two-way reconciliation was cancelled.");
+            throw new ProjectSyncReviewCancelledException("Two-way reconciliation was cancelled.");
         ProjectSnapshot merged = new ProjectSnapshotMerger(decisions)
             .Merge(null, read.Snapshot, incoming).Snapshot;
         ProjectSnapshotValidator.Validate(merged);
@@ -100,7 +100,8 @@ public sealed partial class ProjectGitSyncService
     }
 
     private async Task<ProjectSyncLink> PublishTombstoneAsync(ProjectSyncLink link,
-        GitWorkingTreeState state, CancellationToken token, int attempt = 0)
+        GitWorkingTreeState state, CancellationToken token, int attempt = 0,
+        IProgress<ProjectSyncPhase>? progress = null)
     {
         if (attempt >= 4)
             throw new InvalidOperationException("The upstream kept advancing during deletion publication. Retry sync.");
@@ -116,6 +117,7 @@ public sealed partial class ProjectGitSyncService
         if (!committed && state.Head != link.LastCommonCommit)
             throw new InvalidOperationException("The checkout advanced before deletion publication.");
         string head = state.Head ?? throw new InvalidOperationException("A committed Project base is required.");
+        if (state.UpstreamIdentity is not null) progress?.Report(ProjectSyncPhase.Fetching);
         GitRemoteState? remote = state.UpstreamIdentity is null ? null :
             await git.FetchAsync(link.RepositoryPath, token);
         if (remote is not null && remote.Head != head)
@@ -135,6 +137,7 @@ public sealed partial class ProjectGitSyncService
             }
             else
             {
+                progress?.Report(ProjectSyncPhase.Reviewing);
                 ProjectSnapshot remoteSnapshot = codec.Decode(remote.SnapshotFiles);
                 if (remoteSnapshot.Project.Id != intent.ProjectId)
                     throw new InvalidDataException("The upstream belongs to another Project.");
@@ -148,23 +151,28 @@ public sealed partial class ProjectGitSyncService
             }
             if (head != remote.Head)
             {
+                progress?.Report(ProjectSyncPhase.Committing);
                 head = await git.CommitMergeSnapshotAsync(link.RepositoryPath, head,
                     remote.Head, state.SnapshotFiles, package, token);
                 committed = true;
             }
         }
         if (!committed)
+        {
+            progress?.Report(ProjectSyncPhase.Committing);
             head = await git.CommitSnapshotAsync(link.RepositoryPath, state.SnapshotFiles, package, token);
+        }
         link = link with { LastCommonCommit = head, LastSnapshotHash = package.Sha256,
             LastResult = "Project tombstone committed; push pending", SyncStatus = "PendingPush" };
         await links.SaveAsync(link, token);
         if (remote is not null && remote.Head != head)
         {
+            progress?.Report(ProjectSyncPhase.Pushing);
             try { await git.PushAsync(link.RepositoryPath, token); }
             catch (InvalidOperationException)
             {
                 GitWorkingTreeState next = await git.InspectAsync(link.RepositoryPath, token);
-                return await PublishTombstoneAsync(link, next, token, attempt + 1);
+                return await PublishTombstoneAsync(link, next, token, attempt + 1, progress);
             }
         }
         await links.RemoveAsync(link.ProjectId, token);
@@ -174,7 +182,8 @@ public sealed partial class ProjectGitSyncService
 
     private async Task<ProjectSyncLink> ReceiveTombstoneAsync(ProjectId projectId,
         ProjectSyncLink link, GitWorkingTreeState state, GitRemoteState remote,
-        ProjectTombstone tombstone, ProjectSnapshotRead read, CancellationToken token)
+        ProjectTombstone tombstone, ProjectSnapshotRead read, CancellationToken token,
+        IProgress<ProjectSyncPhase>? progress = null)
     {
         if (tombstone.ProjectId != projectId.Value)
             throw new InvalidDataException("The upstream deleted a different Project.");
@@ -194,10 +203,11 @@ public sealed partial class ProjectGitSyncService
             string path = "Project/Deletion";
             ProjectMergeConflict conflict = new(path, ProjectConflictKind.Deletion,
                 tombstone.BaseSnapshotHash, localHash, "Project deleted from the shared repository");
+            progress?.Report(ProjectSyncPhase.Reviewing);
             IReadOnlyDictionary<string, MergeSide>? decision = mergeReview is null
                 ? null : await mergeReview.ReviewAsync([conflict], token);
             if (decision is null || !decision.TryGetValue(path, out MergeSide side))
-                throw new InvalidOperationException("Project deletion review was cancelled.");
+                throw new ProjectSyncReviewCancelledException("Project deletion review was cancelled.");
             if (side == MergeSide.Local)
             {
                 ProjectSyncLink kept = link with { SyncStatus = "RemoteDeletedLocalKept",
@@ -212,6 +222,7 @@ public sealed partial class ProjectGitSyncService
             throw new InvalidOperationException("The deletion review became stale. Retry sync.");
         if (editGate is not null) await editGate.WaitUntilReadyAsync(projectId, token);
         if (backup is null) throw new InvalidOperationException("A backup service is required for inbound deletion.");
+        progress?.Report(ProjectSyncPhase.Applying);
         await backup.CreatePreApplyBackupAsync(token);
         await snapshots.ApplyTombstoneAsync(projectId, read.Revision, token);
         if (state.Head != remote.Head)
@@ -223,8 +234,10 @@ public sealed partial class ProjectGitSyncService
             else
             {
                 ProjectSnapshotPackage terminal = codec.EncodeTombstone(tombstone);
+                progress?.Report(ProjectSyncPhase.Committing);
                 await git.CommitMergeSnapshotAsync(link.RepositoryPath, state.Head,
                     remote.Head, state.SnapshotFiles, terminal, token);
+                progress?.Report(ProjectSyncPhase.Pushing);
                 await git.PushAsync(link.RepositoryPath, token);
             }
         }
@@ -234,8 +247,10 @@ public sealed partial class ProjectGitSyncService
 
     private async Task<ProjectSyncLink> SyncConcurrentAsync(ProjectId projectId,
         ProjectSyncLink link, GitWorkingTreeState state, GitRemoteState remote,
-        ProjectSnapshotRead read, string? localName, CancellationToken token, int attempt = 0)
+        ProjectSnapshotRead read, string? localName, CancellationToken token,
+        IProgress<ProjectSyncPhase>? progress = null, int attempt = 0)
     {
+        progress?.Report(ProjectSyncPhase.Reviewing);
         if (attempt >= 4) throw new InvalidOperationException("The upstream kept advancing. Retry sync.");
         if (state.Head is null || read.Snapshot is null)
             throw new InvalidOperationException("A committed local Project and SQLite snapshot are required for merge.");
@@ -261,9 +276,9 @@ public sealed partial class ProjectGitSyncService
             ? new Dictionary<string, MergeSide>()
             : mergeReview is null ? null : await mergeReview.ReviewAsync(proposal.Conflicts, token);
         if (decisions is null)
-            throw new InvalidOperationException("Merge review was cancelled; no Project data was changed.");
+            throw new ProjectSyncReviewCancelledException("Merge review was cancelled; no Project data was changed.");
         if (proposal.Conflicts.Any(c => !decisions.ContainsKey(c.Path)))
-            throw new InvalidOperationException("Resolve every merge conflict before syncing.");
+            throw new ProjectSyncReviewRequiredException("Resolve every merge conflict before syncing.");
         ProjectSnapshot merged = new ProjectSnapshotMerger(decisions)
             .Merge(basis, read.Snapshot, remoteSnapshot).Snapshot;
         merged = AppendMergedProgress(merged, state.Head, remote.Head);
@@ -293,6 +308,7 @@ public sealed partial class ProjectGitSyncService
         {
             if (editGate is not null) await editGate.WaitUntilReadyAsync(projectId, token);
             if (backup is null) throw new InvalidOperationException("A pre-apply backup service is required for merge.");
+            progress?.Report(ProjectSyncPhase.Applying);
             await backup.CreatePreApplyBackupAsync(token);
             long revision = await snapshots.ApplyAsync(merged, read.Revision, localName, token);
             read = await snapshots.ReadAsync(projectId, token);
@@ -300,6 +316,7 @@ public sealed partial class ProjectGitSyncService
                 throw new InvalidOperationException("The merged Project could not be re-exported.");
         }
         ProjectSnapshotPackage canonical = codec.Encode(read.Snapshot!);
+        progress?.Report(ProjectSyncPhase.Committing);
         string head = sameHead
             ? await git.CommitSnapshotAsync(link.RepositoryPath, state.SnapshotFiles, canonical, token)
             : await git.CommitMergeSnapshotAsync(link.RepositoryPath,
@@ -308,6 +325,7 @@ public sealed partial class ProjectGitSyncService
             LastRevision = read.Revision, LastSnapshotHash = canonical.Sha256,
             LastResult = "Merged snapshot committed; push pending", SyncStatus = "PendingPush" };
         await links.SaveAsync(pending, token);
+        progress?.Report(ProjectSyncPhase.Pushing);
         try { await git.PushAsync(link.RepositoryPath, token); }
         catch (InvalidOperationException)
         {
@@ -315,7 +333,7 @@ public sealed partial class ProjectGitSyncService
             if (advanced.Head == head) return await CompleteMergeAsync(pending, token);
             GitWorkingTreeState next = await git.InspectAsync(link.RepositoryPath, token);
             return await SyncConcurrentAsync(projectId, pending, next, advanced,
-                await snapshots.ReadAsync(projectId, token), localName, token, attempt + 1);
+                await snapshots.ReadAsync(projectId, token), localName, token, progress, attempt + 1);
         }
         return await CompleteMergeAsync(pending, token);
     }

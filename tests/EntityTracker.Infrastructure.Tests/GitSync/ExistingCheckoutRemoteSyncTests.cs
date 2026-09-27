@@ -46,7 +46,15 @@ public sealed class ExistingCheckoutRemoteSyncTests
         string baseHead = workspace.Git(second, "rev-parse", "HEAD");
         await leftSync.SyncNowAsync(projectId);
         string remoteHead = workspace.Git(first, "rev-parse", "HEAD");
-        ProjectSyncLink merged = await rightSync.SyncNowAsync(projectId);
+        List<ProjectSyncPhase> phases = [];
+        ProjectSyncLink merged = await rightSync.SyncNowAsync(projectId,
+            progress: new RecordingProgress(phases));
+        Assert.Contains(ProjectSyncPhase.Fetching, phases);
+        Assert.Contains(ProjectSyncPhase.Reviewing, phases);
+        Assert.Contains(ProjectSyncPhase.Committing, phases);
+        Assert.Contains(ProjectSyncPhase.Pushing, phases);
+        Assert.True(phases.IndexOf(ProjectSyncPhase.Fetching) < phases.IndexOf(ProjectSyncPhase.Reviewing));
+        Assert.True(phases.IndexOf(ProjectSyncPhase.Committing) < phases.IndexOf(ProjectSyncPhase.Pushing));
         Assert.Equal("Current", merged.SyncStatus);
         string mergeHead = workspace.Git(second, "rev-parse", "HEAD");
         Assert.Equal($"{baseHead} {remoteHead}", workspace.Git(second,
@@ -1195,6 +1203,11 @@ public sealed class ExistingCheckoutRemoteSyncTests
         public Task FastForwardAsync(string path, string expectedHead, string remoteHead,
             CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("Simulated checkout update failure.");
+    }
+
+    private sealed class RecordingProgress(List<ProjectSyncPhase> phases) : IProgress<ProjectSyncPhase>
+    {
+        public void Report(ProjectSyncPhase value) => phases.Add(value);
     }
 
     private sealed class GitWorkspace : IDisposable

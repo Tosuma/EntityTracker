@@ -14,6 +14,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
     private readonly ProjectGitSyncService _service;
     private readonly IProjectRepositoryFolderPicker _picker;
     private readonly WpfProjectUnsavedEditsGate? _editGate;
+    private readonly NotificationCenter? _notifications;
     private CancellationTokenSource? _syncCancellation;
     private ProjectSyncLink? _link;
     private string? _message;
@@ -24,15 +25,17 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
     private readonly RelayCommand _cancelSyncCommand;
 
     public ProjectRepositoryCardViewModel(ProjectId projectId, ProjectGitSyncService service,
-        IProjectRepositoryFolderPicker picker, WpfProjectUnsavedEditsGate? editGate = null)
+        IProjectRepositoryFolderPicker picker, WpfProjectUnsavedEditsGate? editGate = null,
+        NotificationCenter? notifications = null)
     {
         _projectId = projectId;
         _service = service;
         _picker = picker;
         _editGate = editGate;
+        _notifications = notifications;
         if (_editGate is not null) _editGate.WaitingChanged += (_, _) => Notify();
         _linkCommand = new AsyncCommand(LinkAsync, () => !_busy && !IsLinked);
-        _syncCommand = new AsyncCommand(SyncAsync, () => !_busy && IsLinked);
+        _syncCommand = new AsyncCommand(() => SyncAsync(), () => !_busy && IsLinked);
         _unlinkCommand = new AsyncCommand(UnlinkAsync, () => !_busy && _link is not null);
         _cancelSyncCommand = new RelayCommand(() => _syncCancellation?.Cancel(),
             () => _syncCancellation is not null);
@@ -70,7 +73,6 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
         try
         {
             _link = await _service.GetLinkAsync(_projectId, token);
-            _message = null;
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {
@@ -86,25 +88,97 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
         await ExecuteAsync(async () => _link = await _service.LinkAsync(_projectId, path));
     }
 
-    private Task SyncAsync() => ExecuteAsync(async () =>
+    private async Task SyncAsync(NotificationItem? existingNotice = null)
     {
+        if (_busy) return;
+        _busy = true;
+        _message = null;
+        NotificationItem? notice = existingNotice ?? _notifications?.FindActionForProject(_projectId);
+        if (notice is null) notice = _notifications?.BeginProgress("Project sync",
+            "Checking for unfinished edits…", _projectId);
+        else _notifications?.Restart(notice, "Checking for unfinished edits…");
+        void OnWaitingChanged(object? sender, EventArgs args)
+        {
+            if (_editGate?.WaitingProjectId == _projectId.Value && notice is not null)
+                _notifications?.Progress(notice, "Waiting for the unfinished edit to be saved or closed…");
+        }
+        if (_editGate is not null) _editGate.WaitingChanged += OnWaitingChanged;
+        Notify();
         using CancellationTokenSource cancellation = new();
         _syncCancellation = cancellation;
         Notify();
-        try { _link = await _service.SyncNowAsync(_projectId, cancellation.Token); }
-        catch (ProjectNameCollisionException collision)
+        try
         {
-            string? name = ProjectLocalNameDialog.Prompt(System.Windows.Application.Current.MainWindow,
-                collision.ConflictingName);
-            if (name is not null) _link = await _service.SyncNowAsync(_projectId, name, cancellation.Token);
+            IProgress<ProjectSyncPhase>? progress = notice is null ? null :
+                new ProjectSyncProgressReporter(phase =>
+                    _notifications?.Progress(notice, NotificationCenter.DescribeProjectSyncPhase(phase)));
+            try { _link = await _service.SyncNowAsync(_projectId, cancellation.Token, progress); }
+            catch (ProjectNameCollisionException collision)
+            {
+                string? name = ProjectLocalNameDialog.Prompt(System.Windows.Application.Current.MainWindow,
+                    collision.ConflictingName);
+                if (name is null)
+                {
+                    if (notice is not null) _notifications?.Complete(notice,
+                        "Sync stopped. Choose a local Project name when you retry.",
+                        NotificationKind.Information);
+                    return;
+                }
+                _link = await _service.SyncNowAsync(_projectId, name, cancellation.Token, progress);
+            }
+            if (notice is not null)
+            {
+                if (_link?.SyncStatus is "PendingPush" or "PendingRemote")
+                    _notifications?.NeedAction(notice, _link.LastResult, "Retry",
+                        () => SyncAsync(notice));
+                else
+                {
+                    _notifications?.DismissProjectActions(_projectId, notice);
+                    _notifications?.Complete(notice, _link?.LastResult ?? "Sync complete.",
+                        _link?.SyncStatus == "RemoteDeletedLocalKept"
+                            ? NotificationKind.Information : NotificationKind.Success);
+                }
+            }
         }
-        finally { _syncCancellation = null; Notify(); }
-    });
+        catch (OperationCanceledException)
+        {
+            if (notice is not null) _notifications?.Complete(notice, "Sync cancelled.",
+                NotificationKind.Information);
+        }
+        catch (ProjectSyncReviewCancelledException)
+        {
+            if (notice is not null) _notifications?.Complete(notice,
+                "Sync review was cancelled.", NotificationKind.Information);
+        }
+        catch (Exception error)
+        {
+            _message = error.Message;
+            try { _link = await _service.GetLinkAsync(_projectId); }
+            catch { /* Keep the original sync error visible. */ }
+            if (notice is not null)
+            {
+                bool review = error is ProjectSyncReviewRequiredException;
+                bool retry = _link?.SyncStatus is "PendingPush" or "PendingRemote";
+                _notifications?.NeedAction(notice, error.Message,
+                    review ? "Review" : retry ? "Retry" : "Open Project",
+                    review || retry ? () => SyncAsync(notice) : () =>
+                        _notifications?.NavigateToProjectAsync?.Invoke(_projectId) ?? Task.CompletedTask);
+            }
+        }
+        finally
+        {
+            if (_editGate is not null) _editGate.WaitingChanged -= OnWaitingChanged;
+            _syncCancellation = null;
+            _busy = false;
+            Notify();
+        }
+    }
 
     private Task UnlinkAsync() => ExecuteAsync(async () =>
     {
         await _service.UnlinkAsync(_projectId);
         _link = null;
+        _notifications?.DismissProjectActions(_projectId);
     });
 
     private async Task ExecuteAsync(Func<Task> action)
@@ -132,7 +206,8 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
 
 public sealed class ProjectRepositoryCardViewModelFactory(
     ProjectGitSyncService service, IProjectRepositoryFolderPicker picker,
-    WpfProjectUnsavedEditsGate? editGate = null)
+    WpfProjectUnsavedEditsGate? editGate = null, NotificationCenter? notifications = null)
 {
-    public ProjectRepositoryCardViewModel Create(ProjectId projectId) => new(projectId, service, picker, editGate);
+    public ProjectRepositoryCardViewModel Create(ProjectId projectId) =>
+        new(projectId, service, picker, editGate, notifications);
 }

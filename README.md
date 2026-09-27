@@ -124,6 +124,14 @@ configure Git, or manage credentials.
 
 ![Illustrative Project dashboard state with an upstream Git link and manual Sync now control](images/light/project-git-repository.png)
 
+The sidebar notification center shows the current sync phase. A completed sync disappears after
+a short display time. A sync that needs attention stays visible with a contextual action; the
+Project card also retains its detailed status. Notifications are kept for the current session.
+
+![Project sync progress in the sidebar notification center](images/light/project-sync-progress.png)
+
+![Project sync action needed in the sidebar notification center](images/light/project-sync-action-needed.png)
+
 The merge review shows each conflicting object with its base, local, and remote values. Choose a
 side for each conflict or apply one choice to all, then confirm the resolved Project state.
 

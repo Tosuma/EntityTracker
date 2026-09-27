@@ -232,13 +232,16 @@ public sealed partial class ProjectGitSyncService(
                 progress.ReconciledCount == 0);
     }
 
-    public Task<ProjectSyncLink> SyncNowAsync(ProjectId projectId, CancellationToken token = default) =>
-        SyncNowAsync(projectId, null, token);
+    public Task<ProjectSyncLink> SyncNowAsync(ProjectId projectId, CancellationToken token = default,
+        IProgress<ProjectSyncPhase>? progress = null) =>
+        SyncNowAsync(projectId, null, token, progress);
 
     public async Task<ProjectSyncLink> SyncNowAsync(ProjectId projectId, string? localName,
-        CancellationToken token = default)
+        CancellationToken token = default, IProgress<ProjectSyncPhase>? progress = null)
     {
+        progress?.Report(ProjectSyncPhase.CheckingEdits);
         if (editGate is not null) await editGate.WaitUntilReadyAsync(projectId, token);
+        progress?.Report(ProjectSyncPhase.Inspecting);
         ProjectSyncLink link = await GetLinkAsync(projectId, token) ??
             throw new InvalidOperationException("This Project is not linked to a repository.");
         if (link.SyncStatus == "RemoteDeletedLocalKept")
@@ -272,9 +275,11 @@ public sealed partial class ProjectGitSyncService(
                                     published.Head, token);
                             else
                             {
+                                progress?.Report(ProjectSyncPhase.Committing);
                                 await git.CommitMergeSnapshotAsync(link.RepositoryPath,
                                     state.Head, published.Head, state.SnapshotFiles,
                                     codec.EncodeTombstone(received), token);
+                                progress?.Report(ProjectSyncPhase.Pushing);
                                 await git.PushAsync(link.RepositoryPath, token);
                             }
                         }
@@ -285,7 +290,7 @@ public sealed partial class ProjectGitSyncService(
                 }
                 throw new InvalidOperationException("The Project was purged without a pending tombstone.");
             }
-            return await PublishTombstoneAsync(link, state, token);
+            return await PublishTombstoneAsync(link, state, token, progress: progress);
         }
         ProjectSnapshotPackage local = codec.Encode(read.Snapshot);
         if (localName is not null &&
@@ -295,10 +300,11 @@ public sealed partial class ProjectGitSyncService(
         GitRemoteState? remote = null;
         if (state.UpstreamIdentity is not null)
         {
+            progress?.Report(ProjectSyncPhase.Fetching);
             remote = await git.FetchAsync(link.RepositoryPath, token);
             if (codec.TryDecodeTombstone(remote.SnapshotFiles, out ProjectTombstone? tombstone))
                 return await ReceiveTombstoneAsync(projectId, link, state, remote,
-                    tombstone!, read, token);
+                    tombstone!, read, token, progress);
             if (state.Head is not null && state.Head != remote.Head)
             {
                 bool localAncestor = await git.IsAncestorAsync(
@@ -311,7 +317,7 @@ public sealed partial class ProjectGitSyncService(
                 if ((!localAncestor && !remoteAncestor) ||
                     (localAncestor && localChanges && remoteChanges))
                     return await SyncConcurrentAsync(projectId, link, state, remote,
-                        read, localName, token);
+                        read, localName, token, progress);
             }
             if (state.Head != link.LastCommonCommit && state.Head != remote.Head &&
                 state.Head is not null && link.LastCommonCommit is not null &&
@@ -336,6 +342,7 @@ public sealed partial class ProjectGitSyncService(
                     if (editGate is not null) await editGate.WaitUntilReadyAsync(projectId, token);
                     if (backup is null)
                         throw new InvalidOperationException("A pre-apply backup service is required for inbound sync.");
+                    progress?.Report(ProjectSyncPhase.Applying);
                     await backup.CreatePreApplyBackupAsync(token);
                     long applied = await snapshots.ApplyAsync(resumed, read.Revision, localName, token);
                     read = new ProjectSnapshotRead(resumed, applied);
@@ -343,7 +350,7 @@ public sealed partial class ProjectGitSyncService(
                 }
                 else if (resumedHash != local.Sha256)
                     return await SyncConcurrentAsync(projectId, link, state, remote,
-                        read, localName, token);
+                        read, localName, token, progress);
                 link = link with { LastCommonCommit = state.Head, LastRevision = read.Revision,
                     LastSnapshotHash = resumedHash };
             }
@@ -360,7 +367,7 @@ public sealed partial class ProjectGitSyncService(
                 bool localChanged = local.Sha256 != link.LastSnapshotHash;
                 if (remoteChanged && localChanged && inboundHash != local.Sha256)
                     return await SyncConcurrentAsync(projectId, link, state, remote,
-                        read, localName, token);
+                        read, localName, token, progress);
                 if (inbound is null && link.LastSnapshotHash is not null)
                     throw new InvalidOperationException("The upstream Project snapshot is missing.");
                 if (remoteChanged && !localChanged && inbound is not null)
@@ -383,6 +390,7 @@ public sealed partial class ProjectGitSyncService(
                 {
                     if (backup is null)
                         throw new InvalidOperationException("A pre-apply backup service is required for inbound sync.");
+                    progress?.Report(ProjectSyncPhase.Applying);
                     await backup.CreatePreApplyBackupAsync(token);
                     long applied = await snapshots.ApplyAsync(inbound, read.Revision, localName, token);
                     read = new ProjectSnapshotRead(inbound, applied);
@@ -397,7 +405,7 @@ public sealed partial class ProjectGitSyncService(
                 if (state.Head is null)
                     throw new InvalidOperationException("The checkout has no committed Project base for merge.");
                 return await SyncConcurrentAsync(projectId, link, state, remote,
-                    read, localName, token);
+                    read, localName, token, progress);
             }
         }
         if (state.Head != link.LastCommonCommit)
@@ -413,6 +421,7 @@ public sealed partial class ProjectGitSyncService(
             IReadOnlyList<string> deletions = FindDeletions(repositorySnapshot, read.Snapshot!);
             if (deletions.Count > 0)
             {
+                progress?.Report(ProjectSyncPhase.Reviewing);
                 if (!await deletionApproval.ApproveAsync(deletions, token))
                     throw new InvalidOperationException("Outbound deletions were not approved; no files were changed.");
                 ProjectSnapshotRead recheck = await snapshots.ReadAsync(projectId, token);
@@ -438,6 +447,7 @@ public sealed partial class ProjectGitSyncService(
                 latestGit.UpstreamIdentity != state.UpstreamIdentity ||
                 !PackagesEqual(latestGit.SnapshotFiles, state.SnapshotFiles))
                 throw new InvalidOperationException("The repository changed while preparing sync. Retry.");
+            progress?.Report(ProjectSyncPhase.Committing);
             head = await git.CommitSnapshotAsync(link.RepositoryPath, state.SnapshotFiles, local, token);
         }
         ProjectSnapshotRead finalRead = await snapshots.ReadAsync(projectId, token);
@@ -462,6 +472,7 @@ public sealed partial class ProjectGitSyncService(
         {
             if (remote.Head != head)
             {
+                progress?.Report(ProjectSyncPhase.Pushing);
                 try { await git.PushAsync(link.RepositoryPath, token); }
                 catch (InvalidOperationException)
                 {
@@ -492,6 +503,7 @@ public sealed partial class ProjectGitSyncService(
                             if (editGate is not null) await editGate.WaitUntilReadyAsync(projectId, token);
                             if (backup is null)
                                 throw new InvalidOperationException("A pre-apply backup service is required for inbound sync.");
+                            progress?.Report(ProjectSyncPhase.Applying);
                             await backup.CreatePreApplyBackupAsync(token);
                             long applied = await snapshots.ApplyAsync(advanced, read.Revision, localName, token);
                             read = new ProjectSnapshotRead(advanced, applied);
@@ -514,12 +526,13 @@ public sealed partial class ProjectGitSyncService(
                     {
                         GitWorkingTreeState pendingState = await git.InspectAsync(link.RepositoryPath, token);
                         return await SyncConcurrentAsync(projectId, updated, pendingState,
-                            refreshed, await snapshots.ReadAsync(projectId, token), localName, token);
+                            refreshed, await snapshots.ReadAsync(projectId, token), localName, token, progress);
                     }
                 }
             }
             else
             {
+                progress?.Report(ProjectSyncPhase.Fetching);
                 GitRemoteState rechecked = await git.FetchAsync(link.RepositoryPath, token);
                 if (rechecked.Head != head)
                 {

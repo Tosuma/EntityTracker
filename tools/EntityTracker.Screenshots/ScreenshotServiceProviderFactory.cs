@@ -83,6 +83,7 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<IOutboundDeletionApproval, ScreenshotOutboundDeletionApproval>();
         services.AddSingleton<IProjectRepositoryFolderPicker, ScreenshotRepositoryFolderPicker>();
         services.AddSingleton<ProjectGitSyncService>();
+        services.AddSingleton<NotificationCenter>();
         services.AddSingleton<ProjectRepositoryCardViewModelFactory>();
 
         services.AddSingleton<ISchemaImportParser, CsvSchemaImportParser>();

@@ -34,6 +34,10 @@
     <SolidColorBrush x:Key="Brush.Text.Disabled" Color="{DynamicResource TextFillColorDisabled}" />
     <SolidColorBrush x:Key="Brush.Text.OnDark" Color="{StaticResource Color.Brand.White}" />
     <SolidColorBrush x:Key="Brush.Text.OnDarkMuted" Color="{StaticResource Color.Brand.Green10}" />
+    <SolidColorBrush x:Key="Brush.Notification.Information" Color="#A6DCEB" />
+    <SolidColorBrush x:Key="Brush.Notification.Success" Color="#96E4AD" />
+    <SolidColorBrush x:Key="Brush.Notification.Failure" Color="#FF9C94" />
+    <SolidColorBrush x:Key="Brush.Notification.Action" Color="#FFD188" />
     <SolidColorBrush x:Key="Brush.Surface.Page" Color="{DynamicResource ApplicationBackgroundColor}" />
     <SolidColorBrush x:Key="Brush.Surface.Card" Color="{DynamicResource CardBackgroundFillColorDefault}" />
     <SolidColorBrush x:Key="Brush.Surface.Subtle" Color="{DynamicResource SolidBackgroundFillColorQuarternary}" />

@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 
 using EntityTracker.Domain;
 using EntityTracker.Wpf.ViewModels;
@@ -23,6 +25,8 @@ public partial class MainWindow : Window
         Closed += OnClosed;
         PreviewMouseWheel += OnPreviewMouseWheel;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        ((System.Collections.Specialized.INotifyCollectionChanged)_viewModel.Notifications.Items)
+            .CollectionChanged += OnNotificationsChanged;
     }
 
     private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e) =>
@@ -51,6 +55,8 @@ public partial class MainWindow : Window
     private void OnClosed(object? sender, EventArgs e)
     {
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        ((System.Collections.Specialized.INotifyCollectionChanged)_viewModel.Notifications.Items)
+            .CollectionChanged -= OnNotificationsChanged;
         _viewModel.Dispose();
     }
 
@@ -100,8 +106,20 @@ public partial class MainWindow : Window
     private void OnDismissDefaultNamePrompt(object sender, RoutedEventArgs e) =>
         _viewModel.DismissDefaultNamePrompt();
 
-    private void OnDismissNotification(object sender, RoutedEventArgs e) =>
-        _viewModel.DismissNotification();
+    private void OnNotificationsChanged(object? sender,
+        System.Collections.Specialized.NotifyCollectionChangedEventArgs e) =>
+        Dispatcher.BeginInvoke(() => NotificationScrollViewer.ScrollToEnd(),
+            System.Windows.Threading.DispatcherPriority.Loaded);
+
+    private void OnNotificationLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Border card || !SystemParameters.ClientAreaAnimation) return;
+        card.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1,
+            TimeSpan.FromMilliseconds(220)));
+        if (card.RenderTransform is TranslateTransform transform)
+            transform.BeginAnimation(TranslateTransform.YProperty,
+                new DoubleAnimation(16, 0, TimeSpan.FromMilliseconds(220)));
+    }
 
     private void OnRenameDefaultName(object sender, RoutedEventArgs e)
     {
