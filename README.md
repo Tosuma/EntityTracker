@@ -57,7 +57,7 @@ EntityTracker keeps those concerns separate:
 2. Choose Complete or Partial synchronization and review every actionable difference.
 3. Apply the reviewed schema while EntityTracker preserves stable progress, notes, and history.
 4. Use dependency-safe rank, readiness, blockers, filters, and search to choose the next work item.
-5. Update work status and use Reports to communicate delivery trends.
+5. Update development status and use Reports to communicate delivery trends.
 
 ## Screenshots
 
@@ -100,7 +100,7 @@ for consistency.
     </td>
     <td width="50%">
       <strong>Edit without losing imported facts</strong><br />
-      Update work status, notes, lifecycle, and manual dependency corrections.<br /><br />
+      Update development status, notes, lifecycle, and manual dependency corrections.<br /><br />
       <img src="images/light/edit-entity.png" alt="Edit Entity modal with status, notes, dependencies, and archive controls" />
     </td>
   </tr>
@@ -174,6 +174,10 @@ groups, statuses, or work statuses. Selections within a column are alternatives,
 different columns work together. Status summary cards remain useful one-click shortcuts. Search
 entity names and, when needed, dependency names from the overview; the same search opens with
 <kbd>Ctrl</kbd>+<kbd>F</kbd>.
+
+Development status keeps the user-set detail. Work status groups it into Ready or Blocked before
+work starts, In progress for development or rework, Completed after development, and Reconciled
+after reconciliation. The Blockers column still shows unmet dependencies during active work.
 
 ![EntityTracker Work status column filter with staged choices and typed sorting](images/light/overview-filter-flyout.png)
 

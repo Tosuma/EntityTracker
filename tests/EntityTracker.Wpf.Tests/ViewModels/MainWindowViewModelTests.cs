@@ -62,7 +62,7 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(100, viewModel.ReworkNeededPercentage);
         EntityOverviewRow row = Assert.Single(viewModel.OverviewItems);
         Assert.Equal("Rework needed", row.Status);
-        Assert.Equal("Rework needed", row.WorkStatus);
+        Assert.Equal("In progress", row.WorkStatus);
         viewModel.ActiveTable.SetSingleStatusFilter(DevelopmentStatus.ReworkNeeded);
         Assert.Single(viewModel.OverviewItems);
         Assert.Contains(

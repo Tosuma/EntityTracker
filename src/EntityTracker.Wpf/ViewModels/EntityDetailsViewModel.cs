@@ -25,7 +25,7 @@ public sealed class EntityDetailsViewModel
         DevelopmentStatus = row.Status;
         WorkStatus = row.WorkStatus;
         DevelopmentStatusValue = row.DevelopmentStatus;
-        WorkflowStateValue = row.WorkflowState;
+        WorkStatusDisplayValue = row.WorkStatusDisplay;
         ResponsibleDeveloper = row.ResponsibleDeveloperDisplay;
         GroupName = row.GroupNameDisplay;
         DependencyCount = row.DependencyCount;
@@ -74,7 +74,7 @@ public sealed class EntityDetailsViewModel
 
     public DevelopmentStatus DevelopmentStatusValue { get; }
 
-    public EntityWorkflowState WorkflowStateValue { get; }
+    public WorkStatusDisplay WorkStatusDisplayValue { get; }
 
     public string ResponsibleDeveloper { get; }
 

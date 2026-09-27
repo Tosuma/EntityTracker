@@ -15,6 +15,10 @@ public sealed record ProjectComparisonDisplayCell(
 
     public bool HasIssues => Model.HasIssues;
 
+    public WorkStatusDisplay? WorkStatusValue => Model.WorkStatus is { } status
+        ? WorkStatusDisplayMapper.From(status)
+        : null;
+
     public static ProjectComparisonDisplayCell Create(
         string entityName,
         string trackerName,
@@ -31,7 +35,9 @@ public sealed record ProjectComparisonDisplayCell(
         }
 
         string development = FormatDevelopmentStatus(cell.DevelopmentStatus);
-        string work = FormatWorkStatus(cell.WorkStatus);
+        string work = cell.WorkStatus is { } state
+            ? WorkStatusDisplayMapper.Format(WorkStatusDisplayMapper.From(state))
+            : string.Empty;
         string issue = cell.HasIssues
             ? $"Issues: {string.Join(", ", cell.IssueNames)}"
             : "No dependency issues";
@@ -51,19 +57,6 @@ public sealed record ProjectComparisonDisplayCell(
         Domain.DevelopmentStatus.DevelopmentCompleted => "Dev. completed",
         Domain.DevelopmentStatus.Reconciled => "Reconciled",
         null => "Not present",
-        _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
-    };
-
-    private static string FormatWorkStatus(EntityWorkflowState? status) => status switch
-    {
-        EntityWorkflowState.Ready => "Ready",
-        EntityWorkflowState.Blocked => "Blocked",
-        EntityWorkflowState.InProgress => "In progress",
-        EntityWorkflowState.ReworkNeeded => "Rework needed",
-        EntityWorkflowState.DevelopmentCompleted => "Dev. completed",
-        EntityWorkflowState.Reconciled => "Reconciled",
-        EntityWorkflowState.Archived => "Archived",
-        null => string.Empty,
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
     };
 }

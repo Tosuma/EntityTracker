@@ -255,37 +255,31 @@
                            Text="Archived" />
             </Border>
             <DataTemplate.Triggers>
-                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.Ready}">
+                <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Ready}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Ready}" />
                     <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Ready" />
                 </DataTrigger>
-                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.Blocked}">
+                <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Blocked}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Blocked}" />
                     <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Blocked" />
                 </DataTrigger>
-                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.InProgress}">
+                <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.InProgress}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.InProgress}" />
                     <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="In progress" />
                 </DataTrigger>
-                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.ReworkNeeded}">
-                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.ReworkNeeded}" />
-                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
-                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
-                    <Setter TargetName="BadgeText" Property="Text" Value="Rework needed" />
-                </DataTrigger>
-                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.DevelopmentCompleted}">
+                <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Completed}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.DevelopmentCompleted}" />
                     <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
-                    <Setter TargetName="BadgeText" Property="Text" Value="Dev. completed" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Completed" />
                 </DataTrigger>
-                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.Reconciled}">
+                <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Reconciled}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Reconciled}" />
                     <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
@@ -836,7 +830,7 @@
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
                                             <ContentControl AutomationProperties.Name="{Binding WorkStatus, StringFormat=Work status: {0}}"
-                                                            Content="{Binding WorkflowState}"
+                                                            Content="{Binding WorkStatusDisplay}"
                                                             ContentTemplate="{StaticResource WorkStatusBadgeTemplate}" />
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
@@ -2222,16 +2216,19 @@
                               HorizontalScrollBarVisibility="Disabled"
                               VerticalScrollBarVisibility="Auto">
                     <StackPanel>
-                        <TextBlock FontWeight="SemiBold" Text="Status" />
-                        <WrapPanel Margin="0,7,0,16">
-                            <ContentControl Margin="0,0,8,6"
-                                            AutomationProperties.Name="{Binding WorkStatus, StringFormat=Work status: {0}}"
-                                            Content="{Binding WorkflowStateValue}"
-                                            ContentTemplate="{StaticResource WorkStatusBadgeTemplate}" />
-                            <ContentControl Margin="0,0,0,6"
-                                            AutomationProperties.Name="{Binding DevelopmentStatus, StringFormat=Development status: {0}}"
-                                            Content="{Binding DevelopmentStatusValue}"
-                                            ContentTemplate="{StaticResource DevelopmentStatusBadgeTemplate}" />
+                        <WrapPanel Margin="0,0,0,16">
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Margin="0,0,0,7" FontWeight="SemiBold" Text="Work status" />
+                                <ContentControl AutomationProperties.Name="{Binding WorkStatus, StringFormat=Work status: {0}}"
+                                                Content="{Binding WorkStatusDisplayValue}"
+                                                ContentTemplate="{StaticResource WorkStatusBadgeTemplate}" />
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Margin="0,0,0,7" FontWeight="SemiBold" Text="Development status" />
+                                <ContentControl AutomationProperties.Name="{Binding DevelopmentStatus, StringFormat=Development status: {0}}"
+                                                Content="{Binding DevelopmentStatusValue}"
+                                                ContentTemplate="{StaticResource DevelopmentStatusBadgeTemplate}" />
+                            </StackPanel>
                         </WrapPanel>
 
                         <Grid Margin="0,0,0,16">

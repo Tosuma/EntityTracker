@@ -32,7 +32,7 @@
                     <StackPanel>
                         <TextBlock FontWeight="SemiBold" Text="Development status, Work status, and Blockers" />
                         <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}"
-                                   Text="Development status records progress. Work status derives whether work is ready, active, complete, or blocked. Blockers name unresolved or incomplete dependencies; status and issue meaning is always shown as text as well as color." />
+                                   Text="Development status is set by the user and records detailed progress. Work status summarizes it as Ready or Blocked before work starts, In progress for work or rework, Completed after development, and Reconciled after reconciliation. Blockers list unresolved or incomplete dependencies even when work is already in progress." />
                     </StackPanel>
                 </Border>
                 <Border Margin="0,0,6,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
