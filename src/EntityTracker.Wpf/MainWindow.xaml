@@ -12,6 +12,7 @@
         MinHeight="600"
         Background="{DynamicResource Brush.Surface.Page}"
         Foreground="{DynamicResource Brush.Text.Primary}"
+        PreviewKeyDown="OnWindowPreviewKeyDown"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />

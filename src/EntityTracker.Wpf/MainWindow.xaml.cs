@@ -28,6 +28,19 @@ public partial class MainWindow : Window
     private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e) =>
         _mouseWheelRouter.Route(e);
 
+    private void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.F &&
+            (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control &&
+            !_viewModel.IsBusy &&
+            !_viewModel.Catalog.IsOpen &&
+            _viewModel.IsTrackerWorkspace &&
+            WorkspaceView.TryOpenCurrentSearch())
+        {
+            e.Handled = true;
+        }
+    }
+
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         Loaded -= OnLoaded;

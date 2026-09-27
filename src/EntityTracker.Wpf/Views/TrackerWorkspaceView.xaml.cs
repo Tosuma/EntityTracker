@@ -322,27 +322,10 @@ public partial class TrackerWorkspaceView : UserControl
     private void OnOpenOverviewSearchClick(object sender, RoutedEventArgs e) =>
         QueueCurrentSearchFocus();
 
-    private void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)
+    private void OnWorkspacePreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (_viewModel is null)
         {
-            return;
-        }
-
-        if (e.Key == Key.F &&
-            (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
-        {
-            EntityTableViewModel? table = GetCurrentEntityTable();
-            if (table is not null &&
-                !_viewModel.IsBusy &&
-                !_viewModel.ManualCreation.IsBusy &&
-                !_viewModel.Editor.IsOpen)
-            {
-                table.OpenSearchCommand.Execute(null);
-                QueueCurrentSearchFocus();
-                e.Handled = true;
-            }
-
             return;
         }
 
@@ -408,6 +391,27 @@ public partial class TrackerWorkspaceView : UserControl
         MainWindowTab.Archived => _viewModel.ArchivedTable,
         _ => null
     };
+
+    public bool TryOpenCurrentSearch()
+    {
+        if (_viewModel is null ||
+            _viewModel.IsBusy ||
+            _viewModel.ManualCreation.IsBusy ||
+            _viewModel.Editor.IsOpen)
+        {
+            return false;
+        }
+
+        EntityTableViewModel? table = GetCurrentEntityTable();
+        if (table is null)
+        {
+            return false;
+        }
+
+        table.OpenSearchCommand.Execute(null);
+        QueueCurrentSearchFocus();
+        return true;
+    }
 
     private void QueueCurrentSearchFocus()
     {

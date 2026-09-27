@@ -197,6 +197,23 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void SearchShortcut_IsHandledAtWindowScopeForSidebarKeyboardFocus()
+    {
+        XDocument shell = LoadWpfXaml("MainWindow.xaml");
+        Assert.Equal(
+            "OnWindowPreviewKeyDown",
+            (string?)shell.Root?.Attribute("PreviewKeyDown"));
+
+        string repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
+        string shellCode = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "src",
+            "EntityTracker.Wpf",
+            "MainWindow.xaml.cs"));
+        Assert.Contains("WorkspaceView.TryOpenCurrentSearch()", shellCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CatalogModal_TrapsKeyboardFocusAndExposesSafeCancelAction()
     {
         XDocument document = LoadWpfXaml("Views", "CatalogModalView.xaml");

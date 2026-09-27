@@ -14,7 +14,7 @@
         mc:Ignorable="d"
         Background="{DynamicResource Brush.Surface.Page}"
         Foreground="{DynamicResource Brush.Text.Primary}"
-        PreviewKeyDown="OnWindowPreviewKeyDown"
+        PreviewKeyDown="OnWorkspacePreviewKeyDown"
         PreviewMouseDown="OnWindowPreviewMouseDown">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
