@@ -4,7 +4,9 @@ The `UX-` category modernizes EntityTracker around Microsoft's Fluent design lan
 its information architecture for Team Leads and Project Managers. It is separate from the numbered
 core roadmap, corrective milestones, Product Feedback milestones, and CI milestones.
 
-Read [`../design/FLUENT_UI_DIRECTION.md`](../design/FLUENT_UI_DIRECTION.md) before planning or
+UX-01 through UX-08 are recorded as completed in the [cross-category status page](../milestone_status.md).
+
+Read [`../../design/FLUENT_UI_DIRECTION.md`](../../design/FLUENT_UI_DIRECTION.md) before planning or
 implementing any UX milestone.
 
 ## Design baseline
@@ -60,10 +62,9 @@ because a related control or view is already open for modification.
 
 ## Storage direction
 
-SQLite remains the local catalog and working cache. The planned SharePoint integration is retired.
-A future, separately planned capability may synchronize a Project to a Git repository and folder
-through an explicit user action. The UX roadmap reserves an information-architecture location for
-that capability but does not implement or expose it.
+SQLite remains the local catalog and working store. The planned SharePoint integration is retired.
+The separate [GS roadmap](../git-sync/00_README.md) specifies future Project synchronization through
+user-managed existing Git working trees. The completed UX series does not implement or expose it.
 
 ## Verification shared by every milestone
 

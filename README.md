@@ -57,7 +57,7 @@ EntityTracker keeps those concerns separate:
 2. Choose Complete or Partial synchronization and review every actionable difference.
 3. Apply the reviewed schema while EntityTracker preserves stable progress, notes, and history.
 4. Use dependency-safe rank, readiness, blockers, filters, and search to choose the next work item.
-5. Update work status and use Reports to communicate delivery trends.
+5. Update development status and use Reports to communicate delivery trends.
 
 ## Screenshots
 
@@ -100,11 +100,54 @@ for consistency.
     </td>
     <td width="50%">
       <strong>Edit without losing imported facts</strong><br />
-      Update work status, notes, lifecycle, and manual dependency corrections.<br /><br />
+      Update development status, notes, lifecycle, and manual dependency corrections.<br /><br />
       <img src="images/light/edit-entity.png" alt="Edit Entity modal with status, notes, dependencies, and archive controls" />
     </td>
   </tr>
 </table>
+
+### Import and synchronize an existing Git checkout
+
+Clone and configure a dedicated Project repository with command-line Git first. On the Portfolio,
+choose **Import checkout** and select its clean working-tree root. EntityTracker imports the
+snapshot with its stable IDs and history. If its Project name is already used locally, choose a
+private name for this installation; the shared snapshot keeps its original name.
+
+The Project dashboard shows the linked repository, checked-out branch, upstream, current sync
+state, last result, and the latest sync duration for this session. **Sync now** fetches
+and applies upstream changes, merges independent Project edits,
+and asks you to review competing changes before committing and pushing. It waits for an unfinished
+edit to be saved or closed before applying incoming data. A checkout without an upstream keeps
+local commits only. Permanent deletion of a linked Project publishes a tombstone; a member with
+concurrent local changes can keep the Project locally as an unlinked copy. Unlinking by itself
+leaves both the repository and SQLite data in place. EntityTracker does not clone repositories,
+configure Git, or manage credentials. Automatic sync is enabled by default: it checks linked
+Projects after startup and every five minutes. In **Settings**, choose 1, 5, 15, 30, or 60 minutes,
+or turn it off while keeping **Sync now** available. A Project with an unfinished edit waits until
+the edit is saved or closed; other Projects continue. Conflict and deletion review still require
+manual action. Routine automatic checks are quiet; a notification stays visible when action is
+needed.
+
+![Settings showing automatic Project sync and interval choices](images/light/settings.png)
+
+For slow syncs, the daily application log records stage durations, fetch time, snapshot read time,
+and the number of snapshot files read or reused. The remote may still take time to fetch or push;
+the application keeps its validation and remote recheck steps in order.
+
+![Illustrative Project dashboard with an upstream Git link, last sync timing, and manual Sync now control](images/light/project-git-repository.png)
+
+The sidebar notification center shows the current sync phase. A completed sync disappears after
+a short display time. A sync that needs attention stays visible with a contextual action; the
+Project card also retains its detailed status. Notifications are kept for the current session.
+
+![Project sync progress in the sidebar notification center](images/light/project-sync-progress.png)
+
+![Project sync action needed in the sidebar notification center](images/light/project-sync-action-needed.png)
+
+The merge review shows each conflicting object with its base, local, and remote values. Choose a
+side for each conflict or apply one choice to all, then confirm the resolved Project state.
+
+![Project merge review with base, local, and remote values and per-conflict choices](images/light/project-merge-review.png)
 
 ### Compare sibling Trackers
 
@@ -138,6 +181,10 @@ groups, statuses, or work statuses. Selections within a column are alternatives,
 different columns work together. Status summary cards remain useful one-click shortcuts. Search
 entity names and, when needed, dependency names from the overview; the same search opens with
 <kbd>Ctrl</kbd>+<kbd>F</kbd>.
+
+Development status keeps the user-set detail. Work status groups it into Ready or Blocked before
+work starts, In progress for development or rework, Completed after development, and Reconciled
+after reconciliation. The Blockers column still shows unmet dependencies during active work.
 
 ![EntityTracker Work status column filter with staged choices and typed sorting](images/light/overview-filter-flyout.png)
 
@@ -208,16 +255,25 @@ compatible schema CSV without requiring a live database connection inside Entity
 
 Product Milestones 1–12 and UX Milestones UX-01 through UX-08 are complete. EntityTracker uses
 SQLite as its local catalog and working store. Obsolete SharePoint presentation and runtime
-configuration have been retired, and the application exposes no remote synchronization control.
+configuration have been retired. Manual and automatic Git synchronization are available for
+existing checkouts.
 
 A separate
-[PF-01–PF-05 product feedback milestone group](docs/milestones/00_README.md#product-feedback-milestones)
+[PF-01–PF-05 product feedback milestone group](docs/milestones/product-feedback/00_README.md)
 plans bulk status updates, customer priority, responsible-developer and group metadata, and
 column filtering with status-order sorting without extending the numbered roadmap. The independent
-[CI-01 engineering milestone](docs/milestones/ci_01_continuous_integration.md) now validates pull
-requests and pushes to `main` and packages successful `main` builds. The live badge above reports
-the current `main` build status; CI-01 remains in progress until the `main` package artifact is
-verified.
+[CI-01 engineering milestone](docs/milestones/engineering/ci_01_continuous_integration.md) defines
+CI validation for pull requests and pushes to `main` and packaging for successful `main` builds.
+The live badge above reports the current `main` build status.
+
+The [GS-01–GS-05 Git-sync roadmap](docs/milestones/git-sync/00_README.md) now includes portable
+snapshots, local linking, existing-checkout import, collaborative merge, and automatic checks. Prepare
+and configure a clean dedicated repository outside EntityTracker. Use **Import checkout** on the
+Portfolio for a Project already present in the repository, or **Link repository** on an existing
+Project dashboard. **Sync now** merges independent edits, offers conflict review when needed,
+commits locally, and uses the configured upstream when present. **Unlink** removes only the local
+association. **Settings** controls the application-wide automatic schedule; **Sync now** remains
+available when automatic sync is disabled.
 
 See the [milestone status](docs/milestones/milestone_status.md) and complete
 [roadmap](docs/milestones/00_README.md) for details.
@@ -239,9 +295,10 @@ Domain model
 
 Business rules do not depend on WPF or infrastructure technologies. Read the
 [architecture rules](docs/architecture/ARCHITECTURE.md) and
-[collaborative storage contract](docs/architecture/COLLABORATIVE_STORAGE.md) for the historical
-storage boundary. Any future Project-level Git synchronization requires a separately approved
-design and is not exposed by this release.
+[collaborative storage status](docs/architecture/COLLABORATIVE_STORAGE.md) for the current storage
+boundary. Git is used for Project dashboard link and sync actions and scheduled background passes;
+SQLite remains the
+runtime store for editing, reporting, and navigation.
 
 ## Getting started
 

@@ -1,11 +1,12 @@
 <UserControl x:Class="EntityTracker.Wpf.Views.SettingsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:configuration="clr-namespace:EntityTracker.Infrastructure.Configuration;assembly=EntityTracker.Infrastructure">
+             xmlns:configuration="clr-namespace:EntityTracker.Infrastructure.Configuration;assembly=EntityTracker.Infrastructure"
+             xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels">
     <StackPanel MaxWidth="720" HorizontalAlignment="Left">
         <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Settings" />
         <TextBlock Margin="0,4,0,20" Style="{StaticResource PageDescriptionTextStyle}"
-                   Text="Choose whether EntityTracker follows Windows or uses a pinned appearance. Changes apply immediately and are saved locally." />
+                   Text="Choose appearance and application-wide automatic Project sync. Changes apply immediately and are saved locally." />
         <Border Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
             <StackPanel>
                 <TextBlock Margin="0,0,0,4" Style="{StaticResource SectionHeadingTextStyle}" Text="Appearance" />
@@ -27,6 +28,44 @@
                                    Text="{Binding Appearance.ErrorMessage}" TextWrapping="Wrap" />
                     </ScrollViewer>
                 </Border>
+            </StackPanel>
+        </Border>
+        <Border Margin="0,16,0,0" Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
+            <StackPanel>
+                <TextBlock Margin="0,0,0,4" Style="{StaticResource SectionHeadingTextStyle}"
+                           Text="Automatic Project sync" />
+                <TextBlock Margin="0,0,0,12" Style="{StaticResource PageDescriptionTextStyle}"
+                           Text="Checks linked Projects after startup and at the selected interval. Sync now remains available when automatic sync is off. Configure Git and credentials outside EntityTracker." TextWrapping="Wrap" />
+                <CheckBox Content="Enable automatic sync"
+                          AutomationProperties.Name="Enable automatic Project sync"
+                          Command="{Binding AutoSync.ToggleCommand}"
+                          IsChecked="{Binding AutoSync.IsEnabled, Mode=OneWay}" />
+                <TextBlock Margin="0,14,0,5" FontWeight="SemiBold" Text="Check every" />
+                <WrapPanel>
+                    <RadioButton Margin="0,4,16,4" GroupName="AutoSyncInterval" Content="1 minute"
+                                 Command="{Binding AutoSync.SelectIntervalCommand}"
+                                 CommandParameter="{x:Static viewModels:AutoSyncSettingsViewModel.OneMinute}"
+                                 IsChecked="{Binding AutoSync.IsOneMinute, Mode=OneWay}" />
+                    <RadioButton Margin="0,4,16,4" GroupName="AutoSyncInterval" Content="5 minutes"
+                                 Command="{Binding AutoSync.SelectIntervalCommand}"
+                                 CommandParameter="{x:Static viewModels:AutoSyncSettingsViewModel.FiveMinutes}"
+                                 IsChecked="{Binding AutoSync.IsFiveMinutes, Mode=OneWay}" />
+                    <RadioButton Margin="0,4,16,4" GroupName="AutoSyncInterval" Content="15 minutes"
+                                 Command="{Binding AutoSync.SelectIntervalCommand}"
+                                 CommandParameter="{x:Static viewModels:AutoSyncSettingsViewModel.FifteenMinutes}"
+                                 IsChecked="{Binding AutoSync.IsFifteenMinutes, Mode=OneWay}" />
+                    <RadioButton Margin="0,4,16,4" GroupName="AutoSyncInterval" Content="30 minutes"
+                                 Command="{Binding AutoSync.SelectIntervalCommand}"
+                                 CommandParameter="{x:Static viewModels:AutoSyncSettingsViewModel.ThirtyMinutes}"
+                                 IsChecked="{Binding AutoSync.IsThirtyMinutes, Mode=OneWay}" />
+                    <RadioButton Margin="0,4,16,4" GroupName="AutoSyncInterval" Content="60 minutes"
+                                 Command="{Binding AutoSync.SelectIntervalCommand}"
+                                 CommandParameter="{x:Static viewModels:AutoSyncSettingsViewModel.SixtyMinutes}"
+                                 IsChecked="{Binding AutoSync.IsSixtyMinutes, Mode=OneWay}" />
+                </WrapPanel>
+                <TextBlock Margin="0,8,0,0" AutomationProperties.LiveSetting="Assertive"
+                           Text="{Binding AutoSync.ErrorMessage}" TextWrapping="Wrap"
+                           Visibility="{Binding AutoSync.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
             </StackPanel>
         </Border>
     </StackPanel>

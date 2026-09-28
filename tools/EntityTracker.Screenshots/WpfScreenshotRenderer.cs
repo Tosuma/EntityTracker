@@ -11,11 +11,11 @@ using EntityTracker.Wpf.ViewModels;
 
 namespace EntityTracker.Screenshots;
 
-internal sealed class WpfScreenshotRenderer(MainWindow window, string outputDirectory)
+internal sealed class WpfScreenshotRenderer(Window window, string outputDirectory)
 {
     private const double Dpi = 96;
 
-    private readonly MainWindow _window = window ?? throw new ArgumentNullException(nameof(window));
+    private readonly Window _window = window ?? throw new ArgumentNullException(nameof(window));
     private readonly string _outputDirectory = string.IsNullOrWhiteSpace(outputDirectory)
         ? throw new ArgumentException("An output directory is required.", nameof(outputDirectory))
         : outputDirectory;
@@ -26,6 +26,23 @@ internal sealed class WpfScreenshotRenderer(MainWindow window, string outputDire
     {
         await SettleAsync(settleMilliseconds);
         Save(RenderVisual(Root, includePageBackground: true), Path.Combine(_outputDirectory, fileName));
+    }
+
+    internal async Task CaptureWithTextOverrideAsync(
+        string fileName, string actualText, string screenshotText, int settleMilliseconds = 150)
+    {
+        TextBlock pathLabel = FindVisualDescendants<TextBlock>(Root)
+            .SingleOrDefault(label => label.Text == actualText)
+            ?? throw new InvalidOperationException("The repository path label was not rendered.");
+        pathLabel.SetCurrentValue(TextBlock.TextProperty, screenshotText);
+        try
+        {
+            await CaptureAsync(fileName, settleMilliseconds);
+        }
+        finally
+        {
+            pathLabel.SetCurrentValue(TextBlock.TextProperty, actualText);
+        }
     }
 
     internal async Task CaptureGraphIssueAsync(string fileName)

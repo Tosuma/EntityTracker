@@ -4,12 +4,13 @@
 
 EntityTracker uses SQLite as its only persistence provider. UX-08 retired the unused SharePoint
 configuration model, provider selector, and associated application composition branch. The
-application does not authenticate with, read from, write to, or synchronize with any remote
-service, and the shell exposes no remote connection or Sync control.
+application does not authenticate with a remote service or manage Git credentials. GS-01–GS-05
+add portable Project snapshots, existing-checkout linking, manual fetch and push, collaborative
+merge review, and terminal Project tombstones. Ordinary SQLite operations do not invoke Git.
 
 Settings versions 1–3 may contain retired `activeStorage` and `sharePoint` fields. They remain
 readable only for a safe migration of supported appearance and active Project/Tracker context.
-Loading does not rewrite an existing file. The next legitimate settings save writes version 4
+Loading does not rewrite an existing file. The next legitimate settings save writes version 5
 atomically and omits the retired fields.
 
 ## Preserved boundaries
@@ -24,13 +25,18 @@ atomically and omits the retired fields.
   ranking, synchronization, readiness, lifecycle, or reporting rules.
 
 Application still contains backend-neutral `CollaborativeConflict`, `CollaborativeConflictField`,
-and `CollaborativeConflictSet` value types from the retired provider investigation. No active
-backend produces them and no conflict-review UI consumes them. They are inactive historical seams,
-not a commitment to a particular provider or synchronization model.
+and `CollaborativeConflictSet` value types from the retired provider investigation. Git-sync uses
+its own typed Project merge conflicts; the older value types remain inactive historical seams.
 
-## Future work
+## Git-sync status
 
-Any collaborative provider or Git synchronization requires a separately approved product
-milestone covering authority, data format, authentication, concurrency, merge behavior, offline
-behavior, recovery, migration, and user-visible conflict handling. It must preserve the inward
-dependency direction and must not be inferred from the inactive conflict value types.
+The [GS-01–GS-05 roadmap](../milestones/git-sync/00_README.md) records GS-01–GS-05 as completed.
+Users prepare and configure repositories outside EntityTracker, then select an existing clean
+working tree. The local association is stored outside SQLite so a deletion tombstone survives
+Project purge until publication. Manual sync can import, fetch, merge, review conflicts, and push.
+It waits for unfinished presentation edits before applying inbound changes. The Application
+scheduler runs linked Projects sequentially after startup and at the configured global interval.
+Automatic sync defers an unfinished edit, while manual sync waits for it. WPF presents status and
+review; Infrastructure owns Git process limits and the settings v5 file. A named per-data-root
+mutex prevents a second application instance from opening the same SQLite store. SQLite stays
+the runtime store and the inward dependency direction remains intact.

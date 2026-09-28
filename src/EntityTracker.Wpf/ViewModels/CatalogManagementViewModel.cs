@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Windows.Input;
 
 using EntityTracker.Application.Projects;
+using EntityTracker.Application.GitSync;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
@@ -60,6 +61,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     private readonly ITrackerRepository _trackerRepository;
     private readonly ICsvFilePicker _filePicker;
     private readonly ILogger<CatalogManagementViewModel> _logger;
+    private readonly ProjectGitSyncService? _gitSync;
     private readonly AsyncCommand _submitNameCommand;
     private readonly AsyncCommand _prepareTrackerCommand;
     private readonly AsyncCommand _applyTrackerCommand;
@@ -92,7 +94,8 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         IProjectRepository projectRepository,
         ITrackerRepository trackerRepository,
         ICsvFilePicker filePicker,
-        ILogger<CatalogManagementViewModel>? logger = null)
+        ILogger<CatalogManagementViewModel>? logger = null,
+        ProjectGitSyncService? gitSync = null)
     {
         _projectService = projectService;
         _trackerService = trackerService;
@@ -104,6 +107,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         _trackerRepository = trackerRepository;
         _filePicker = filePicker;
         _logger = logger ?? NullLogger<CatalogManagementViewModel>.Instance;
+        _gitSync = gitSync;
         RecycledProjects = [];
         RecycledTrackers = [];
         CopySources = [];
@@ -596,7 +600,8 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         {
             if (_pendingProject is not null)
             {
-                await _projectService.PurgeAsync(new PurgeProjectRequest(_pendingProject.Id));
+                if (_gitSync is null || !await _gitSync.PurgeLinkedProjectAsync(_pendingProject.Id))
+                    await _projectService.PurgeAsync(new PurgeProjectRequest(_pendingProject.Id));
             }
             else if (_pendingTracker is not null)
             {

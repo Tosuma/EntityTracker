@@ -4,6 +4,7 @@
         xmlns:domain="clr-namespace:EntityTracker.Domain;assembly=EntityTracker.Domain"
         xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels"
         xmlns:views="clr-namespace:EntityTracker.Wpf.Views"
+        xmlns:services="clr-namespace:EntityTracker.Wpf.Services"
         Title="EntityTracker"
         Icon="Assets/v2/EntityTracker.ico"
         Width="1240"
@@ -12,9 +13,11 @@
         MinHeight="600"
         Background="{DynamicResource Brush.Surface.Page}"
         Foreground="{DynamicResource Brush.Text.Primary}"
+        PreviewKeyDown="OnWindowPreviewKeyDown"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <services:SidebarNotificationHeightConverter x:Key="SidebarNotificationHeightConverter" />
         <Style x:Key="ShellNavigationButtonStyle"
                TargetType="ToggleButton"
                BasedOn="{StaticResource {x:Type ToggleButton}}">
@@ -52,11 +55,18 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0"
-                    Padding="18,20"
-                    Background="{DynamicResource Brush.Surface.Primary}">
-                <DockPanel>
-                    <StackPanel DockPanel.Dock="Top">
+            <Grid x:Name="SidebarRoot" Grid.Column="0"
+                  Background="{DynamicResource Brush.Surface.Primary}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <ScrollViewer Grid.Row="0" Margin="18,20,18,0"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              CanContentScroll="False">
+                    <StackPanel>
                         <TextBlock FontSize="24"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource Brush.Text.OnDark}"
@@ -118,8 +128,9 @@
                                 ToolTip="Select a Tracker before adding an entity."
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
                     </StackPanel>
+                </ScrollViewer>
 
-                    <StackPanel DockPanel.Dock="Bottom">
+                    <StackPanel Grid.Row="1" Margin="18,8,18,12">
                         <TextBlock Margin="8,0,0,4"
                                    Foreground="{DynamicResource Brush.Text.OnDarkMuted}"
                                    FontWeight="SemiBold"
@@ -135,15 +146,91 @@
                                 Content="Settings"
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
                     </StackPanel>
-                </DockPanel>
-            </Border>
+
+                <Border Grid.Row="2" Padding="0,8,0,4"
+                        MaxHeight="{Binding ElementName=SidebarRoot, Path=ActualHeight, Converter={StaticResource SidebarNotificationHeightConverter}}"
+                        Background="{DynamicResource Brush.Brand.Green90}"
+                        Visibility="{Binding Notifications.HasItems, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <ScrollViewer x:Name="NotificationScrollViewer"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  CanContentScroll="False">
+                        <ItemsControl ItemsSource="{Binding Notifications.Items}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type services:NotificationItem}">
+                                    <Border Margin="10,0,10,8" Padding="10"
+                                            CornerRadius="6" BorderThickness="1"
+                                            BorderBrush="{DynamicResource Brush.Brand.Green60}"
+                                            Background="{DynamicResource Brush.Brand.Green100}"
+                                            AutomationProperties.LiveSetting="Polite"
+                                            Loaded="OnNotificationLoaded">
+                                        <Border.RenderTransform>
+                                            <TranslateTransform />
+                                        </Border.RenderTransform>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="22" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="22" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock FontSize="18" FontWeight="Bold" Text="{Binding Symbol}"
+                                                       AutomationProperties.Name="{Binding Kind}">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Notification.Information}" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Kind}" Value="Success">
+                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.Notification.Success}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Kind}" Value="Failure">
+                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.Notification.Failure}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Kind}" Value="ActionNeeded">
+                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.Notification.Action}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock FontWeight="SemiBold" FontSize="12"
+                                                           Foreground="{DynamicResource Brush.Text.OnDark}"
+                                                           Text="{Binding Title}" TextWrapping="Wrap" />
+                                                <TextBlock Margin="0,3,0,0" FontSize="12"
+                                                           Foreground="{DynamicResource Brush.Text.OnDarkMuted}"
+                                                           Text="{Binding Message}" TextWrapping="Wrap" />
+                                                <ProgressBar Margin="0,8,0,0" Height="6"
+                                                             Background="{DynamicResource Brush.Brand.Green80}"
+                                                             Foreground="{DynamicResource Brush.Notification.Information}"
+                                                             IsIndeterminate="True"
+                                                             Visibility="{Binding IsProgress, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                <Button Margin="0,8,0,0" HorizontalAlignment="Left"
+                                                        Padding="8,3" Content="{Binding ActionLabel}"
+                                                        Command="{Binding ActionCommand}"
+                                                        Visibility="{Binding HasAction, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                                        Style="{StaticResource SecondaryButtonStyle}" />
+                                            </StackPanel>
+                                            <Button Grid.Column="2" Width="20" Height="20" Padding="0"
+                                                    Content="×" FontSize="14"
+                                                    Foreground="{DynamicResource Brush.Text.OnDark}"
+                                                    Background="Transparent" BorderBrush="Transparent"
+                                                    ToolTip="Dismiss notification"
+                                                    AutomationProperties.Name="Dismiss notification"
+                                                    Command="{Binding DismissCommand}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
 
             <Grid Grid.Column="1">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
-                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
@@ -223,29 +310,6 @@
                 </Grid>
 
                 <Border Grid.Row="3"
-                        MaxHeight="140"
-                        Padding="12,8"
-                        Background="{DynamicResource Brush.Surface.Alert}"
-                        BorderBrush="{DynamicResource Brush.Accent}"
-                        BorderThickness="0,1,0,0"
-                        AutomationProperties.LiveSetting="Polite"
-                        Visibility="{Binding HasNotification, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <DockPanel>
-                        <Button DockPanel.Dock="Right"
-                                Margin="12,0,0,0"
-                                AutomationProperties.Name="Dismiss notification"
-                                Click="OnDismissNotification"
-                                Content="Dismiss"
-                                Style="{StaticResource SecondaryButtonStyle}" />
-                        <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <TextBlock VerticalAlignment="Center"
-                                       Text="{Binding NotificationMessage}"
-                                       TextWrapping="Wrap" />
-                        </ScrollViewer>
-                    </DockPanel>
-                </Border>
-
-                <Border Grid.Row="4"
                         Padding="12,8"
                         Background="{DynamicResource Brush.Surface.Subtle}"
                         Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">

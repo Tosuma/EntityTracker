@@ -173,7 +173,7 @@ public sealed class ShellViewModelTests
                 lastTrackerId: harness.DefaultTracker.Id),
             confirmation);
         await shell.InitializeAsync();
-        Assert.True(shell.NotificationMessage is null, shell.NotificationMessage);
+        Assert.Empty(shell.Notifications.Items);
         MainWindowViewModel firstWorkspace = Assert.IsType<MainWindowViewModel>(
             shell.CurrentWorkspace);
         firstWorkspace.ActiveTable.SearchQuery = "First";

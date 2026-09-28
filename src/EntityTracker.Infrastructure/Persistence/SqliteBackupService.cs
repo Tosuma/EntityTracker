@@ -1,8 +1,9 @@
 using Microsoft.Data.Sqlite;
+using EntityTracker.Application.GitSync;
 
 namespace EntityTracker.Infrastructure.Persistence;
 
-public sealed class SqliteBackupService
+public sealed class SqliteBackupService : IProjectSyncBackup
 {
     public const int RetainedBackupCount = 14;
 
@@ -75,6 +76,16 @@ public sealed class SqliteBackupService
                     $"Startup will continue. {exception.Message}"
                 ]);
         }
+    }
+
+    public async Task<string> CreatePreApplyBackupAsync(CancellationToken cancellationToken = default)
+    {
+        Directory.CreateDirectory(_backupDirectory);
+        string path = Path.Combine(_backupDirectory,
+            $"entity-tracker-pre-sync-{_timeProvider.GetUtcNow():yyyyMMddTHHmmssfffZ}-{Guid.NewGuid():N}.db");
+        await CreateOnlineBackupAsync(path, cancellationToken);
+        PruneBackups();
+        return path;
     }
 
     private async Task CreateOnlineBackupAsync(

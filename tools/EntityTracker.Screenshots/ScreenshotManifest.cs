@@ -14,6 +14,10 @@ internal static class ScreenshotManifest
     [
         "portfolio.png",
         "project-dashboard.png",
+        "project-git-repository.png",
+        "project-sync-progress.png",
+        "project-sync-action-needed.png",
+        "project-merge-review.png",
         "project-comparison.png",
         "tracker-recycle-confirmation.png",
         "tracker-recycle-bin.png",

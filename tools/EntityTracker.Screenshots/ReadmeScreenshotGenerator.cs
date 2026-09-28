@@ -9,6 +9,8 @@ using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Tracking;
+using EntityTracker.Application.GitSync;
+using EntityTracker.Wpf.Views;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Wpf;
@@ -84,6 +86,87 @@ internal sealed class ReadmeScreenshotGenerator
                 "The project dashboard did not finish loading.",
                 cancellationToken);
             await renderer.CaptureAsync("project-dashboard.png", settleMilliseconds: 900);
+            // Presentation fixture only. The real folder stays in the disposable workspace.
+            string repositoryFixturePath = Directory.CreateDirectory(
+                Path.Combine(workspace.RootDirectory, "example-repository")).FullName;
+            IProjectSyncLinkStore linkStore = provider.GetRequiredService<IProjectSyncLinkStore>();
+            ProjectSyncLink repositoryFixture = new(
+                project.Id.Value,
+                repositoryFixturePath,
+                "main",
+                "origin/main:illustrative-upstream",
+                null,
+                0,
+                null,
+                "Snapshot pushed",
+                "Current");
+            await linkStore.SaveAsync(repositoryFixture, cancellationToken);
+            await shell.ProjectReporting!.RepositoryCard!.RefreshAsync(cancellationToken);
+            shell.ProjectReporting.RepositoryCard.ShowTiming(new ProjectSyncTiming(
+                TimeSpan.FromSeconds(18.4),
+                new Dictionary<ProjectSyncPhase, TimeSpan>
+                {
+                    [ProjectSyncPhase.Fetching] = TimeSpan.FromSeconds(11.7),
+                    [ProjectSyncPhase.Exporting] = TimeSpan.FromSeconds(2.1),
+                    [ProjectSyncPhase.Validating] = TimeSpan.FromSeconds(4.6)
+                },
+                TimeSpan.FromSeconds(8.2), TimeSpan.FromSeconds(3.5), 142, 1, 0,
+                "Completed"));
+            await renderer.CaptureWithTextOverrideAsync(
+                "project-git-repository.png", repositoryFixturePath,
+                @"C:\Projects\order-platform", settleMilliseconds: 900);
+            NotificationCenter notifications = provider.GetRequiredService<NotificationCenter>();
+            NotificationItem syncNotice = notifications.BeginProgress("Project sync",
+                "Fetching upstream changes…");
+            await renderer.CaptureWithTextOverrideAsync(
+                "project-sync-progress.png", repositoryFixturePath,
+                @"C:\Projects\order-platform", settleMilliseconds: 900);
+            await linkStore.SaveAsync(repositoryFixture with
+            {
+                LastResult = "Upstream advanced during sync; validation pending",
+                SyncStatus = "PendingRemote"
+            }, cancellationToken);
+            await shell.ProjectReporting.RepositoryCard.RefreshAsync(cancellationToken);
+            shell.ProjectReporting.RepositoryCard.ShowTiming(new ProjectSyncTiming(
+                TimeSpan.FromSeconds(21.2),
+                new Dictionary<ProjectSyncPhase, TimeSpan>
+                {
+                    [ProjectSyncPhase.Rechecking] = TimeSpan.FromSeconds(15.2),
+                    [ProjectSyncPhase.Fetching] = TimeSpan.FromSeconds(4.0),
+                    [ProjectSyncPhase.Validating] = TimeSpan.FromSeconds(2.0)
+                },
+                TimeSpan.FromSeconds(18.0), TimeSpan.FromSeconds(1.2), 142, 1, 0,
+                "Action needed"));
+            notifications.NeedAction(syncNotice,
+                "The upstream advanced during sync. Retry to validate its changes.",
+                "Retry", () => Task.CompletedTask);
+            await renderer.CaptureWithTextOverrideAsync(
+                "project-sync-action-needed.png", repositoryFixturePath,
+                @"C:\Projects\order-platform", settleMilliseconds: 900);
+            notifications.Dismiss(syncNotice);
+            await linkStore.SaveAsync(repositoryFixture, cancellationToken);
+            await shell.ProjectReporting.RepositoryCard.RefreshAsync(cancellationToken);
+            ProjectMergeReviewDialog mergeDialog = new(new ProjectMergeReviewViewModel([
+                new ProjectMergeConflict("Tracker Delivery / Entity Orders / Notes",
+                    ProjectConflictKind.Field, "Review the order mapping",
+                    "Add invoice validation before release",
+                    "Coordinate rollout with the fulfillment team")
+            ]))
+            {
+                Owner = window,
+                Height = 550
+            };
+            Grid mergeContent = (Grid)mergeDialog.Content;
+            mergeDialog.Content = null;
+            mergeContent.Margin = new Thickness(0);
+            mergeDialog.Content = new Border { Padding = new Thickness(20), Child = mergeContent };
+            mergeDialog.Show();
+            try
+            {
+                await new WpfScreenshotRenderer(mergeDialog, workspace.StagingDirectory)
+                    .CaptureAsync("project-merge-review.png", settleMilliseconds: 900);
+            }
+            finally { mergeDialog.Close(); }
             await renderer.BringNamedElementIntoViewAndCaptureAsync(
                 "ComparisonGrid",
                 "project-comparison.png");

@@ -5,7 +5,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    internal const int CurrentSchemaVersion = 12;
+    internal const int CurrentSchemaVersion = 14;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -515,6 +515,7 @@ public sealed class SqliteDatabase
         }
 
         await using SqliteConnection connection = await OpenConnectionAsync(cancellationToken);
+        await ExecuteAsync(connection, "PRAGMA journal_mode = WAL;", cancellationToken);
         int schemaVersion = await ReadSchemaVersionAsync(connection, cancellationToken);
 
         if (schemaVersion > CurrentSchemaVersion)
@@ -529,7 +530,7 @@ public sealed class SqliteDatabase
             return;
         }
 
-        bool requiresForeignKeyRebuild = schemaVersion < 12;
+        bool requiresForeignKeyRebuild = schemaVersion < 13;
         bool rebuildWorkflowTrackedEntities = schemaVersion is > 0 and < 7;
         if (requiresForeignKeyRebuild)
         {
@@ -706,6 +707,26 @@ public sealed class SqliteDatabase
                     cancellationToken);
             }
 
+            if (schemaVersion < 13)
+            {
+                await SqliteSnapshotMigration.MigrateAsync(
+                    connection, transaction, cancellationToken);
+                await EnsureNoForeignKeyViolationsAsync(
+                    connection, transaction, cancellationToken);
+            }
+
+            if (schemaVersion < 14)
+            {
+                await ExecuteAsync(connection, transaction, """
+                    CREATE TABLE IF NOT EXISTS project_snapshot_names
+                    (
+                        project_id TEXT NOT NULL PRIMARY KEY,
+                        canonical_name TEXT NOT NULL,
+                        FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+                    );
+                    """, cancellationToken);
+            }
+
             await ExecuteAsync(
                 connection,
                 transaction,
@@ -771,6 +792,9 @@ public sealed class SqliteDatabase
         try
         {
             await connection.OpenAsync(cancellationToken);
+            using SqliteCommand busy = connection.CreateCommand();
+            busy.CommandText = "PRAGMA busy_timeout = 5000;";
+            await busy.ExecuteNonQueryAsync(cancellationToken);
             return connection;
         }
         catch

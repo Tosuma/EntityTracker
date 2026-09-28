@@ -104,12 +104,7 @@ public sealed class ProgressDemoSeeder
                 options,
                 cancellationToken);
 
-            SqliteConnection.ClearAllPools();
-            File.Replace(
-                workingPath,
-                fullPath,
-                destinationBackupFileName: null,
-                ignoreMetadataErrors: true);
+            await PublishWorkingCopyAsync(workingPath, fullPath, cancellationToken);
             return result;
         }
         finally
@@ -141,6 +136,26 @@ public sealed class ProgressDemoSeeder
 
         await using SqliteConnection source = new(sourceBuilder.ToString());
         await using SqliteConnection destination = new(destinationBuilder.ToString());
+        await source.OpenAsync(cancellationToken);
+        await destination.OpenAsync(cancellationToken);
+        source.BackupDatabase(destination);
+    }
+
+    private static async Task PublishWorkingCopyAsync(
+        string workingPath, string destinationPath, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await using SqliteConnection source = new(new SqliteConnectionStringBuilder
+        {
+            DataSource = workingPath,
+            Mode = SqliteOpenMode.ReadOnly
+        }.ToString());
+        await using SqliteConnection destination = new(new SqliteConnectionStringBuilder
+        {
+            DataSource = destinationPath,
+            Mode = SqliteOpenMode.ReadWrite,
+            ForeignKeys = true
+        }.ToString());
         await source.OpenAsync(cancellationToken);
         await destination.OpenAsync(cancellationToken);
         source.BackupDatabase(destination);

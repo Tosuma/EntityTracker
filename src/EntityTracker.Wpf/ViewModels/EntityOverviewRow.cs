@@ -48,5 +48,7 @@ public sealed record EntityOverviewRow(
 
     public string BlockersDisplay => MissingDependencies;
 
+    public WorkStatusDisplay WorkStatusDisplay => WorkStatusDisplayMapper.From(WorkflowState);
+
     public IReadOnlyList<DependencyBlocker> ReadinessBlockers => Blockers ?? [];
 }

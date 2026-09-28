@@ -1,0 +1,61 @@
+namespace EntityTracker.Application.Snapshots;
+
+public sealed record ProjectSnapshot(
+    int FormatVersion,
+    SnapshotProject Project,
+    IReadOnlyList<SnapshotTracker> Trackers)
+{
+    public const int CurrentFormatVersion = 1;
+}
+
+public sealed record SnapshotProject(
+    Guid Id, string Name, string LifecycleState,
+    DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc,
+    DateTimeOffset? RecycledAtUtc);
+
+public sealed record SnapshotTracker(
+    Guid Id, Guid ProjectId, string Name, string LifecycleState,
+    DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc,
+    DateTimeOffset? RecycledAtUtc, Guid? CopiedFromTrackerId,
+    IReadOnlyList<SnapshotEntity> Entities,
+    IReadOnlyList<SnapshotStatusEvent> StatusHistory,
+    IReadOnlyList<SnapshotProgress> ProgressHistory,
+    SnapshotImportSummary? ImportSummary);
+
+public sealed record SnapshotEntity(
+    Guid Id, Guid TrackerId, string SourceName, string DevelopmentStatus,
+    string Notes, string LifecycleState, string Provenance,
+    int? RequestedPriority, string ResponsibleDeveloper, string GroupName,
+    DateTimeOffset CreatedAtUtc, DateTimeOffset SchemaUpdatedAtUtc,
+    DateTimeOffset ProgressUpdatedAtUtc,
+    IReadOnlyList<SnapshotDependency> Dependencies,
+    IReadOnlyList<SnapshotUnresolvedDependency> UnresolvedDependencies,
+    IReadOnlyList<SnapshotOverride> ManualOverrides);
+
+public sealed record SnapshotDependency(
+    Guid DependentEntityId, Guid DependencyEntityId, string Kind,
+    DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
+
+public sealed record SnapshotUnresolvedDependency(
+    Guid DependentEntityId, string DependencySourceName, string Kind,
+    DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
+
+public sealed record SnapshotOverride(
+    Guid DependentEntityId, string DependencySourceName, string Action,
+    DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
+
+public sealed record SnapshotStatusEvent(
+    Guid EventId, Guid EntityId, Guid? PreviousEventId,
+    string? PreviousStatus, string NewStatus, string Kind,
+    DateTimeOffset OccurredAtUtc, int Order);
+
+public sealed record SnapshotProgress(
+    Guid SnapshotId, DateTimeOffset RecordedAtUtc,
+    int ReadyCount, int BlockedCount, int InProgressCount,
+    int ReworkNeededCount, int DevelopmentCompletedCount, int ReconciledCount,
+    int Order);
+
+public sealed record SnapshotImportSummary(
+    DateTimeOffset AppliedAtUtc, string SourceFileName, string Mode,
+    int NewEntityCount, int ChangedEntityCount, int ArchivedEntityCount,
+    int UnchangedEntityCount, int UnresolvedEntityCount);

@@ -4,6 +4,7 @@
              xmlns:domain="clr-namespace:EntityTracker.Domain;assembly=EntityTracker.Domain"
              xmlns:projects="clr-namespace:EntityTracker.Application.Projects;assembly=EntityTracker.Application"
              xmlns:workflow="clr-namespace:EntityTracker.Application.Workflow;assembly=EntityTracker.Application"
+             xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels"
              xmlns:views="clr-namespace:EntityTracker.Wpf.Views">
     <UserControl.Resources>
         <Style x:Key="ComparisonFilterButtonStyle" TargetType="ToggleButton">
@@ -106,37 +107,31 @@
                            Foreground="{DynamicResource Brush.Text.Primary}" />
             </Border>
             <DataTemplate.Triggers>
-                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.Ready}">
+                <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Ready}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Ready}" />
                     <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Ready" />
                 </DataTrigger>
-                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.Blocked}">
+                <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Blocked}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Blocked}" />
                     <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Blocked" />
                 </DataTrigger>
-                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.InProgress}">
+                <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.InProgress}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.InProgress}" />
                     <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="In progress" />
                 </DataTrigger>
-                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.ReworkNeeded}">
-                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.ReworkNeeded}" />
-                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
-                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
-                    <Setter TargetName="BadgeText" Property="Text" Value="Rework needed" />
-                </DataTrigger>
-                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.DevelopmentCompleted}">
+                <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Completed}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.DevelopmentCompleted}" />
                     <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
-                    <Setter TargetName="BadgeText" Property="Text" Value="Dev. completed" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Completed" />
                 </DataTrigger>
-                <DataTrigger Binding="{Binding}" Value="{x:Static workflow:EntityWorkflowState.Reconciled}">
+                <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Reconciled}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Reconciled}" />
                     <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
@@ -158,7 +153,7 @@
                 <StackPanel>
                     <ContentControl Content="{Binding Model.DevelopmentStatus}"
                                     ContentTemplate="{StaticResource ComparisonDevelopmentStatusBadgeTemplate}" />
-                    <ContentControl Content="{Binding Model.WorkStatus}"
+                    <ContentControl Content="{Binding WorkStatusValue}"
                                     ContentTemplate="{StaticResource ComparisonWorkStatusBadgeTemplate}"
                                     Visibility="{Binding IsPresent, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <TextBlock Margin="0,4,0,0"
@@ -198,6 +193,45 @@
             <Border Margin="0,0,0,12" Style="{StaticResource InfoMessageStyle}"
                     Visibility="{Binding ProjectReporting.IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <TextBlock AutomationProperties.LiveSetting="Polite" Text="Loading Project dashboard…" />
+            </Border>
+
+            <Border Margin="0,0,0,18" Padding="16" Style="{StaticResource EntityTrackerCardStyle}"
+                    DataContext="{Binding ProjectReporting.RepositoryCard}">
+                <StackPanel>
+                    <TextBlock FontSize="20" FontWeight="SemiBold" Text="Git repository" />
+                    <TextBlock Margin="0,5,0,0" FontWeight="SemiBold"
+                               Text="{Binding SyncStateLabel}"
+                               AutomationProperties.LiveSetting="Polite" />
+                    <TextBlock Margin="0,5,0,0" Text="{Binding RepositoryPath}" TextWrapping="Wrap" />
+                    <TextBlock Margin="0,4,0,0" Text="{Binding Branch}"
+                               Visibility="{Binding IsLinked, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <TextBlock Margin="0,4,0,0" Text="{Binding Upstream}"
+                               Visibility="{Binding IsLinked, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <TextBlock Margin="0,6,0,0" Text="{Binding LastResult}" TextWrapping="Wrap" />
+                    <TextBlock Margin="0,4,0,0" Text="{Binding LastSyncTiming}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Brush.Text.Secondary}"
+                               Visibility="{Binding HasLastSyncTiming, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <TextBlock Margin="0,4,0,0" Text="{Binding PendingAction}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Brush.Text.Secondary}"
+                               Visibility="{Binding HasPendingAction, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <TextBlock Margin="0,6,0,0" Text="{Binding Message}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Brush.Text.Primary}"
+                               Visibility="{Binding HasMessage, Converter={StaticResource BooleanToVisibilityConverter}}"
+                               AutomationProperties.LiveSetting="Assertive" />
+                    <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
+                        <Button Margin="0,0,8,0" Content="Link repository" Command="{Binding LinkCommand}"
+                                AutomationProperties.Name="Link existing Git repository" />
+                        <Button Margin="0,0,8,0" Content="Sync now" Command="{Binding SyncCommand}"
+                                AutomationProperties.Name="Commit Project snapshot now"
+                                Style="{StaticResource PrimaryButtonStyle}" />
+                        <Button Content="Unlink" Command="{Binding UnlinkCommand}"
+                                AutomationProperties.Name="Unlink Git repository" />
+                        <Button Margin="8,0,0,0" Content="Cancel sync"
+                                Command="{Binding CancelSyncCommand}"
+                                IsEnabled="{Binding CanCancelSync}"
+                                AutomationProperties.Name="Cancel waiting or running Project sync" />
+                    </StackPanel>
+                </StackPanel>
             </Border>
 
             <TextBlock Margin="0,0,0,10" FontSize="20" FontWeight="SemiBold" Text="Trackers" />

@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Windows.Input;
 
 using EntityTracker.Application.History;
+using EntityTracker.Application.GitSync;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Projects;
 using EntityTracker.Domain;
@@ -25,6 +26,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private readonly EntityTrackerSettingsStore _settingsStore;
     private readonly TrackerWorkspaceViewModelFactory _workspaceFactory;
     private readonly IContextDiscardConfirmation _discardConfirmation;
+    private readonly ProjectGitSyncService? _gitSync;
+    private readonly ProjectAutoSyncService? _autoSync;
+    private readonly WpfProjectUnsavedEditsGate? _syncEditGate;
     private readonly ILogger<ShellViewModel> _logger;
     private readonly Dictionary<TrackerId, MainWindowViewModel> _workspaces = [];
     private readonly Dictionary<ProjectId, ProjectDashboardViewModel> _projectDashboards = [];
@@ -38,9 +42,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private PortfolioDashboard? _portfolio;
     private ProjectDashboard? _projectDashboard;
     private ProjectDashboardViewModel? _projectReporting;
+    private IReadOnlyList<ProjectSyncLink> _pendingProjectDeletions = [];
     private bool _isBusy;
     private string _busyMessage = string.Empty;
-    private string? _notificationMessage;
     private bool _showDefaultNamePrompt;
 
     public ShellViewModel(
@@ -55,7 +59,12 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         AppearanceViewModel appearance,
         IClipboardService clipboard,
         EntityTrackerSettings initialSettings,
-        ILogger<ShellViewModel>? logger = null)
+        ILogger<ShellViewModel>? logger = null,
+        ProjectGitSyncService? gitSync = null,
+        WpfProjectUnsavedEditsGate? syncEditGate = null,
+        NotificationCenter? notifications = null,
+        AutoSyncSettingsViewModel? autoSyncSettings = null,
+        ProjectAutoSyncService? autoSync = null)
     {
         _projectRepository = projectRepository;
         _trackerRepository = trackerRepository;
@@ -64,8 +73,16 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         _settingsStore = settingsStore;
         _workspaceFactory = workspaceFactory;
         _discardConfirmation = discardConfirmation;
+        _gitSync = gitSync;
+        _autoSync = autoSync;
+        _syncEditGate = syncEditGate;
+        Notifications = notifications ?? new NotificationCenter();
+        Notifications.NavigateToProjectAsync = OpenProjectAsync;
+        if (_autoSync is not null) _autoSync.StateChanged += OnAutoSyncStateChanged;
+        _syncEditGate?.Attach(this);
         Catalog = catalogManagement;
         Appearance = appearance;
+        AutoSync = autoSyncSettings;
         Help = new SqlQueryHelpViewModel(
             clipboard,
             () => _ = NavigateAsync(ShellDestination.SchemaSynchronization));
@@ -101,10 +118,13 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public ObservableCollection<Tracker> Trackers { get; }
 
     public IReadOnlyList<ShellNavigationItem> NavigationItems { get; }
+    public IReadOnlyList<ProjectSyncLink> PendingProjectDeletions => _pendingProjectDeletions;
 
     public CatalogManagementViewModel Catalog { get; }
 
     public AppearanceViewModel Appearance { get; }
+    public AutoSyncSettingsViewModel? AutoSync { get; }
+    public NotificationCenter Notifications { get; }
 
     public SqlQueryHelpViewModel Help { get; }
 
@@ -224,18 +244,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         private set => SetField(ref _busyMessage, value);
     }
 
-    public string? NotificationMessage
-    {
-        get => _notificationMessage;
-        private set
-        {
-            if (SetField(ref _notificationMessage, value))
-            {
-                OnPropertyChanged(nameof(HasNotification));
-            }
-        }
-    }
-
     public bool ShowDefaultNamePrompt
     {
         get => _showDefaultNamePrompt;
@@ -259,7 +267,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         CurrentWorkspace is not null && IsTrackerDestination(SelectedDestination);
     public bool HasPortfolioProjects => Portfolio?.Projects.Count > 0;
     public bool HasProjectTrackers => ProjectDashboard?.Trackers.Count > 0;
-    public bool HasNotification => !string.IsNullOrWhiteSpace(NotificationMessage);
     public string ProjectContextName => SelectedProject?.Name ?? "No project selected";
     public string TrackerContextName => SelectedTracker?.Name ?? "No tracker selected";
     public string ContextSummary => HasProject
@@ -389,6 +396,78 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    public void StartAutomaticSync() => _autoSync?.Start();
+
+    private void OnAutoSyncStateChanged(object? sender, ProjectId projectId)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.HasShutdownStarted) return;
+        if (!dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(() => OnAutoSyncStateChanged(sender, projectId));
+            return;
+        }
+        ProjectSyncState state = _autoSync!.GetState(projectId);
+        if (state.Kind is ProjectSyncStateKind.DeletionApproval or
+            ProjectSyncStateKind.Conflict or ProjectSyncStateKind.AuthenticationRequired or
+            ProjectSyncStateKind.ConfigurationInvalid or ProjectSyncStateKind.Failed)
+        {
+            if (Notifications.FindActionForProject(projectId) is null)
+                Notifications.RequireAction("Project sync needs attention", state.LastResult,
+                    "Open Project", () => OpenProjectAsync(projectId), projectId);
+        }
+        else if (state.Kind is ProjectSyncStateKind.UpToDate or ProjectSyncStateKind.Unlinked)
+            Notifications.DismissProjectActions(projectId);
+    }
+
+    public async Task<ProjectSyncLink> ImportProjectAsync(string repositoryPath, string? localName = null)
+    {
+        if (_gitSync is null) throw new InvalidOperationException("Project import is unavailable.");
+        ProjectSyncLink link = await _gitSync.ImportAsync(repositoryPath, localName);
+        await ReloadCatalogAsync(CancellationToken.None);
+        if (Projects.Any(project => project.Id.Value == link.ProjectId))
+            await OpenProjectAsync(new ProjectId(link.ProjectId));
+        Notifications.Show("Project imported", "Imported the existing Project checkout.",
+            NotificationKind.Success);
+        return link;
+    }
+
+    public Task PublishPendingDeletionAsync(ProjectSyncLink link) =>
+        PublishPendingDeletionAsync(link, null);
+
+    private async Task PublishPendingDeletionAsync(ProjectSyncLink link,
+        NotificationItem? existingNotice)
+    {
+        if (_gitSync is null) throw new InvalidOperationException("Project sync is unavailable.");
+        NotificationItem notice = existingNotice ?? Notifications.BeginProgress(
+            "Project deletion", "Checking the linked checkout…", new ProjectId(link.ProjectId));
+        if (existingNotice is not null) Notifications.Restart(notice, "Checking the linked checkout…");
+        IProgress<ProjectSyncPhase> progress = new ProjectSyncProgressReporter(phase =>
+            Notifications.Progress(notice, NotificationCenter.DescribeProjectSyncPhase(phase)));
+        IProgress<ProjectSyncTiming> timing = new ProjectSyncTimingReporter(result =>
+            _logger.LogInformation(
+                "Project deletion sync timing: outcome={Outcome} totalMs={TotalMs} stages={Stages} networkFetchMs={NetworkMs} gitSnapshotReadMs={SnapshotReadMs} snapshotFiles={SnapshotFiles} reusedSnapshots={ReusedSnapshots} blobReadProcesses={BlobReadProcesses}",
+                result.Outcome, result.Total.TotalMilliseconds,
+                string.Join(", ", result.Stages.OrderBy(stage => stage.Key)
+                    .Select(stage => $"{stage.Key}={stage.Value.TotalMilliseconds:0}")),
+                result.NetworkFetch.TotalMilliseconds, result.GitSnapshotRead.TotalMilliseconds,
+                result.GitSnapshotFileCount, result.ReusedSnapshots, result.BlobReadProcesses));
+        try
+        {
+            await _gitSync.SyncNowAsync(new ProjectId(link.ProjectId), progress: progress,
+                timing: timing);
+            Notifications.DismissProjectActions(new ProjectId(link.ProjectId), notice);
+            Notifications.Complete(notice, "Project deletion published to the linked repository.");
+        }
+        catch (OperationCanceledException) { Notifications.Complete(notice, "Sync cancelled.", NotificationKind.Information); }
+        catch (Exception error)
+        {
+            Notifications.NeedAction(notice, error.Message, "Retry",
+                () => PublishPendingDeletionAsync(link, notice));
+        }
+        await ReloadCatalogAsync(CancellationToken.None);
+    }
+
     public async Task OpenTrackerAsync(TrackerId trackerId)
     {
         Tracker? tracker = Trackers.FirstOrDefault(item => item.Id == trackerId);
@@ -423,7 +502,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     public void DismissDefaultNamePrompt() => ShowDefaultNamePrompt = false;
 
-    public void DismissNotification() => NotificationMessage = null;
+    public void ShowNotification(string message) =>
+        Notifications.Show("EntityTracker", message, NotificationKind.Failure);
 
     private bool CanNavigate(ShellNavigationItem item) =>
         !IsBusy && (!item.RequiresProject || HasProject) && (!item.RequiresTracker || HasTracker);
@@ -538,7 +618,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             Replace(Trackers, previousTrackers);
             SetDestination(previousDestination);
             _logger.LogError(exception, "Application context could not be changed.");
-            NotificationMessage = $"The application context could not be changed: {exception.Message}";
+            Notifications.Show("Context could not be changed", exception.Message,
+                NotificationKind.Failure);
             return false;
         }
         finally
@@ -567,6 +648,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     private async Task ReloadCatalogAsync(CancellationToken cancellationToken)
     {
+        _pendingProjectDeletions = _gitSync is null ? [] :
+            await _gitSync.ListPendingDeletionsAsync(cancellationToken);
+        OnPropertyChanged(nameof(PendingProjectDeletions));
         Replace(Projects, (await _projectRepository.GetAllAsync(cancellationToken))
             .Where(static project => project.LifecycleState == CatalogLifecycleState.Active));
         await RefreshDashboardsAsync(cancellationToken);
@@ -714,6 +798,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     public void Dispose()
     {
+        if (_autoSync is not null) _autoSync.StateChanged -= OnAutoSyncStateChanged;
+        foreach (ProjectDashboardViewModel dashboard in _projectDashboards.Values)
+            dashboard.RepositoryCard?.Dispose();
         Catalog.Changed -= OnCatalogChanged;
         Catalog.SelectionRequested -= OnCatalogSelectionRequested;
         foreach (MainWindowViewModel workspace in _workspaces.Values)

@@ -137,27 +137,27 @@ public partial class ProjectDashboardView : UserControl
 
     private async void OnOpenTracker(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is TrackerDashboardSummary item)
+        if (sender is FrameworkElement { DataContext: TrackerDashboardSummary item })
             await Shell.OpenTrackerAsync(item.TrackerId);
     }
 
     private void OnRenameTracker(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is TrackerDashboardSummary item &&
+        if (sender is FrameworkElement { DataContext: TrackerDashboardSummary item } &&
             Shell.Trackers.FirstOrDefault(tracker => tracker.Id == item.TrackerId) is { } tracker)
             Shell.Catalog.OpenRenameTracker(tracker);
     }
 
     private void OnRecycleTracker(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is TrackerDashboardSummary item &&
+        if (sender is FrameworkElement { DataContext: TrackerDashboardSummary item } &&
             Shell.Trackers.FirstOrDefault(tracker => tracker.Id == item.TrackerId) is { } tracker)
             Shell.Catalog.RequestRecycle(tracker);
     }
 
     private async void OnOpenComparisonCell(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is ProjectComparisonDisplayCell cell)
+        if (sender is FrameworkElement { DataContext: ProjectComparisonDisplayCell cell })
         {
             await Shell.OpenComparisonCellAsync(cell.Model);
         }

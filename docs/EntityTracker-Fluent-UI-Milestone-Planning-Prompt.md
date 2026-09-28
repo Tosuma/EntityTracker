@@ -45,6 +45,8 @@ Before creating the milestones, inspect the existing repository and documentatio
 Read at minimum:
 - docs/architecture/ARCHITECTURE.md
 - docs/milestones/00_README.md
+- docs/milestones/ux/00_README.md
+- docs/milestones/product-feedback/00_README.md
 - all completed/accepted milestones relevant to the current UI
 - any Product Feedback milestones that affect the overview, filtering, editing, importing, reporting, or navigation
 - the current WPF project structure

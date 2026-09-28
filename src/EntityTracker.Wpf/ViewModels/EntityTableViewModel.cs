@@ -18,16 +18,15 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
             [DevelopmentStatus.Reconciled] = 4
         };
 
-    private static readonly IReadOnlyDictionary<EntityWorkflowState, int> WorkStatusOrder =
-        new Dictionary<EntityWorkflowState, int>
+    private static readonly IReadOnlyDictionary<WorkStatusDisplay, int> WorkStatusOrder =
+        new Dictionary<WorkStatusDisplay, int>
         {
-            [EntityWorkflowState.Ready] = 0,
-            [EntityWorkflowState.Blocked] = 1,
-            [EntityWorkflowState.InProgress] = 2,
-            [EntityWorkflowState.ReworkNeeded] = 3,
-            [EntityWorkflowState.DevelopmentCompleted] = 4,
-            [EntityWorkflowState.Reconciled] = 5,
-            [EntityWorkflowState.Archived] = 6
+            [WorkStatusDisplay.Ready] = 0,
+            [WorkStatusDisplay.Blocked] = 1,
+            [WorkStatusDisplay.InProgress] = 2,
+            [WorkStatusDisplay.Completed] = 3,
+            [WorkStatusDisplay.Reconciled] = 4,
+            [WorkStatusDisplay.Archived] = 5
         };
 
     private readonly IReadOnlyList<OverviewColumnFilterState> _filters;
@@ -65,14 +64,14 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
 
         if (!isArchived)
         {
-            WorkStatusFilter = new OverviewColumnFilterState<EntityWorkflowState>(
+            WorkStatusFilter = new OverviewColumnFilterState<WorkStatusDisplay>(
                 this,
                 OverviewColumnKey.WorkStatus,
                 "Work status",
                 canSort: true,
-                row => row.WorkflowState,
-                FormatWorkStatus,
-                sortComparer: Comparer<EntityWorkflowState>.Create(
+                row => row.WorkStatusDisplay,
+                WorkStatusDisplayMapper.Format,
+                sortComparer: Comparer<WorkStatusDisplay>.Create(
                     (left, right) => WorkStatusOrder[left].CompareTo(WorkStatusOrder[right])));
         }
 
@@ -411,7 +410,7 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
         Func<(EntityOverviewRow Row, int SourcePosition), int> keySelector = sort.Column switch
         {
             OverviewColumnKey.Status => item => StatusOrder[item.Row.DevelopmentStatus],
-            OverviewColumnKey.WorkStatus => item => WorkStatusOrder[item.Row.WorkflowState],
+            OverviewColumnKey.WorkStatus => item => WorkStatusOrder[item.Row.WorkStatusDisplay],
             _ => item => item.SourcePosition
         };
 
@@ -449,18 +448,6 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
 
     private static string NormalizeMetadataValue(string value) =>
         string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
-
-    private static string FormatWorkStatus(EntityWorkflowState status) => status switch
-    {
-        EntityWorkflowState.Ready => "Ready",
-        EntityWorkflowState.Blocked => "Blocked",
-        EntityWorkflowState.InProgress => "In progress",
-        EntityWorkflowState.ReworkNeeded => "Rework needed",
-        EntityWorkflowState.DevelopmentCompleted => "Dev. completed",
-        EntityWorkflowState.Reconciled => "Reconciled",
-        EntityWorkflowState.Archived => "Archived",
-        _ => status.ToString()
-    };
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));

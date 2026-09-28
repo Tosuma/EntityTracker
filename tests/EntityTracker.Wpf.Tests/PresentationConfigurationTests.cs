@@ -6,6 +6,23 @@ namespace EntityTracker.Wpf.Tests;
 public sealed class PresentationConfigurationTests
 {
     [Fact]
+    public void AutomaticSyncSettingsAndProjectStatusAreAccessible()
+    {
+        XDocument settings = LoadWpfXaml("Views", "SettingsView.xaml");
+        Assert.Contains(settings.Descendants(), element =>
+            element.Name.LocalName == "CheckBox" &&
+            (string?)element.Attribute("AutomationProperties.Name") == "Enable automatic Project sync" &&
+            (string?)element.Attribute("Command") == "{Binding AutoSync.ToggleCommand}");
+        Assert.Equal(5, settings.Descendants().Count(element =>
+            element.Name.LocalName == "RadioButton" &&
+            (string?)element.Attribute("GroupName") == "AutoSyncInterval"));
+        XDocument dashboard = LoadWpfXaml("Views", "ProjectDashboardView.xaml");
+        Assert.Contains(dashboard.Descendants(), element =>
+            (string?)element.Attribute("Text") == "{Binding SyncStateLabel}" &&
+            (string?)element.Attribute("AutomationProperties.LiveSetting") == "Polite");
+    }
+
+    [Fact]
     public void App_EnablesBuiltInSystemFluentTheme()
     {
         XDocument document = LoadWpfXaml("App.xaml");
@@ -194,6 +211,42 @@ public sealed class PresentationConfigurationTests
         Assert.Contains(document.Descendants(), element =>
             element.Name.LocalName == "ComboBox" &&
             (string?)element.Attribute("AutomationProperties.LabeledBy") is not null);
+    }
+
+    [Fact]
+    public void SearchShortcut_IsHandledAtWindowScopeForSidebarKeyboardFocus()
+    {
+        XDocument shell = LoadWpfXaml("MainWindow.xaml");
+        Assert.Equal(
+            "OnWindowPreviewKeyDown",
+            (string?)shell.Root?.Attribute("PreviewKeyDown"));
+
+        string repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
+        string shellCode = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "src",
+            "EntityTracker.Wpf",
+            "MainWindow.xaml.cs"));
+        Assert.Contains("WorkspaceView.TryOpenCurrentSearch()", shellCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MergeReviewDialog_ProvidesKeyboardAndScreenReaderContext()
+    {
+        XDocument review = LoadWpfXaml("Views", "ProjectMergeReviewDialog.xaml");
+        Assert.Equal("Review Project merge", (string?)review.Root?.Attribute("Title"));
+        XElement root = Assert.Single(review.Root!.Elements(), e => e.Name.LocalName == "Grid");
+        Assert.Equal("Cycle", (string?)root.Attribute("KeyboardNavigation.TabNavigation"));
+        Assert.Contains(review.Descendants(), e =>
+            (string?)e.Attribute("AutomationProperties.HeadingLevel") == "Level1");
+        Assert.Contains(review.Descendants(), e =>
+            (string?)e.Attribute("AutomationProperties.Name") == "Base value");
+        Assert.Contains(review.Descendants(), e =>
+            (string?)e.Attribute("AutomationProperties.Name") == "Local value");
+        Assert.Contains(review.Descendants(), e =>
+            (string?)e.Attribute("AutomationProperties.Name") == "Remote value");
+        Assert.Contains(review.Descendants(), e =>
+            (string?)e.Attribute("IsCancel") == "True");
     }
 
     [Fact]

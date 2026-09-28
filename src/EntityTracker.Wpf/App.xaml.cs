@@ -14,10 +14,12 @@ using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Application.Workflow;
+using EntityTracker.Application.GitSync;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Infrastructure.Importing;
 using EntityTracker.Infrastructure.Persistence;
+using EntityTracker.Infrastructure.GitSync;
 using EntityTracker.Reporting;
 using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels;
@@ -33,6 +35,7 @@ public partial class App : System.Windows.Application
     private ServiceProvider? _serviceProvider;
     private ILogger<App>? _logger;
     private IApplicationThemeService? _themeService;
+    private SingleInstanceCoordinator? _singleInstance;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -40,6 +43,20 @@ public partial class App : System.Windows.Application
 
         ApplicationDataPathResolver dataPathResolver = new();
         ApplicationDataPaths dataPaths = dataPathResolver.ResolvePaths();
+        _singleInstance = new SingleInstanceCoordinator(dataPaths.RootDirectory);
+        if (!_singleInstance.TryBecomePrimary(() =>
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (MainWindow is null || Dispatcher.HasShutdownStarted) return;
+                if (MainWindow.WindowState == WindowState.Minimized)
+                    MainWindow.WindowState = WindowState.Normal;
+                MainWindow.Show();
+                MainWindow.Activate();
+            })))
+        {
+            Shutdown();
+            return;
+        }
         RollingFileLoggerProvider fileLoggerProvider = new(dataPaths.LogsDirectory);
         ILogger bootstrapLogger = fileLoggerProvider.CreateLogger("EntityTracker.Startup");
         EntityTrackerSettingsStore settingsStore = new(dataPaths.SettingsPath);
@@ -116,6 +133,28 @@ public partial class App : System.Windows.Application
             services.AddSingleton<ICsvFilePicker, CsvFilePicker>();
             services.AddSingleton<TrackerWorkspaceViewModelFactory>();
             services.AddSingleton<DashboardViewModelFactory>();
+            services.AddSingleton<IProjectSyncLinkStore>(new JsonProjectSyncLinkStore(
+                System.IO.Path.Combine(dataPaths.RootDirectory, "git-sync-links.v1.json")));
+            services.AddSingleton<ILocalGitTransport, SystemGitTransport>();
+            services.AddSingleton<IOutboundDeletionApproval, WpfOutboundDeletionApproval>();
+            services.AddSingleton<IProjectMergeReview, WpfProjectMergeReview>();
+            services.AddSingleton<WpfProjectUnsavedEditsGate>();
+            services.AddSingleton<IProjectUnsavedEditsGate>(provider =>
+                provider.GetRequiredService<WpfProjectUnsavedEditsGate>());
+            services.AddSingleton<IProjectRepositoryFolderPicker, ProjectRepositoryFolderPicker>();
+            services.AddSingleton<ProjectGitSyncService>();
+            services.AddSingleton(provider => new ProjectAutoSyncService(
+                provider.GetRequiredService<IProjectSyncLinkStore>(),
+                (projectId, token) => provider.GetRequiredService<ProjectGitSyncService>()
+                    .SyncNowAsync(projectId, token, mode: ProjectSyncMode.Automatic),
+                settings.Settings.AutoSyncEnabled,
+                settings.Settings.AutoSyncIntervalMinutes,
+                provider.GetRequiredService<IProjectUnsavedEditsGate>()));
+            services.AddSingleton(provider => new AutoSyncSettingsViewModel(
+                settingsStore, provider.GetRequiredService<ProjectAutoSyncService>(),
+                settings.Settings));
+            services.AddSingleton<NotificationCenter>();
+            services.AddSingleton<ProjectRepositoryCardViewModelFactory>();
             services.AddSingleton<CatalogManagementViewModel>();
             services.AddSingleton<ShellViewModel>();
 
@@ -182,6 +221,8 @@ public partial class App : System.Windows.Application
         services.AddSingleton(provider => new SqliteBackupService(
             provider.GetRequiredService<SqliteDatabase>(),
             dataPaths.BackupsDirectory));
+        services.AddSingleton<IProjectSyncBackup>(provider => provider.GetRequiredService<SqliteBackupService>());
+        services.AddSingleton<IProjectSyncBackup>(provider => provider.GetRequiredService<SqliteBackupService>());
         services.AddSingleton<IPersistenceInitializer, SqlitePersistenceInitializer>();
         services.AddSingleton<IEntityRepository, SqliteEntityRepository>();
         services.AddSingleton<IEntityAuditReader, SqliteEntityAuditReader>();
@@ -197,6 +238,9 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IProjectRepository, SqliteProjectRepository>();
         services.AddSingleton<ITrackerRepository, SqliteTrackerRepository>();
         services.AddSingleton<IProjectTrackerStore, SqliteProjectTrackerStore>();
+        services.AddSingleton<EntityTracker.Application.Snapshots.IProjectSnapshotStore, SqliteProjectSnapshotStore>();
+        services.AddSingleton<EntityTracker.Application.Snapshots.IProjectSnapshotCodec,
+            EntityTracker.Infrastructure.Snapshots.ProjectSnapshotJsonCodec>();
     }
 
     private void OnDispatcherUnhandledException(
@@ -229,6 +273,8 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _serviceProvider?.GetService<ProjectAutoSyncService>()?.Dispose();
+        _singleInstance?.Dispose();
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         DispatcherUnhandledException -= OnDispatcherUnhandledException;
         _logger?.LogInformation("EntityTracker stopped.");

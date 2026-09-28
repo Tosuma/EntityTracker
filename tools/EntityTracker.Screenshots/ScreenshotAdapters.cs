@@ -1,4 +1,5 @@
 using EntityTracker.Wpf.Services;
+using EntityTracker.Application.GitSync;
 
 namespace EntityTracker.Screenshots;
 
@@ -23,6 +24,17 @@ internal sealed class ScreenshotClipboard : IClipboardService
 internal sealed class ScreenshotChartFilePicker : IProgressChartFilePicker
 {
     public string? SelectPngPath(string suggestedFileName) => null;
+}
+
+internal sealed class ScreenshotRepositoryFolderPicker : IProjectRepositoryFolderPicker
+{
+    public string? Pick() => null;
+}
+
+internal sealed class ScreenshotOutboundDeletionApproval : IOutboundDeletionApproval
+{
+    public Task<bool> ApproveAsync(IReadOnlyList<string> deletedObjects,
+        CancellationToken cancellationToken = default) => Task.FromResult(false);
 }
 
 internal sealed class ScreenshotSynchronizationConfirmation : ISchemaSynchronizationConfirmation

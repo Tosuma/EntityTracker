@@ -8,7 +8,8 @@ public sealed class DashboardViewModelFactory(
     PortfolioQueryService portfolioQueryService,
     ProjectEntityComparisonQueryService comparisonQueryService,
     AggregateProgressReportingService reportingService,
-    ProgressChartPresentationBuilder presentationBuilder)
+    ProgressChartPresentationBuilder presentationBuilder,
+    ProjectRepositoryCardViewModelFactory? repositoryCardFactory = null)
 {
     public PortfolioDashboardViewModel CreatePortfolio() => new(
         portfolioQueryService,
@@ -20,5 +21,6 @@ public sealed class DashboardViewModelFactory(
         portfolioQueryService,
         comparisonQueryService,
         reportingService,
-        presentationBuilder);
+        presentationBuilder,
+        repositoryCardFactory?.Create(projectId));
 }

@@ -1,43 +1,11 @@
 # Milestone status
 
-## Completed product milestones
+| Category | Completed | Planned | Retired |
+| --- | --- | --- | --- |
+| [Product](product/00_README.md) | 01–12, including 05.1 and 06.1 | — | 13 — Live SharePoint integration |
+| [Product feedback](product-feedback/00_README.md) | — | PF-01–PF-05 | — |
+| [Engineering](engineering/00_README.md) | CI-01 | — | — |
+| [UI/UX](ux/00_README.md) | UX-01–UX-08 | — | — |
+| [Git sync](git-sync/00_README.md) | GS-01–GS-05 | — | — |
 
-- 01
-- 02
-- 03
-- 04
-- 05
-- 06
-- 07
-- 08
-- 09
-- 10
-- 11
-- 12
-- CI-01
-
-## Retired product milestones
-
-- 13 — Live SharePoint integration
-
-## Planned product feedback milestones
-
-- PF-01 — Bulk status updates
-- PF-02 — Priority planning and replaceable ranking
-- PF-03 — Responsible developer
-- PF-04 — Entity groups with suggestions
-- PF-05 — Column filtering and status sorting
-
-## Completed UI/UX modernization milestones
-
-- UX-01 — Projects and Trackers Foundation
-- UX-02 — Fluent Foundation and Theme
-- UX-03 — Application Shell and Portfolio
-- UX-04 — Overview and Entity Details
-- UX-05 — Schema Synchronization Experience
-- UX-06 — Entity Creation and Editing
-- UX-07 — Reporting and Tracker Comparison
-- UX-08 — Accessibility and Consistency
-
-Future Project-level Git synchronization will be planned separately after its data format, merge,
-authentication, and recovery requirements are decided.
+GS-01 implements portable Project snapshots. GS-02 adds existing local repository linking and manual local snapshot commits. GS-03 adds existing-checkout import and manual fetch and push. GS-04 adds collaborative three-way merge review and Project tombstones. GS-05 adds automatic synchronization, settings v5, status, recovery guidance, defensive limits, and single-instance protection.
