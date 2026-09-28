@@ -19,8 +19,8 @@ dotnet --version
 ## Install for everyday use
 
 ```powershell
-git clone https://github.com/Tosuma/Entity-Dependency-Manager.git
-cd Entity-Dependency-Manager
+git clone https://github.com/Tosuma/EntityTracker.git
+cd EntityTracker
 .\scripts\Install-EntityTracker.ps1
 ```
 

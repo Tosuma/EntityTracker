@@ -108,7 +108,11 @@ public partial class MainWindow : Window
             catalogOpen ? "Finish or close the current dialog, then update EntityTracker." :
             operationRunning ? "Wait for the current operation to finish, then update EntityTracker." :
             $"{_updates.RequiredTag} is available. Close and update before continuing.";
-        if (_updateNotice is null)
+        if (showOverlay)
+        {
+            ClearUpdateNotice();
+        }
+        else if (_updateNotice is null)
         {
             _updateNotice = _viewModel.Notifications.RequireAction(
                 "App update required", message,
@@ -119,7 +123,7 @@ public partial class MainWindow : Window
             _viewModel.Notifications.NeedAction(_updateNotice, message,
                 "Close and update", RunUpdateAsync);
         }
-        _updateNotice.IsActionEnabled = actionEnabled;
+        if (_updateNotice is not null) _updateNotice.IsActionEnabled = false;
         UpdateBlock.Visibility = showOverlay ? Visibility.Visible : Visibility.Collapsed;
         UpdateSidebarBlock.Visibility = showOverlay ? Visibility.Visible : Visibility.Collapsed;
         UpdateActionButton.IsEnabled = actionEnabled;
@@ -170,13 +174,19 @@ public partial class MainWindow : Window
 
     internal void ShowUpdatePreview(string tag)
     {
-        _updateNotice = _viewModel.Notifications.RequireAction(
-            "App update required", $"{tag} is available. Close and update before continuing.",
-            "Close and update", () => Task.CompletedTask, canDismiss: false);
+        ClearUpdateNotice();
         UpdateBlockMessage.Text = $"{tag} is ready. EntityTracker must update before you continue working or sync Projects.";
         UpdateBlock.Visibility = Visibility.Visible;
         UpdateSidebarBlock.Visibility = Visibility.Visible;
         SetUnderlyingUiForUpdate(false);
+    }
+
+    private void ClearUpdateNotice()
+    {
+        if (_updateNotice is null) return;
+        _updateNotice.CanDismiss = true;
+        _viewModel.Notifications.Dismiss(_updateNotice);
+        _updateNotice = null;
     }
 
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
