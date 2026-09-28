@@ -6,6 +6,23 @@ namespace EntityTracker.Wpf.Tests;
 public sealed class PresentationConfigurationTests
 {
     [Fact]
+    public void AutomaticSyncSettingsAndProjectStatusAreAccessible()
+    {
+        XDocument settings = LoadWpfXaml("Views", "SettingsView.xaml");
+        Assert.Contains(settings.Descendants(), element =>
+            element.Name.LocalName == "CheckBox" &&
+            (string?)element.Attribute("AutomationProperties.Name") == "Enable automatic Project sync" &&
+            (string?)element.Attribute("Command") == "{Binding AutoSync.ToggleCommand}");
+        Assert.Equal(5, settings.Descendants().Count(element =>
+            element.Name.LocalName == "RadioButton" &&
+            (string?)element.Attribute("GroupName") == "AutoSyncInterval"));
+        XDocument dashboard = LoadWpfXaml("Views", "ProjectDashboardView.xaml");
+        Assert.Contains(dashboard.Descendants(), element =>
+            (string?)element.Attribute("Text") == "{Binding SyncStateLabel}" &&
+            (string?)element.Attribute("AutomationProperties.LiveSetting") == "Polite");
+    }
+
+    [Fact]
     public void App_EnablesBuiltInSystemFluentTheme()
     {
         XDocument document = LoadWpfXaml("App.xaml");

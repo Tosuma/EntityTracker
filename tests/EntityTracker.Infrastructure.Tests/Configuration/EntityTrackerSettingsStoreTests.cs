@@ -24,7 +24,7 @@ public sealed class EntityTrackerSettingsStoreTests
     [InlineData(ApplicationAppearance.System)]
     [InlineData(ApplicationAppearance.Light)]
     [InlineData(ApplicationAppearance.Dark)]
-    public async Task SaveAppearanceAsync_WritesVersionFourWithoutRetiredProviderFields(
+    public async Task SaveAppearanceAsync_WritesVersionFiveWithoutRetiredProviderFields(
         ApplicationAppearance appearance)
     {
         using TemporarySettingsDirectory directory = new();
@@ -35,10 +35,51 @@ public sealed class EntityTrackerSettingsStoreTests
 
         Assert.Equal(appearance, result.Settings.Appearance);
         string json = await File.ReadAllTextAsync(directory.SettingsPath);
-        Assert.Contains("\"version\": 4", json, StringComparison.Ordinal);
+        Assert.Contains("\"version\": 5", json, StringComparison.Ordinal);
+        Assert.True(result.Settings.AutoSyncEnabled);
+        Assert.Equal(5, result.Settings.AutoSyncIntervalMinutes);
         Assert.Contains($"\"appearance\": \"{appearance}\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain("activeStorage", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("sharePoint", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(5)]
+    [InlineData(15)]
+    [InlineData(30)]
+    [InlineData(60)]
+    public async Task SaveAutoSyncAsync_PreservesContextAndAcceptsSupportedIntervals(int minutes)
+    {
+        using TemporarySettingsDirectory directory = new();
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+        ProjectId project = ProjectId.New();
+        await store.SaveActiveContextAsync(project, null);
+        await store.SaveAutoSyncAsync(false, minutes);
+        await store.SaveAppearanceAsync(ApplicationAppearance.Dark);
+
+        SettingsLoadResult result = await store.LoadAsync();
+        Assert.False(result.Settings.AutoSyncEnabled);
+        Assert.Equal(minutes, result.Settings.AutoSyncIntervalMinutes);
+        Assert.Equal(project, result.Settings.LastProjectId);
+        Assert.Equal(ApplicationAppearance.Dark, result.Settings.Appearance);
+        Assert.Contains("\"version\": 5", await File.ReadAllTextAsync(directory.SettingsPath));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public async Task OlderSettingsVersions_DefaultToEnabledFiveMinuteSync(int version)
+    {
+        using TemporarySettingsDirectory directory = new();
+        Directory.CreateDirectory(directory.DirectoryPath);
+        await File.WriteAllTextAsync(directory.SettingsPath,
+            $$"""{"version": {{version}}, "appearance": "Dark", "activeStorage": "Sqlite"}""");
+        SettingsLoadResult result = await new EntityTrackerSettingsStore(directory.SettingsPath).LoadAsync();
+        Assert.True(result.Settings.AutoSyncEnabled);
+        Assert.Equal(5, result.Settings.AutoSyncIntervalMinutes);
     }
 
     [Fact]
@@ -102,7 +143,7 @@ public sealed class EntityTrackerSettingsStoreTests
         Assert.Equal(projectId, result.Settings.LastProjectId);
         Assert.Equal(trackerId, result.Settings.LastTrackerId);
         string json = await File.ReadAllTextAsync(directory.SettingsPath);
-        Assert.Contains("\"version\": 4", json, StringComparison.Ordinal);
+        Assert.Contains("\"version\": 5", json, StringComparison.Ordinal);
         Assert.DoesNotContain("activeStorage", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("sharePoint", json, StringComparison.OrdinalIgnoreCase);
     }

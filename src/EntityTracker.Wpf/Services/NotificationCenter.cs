@@ -135,9 +135,9 @@ public sealed class NotificationCenter : INotifyPropertyChanged
     }
 
     public NotificationItem RequireAction(string title, string message, string actionLabel,
-        Func<Task> action)
+        Func<Task> action, ProjectId? projectId = null)
     {
-        NotificationItem item = Add(title, message, NotificationKind.ActionNeeded);
+        NotificationItem item = Add(title, message, NotificationKind.ActionNeeded, projectId);
         item.Update(message, NotificationKind.ActionNeeded, actionLabel, action);
         return item;
     }

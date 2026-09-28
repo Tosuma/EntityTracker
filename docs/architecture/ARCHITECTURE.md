@@ -489,13 +489,16 @@ replace them with a generic repository framework.
 
 SQLite is the only supported provider. SharePoint configuration and provider selection were
 retired in UX-08. Settings versions 1–3 remain readable so appearance and active Project/Tracker
-context survive; the next settings save writes version 4 without retired provider fields.
+context survive; the next settings save writes version 5 without retired provider fields.
 Backend-neutral collaborative conflict value types are currently inactive historical seams, as
 described in [COLLABORATIVE_STORAGE.md](COLLABORATIVE_STORAGE.md).
 
-The [GS milestone roadmap](../milestones/git-sync/00_README.md) records portable snapshots and
-manual local Git commits through user-managed existing working trees. SQLite remains the runtime
-store for ordinary operations. Remote synchronization and merge remain future milestones.
+The [GS milestone roadmap](../milestones/git-sync/00_README.md) records portable snapshots,
+manual collaboration, and automatic synchronization through user-managed existing working trees.
+The Application scheduler starts after the UI is usable, runs one linked Project at a time, and
+uses cancellation and a per-Project result state. Infrastructure bounds repository paths, files,
+Git output, and operation time. Git work remains outside synchronous SQLite and navigation paths;
+SQLite remains the runtime store for ordinary operations.
 
 Local backup, logging, retention, and restore procedures are defined in
 [RECOVERY.md](../operations/RECOVERY.md).

@@ -70,7 +70,7 @@ public sealed class ExistingCheckoutRemoteSyncTests
         using GitWorkspace workspace = new();
         string publisher = workspace.CreateRemoteCheckout("publisher", Snapshot(Guid.NewGuid(), "Project"));
         string full = Path.Combine(publisher, ".entitytracker", "oversized.json");
-        File.WriteAllBytes(full, new byte[1024 * 1024 + 1]);
+        File.WriteAllBytes(full, new byte[8 * 1024 * 1024 + 1]);
         workspace.Git(publisher, "add", ".entitytracker");
         workspace.Git(publisher, "commit", "-m", "Oversized blob");
         workspace.Git(publisher, "push", "origin", "main");
@@ -277,6 +277,41 @@ public sealed class ExistingCheckoutRemoteSyncTests
     }
 
     [Fact]
+    public async Task AutomaticSyncDefersConflictsWithoutChangingSqliteOrOpeningReview()
+    {
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        string publisher = workspace.CreateRemoteCheckout("publisher", Snapshot(id, "Project"));
+        string receiver = workspace.Clone("receiver");
+        await using TestCatalog catalog = await TestCatalog.CreateAsync(workspace, "catalog");
+        await catalog.Sync(receiver).ImportAsync(receiver);
+        ProjectId projectId = new(id);
+        ProjectSnapshotRead read = await catalog.Snapshots.ReadAsync(projectId);
+        await catalog.Snapshots.ApplyAsync(read.Snapshot! with
+        {
+            Project = read.Snapshot.Project with { Name = "Local edit" }
+        }, read.Revision);
+        foreach ((string relative, byte[] bytes) in new ProjectSnapshotJsonCodec()
+            .Encode(Snapshot(id, "Remote edit")).Files)
+            File.WriteAllBytes(Path.Combine(publisher,
+                relative.Replace('/', Path.DirectorySeparatorChar)), bytes);
+        workspace.Git(publisher, "add", ".entitytracker");
+        workspace.Git(publisher, "commit", "-m", "Remote change");
+        workspace.Git(publisher, "push", "origin", "main");
+        string head = workspace.Git(receiver, "rev-parse", "HEAD");
+        int backupsBefore = Directory.GetFiles(catalog.BackupDirectory,
+            "entity-tracker-pre-sync-*.db").Length;
+
+        await Assert.ThrowsAsync<ProjectSyncReviewRequiredException>(() =>
+            catalog.Sync(receiver).SyncNowAsync(projectId, mode: ProjectSyncMode.Automatic));
+
+        Assert.Equal(head, workspace.Git(receiver, "rev-parse", "HEAD"));
+        Assert.Equal("Local edit", (await catalog.Snapshots.ReadAsync(projectId)).Snapshot!.Project.Name);
+        Assert.Equal(backupsBefore, Directory.GetFiles(catalog.BackupDirectory,
+            "entity-tracker-pre-sync-*.db").Length);
+    }
+
+    [Fact]
     public async Task SyncWaitsForUnfinishedEditThenResumesAndCanBeCancelled()
     {
         using GitWorkspace workspace = new();
@@ -345,6 +380,32 @@ public sealed class ExistingCheckoutRemoteSyncTests
         Assert.Contains($"Tracker {removed.Id:D}", deletionSet);
         Assert.Contains($"Entity {removed.Entities[0].Id:D}", deletionSet);
         Assert.Contains($"Progress record {removed.ProgressHistory[0].SnapshotId:D}", deletionSet);
+    }
+
+    [Fact]
+    public async Task AutomaticSyncDefersDeletionWithoutOpeningApprovalOrChangingRepository()
+    {
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        string checkout = workspace.CreateLocalCheckout("project", Snapshot(id, "Project"));
+        await using TestCatalog catalog = await TestCatalog.CreateAsync(workspace, "catalog");
+        RecordingApproval approval = new();
+        ProjectGitSyncService sync = catalog.Sync(checkout, approval: approval);
+        await sync.ImportAsync(checkout);
+        ProjectId projectId = new(id);
+        ProjectSnapshotRead read = await catalog.Snapshots.ReadAsync(projectId);
+        await catalog.Snapshots.ApplyAsync(read.Snapshot! with
+        {
+            Trackers = [read.Snapshot.Trackers[0]]
+        }, read.Revision);
+        string head = workspace.Git(checkout, "rev-parse", "HEAD");
+
+        await Assert.ThrowsAsync<ProjectSyncDeletionApprovalRequiredException>(() =>
+            sync.SyncNowAsync(projectId, mode: ProjectSyncMode.Automatic));
+
+        Assert.Empty(approval.Calls);
+        Assert.Equal(head, workspace.Git(checkout, "rev-parse", "HEAD"));
+        Assert.Single((await catalog.Snapshots.ReadAsync(projectId)).Snapshot!.Trackers);
     }
 
     [Fact]
@@ -648,7 +709,7 @@ public sealed class ExistingCheckoutRemoteSyncTests
     [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa tree 4")]
     [InlineData("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb blob 4")]
     [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa blob -1")]
-    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa blob 1048577")]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa blob 8388609")]
     [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa blob unknown")]
     public void BatchReaderRejectsMalformedBlobHeaders(string header) =>
         Assert.Throws<InvalidDataException>(() => SystemGitTransport.ParseBatchHeader(
@@ -840,11 +901,11 @@ public sealed class ExistingCheckoutRemoteSyncTests
         await using TestCatalog catalog = await TestCatalog.CreateAsync(workspace, "catalog");
         ProjectGitSyncService sync = catalog.Sync(checkout);
         workspace.Git(checkout, "checkout", "--detach", "HEAD");
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sync.ImportAsync(checkout));
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() => sync.ImportAsync(checkout));
         workspace.Git(checkout, "checkout", "main");
         await sync.ImportAsync(checkout);
         workspace.Git(checkout, "branch", "-m", "other");
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sync.SyncNowAsync(new ProjectId(id)));
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() => sync.SyncNowAsync(new ProjectId(id)));
     }
 
     [Fact]

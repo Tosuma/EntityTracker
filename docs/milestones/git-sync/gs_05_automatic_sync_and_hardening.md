@@ -1,6 +1,6 @@
 # GS-05 — Automatic Sync and Hardening
 
-**Status: planned.** GS-01 through GS-04 must be complete and verified before this milestone begins.
+**Status: completed.** GS-01 through GS-04 were completed and verified before implementation.
 
 ## Goal and user-facing outcome
 
@@ -28,6 +28,27 @@ Application owns scheduler policy and sync-state models; Infrastructure owns set
 - Test stale/invalid repository configuration, authentication-required state, deletion approval and conflicts pausing only the affected Project, multi-instance protection, bounds, symlinks, and sanitized logs.
 - Verify backup creation only for inbound SQLite changes and successful recovery guidance. Use a deliberately stalled Git transport to prove ordinary SQLite reads, writes, and UI navigation remain responsive.
 - Test settings version 5 migration and UI settings/status accessibility. Build the complete solution and run its regression suite.
+
+## Completion evidence
+
+Settings v5 stores only the global automatic sync switch and interval, preserving v1–v4 reads.
+The Application scheduler starts after the WPF shell is usable, checks linked Projects in sequence,
+defers unfinished edits, isolates Project failures, and cancels work at shutdown. Manual sync remains
+available when automatic sync is off. Automatic conflict and deletion paths require manual review
+without showing a background dialog or mutating SQLite. The repository card and action-needed
+notifications expose the result; routine automatic checks remain quiet.
+
+System Git runs only against user-managed existing checkouts. The transport rejects traversal and
+symlink entries and bounds snapshot file count (20,000), individual files (8 MiB), total snapshot
+bytes (128 MiB), Git metadata output (4 MiB), and local/remote operation time (30/120 seconds).
+A per-data-root instance guard activates the existing application window. Help, README,
+architecture, collaborative-storage, and recovery guidance now describe setup and repair.
+
+Verification: `dotnet build EntityTracker.slnx --no-restore -m:1 --verbosity quiet` succeeded with
+zero warnings and errors. `dotnet test EntityTracker.slnx --no-build -m:1 --verbosity quiet` passed
+all 646 tests, including scheduler timing and isolation, settings migration, stalled Git with
+responsive SQLite reads and writes, conflict/deletion deferral, bounds, symlinks, and instance
+protection. README screenshots were regenerated and visually reviewed in Light and Dark mode.
 
 ## Agent planning prompt
 

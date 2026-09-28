@@ -27,6 +27,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private readonly TrackerWorkspaceViewModelFactory _workspaceFactory;
     private readonly IContextDiscardConfirmation _discardConfirmation;
     private readonly ProjectGitSyncService? _gitSync;
+    private readonly ProjectAutoSyncService? _autoSync;
     private readonly WpfProjectUnsavedEditsGate? _syncEditGate;
     private readonly ILogger<ShellViewModel> _logger;
     private readonly Dictionary<TrackerId, MainWindowViewModel> _workspaces = [];
@@ -61,7 +62,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         ILogger<ShellViewModel>? logger = null,
         ProjectGitSyncService? gitSync = null,
         WpfProjectUnsavedEditsGate? syncEditGate = null,
-        NotificationCenter? notifications = null)
+        NotificationCenter? notifications = null,
+        AutoSyncSettingsViewModel? autoSyncSettings = null,
+        ProjectAutoSyncService? autoSync = null)
     {
         _projectRepository = projectRepository;
         _trackerRepository = trackerRepository;
@@ -71,12 +74,15 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         _workspaceFactory = workspaceFactory;
         _discardConfirmation = discardConfirmation;
         _gitSync = gitSync;
+        _autoSync = autoSync;
         _syncEditGate = syncEditGate;
         Notifications = notifications ?? new NotificationCenter();
         Notifications.NavigateToProjectAsync = OpenProjectAsync;
+        if (_autoSync is not null) _autoSync.StateChanged += OnAutoSyncStateChanged;
         _syncEditGate?.Attach(this);
         Catalog = catalogManagement;
         Appearance = appearance;
+        AutoSync = autoSyncSettings;
         Help = new SqlQueryHelpViewModel(
             clipboard,
             () => _ = NavigateAsync(ShellDestination.SchemaSynchronization));
@@ -117,6 +123,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public CatalogManagementViewModel Catalog { get; }
 
     public AppearanceViewModel Appearance { get; }
+    public AutoSyncSettingsViewModel? AutoSync { get; }
     public NotificationCenter Notifications { get; }
 
     public SqlQueryHelpViewModel Help { get; }
@@ -387,6 +394,30 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         {
             await NavigateAsync(ShellDestination.ProjectDashboard);
         }
+    }
+
+    public void StartAutomaticSync() => _autoSync?.Start();
+
+    private void OnAutoSyncStateChanged(object? sender, ProjectId projectId)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.HasShutdownStarted) return;
+        if (!dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(() => OnAutoSyncStateChanged(sender, projectId));
+            return;
+        }
+        ProjectSyncState state = _autoSync!.GetState(projectId);
+        if (state.Kind is ProjectSyncStateKind.DeletionApproval or
+            ProjectSyncStateKind.Conflict or ProjectSyncStateKind.AuthenticationRequired or
+            ProjectSyncStateKind.ConfigurationInvalid or ProjectSyncStateKind.Failed)
+        {
+            if (Notifications.FindActionForProject(projectId) is null)
+                Notifications.RequireAction("Project sync needs attention", state.LastResult,
+                    "Open Project", () => OpenProjectAsync(projectId), projectId);
+        }
+        else if (state.Kind is ProjectSyncStateKind.UpToDate or ProjectSyncStateKind.Unlinked)
+            Notifications.DismissProjectActions(projectId);
     }
 
     public async Task<ProjectSyncLink> ImportProjectAsync(string repositoryPath, string? localName = null)
@@ -767,6 +798,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     public void Dispose()
     {
+        if (_autoSync is not null) _autoSync.StateChanged -= OnAutoSyncStateChanged;
+        foreach (ProjectDashboardViewModel dashboard in _projectDashboards.Values)
+            dashboard.RepositoryCard?.Dispose();
         Catalog.Changed -= OnCatalogChanged;
         Catalog.SelectionRequested -= OnCatalogSelectionRequested;
         foreach (MainWindowViewModel workspace in _workspaces.Values)

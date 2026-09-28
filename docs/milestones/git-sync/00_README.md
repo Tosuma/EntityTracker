@@ -1,6 +1,6 @@
 # GS roadmap — Project Git synchronization
 
-**Status: GS-01–GS-04 completed; GS-05 planned.** Portable snapshots, existing-checkout import, manual remote synchronization, collaborative merge review, and Project tombstones are available. Automatic sync remains planned.
+**Status: GS-01–GS-05 completed.** Portable snapshots, existing-checkout import, manual and automatic remote synchronization, collaborative merge review, and Project tombstones are available.
 
 The GS series adds full-fidelity Project collaboration through one user-managed, dedicated Git working tree per Project. SQLite remains the application's only runtime store: editing, reporting, navigation, and queries use SQLite. Git work runs asynchronously, outside interactive save and read paths. The completed [product](../product/00_README.md) and [UX](../ux/00_README.md) series provide the existing Project/Tracker foundation; the planned [product feedback](../product-feedback/00_README.md) series adds fields that snapshots must preserve when those fields exist.
 
@@ -10,7 +10,7 @@ The GS series adds full-fidelity Project collaboration through one user-managed,
 2. [GS-02 — Existing Local Repository Linking](gs_02_local_git_linking.md) — completed: select and link an existing clean working tree; commit locally by manual sync.
 3. [GS-03 — Existing Checkout Import and Remote Sync](gs_03_existing_checkout_remote_sync.md) — completed: import from an externally cloned checkout; fetch and push non-divergent branches.
 4. [GS-04 — Collaborative Merge and Conflict Review](gs_04_collaborative_merge.md) — completed: reconcile divergence, review conflicts, and publish or consume Project tombstones.
-5. [GS-05 — Automatic Sync and Hardening](gs_05_automatic_sync_and_hardening.md): background scheduling, status, recovery, and defensive limits.
+5. [GS-05 — Automatic Sync and Hardening](gs_05_automatic_sync_and_hardening.md) — completed: background scheduling, status, recovery, defensive limits, and single-instance protection.
 
 Complete and verify each milestone before beginning the next. Manual sync remains available after auto-sync is introduced.
 
@@ -46,8 +46,16 @@ One-sided changes win and identical changes collapse. Independent additions and 
 
 Permanent deletion relative to the sync base requires approval from the member publishing the exact deletion set. Auto-sync pauses until approval, and subsequent local changes invalidate it. Other members apply published deletions unless they concurrently modified the object. Project deletion uses a terminal tombstone that survives local purge long enough to publish and that receiving clients apply transactionally.
 
-## Architecture and remaining verification
+Automatic sync is enabled by default and starts one background pass after the UI becomes usable.
+It processes linked Projects sequentially every five minutes by default; Settings offers 1, 5, 15,
+30, and 60 minutes or an off switch. Manual Sync now remains available. An unfinished edit defers
+only its Project and resumes when the edit closes. Conflicts and deletion approval require manual
+review. Only action-needed automatic results appear in the notification center. The Project card
+shows unlinked, idle, syncing, up-to-date, local-pending, deletion-approval, conflict,
+authentication-required, configuration-invalid, and failed states.
 
-GS-01–GS-04 provide stable history IDs, Project snapshots and revisions, sync-link state, exact import, deletion approval, manual remote sync, typed conflict review, and tombstones. Application owns snapshot, link, backup, and transport interfaces; Git, JSON, and SQLite implementations remain in Infrastructure. WPF owns folder selection and user decisions, never Git commands. Local link state is separate from SQLite and credentials stay external. GS-05 adds automatic scheduling and its global settings.
+## Architecture and verification
 
-The remaining GS-05 milestone must build the full solution and pass its relevant tests. GS-01–GS-04 tests cover snapshot round trips, migration, invalid data, temporary working trees and bare remotes, push retries, atomic import and rollback, SQLite responsiveness during stalled Git, merge and deletion matrices, revision-bound conflict review, and collaborator convergence. Scheduler behavior belongs to GS-05.
+GS-01–GS-05 provide stable history IDs, Project snapshots and revisions, sync-link state, exact import, deletion approval, manual and automatic remote sync, typed conflict review, tombstones, and defensive bounds. Application owns snapshot, link, backup, transport, and scheduler policy; Git, JSON, and SQLite implementations remain in Infrastructure. WPF owns folder selection and user decisions, never Git commands. Local link state is separate from SQLite and credentials stay external. Settings v5 stores the global automatic schedule only.
+
+The full solution builds with zero warnings and all 646 regression tests pass. Coverage includes snapshot round trips, migration, invalid data, temporary working trees and bare remotes, push retries, atomic import and rollback, SQLite responsiveness during stalled Git, merge and deletion matrices, revision-bound conflict review, collaborator convergence, scheduler timing and isolation, instance protection, size bounds, and symlink rejection.

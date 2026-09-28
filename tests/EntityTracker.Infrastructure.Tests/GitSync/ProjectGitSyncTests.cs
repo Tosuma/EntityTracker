@@ -11,6 +11,67 @@ namespace EntityTracker.Infrastructure.Tests.GitSync;
 
 public sealed class ProjectGitSyncTests
 {
+    [Theory]
+    [InlineData(".entitytracker/../escape.json")]
+    [InlineData(".entitytracker/..\\escape.json")]
+    [InlineData(".entitytracker/trackers//entity.json")]
+    public async Task SnapshotCommitRejectsPathTraversalBeforeWriting(string relative)
+    {
+        using TestRepository repo = new();
+        repo.Init();
+        ProjectSnapshotPackage package = new(
+            new Dictionary<string, byte[]> { [relative] = [1] }, "hash");
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            new SystemGitTransport().CommitSnapshotAsync(repo.Root,
+                new Dictionary<string, byte[]>(), package));
+    }
+
+    [Fact]
+    public async Task SnapshotCommitRejectsOversizedFileBeforeWriting()
+    {
+        using TestRepository repo = new();
+        repo.Init();
+        ProjectSnapshotPackage package = new(
+            new Dictionary<string, byte[]> { [".entitytracker/oversized.json"] = new byte[8 * 1024 * 1024 + 1] },
+            "hash");
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            new SystemGitTransport().CommitSnapshotAsync(repo.Root,
+                new Dictionary<string, byte[]>(), package));
+        Assert.False(File.Exists(Path.Combine(repo.Root, ".entitytracker", "oversized.json")));
+    }
+
+    [Fact]
+    public async Task AutomaticSyncDefersUnfinishedEditBeforeOpeningGit()
+    {
+        using TestRepository repo = new();
+        ProjectId projectId = ProjectId.New();
+        ProjectGitSyncService service = new(new JsonProjectSyncLinkStore(repo.Root + "-links.json"),
+            new SystemGitTransport(), new TestSnapshotStore(Snapshot(projectId.Value)),
+            new ProjectSnapshotJsonCodec(), new RejectDeletions(),
+            editGate: new EditingGate());
+
+        await Assert.ThrowsAsync<ProjectSyncEditDeferredException>(() =>
+            service.SyncNowAsync(projectId, mode: ProjectSyncMode.Automatic));
+    }
+
+    [Fact]
+    public async Task SnapshotReaderRejectsGitSymlinkEntries()
+    {
+        using TestRepository repo = new();
+        repo.Init();
+        Directory.CreateDirectory(Path.Combine(repo.Root, ".entitytracker"));
+        repo.Write(".entitytracker/escape", "../outside");
+        string objectId = repo.Git("hash-object", "-w",
+            Path.Combine(repo.Root, ".entitytracker", "escape"));
+        repo.Git("update-index", "--add", "--cacheinfo",
+            "120000," + objectId + ",.entitytracker/escape");
+        repo.Git("commit", "-m", "Symlink entry");
+        string head = repo.Git("rev-parse", "HEAD");
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            new SystemGitTransport().ReadSnapshotAtCommitAsync(repo.Root, head));
+    }
+
     [Fact]
     public async Task LinkSyncIdempotenceAndUnlinkUseExistingLocalRepository()
     {
@@ -55,10 +116,10 @@ public sealed class ProjectGitSyncTests
         TestSnapshotStore snapshots = new(Snapshot(id));
         ProjectGitSyncService service = CreateService(repo, snapshots);
         repo.Write("untracked.txt", "dirty");
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.LinkAsync(new ProjectId(id), repo.Root));
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() => service.LinkAsync(new ProjectId(id), repo.Root));
         File.Delete(Path.Combine(repo.Root, "untracked.txt"));
         repo.Git("config", "user.email", "");
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.LinkAsync(new ProjectId(id), repo.Root));
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() => service.LinkAsync(new ProjectId(id), repo.Root));
         repo.Git("config", "user.email", "test@example.invalid");
         repo.Write("unsupported.txt", "no");
         repo.Git("add", "unsupported.txt");
@@ -70,7 +131,7 @@ public sealed class ProjectGitSyncTests
         snapshots.Snapshot = Snapshot(Guid.NewGuid());
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.LinkAsync(new ProjectId(snapshots.Snapshot.Project.Id), repo.Root));
         repo.Git("branch", "-m", "renamed");
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.SyncNowAsync(new ProjectId(id)));
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() => service.SyncNowAsync(new ProjectId(id)));
     }
 
     [Fact]
@@ -93,7 +154,7 @@ public sealed class ProjectGitSyncTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.LinkAsync(new ProjectId(id), repo.Root));
         Assert.Equal(head, repo.Git("rev-parse", "HEAD"));
         Directory.CreateDirectory(Path.Combine(repo.Root, "nested"));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => new SystemGitTransport().InspectAsync(Path.Combine(repo.Root, "nested")));
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() => new SystemGitTransport().InspectAsync(Path.Combine(repo.Root, "nested")));
     }
 
     [Fact]
@@ -204,6 +265,14 @@ public sealed class ProjectGitSyncTests
     private sealed class RejectDeletions : IOutboundDeletionApproval
     {
         public Task<bool> ApproveAsync(IReadOnlyList<string> deletedObjects, CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
+    }
+
+    private sealed class EditingGate : IProjectUnsavedEditsGate
+    {
+        public Task WaitUntilReadyAsync(ProjectId id, CancellationToken token = default) =>
+            throw new InvalidOperationException("Automatic sync must not wait for an edit.");
+        public Task<bool> IsReadyAsync(ProjectId id, CancellationToken token = default) =>
             Task.FromResult(false);
     }
 

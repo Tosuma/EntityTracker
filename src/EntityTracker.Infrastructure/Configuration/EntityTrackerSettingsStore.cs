@@ -10,6 +10,7 @@ public sealed class EntityTrackerSettingsStore
     private const int LegacyVersion = 1;
     private const int AppearanceVersion = 2;
     private const int ContextVersion = 3;
+    private const int PreviousVersion = 4;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -59,7 +60,9 @@ public sealed class EntityTrackerSettingsStore
                 new EntityTrackerSettings(
                     appearance,
                     current.LastProjectId,
-                    current.LastTrackerId),
+                    current.LastTrackerId,
+                    current.AutoSyncEnabled,
+                    current.AutoSyncIntervalMinutes),
                 cancellationToken);
         }
         finally
@@ -86,13 +89,31 @@ public sealed class EntityTrackerSettingsStore
                 new EntityTrackerSettings(
                     current.Appearance,
                     projectId,
-                    trackerId),
+                    trackerId,
+                    current.AutoSyncEnabled,
+                    current.AutoSyncIntervalMinutes),
                 cancellationToken);
         }
         finally
         {
             _gate.Release();
         }
+    }
+
+    public async Task SaveAutoSyncAsync(bool enabled, int intervalMinutes,
+        CancellationToken cancellationToken = default)
+    {
+        if (!EntityTrackerSettings.AutoSyncIntervals.Contains(intervalMinutes))
+            throw new ArgumentOutOfRangeException(nameof(intervalMinutes));
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            EntityTrackerSettings current = await LoadSettingsForUpdateAsync(cancellationToken);
+            await WriteAsync(new EntityTrackerSettings(current.Appearance,
+                current.LastProjectId, current.LastTrackerId, enabled, intervalMinutes),
+                cancellationToken);
+        }
+        finally { _gate.Release(); }
     }
 
     private async Task<SettingsLoadResult> LoadCoreAsync(CancellationToken cancellationToken)
@@ -185,7 +206,9 @@ public sealed class EntityTrackerSettingsStore
             Version = EntityTrackerSettings.CurrentVersion,
             Appearance = settings.Appearance.ToString(),
             LastProjectId = settings.LastProjectId?.Value.ToString("D"),
-            LastTrackerId = settings.LastTrackerId?.Value.ToString("D")
+            LastTrackerId = settings.LastTrackerId?.Value.ToString("D"),
+            AutoSyncEnabled = settings.AutoSyncEnabled,
+            AutoSyncIntervalMinutes = settings.AutoSyncIntervalMinutes
         };
 
         string directory = Path.GetDirectoryName(SettingsPath)
@@ -230,7 +253,20 @@ public sealed class EntityTrackerSettingsStore
         return new EntityTrackerSettings(
             appearance,
             projectId,
-            trackerId);
+            trackerId,
+            document.Version < EntityTrackerSettings.CurrentVersion
+                ? true : document.AutoSyncEnabled ?? true,
+            ParseAutoSyncInterval(document, warnings));
+    }
+
+    private static int ParseAutoSyncInterval(SettingsDocument document,
+        ICollection<string> warnings)
+    {
+        if (document.Version < EntityTrackerSettings.CurrentVersion) return 5;
+        int value = document.AutoSyncIntervalMinutes ?? 5;
+        if (EntityTrackerSettings.AutoSyncIntervals.Contains(value)) return value;
+        warnings.Add("The automatic sync interval is invalid. Five minutes is active; the settings file was not changed.");
+        return 5;
     }
 
     private static ProjectId? ParseProjectId(
@@ -304,7 +340,7 @@ public sealed class EntityTrackerSettingsStore
             UnauthorizedAccessException;
 
     private static bool IsSupportedVersion(int version) =>
-        version is LegacyVersion or AppearanceVersion or ContextVersion or EntityTrackerSettings.CurrentVersion;
+        version is LegacyVersion or AppearanceVersion or ContextVersion or PreviousVersion or EntityTrackerSettings.CurrentVersion;
 
     private static SettingsLoadResult DefaultResult(string? warning = null) =>
         new(
@@ -324,6 +360,10 @@ public sealed class EntityTrackerSettingsStore
         public string? LastProjectId { get; init; }
 
         public string? LastTrackerId { get; init; }
+
+        public bool? AutoSyncEnabled { get; init; }
+
+        public int? AutoSyncIntervalMinutes { get; init; }
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public JsonElement? SharePoint { get; init; }

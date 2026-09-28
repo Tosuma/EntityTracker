@@ -12,13 +12,20 @@ public sealed class WpfProjectUnsavedEditsGate : IProjectUnsavedEditsGate
 
     public void Attach(ShellViewModel shell) => _shell = shell;
 
+    public async Task<bool> IsReadyAsync(ProjectId projectId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+            _shell?.SelectedProject?.Id != projectId ||
+            _shell.CurrentWorkspace?.HasUnsavedWork != true);
+    }
+
     public async Task WaitUntilReadyAsync(ProjectId projectId, CancellationToken cancellationToken = default)
     {
         try
         {
-            while (await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
-                _shell?.SelectedProject?.Id == projectId &&
-                _shell.CurrentWorkspace?.HasUnsavedWork == true))
+            while (!await IsReadyAsync(projectId, cancellationToken))
             {
                 if (WaitingProjectId != projectId.Value)
                 {

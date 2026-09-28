@@ -35,6 +35,7 @@ public partial class App : System.Windows.Application
     private ServiceProvider? _serviceProvider;
     private ILogger<App>? _logger;
     private IApplicationThemeService? _themeService;
+    private SingleInstanceCoordinator? _singleInstance;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -42,6 +43,20 @@ public partial class App : System.Windows.Application
 
         ApplicationDataPathResolver dataPathResolver = new();
         ApplicationDataPaths dataPaths = dataPathResolver.ResolvePaths();
+        _singleInstance = new SingleInstanceCoordinator(dataPaths.RootDirectory);
+        if (!_singleInstance.TryBecomePrimary(() =>
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (MainWindow is null || Dispatcher.HasShutdownStarted) return;
+                if (MainWindow.WindowState == WindowState.Minimized)
+                    MainWindow.WindowState = WindowState.Normal;
+                MainWindow.Show();
+                MainWindow.Activate();
+            })))
+        {
+            Shutdown();
+            return;
+        }
         RollingFileLoggerProvider fileLoggerProvider = new(dataPaths.LogsDirectory);
         ILogger bootstrapLogger = fileLoggerProvider.CreateLogger("EntityTracker.Startup");
         EntityTrackerSettingsStore settingsStore = new(dataPaths.SettingsPath);
@@ -128,6 +143,16 @@ public partial class App : System.Windows.Application
                 provider.GetRequiredService<WpfProjectUnsavedEditsGate>());
             services.AddSingleton<IProjectRepositoryFolderPicker, ProjectRepositoryFolderPicker>();
             services.AddSingleton<ProjectGitSyncService>();
+            services.AddSingleton(provider => new ProjectAutoSyncService(
+                provider.GetRequiredService<IProjectSyncLinkStore>(),
+                (projectId, token) => provider.GetRequiredService<ProjectGitSyncService>()
+                    .SyncNowAsync(projectId, token, mode: ProjectSyncMode.Automatic),
+                settings.Settings.AutoSyncEnabled,
+                settings.Settings.AutoSyncIntervalMinutes,
+                provider.GetRequiredService<IProjectUnsavedEditsGate>()));
+            services.AddSingleton(provider => new AutoSyncSettingsViewModel(
+                settingsStore, provider.GetRequiredService<ProjectAutoSyncService>(),
+                settings.Settings));
             services.AddSingleton<NotificationCenter>();
             services.AddSingleton<ProjectRepositoryCardViewModelFactory>();
             services.AddSingleton<CatalogManagementViewModel>();
@@ -248,6 +273,8 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _serviceProvider?.GetService<ProjectAutoSyncService>()?.Dispose();
+        _singleInstance?.Dispose();
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         DispatcherUnhandledException -= OnDispatcherUnhandledException;
         _logger?.LogInformation("EntityTracker stopped.");

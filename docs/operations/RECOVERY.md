@@ -12,12 +12,13 @@ The relevant paths are:
 
 ```text
 entity-tracker.db              active SQLite database
-settings.json                  optional local appearance and last active Project/Tracker context
+settings.json                  local appearance, active context, and automatic sync schedule
+git-sync-links.v1.json         local Project-to-checkout associations and sync state
 backups\                       automatic SQLite backups
 logs\                          daily application logs
 ```
 
-The settings file is created when appearance or active context is saved. It must
+The settings file is created when appearance, active context, or automatic sync is saved. It must
 never contain a password, client secret, access token, certificate, or other authentication
 material. Appearance and the remembered selection are installation-local; Project and Tracker
 records remain in SQLite.
@@ -49,6 +50,29 @@ application from opening. A database initialization or migration failure still s
 Do not edit or restore the database while EntityTracker is running. If the restored database is
 newer than the application supports, use a newer compatible application version instead of trying
 to downgrade the schema manually.
+
+## Recover a Project sync
+
+Automatic sync checks linked Projects after startup and every 1, 5, 15, 30, or 60 minutes as
+selected in Settings (enabled and five minutes by default). Manual **Sync now** remains available
+when automatic sync is disabled. A Project with an unfinished edit resumes after the edit is saved
+or closed; another linked Project can sync meanwhile. Conflicts and outbound deletions require
+manual review or approval. Only inbound changes that alter SQLite create a pre-apply backup.
+
+If the Project card says **Authentication required**, use command-line Git in the existing checkout
+to repair the credential helper, key, host trust, or remote access; then retry **Sync now**. If it
+says **Configuration invalid**, restore the checkout and its expected branch/upstream, or unlink
+and relink the clean existing root. EntityTracker does not create, clone, configure, or repair Git
+repositories. A missing checkout does not remove the SQLite Project. The notification's action
+opens the affected Project for details.
+
+For SQLite recovery, first close EntityTracker, copy both the current database and repository to
+a safe location, then restore the chosen `.db` backup by the procedure above. Do not replace
+`.entitytracker` files with a database backup: compare the restored Project with the existing
+checkout, then use **Sync now** to reconcile it. If the checkout itself is damaged, repair or
+reclone it with system Git outside EntityTracker and relink the clean root. Keep
+`git-sync-links.v1.json` with the local database when moving a full installation; paths may need
+relinking on the new machine.
 
 ## Logs
 

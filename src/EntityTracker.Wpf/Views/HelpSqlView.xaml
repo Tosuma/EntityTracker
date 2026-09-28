@@ -58,6 +58,16 @@
                 </Border>
             </UniformGrid>
 
+            <TextBlock Margin="0,12,0,8" Style="{StaticResource SectionHeadingTextStyle}"
+                       Text="Project Git synchronization" />
+            <Border Margin="0,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                <StackPanel>
+                    <TextBlock TextWrapping="Wrap" Text="Install system Git and prepare one dedicated repository per Project outside EntityTracker. Clone an existing remote or initialize a repository, check out a branch, set your Git identity, remote, upstream, and credentials with Git. Then use Import checkout on Portfolio or Link repository on the Project dashboard. Select the clean repository root." />
+                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Text="Automatic sync is enabled by default and checks linked Projects after startup and at the interval in Settings. It pauses a Project with an unfinished edit until that edit is saved or closed. Sync now remains available at any time. Conflicts and outbound deletions require Sync now for review or approval." />
+                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Text="If authentication fails, repair credentials with command-line Git outside EntityTracker. If a checkout moved, changed branch or upstream, or became invalid, restore it or unlink and relink its existing root. Check the Project card for the last result. Before inbound SQLite changes, EntityTracker creates a backup in %LOCALAPPDATA%\EntityTracker\backups. Close the app before restoring that backup; keep a copy of the current database and repository first." />
+                </StackPanel>
+            </Border>
+
             <TextBlock Margin="0,12,0,8" Style="{StaticResource SectionHeadingTextStyle}" Text="PostgreSQL extraction query" />
             <Border Margin="0,0,0,12" Style="{StaticResource InfoMessageStyle}">
                 <StackPanel>

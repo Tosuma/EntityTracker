@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.ViewModels;
 
-public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
+public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly ProjectId _projectId;
     private readonly ProjectGitSyncService _service;
@@ -17,6 +17,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
     private readonly WpfProjectUnsavedEditsGate? _editGate;
     private readonly NotificationCenter? _notifications;
     private readonly ILogger<ProjectRepositoryCardViewModel>? _logger;
+    private readonly ProjectAutoSyncService? _autoSync;
     private readonly Action<ProjectSyncTiming?>? _saveTiming;
     private CancellationTokenSource? _syncCancellation;
     private ProjectSyncLink? _link;
@@ -33,7 +34,8 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
         NotificationCenter? notifications = null,
         ILogger<ProjectRepositoryCardViewModel>? logger = null,
         ProjectSyncTiming? initialTiming = null,
-        Action<ProjectSyncTiming?>? saveTiming = null)
+        Action<ProjectSyncTiming?>? saveTiming = null,
+        ProjectAutoSyncService? autoSync = null)
     {
         _projectId = projectId;
         _service = service;
@@ -41,6 +43,8 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
         _editGate = editGate;
         _notifications = notifications;
         _logger = logger;
+        _autoSync = autoSync;
+        if (_autoSync is not null) _autoSync.StateChanged += OnAutoSyncStateChanged;
         _lastTiming = initialTiming;
         _saveTiming = saveTiming;
         if (_editGate is not null) _editGate.WaitingChanged += (_, _) => Notify();
@@ -63,7 +67,31 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
     public string Branch => !IsLinked ? string.Empty : "Branch: " + _link!.Branch;
     public string Upstream => !IsLinked ? string.Empty : _link!.UpstreamIdentity is null
         ? "Local only (no upstream)" : "Upstream: " + _link.UpstreamIdentity.Split(':', 2)[0];
-    public string LastResult => _link?.LastResult ?? "Select an existing clean repository to link this Project.";
+    public string SyncStateLabel => CurrentState.Kind switch
+    {
+        ProjectSyncStateKind.Unlinked => "Unlinked",
+        ProjectSyncStateKind.Idle => "Idle",
+        ProjectSyncStateKind.Syncing => "Syncing",
+        ProjectSyncStateKind.UpToDate => "Up to date",
+        ProjectSyncStateKind.LocalPending => "Local pending",
+        ProjectSyncStateKind.DeletionApproval => "Deletion approval needed",
+        ProjectSyncStateKind.Conflict => "Conflict",
+        ProjectSyncStateKind.AuthenticationRequired => "Authentication required",
+        ProjectSyncStateKind.ConfigurationInvalid => "Configuration invalid",
+        _ => "Failed"
+    };
+    private ProjectSyncState CurrentState
+    {
+        get
+        {
+            ProjectSyncState? state = _autoSync?.GetState(_projectId);
+            return state is { Kind: not ProjectSyncStateKind.Unlinked } ? state :
+                _link is null ? new(ProjectSyncStateKind.Unlinked, "No repository linked.") :
+                ProjectAutoSyncService.FromLink(_link);
+        }
+    }
+    public string LastResult => IsLinked ? CurrentState.LastResult :
+        _link?.LastResult ?? "Select an existing clean repository to link this Project.";
     public bool HasLastSyncTiming => _lastTiming is not null;
     public string LastSyncTiming
     {
@@ -73,16 +101,34 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
             return $"Last sync: {_lastTiming.Total.TotalSeconds:0.0}s.";
         }
     }
-    public string PendingAction => _link?.SyncStatus switch
+    public string PendingAction
     {
-        _ when _editGate?.WaitingProjectId == _projectId.Value =>
-            "Sync is waiting for the unfinished edit to be saved or closed.",
-        "Pending" => "Sync now to create the initial snapshot commit.",
-        "PendingPush" => "A local commit is waiting for push. Retry sync after checking Git access.",
-        "PendingRemote" => "The upstream advanced during sync. Retry to validate its changes.",
-        "RemoteDeletedLocalKept" => "The shared repository Project was deleted. Local changes were kept; this Project is unlinked.",
-        _ => string.Empty
-    };
+        get
+        {
+            if (_editGate?.WaitingProjectId == _projectId.Value)
+                return "Sync is waiting for the unfinished edit to be saved or closed.";
+            string action = CurrentState.Kind switch
+            {
+                ProjectSyncStateKind.DeletionApproval or ProjectSyncStateKind.Conflict =>
+                    "Open this Project and use Sync now to review the change.",
+                ProjectSyncStateKind.AuthenticationRequired =>
+                    "Repair Git access outside EntityTracker, then use Sync now.",
+                ProjectSyncStateKind.ConfigurationInvalid =>
+                    "Repair or relink the checkout outside EntityTracker, then use Sync now.",
+                ProjectSyncStateKind.Failed => "Check the repository and use Sync now to retry.",
+                _ => string.Empty
+            };
+            if (action.Length > 0) return action;
+            return _link?.SyncStatus switch
+            {
+                "Pending" => "Sync now to create the initial snapshot commit.",
+                "PendingPush" => "A local commit is waiting for push. Retry sync after checking Git access.",
+                "PendingRemote" => "The upstream advanced during sync. Retry to validate its changes.",
+                "RemoteDeletedLocalKept" => "The shared repository Project was deleted. Local changes were kept; this Project is unlinked.",
+                _ => string.Empty
+            };
+        }
+    }
     public string? Message => _message;
     public bool HasPendingAction => !string.IsNullOrEmpty(PendingAction);
     public bool HasMessage => !string.IsNullOrWhiteSpace(Message);
@@ -112,6 +158,9 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
         if (_busy) return;
         _busy = true;
         _message = null;
+        _autoSync?.BeginManual(_projectId);
+        _autoSync?.ReportManual(_projectId, new(ProjectSyncStateKind.Syncing,
+            "Manual sync is running…", DateTimeOffset.UtcNow));
         NotificationItem? notice = existingNotice ?? _notifications?.FindActionForProject(_projectId);
         if (notice is null) notice = _notifications?.BeginProgress("Project sync",
             "Checking for unfinished edits…", _projectId);
@@ -146,6 +195,8 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
                 }
                 _link = await _service.SyncNowAsync(_projectId, name, cancellation.Token, progress, timing);
             }
+            if (_link is not null) _autoSync?.ReportManual(_projectId,
+                ProjectAutoSyncService.FromLink(_link, DateTimeOffset.UtcNow));
             if (notice is not null)
             {
                 if (_link?.SyncStatus is "PendingPush" or "PendingRemote")
@@ -162,17 +213,23 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
         }
         catch (OperationCanceledException)
         {
+            if (_link is not null) _autoSync?.ReportManual(_projectId,
+                ProjectAutoSyncService.FromLink(_link));
             if (notice is not null) _notifications?.Complete(notice, "Sync cancelled.",
                 NotificationKind.Information);
         }
         catch (ProjectSyncReviewCancelledException)
         {
+            if (_link is not null) _autoSync?.ReportManual(_projectId,
+                ProjectAutoSyncService.FromLink(_link));
             if (notice is not null) _notifications?.Complete(notice,
                 "Sync review was cancelled.", NotificationKind.Information);
         }
         catch (Exception error)
         {
             _message = error.Message;
+            _autoSync?.ReportManual(_projectId,
+                ProjectAutoSyncService.FromError(error, DateTimeOffset.UtcNow));
             try { _link = await _service.GetLinkAsync(_projectId); }
             catch { /* Keep the original sync error visible. */ }
             if (notice is not null)
@@ -190,6 +247,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
             if (_editGate is not null) _editGate.WaitingChanged -= OnWaitingChanged;
             _syncCancellation = null;
             _busy = false;
+            _autoSync?.EndManual(_projectId);
             Notify();
         }
     }
@@ -220,6 +278,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
         _lastTiming = null;
         _saveTiming?.Invoke(null);
         _notifications?.DismissProjectActions(_projectId);
+        _autoSync?.ReportUnlinked(_projectId);
     });
 
     private async Task ExecuteAsync(Func<Task> action)
@@ -237,19 +296,34 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged
         foreach (string name in new[] { nameof(IsLinked), nameof(IsBusy), nameof(RepositoryPath),
                      nameof(Branch), nameof(Upstream), nameof(LastResult), nameof(LastSyncTiming),
                      nameof(HasLastSyncTiming), nameof(PendingAction), nameof(Message),
-                     nameof(HasPendingAction), nameof(HasMessage), nameof(CanCancelSync) })
+                     nameof(HasPendingAction), nameof(HasMessage), nameof(CanCancelSync),
+                     nameof(SyncStateLabel) })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         _linkCommand.NotifyCanExecuteChanged();
         _syncCommand.NotifyCanExecuteChanged();
         _unlinkCommand.NotifyCanExecuteChanged();
         _cancelSyncCommand.NotifyCanExecuteChanged();
     }
+
+    private void OnAutoSyncStateChanged(object? sender, ProjectId projectId)
+    {
+        if (projectId != _projectId) return;
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess()) Notify();
+        else if (!dispatcher.HasShutdownStarted) dispatcher.BeginInvoke(Notify);
+    }
+
+    public void Dispose()
+    {
+        if (_autoSync is not null) _autoSync.StateChanged -= OnAutoSyncStateChanged;
+    }
 }
 
 public sealed class ProjectRepositoryCardViewModelFactory(
     ProjectGitSyncService service, IProjectRepositoryFolderPicker picker,
     WpfProjectUnsavedEditsGate? editGate = null, NotificationCenter? notifications = null,
-    ILogger<ProjectRepositoryCardViewModel>? logger = null)
+    ILogger<ProjectRepositoryCardViewModel>? logger = null,
+    ProjectAutoSyncService? autoSync = null)
 {
     private readonly Dictionary<Guid, ProjectSyncTiming> _timings = [];
 
@@ -259,7 +333,7 @@ public sealed class ProjectRepositoryCardViewModelFactory(
             {
                 if (timing is null) _timings.Remove(projectId.Value);
                 else _timings[projectId.Value] = timing;
-            });
+            }, autoSync);
 }
 
 internal sealed class ProjectSyncTimingReporter(Action<ProjectSyncTiming> report)

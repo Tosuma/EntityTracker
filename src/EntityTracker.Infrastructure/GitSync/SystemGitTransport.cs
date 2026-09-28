@@ -10,7 +10,10 @@ namespace EntityTracker.Infrastructure.GitSync;
 /// <summary>Runs the fixed Git operations needed for a user-managed Project checkout.</summary>
 public sealed class SystemGitTransport : ILocalGitTransport
 {
-    private const int MaxOutput = 1024 * 1024;
+    private const int MaxOutput = 4 * 1024 * 1024;
+    private const int MaxSnapshotFiles = 20_000;
+    private const int MaxSnapshotFileBytes = 8 * 1024 * 1024;
+    private const long MaxSnapshotBytes = 128L * 1024 * 1024;
     private static readonly StringComparison PathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
@@ -32,7 +35,8 @@ public sealed class SystemGitTransport : ILocalGitTransport
     public async Task<GitWorkingTreeState> InspectAsync(string path, CancellationToken cancellationToken = default)
     {
         string selected = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);
-        if (!Directory.Exists(selected)) throw new InvalidOperationException("Select an existing repository folder.");
+        if (!Directory.Exists(selected)) throw new ProjectSyncConfigurationException("The linked repository folder is missing. Restore it or relink an existing checkout.");
+        EnsureNoLinks(selected, string.Empty);
         string version = (await RunAsync(null, ["--version"], cancellationToken)).Trim();
         string[] parts = version.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length < 3 || !Version.TryParse(parts[2].Split('-', '.')[0] + "." +
@@ -42,20 +46,22 @@ public sealed class SystemGitTransport : ILocalGitTransport
         string root = (await RunAsync(selected, ["rev-parse", "--show-toplevel"], cancellationToken)).Trim();
         root = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar);
         if (!string.Equals(root, selected, PathComparison))
-            throw new InvalidOperationException("Select the repository root, not a nested folder.");
+            throw new ProjectSyncConfigurationException("The linked path is not the repository root. Relink the existing checkout.");
         if (!Directory.Exists(Path.Combine(root, ".git")))
-            throw new InvalidOperationException("Linked worktrees and submodules are unsupported. Select a regular repository root.");
+            throw new ProjectSyncConfigurationException("Linked worktrees and submodules are unsupported. Relink a regular repository root.");
         if ((await RunAsync(root, ["rev-parse", "--is-bare-repository"], cancellationToken)).Trim() != "false")
             throw new InvalidOperationException("A non-bare working tree is required.");
         string branch = (await RunAsync(root, ["symbolic-ref", "--quiet", "--short", "HEAD"], cancellationToken)).Trim();
-        if (string.IsNullOrWhiteSpace(branch)) throw new InvalidOperationException("Check out a branch before linking.");
+        if (string.IsNullOrWhiteSpace(branch)) throw new ProjectSyncConfigurationException("Check out the linked branch with Git outside EntityTracker, then retry.");
         if (string.IsNullOrWhiteSpace((await RunAsync(root, ["config", "--get", "user.name"], cancellationToken)).Trim()) ||
             string.IsNullOrWhiteSpace((await RunAsync(root, ["config", "--get", "user.email"], cancellationToken)).Trim()))
-            throw new InvalidOperationException("Configure Git commit identity outside EntityTracker before linking.");
+            throw new ProjectSyncConfigurationException("Configure Git commit identity outside EntityTracker before syncing.");
         byte[] status = await RunBytesAsync(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], cancellationToken);
         if (status.Length > 0) throw new InvalidOperationException("The working tree must be clean before linking or syncing.");
         byte[] tracked = await RunBytesAsync(root, ["ls-files", "-z"], cancellationToken);
         string[] paths = SplitNull(tracked);
+        if (paths.Length > MaxSnapshotFiles)
+            throw new InvalidDataException("The repository has too many tracked files.");
         foreach (string trackedPath in paths)
         {
             if (!IsAllowed(trackedPath))
@@ -73,10 +79,14 @@ public sealed class SystemGitTransport : ILocalGitTransport
         }
         string head = (await RunAsync(root, ["rev-parse", "--verify", "HEAD"], cancellationToken, true)).Trim();
         Dictionary<string, byte[]> files = new(StringComparer.Ordinal);
+        long totalBytes = 0;
         foreach (string trackedPath in paths.Where(p => p.StartsWith(".entitytracker/", StringComparison.Ordinal)))
         {
-            string full = Path.Combine(root, trackedPath.Replace('/', Path.DirectorySeparatorChar));
-            files.Add(trackedPath, await File.ReadAllBytesAsync(full, cancellationToken));
+            string full = SafeSnapshotPath(root, trackedPath);
+            byte[] bytes = await ReadSnapshotFileAsync(full,
+                MaxSnapshotBytes - totalBytes, cancellationToken);
+            totalBytes += bytes.Length;
+            files.Add(trackedPath, bytes);
         }
         return new GitWorkingTreeState(root, branch, upstreamIdentity, head.Length == 0 ? null : head, files);
     }
@@ -85,15 +95,14 @@ public sealed class SystemGitTransport : ILocalGitTransport
         ProjectSnapshotPackage package, CancellationToken cancellationToken = default)
     {
         string root = Path.GetFullPath(path);
+        ValidateSnapshotBudget(package.Files);
         foreach (string oldPath in oldFiles.Keys.Except(package.Files.Keys, StringComparer.Ordinal))
         {
-            if (!IsSnapshotPath(oldPath)) throw new InvalidDataException("An existing snapshot path is invalid.");
-            File.Delete(Path.Combine(root, oldPath.Replace('/', Path.DirectorySeparatorChar)));
+            File.Delete(SafeSnapshotPath(root, oldPath));
         }
         foreach ((string relative, byte[] bytes) in package.Files)
         {
-            if (!IsSnapshotPath(relative)) throw new InvalidDataException("A snapshot path is invalid.");
-            string destination = Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar));
+            string destination = SafeSnapshotPath(root, relative);
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             EnsureNoLinks(root, relative);
             await File.WriteAllBytesAsync(destination, bytes, cancellationToken);
@@ -178,6 +187,8 @@ public sealed class SystemGitTransport : ILocalGitTransport
             if (!IsAllowed(trackedPath))
                 throw new InvalidOperationException($"Unsupported tracked path: {trackedPath}.");
             if (IsSnapshotPath(trackedPath)) blobs.Add((trackedPath, metadata[2]));
+            if (blobs.Count > MaxSnapshotFiles)
+                throw new InvalidDataException("The repository snapshot has too many files.");
         }
         return await ReadBlobsAsync(path, blobs, token);
     }
@@ -186,6 +197,7 @@ public sealed class SystemGitTransport : ILocalGitTransport
         string path, IReadOnlyList<(string Path, string ObjectId)> blobs, CancellationToken token)
     {
         Dictionary<string, byte[]> files = new(StringComparer.Ordinal);
+        long totalBytes = 0;
         if (blobs.Count == 0) return files;
         string[] args = ["cat-file", "--batch"];
         ValidateCommand(args);
@@ -216,6 +228,9 @@ public sealed class SystemGitTransport : ILocalGitTransport
             {
                 string header = await ReadBatchHeaderAsync(output, timeout.Token);
                 int length = ParseBatchHeader(header, objectId);
+                totalBytes += length;
+                if (totalBytes > MaxSnapshotBytes)
+                    throw new InvalidDataException("The repository snapshot exceeds the supported size.");
                 byte[] bytes = new byte[length];
                 await output.ReadExactlyAsync(bytes, timeout.Token);
                 byte[] terminator = new byte[1];
@@ -277,7 +292,7 @@ public sealed class SystemGitTransport : ILocalGitTransport
         string[] parts = header.Split(' ');
         if (parts.Length != 3 || parts[0] != objectId || parts[1] != "blob" ||
             !int.TryParse(parts[2], NumberStyles.None, CultureInfo.InvariantCulture,
-                out int length) || length > MaxOutput)
+                out int length) || length > MaxSnapshotFileBytes)
             throw new InvalidDataException("Git returned an invalid or oversized snapshot blob.");
         return length;
     }
@@ -323,15 +338,14 @@ public sealed class SystemGitTransport : ILocalGitTransport
         CancellationToken cancellationToken)
     {
         string root = Path.GetFullPath(path);
+        ValidateSnapshotBudget(package.Files);
         foreach (string oldPath in oldFiles.Keys.Except(package.Files.Keys, StringComparer.Ordinal))
         {
-            if (!IsSnapshotPath(oldPath)) throw new InvalidDataException("An existing snapshot path is invalid.");
-            File.Delete(Path.Combine(root, oldPath.Replace('/', Path.DirectorySeparatorChar)));
+            File.Delete(SafeSnapshotPath(root, oldPath));
         }
         foreach ((string relative, byte[] bytes) in package.Files)
         {
-            if (!IsSnapshotPath(relative)) throw new InvalidDataException("A snapshot path is invalid.");
-            string destination = Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar));
+            string destination = SafeSnapshotPath(root, relative);
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             EnsureNoLinks(root, relative);
             await File.WriteAllBytesAsync(destination, bytes, cancellationToken);
@@ -372,13 +386,14 @@ public sealed class SystemGitTransport : ILocalGitTransport
         string upstream = (await RunAsync(root,
             ["for-each-ref", "--format=%(upstream:short)", "refs/heads/" + branch], token)).Trim();
         if (remote.Length == 0 || remote == "." || upstream.Length == 0)
-            throw new InvalidOperationException("Configure a remote branch upstream with command-line Git, then relink.");
+            throw new ProjectSyncConfigurationException("Configure a remote branch upstream with command-line Git, then relink.");
         return (remote, upstream);
     }
 
     private static async Task RunRemoteAsync(string root, string[] args, CancellationToken token)
     {
         try { await RunAsync(root, args, token); }
+        catch (ProjectSyncAuthenticationException) { throw; }
         catch (InvalidOperationException error)
         {
             throw new InvalidOperationException(
@@ -398,6 +413,9 @@ public sealed class SystemGitTransport : ILocalGitTransport
 
     private static void EnsureNoLinks(string root, string relative)
     {
+        string absoluteRoot = Path.GetFullPath(root);
+        if ((File.GetAttributes(absoluteRoot) & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidOperationException("Symlinked repository roots are unsupported.");
         string current = root;
         foreach (string segment in relative.Split('/'))
         {
@@ -405,6 +423,45 @@ public sealed class SystemGitTransport : ILocalGitTransport
             if (File.Exists(current) || Directory.Exists(current))
                 if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
                     throw new InvalidOperationException("Symlinks inside the snapshot are unsupported.");
+        }
+    }
+
+    private static string SafeSnapshotPath(string root, string relative)
+    {
+        if (!IsSnapshotPath(relative)) throw new InvalidDataException("A snapshot path is invalid.");
+        string fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar);
+        string full = Path.GetFullPath(Path.Combine(fullRoot,
+            relative.Replace('/', Path.DirectorySeparatorChar)));
+        if (!full.StartsWith(fullRoot + Path.DirectorySeparatorChar, PathComparison))
+            throw new InvalidDataException("A snapshot path escapes the repository.");
+        EnsureNoLinks(fullRoot, relative);
+        return full;
+    }
+
+    private static void ValidateSnapshotBudget(IReadOnlyDictionary<string, byte[]> files)
+    {
+        if (files.Count > MaxSnapshotFiles ||
+            files.Values.Any(bytes => bytes.Length > MaxSnapshotFileBytes) ||
+            files.Values.Sum(bytes => (long)bytes.Length) > MaxSnapshotBytes)
+            throw new InvalidDataException("The repository snapshot exceeds the supported size.");
+    }
+
+    private static async Task<byte[]> ReadSnapshotFileAsync(string path, long remaining,
+        CancellationToken token)
+    {
+        await using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read,
+            8192, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        if (stream.Length > MaxSnapshotFileBytes || stream.Length > remaining)
+            throw new InvalidDataException("The repository snapshot exceeds the supported size.");
+        using MemoryStream output = new();
+        byte[] buffer = new byte[8192];
+        while (true)
+        {
+            int read = await stream.ReadAsync(buffer, token);
+            if (read == 0) return output.ToArray();
+            if (output.Length + read > MaxSnapshotFileBytes || output.Length + read > remaining)
+                throw new InvalidDataException("The repository snapshot exceeds the supported size.");
+            output.Write(buffer, 0, read);
         }
     }
 
@@ -418,7 +475,7 @@ public sealed class SystemGitTransport : ILocalGitTransport
     {
         ValidateCommand(args);
         using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
-        timeout.CancelAfter(TimeSpan.FromSeconds(args[0] is "commit" or "fetch" or "push" ? 60 : 15));
+        timeout.CancelAfter(TimeSpan.FromSeconds(args[0] is "fetch" or "push" ? 120 : 30));
         ProcessStartInfo start = new("git")
         {
             WorkingDirectory = root ?? Environment.CurrentDirectory,
@@ -441,9 +498,14 @@ public sealed class SystemGitTransport : ILocalGitTransport
             Task<byte[]> error = ReadBoundedAsync(process.StandardError.BaseStream, timeout.Token);
             await process.WaitForExitAsync(timeout.Token);
             byte[] result = await output;
-            _ = await error; // Never expose Git output: remote URLs and credentials may appear in errors.
+            byte[] stderr = await error; // Never expose Git stderr: URLs and credentials may appear.
             if (process.ExitCode != 0 && !allowFailure)
+            {
+                if (args[0] is "fetch" or "push" && LooksLikeAuthenticationFailure(stderr))
+                    throw new ProjectSyncAuthenticationException(
+                        "Git authentication failed. Repair access with command-line Git outside EntityTracker, then retry.");
                 throw new InvalidOperationException($"Git {args[0]} failed. Check the repository with system Git and retry.");
+            }
             return process.ExitCode == 0 ? result : [];
         }
         catch (OperationCanceledException)
@@ -464,6 +526,14 @@ public sealed class SystemGitTransport : ILocalGitTransport
         "for-each-ref", "add", "diff", "commit", "fetch", "merge-base", "merge", "push", "ls-tree", "show",
         "write-tree", "commit-tree", "update-ref", "cat-file"
     };
+
+    private static bool LooksLikeAuthenticationFailure(byte[] stderr)
+    {
+        string message = Encoding.UTF8.GetString(stderr);
+        return new[] { "authentication failed", "permission denied", "could not read username",
+            "terminal prompts disabled", "publickey", "access denied", "invalid credentials" }
+            .Any(fragment => message.Contains(fragment, StringComparison.OrdinalIgnoreCase));
+    }
 
     internal static void ValidateCommand(IReadOnlyList<string> args)
     {

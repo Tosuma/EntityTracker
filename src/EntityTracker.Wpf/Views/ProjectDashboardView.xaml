@@ -199,6 +199,9 @@
                     DataContext="{Binding ProjectReporting.RepositoryCard}">
                 <StackPanel>
                     <TextBlock FontSize="20" FontWeight="SemiBold" Text="Git repository" />
+                    <TextBlock Margin="0,5,0,0" FontWeight="SemiBold"
+                               Text="{Binding SyncStateLabel}"
+                               AutomationProperties.LiveSetting="Polite" />
                     <TextBlock Margin="0,5,0,0" Text="{Binding RepositoryPath}" TextWrapping="Wrap" />
                     <TextBlock Margin="0,4,0,0" Text="{Binding Branch}"
                                Visibility="{Binding IsLinked, Converter={StaticResource BooleanToVisibilityConverter}}" />

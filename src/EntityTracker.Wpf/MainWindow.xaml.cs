@@ -50,6 +50,8 @@ public partial class MainWindow : Window
         Loaded -= OnLoaded;
         await _viewModel.InitializeAsync();
         SynchronizeSelectors();
+        await Dispatcher.InvokeAsync(_viewModel.StartAutomaticSync,
+            System.Windows.Threading.DispatcherPriority.ApplicationIdle);
     }
 
     private void OnClosed(object? sender, EventArgs e)

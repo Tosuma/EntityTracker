@@ -83,6 +83,14 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<IOutboundDeletionApproval, ScreenshotOutboundDeletionApproval>();
         services.AddSingleton<IProjectRepositoryFolderPicker, ScreenshotRepositoryFolderPicker>();
         services.AddSingleton<ProjectGitSyncService>();
+        services.AddSingleton(provider => new ProjectAutoSyncService(
+            provider.GetRequiredService<IProjectSyncLinkStore>(),
+            (projectId, token) => provider.GetRequiredService<ProjectGitSyncService>()
+                .SyncNowAsync(projectId, token, mode: ProjectSyncMode.Automatic),
+            enabled: false));
+        services.AddSingleton(provider => new AutoSyncSettingsViewModel(settingsStore,
+            provider.GetRequiredService<ProjectAutoSyncService>(),
+            provider.GetRequiredService<EntityTrackerSettings>()));
         services.AddSingleton<NotificationCenter>();
         services.AddSingleton<ProjectRepositoryCardViewModelFactory>();
 
