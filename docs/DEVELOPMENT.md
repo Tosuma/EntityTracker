@@ -68,17 +68,27 @@ not part of this workflow.
 ## Release an installed-app update
 
 1. Merge the update to `main`. Wait for its Windows CI build, tests, and package job to pass.
-2. Create a new, immutable annotated tag on that commit and push it:
+2. In your development checkout, update `main` and run the release script. Choose `Major`, `Minor`,
+   or `Patch`, and write the release message that will be stored in the annotated Git tag:
 
    ```powershell
    git switch main
    git pull --ff-only
-   git tag -a app-v1.0.0 -m "EntityTracker 1.0.0"
-   git push origin app-v1.0.0
+   .\scripts\New-AppRelease.ps1 -Bump Minor -Message "Release message" -MainCiPassed
    ```
 
+   `-MainCiPassed` confirms that you checked the **main push** run on GitHub, including the package
+   job. The script requires a clean local `main` matching `origin/main`; it reads the latest release
+   tag from `origin`, creates the next tag, and pushes only that tag. The first tag is always
+   `app-v1.0.0`. Later tags increment the selected component and reset lower components. If a push
+   fails, the script leaves the local tag in place and prints a command to retry after you inspect
+   the failure. Never move or reuse a pushed release tag.
+
 3. Confirm the tag's CI run passes. The tag becomes visible to installed apps as soon as it is
-   pushed, so only push a verified release. Never move or reuse a release tag.
+   pushed, so only push a verified release. Protecting `main` with required pull requests does not
+   prevent a separate tag push; a tag ruleset can restrict who may create `app-v*` tags.
+
+Run the release-script fixture tests with `.\scripts\Test-New-AppRelease.ps1`. CI also runs them.
 
 The first `app-vX.Y.Z` tag must include the installer and updater scripts. Until it exists, the
 first-install script reports that there is no approved release. Use a new higher version for every
