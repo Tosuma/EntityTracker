@@ -78,8 +78,7 @@ try {
             $movedOld = $true
         }
         Move-Item -LiteralPath $newInstall -Destination $installPath
-        $shortcutDirectory = Join-Path ([Environment]::GetFolderPath('ApplicationData'))
-            'Microsoft\Windows\Start Menu\Programs'
+        $shortcutDirectory = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'Microsoft\Windows\Start Menu\Programs'
         New-Item -ItemType Directory -Path $shortcutDirectory -Force | Out-Null
         $shortcutPath = Join-Path $shortcutDirectory 'EntityTracker.lnk'
         $shell = New-Object -ComObject WScript.Shell
