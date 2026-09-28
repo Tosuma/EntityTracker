@@ -142,6 +142,9 @@ public partial class App : System.Windows.Application
             services.AddSingleton<IProjectUnsavedEditsGate>(provider =>
                 provider.GetRequiredService<WpfProjectUnsavedEditsGate>());
             services.AddSingleton<IProjectRepositoryFolderPicker, ProjectRepositoryFolderPicker>();
+            services.AddSingleton<AppUpdateService>();
+            services.AddSingleton<IProjectSyncVersionGate>(provider =>
+                provider.GetRequiredService<AppUpdateService>());
             services.AddSingleton<ProjectGitSyncService>();
             services.AddSingleton(provider => new ProjectAutoSyncService(
                 provider.GetRequiredService<IProjectSyncLinkStore>(),
@@ -181,7 +184,8 @@ public partial class App : System.Windows.Application
 
             ShellViewModel shellViewModel =
                 _serviceProvider.GetRequiredService<ShellViewModel>();
-            MainWindow mainWindow = new(shellViewModel);
+            MainWindow mainWindow = new(shellViewModel,
+                _serviceProvider.GetRequiredService<AppUpdateService>());
             MainWindow = mainWindow;
             mainWindow.Show();
 
@@ -274,6 +278,7 @@ public partial class App : System.Windows.Application
     protected override void OnExit(ExitEventArgs e)
     {
         _serviceProvider?.GetService<ProjectAutoSyncService>()?.Dispose();
+        _serviceProvider?.GetService<AppUpdateService>()?.Dispose();
         _singleInstance?.Dispose();
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         DispatcherUnhandledException -= OnDispatcherUnhandledException;

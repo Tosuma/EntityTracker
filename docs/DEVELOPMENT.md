@@ -49,11 +49,11 @@ dotnet test EntityTracker.slnx --configuration Release --no-build --no-restore
 ## Continuous integration
 
 GitHub Actions runs the same Release restore, build, and test commands for every pull request and
-every push to `main`. A newer run for the same pull request or branch cancels an older run that is
+every push to `main` or an `app-vX.Y.Z` tag. A newer run for the same pull request or branch cancels an older run that is
 still in progress. The workflow uses a Windows runner and the SDK selected by `global.json`; it
 does not require a database, SharePoint access, organization credentials, or repository secrets.
 
-Successful pushes to `main` also run:
+Successful pushes to `main` or an app release tag also run:
 
 ```powershell
 .\scripts\Publish-Windows.ps1 -Configuration Release
@@ -64,6 +64,34 @@ The resulting `artifacts\EntityTracker-win-x64.zip` is uploaded to that workflow
 run the packaging job, so it appears as skipped on a pull-request run. Merging to `main` starts a
 separate push run where packaging is enabled. GitHub Releases and external deployment targets are
 not part of this workflow.
+
+## Release an installed-app update
+
+1. Merge the update to `main`. Wait for its Windows CI build, tests, and package job to pass.
+2. Create a new, immutable annotated tag on that commit and push it:
+
+   ```powershell
+   git switch main
+   git pull --ff-only
+   git tag -a app-v1.0.0 -m "EntityTracker 1.0.0"
+   git push origin app-v1.0.0
+   ```
+
+3. Confirm the tag's CI run passes. The tag becomes visible to installed apps as soon as it is
+   pushed, so only push a verified release. Never move or reuse a release tag.
+
+The first `app-vX.Y.Z` tag must include the installer and updater scripts. Until it exists, the
+first-install script reports that there is no approved release. Use a new higher version for every
+update. Breaking shared Project snapshot changes must still increment and validate the snapshot
+format version, because a release can appear while an older process is finishing an in-flight sync.
+
+Colleagues clone the app repository once and run `.\scripts\Install-EntityTracker.ps1`. The
+script fetches an approved tag into that existing clone, archives its source without switching
+branches or touching local edits, builds a self-contained app, and installs it under
+`%LOCALAPPDATA%\Programs\EntityTracker` with a Start Menu shortcut. An exact release can be
+selected with `-Tag app-v1.0.0` for recovery. The app's update notification uses the same installer
+through a separate updater window after the app closes. Neither script clones or initializes a
+repository, configures Git, or manages credentials.
 
 The ZIP includes EntityTracker's `LICENSE.txt`, the runtime dependency inventory in
 `THIRD-PARTY-NOTICES.txt`, common license texts, and the upstream .NET and native graphics

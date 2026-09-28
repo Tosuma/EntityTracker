@@ -18,6 +18,7 @@ public sealed class NotificationItem : INotifyPropertyChanged
     private string _message;
     private string? _actionLabel;
     private ICommand? _actionCommand;
+    private bool _isActionEnabled = true;
     private int _version;
 
     internal NotificationItem(NotificationCenter owner, string title, string message,
@@ -39,6 +40,7 @@ public sealed class NotificationItem : INotifyPropertyChanged
     public string? ActionLabel { get => _actionLabel; private set => Set(ref _actionLabel, value); }
     public ICommand? ActionCommand { get => _actionCommand; private set => Set(ref _actionCommand, value); }
     public bool HasAction => ActionCommand is not null;
+    public bool IsActionEnabled { get => _isActionEnabled; internal set => Set(ref _isActionEnabled, value); }
     public bool IsProgress => Kind == NotificationKind.Progress;
     public string Symbol => Kind switch
     {
@@ -49,6 +51,7 @@ public sealed class NotificationItem : INotifyPropertyChanged
         _ => "i"
     };
     public ICommand DismissCommand { get; }
+    public bool CanDismiss { get; internal set; } = true;
 
     internal int Version => _version;
     internal void Update(string message, NotificationKind kind, string? actionLabel = null,
@@ -135,9 +138,10 @@ public sealed class NotificationCenter : INotifyPropertyChanged
     }
 
     public NotificationItem RequireAction(string title, string message, string actionLabel,
-        Func<Task> action, ProjectId? projectId = null)
+        Func<Task> action, ProjectId? projectId = null, bool canDismiss = true)
     {
         NotificationItem item = Add(title, message, NotificationKind.ActionNeeded, projectId);
+        item.CanDismiss = canDismiss;
         item.Update(message, NotificationKind.ActionNeeded, actionLabel, action);
         return item;
     }
@@ -170,7 +174,10 @@ public sealed class NotificationCenter : INotifyPropertyChanged
         if (_items.Contains(item)) item.Update(message, NotificationKind.Progress);
     }
 
-    public void Dismiss(NotificationItem item) => _items.Remove(item);
+    public void Dismiss(NotificationItem item)
+    {
+        if (item.CanDismiss) _items.Remove(item);
+    }
 
     private NotificationItem Add(string title, string message, NotificationKind kind,
         ProjectId? projectId = null)

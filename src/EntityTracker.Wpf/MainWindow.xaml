@@ -62,7 +62,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
-                <ScrollViewer Grid.Row="0" Margin="18,20,18,0"
+                <ScrollViewer x:Name="SidebarNavigation" Grid.Row="0" Margin="18,20,18,0"
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled"
                               CanContentScroll="False">
@@ -130,7 +130,7 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                    <StackPanel Grid.Row="1" Margin="18,8,18,12">
+                    <StackPanel x:Name="SidebarUtilities" Grid.Row="1" Margin="18,8,18,12">
                         <TextBlock Margin="8,0,0,4"
                                    Foreground="{DynamicResource Brush.Text.OnDarkMuted}"
                                    FontWeight="SemiBold"
@@ -204,6 +204,7 @@
                                                 <Button Margin="0,8,0,0" HorizontalAlignment="Left"
                                                         Padding="8,3" Content="{Binding ActionLabel}"
                                                         Command="{Binding ActionCommand}"
+                                                        IsEnabled="{Binding IsActionEnabled}"
                                                         Visibility="{Binding HasAction, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                         Style="{StaticResource SecondaryButtonStyle}" />
                                             </StackPanel>
@@ -213,7 +214,8 @@
                                                     Background="Transparent" BorderBrush="Transparent"
                                                     ToolTip="Dismiss notification"
                                                     AutomationProperties.Name="Dismiss notification"
-                                                    Command="{Binding DismissCommand}" />
+                                                    Command="{Binding DismissCommand}"
+                                                    Visibility="{Binding CanDismiss, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
@@ -221,6 +223,9 @@
                         </ItemsControl>
                     </ScrollViewer>
                 </Border>
+                <Border x:Name="UpdateSidebarBlock" Grid.RowSpan="2" Panel.ZIndex="25"
+                        Background="{DynamicResource Brush.Surface.Primary}"
+                        Visibility="Collapsed" />
             </Grid>
 
             <Grid Grid.Column="1">
@@ -231,7 +236,7 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <Border Padding="20,12"
+                <Border x:Name="MainHeader" Padding="20,12"
                         Background="{DynamicResource Brush.Surface.Card}"
                         BorderBrush="{DynamicResource Brush.Border.Default}"
                         BorderThickness="0,0,0,1">
@@ -272,7 +277,7 @@
                     </Grid>
                 </Border>
 
-                <Border Grid.Row="1"
+                <Border x:Name="DefaultPrompt" Grid.Row="1"
                         Margin="18,12,18,0"
                         Padding="12"
                         Background="{DynamicResource Brush.Surface.Card}"
@@ -296,7 +301,7 @@
                     </DockPanel>
                 </Border>
 
-                <Grid Grid.Row="2" Margin="18">
+                <Grid x:Name="WorkspaceArea" Grid.Row="2" Margin="18">
                     <views:PortfolioView Visibility="{Binding IsPortfolio, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <views:ProjectDashboardView Visibility="{Binding IsProjectDashboard, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <views:TrackerWorkspaceView x:Name="WorkspaceView"
@@ -306,13 +311,28 @@
                     <views:SettingsView Visibility="{Binding IsSettings, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 </Grid>
 
-                <Border Grid.Row="3"
+                <Border x:Name="BusyFooter" Grid.Row="3"
                         Padding="12,8"
                         Background="{DynamicResource Brush.Surface.Subtle}"
                         Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <StackPanel Orientation="Horizontal">
                         <ProgressBar Width="100" Height="5" IsIndeterminate="True" />
                         <TextBlock Margin="12,0,0,0" Text="{Binding BusyMessage}" />
+                    </StackPanel>
+                </Border>
+                <Border x:Name="UpdateBlock" Grid.RowSpan="4" Panel.ZIndex="25"
+                        Background="{DynamicResource Brush.Surface.Page}"
+                        Visibility="Collapsed">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                                Width="420">
+                        <TextBlock FontSize="26" FontWeight="SemiBold"
+                                   Text="EntityTracker update required" />
+                        <TextBlock x:Name="UpdateBlockMessage" Margin="0,14,0,20"
+                                   TextWrapping="Wrap" />
+                        <Button x:Name="UpdateActionButton" HorizontalAlignment="Left" Padding="18,8"
+                                Content="Close and update"
+                                Click="OnUpdateClick"
+                                Style="{StaticResource PrimaryButtonStyle}" />
                     </StackPanel>
                 </Border>
             </Grid>

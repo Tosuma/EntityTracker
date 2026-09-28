@@ -11,6 +11,22 @@ namespace EntityTracker.Infrastructure.Tests.GitSync;
 
 public sealed class ProjectGitSyncTests
 {
+    [Fact]
+    public async Task RequiredAppUpdateStopsLinkAndSyncBeforeOpeningRepository()
+    {
+        using TestRepository repo = new();
+        ProjectId projectId = ProjectId.New();
+        RejectVersionGate gate = new();
+        ProjectGitSyncService service = new(new JsonProjectSyncLinkStore(repo.Root + "-links.json"),
+            new SystemGitTransport(), new TestSnapshotStore(Snapshot(projectId.Value)),
+            new ProjectSnapshotJsonCodec(), new RejectDeletions(), versionGate: gate);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.LinkAsync(projectId, repo.Root));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.SyncNowAsync(projectId));
+        Assert.Equal(2, gate.Calls);
+        Assert.False(Directory.Exists(repo.Root));
+    }
+
     [Theory]
     [InlineData(".entitytracker/../escape.json")]
     [InlineData(".entitytracker/..\\escape.json")]
@@ -274,6 +290,16 @@ public sealed class ProjectGitSyncTests
             throw new InvalidOperationException("Automatic sync must not wait for an edit.");
         public Task<bool> IsReadyAsync(ProjectId id, CancellationToken token = default) =>
             Task.FromResult(false);
+    }
+
+    private sealed class RejectVersionGate : IProjectSyncVersionGate
+    {
+        public int Calls { get; private set; }
+        public Task EnsureSyncAllowedAsync(CancellationToken cancellationToken)
+        {
+            Calls++;
+            throw new InvalidOperationException("Update required");
+        }
     }
 
     private sealed class StalledTransport(string root) : ILocalGitTransport

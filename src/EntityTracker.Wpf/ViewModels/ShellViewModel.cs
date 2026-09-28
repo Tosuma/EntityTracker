@@ -125,6 +125,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public AppearanceViewModel Appearance { get; }
     public AutoSyncSettingsViewModel? AutoSync { get; }
     public NotificationCenter Notifications { get; }
+    public bool HasActiveProjectSync => _autoSync?.HasActiveSync == true;
 
     public SqlQueryHelpViewModel Help { get; }
 

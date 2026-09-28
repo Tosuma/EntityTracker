@@ -78,6 +78,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
         ProjectSyncStateKind.Conflict => "Conflict",
         ProjectSyncStateKind.AuthenticationRequired => "Authentication required",
         ProjectSyncStateKind.ConfigurationInvalid => "Configuration invalid",
+        ProjectSyncStateKind.UpdatePaused => "Sync paused",
         _ => "Failed"
     };
     private ProjectSyncState CurrentState
@@ -115,6 +116,8 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
                     "Repair Git access outside EntityTracker, then use Sync now.",
                 ProjectSyncStateKind.ConfigurationInvalid =>
                     "Repair or relink the checkout outside EntityTracker, then use Sync now.",
+                ProjectSyncStateKind.UpdatePaused =>
+                    "Update EntityTracker or restore access to the app release check.",
                 ProjectSyncStateKind.Failed => "Check the repository and use Sync now to retry.",
                 _ => string.Empty
             };

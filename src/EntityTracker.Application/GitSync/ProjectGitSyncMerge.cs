@@ -61,6 +61,7 @@ public sealed partial class ProjectGitSyncService
     public async Task<bool> PurgeLinkedProjectAsync(ProjectId projectId,
         CancellationToken token = default)
     {
+        if (versionGate is not null) await versionGate.EnsureSyncAllowedAsync(token);
         ProjectSyncLink? link = await GetLinkAsync(projectId, token);
         if (link is null || link.SyncStatus == "RemoteDeletedLocalKept") return false;
         await using IAsyncDisposable guard = await git.LockAsync(link.RepositoryPath, token);

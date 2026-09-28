@@ -251,6 +251,8 @@ internal sealed class ReadmeScreenshotGenerator
 
             await shell.NavigateAsync(ShellDestination.Settings, cancellationToken);
             await renderer.CaptureAsync("settings.png");
+            window.ShowUpdatePreview("app-v1.0.0");
+            await renderer.CaptureAsync("app-update-required.png");
         }
         finally
         {
