@@ -35,3 +35,48 @@ function Assert-ChildPath {
         throw "Refusing to change a path outside $parentFull."
     }
 }
+
+function Invoke-InstallSwap {
+    param(
+        [string]$InstallParent,
+        [string]$CurrentPath,
+        [string]$StagedPath,
+        [string]$PreviousPath,
+        [scriptblock]$Activate
+    )
+    foreach ($candidate in @($CurrentPath, $StagedPath, $PreviousPath)) {
+        Assert-ChildPath $InstallParent $candidate
+    }
+
+    $movedOld = $false
+    $installedNew = $false
+    try {
+        if (Test-Path -LiteralPath $CurrentPath) {
+            try { [IO.Directory]::Move($CurrentPath, $PreviousPath) }
+            catch {
+                throw "Could not replace EntityTracker because its install folder is in use. Close the app and any updater, then retry. $($_.Exception.Message)"
+            }
+            $movedOld = $true
+        }
+        [IO.Directory]::Move($StagedPath, $CurrentPath)
+        $installedNew = $true
+        & $Activate $CurrentPath
+    }
+    catch {
+        $installError = $_
+        if ($installedNew -and (Test-Path -LiteralPath $CurrentPath)) {
+            try { Remove-Item -LiteralPath $CurrentPath -Recurse -Force }
+            catch { Write-Warning "Could not remove the incomplete new install: $CurrentPath" }
+        }
+        if ($movedOld) {
+            try { [IO.Directory]::Move($PreviousPath, $CurrentPath) }
+            catch { Write-Warning "Could not restore the previous install: $PreviousPath" }
+        }
+        throw $installError
+    }
+
+    if ($movedOld) {
+        try { Remove-Item -LiteralPath $PreviousPath -Recurse -Force }
+        catch { Write-Warning "The previous install could not be removed: $PreviousPath" }
+    }
+}

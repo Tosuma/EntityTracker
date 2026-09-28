@@ -71,37 +71,18 @@ try {
         if ($oldProcess) { $oldProcess.WaitForExit() }
     }
 
-    $movedOld = $false
-    try {
-        if (Test-Path -LiteralPath $installPath) {
-            Move-Item -LiteralPath $installPath -Destination $oldInstall
-            $movedOld = $true
-        }
-        Move-Item -LiteralPath $newInstall -Destination $installPath
+    Invoke-InstallSwap $installParent $installPath $newInstall $oldInstall {
+        param($installedPath)
         $shortcutDirectory = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'Microsoft\Windows\Start Menu\Programs'
         New-Item -ItemType Directory -Path $shortcutDirectory -Force | Out-Null
         $shortcutPath = Join-Path $shortcutDirectory 'EntityTracker.lnk'
         $shell = New-Object -ComObject WScript.Shell
         $shortcut = $shell.CreateShortcut($shortcutPath)
-        $shortcut.TargetPath = Join-Path $installPath 'EntityTracker.Wpf.exe'
-        $shortcut.WorkingDirectory = $installPath
-        $shortcut.IconLocation = (Join-Path $installPath 'EntityTracker.Wpf.exe') + ',0'
+        $shortcut.TargetPath = Join-Path $installedPath 'EntityTracker.Wpf.exe'
+        $shortcut.WorkingDirectory = $installedPath
+        $shortcut.IconLocation = (Join-Path $installedPath 'EntityTracker.Wpf.exe') + ',0'
         $shortcut.Save()
-        Start-Process -FilePath (Join-Path $installPath 'EntityTracker.Wpf.exe')
-    }
-    catch {
-        if (Test-Path -LiteralPath $installPath) {
-            Assert-ChildPath $installParent $installPath
-            Remove-Item -LiteralPath $installPath -Recurse -Force
-        }
-        if ($movedOld) { Move-Item -LiteralPath $oldInstall -Destination $installPath }
-        throw
-    }
-
-    if ($movedOld) {
-        Assert-ChildPath $installParent $oldInstall
-        try { Remove-Item -LiteralPath $oldInstall -Recurse -Force }
-        catch { Write-Warning "The previous install could not be removed: $oldInstall" }
+        Start-Process -FilePath (Join-Path $installedPath 'EntityTracker.Wpf.exe') -WorkingDirectory $installedPath
     }
     Write-Host "Installed EntityTracker $Tag at $installPath"
 }

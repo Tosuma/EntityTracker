@@ -228,7 +228,8 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
         ProcessStartInfo start = new("powershell.exe")
         {
             UseShellExecute = true,
-            WindowStyle = ProcessWindowStyle.Hidden
+            WorkingDirectory = staging,
+            WindowStyle = ProcessWindowStyle.Normal
         };
         start.ArgumentList.Add("-NoProfile");
         start.ArgumentList.Add("-STA");
