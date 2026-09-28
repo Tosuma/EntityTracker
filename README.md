@@ -304,12 +304,15 @@ runtime store for editing, reporting, and navigation.
 
 EntityTracker currently runs on Windows and uses the .NET SDK pinned by `global.json`.
 
-The [development guide](docs/DEVELOPMENT.md) contains prerequisites and complete instructions for
-cloning, restoring, building, testing, running, publishing, importing a schema, and locating local
-application data.
+See the [getting started guide](docs/GETTING_STARTED.md) for prerequisites, clone/build/run
+instructions, and first steps.
+
+The [development guide](docs/DEVELOPMENT.md) contains complete instructions for publishing, CI,
+screenshots, schema import details, and locating local application data.
 
 ## Documentation
 
+- [Getting started](docs/GETTING_STARTED.md)
 - [Development, build, and run guide](docs/DEVELOPMENT.md)
 - [Design and color guide](docs/design/DESIGN_GUIDE.md)
 - [PostgreSQL schema CSV contract](docs/importing/schema-csv-contract-v1.md)
