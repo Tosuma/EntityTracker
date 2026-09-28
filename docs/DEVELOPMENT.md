@@ -15,8 +15,8 @@ Visual Studio is optional. All required workflows are available from PowerShell 
 ## Clone and restore
 
 ```powershell
-git clone https://github.com/Tosuma/Entity-Dependency-Manager.git
-cd Entity-Dependency-Manager
+git clone https://github.com/Tosuma/EntityTracker.git
+cd EntityTracker
 dotnet restore EntityTracker.slnx
 ```
 
