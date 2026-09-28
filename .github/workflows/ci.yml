@@ -35,6 +35,10 @@ jobs:
         shell: pwsh
         run: .\scripts\Test-New-AppRelease.ps1
 
+      - name: Test installer swap
+        shell: pwsh
+        run: .\scripts\Test-InstallSwap.ps1
+
       - name: Set up .NET from global.json
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
 

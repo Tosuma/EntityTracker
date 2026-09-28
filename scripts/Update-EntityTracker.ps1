@@ -74,7 +74,8 @@ function Start-UpdateAttempt {
     $script:stderrPath = Join-Path $PSScriptRoot "update-$($script:attempt).err.log"
     try {
         $script:worker = Start-Process -FilePath 'powershell.exe' -PassThru -WindowStyle Hidden `
-            -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+            -WorkingDirectory $PSScriptRoot `
+            -ArgumentList @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
                 ('"' + (Join-Path $PSScriptRoot 'Install-EntityTracker.ps1') + '"'),
                 '-SourcePath', ('"' + $SourcePath + '"'), '-Tag', $Tag,
                 '-WaitForProcess', $WaitForProcess) `

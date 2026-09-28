@@ -42,6 +42,22 @@ dotnet nuget locals all --clear
 .\scripts\Install-EntityTracker.ps1
 ```
 
+If an installed app closes for an update but does not reopen, close any updater window and run the
+installer from an up-to-date source checkout in an open PowerShell terminal:
+
+```powershell
+git switch main
+git pull --ff-only
+.\scripts\Install-EntityTracker.ps1
+```
+
+This builds the newest approved release using the checkout's installer script. The application
+database remains under `%LOCALAPPDATA%\EntityTracker`; reinstalling does not replace it. In
+particular, `app-v1.0.0` bundled an installer that could wait for a hidden prompt during an in-app
+update, so use this manual path to move from `app-v1.0.0` to `app-v1.0.1` or later.
+If Windows reports that the install folder is in use even after closing EntityTracker and the
+updater, restart the computer and rerun the installer before opening the app.
+
 ## Run from source for development
 
 ```powershell
@@ -91,6 +107,7 @@ dotnet test EntityTracker.slnx --no-build --no-restore
 | Application opens but shows no data | Data is per-user; check `%LOCALAPPDATA%\EntityTracker\entity-tracker.db` exists |
 | Installer reports no approved release | Ask the developer to publish the first `app-vX.Y.Z` tag |
 | Update build fails | Use the updater's error log; restore source-clone access and NuGet connectivity, then retry |
+| App closes for an update but does not reopen | Run the installer from the updated source checkout as shown above |
 | Local work opens but Project sync is paused | Restore access to the app source clone and its Git origin, then select **Retry check** |
 
 ## Further reading
