@@ -1,6 +1,6 @@
 # EntityTracker
 
-[![CI](https://github.com/Tosuma/Entity-Dependency-Manager/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Tosuma/Entity-Dependency-Manager/actions/workflows/ci.yml)
+[![CI](https://github.com/Tosuma/EntityTracker/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Tosuma/EntityTracker/actions/workflows/ci.yml)
 [![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D4)](docs/DEVELOPMENT.md)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4)](global.json)
 [![UI: WPF](https://img.shields.io/badge/UI-WPF-0C54C2)](src/EntityTracker.Wpf)
@@ -308,7 +308,7 @@ See the [getting started guide](docs/GETTING_STARTED.md) for prerequisites, one-
 installation, updates, and first steps. Colleagues build approved release tags on their own
 computers; the app checks for updates and guides them through rebuilding when one arrives.
 
-![Required app update with persistent notification and blocked workspace](images/light/app-update-required.png)
+![Required app update blocking the workspace](images/light/app-update-required.png)
 
 The [development guide](docs/DEVELOPMENT.md) contains complete instructions for publishing, CI,
 screenshots, schema import details, and locating local application data.
