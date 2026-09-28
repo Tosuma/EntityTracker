@@ -118,9 +118,10 @@ public partial class MainWindow : Window
         if (sender is not Border card || !SystemParameters.ClientAreaAnimation) return;
         card.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1,
             TimeSpan.FromMilliseconds(220)));
-        if (card.RenderTransform is TranslateTransform transform)
-            transform.BeginAnimation(TranslateTransform.YProperty,
-                new DoubleAnimation(16, 0, TimeSpan.FromMilliseconds(220)));
+        var transform = new TranslateTransform();
+        card.RenderTransform = transform;
+        transform.BeginAnimation(TranslateTransform.YProperty,
+            new DoubleAnimation(16, 0, TimeSpan.FromMilliseconds(220)));
     }
 
     private void OnRenameDefaultName(object sender, RoutedEventArgs e)

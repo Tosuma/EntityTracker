@@ -164,9 +164,6 @@
                                             Background="{DynamicResource Brush.Brand.Green100}"
                                             AutomationProperties.LiveSetting="Polite"
                                             Loaded="OnNotificationLoaded">
-                                        <Border.RenderTransform>
-                                            <TranslateTransform />
-                                        </Border.RenderTransform>
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="22" />
