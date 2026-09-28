@@ -96,12 +96,25 @@ public interface IProjectUnsavedEditsGate
         Task.FromResult(true);
 }
 
+/// <summary>Prevents repository writes until the installed app has checked its release.</summary>
+public interface IProjectSyncVersionGate
+{
+    Task EnsureSyncAllowedAsync(CancellationToken cancellationToken);
+}
+
+public sealed class ProjectSyncUpdateRequiredException(string version)
+    : InvalidOperationException($"EntityTracker {version} is required before Project sync.");
+
+public sealed class ProjectSyncVersionCheckUnavailableException()
+    : InvalidOperationException("Project sync is paused until EntityTracker can check for app updates.");
+
 public sealed partial class ProjectGitSyncService(
     IProjectSyncLinkStore links, ILocalGitTransport git, IProjectSnapshotStore snapshots,
     IProjectSnapshotCodec codec, IOutboundDeletionApproval deletionApproval,
     IProjectRepository? projects = null, IProjectSyncBackup? backup = null,
     IProjectMergeReview? mergeReview = null,
-    IProjectUnsavedEditsGate? editGate = null)
+    IProjectUnsavedEditsGate? editGate = null,
+    IProjectSyncVersionGate? versionGate = null)
 {
     private async Task EnsureEditsReadyAsync(ProjectId projectId, ProjectSyncMode mode,
         CancellationToken token)
@@ -127,6 +140,7 @@ public sealed partial class ProjectGitSyncService(
 
     public async Task<ProjectSyncLink> LinkAsync(ProjectId projectId, string path, CancellationToken token = default)
     {
+        if (versionGate is not null) await versionGate.EnsureSyncAllowedAsync(token);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         await using IAsyncDisposable guard = await git.LockAsync(path, token);
         GitWorkingTreeState state = await git.InspectAsync(path, token);
@@ -162,6 +176,7 @@ public sealed partial class ProjectGitSyncService(
     public async Task<ProjectSyncLink> ImportAsync(string path, string? localName = null,
         CancellationToken token = default)
     {
+        if (versionGate is not null) await versionGate.EnsureSyncAllowedAsync(token);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         if (projects is null || backup is null)
             throw new InvalidOperationException("Project import is unavailable in this application configuration.");
@@ -293,6 +308,7 @@ public sealed partial class ProjectGitSyncService(
     private async Task<ProjectSyncLink> SyncCoreAsync(ProjectId projectId, string? localName,
         CancellationToken token, IProgress<ProjectSyncPhase>? progress, ProjectSyncMode mode)
     {
+        if (versionGate is not null) await versionGate.EnsureSyncAllowedAsync(token);
         progress?.Report(ProjectSyncPhase.CheckingEdits);
         await EnsureEditsReadyAsync(projectId, mode, token);
         progress?.Report(ProjectSyncPhase.Inspecting);

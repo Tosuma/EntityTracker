@@ -16,30 +16,40 @@ dotnet --version
 # Should output: 10.0.4xx
 ```
 
-## Clone and build
+## Install for everyday use
 
 ```powershell
 git clone https://github.com/Tosuma/Entity-Dependency-Manager.git
 cd Entity-Dependency-Manager
-dotnet restore EntityTracker.slnx
-dotnet build EntityTracker.slnx --no-restore
+.\scripts\Install-EntityTracker.ps1
 ```
 
-If restore fails with `NU1100` errors (usually a transient network issue), clear the NuGet
-HTTP cache and retry:
+The script builds the newest approved `app-vX.Y.Z` release on your computer, installs it at
+`%LOCALAPPDATA%\Programs\EntityTracker`, creates a **Start Menu** shortcut, and opens it. Keep
+the source clone: it is used to check and build later releases. Git access and .NET package restore
+must work on this computer.
+
+The app checks for new releases at startup, every 15 minutes, and before each Project Git sync.
+When an update is available, finish any open edit and choose **Close and update**. The updater
+window shows build progress and reopens the app when complete. If the build fails, use **Retry
+update** or exit; the older app remains blocked. If the release check is unavailable, local work
+continues but Project Git sync pauses until a check succeeds.
+
+If restore fails with `NU1100` errors, check network access to NuGet, then retry:
 
 ```powershell
 dotnet nuget locals all --clear
-dotnet restore EntityTracker.slnx
+.\scripts\Install-EntityTracker.ps1
 ```
 
-## Run the application
+## Run from source for development
 
 ```powershell
 dotnet run --project src/EntityTracker.Wpf/EntityTracker.Wpf.csproj
 ```
 
-The application window opens to the Portfolio view.
+Source runs do not enforce installed-app updates. They share the same per-user data with the
+installed app, so close one before opening the other.
 
 ## First steps
 
@@ -61,8 +71,9 @@ All application data is stored per-user under:
 %LOCALAPPDATA%\EntityTracker\
 ```
 
-This includes the SQLite database, settings, backups, and logs. Running from source and from a
-published ZIP share the same data for the same Windows user.
+This includes the SQLite database, settings, backups, and logs. The installed app lives separately
+under `%LOCALAPPDATA%\Programs\EntityTracker`. Updating it does not replace the database or your
+user-managed Project repositories. Startup applies database migrations after making a backup.
 
 ## Run tests
 
@@ -78,6 +89,9 @@ dotnet test EntityTracker.slnx --no-build --no-restore
 | `global.json` SDK not found | Install the exact SDK version from the [.NET download page](https://dotnet.microsoft.com/download/dotnet/10.0) |
 | Build fails on WPF projects | Confirm you are on Windows; WPF is not supported on other platforms |
 | Application opens but shows no data | Data is per-user; check `%LOCALAPPDATA%\EntityTracker\entity-tracker.db` exists |
+| Installer reports no approved release | Ask the developer to publish the first `app-vX.Y.Z` tag |
+| Update build fails | Use the updater's error log; restore source-clone access and NuGet connectivity, then retry |
+| Local work opens but Project sync is paused | Restore access to the app source clone and its Git origin, then select **Retry check** |
 
 ## Further reading
 

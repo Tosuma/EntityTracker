@@ -6,6 +6,31 @@ namespace EntityTracker.Application.Tests.GitSync;
 public sealed class ProjectAutoSyncServiceTests
 {
     [Fact]
+    public async Task ActiveSyncFlagTracksRunningAutomaticAndManualWork()
+    {
+        ProjectId project = ProjectId.New();
+        TaskCompletionSource entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        using ProjectAutoSyncService service = new(new LinkStore(Link(project)), async (id, _) =>
+        {
+            entered.SetResult();
+            await release.Task;
+            return Link(id) with { SyncStatus = "Current" };
+        });
+
+        Task pass = service.RunPassAsync();
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(service.HasActiveSync);
+        release.SetResult();
+        await pass;
+        Assert.False(service.HasActiveSync);
+        service.BeginManual(project);
+        Assert.True(service.HasActiveSync);
+        service.EndManual(project);
+        Assert.False(service.HasActiveSync);
+    }
+
+    [Fact]
     public async Task StartRunsAnInitialPassAndDisabledSchedulerCanBeEnabled()
     {
         ProjectId project = ProjectId.New();

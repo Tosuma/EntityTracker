@@ -42,7 +42,8 @@ internal static class ScreenshotManifest
         "archived-details.png",
         "help-and-sql.png",
         "sql-query.png",
-        "settings.png"
+        "settings.png",
+        "app-update-required.png"
     ];
 
     internal static string GetAppearanceDirectoryName(ApplicationAppearance appearance) =>

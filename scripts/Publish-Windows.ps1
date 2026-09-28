@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [ValidateSet('Debug', 'Release')]
-    [string]$Configuration = 'Release'
+    [string]$Configuration = 'Release',
+    [string]$Version
 )
 
 $ErrorActionPreference = 'Stop'
@@ -32,13 +33,15 @@ if (Test-Path -LiteralPath $zipPath) {
 
 New-Item -ItemType Directory -Path $publishDirectory -Force | Out-Null
 
+$versionArgument = if ($Version) { @("-p:Version=$Version", "-p:InformationalVersion=$Version") } else { @() }
 dotnet publish $projectPath `
     --configuration $Configuration `
     --runtime win-x64 `
     --self-contained true `
     --output $publishDirectory `
     -p:DebugType=None `
-    -p:DebugSymbols=false
+    -p:DebugSymbols=false `
+    @versionArgument
 
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish failed with exit code $LASTEXITCODE."

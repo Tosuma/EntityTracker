@@ -8,6 +8,18 @@ namespace EntityTracker.Wpf.Tests.Services;
 public sealed class NotificationCenterTests
 {
     [Fact]
+    public async Task RequiredUpdateNoticeCannotBeDismissedOrExpire()
+    {
+        NotificationCenter center = new(displayTime: TimeSpan.FromMilliseconds(30));
+        NotificationItem item = center.RequireAction("Update", "Required", "Update",
+            () => Task.CompletedTask, canDismiss: false);
+        center.Dismiss(item);
+        await Task.Delay(80);
+        Assert.False(item.CanDismiss);
+        Assert.Single(center.Items);
+    }
+
+    [Fact]
     public async Task NoticesKeepInsertionOrderAndExpireIndependently()
     {
         NotificationCenter center = new(displayTime: TimeSpan.FromMilliseconds(80));

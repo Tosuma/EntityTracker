@@ -263,7 +263,7 @@ A separate
 plans bulk status updates, customer priority, responsible-developer and group metadata, and
 column filtering with status-order sorting without extending the numbered roadmap. The independent
 [CI-01 engineering milestone](docs/milestones/engineering/ci_01_continuous_integration.md) defines
-CI validation for pull requests and pushes to `main` and packaging for successful `main` builds.
+CI validation for pull requests, pushes to `main`, and app release tags; successful pushes are packaged.
 The live badge above reports the current `main` build status.
 
 The [GS-01–GS-05 Git-sync roadmap](docs/milestones/git-sync/00_README.md) now includes portable
@@ -304,8 +304,11 @@ runtime store for editing, reporting, and navigation.
 
 EntityTracker currently runs on Windows and uses the .NET SDK pinned by `global.json`.
 
-See the [getting started guide](docs/GETTING_STARTED.md) for prerequisites, clone/build/run
-instructions, and first steps.
+See the [getting started guide](docs/GETTING_STARTED.md) for prerequisites, one-command local
+installation, updates, and first steps. Colleagues build approved release tags on their own
+computers; the app checks for updates and guides them through rebuilding when one arrives.
+
+![Required app update with persistent notification and blocked workspace](images/light/app-update-required.png)
 
 The [development guide](docs/DEVELOPMENT.md) contains complete instructions for publishing, CI,
 screenshots, schema import details, and locating local application data.

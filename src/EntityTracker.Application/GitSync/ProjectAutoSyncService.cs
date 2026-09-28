@@ -6,7 +6,7 @@ namespace EntityTracker.Application.GitSync;
 public enum ProjectSyncStateKind
 {
     Unlinked, Idle, Syncing, UpToDate, LocalPending, DeletionApproval,
-    Conflict, AuthenticationRequired, ConfigurationInvalid, Failed
+    Conflict, AuthenticationRequired, ConfigurationInvalid, UpdatePaused, Failed
 }
 
 public sealed record ProjectSyncState(ProjectSyncStateKind Kind, string LastResult,
@@ -47,6 +47,7 @@ public sealed class ProjectAutoSyncService : IDisposable
     }
 
     public event EventHandler<ProjectId>? StateChanged;
+    public bool HasActiveSync => !_inFlight.IsEmpty || !_manualInFlight.IsEmpty;
     public ProjectSyncState GetState(ProjectId projectId) =>
         _states.TryGetValue(projectId.Value, out ProjectSyncState? state)
             ? state : new(ProjectSyncStateKind.Unlinked, "No repository linked.");
@@ -210,6 +211,8 @@ public sealed class ProjectAutoSyncService : IDisposable
         ProjectSyncDeletionApprovalRequiredException => ProjectSyncStateKind.DeletionApproval,
         ProjectSyncReviewRequiredException or ProjectNameCollisionException => ProjectSyncStateKind.Conflict,
         ProjectSyncAuthenticationException => ProjectSyncStateKind.AuthenticationRequired,
+        ProjectSyncUpdateRequiredException or ProjectSyncVersionCheckUnavailableException =>
+            ProjectSyncStateKind.UpdatePaused,
         ProjectSyncConfigurationException or InvalidDataException or ArgumentException =>
             ProjectSyncStateKind.ConfigurationInvalid,
         _ => ProjectSyncStateKind.Failed
@@ -220,6 +223,8 @@ public sealed class ProjectAutoSyncService : IDisposable
         ProjectSyncDeletionApprovalRequiredException or ProjectSyncReviewRequiredException or
             ProjectSyncAuthenticationException or ProjectSyncConfigurationException => error.Message,
         ProjectNameCollisionException => "Choose a unique local Project name with Sync now.",
+        ProjectSyncUpdateRequiredException or ProjectSyncVersionCheckUnavailableException =>
+            error.Message,
         InvalidDataException => "The repository snapshot is invalid. Open the Project for details.",
         _ => "Automatic sync failed. Open the Project and use Sync now for details."
     };

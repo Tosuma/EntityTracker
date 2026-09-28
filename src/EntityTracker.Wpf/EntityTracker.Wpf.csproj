@@ -15,6 +15,9 @@
 
   <ItemGroup>
     <Resource Include="Assets\v2\EntityTracker.ico" />
+    <Content Include="..\..\scripts\Install-EntityTracker.ps1" Link="Updater\Install-EntityTracker.ps1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+    <Content Include="..\..\scripts\Install-Common.ps1" Link="Updater\Install-Common.ps1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+    <Content Include="..\..\scripts\Update-EntityTracker.ps1" Link="Updater\Update-EntityTracker.ps1" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
   </ItemGroup>
 
   <PropertyGroup>
