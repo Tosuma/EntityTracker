@@ -346,6 +346,35 @@ public sealed class ShellViewModelTests
         Assert.Null(shell.SelectedTracker);
     }
 
+    [Fact]
+    public async Task TrackerSync_StaysOnOwningProjectDashboard()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "Original");
+        Tracker copy = await harness.TrackerManagement.CopyAsync(
+            harness.DefaultTracker.Id, harness.DefaultProject.Id, "Copy for dashboard");
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "Added later");
+        using ShellViewModel shell = harness.CreateShell(
+            new EntityTrackerSettings(lastProjectId: harness.DefaultProject.Id,
+                lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        Assert.True(await shell.NavigateAsync(ShellDestination.ProjectDashboard));
+
+        await shell.Catalog.OpenSyncTrackerAsync(copy);
+        TrackerSyncReview review = Assert.IsType<TrackerSyncReview>(shell.Catalog.SyncReview);
+        Assert.NotEmpty(review.Changes);
+        foreach (TrackerSyncChange change in review.Changes)
+            change.Choice = TrackerSyncChoice.Source;
+        await WaitUntilAsync(() => shell.Catalog.ApplySyncCommand.CanExecute(null));
+        shell.Catalog.ApplySyncCommand.Execute(null);
+        await WaitUntilAsync(() => !shell.Catalog.IsOpen && !shell.Catalog.IsBusy &&
+            shell.SelectedTracker is null && !shell.IsBusy);
+
+        Assert.Equal(harness.DefaultProject.Id, shell.SelectedProject?.Id);
+        Assert.Equal(ShellDestination.ProjectDashboard, shell.SelectedDestination);
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
         using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));

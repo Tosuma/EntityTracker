@@ -430,8 +430,11 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         await RunAsync(async () =>
         {
             await _trackerSyncService.ApplyAsync(SyncReview);
+            ProjectId projectId = _syncTracker?.ProjectId ??
+                throw new InvalidOperationException("The tracker being synced is no longer selected.");
             Close();
-            Changed?.Invoke(this, EventArgs.Empty);
+            SelectionRequested?.Invoke(this,
+                new CatalogSelectionRequestedEventArgs(projectId, null));
         });
     }
 
