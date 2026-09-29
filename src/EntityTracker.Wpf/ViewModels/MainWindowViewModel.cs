@@ -114,6 +114,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             OnDependencyEditsPersistedAsync,
             OnEntityArchivedAsync,
             OnEntityRestoredAsync,
+            OnEntityPurgedAsync,
             OnReviewDependencyEditsStaged,
             () => !IsBusy && !ManualCreation.IsBusy,
             effectiveLoggerFactory.CreateLogger<EntityDependencyEditorViewModel>());
@@ -952,6 +953,24 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    private async Task OnEntityPurgedAsync()
+    {
+        SelectedTab = MainWindowTab.Archived;
+        try
+        {
+            await LoadOverviewAndProgressAsync(CancellationToken.None);
+            PersistedStateChanged?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "The overview could not be reloaded after permanently deleting an entity.");
+            SetOverviewFailure(
+                $"The entity was permanently deleted, but persisted entities could not be reloaded: {exception.Message}");
+        }
+    }
+
     private async Task OpenOverviewEntityAsync(EntityOverviewRow row)
     {
         CloseEntityDetails();
@@ -1133,7 +1152,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             FormatGraphIssueNames(item.DependencyResolutionIssueNames),
             isArchived ? "—" : FormatMissingDependencies(item.MissingDependencyNames),
             item.Notes,
-            isArchived ? "View and restore" : "Edit entity",
+            isArchived ? "View archived entity" : "Edit entity",
             item.RequestedPriority,
             item.Blockers,
             item.AuditTimestamps.CreatedAtUtc,

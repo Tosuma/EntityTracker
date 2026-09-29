@@ -77,6 +77,7 @@ public sealed class EntityDependencyEditorViewModelTests
             () => Task.CompletedTask,
             () => Task.CompletedTask,
             () => Task.CompletedTask,
+            () => Task.CompletedTask,
             _ => { });
     }
 

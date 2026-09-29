@@ -1,5 +1,6 @@
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
+using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Tracking;
@@ -188,5 +189,105 @@ public sealed class EntityLifecycleService
                     effectiveState)),
             cancellationToken);
         return EntityRestorationResult.Success();
+    }
+
+    public async Task<bool> PurgeArchivedAsync(
+        TrackerId trackerId,
+        EntityId entityId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(trackerId);
+        ArgumentNullException.ThrowIfNull(entityId);
+
+        Task<IReadOnlyList<TrackedEntity>> entitiesTask =
+            _entityRepository.GetAllAsync(trackerId, cancellationToken);
+        Task<IReadOnlyList<PersistedDependency>> resolvedTask =
+            _dependencyRepository.GetAllAsync(trackerId, cancellationToken);
+        Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
+            _dependencyRepository.GetAllUnresolvedAsync(trackerId, cancellationToken);
+        Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
+            _overrideRepository.GetAllAsync(trackerId, cancellationToken);
+        await Task.WhenAll(entitiesTask, resolvedTask, unresolvedTask, overridesTask);
+
+        TrackedEntity[] entities = (await entitiesTask).ToArray();
+        PersistedDependency[] resolved = (await resolvedTask).ToArray();
+        PersistedUnresolvedDependency[] unresolved = (await unresolvedTask).ToArray();
+        ManualDependencyOverride[] overrides = (await overridesTask).ToArray();
+        TrackerStateValidator.EnsureOwned(trackerId, entities, resolved, unresolved, overrides);
+
+        TrackedEntity? archived = entities.SingleOrDefault(entity => entity.Id == entityId);
+        if (archived?.LifecycleState != EntityLifecycleState.Archived)
+        {
+            return false;
+        }
+
+        EntitySourceKey targetKey = EntitySourceKey.From(archived.SourceName);
+        TrackedEntity[] remainingEntities = entities
+            .Where(entity => entity.Id != entityId)
+            .ToArray();
+        PersistedDependency[] remainingResolved = resolved
+            .Where(dependency =>
+                dependency.Edge.DependentEntityId != entityId &&
+                dependency.Edge.DependencyEntityId != entityId)
+            .ToArray();
+        PersistedUnresolvedDependency[] remainingUnresolved = unresolved
+            .Where(dependency => dependency.Dependency.DependentEntityId != entityId)
+            .Concat(resolved
+                .Where(dependency => dependency.Edge.DependencyEntityId == entityId)
+                .Select(dependency => new PersistedUnresolvedDependency(
+                    new UnresolvedDependency(
+                        dependency.Edge.DependentEntityId,
+                        archived.SourceName),
+                    dependency.Kind)))
+            .GroupBy(dependency => new
+            {
+                dependency.Dependency.DependentEntityId,
+                Key = EntitySourceKey.From(dependency.Dependency.DependencySourceName)
+            })
+            .Select(group => group
+                .OrderByDescending(dependency => dependency.Kind == ImportedDependencyKind.Mandatory)
+                .First())
+            .ToArray();
+        ManualDependencyOverride[] remainingOverrides = overrides
+            .Where(overrideItem => overrideItem.DependentEntityId != entityId)
+            .Where(overrideItem =>
+                overrideItem.Action != ManualDependencyOverrideAction.Suppress ||
+                EntitySourceKey.From(overrideItem.DependencySourceName) != targetKey)
+            .ToArray();
+
+        EntityId[] reconciledOwners = resolved
+            .Where(dependency => dependency.Edge.DependencyEntityId == entityId)
+            .Select(dependency => dependency.Edge.DependentEntityId)
+            .Distinct()
+            .ToArray();
+        EntityId[] overrideOwners = overrides
+            .Where(overrideItem => overrideItem.DependentEntityId == entityId ||
+                (overrideItem.Action == ManualDependencyOverrideAction.Suppress &&
+                 EntitySourceKey.From(overrideItem.DependencySourceName) == targetKey))
+            .Select(overrideItem => overrideItem.DependentEntityId)
+            .Distinct()
+            .ToArray();
+        EffectiveDependencyState effectiveState = _effectiveDependencyResolver.Resolve(
+            remainingEntities,
+            remainingResolved,
+            remainingUnresolved,
+            remainingOverrides);
+        await _store.ApplyAsync(
+            trackerId,
+            new TrackedStateChangeSet(
+                [],
+                [],
+                [],
+                reconciledOwners,
+                remainingResolved,
+                remainingUnresolved,
+                overrideOwners,
+                remainingOverrides,
+                progressSnapshotAfterChanges: _snapshotCalculator.Calculate(
+                    remainingEntities,
+                    effectiveState),
+                entityIdsToPurge: [entityId]),
+            cancellationToken);
+        return true;
     }
 }

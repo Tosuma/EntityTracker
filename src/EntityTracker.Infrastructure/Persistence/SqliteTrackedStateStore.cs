@@ -228,6 +228,16 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                 }
             }
 
+            foreach (EntityId entityId in changeSet.EntityIdsToPurge)
+            {
+                await PurgeArchivedEntityAsync(
+                    connection,
+                    transaction,
+                    trackerId,
+                    entityId,
+                    cancellationToken);
+            }
+
             if (changeSet.ProgressSnapshotAfterChanges is not null)
             {
                 await InsertSnapshotIfChangedAsync(
@@ -725,6 +735,35 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entityId));
         command.Parameters.AddWithValue("$timestamp", timestamp);
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task PurgeArchivedEntityAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        TrackerId trackerId,
+        EntityId entityId,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand history = CreateCommand(connection, transaction, """
+            DELETE FROM entity_status_history
+            WHERE entity_id = $entityId;
+            """);
+        history.Parameters.AddWithValue("$entityId", SqlitePersistenceValues.Format(entityId));
+        await history.ExecuteNonQueryAsync(cancellationToken);
+
+        using SqliteCommand entity = CreateCommand(connection, transaction, """
+            DELETE FROM tracked_entities
+            WHERE id = $entityId
+              AND tracker_id = $trackerId
+              AND lifecycle_state = 'Archived';
+            """);
+        entity.Parameters.AddWithValue("$entityId", SqlitePersistenceValues.Format(entityId));
+        entity.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
+        if (await entity.ExecuteNonQueryAsync(cancellationToken) != 1)
+        {
+            throw new InvalidOperationException(
+                "Only an archived entity in this tracker can be permanently deleted.");
+        }
     }
 
     private static async Task UpdateProgressAsync(

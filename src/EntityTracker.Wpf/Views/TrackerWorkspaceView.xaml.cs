@@ -19,6 +19,7 @@ public partial class TrackerWorkspaceView : UserControl
     private IInputElement? _focusBeforeEditor;
     private IInputElement? _focusBeforeDetails;
     private IInputElement? _focusBeforeArchiveConfirmation;
+    private IInputElement? _focusBeforePurgeConfirmation;
     private Button? _lastEntityActionButton;
     private IReadOnlyList<EntityId> _selectionBeforeRowClick = [];
     private DataGrid? _resizingDataGrid;
@@ -136,6 +137,31 @@ public partial class TrackerWorkspaceView : UserControl
                     }
 
                     ArchiveEntityButton.Focus();
+                }));
+            }
+
+            return;
+        }
+
+        if (e.PropertyName == nameof(EntityDependencyEditorViewModel.IsPurgeConfirmationOpen))
+        {
+            if (_viewModel?.Editor.IsPurgeConfirmationOpen == true)
+            {
+                _focusBeforePurgeConfirmation = Keyboard.FocusedElement;
+                Dispatcher.BeginInvoke(new Action(() => PurgeConfirmationTextBox.Focus()));
+            }
+            else
+            {
+                IInputElement? purgeRestoreTarget = _focusBeforePurgeConfirmation;
+                _focusBeforePurgeConfirmation = null;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (purgeRestoreTarget is not null && Keyboard.Focus(purgeRestoreTarget) is not null)
+                    {
+                        return;
+                    }
+
+                    PurgeEntityButton.Focus();
                 }));
             }
 
@@ -345,6 +371,13 @@ public partial class TrackerWorkspaceView : UserControl
         if (_viewModel.Editor.IsArchiveConfirmationOpen)
         {
             _viewModel.Editor.CancelArchiveCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
+        if (_viewModel.Editor.IsPurgeConfirmationOpen)
+        {
+            _viewModel.Editor.CancelPurgeCommand.Execute(null);
             e.Handled = true;
             return;
         }
