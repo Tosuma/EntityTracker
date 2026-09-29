@@ -139,6 +139,8 @@ public sealed class ProjectAutoSyncService : IDisposable
             if (link.SyncStatus is "RemoteDeletedLocalKept" or "Deleted") continue;
             ProjectId projectId = new(link.ProjectId);
             _states.TryAdd(link.ProjectId, FromLink(link));
+            // Publishing a shared Project deletion must always be an explicit manual action.
+            if (link.PendingDeletion is not null) continue;
             if (_manualInFlight.ContainsKey(link.ProjectId) ||
                 !_inFlight.TryAdd(link.ProjectId, 0)) continue;
             await RunProjectAsync(projectId, token);
