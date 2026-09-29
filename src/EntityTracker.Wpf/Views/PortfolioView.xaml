@@ -6,7 +6,7 @@
         <StackPanel>
             <DockPanel Margin="0,0,0,18">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Margin="0,0,8,0" Click="OnImportProject" Content="Import checkout"
+                    <Button Margin="0,0,8,0" Click="OnImportProject" Content="Import Project"
                             AutomationProperties.Name="Import Project from existing Git checkout"
                             Style="{StaticResource SecondaryButtonStyle}" />
                     <Button Margin="0,0,8,0" Click="OnOpenRecycleBins" Content="Recycle bins"

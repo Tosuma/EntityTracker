@@ -867,7 +867,7 @@
                                                    ToolTip="Unresolved or not-yet-implemented direct dependencies" />
                                     </DataGridTextColumn.Header>
                                 </DataGridTextColumn>
-                                <DataGridTemplateColumn Width="76" Header="Actions">
+                                <DataGridTemplateColumn Width="30">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
                                             <Button Width="30"
