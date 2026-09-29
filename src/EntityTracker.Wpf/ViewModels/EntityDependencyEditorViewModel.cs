@@ -25,12 +25,14 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private readonly Func<Task> _onPersisted;
     private readonly Func<Task> _onArchived;
     private readonly Func<Task> _onRestored;
+    private readonly Func<Task> _onPurged;
     private readonly Action<SchemaSynchronizationPlan> _onReviewStaged;
     private readonly Func<bool> _canOperate;
     private readonly ILogger<EntityDependencyEditorViewModel> _logger;
     private readonly AsyncCommand _saveCommand;
     private readonly AsyncCommand _confirmArchiveCommand;
     private readonly AsyncCommand _restoreEntityCommand;
+    private readonly AsyncCommand _confirmPurgeCommand;
     private readonly RelayCommand<ManualDependencySuggestion> _addExistingCommand;
     private readonly RelayCommand<string> _useGroupSuggestionCommand;
     private readonly RelayCommand<EntityDependencyEditRow> _suppressCommand;
@@ -40,6 +42,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private readonly RelayCommand _cancelCommand;
     private readonly RelayCommand _requestArchiveCommand;
     private readonly RelayCommand _cancelArchiveCommand;
+    private readonly RelayCommand _requestPurgeCommand;
+    private readonly RelayCommand _cancelPurgeCommand;
     private IReadOnlyList<EntityDependencyEditRow> _dependencies = [];
     private IReadOnlyList<ManualDependencySuggestion> _suggestions = [];
     private IReadOnlyList<string> _groupSuggestions = [];
@@ -58,8 +62,12 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private bool _isOpen;
     private EntityEditorMode _mode;
     private bool _isArchiveConfirmationOpen;
+    private bool _isPurgeConfirmationOpen;
+    private string _typedPurgeConfirmation = string.Empty;
+    private string? _purgeErrorMessage;
     private int _searchVersion;
     private int _groupSearchVersion;
+    private int _previewVersion;
     private EntityDependencyEditPlan? _currentEditPlan;
     private ArchivedEntityDetails? _archivedDetails;
     private SchemaSynchronizationPlan? _reviewPlan;
@@ -82,6 +90,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         Func<Task> onPersisted,
         Func<Task> onArchived,
         Func<Task> onRestored,
+        Func<Task> onPurged,
         Action<SchemaSynchronizationPlan> onReviewStaged,
         Func<bool>? canOperate = null,
         ILogger<EntityDependencyEditorViewModel>? logger = null)
@@ -92,6 +101,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         ArgumentNullException.ThrowIfNull(onPersisted);
         ArgumentNullException.ThrowIfNull(onArchived);
         ArgumentNullException.ThrowIfNull(onRestored);
+        ArgumentNullException.ThrowIfNull(onPurged);
         ArgumentNullException.ThrowIfNull(onReviewStaged);
 
         _trackerId = trackerId;
@@ -101,11 +111,12 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _onPersisted = onPersisted;
         _onArchived = onArchived;
         _onRestored = onRestored;
+        _onPurged = onPurged;
         _onReviewStaged = onReviewStaged;
         _canOperate = canOperate ?? (() => true);
         _logger = logger ?? NullLogger<EntityDependencyEditorViewModel>.Instance;
         _addExistingCommand = new RelayCommand<ManualDependencySuggestion>(
-            suggestion => _ = AddManualDependencyAsync(suggestion.SourceName),
+            AddExisting,
             _ => CanEdit);
         _useGroupSuggestionCommand = new RelayCommand<string>(
             UseGroupSuggestion,
@@ -139,9 +150,18 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _restoreEntityCommand = new AsyncCommand(
             RestoreEntityAsync,
             () => CanRestoreEntity);
+        _requestPurgeCommand = new RelayCommand(
+            RequestPurge,
+            () => CanPurgeEntity);
+        _confirmPurgeCommand = new AsyncCommand(
+            ConfirmPurgeAsync,
+            () => CanConfirmPurge);
         _cancelArchiveCommand = new RelayCommand(
             CancelArchive,
             () => IsArchiveConfirmationOpen && !IsBusy);
+        _cancelPurgeCommand = new RelayCommand(
+            CancelPurge,
+            () => IsPurgeConfirmationOpen && !IsBusy);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -205,9 +225,9 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 return;
             }
 
-            _ = AddManualDependencyAsync(value.SourceName);
             _selectedDependencySuggestion = null;
             OnPropertyChanged();
+            AddExisting(value);
         }
     }
 
@@ -325,6 +345,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(CanEditProgress));
                 OnPropertyChanged(nameof(CanEditPriority));
                 OnPropertyChanged(nameof(CanRestoreEntity));
+                OnPropertyChanged(nameof(CanPurgeEntity));
+                OnPropertyChanged(nameof(CanConfirmPurge));
             }
         }
     }
@@ -341,6 +363,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(CanEditProgress));
                 OnPropertyChanged(nameof(CanEditPriority));
                 OnPropertyChanged(nameof(CanRestoreEntity));
+                OnPropertyChanged(nameof(CanPurgeEntity));
+                OnPropertyChanged(nameof(CanConfirmPurge));
                 NotifyCommandsChanged();
             }
         }
@@ -396,6 +420,45 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
     }
 
+    public bool IsPurgeConfirmationOpen
+    {
+        get => _isPurgeConfirmationOpen;
+        private set
+        {
+            if (SetField(ref _isPurgeConfirmationOpen, value))
+            {
+                OnPropertyChanged(nameof(CanPurgeEntity));
+                OnPropertyChanged(nameof(CanConfirmPurge));
+                NotifyCommandsChanged();
+            }
+        }
+    }
+
+    public string TypedPurgeConfirmation
+    {
+        get => _typedPurgeConfirmation;
+        set
+        {
+            if (SetField(ref _typedPurgeConfirmation, value ?? string.Empty))
+            {
+                OnPropertyChanged(nameof(CanConfirmPurge));
+                _confirmPurgeCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    public string? PurgeErrorMessage
+    {
+        get => _purgeErrorMessage;
+        private set
+        {
+            if (SetField(ref _purgeErrorMessage, value))
+            {
+                OnPropertyChanged(nameof(HasPurgeError));
+            }
+        }
+    }
+
     public EntityDependencyEditPlan? CurrentEditPlan
     {
         get => _currentEditPlan;
@@ -426,6 +489,9 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(SelectedEntityName));
                 OnPropertyChanged(nameof(EntityDetails));
                 OnPropertyChanged(nameof(CanRestoreEntity));
+                OnPropertyChanged(nameof(CanPurgeEntity));
+                OnPropertyChanged(nameof(CanConfirmPurge));
+                OnPropertyChanged(nameof(PurgeConfirmationMessage));
                 NotifyCommandsChanged();
             }
         }
@@ -563,6 +629,12 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     public bool CanRestoreEntity =>
         IsOpen && !IsBusy && _canOperate() && IsArchivedMode && ArchivedDetails is not null;
 
+    public bool CanPurgeEntity => CanRestoreEntity && !IsPurgeConfirmationOpen;
+
+    public bool CanConfirmPurge =>
+        IsPurgeConfirmationOpen && !IsBusy && _canOperate() &&
+        TypedPurgeConfirmation == ArchivedDetails?.Entity.SourceName;
+
     public bool ShowSave => !IsArchivedMode;
 
     public bool ShowDependencyEditor => !IsArchivedMode;
@@ -584,6 +656,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     public bool HasGroupSearchMessage => !string.IsNullOrWhiteSpace(GroupSearchMessage);
 
     public bool HasArchiveError => !string.IsNullOrWhiteSpace(ArchiveErrorMessage);
+
+    public bool HasPurgeError => !string.IsNullOrWhiteSpace(PurgeErrorMessage);
 
     public bool HasPriorityPreview => PriorityPreviewRows.Count > 0;
 
@@ -641,6 +715,12 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
           "Entities that depend on it may become unresolved. You can restore it later from the Archived view. " +
           "Unsaved edits will be discarded.";
 
+    public string PurgeConfirmationMessage => ArchivedDetails is null
+        ? string.Empty
+        : $"Permanently delete '{ArchivedDetails.Entity.SourceName}'? This cannot be undone. " +
+          "Its history, dependencies, and manual overrides will be deleted. Entities that reference it will retain " +
+          $"'{ArchivedDetails.Entity.SourceName}' as an unresolved dependency. Type the entity name to confirm.";
+
     public ICommand AddExistingCommand => _addExistingCommand;
 
     public ICommand UseGroupSuggestionCommand => _useGroupSuggestionCommand;
@@ -654,6 +734,12 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     public ICommand RestoreCommand => _restoreDependencyCommand;
 
     public ICommand RestoreEntityCommand => _restoreEntityCommand;
+
+    public ICommand RequestPurgeCommand => _requestPurgeCommand;
+
+    public ICommand ConfirmPurgeCommand => _confirmPurgeCommand;
+
+    public ICommand CancelPurgeCommand => _cancelPurgeCommand;
 
     public ICommand SaveCommand => _saveCommand;
 
@@ -798,6 +884,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(CanEditProgress));
         OnPropertyChanged(nameof(CanEditPriority));
         OnPropertyChanged(nameof(CanRestoreEntity));
+        OnPropertyChanged(nameof(CanPurgeEntity));
+        OnPropertyChanged(nameof(CanConfirmPurge));
         NotifyCommandsChanged();
     }
 
@@ -925,6 +1013,24 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         GroupSearchMessage = null;
     }
 
+    private void AddExisting(ManualDependencySuggestion suggestion)
+    {
+        ArgumentNullException.ThrowIfNull(suggestion);
+        if (!CanEdit ||
+            CurrentEditPlan is null ||
+            ContainsDependency(EntitySourceKey.From(suggestion.SourceName)))
+        {
+            return;
+        }
+
+        _logger.LogInformation(
+            "Selecting dependency suggestion {DependencyName} for {EntityName} in {Mode} mode.",
+            suggestion.SourceName,
+            CurrentEditPlan?.Entity.SourceName ?? "<no entity>",
+            Mode);
+        _ = AddManualDependencyAsync(suggestion.SourceName);
+    }
+
     private Task AddManualDependencyAsync(string sourceName)
     {
         if (sourceName.Length == 0)
@@ -973,6 +1079,12 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             return;
         }
 
+        int previewVersion = ++_previewVersion;
+        _logger.LogInformation(
+            "Starting dependency preview {PreviewVersion} for {EntityName} with {OverrideCount} override(s).",
+            previewVersion,
+            CurrentEditPlan.Entity.SourceName,
+            desired.Count);
         try
         {
             EntityDependencyEditPlan plan = IsReviewMode
@@ -985,12 +1097,32 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                     _trackerId,
                     CurrentEditPlan.Entity.Id,
                     desired);
+            if (previewVersion != _previewVersion || !IsOpen)
+            {
+                _logger.LogInformation(
+                    "Discarding stale dependency preview {PreviewVersion} for {EntityName}.",
+                    previewVersion,
+                    CurrentEditPlan?.Entity.SourceName ?? "<closed editor>");
+                return;
+            }
+
             LoadPlan(plan, false);
             ClearSearch();
+            _logger.LogInformation(
+                "Applied dependency preview {PreviewVersion} for {EntityName}: {DependencyCount} dependency row(s), {ErrorCount} error(s).",
+                previewVersion,
+                plan.Entity.SourceName,
+                plan.Dependencies.Count,
+                plan.Errors.Count);
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Dependency changes could not be evaluated.");
+            _logger.LogError(
+                exception,
+                "Dependency preview {PreviewVersion} failed for {EntityName} with {OverrideCount} override(s).",
+                previewVersion,
+                CurrentEditPlan?.Entity.SourceName ?? "<no entity>",
+                desired.Count);
             Errors = [$"Dependency changes could not be evaluated: {exception.Message}"];
         }
     }
@@ -1060,7 +1192,27 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             return;
         }
 
+        if (IsPurgeConfirmationOpen)
+        {
+            CancelPurge();
+            return;
+        }
+
         CloseSession();
+    }
+
+    private void RequestPurge()
+    {
+        PurgeErrorMessage = null;
+        TypedPurgeConfirmation = string.Empty;
+        IsPurgeConfirmationOpen = true;
+    }
+
+    private void CancelPurge()
+    {
+        PurgeErrorMessage = null;
+        TypedPurgeConfirmation = string.Empty;
+        IsPurgeConfirmationOpen = false;
     }
 
     private async Task ConfirmArchiveAsync()
@@ -1126,6 +1278,41 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         {
             _logger.LogError(exception, "An entity could not be restored.");
             Errors = [$"The entity could not be restored: {exception.Message}"];
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private async Task ConfirmPurgeAsync()
+    {
+        if (ArchivedDetails is null || !CanConfirmPurge)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        PurgeErrorMessage = null;
+        try
+        {
+            bool purged = await _lifecycleService.PurgeArchivedAsync(
+                _trackerId,
+                ArchivedDetails.Entity.Id);
+            if (!purged)
+            {
+                PurgeErrorMessage =
+                    "This entity is no longer archived. Close the editor and refresh before trying again.";
+                return;
+            }
+
+            await _onPurged();
+            CloseSession();
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "An archived entity could not be permanently deleted.");
+            PurgeErrorMessage = $"The entity could not be permanently deleted: {exception.Message}";
         }
         finally
         {
@@ -1203,18 +1390,23 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private void CloseSession()
     {
         IsArchiveConfirmationOpen = false;
+        IsPurgeConfirmationOpen = false;
         IsOpen = false;
         ResetSessionState();
     }
 
     private void ResetSessionState()
     {
+        _previewVersion++;
         CurrentEditPlan = null;
         ArchivedDetails = null;
         Dependencies = [];
         Warnings = [];
         Errors = [];
         ArchiveErrorMessage = null;
+        PurgeErrorMessage = null;
+        _typedPurgeConfirmation = string.Empty;
+        OnPropertyChanged(nameof(TypedPurgeConfirmation));
         _reviewPlan = null;
         _initialOverrideSignature = null;
         Mode = EntityEditorMode.Standalone;
@@ -1276,6 +1468,9 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _removeManualCommand.NotifyCanExecuteChanged();
         _restoreDependencyCommand.NotifyCanExecuteChanged();
         _restoreEntityCommand.NotifyCanExecuteChanged();
+        _requestPurgeCommand.NotifyCanExecuteChanged();
+        _confirmPurgeCommand.NotifyCanExecuteChanged();
+        _cancelPurgeCommand.NotifyCanExecuteChanged();
         _cancelCommand.NotifyCanExecuteChanged();
         _requestArchiveCommand.NotifyCanExecuteChanged();
         _confirmArchiveCommand.NotifyCanExecuteChanged();

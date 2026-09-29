@@ -85,6 +85,29 @@ public sealed class ProjectAutoSyncServiceTests
     }
 
     [Fact]
+    public async Task PassDoesNotPublishPendingDeletionAutomatically()
+    {
+        ProjectId pendingDeletion = ProjectId.New();
+        ProjectId pendingSync = ProjectId.New();
+        ProjectDeletionIntent deletion = new(pendingDeletion.Value, "snapshot-hash",
+            DateTimeOffset.UtcNow, 1);
+        List<ProjectId> synced = [];
+        using ProjectAutoSyncService service = new(new LinkStore(
+            Link(pendingDeletion) with { SyncStatus = "PendingDeletion", PendingDeletion = deletion },
+            Link(pendingSync)), (id, _) =>
+            {
+                synced.Add(id);
+                return Task.FromResult(Link(id) with { SyncStatus = "Current" });
+            });
+
+        await service.RunPassAsync();
+
+        Assert.DoesNotContain(pendingDeletion, synced);
+        Assert.Contains(pendingSync, synced);
+        Assert.Equal(ProjectSyncStateKind.LocalPending, service.GetState(pendingDeletion).Kind);
+    }
+
+    [Fact]
     public async Task DeferredEditDoesNotBlockOtherProjectAndResumesAfterEditCloses()
     {
         ProjectId deferred = ProjectId.New();

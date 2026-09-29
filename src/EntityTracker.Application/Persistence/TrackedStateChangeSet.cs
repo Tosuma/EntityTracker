@@ -22,7 +22,8 @@ public sealed class TrackedStateChangeSet
         ProgressSnapshotState? progressSnapshotAfterChanges = null,
         IEnumerable<TrackedEntity>? entitiesWithRequestedPriorityToUpdate = null,
         IEnumerable<TrackedEntity>? entitiesWithResponsibleDeveloperToUpdate = null,
-        IEnumerable<TrackedEntity>? entitiesWithGroupNameToUpdate = null)
+        IEnumerable<TrackedEntity>? entitiesWithGroupNameToUpdate = null,
+        IEnumerable<EntityId>? entityIdsToPurge = null)
     {
         EntitiesToAdd = entitiesToAdd.ToArray();
         EntitiesToUpdate = entitiesToUpdate.ToArray();
@@ -41,6 +42,7 @@ public sealed class TrackedStateChangeSet
             (entitiesWithResponsibleDeveloperToUpdate ?? []).ToArray();
         EntitiesWithGroupNameToUpdate =
             (entitiesWithGroupNameToUpdate ?? []).ToArray();
+        EntityIdsToPurge = (entityIdsToPurge ?? []).ToArray();
     }
 
     public IReadOnlyList<TrackedEntity> EntitiesToAdd { get; }
@@ -71,6 +73,8 @@ public sealed class TrackedStateChangeSet
 
     public IReadOnlyList<TrackedEntity> EntitiesWithGroupNameToUpdate { get; }
 
+    public IReadOnlyList<EntityId> EntityIdsToPurge { get; }
+
     public bool HasChanges =>
         EntitiesToAdd.Count > 0 ||
         EntitiesToUpdate.Count > 0 ||
@@ -79,7 +83,8 @@ public sealed class TrackedStateChangeSet
         ReconciledOverrideOwnerIds.Count > 0 ||
         EntitiesWithProgressToUpdate.Count > 0 ||
         EntityIdsToRestore.Count > 0 ||
-        EntitiesWithRequestedPriorityToUpdate.Count > 0 ||
-        EntitiesWithResponsibleDeveloperToUpdate.Count > 0 ||
-        EntitiesWithGroupNameToUpdate.Count > 0;
+            EntitiesWithRequestedPriorityToUpdate.Count > 0 ||
+            EntitiesWithResponsibleDeveloperToUpdate.Count > 0 ||
+            EntitiesWithGroupNameToUpdate.Count > 0 ||
+            EntityIdsToPurge.Count > 0;
 }

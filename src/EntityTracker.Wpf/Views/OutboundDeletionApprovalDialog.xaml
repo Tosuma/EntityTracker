@@ -1,0 +1,36 @@
+<Window x:Class="EntityTracker.Wpf.Views.OutboundDeletionApprovalDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Approve outbound deletions" Width="580" Height="460" MinWidth="440" MinHeight="320"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
+        Background="{DynamicResource Brush.Surface.Page}"
+        Foreground="{DynamicResource Brush.Text.Primary}">
+    <Grid Margin="20" FocusManager.IsFocusScope="True"
+          KeyboardNavigation.TabNavigation="Cycle" KeyboardNavigation.ControlTabNavigation="Cycle">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <TextBlock FontSize="22" FontWeight="SemiBold" Text="Approve repository deletion"
+                   AutomationProperties.HeadingLevel="Level1" />
+        <TextBlock Grid.Row="1" Margin="0,10,0,14"
+                   Text="Sync will permanently remove these objects from the repository snapshot. Approve this exact deletion set?"
+                   TextWrapping="Wrap" />
+        <ListBox Grid.Row="2" ItemsSource="{Binding DeletedObjects}" IsTabStop="False"
+                 AutomationProperties.Name="Objects to delete">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock Padding="4" Text="{Binding}" TextWrapping="Wrap" />
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+        <StackPanel Grid.Row="3" Margin="0,14,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="CancelButton" Content="Cancel" IsCancel="True" MinWidth="100" />
+            <Button Margin="8,0,0,0" Content="Approve deletion" IsDefault="True" MinWidth="135"
+                    Click="OnApprove" Style="{StaticResource DangerButtonStyle}"
+                    AutomationProperties.Name="Approve repository deletion" />
+        </StackPanel>
+    </Grid>
+</Window>

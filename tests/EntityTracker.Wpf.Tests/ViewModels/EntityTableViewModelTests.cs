@@ -310,5 +310,5 @@ public sealed class EntityTableViewModelTests
             string.Empty,
             "—",
             string.Empty,
-            archived ? "View and restore" : "Edit entity");
+            archived ? "View archived entity" : "Edit entity");
 }

@@ -600,8 +600,9 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         {
             if (_pendingProject is not null)
             {
-                if (_gitSync is null || !await _gitSync.PurgeLinkedProjectAsync(_pendingProject.Id))
-                    await _projectService.PurgeAsync(new PurgeProjectRequest(_pendingProject.Id));
+                if (_gitSync is not null)
+                    await _gitSync.UnlinkAsync(_pendingProject.Id);
+                await _projectService.PurgeAsync(new PurgeProjectRequest(_pendingProject.Id));
             }
             else if (_pendingTracker is not null)
             {

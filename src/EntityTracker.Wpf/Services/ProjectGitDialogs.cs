@@ -1,5 +1,6 @@
 using System.Windows;
 using EntityTracker.Application.GitSync;
+using EntityTracker.Wpf.Views;
 using Microsoft.Win32;
 
 namespace EntityTracker.Wpf.Services;
@@ -23,9 +24,9 @@ public sealed class WpfOutboundDeletionApproval : IOutboundDeletionApproval
     public Task<bool> ApproveAsync(IReadOnlyList<string> deletedObjects, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        string message = "Sync will permanently remove these objects from the repository snapshot:\n\n" +
-            string.Join("\n", deletedObjects) + "\n\nApprove this exact deletion set?";
-        return Task.FromResult(MessageBox.Show(System.Windows.Application.Current.MainWindow, message,
-            "Approve outbound deletions", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes);
+        Window? owner = System.Windows.Application.Current?.MainWindow;
+        OutboundDeletionApprovalDialog dialog = new(deletedObjects);
+        if (owner is not null) dialog.Owner = owner;
+        return Task.FromResult(dialog.ShowDialog() == true);
     }
 }

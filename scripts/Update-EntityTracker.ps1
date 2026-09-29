@@ -39,6 +39,7 @@ $form.Controls.Add($progress)
 
 $log = New-Object System.Windows.Forms.TextBox
 $log.Multiline = $true
+$log.AcceptsReturn = $true
 $log.ReadOnly = $true
 $log.ScrollBars = 'Vertical'
 $log.Location = New-Object System.Drawing.Point(20, 120)
@@ -58,6 +59,33 @@ $exit.Location = New-Object System.Drawing.Point(510, 314)
 $exit.Size = New-Object System.Drawing.Size(94, 30)
 $exit.Add_Click({ $form.Close() })
 $form.Controls.Add($exit)
+
+$successPage = New-Object System.Windows.Forms.Panel
+$successPage.Location = New-Object System.Drawing.Point(0, 0)
+$successPage.Size = $form.ClientSize
+$successPage.Visible = $false
+$form.Controls.Add($successPage)
+
+$successHeading = New-Object System.Windows.Forms.Label
+$successHeading.Text = 'Update complete'
+$successHeading.Font = New-Object System.Drawing.Font('Segoe UI', 13,
+    [System.Drawing.FontStyle]::Bold)
+$successHeading.Location = New-Object System.Drawing.Point(20, 18)
+$successHeading.Size = New-Object System.Drawing.Size(590, 32)
+$successPage.Controls.Add($successHeading)
+
+$successDescription = New-Object System.Windows.Forms.Label
+$successDescription.Text = "EntityTracker was updated to $Tag and is ready to use."
+$successDescription.Location = New-Object System.Drawing.Point(20, 56)
+$successDescription.Size = New-Object System.Drawing.Size(590, 48)
+$successPage.Controls.Add($successDescription)
+
+$finish = New-Object System.Windows.Forms.Button
+$finish.Text = 'Finish'
+$finish.Location = New-Object System.Drawing.Point(510, 314)
+$finish.Size = New-Object System.Drawing.Size(94, 30)
+$finish.Add_Click({ $form.Close() })
+$successPage.Controls.Add($finish)
 
 $script:worker = $null
 $script:stdoutPath = $null
@@ -99,7 +127,7 @@ $timer.Add_Tick({
     $errors = if (Test-Path -LiteralPath $script:stderrPath) {
         Get-Content -LiteralPath $script:stderrPath -Raw -ErrorAction SilentlyContinue
     } else { '' }
-    $log.Text = ($output + [Environment]::NewLine + $errors).Trim()
+    $log.Text = ($output + [Environment]::NewLine + $errors).TrimEnd()
     $log.SelectionStart = $log.TextLength
     $log.ScrollToCaret()
     if ($script:worker.HasExited) {
@@ -108,7 +136,15 @@ $timer.Add_Tick({
         $script:worker = $null
         if ($code -eq 0) {
             $timer.Stop()
-            $form.Close()
+            $heading.Visible = $false
+            $description.Visible = $false
+            $progress.Visible = $false
+            $log.Visible = $false
+            $retry.Visible = $false
+            $exit.Visible = $false
+            $successPage.Visible = $true
+            $successPage.BringToFront()
+            $form.AcceptButton = $finish
         } else {
             $progress.Style = 'Blocks'
             $heading.Text = 'Update failed'

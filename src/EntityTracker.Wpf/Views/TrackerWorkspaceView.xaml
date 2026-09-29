@@ -2719,6 +2719,13 @@
                                 Content="Restore entity"
                                 Style="{StaticResource PrimaryButtonStyle}"
                                 Visibility="{Binding Editor.CanRestoreEntity, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <Button DockPanel.Dock="Left"
+                                x:Name="PurgeEntityButton"
+                                Margin="8,0,0,0"
+                                Command="{Binding Editor.RequestPurgeCommand}"
+                                Content="Permanently delete entity"
+                                Style="{StaticResource DangerButtonStyle}"
+                                Visibility="{Binding Editor.CanPurgeEntity, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                             <Button Margin="0,0,8,0"
                                     Command="{Binding Editor.CancelCommand}"
@@ -2774,6 +2781,62 @@
                                             Style="{StaticResource PrimaryButtonStyle}" />
                                     <Button Command="{Binding Editor.ConfirmArchiveCommand}"
                                             Content="Archive entity"
+                                            Style="{StaticResource DangerButtonStyle}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <Grid Grid.RowSpan="3"
+                          Panel.ZIndex="11"
+                          Background="{DynamicResource Brush.Overlay}"
+                          FocusManager.IsFocusScope="True"
+                          FocusManager.FocusedElement="{Binding ElementName=CancelPurgeButton}"
+                          Visibility="{Binding Editor.IsPurgeConfirmationOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Border x:Name="PurgeConfirmationSurface"
+                                Width="560"
+                                MaxWidth="560"
+                                Padding="22"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Background="{DynamicResource Brush.Surface.Page}"
+                                BorderBrush="{DynamicResource Brush.Accent}"
+                                BorderThickness="1"
+                                CornerRadius="6">
+                            <StackPanel>
+                                <TextBlock FontSize="20"
+                                           AutomationProperties.HeadingLevel="Level2"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Brush.Text.Primary}"
+                                           Text="Permanently delete entity?" />
+                                <TextBlock Margin="0,10,0,0"
+                                           Foreground="{DynamicResource Brush.Text.Primary}"
+                                           Text="{Binding Editor.PurgeConfirmationMessage}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Margin="0,14,0,4"
+                                           Foreground="{DynamicResource Brush.Text.Primary}"
+                                           Text="Type the exact entity name to continue:"
+                                           TextWrapping="Wrap" />
+                                <TextBox x:Name="PurgeConfirmationTextBox"
+                                         AutomationProperties.Name="Exact entity name confirmation"
+                                         Text="{Binding Editor.TypedPurgeConfirmation, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Margin="0,10,0,0"
+                                           Foreground="{DynamicResource Brush.Text.Danger}"
+                                           Text="{Binding Editor.PurgeErrorMessage}"
+                                           TextWrapping="Wrap"
+                                           Visibility="{Binding Editor.HasPurgeError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <StackPanel Margin="0,20,0,0"
+                                            HorizontalAlignment="Right"
+                                            Orientation="Horizontal">
+                                    <Button x:Name="CancelPurgeButton"
+                                            Margin="0,0,8,0"
+                                            Command="{Binding Editor.CancelPurgeCommand}"
+                                            Content="Cancel"
+                                            IsDefault="True"
+                                            IsCancel="True"
+                                            Style="{StaticResource PrimaryButtonStyle}" />
+                                    <Button Command="{Binding Editor.ConfirmPurgeCommand}"
+                                            Content="Permanently delete"
                                             Style="{StaticResource DangerButtonStyle}" />
                                 </StackPanel>
                             </StackPanel>
