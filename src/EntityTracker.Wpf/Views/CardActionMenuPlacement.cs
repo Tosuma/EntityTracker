@@ -2,11 +2,11 @@ using System.Windows;
 
 namespace EntityTracker.Wpf.Views;
 
-internal readonly record struct TrackerActionMenuPosition(double Left, double Top, bool OpensAbove);
+internal readonly record struct CardActionMenuPosition(double Left, double Top, bool OpensAbove);
 
-internal static class TrackerActionMenuPlacement
+internal static class CardActionMenuPlacement
 {
-    public static TrackerActionMenuPosition Calculate(Rect anchor, Size menu, Size viewport)
+    public static CardActionMenuPosition Calculate(Rect anchor, Size menu, Size viewport)
     {
         double left = Math.Clamp(anchor.Left, 0, Math.Max(0, viewport.Width - menu.Width));
         double below = anchor.Bottom - 1;
@@ -14,6 +14,6 @@ internal static class TrackerActionMenuPlacement
                           anchor.Top >= menu.Height - 1;
         double top = opensAbove ? anchor.Top - menu.Height + 1 : below;
         top = Math.Clamp(top, 0, Math.Max(0, viewport.Height - menu.Height));
-        return new TrackerActionMenuPosition(left, top, opensAbove);
+        return new CardActionMenuPosition(left, top, opensAbove);
     }
 }

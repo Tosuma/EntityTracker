@@ -240,7 +240,7 @@ public partial class ProjectDashboardView : UserControl
         if (_openTrackerActionsToggle is not { IsLoaded: true } toggle) return;
         TrackerActionsMenu.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         Point anchorTopLeft = toggle.TranslatePoint(new Point(), TrackerActionLayer);
-        TrackerActionMenuPosition position = TrackerActionMenuPlacement.Calculate(
+        CardActionMenuPosition position = CardActionMenuPlacement.Calculate(
             new Rect(anchorTopLeft, new Size(toggle.ActualWidth, toggle.ActualHeight)),
             TrackerActionsMenu.DesiredSize,
             new Size(TrackerActionLayer.ActualWidth, TrackerActionLayer.ActualHeight));
