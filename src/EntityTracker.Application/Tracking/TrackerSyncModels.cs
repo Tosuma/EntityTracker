@@ -25,7 +25,9 @@ public sealed record TrackerSyncPreview(
     ProgressSnapshotState ResultProgress,
     int UnresolvedDependencyCount);
 
-public enum TrackerSyncChoice { Source, Destination, Both }
+public enum TrackerSyncChoice { Source, Destination }
+
+public sealed record TrackerSyncChoiceOption(TrackerSyncChoice Value, string Label);
 
 public enum TrackerSyncChangeKind { Entity, Dependency, RequestedPriority, Group }
 
@@ -38,17 +40,19 @@ public sealed class TrackerSyncChange : INotifyPropertyChanged
         string entityName,
         string? dependencyName,
         string sourceValue,
-        string destinationValue,
-        bool allowBoth)
+        string destinationValue)
     {
         Kind = kind;
         EntityName = entityName;
         DependencyName = dependencyName;
         SourceValue = sourceValue;
         DestinationValue = destinationValue;
-        Choices = allowBoth
-            ? [TrackerSyncChoice.Source, TrackerSyncChoice.Destination, TrackerSyncChoice.Both]
-            : [TrackerSyncChoice.Source, TrackerSyncChoice.Destination];
+        Choices = kind == TrackerSyncChangeKind.Dependency &&
+                  (sourceValue == "Absent" || destinationValue == "Absent")
+            ? [new(TrackerSyncChoice.Source, sourceValue == "Absent" ? "Remove dependency" : "Keep dependency"),
+               new(TrackerSyncChoice.Destination, destinationValue == "Absent" ? "Remove dependency" : "Keep dependency")]
+            : [new(TrackerSyncChoice.Source, $"Use source: {sourceValue}"),
+               new(TrackerSyncChoice.Destination, $"Keep this tracker: {destinationValue}")];
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -57,7 +61,7 @@ public sealed class TrackerSyncChange : INotifyPropertyChanged
     public string? DependencyName { get; }
     public string SourceValue { get; }
     public string DestinationValue { get; }
-    public IReadOnlyList<TrackerSyncChoice> Choices { get; }
+    public IReadOnlyList<TrackerSyncChoiceOption> Choices { get; }
     public string Label => Kind switch
     {
         TrackerSyncChangeKind.Entity => $"{EntityName} — entity",
@@ -72,7 +76,7 @@ public sealed class TrackerSyncChange : INotifyPropertyChanged
         set
         {
             if (_choice == value) return;
-            if (value is not null && !Choices.Contains(value.Value))
+            if (value is not null && !Choices.Any(option => option.Value == value.Value))
                 throw new ArgumentOutOfRangeException(nameof(value));
             _choice = value;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Choice)));

@@ -74,10 +74,12 @@
                                                     <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextWrapping="Wrap" />
                                                     <TextBlock Margin="0,5,0,0" Text="{Binding SourceValue, StringFormat=Source: {0}}" TextWrapping="Wrap" />
                                                     <TextBlock Text="{Binding DestinationValue, StringFormat=This tracker: {0}}" TextWrapping="Wrap" />
-                                                    <ComboBox Margin="0,8,0,0" Width="180" HorizontalAlignment="Left"
+                                                    <ComboBox Margin="0,8,0,0" MinWidth="220" HorizontalAlignment="Left"
                                                               AutomationProperties.Name="Choose sync result"
                                                               ItemsSource="{Binding Choices}"
-                                                              SelectedItem="{Binding Choice, Mode=TwoWay}" />
+                                                              DisplayMemberPath="Label"
+                                                              SelectedValuePath="Value"
+                                                              SelectedValue="{Binding Choice, Mode=TwoWay}" />
                                                 </StackPanel>
                                             </Border>
                                         </DataTemplate>

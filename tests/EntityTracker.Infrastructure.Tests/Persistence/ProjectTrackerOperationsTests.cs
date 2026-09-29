@@ -60,9 +60,19 @@ public sealed class ProjectTrackerOperationsTests
             change.EntityName == "Gamma");
         Assert.Contains(review.Changes, change => change.Kind == TrackerSyncChangeKind.Dependency &&
             change.DependencyName == "Local");
+        TrackerSyncChange sourceDependency = Assert.Single(review.Changes,
+            change => change.Kind == TrackerSyncChangeKind.Dependency && change.DependencyName == "Gamma");
+        Assert.Equal(
+            [(TrackerSyncChoice.Source, "Keep dependency"), (TrackerSyncChoice.Destination, "Remove dependency")],
+            sourceDependency.Choices.Select(option => (option.Value, option.Label)));
+        TrackerSyncChange destinationDependency = Assert.Single(review.Changes,
+            change => change.Kind == TrackerSyncChangeKind.Dependency && change.DependencyName == "Local");
+        Assert.Equal(
+            [(TrackerSyncChoice.Source, "Remove dependency"), (TrackerSyncChoice.Destination, "Keep dependency")],
+            destinationDependency.Choices.Select(option => (option.Value, option.Label)));
         foreach (TrackerSyncChange change in review.Changes)
             change.Choice = change.DependencyName == "Local"
-                ? TrackerSyncChoice.Both
+                ? TrackerSyncChoice.Destination
                 : change.EntityName == "Local"
                     ? TrackerSyncChoice.Destination : TrackerSyncChoice.Source;
         await sync.ApplyAsync(review);

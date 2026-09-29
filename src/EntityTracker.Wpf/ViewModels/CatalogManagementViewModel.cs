@@ -296,8 +296,9 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     public int SyncPendingCount => SyncReview?.Changes.Count(static change => change.Choice is null) ?? 0;
     public string SyncReviewSummary => SyncReview is null ? "Loading changes…" :
         SyncReview.Changes.Count == 0 ? "The trackers have no new differences to review." :
-        $"{SyncReview.Changes.Count} changes to review. Choose a result for each change. " +
-        "Source is the original tracker; destination is this tracker. Both keeps a dependency present on either side." +
+        $"{SyncReview.Changes.Count} changes to review. Choose the result for each change. " +
+        "For each dependency, choose whether this tracker should keep or remove it. " +
+        "To keep separate dependencies from both trackers, choose Keep dependency on each row." +
         (SyncReview.Baseline is null
             ? " This copy has no earlier sync baseline, so older differences cannot be attributed to either tracker."
             : string.Empty);

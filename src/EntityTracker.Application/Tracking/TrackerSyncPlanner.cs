@@ -72,19 +72,19 @@ public static class TrackerSyncPlanner
             if (Different(aActive, bActive, oldAe?.Active == true, oldBe?.Active == true))
                 changes.Add(new TrackerSyncChange(TrackerSyncChangeKind.Entity, name, null,
                     aActive ? "Active" : "Archived or absent",
-                    bActive ? "Active" : "Archived or absent", false));
+                    bActive ? "Active" : "Archived or absent"));
 
             if (!aActive && !bActive) continue;
             if (Different(ae?.RequestedPriority, be?.RequestedPriority,
                     oldAe?.RequestedPriority, oldBe?.RequestedPriority))
                 changes.Add(new TrackerSyncChange(TrackerSyncChangeKind.RequestedPriority, name, null,
                     ae?.RequestedPriority?.ToString() ?? "None",
-                    be?.RequestedPriority?.ToString() ?? "None", false));
+                    be?.RequestedPriority?.ToString() ?? "None"));
             if (Different(ae?.GroupName ?? "", be?.GroupName ?? "",
                     oldAe?.GroupName ?? "", oldBe?.GroupName ?? ""))
                 changes.Add(new TrackerSyncChange(TrackerSyncChangeKind.Group, name, null,
                     string.IsNullOrEmpty(ae?.GroupName) ? "None" : ae.GroupName,
-                    string.IsNullOrEmpty(be?.GroupName) ? "None" : be.GroupName, false));
+                    string.IsNullOrEmpty(be?.GroupName) ? "None" : be.GroupName));
 
             var ad = Dependencies(ae);
             var bd = Dependencies(be);
@@ -101,7 +101,7 @@ public static class TrackerSyncPlanner
                 string targetName = av?.Name ?? bv?.Name ?? oldAv?.Name ?? oldBv!.Name;
                 changes.Add(new TrackerSyncChange(TrackerSyncChangeKind.Dependency,
                     name, targetName, av?.Kind.ToString() ?? "Absent",
-                    bv?.Kind.ToString() ?? "Absent", av is null || bv is null));
+                    bv?.Kind.ToString() ?? "Absent"));
             }
         }
         return new TrackerSyncReview(sourceId, destinationId, source, destination,
@@ -147,8 +147,6 @@ public static class TrackerSyncPlanner
                 {
                     TrackerSyncChoice.Source => sourceValue,
                     TrackerSyncChoice.Destination => destinationValue,
-                    TrackerSyncChoice.Both when kind == TrackerSyncChangeKind.Dependency =>
-                        !EqualityComparer<T>.Default.Equals(sourceValue, default!) ? sourceValue : destinationValue,
                     _ => throw new InvalidOperationException("An invalid sync choice was selected.")
                 };
             }
