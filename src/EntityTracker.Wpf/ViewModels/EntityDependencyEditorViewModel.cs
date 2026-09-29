@@ -60,6 +60,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private bool _isArchiveConfirmationOpen;
     private int _searchVersion;
     private int _groupSearchVersion;
+    private int _previewVersion;
     private EntityDependencyEditPlan? _currentEditPlan;
     private ArchivedEntityDetails? _archivedDetails;
     private SchemaSynchronizationPlan? _reviewPlan;
@@ -105,7 +106,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _canOperate = canOperate ?? (() => true);
         _logger = logger ?? NullLogger<EntityDependencyEditorViewModel>.Instance;
         _addExistingCommand = new RelayCommand<ManualDependencySuggestion>(
-            suggestion => _ = AddManualDependencyAsync(suggestion.SourceName),
+            AddExisting,
             _ => CanEdit);
         _useGroupSuggestionCommand = new RelayCommand<string>(
             UseGroupSuggestion,
@@ -205,9 +206,9 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 return;
             }
 
-            _ = AddManualDependencyAsync(value.SourceName);
             _selectedDependencySuggestion = null;
             OnPropertyChanged();
+            AddExisting(value);
         }
     }
 
@@ -925,6 +926,24 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         GroupSearchMessage = null;
     }
 
+    private void AddExisting(ManualDependencySuggestion suggestion)
+    {
+        ArgumentNullException.ThrowIfNull(suggestion);
+        if (!CanEdit ||
+            CurrentEditPlan is null ||
+            ContainsDependency(EntitySourceKey.From(suggestion.SourceName)))
+        {
+            return;
+        }
+
+        _logger.LogInformation(
+            "Selecting dependency suggestion {DependencyName} for {EntityName} in {Mode} mode.",
+            suggestion.SourceName,
+            CurrentEditPlan?.Entity.SourceName ?? "<no entity>",
+            Mode);
+        _ = AddManualDependencyAsync(suggestion.SourceName);
+    }
+
     private Task AddManualDependencyAsync(string sourceName)
     {
         if (sourceName.Length == 0)
@@ -973,6 +992,12 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             return;
         }
 
+        int previewVersion = ++_previewVersion;
+        _logger.LogInformation(
+            "Starting dependency preview {PreviewVersion} for {EntityName} with {OverrideCount} override(s).",
+            previewVersion,
+            CurrentEditPlan.Entity.SourceName,
+            desired.Count);
         try
         {
             EntityDependencyEditPlan plan = IsReviewMode
@@ -985,12 +1010,32 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                     _trackerId,
                     CurrentEditPlan.Entity.Id,
                     desired);
+            if (previewVersion != _previewVersion || !IsOpen)
+            {
+                _logger.LogInformation(
+                    "Discarding stale dependency preview {PreviewVersion} for {EntityName}.",
+                    previewVersion,
+                    CurrentEditPlan?.Entity.SourceName ?? "<closed editor>");
+                return;
+            }
+
             LoadPlan(plan, false);
             ClearSearch();
+            _logger.LogInformation(
+                "Applied dependency preview {PreviewVersion} for {EntityName}: {DependencyCount} dependency row(s), {ErrorCount} error(s).",
+                previewVersion,
+                plan.Entity.SourceName,
+                plan.Dependencies.Count,
+                plan.Errors.Count);
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Dependency changes could not be evaluated.");
+            _logger.LogError(
+                exception,
+                "Dependency preview {PreviewVersion} failed for {EntityName} with {OverrideCount} override(s).",
+                previewVersion,
+                CurrentEditPlan?.Entity.SourceName ?? "<no entity>",
+                desired.Count);
             Errors = [$"Dependency changes could not be evaluated: {exception.Message}"];
         }
     }
@@ -1209,6 +1254,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
     private void ResetSessionState()
     {
+        _previewVersion++;
         CurrentEditPlan = null;
         ArchivedDetails = null;
         Dependencies = [];
