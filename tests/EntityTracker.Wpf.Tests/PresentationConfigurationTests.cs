@@ -601,7 +601,7 @@ public sealed class PresentationConfigurationTests
         Assert.Equal("Entity", (string?)configuredColumns[2].Attribute("Header"));
         Assert.Contains(configuredColumns[7].Descendants(), element =>
             (string?)element.Attribute("Text") == "Blockers");
-        Assert.Equal("Actions", (string?)configuredColumns[8].Attribute("Header"));
+        Assert.Null(configuredColumns[8].Attribute("Header"));
         Assert.DoesNotContain(columns.DescendantsAndSelf(), element =>
             ((string?)element.Attribute("Binding"))?.Contains("Provenance", StringComparison.Ordinal) == true ||
             ((string?)element.Attribute("Binding"))?.Contains("Notes", StringComparison.Ordinal) == true ||
