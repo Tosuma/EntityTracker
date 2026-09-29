@@ -12,6 +12,7 @@
     <Color x:Key="Color.Brand.Green10">#E7EBEB</Color>
     <Color x:Key="Color.Brand.White">#FFFFFF</Color>
     <Color x:Key="Color.Brand.Coral">#FF6359</Color>
+    <Color x:Key="Color.Brand.CoralHover">#FF786F</Color>
     <Color x:Key="Color.Review.Warning.Header">#D9922E</Color>
     <Color x:Key="Color.Review.Warning.Surface">#40D9922E</Color>
     <Color x:Key="Color.Review.Warning.Border">#D9922E</Color>
@@ -27,6 +28,7 @@
     <SolidColorBrush x:Key="Brush.Brand.Green10" Color="{StaticResource Color.Brand.Green10}" />
     <SolidColorBrush x:Key="Brush.Brand.White" Color="{StaticResource Color.Brand.White}" />
     <SolidColorBrush x:Key="Brush.Brand.Coral" Color="{StaticResource Color.Brand.Coral}" />
+    <SolidColorBrush x:Key="Brush.Brand.CoralHover" Color="{StaticResource Color.Brand.CoralHover}" />
 
     <!-- These brushes are recreated after a live ThemeMode change so their Fluent colors refresh. -->
     <SolidColorBrush x:Key="Brush.Text.Primary" Color="{DynamicResource TextFillColorPrimary}" />

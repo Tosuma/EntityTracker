@@ -31,7 +31,7 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
-    public void Theme_IsSplitIntoPaletteTypographyAndComponentsWithoutCustomTemplates()
+    public void Theme_IsSplitIntoPaletteTypographyAndComponentsWithOnlyDangerButtonTemplate()
     {
         XDocument theme = LoadWpfXaml("Themes", "EntityTrackerTheme.xaml");
         string[] sources = theme
@@ -50,9 +50,12 @@ public sealed class PresentationConfigurationTests
             sources);
 
         XDocument components = LoadWpfXaml("Themes", "EntityTrackerComponents.xaml");
-        Assert.DoesNotContain(
-            components.Descendants(),
+        XElement template = Assert.Single(components.Descendants(),
             element => element.Name.LocalName == "ControlTemplate");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        Assert.Equal("DangerButtonStyle",
+            (string?)template.Ancestors().First(element => element.Name.LocalName == "Style")
+                .Attribute(x + "Key"));
     }
 
     [Fact]

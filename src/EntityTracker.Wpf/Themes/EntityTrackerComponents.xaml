@@ -65,6 +65,45 @@
         <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Border x:Name="ButtonSurface"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="4" SnapsToDevicePixels="True">
+                        <ContentPresenter Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          RecognizesAccessKey="True" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="ButtonSurface" Property="Background"
+                                    Value="{DynamicResource Brush.Brand.CoralHover}" />
+                            <Setter TargetName="ButtonSurface" Property="BorderBrush"
+                                    Value="{DynamicResource Brush.Brand.CoralHover}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="ButtonSurface" Property="Background"
+                                    Value="{DynamicResource Brush.Accent}" />
+                            <Setter TargetName="ButtonSurface" Property="BorderBrush"
+                                    Value="{DynamicResource Brush.Accent}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="ButtonSurface" Property="Opacity" Value="0.72" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="ButtonSurface" Property="BorderBrush"
+                                    Value="{DynamicResource Brush.Focus}" />
+                            <Setter TargetName="ButtonSurface" Property="BorderThickness" Value="2" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <Style x:Key="EntityTrackerCardStyle" TargetType="{x:Type Border}">
