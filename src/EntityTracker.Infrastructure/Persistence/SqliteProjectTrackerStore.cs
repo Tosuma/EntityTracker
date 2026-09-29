@@ -2,6 +2,7 @@ using EntityTracker.Application.Importing;
 using EntityTracker.Application.History;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Synchronization;
+using System.Text.Json;
 using EntityTracker.Domain;
 
 using Microsoft.Data.Sqlite;
@@ -153,6 +154,17 @@ public sealed class SqliteProjectTrackerStore(
                     completion,
                     timestamp,
                     cancellationToken);
+            }
+
+            if (creation.SyncBaseline is { } syncBaseline)
+            {
+                using SqliteCommand command = CreateCommand(connection, transaction, """
+                    INSERT INTO tracker_sync_baselines (tracker_id, baseline_json)
+                    VALUES ($trackerId, $baselineJson);
+                    """);
+                command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(tracker.Id));
+                command.Parameters.AddWithValue("$baselineJson", JsonSerializer.Serialize(syncBaseline));
+                await command.ExecuteNonQueryAsync(cancellationToken);
             }
 
             await transaction.CommitAsync(cancellationToken);

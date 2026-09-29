@@ -15,6 +15,220 @@ namespace EntityTracker.Infrastructure.Tests.Persistence;
 public sealed class ProjectTrackerOperationsTests
 {
     [Fact]
+    public async Task TrackerSync_ReviewsIndependentChangesAndPreservesDestinationProgress()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteTrackerRepository trackers = new(database);
+        SqliteEntityRepository entities = new(database);
+        SqliteDependencyRepository dependencies = new(database);
+        SqliteTrackedStateStore state = new(database);
+        Tracker source = Assert.Single(await trackers.GetAllAsync());
+        TrackedEntity alpha = new(EntityId.New(), source.Id, "Alpha",
+            requestedPriority: 2, groupName: "Original");
+        TrackedEntity beta = new(EntityId.New(), source.Id, "Beta");
+        await state.ApplyAsync(source.Id, new TrackedStateChangeSet(
+            [alpha, beta], [], [], [alpha.Id],
+            [new PersistedDependency(new DependencyEdge(alpha.Id, beta.Id), ImportedDependencyKind.Mandatory)],
+            []));
+        Tracker copy = await CreateTrackerService(database).CopyAsync(
+            source.Id, source.ProjectId, "Copy for sync");
+        TrackedEntity copiedAlpha = Assert.Single(await entities.GetAllAsync(copy.Id),
+            item => item.SourceName == "Alpha");
+        copiedAlpha.ChangeStatus(DevelopmentStatus.InProgress);
+        copiedAlpha.ChangeNotes("Keep this work");
+        TrackedEntity local = new(EntityId.New(), copy.Id, "Local");
+        await state.ApplyAsync(copy.Id, new TrackedStateChangeSet(
+            [local], [], [], [], [], [],
+            [copiedAlpha.Id],
+            [new ManualDependencyOverride(copiedAlpha.Id, "Local", ManualDependencyOverrideAction.Add)],
+            entitiesWithProgressToUpdate: [copiedAlpha]));
+
+        TrackedEntity gamma = new(EntityId.New(), source.Id, "Gamma");
+        alpha.ChangeRequestedPriority(5);
+        alpha.ChangeGroupName("Updated");
+        await state.ApplyAsync(source.Id, new TrackedStateChangeSet(
+            [gamma], [], [], [alpha.Id],
+            [new PersistedDependency(new DependencyEdge(alpha.Id, gamma.Id), ImportedDependencyKind.Mandatory)],
+            [], entitiesWithRequestedPriorityToUpdate: [alpha],
+            entitiesWithGroupNameToUpdate: [alpha]));
+
+        TrackerSyncService sync = CreateSyncService(database);
+        TrackerSyncReview review = await sync.ReviewAsync(copy.Id);
+        Assert.Contains(review.Changes, change => change.Kind == TrackerSyncChangeKind.Entity &&
+            change.EntityName == "Gamma");
+        Assert.Contains(review.Changes, change => change.Kind == TrackerSyncChangeKind.Dependency &&
+            change.DependencyName == "Local");
+        foreach (TrackerSyncChange change in review.Changes)
+            change.Choice = change.DependencyName == "Local"
+                ? TrackerSyncChoice.Both
+                : change.EntityName == "Local"
+                    ? TrackerSyncChoice.Destination : TrackerSyncChoice.Source;
+        await sync.ApplyAsync(review);
+
+        TrackedEntity[] copied = (await entities.GetAllAsync(copy.Id)).ToArray();
+        Assert.Equal(4, copied.Length);
+        Assert.Contains(copied, item => item.SourceName == "Gamma");
+        Assert.Contains(copied, item => item.SourceName == "Local");
+        TrackedEntity after = Assert.Single(copied, item => item.SourceName == "Alpha");
+        Assert.Equal(DevelopmentStatus.InProgress, after.Status);
+        Assert.Equal("Keep this work", after.Notes);
+        Assert.Equal(5, after.RequestedPriority);
+        Assert.Equal("Updated", after.GroupName);
+        IReadOnlyList<ManualDependencyOverride> copiedOverrides =
+            await new SqliteManualDependencyOverrideRepository(database).GetAllAsync(copy.Id);
+        EffectiveDependencyState effective = new EffectiveDependencyResolver().Resolve(
+            copied, await dependencies.GetAllAsync(copy.Id),
+            await dependencies.GetAllUnresolvedAsync(copy.Id), copiedOverrides);
+        string[] targetNames = effective.ResolvedDependencies
+            .Where(item => item.Edge.DependentEntityId == after.Id)
+            .Select(item => copied.Single(entity => entity.Id == item.Edge.DependencyEntityId).SourceName)
+            .OrderBy(static name => name).ToArray();
+        Assert.Equal(["Gamma", "Local"], targetNames);
+        Assert.Contains(copiedOverrides,
+            item => item.DependentEntityId == after.Id &&
+                    item.DependencySourceName == "Local" &&
+                    item.Action == ManualDependencyOverrideAction.Add);
+        Assert.Empty((await sync.ReviewAsync(copy.Id)).Changes);
+    }
+
+    [Fact]
+    public async Task TrackerSync_IgnoredRemovalDoesNotRepeatAndStaleReviewIsRejected()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteTrackerRepository trackers = new(database);
+        SqliteEntityRepository entities = new(database);
+        SqliteTrackedStateStore state = new(database);
+        Tracker source = Assert.Single(await trackers.GetAllAsync());
+        TrackedEntity entity = new(EntityId.New(), source.Id, "Removed from source");
+        await state.ApplyAsync(source.Id, Add(entity));
+        Tracker copy = await CreateTrackerService(database).CopyAsync(
+            source.Id, source.ProjectId, "Removal copy");
+        await state.ApplyAsync(source.Id, new TrackedStateChangeSet(
+            [], [], [entity.Id], [], [], []));
+        TrackerSyncService sync = CreateSyncService(database);
+        TrackerSyncReview review = await sync.ReviewAsync(copy.Id);
+        Assert.Single(review.Changes).Choice = TrackerSyncChoice.Destination;
+        await sync.ApplyAsync(review);
+        Assert.Empty((await sync.ReviewAsync(copy.Id)).Changes);
+        Assert.Equal(EntityLifecycleState.Active,
+            Assert.Single(await entities.GetAllAsync(copy.Id)).LifecycleState);
+
+        TrackerSyncReview stale = await sync.ReviewAsync(copy.Id);
+        TrackedEntity copied = Assert.Single(await entities.GetAllAsync(copy.Id));
+        copied.ChangeNotes("Edited during review");
+        await state.ApplyAsync(copy.Id, new TrackedStateChangeSet(
+            [], [], [], [], [], [], entitiesWithProgressToUpdate: [copied]));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sync.ApplyAsync(stale));
+    }
+
+    [Fact]
+    public async Task TrackerSync_ExistingCopyWithoutBaselineGetsFirstReview()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        Tracker source = Assert.Single(await new SqliteTrackerRepository(database).GetAllAsync());
+        TrackedEntity entity = new(EntityId.New(), source.Id, "Initial");
+        await new SqliteTrackedStateStore(database).ApplyAsync(source.Id, Add(entity));
+        Tracker copy = await CreateTrackerService(database).CopyAsync(
+            source.Id, source.ProjectId, "Older copy");
+        await using (var connection = await database.OpenConnectionAsync(CancellationToken.None))
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = "DELETE FROM tracker_sync_baselines WHERE tracker_id = $id;";
+            command.Parameters.AddWithValue("$id", copy.Id.Value.ToString("D"));
+            await command.ExecuteNonQueryAsync();
+        }
+        TrackedEntity added = new(EntityId.New(), source.Id, "Later");
+        await new SqliteTrackedStateStore(database).ApplyAsync(source.Id, Add(added));
+        TrackerSyncService sync = CreateSyncService(database);
+        TrackerSyncReview review = await sync.ReviewAsync(copy.Id);
+        Assert.Null(review.Baseline);
+        Assert.Single(review.Changes).Choice = TrackerSyncChoice.Source;
+        await sync.ApplyAsync(review);
+        Assert.Contains(await new SqliteEntityRepository(database).GetAllAsync(copy.Id),
+            item => item.SourceName == "Later");
+        Assert.Empty((await sync.ReviewAsync(copy.Id)).Changes);
+    }
+
+    [Fact]
+    public async Task TrackerSync_SourceRenameIsReviewedAsArchiveAndAddition()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteTrackerRepository trackers = new(database);
+        SqliteEntityRepository entities = new(database);
+        SqliteTrackedStateStore state = new(database);
+        Tracker source = Assert.Single(await trackers.GetAllAsync());
+        TrackedEntity sourceEntity = new(EntityId.New(), source.Id, "Old name");
+        await state.ApplyAsync(source.Id, Add(sourceEntity));
+        Tracker copy = await CreateTrackerService(database).CopyAsync(
+            source.Id, source.ProjectId, "Rename copy");
+        TrackedEntity oldCopy = Assert.Single(await entities.GetAllAsync(copy.Id));
+        oldCopy.ChangeNotes("Keep history");
+        await state.ApplyAsync(copy.Id, new TrackedStateChangeSet(
+            [], [], [], [], [], [], entitiesWithProgressToUpdate: [oldCopy]));
+        sourceEntity.ChangeSourceName("New name");
+        await state.ApplyAsync(source.Id, new TrackedStateChangeSet(
+            [], [sourceEntity], [], [], [], []));
+
+        TrackerSyncService sync = CreateSyncService(database);
+        TrackerSyncReview review = await sync.ReviewAsync(copy.Id);
+        Assert.Equal(2, review.Changes.Count);
+        Assert.All(review.Changes, change => change.Choice = TrackerSyncChoice.Source);
+        await sync.ApplyAsync(review);
+        TrackedEntity[] copied = (await entities.GetAllAsync(copy.Id)).ToArray();
+        Assert.Equal(EntityLifecycleState.Archived,
+            copied.Single(item => item.Id == oldCopy.Id).LifecycleState);
+        Assert.Equal("Keep history", copied.Single(item => item.Id == oldCopy.Id).Notes);
+        TrackedEntity renamed = copied.Single(item => item.SourceName == "New name");
+        Assert.NotEqual(oldCopy.Id, renamed.Id);
+        Assert.Equal(EntityLifecycleState.Active, renamed.LifecycleState);
+    }
+
+    [Fact]
+    public async Task TrackerSync_RejectsCombinedDependencyCycleWithoutWriting()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteTrackerRepository trackers = new(database);
+        SqliteEntityRepository entities = new(database);
+        SqliteDependencyRepository dependencies = new(database);
+        SqliteTrackedStateStore state = new(database);
+        Tracker source = Assert.Single(await trackers.GetAllAsync());
+        TrackedEntity x = new(EntityId.New(), source.Id, "X");
+        TrackedEntity y = new(EntityId.New(), source.Id, "Y");
+        await state.ApplyAsync(source.Id, new TrackedStateChangeSet(
+            [x, y], [], [], [x.Id],
+            [new PersistedDependency(new DependencyEdge(x.Id, y.Id), ImportedDependencyKind.Mandatory)], []));
+        Tracker copy = await CreateTrackerService(database).CopyAsync(
+            source.Id, source.ProjectId, "Cycle copy");
+        TrackedEntity[] copied = (await entities.GetAllAsync(copy.Id)).ToArray();
+        TrackedEntity copiedX = copied.Single(item => item.SourceName == "X");
+        TrackedEntity copiedY = copied.Single(item => item.SourceName == "Y");
+        await state.ApplyAsync(copy.Id, new TrackedStateChangeSet(
+            [], [], [], [copiedX.Id, copiedY.Id],
+            [new PersistedDependency(new DependencyEdge(copiedY.Id, copiedX.Id), ImportedDependencyKind.Mandatory)], []));
+        TrackerSyncService sync = CreateSyncService(database);
+        TrackerSyncReview review = await sync.ReviewAsync(copy.Id);
+        Assert.Equal(2, review.Changes.Count);
+        foreach (TrackerSyncChange change in review.Changes)
+            change.Choice = change.EntityName == "X"
+                ? TrackerSyncChoice.Source : TrackerSyncChoice.Destination;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sync.PreviewAsync(review));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sync.ApplyAsync(review));
+        PersistedDependency unchanged = Assert.Single(await dependencies.GetAllAsync(copy.Id));
+        Assert.Equal(copiedY.Id, unchanged.Edge.DependentEntityId);
+        Assert.Equal(copiedX.Id, unchanged.Edge.DependencyEntityId);
+    }
+
+    [Fact]
     public async Task EntityState_IsIsolatedByTracker_AndCrossTrackerEdgesAreRejected()
     {
         await using TemporarySqliteFile file = new();
@@ -402,6 +616,17 @@ public sealed class ProjectTrackerOperationsTests
         new SqliteProjectTrackerStore(database),
         new EffectiveDependencyResolver(),
         new ProgressSnapshotCalculator());
+
+    private static TrackerSyncService CreateSyncService(SqliteDatabase database) => new(
+        new SqliteProjectRepository(database),
+        new SqliteTrackerRepository(database),
+        new SqliteEntityRepository(database),
+        new SqliteDependencyRepository(database),
+        new SqliteManualDependencyOverrideRepository(database),
+        new SqliteTrackedStateStore(database),
+        new EffectiveDependencyResolver(),
+        new ProgressSnapshotCalculator(),
+        new DependencyRanker());
 
     private static TrackedStateChangeSet Add(TrackedEntity entity) => new(
         [entity],

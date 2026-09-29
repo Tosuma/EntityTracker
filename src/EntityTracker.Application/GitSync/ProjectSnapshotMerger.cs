@@ -73,6 +73,8 @@ public sealed class ProjectSnapshotMerger
                 l.RecycledAtUtc, r.RecycledAtUtc, ProjectConflictKind.Lifecycle),
             CopiedFromTrackerId = Field(path + "/CopiedFromTrackerId", b.CopiedFromTrackerId,
                 l.CopiedFromTrackerId, r.CopiedFromTrackerId),
+            SyncBaselineJson = Field(path + "/SyncBaselineJson", b.SyncBaselineJson,
+                l.SyncBaselineJson, r.SyncBaselineJson),
             Entities = ThreeWayMerge.Keyed(path + "/Entity", b.Entities, l.Entities, r.Entities,
                 e => e.Id, MergeEntity),
             ImportSummary = Object(path + "/ImportSummary", b.ImportSummary,

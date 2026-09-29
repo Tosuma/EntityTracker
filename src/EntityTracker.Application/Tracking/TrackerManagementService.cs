@@ -148,7 +148,12 @@ public sealed class TrackerManagementService(
             copiedOverrides,
             progressSnapshotAfterChanges: baseline);
         await store.CreateTrackerAsync(
-            new TrackerCreationState(tracker, changeSet, baseline),
+            new TrackerCreationState(tracker, changeSet, baseline,
+                SyncBaseline: new TrackerSyncBaseline(
+                    TrackerSyncPlanner.Capture(sourceEntities, sourceResolved,
+                        sourceUnresolved, sourceOverrides),
+                    TrackerSyncPlanner.Capture(copiedEntities, copiedResolved,
+                        copiedUnresolved, copiedOverrides))),
             cancellationToken);
         return tracker;
     }

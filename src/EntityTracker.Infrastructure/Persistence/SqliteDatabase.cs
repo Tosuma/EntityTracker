@@ -5,7 +5,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    internal const int CurrentSchemaVersion = 14;
+    internal const int CurrentSchemaVersion = 15;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -723,6 +723,18 @@ public sealed class SqliteDatabase
                         project_id TEXT NOT NULL PRIMARY KEY,
                         canonical_name TEXT NOT NULL,
                         FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+                    );
+                    """, cancellationToken);
+            }
+
+            if (schemaVersion < 15)
+            {
+                await ExecuteAsync(connection, transaction, """
+                    CREATE TABLE IF NOT EXISTS tracker_sync_baselines
+                    (
+                        tracker_id TEXT NOT NULL PRIMARY KEY,
+                        baseline_json TEXT NOT NULL,
+                        FOREIGN KEY (tracker_id) REFERENCES trackers (id) ON DELETE CASCADE
                     );
                     """, cancellationToken);
             }

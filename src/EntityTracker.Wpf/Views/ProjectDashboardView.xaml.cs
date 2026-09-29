@@ -148,6 +148,13 @@ public partial class ProjectDashboardView : UserControl
             Shell.Catalog.OpenRenameTracker(tracker);
     }
 
+    private async void OnSyncTracker(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: TrackerDashboardSummary item } &&
+            Shell.Trackers.FirstOrDefault(tracker => tracker.Id == item.TrackerId) is { } tracker)
+            await Shell.Catalog.OpenSyncTrackerAsync(tracker);
+    }
+
     private void OnRecycleTracker(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: TrackerDashboardSummary item } &&

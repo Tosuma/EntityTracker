@@ -285,6 +285,18 @@
                                             Style="{StaticResource PrimaryButtonStyle}" />
                                     <Button Margin="0,0,8,0" Click="OnRenameTracker" Content="Rename"
                                             AutomationProperties.Name="{Binding Name, StringFormat=Rename tracker {0}}" />
+                                    <Button Margin="0,0,8,0" Click="OnSyncTracker" Content="Sync from source"
+                                            AutomationProperties.Name="{Binding Name, StringFormat=Sync tracker {0} from source}">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding CopiedFromTrackerId}" Value="{x:Null}">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
                                     <Button Click="OnRecycleTracker" Content="Recycle"
                                             AutomationProperties.Name="{Binding Name, StringFormat=Recycle tracker {0}}"
                                             Style="{StaticResource DangerButtonStyle}" />

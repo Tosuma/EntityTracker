@@ -546,7 +546,9 @@ public sealed class ShellViewModelTests
                 portfolio,
                 projects,
                 trackers,
-                adapters);
+                adapters,
+                new TrackerSyncService(projects, trackers, entities, dependencies, overrides,
+                    stateStore, resolver, snapshots, (IDependencyRankingService)ranker));
             EntityTrackerSettingsStore settings = new(Path.Combine(directory, "settings.json"));
             AppearanceViewModel appearance = new(
                 settings,

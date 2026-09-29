@@ -2,7 +2,11 @@ using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Synchronization;
+using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 
 using Microsoft.Data.Sqlite;
 
@@ -12,7 +16,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 /// Applies one validated tracked-schema change set using a single SQLite transaction.
 /// Conditional upserts leave audit timestamps unchanged for relationships that did not change.
 /// </summary>
-public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchronizationStore
+public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchronizationStore, ITrackerSyncStore
 {
     private readonly SqliteDatabase _database;
 
@@ -29,7 +33,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         TrackedStateChangeSet changeSet,
         CancellationToken cancellationToken = default)
     {
-        await ApplyInternalAsync(trackerId, changeSet, null, cancellationToken);
+        await ApplyInternalAsync(trackerId, changeSet, null, cancellationToken, null);
     }
 
     public async Task<SchemaImportSummary> ApplyAsync(
@@ -39,14 +43,44 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(completion);
-        return (await ApplyInternalAsync(trackerId, changeSet, completion, cancellationToken))!;
+        return (await ApplyInternalAsync(trackerId, changeSet, completion, cancellationToken, null))!;
+    }
+
+    public async Task<TrackerSyncBaseline?> ReadBaselineAsync(
+        TrackerId destinationTrackerId, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = await _database.OpenConnectionAsync(cancellationToken);
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT baseline_json FROM tracker_sync_baselines WHERE tracker_id = $id;";
+        command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(destinationTrackerId));
+        string? json = (string?)await command.ExecuteScalarAsync(cancellationToken);
+        return json is null ? null : JsonSerializer.Deserialize<TrackerSyncBaseline>(json)
+            ?? throw new InvalidDataException("The tracker sync baseline is invalid.");
+    }
+
+    public async Task<string> FingerprintAsync(
+        TrackerId trackerId, CancellationToken cancellationToken = default)
+    {
+        await using SqliteConnection connection = await _database.OpenConnectionAsync(cancellationToken);
+        await using SqliteTransaction transaction = connection.BeginTransaction(deferred: true);
+        string fingerprint = await FingerprintAsync(connection, transaction, trackerId, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return fingerprint;
+    }
+
+    public async Task ApplyAsync(TrackerSyncCommit commit, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(commit);
+        await ApplyInternalAsync(commit.DestinationTrackerId, commit.ChangeSet,
+            null, cancellationToken, commit);
     }
 
     private async Task<SchemaImportSummary?> ApplyInternalAsync(
         TrackerId trackerId,
         TrackedStateChangeSet changeSet,
         SchemaImportCompletion? completion,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TrackerSyncCommit? syncCommit)
     {
         ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(changeSet);
@@ -60,6 +94,17 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
 
         try
         {
+            if (syncCommit is not null)
+            {
+                string sourceFingerprint = await FingerprintAsync(connection, transaction,
+                    syncCommit.SourceTrackerId, cancellationToken);
+                string destinationFingerprint = await FingerprintAsync(connection, transaction,
+                    trackerId, cancellationToken);
+                if (sourceFingerprint != syncCommit.ExpectedSourceFingerprint ||
+                    destinationFingerprint != syncCommit.ExpectedDestinationFingerprint)
+                    throw new InvalidOperationException(
+                        "A tracker changed after this review opened. Open a new sync review.");
+            }
             await ValidateScopeAsync(
                 connection,
                 transaction,
@@ -261,6 +306,20 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                     cancellationToken);
             }
 
+            if (syncCommit is not null)
+            {
+                using SqliteCommand baselineCommand = connection.CreateCommand();
+                baselineCommand.Transaction = transaction;
+                baselineCommand.CommandText = """
+                    INSERT INTO tracker_sync_baselines (tracker_id, baseline_json)
+                    VALUES ($id, $json)
+                    ON CONFLICT(tracker_id) DO UPDATE SET baseline_json = excluded.baseline_json;
+                    """;
+                baselineCommand.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(trackerId));
+                baselineCommand.Parameters.AddWithValue("$json", JsonSerializer.Serialize(syncCommit.Baseline));
+                await baselineCommand.ExecuteNonQueryAsync(cancellationToken);
+            }
+
             await transaction.CommitAsync(cancellationToken);
             return summary;
         }
@@ -270,6 +329,43 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                 "The tracked schema could not be changed because its candidate state is invalid.",
                 exception);
         }
+    }
+
+    private static async Task<string> FingerprintAsync(
+        SqliteConnection connection, SqliteTransaction transaction,
+        TrackerId trackerId, CancellationToken cancellationToken)
+    {
+        string id = SqlitePersistenceValues.Format(trackerId);
+        StringBuilder state = new();
+        string[] queries =
+        [
+            "SELECT id, project_id, lifecycle_state, copied_from_tracker_id FROM trackers WHERE id = $id ORDER BY id;",
+            "SELECT id, source_name, development_status, notes, lifecycle_state, provenance, requested_priority, responsible_developer, group_name, schema_updated_at_utc, progress_updated_at_utc FROM tracked_entities WHERE tracker_id = $id ORDER BY id;",
+            "SELECT d.dependent_entity_id, d.dependency_entity_id, d.dependency_kind, d.updated_at_utc FROM schema_dependencies d JOIN tracked_entities e ON e.id = d.dependent_entity_id WHERE e.tracker_id = $id ORDER BY d.dependent_entity_id, d.dependency_entity_id;",
+            "SELECT d.dependent_entity_id, d.dependency_source_key, d.dependency_kind, d.updated_at_utc FROM unresolved_schema_dependencies d JOIN tracked_entities e ON e.id = d.dependent_entity_id WHERE e.tracker_id = $id ORDER BY d.dependent_entity_id, d.dependency_source_key;",
+            "SELECT d.dependent_entity_id, d.dependency_source_key, d.override_action, d.updated_at_utc FROM manual_dependency_overrides d JOIN tracked_entities e ON e.id = d.dependent_entity_id WHERE e.tracker_id = $id ORDER BY d.dependent_entity_id, d.dependency_source_key;",
+            "SELECT baseline_json FROM tracker_sync_baselines WHERE tracker_id = $id;"
+        ];
+        foreach (string query in queries)
+        {
+            state.Append('|');
+            using SqliteCommand command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = query;
+            command.Parameters.AddWithValue("$id", id);
+            await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                state.Append('[');
+                for (int i = 0; i < reader.FieldCount; i++)
+                {
+                    string value = reader.IsDBNull(i) ? "<null>" : reader.GetValue(i).ToString()!;
+                    state.Append(value.Length).Append(':').Append(value);
+                }
+                state.Append(']');
+            }
+        }
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(state.ToString())));
     }
 
     public async Task<SchemaImportSummary?> GetLatestImportAsync(

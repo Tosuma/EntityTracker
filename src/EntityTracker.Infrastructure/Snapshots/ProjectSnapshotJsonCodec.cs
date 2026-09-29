@@ -35,7 +35,8 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
             files[prefix + "tracker.json"] = JsonSerializer.SerializeToUtf8Bytes(
                 new TrackerDocument(tracker.Id, tracker.ProjectId, tracker.Name,
                     tracker.LifecycleState, tracker.CreatedAtUtc, tracker.UpdatedAtUtc,
-                    tracker.RecycledAtUtc, tracker.CopiedFromTrackerId), JsonOptions);
+                    tracker.RecycledAtUtc, tracker.CopiedFromTrackerId,
+                    tracker.SyncBaselineJson), JsonOptions);
             foreach (SnapshotEntity entity in tracker.Entities.OrderBy(e => e.Id))
             {
                 SnapshotEntity ordered = entity with
@@ -91,7 +92,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                 ? Read<SnapshotImportSummary>(files, summaryPath) : null;
             trackers.Add(new SnapshotTracker(doc.Id, doc.ProjectId, doc.Name, doc.LifecycleState,
                 doc.CreatedAtUtc, doc.UpdatedAtUtc, doc.RecycledAtUtc, doc.CopiedFromTrackerId,
-                entities, events, progress, summary));
+                entities, events, progress, summary, doc.SyncBaselineJson));
         }
         ProjectSnapshot snapshot = new(manifest.FormatVersion, project, trackers);
         ProjectSnapshotValidator.Validate(snapshot);
@@ -202,5 +203,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
     private sealed record TrackerDocument(
         Guid Id, Guid ProjectId, string Name, string LifecycleState,
         DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc,
-        DateTimeOffset? RecycledAtUtc, Guid? CopiedFromTrackerId);
+        DateTimeOffset? RecycledAtUtc, Guid? CopiedFromTrackerId,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? SyncBaselineJson = null);
 }

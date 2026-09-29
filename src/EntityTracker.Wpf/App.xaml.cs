@@ -125,6 +125,7 @@ public partial class App : System.Windows.Application
             services.AddSingleton<EntityLifecycleService>();
             services.AddSingleton<ProjectManagementService>();
             services.AddSingleton<TrackerManagementService>();
+            services.AddSingleton<TrackerSyncService>();
             services.AddSingleton<TrackerCsvCreationService>();
             services.AddSingleton<CatalogNameValidationService>();
             services.AddSingleton<PortfolioQueryService>();
@@ -235,6 +236,8 @@ public partial class App : System.Windows.Application
             SqliteManualDependencyOverrideRepository>();
         services.AddSingleton<SqliteTrackedStateStore>();
         services.AddSingleton<ITrackedStateStore>(static provider =>
+            provider.GetRequiredService<SqliteTrackedStateStore>());
+        services.AddSingleton<ITrackerSyncStore>(static provider =>
             provider.GetRequiredService<SqliteTrackedStateStore>());
         services.AddSingleton<ISchemaSynchronizationStore>(static provider =>
             provider.GetRequiredService<SqliteTrackedStateStore>());

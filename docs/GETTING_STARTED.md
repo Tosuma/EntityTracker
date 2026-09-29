@@ -79,6 +79,16 @@ installed app, so close one before opening the other.
 5. **Review reports** — Open **Reports** to see status distribution, implementation history,
    and blocker trends.
 
+### Sync a copied tracker
+
+On the Project dashboard, choose **Sync from source** on a tracker created with **Copy tracker**.
+Review each entity, dependency, requested priority, and group difference, then choose **Source**,
+**Destination**, or **Both** where both dependencies can be kept. Every change needs a choice
+before **Apply sync** is enabled. Removed entities can be archived in the copied tracker or kept;
+their progress and history remain available. Existing status, notes, and developer assignments
+stay with the copied tracker. A declined source change is not offered again unless the source changes;
+new destination edits can still appear in the next review.
+
 ## Where data lives
 
 All application data is stored per-user under:
