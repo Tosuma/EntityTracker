@@ -17,7 +17,8 @@ Build a Windows C#/.NET WPF application that imports database relationships from
 | Category | Roadmap | Status | Relationship |
 | --- | --- | --- | --- |
 | Product | [01–12 and intermediate milestones](product/00_README.md) | Completed; former 13 retired | Original product foundation. |
-| Product feedback | [PF-01–PF-05](product-feedback/00_README.md) | Planned | Independent workflow improvements on the product foundation. |
+| Product feedback | [PF-01–PF-05](product-feedback/00_README.md) | Completed | Bulk updates, priority, responsible text, groups, and column filtering. |
+| Responsibility | [RESP-01–RESP-04](responsibility/00_README.md) | Planned | Project developers, dated assignments, search, and local `Assign me`. |
 | Engineering | [CI-01](engineering/00_README.md) | Completed | Repository engineering independent of the product sequence. |
 | UI/UX | [UX-01–UX-08](ux/00_README.md) | Completed | Projects/Trackers and Fluent presentation, building on the product foundation. |
 | Git sync | [GS-01–GS-05](git-sync/00_README.md) | Completed | Portable snapshots, existing-checkout collaboration, automatic sync, and hardening are implemented. |

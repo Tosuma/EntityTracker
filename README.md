@@ -255,15 +255,17 @@ compatible schema CSV without requiring a live database connection inside Entity
 
 ## Project status
 
-Product Milestones 1–12 and UX Milestones UX-01 through UX-08 are complete. EntityTracker uses
+Product Milestones 1–12, PF-01 through PF-05, and UX-01 through UX-08 are complete. EntityTracker uses
 SQLite as its local catalog and working store. Obsolete SharePoint presentation and runtime
 configuration have been retired. Manual and automatic Git synchronization are available for
 existing checkouts.
 
 A separate
 [PF-01–PF-05 product feedback milestone group](docs/milestones/product-feedback/00_README.md)
-plans bulk status updates, customer priority, responsible-developer and group metadata, and
-column filtering with status-order sorting without extending the numbered roadmap. The independent
+records the implemented bulk status updates, customer priority, responsible-developer and group
+metadata, and column filtering with status-order sorting. The planned
+[RESP-01–RESP-04 Responsibility roadmap](docs/milestones/responsibility/00_README.md) covers
+project developers, dated assignments, responsibility search, and local `Assign me`. The independent
 [CI-01 engineering milestone](docs/milestones/engineering/ci_01_continuous_integration.md) defines
 CI validation for pull requests, pushes to `main`, and app release tags; successful pushes are packaged.
 The live badge above reports the current `main` build status.

@@ -1,6 +1,9 @@
 # Product feedback milestones
 
-PF milestones cover planning and table workflow requests independently of the numbered product roadmap. All PF-01–PF-05 milestones are currently planned; their documents do not describe shipped behavior.
+PF milestones cover planning and table workflow requests independently of the numbered product
+roadmap. PF-01–PF-05 are implemented; their original milestone documents remain as the accepted
+behavioral baseline. The planned [Responsibility series](../responsibility/00_README.md) extends
+PF-03's single responsible text field into project developers and dated assignments.
 
 ## Execution order
 
@@ -10,4 +13,7 @@ PF milestones cover planning and table workflow requests independently of the nu
 4. [PF-04 — Entity groups with suggestions](pf_04_entity_groups.md)
 5. [PF-05 — Column filtering and status sorting](pf_05_column_filtering.md)
 
-The PF series builds on the [product foundation](../product/00_README.md). The completed [UX series](../ux/00_README.md) provides its presentation setting and refers to PF behavior where relevant. [Git sync](../git-sync/00_README.md) must eventually preserve PF data once implemented; planning PF does not start GS work.
+The PF series builds on the [product foundation](../product/00_README.md). The completed
+[UX series](../ux/00_README.md) provides its presentation setting and refers to PF behavior where
+relevant. The completed [Git-sync series](../git-sync/00_README.md) preserves current PF data;
+the Responsibility milestones must extend that shared Project contract.
