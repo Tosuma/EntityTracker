@@ -64,6 +64,33 @@ public sealed class ProjectSnapshotTests
     }
 
     [Fact]
+    public async Task TrackerSyncBaseline_RoundTripsWithProjectSnapshot()
+    {
+        await using TemporarySqliteFile sourceFile = new();
+        await using TemporarySqliteFile targetFile = new();
+        SqliteDatabase sourceDb = new(sourceFile.DatabasePath);
+        SqliteDatabase targetDb = new(targetFile.DatabasePath);
+        await sourceDb.InitializeAsync();
+        await targetDb.InitializeAsync();
+        const string baseline = "{\"Source\":{\"Entities\":[]},\"Destination\":{\"Entities\":[]}}";
+        ProjectSnapshot seed = CompleteSnapshot();
+        seed = seed with { Trackers = seed.Trackers.Select((tracker, index) =>
+            index == 0 ? tracker with { SyncBaselineJson = baseline } : tracker).ToArray() };
+        SqliteProjectSnapshotStore source = new(sourceDb);
+        SqliteProjectSnapshotStore target = new(targetDb);
+        await source.ApplyAsync(seed, 0);
+        ProjectSnapshot exported = Assert.IsType<ProjectSnapshot>(
+            (await source.ReadAsync(new ProjectId(seed.Project.Id))).Snapshot);
+        Assert.Equal(baseline, exported.Trackers[0].SyncBaselineJson);
+        ProjectSnapshotJsonCodec codec = new();
+        ProjectSnapshot decoded = codec.Decode(codec.Encode(exported).Files);
+        await target.ApplyAsync(decoded, 0);
+        ProjectSnapshot imported = Assert.IsType<ProjectSnapshot>(
+            (await target.ReadAsync(new ProjectId(seed.Project.Id))).Snapshot);
+        Assert.Equal(baseline, imported.Trackers[0].SyncBaselineJson);
+    }
+
+    [Fact]
     public async Task LargerSnapshotExportPreservesEntityRelationshipsAndCanonicalHash()
     {
         await using TemporarySqliteFile file = new();

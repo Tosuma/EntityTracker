@@ -59,6 +59,34 @@
                             <TextBlock Margin="0,12,0,0" Text="{Binding OperationMessage}" TextWrapping="Wrap" />
                             </StackPanel>
 
+                            <StackPanel Visibility="{Binding IsTrackerSync, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <TextBlock Text="{Binding SyncReviewSummary}" TextWrapping="Wrap" />
+                                <TextBlock Margin="0,8,0,10"
+                                           Text="{Binding SyncPendingCount, StringFormat={}{0} choices remaining}"
+                                           FontWeight="SemiBold" />
+                                <TextBlock Margin="0,0,0,10" Text="{Binding SyncPreviewMessage}"
+                                           TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                                <ItemsControl ItemsSource="{Binding SyncReview.Changes}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Margin="0,0,0,8" Padding="12" Style="{StaticResource EntityTrackerCardStyle}">
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                    <TextBlock Margin="0,5,0,0" Text="{Binding SourceValue, StringFormat=Source: {0}}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{Binding DestinationValue, StringFormat=This tracker: {0}}" TextWrapping="Wrap" />
+                                                    <ComboBox Margin="0,8,0,0" MinWidth="220" HorizontalAlignment="Left"
+                                                              AutomationProperties.Name="Choose sync result"
+                                                              ItemsSource="{Binding Choices}"
+                                                              DisplayMemberPath="Label"
+                                                              SelectedValuePath="Value"
+                                                              SelectedValue="{Binding Choice, Mode=TwoWay}" />
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
                             <StackPanel Visibility="{Binding IsRecycleBin, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="Recycled projects" />
                             <TextBlock Margin="0,8,0,12" Style="{StaticResource PageDescriptionTextStyle}" Text="No recycled projects."
@@ -122,6 +150,8 @@
                             Visibility="{Binding IsTrackerCreation, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <Button Command="{Binding ApplyTrackerCommand}" Content="Apply and create" Style="{StaticResource PrimaryButtonStyle}"
                             Visibility="{Binding ShowApplyTracker, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <Button Command="{Binding ApplySyncCommand}" Content="Apply sync" Style="{StaticResource PrimaryButtonStyle}"
+                            Visibility="{Binding IsTrackerSync, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <Button Command="{Binding ConfirmRecycleCommand}" Content="Recycle" Style="{StaticResource DangerButtonStyle}"
                             Visibility="{Binding IsRecycleConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <Button Command="{Binding ConfirmPurgeCommand}" Content="Permanently delete" Style="{StaticResource DangerButtonStyle}"

@@ -167,7 +167,9 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+    <Grid x:Name="DashboardRoot" ClipToBounds="True">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
+                  ScrollChanged="OnDashboardScrollChanged">
         <StackPanel>
             <DockPanel Margin="0,0,0,18">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
@@ -279,16 +281,23 @@
                                     <TextBlock Margin="0,7,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
                                                Text="{Binding Progress.LastActivityText}" />
                                 </StackPanel>
-                                <StackPanel Grid.Row="2" Orientation="Horizontal">
+                                <Grid Grid.Row="2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
                                     <Button Margin="0,0,8,0" Click="OnOpenTracker" Content="Open"
                                             AutomationProperties.Name="{Binding Name, StringFormat=Open tracker {0}}"
                                             Style="{StaticResource PrimaryButtonStyle}" />
-                                    <Button Margin="0,0,8,0" Click="OnRenameTracker" Content="Rename"
-                                            AutomationProperties.Name="{Binding Name, StringFormat=Rename tracker {0}}" />
-                                    <Button Click="OnRecycleTracker" Content="Recycle"
-                                            AutomationProperties.Name="{Binding Name, StringFormat=Recycle tracker {0}}"
-                                            Style="{StaticResource DangerButtonStyle}" />
-                                </StackPanel>
+                                    <ToggleButton x:Name="TrackerActionsToggle" Grid.Column="1"
+                                                  Content="☰" Padding="12,5"
+                                                  MinHeight="{DynamicResource Height.Control}"
+                                                  ToolTip="Tracker actions"
+                                                  AutomationProperties.Name="{Binding Name, StringFormat=Actions for tracker {0}}"
+                                                  AutomationProperties.HelpText="Show tracker actions"
+                                                  Checked="OnTrackerActionsChecked"
+                                                  Unchecked="OnTrackerActionsUnchecked" />
+                                </Grid>
                             </Grid>
                         </Border>
                     </DataTemplate>
@@ -483,4 +492,43 @@
             </Border>
         </StackPanel>
     </ScrollViewer>
+    <Canvas x:Name="TrackerActionLayer" Panel.ZIndex="1" ClipToBounds="True"
+            SizeChanged="OnTrackerActionLayerSizeChanged">
+        <Border x:Name="TrackerActionsMenu" MinWidth="190" Padding="8"
+                Background="{DynamicResource Brush.Surface.Page}"
+                BorderBrush="{DynamicResource Brush.Border.Medium}"
+                BorderThickness="1" CornerRadius="0,0,6,6"
+                Visibility="Collapsed"
+                PreviewKeyDown="OnTrackerActionsPreviewKeyDown">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="10" Opacity="0.16" ShadowDepth="2" />
+            </Border.Effect>
+            <StackPanel>
+                <Button x:Name="RenameTrackerAction" Margin="0,0,0,6"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                        Click="OnRenameTracker" Content="Rename"
+                        AutomationProperties.Name="{Binding Name, StringFormat=Rename tracker {0}}" />
+                <Button x:Name="SyncTrackerAction" Margin="0,0,0,6"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                        Click="OnSyncTracker" Content="Sync from source"
+                        AutomationProperties.Name="{Binding Name, StringFormat=Sync tracker {0} from source}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding CopiedFromTrackerId}" Value="{x:Null}">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <Button x:Name="RecycleTrackerAction" HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        Click="OnRecycleTracker" Content="Recycle"
+                        AutomationProperties.Name="{Binding Name, StringFormat=Recycle tracker {0}}"
+                        Style="{StaticResource DangerButtonStyle}" />
+            </StackPanel>
+        </Border>
+    </Canvas>
+    </Grid>
 </UserControl>

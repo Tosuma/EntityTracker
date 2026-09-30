@@ -22,6 +22,7 @@ public enum CatalogDialogKind
     ProjectName,
     TrackerName,
     TrackerCreation,
+    TrackerSync,
     RecycleBin,
     RecycleConfirmation,
     PurgeConfirmation
@@ -53,6 +54,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
 {
     private readonly ProjectManagementService _projectService;
     private readonly TrackerManagementService _trackerService;
+    private readonly TrackerSyncService _trackerSyncService;
     private readonly TrackerCsvCreationService _csvCreationService;
     private readonly CatalogNameValidationService _nameValidation;
     private readonly CatalogPurgeImpactService _purgeImpactService;
@@ -83,6 +85,11 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     private PreparedCsvTrackerCreation? _preparedCsv;
     private CatalogPurgeImpact? _purgeImpact;
     private string _copyPreview = string.Empty;
+    private TrackerSyncReview? _syncReview;
+    private Tracker? _syncTracker;
+    private TrackerSyncPreview? _syncPreview;
+    private string? _syncPreviewError;
+    private int _syncChoiceRevision;
 
     public CatalogManagementViewModel(
         ProjectManagementService projectService,
@@ -94,11 +101,13 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         IProjectRepository projectRepository,
         ITrackerRepository trackerRepository,
         ICsvFilePicker filePicker,
+        TrackerSyncService trackerSyncService,
         ILogger<CatalogManagementViewModel>? logger = null,
         ProjectGitSyncService? gitSync = null)
     {
         _projectService = projectService;
         _trackerService = trackerService;
+        _trackerSyncService = trackerSyncService;
         _csvCreationService = csvCreationService;
         _nameValidation = nameValidation;
         _purgeImpactService = purgeImpactService;
@@ -117,6 +126,8 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         _applyTrackerCommand = new AsyncCommand(ApplyTrackerAsync, CanApplyTracker);
         _confirmRecycleCommand = new AsyncCommand(ConfirmRecycleAsync, () => !IsBusy);
         _confirmPurgeCommand = new AsyncCommand(ConfirmPurgeAsync, CanConfirmPurge);
+        ApplySyncCommand = new AsyncCommand(ApplySyncAsync,
+            () => !IsBusy && SyncReview?.CanApply == true && _syncPreview is not null);
         CancelCommand = new RelayCommand(Close, () => !IsBusy);
     }
 
@@ -139,6 +150,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(IsOpen));
                 OnPropertyChanged(nameof(IsNameDialog));
                 OnPropertyChanged(nameof(IsTrackerCreation));
+                OnPropertyChanged(nameof(IsTrackerSync));
                 OnPropertyChanged(nameof(IsRecycleBin));
                 OnPropertyChanged(nameof(IsRecycleConfirmation));
                 OnPropertyChanged(nameof(IsPurgeConfirmation));
@@ -255,6 +267,50 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     public bool IsOpen => DialogKind != CatalogDialogKind.None;
     public bool IsNameDialog => DialogKind is CatalogDialogKind.ProjectName or CatalogDialogKind.TrackerName;
     public bool IsTrackerCreation => DialogKind == CatalogDialogKind.TrackerCreation;
+    public bool IsTrackerSync => DialogKind == CatalogDialogKind.TrackerSync;
+    public TrackerSyncReview? SyncReview
+    {
+        get => _syncReview;
+        private set
+        {
+            if (ReferenceEquals(_syncReview, value)) return;
+            if (_syncReview is not null)
+                foreach (TrackerSyncChange change in _syncReview.Changes)
+                    change.PropertyChanged -= OnSyncChoiceChanged;
+            _syncReview = value;
+            _syncPreview = null;
+            _syncPreviewError = null;
+            _syncChoiceRevision++;
+            if (value is not null)
+                foreach (TrackerSyncChange change in value.Changes)
+                    change.PropertyChanged += OnSyncChoiceChanged;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SyncPendingCount));
+            OnPropertyChanged(nameof(SyncReviewSummary));
+            OnPropertyChanged(nameof(SyncPreviewMessage));
+            ApplySyncCommand.NotifyCanExecuteChanged();
+            if (value?.CanApply == true)
+                _ = UpdateSyncPreviewAsync(_syncChoiceRevision, value);
+        }
+    }
+    public int SyncPendingCount => SyncReview?.Changes.Count(static change => change.Choice is null) ?? 0;
+    public string SyncReviewSummary => SyncReview is null ? "Loading changes…" :
+        SyncReview.Changes.Count == 0 ? "The trackers have no new differences to review." :
+        $"{SyncReview.Changes.Count} changes to review. Choose the result for each change. " +
+        "For each dependency, choose whether this tracker should keep or remove it. " +
+        "To keep separate dependencies from both trackers, choose Keep dependency on each row." +
+        (SyncReview.Baseline is null
+            ? " This copy has no earlier sync baseline, so older differences cannot be attributed to either tracker."
+            : string.Empty);
+    public string SyncPreviewMessage => _syncPreviewError ?? (_syncPreview is null
+        ? SyncReview?.CanApply == true ? "Checking dependency validity and progress…" : string.Empty
+        : $"After sync: {_syncPreview.ResultProgress.TotalActiveCount} active " +
+          $"({_syncPreview.ResultProgress.TotalActiveCount - _syncPreview.CurrentProgress.TotalActiveCount:+#;-#;0}), " +
+          $"{_syncPreview.ResultProgress.ReadyCount} ready " +
+          $"({_syncPreview.ResultProgress.ReadyCount - _syncPreview.CurrentProgress.ReadyCount:+#;-#;0}), " +
+          $"{_syncPreview.ResultProgress.BlockedCount} blocked " +
+          $"({_syncPreview.ResultProgress.BlockedCount - _syncPreview.CurrentProgress.BlockedCount:+#;-#;0}), " +
+          $"{_syncPreview.UnresolvedDependencyCount} unresolved references.");
     public bool IsRecycleBin => DialogKind == CatalogDialogKind.RecycleBin;
     public bool IsRecycleConfirmation => DialogKind == CatalogDialogKind.RecycleConfirmation;
     public bool IsPurgeConfirmation => DialogKind == CatalogDialogKind.PurgeConfirmation;
@@ -282,6 +338,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         CatalogDialogKind.ProjectName => IsRename ? "Rename project" : "Create project",
         CatalogDialogKind.TrackerName => "Rename tracker",
         CatalogDialogKind.TrackerCreation => "Create tracker",
+        CatalogDialogKind.TrackerSync => _syncTracker is null ? "Sync tracker" : $"Sync {_syncTracker.Name} from its source",
         CatalogDialogKind.RecycleBin => "Recycle bins",
         CatalogDialogKind.RecycleConfirmation => _pendingProject is null ? "Recycle tracker?" : "Recycle project?",
         CatalogDialogKind.PurgeConfirmation => "Permanently delete?",
@@ -301,6 +358,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     public ICommand ApplyTrackerCommand => _applyTrackerCommand;
     public ICommand ConfirmRecycleCommand => _confirmRecycleCommand;
     public ICommand ConfirmPurgeCommand => _confirmPurgeCommand;
+    public AsyncCommand ApplySyncCommand { get; }
     public RelayCommand CancelCommand { get; }
 
     public void OpenCreateProject()
@@ -327,6 +385,58 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         DialogKind = CatalogDialogKind.TrackerCreation;
         _ = LoadCopySourcesAsync();
         NotifyDialogChanged();
+    }
+
+    public async Task OpenSyncTrackerAsync(Tracker tracker)
+    {
+        ResetDialog();
+        _syncTracker = tracker;
+        DialogKind = CatalogDialogKind.TrackerSync;
+        NotifyDialogChanged();
+        await RunAsync(async () => SyncReview = await _trackerSyncService.ReviewAsync(tracker.Id));
+    }
+
+    private void OnSyncChoiceChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        _syncPreview = null;
+        _syncPreviewError = null;
+        int revision = ++_syncChoiceRevision;
+        OnPropertyChanged(nameof(SyncPendingCount));
+        OnPropertyChanged(nameof(SyncPreviewMessage));
+        ApplySyncCommand.NotifyCanExecuteChanged();
+        if (SyncReview?.CanApply == true)
+            _ = UpdateSyncPreviewAsync(revision, SyncReview);
+    }
+
+    private async Task UpdateSyncPreviewAsync(int revision, TrackerSyncReview review)
+    {
+        try
+        {
+            TrackerSyncPreview preview = await _trackerSyncService.PreviewAsync(review);
+            if (revision != _syncChoiceRevision) return;
+            _syncPreview = preview;
+        }
+        catch (Exception exception)
+        {
+            if (revision != _syncChoiceRevision) return;
+            _syncPreviewError = exception.Message;
+        }
+        OnPropertyChanged(nameof(SyncPreviewMessage));
+        ApplySyncCommand.NotifyCanExecuteChanged();
+    }
+
+    private async Task ApplySyncAsync()
+    {
+        if (SyncReview is null || !SyncReview.CanApply) return;
+        await RunAsync(async () =>
+        {
+            await _trackerSyncService.ApplyAsync(SyncReview);
+            ProjectId projectId = _syncTracker?.ProjectId ??
+                throw new InvalidOperationException("The tracker being synced is no longer selected.");
+            Close();
+            SelectionRequested?.Invoke(this,
+                new CatalogSelectionRequestedEventArgs(projectId, null));
+        });
     }
 
     public void OpenRenameTracker(Tracker tracker)
@@ -708,6 +818,8 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         _trackerBeingEdited = null;
         _pendingProject = null;
         _pendingTracker = null;
+        _syncTracker = null;
+        SyncReview = null;
         _targetProject = null;
         _selectedCopySource = null;
         _name = string.Empty;
@@ -745,6 +857,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         _applyTrackerCommand.NotifyCanExecuteChanged();
         _confirmRecycleCommand.NotifyCanExecuteChanged();
         _confirmPurgeCommand.NotifyCanExecuteChanged();
+        ApplySyncCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
     }
 

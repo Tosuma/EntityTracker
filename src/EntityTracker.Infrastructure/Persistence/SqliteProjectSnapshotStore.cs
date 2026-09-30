@@ -69,6 +69,11 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
             JOIN trackers tracker ON tracker.id = summary.tracker_id
             WHERE tracker.project_id = $projectId;
             """, id, cancellationToken);
+        List<Row> syncBaselines = await RowsAsync(connection, transaction, """
+            SELECT baseline.* FROM tracker_sync_baselines baseline
+            JOIN trackers tracker ON tracker.id = baseline.tracker_id
+            WHERE tracker.project_id = $projectId;
+            """, id, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
         var entitiesByTracker = entityRows.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
@@ -78,6 +83,7 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         var historyByTracker = history.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
         var progressByTracker = progress.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
         var summariesByTracker = summaries.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
+        var baselinesByTracker = syncBaselines.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
 
         SnapshotProject projectModel = new(project.Guid("id"), canonicalName ?? project.Str("name"),
             project.Str("lifecycle_state"), project.Time("created_at_utc"),
@@ -127,7 +133,8 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                     summary.Str("source_file_name"), summary.Str("import_mode"),
                     summary.Int("new_entity_count"), summary.Int("changed_entity_count"),
                     summary.Int("archived_entity_count"), summary.Int("unchanged_entity_count"),
-                    summary.Int("unresolved_entity_count")));
+                    summary.Int("unresolved_entity_count")),
+                baselinesByTracker[trackerId].SingleOrDefault()?.Str("baseline_json"));
         }).ToArray();
         ProjectSnapshot snapshot = new(ProjectSnapshot.CurrentFormatVersion, projectModel, trackers);
         ProjectSnapshotValidator.Validate(snapshot);
@@ -270,6 +277,10 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                 [Id(tracker.Id), Time(summary.AppliedAtUtc), summary.SourceFileName, summary.Mode,
                  summary.NewEntityCount, summary.ChangedEntityCount, summary.ArchivedEntityCount,
                  summary.UnchangedEntityCount, summary.UnresolvedEntityCount], cancellationToken);
+        if (tracker.SyncBaselineJson is { } baselineJson)
+            await InsertAsync(connection, transaction, "tracker_sync_baselines",
+                ["tracker_id", "baseline_json"],
+                [Id(tracker.Id), baselineJson], cancellationToken);
     }
 
     private static async Task DeleteProjectAsync(

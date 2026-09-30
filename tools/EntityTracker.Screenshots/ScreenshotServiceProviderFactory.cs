@@ -71,6 +71,8 @@ internal static class ScreenshotServiceProviderFactory
             provider.GetRequiredService<SqliteTrackedStateStore>());
         services.AddSingleton<ISchemaSynchronizationStore>(static provider =>
             provider.GetRequiredService<SqliteTrackedStateStore>());
+        services.AddSingleton<ITrackerSyncStore>(static provider =>
+            provider.GetRequiredService<SqliteTrackedStateStore>());
         services.AddSingleton<IProgressHistoryRepository, SqliteProgressHistoryRepository>();
         services.AddSingleton<IProjectRepository, SqliteProjectRepository>();
         services.AddSingleton<ITrackerRepository, SqliteTrackerRepository>();
@@ -133,6 +135,7 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<EntityLifecycleService>();
         services.AddSingleton<ProjectManagementService>();
         services.AddSingleton<TrackerManagementService>();
+        services.AddSingleton<TrackerSyncService>();
         services.AddSingleton<TrackerCsvCreationService>();
         services.AddSingleton<CatalogNameValidationService>();
         services.AddSingleton<PortfolioQueryService>();

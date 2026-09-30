@@ -20,7 +20,8 @@ public sealed record SnapshotTracker(
     IReadOnlyList<SnapshotEntity> Entities,
     IReadOnlyList<SnapshotStatusEvent> StatusHistory,
     IReadOnlyList<SnapshotProgress> ProgressHistory,
-    SnapshotImportSummary? ImportSummary);
+    SnapshotImportSummary? ImportSummary,
+    string? SyncBaselineJson = null);
 
 public sealed record SnapshotEntity(
     Guid Id, Guid TrackerId, string SourceName, string DevelopmentStatus,
