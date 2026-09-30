@@ -149,6 +149,14 @@ internal sealed class SyntheticProgressTimeline
             DevelopmentStatus.DevelopmentCompleted,
             DevelopmentStatus.Reconciled
         ],
+        DevelopmentStatus.Blocked =>
+            [DevelopmentStatus.InProgress, DevelopmentStatus.Blocked],
+        DevelopmentStatus.Reworking =>
+        [
+            DevelopmentStatus.InProgress,
+            DevelopmentStatus.DevelopmentCompleted,
+            DevelopmentStatus.Reworking
+        ],
         _ => throw new ArgumentOutOfRangeException(nameof(target), target, null)
     };
 
