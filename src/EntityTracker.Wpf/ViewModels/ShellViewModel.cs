@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 
@@ -119,6 +120,21 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     public IReadOnlyList<ShellNavigationItem> NavigationItems { get; }
     public IReadOnlyList<ProjectSyncLink> PendingProjectDeletions => _pendingProjectDeletions;
+
+    public string AppVersion
+    {
+        get
+        {
+            Assembly assembly = typeof(App).Assembly;
+            bool versionSpecified = assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
+                .Any(static attribute => attribute.Key == "EntityTracker.ExplicitVersion" &&
+                    attribute.Value == "true");
+            if (!versionSpecified) return "Development build";
+            return assembly.GetName().Version is { } version
+                ? $"v{version.Major}.{version.Minor}.{Math.Max(version.Build, 0)}"
+                : "Version unavailable";
+        }
+    }
 
     public CatalogManagementViewModel Catalog { get; }
 
