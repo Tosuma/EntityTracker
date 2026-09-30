@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [switch]$UpdateReadme,
-    [string]$Output
+    [string]$Output,
+    [string]$Version = '1.0.0'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -11,7 +12,9 @@ $arguments = @(
     '--project',
     (Join-Path $repositoryRoot 'tools\EntityTracker.Screenshots\EntityTracker.Screenshots.csproj'),
     '--configuration',
-    'Release'
+    'Release',
+    "-p:Version=$Version",
+    "-p:InformationalVersion=$Version"
 )
 
 if ($UpdateReadme) {
