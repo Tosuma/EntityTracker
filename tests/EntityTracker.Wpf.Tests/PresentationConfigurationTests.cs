@@ -6,6 +6,19 @@ namespace EntityTracker.Wpf.Tests;
 public sealed class PresentationConfigurationTests
 {
     [Fact]
+    public void SettingsDisplaysAppVersion()
+    {
+        XDocument settings = LoadWpfXaml("Views", "SettingsView.xaml");
+
+        Assert.Contains(settings.Descendants(), element =>
+            element.Name.LocalName == "TextBlock" &&
+            (string?)element.Attribute("Text") == "App version");
+        Assert.Contains(settings.Descendants(), element =>
+            element.Name.LocalName == "TextBlock" &&
+            (string?)element.Attribute("Text") == "{Binding AppVersion}");
+    }
+
+    [Fact]
     public void AutomaticSyncSettingsAndProjectStatusAreAccessible()
     {
         XDocument settings = LoadWpfXaml("Views", "SettingsView.xaml");
