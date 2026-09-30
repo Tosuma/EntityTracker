@@ -165,7 +165,8 @@ repeatable. From the repository root, generate a preview set with:
 ```
 
 The default preview is written to `artifacts\readme-screenshots`, with complete `dark` and `light`
-subdirectories, and is ignored by Git. You can choose another preview directory without replacing
+subdirectories, and is ignored by Git. Screenshots use the sample app version `1.0.0` by default;
+pass `-Version` to show another version. You can choose another preview directory without replacing
 unrelated files:
 
 ```powershell

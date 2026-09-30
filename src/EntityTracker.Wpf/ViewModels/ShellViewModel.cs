@@ -120,6 +120,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public IReadOnlyList<ShellNavigationItem> NavigationItems { get; }
     public IReadOnlyList<ProjectSyncLink> PendingProjectDeletions => _pendingProjectDeletions;
 
+    public string AppVersion => AppVersionFormatter.ForAssembly(typeof(App).Assembly);
+
     public CatalogManagementViewModel Catalog { get; }
 
     public AppearanceViewModel Appearance { get; }
