@@ -109,9 +109,11 @@
                                             <TextBlock FontWeight="SemiBold" Text="{Binding Progress.ReconciledProgressText}" />
                                         </StackPanel>
                                     </UniformGrid>
-                                    <TextBlock Text="{Binding Progress.ReadyCount, StringFormat={}{0} ready}" />
-                                    <TextBlock Margin="0,3,0,0" Text="{Binding Progress.BlockedCount, StringFormat={}{0} blocked}" />
+                                    <TextBlock Text="{Binding Progress.ReadyCount, StringFormat={}{0} ready to start}" />
+                                    <TextBlock Margin="0,3,0,0" Text="{Binding Progress.BlockedCount, StringFormat={}{0} waiting on dependencies}" />
+                                    <TextBlock Margin="0,3,0,0" Text="{Binding Progress.ManuallyBlockedCount, StringFormat={}{0} blocked}" />
                                     <TextBlock Margin="0,3,0,0" Text="{Binding Progress.ReworkNeededCount, StringFormat={}{0} rework needed}" />
+                                    <TextBlock Margin="0,3,0,0" Text="{Binding Progress.ReworkingCount, StringFormat={}{0} reworking}" />
                                     <TextBlock Margin="0,3,0,0" Text="{Binding Progress.UnresolvedReferenceCount, StringFormat={}{0} unresolved references}" />
                                     <TextBlock Margin="0,7,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
                                                Text="{Binding Progress.LastActivityText}" />

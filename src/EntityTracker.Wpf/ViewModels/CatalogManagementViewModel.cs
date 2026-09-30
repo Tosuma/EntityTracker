@@ -306,10 +306,14 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         ? SyncReview?.CanApply == true ? "Checking dependency validity and progress…" : string.Empty
         : $"After sync: {_syncPreview.ResultProgress.TotalActiveCount} active " +
           $"({_syncPreview.ResultProgress.TotalActiveCount - _syncPreview.CurrentProgress.TotalActiveCount:+#;-#;0}), " +
-          $"{_syncPreview.ResultProgress.ReadyCount} ready " +
+          $"{_syncPreview.ResultProgress.ReadyCount} ready to start " +
           $"({_syncPreview.ResultProgress.ReadyCount - _syncPreview.CurrentProgress.ReadyCount:+#;-#;0}), " +
-          $"{_syncPreview.ResultProgress.BlockedCount} blocked " +
+          $"{_syncPreview.ResultProgress.BlockedCount} waiting on dependencies " +
           $"({_syncPreview.ResultProgress.BlockedCount - _syncPreview.CurrentProgress.BlockedCount:+#;-#;0}), " +
+          $"{_syncPreview.ResultProgress.ManuallyBlockedCount} blocked " +
+          $"({_syncPreview.ResultProgress.ManuallyBlockedCount - _syncPreview.CurrentProgress.ManuallyBlockedCount:+#;-#;0}), " +
+          $"{_syncPreview.ResultProgress.ReworkingCount} reworking " +
+          $"({_syncPreview.ResultProgress.ReworkingCount - _syncPreview.CurrentProgress.ReworkingCount:+#;-#;0}), " +
           $"{_syncPreview.UnresolvedDependencyCount} unresolved references.");
     public bool IsRecycleBin => DialogKind == CatalogDialogKind.RecycleBin;
     public bool IsRecycleConfirmation => DialogKind == CatalogDialogKind.RecycleConfirmation;

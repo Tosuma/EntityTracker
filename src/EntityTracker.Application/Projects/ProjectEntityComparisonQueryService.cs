@@ -28,7 +28,8 @@ public sealed class ProjectEntityComparisonQueryService(
             ProjectComparisonCategory.Divergent |
             ProjectComparisonCategory.Blocked |
             ProjectComparisonCategory.ReworkNeeded |
-            ProjectComparisonCategory.Unresolved;
+            ProjectComparisonCategory.Unresolved |
+            ProjectComparisonCategory.WaitingOnDependencies;
         if ((category & ~allCategories) != 0 ||
             category != ProjectComparisonCategory.None && !IsSingleCategory(category))
         {
@@ -111,7 +112,8 @@ public sealed class ProjectEntityComparisonQueryService(
             Count(ProjectComparisonCategory.Divergent),
             Count(ProjectComparisonCategory.Blocked),
             Count(ProjectComparisonCategory.ReworkNeeded),
-            Count(ProjectComparisonCategory.Unresolved));
+            Count(ProjectComparisonCategory.Unresolved),
+            Count(ProjectComparisonCategory.WaitingOnDependencies));
 
         return new ProjectEntityComparison(
             projectId,
@@ -143,14 +145,18 @@ public sealed class ProjectEntityComparisonQueryService(
             categories |= ProjectComparisonCategory.Divergent;
         }
 
-        if (cells.Any(static cell => cell.WorkStatus == EntityWorkflowState.Blocked))
+        if (cells.Any(static cell => cell.DevelopmentStatus == DevelopmentStatus.Blocked))
         {
             categories |= ProjectComparisonCategory.Blocked;
         }
 
+        if (cells.Any(static cell => cell.WorkStatus == EntityWorkflowState.Blocked))
+        {
+            categories |= ProjectComparisonCategory.WaitingOnDependencies;
+        }
+
         if (cells.Any(static cell =>
-                cell.DevelopmentStatus == DevelopmentStatus.ReworkNeeded ||
-                cell.WorkStatus == EntityWorkflowState.ReworkNeeded))
+                cell.DevelopmentStatus is DevelopmentStatus.ReworkNeeded or DevelopmentStatus.Reworking))
         {
             categories |= ProjectComparisonCategory.ReworkNeeded;
         }

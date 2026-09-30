@@ -8,5 +8,7 @@ public enum EntityWorkflowState
     ReworkNeeded,
     DevelopmentCompleted,
     Reconciled,
-    Archived
+    Archived,
+    ManuallyBlocked,
+    Reworking
 }

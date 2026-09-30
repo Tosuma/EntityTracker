@@ -9,7 +9,8 @@ public enum WorkStatusDisplay
     InProgress,
     Completed,
     Reconciled,
-    Archived
+    Archived,
+    WaitingOnDependencies
 }
 
 public static class WorkStatusDisplayMapper
@@ -17,8 +18,10 @@ public static class WorkStatusDisplayMapper
     public static WorkStatusDisplay From(EntityWorkflowState state) => state switch
     {
         EntityWorkflowState.Ready => WorkStatusDisplay.Ready,
-        EntityWorkflowState.Blocked => WorkStatusDisplay.Blocked,
-        EntityWorkflowState.InProgress or EntityWorkflowState.ReworkNeeded => WorkStatusDisplay.InProgress,
+        EntityWorkflowState.Blocked => WorkStatusDisplay.WaitingOnDependencies,
+        EntityWorkflowState.ManuallyBlocked => WorkStatusDisplay.Blocked,
+        EntityWorkflowState.ReworkNeeded => WorkStatusDisplay.Ready,
+        EntityWorkflowState.InProgress or EntityWorkflowState.Reworking => WorkStatusDisplay.InProgress,
         EntityWorkflowState.DevelopmentCompleted => WorkStatusDisplay.Completed,
         EntityWorkflowState.Reconciled => WorkStatusDisplay.Reconciled,
         EntityWorkflowState.Archived => WorkStatusDisplay.Archived,
@@ -29,6 +32,7 @@ public static class WorkStatusDisplayMapper
     {
         WorkStatusDisplay.Ready => "Ready",
         WorkStatusDisplay.Blocked => "Blocked",
+        WorkStatusDisplay.WaitingOnDependencies => "Waiting on dependencies",
         WorkStatusDisplay.InProgress => "In progress",
         WorkStatusDisplay.Completed => "Completed",
         WorkStatusDisplay.Reconciled => "Reconciled",

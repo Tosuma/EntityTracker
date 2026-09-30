@@ -228,6 +228,15 @@
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.ReworkNeeded}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Rework needed" />
                 </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.Reworking}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Reworking}" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Reworking" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.Blocked}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Blocked}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Blocked" />
+                </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.DevelopmentCompleted}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.DevelopmentCompleted}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Dev. completed" />
@@ -266,6 +275,12 @@
                     <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Blocked" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.WaitingOnDependencies}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Blocked}" />
+                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Waiting on dependencies" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.InProgress}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.InProgress}" />
@@ -505,6 +520,52 @@
                             </StackPanel>
                         </Button>
 
+                        <Button AutomationProperties.Name="{Binding ReworkingCount, StringFormat=Show reworking entities. {0} entities}"
+                                AutomationProperties.ItemStatus="{Binding IsReworkingSummarySelected, StringFormat=Selected: {0}}"
+                                Command="{Binding SelectOverviewStatusCommand}"
+                                CommandParameter="{x:Static domain:DevelopmentStatus.Reworking}"
+                                ToolTip="Show reworking entities">
+                            <Button.Style>
+                                <Style BasedOn="{StaticResource SummaryFilterButtonStyle}" TargetType="Button">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsReworkingSummarySelected}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green100}" />
+                                            <Setter Property="BorderThickness" Value="2" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <StackPanel>
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Reworking" />
+                                <TextBlock Margin="0,3,0,0" FontSize="22" FontWeight="SemiBold"
+                                           Text="{Binding ReworkingCount}" />
+                            </StackPanel>
+                        </Button>
+
+                        <Button AutomationProperties.Name="{Binding BlockedCount, StringFormat=Show blocked entities. {0} entities}"
+                                AutomationProperties.ItemStatus="{Binding IsBlockedSummarySelected, StringFormat=Selected: {0}}"
+                                Command="{Binding SelectOverviewStatusCommand}"
+                                CommandParameter="{x:Static domain:DevelopmentStatus.Blocked}"
+                                ToolTip="Show manually blocked entities">
+                            <Button.Style>
+                                <Style BasedOn="{StaticResource SummaryFilterButtonStyle}" TargetType="Button">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsBlockedSummarySelected}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                                            <Setter Property="BorderThickness" Value="2" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <StackPanel>
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Blocked" />
+                                <TextBlock Margin="0,3,0,0" FontSize="22" FontWeight="SemiBold"
+                                           Text="{Binding BlockedCount}" />
+                            </StackPanel>
+                        </Button>
+
                         <Button AutomationProperties.Name="{Binding DevelopmentCompletedCount, StringFormat=Show development completed entities. {0} entities}"
                                 AutomationProperties.ItemStatus="{Binding IsDevelopmentCompletedSummarySelected, StringFormat=Selected: {0}}"
                                 Command="{Binding SelectOverviewStatusCommand}"
@@ -567,6 +628,10 @@
                                                  Maximum="100"
                                                  Value="{Binding ImplementedPercentage, Mode=OneWay}" />
                                     <ProgressBar Background="Transparent"
+                                                 Foreground="{DynamicResource Brush.Status.Reworking}"
+                                                 Maximum="100"
+                                                 Value="{Binding ReconciledAndReworkAndReworkingPercentage, Mode=OneWay}" />
+                                    <ProgressBar Background="Transparent"
                                                  Foreground="{DynamicResource Brush.Status.ReworkNeeded}"
                                                  Maximum="100"
                                                  Value="{Binding ReconciledAndReworkPercentage, Mode=OneWay}" />
@@ -597,6 +662,15 @@
                                         <TextBlock FontSize="11"
                                                    Foreground="{DynamicResource Brush.Text.Secondary}"
                                                    Text="Rework needed" />
+                                    </StackPanel>
+                                    <StackPanel Margin="0,0,10,0" Orientation="Horizontal">
+                                        <Border Width="8" Height="8" Margin="0,0,4,0"
+                                                VerticalAlignment="Center"
+                                                Background="{DynamicResource Brush.Status.Reworking}"
+                                                CornerRadius="4" />
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                   Text="Reworking" />
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal">
                                         <Border Width="8"
@@ -1996,7 +2070,7 @@
                                         <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Progress.ManagerSummary.ReconciledEntityCount}" />
                                     </StackPanel>
                                     <StackPanel>
-                                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Ready" />
+                                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Ready to start" />
                                         <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Progress.ManagerSummary.ReadyEntityCount}" />
                                     </StackPanel>
                                     <Border Margin="6,0,0,0"
@@ -2004,7 +2078,7 @@
                                             Background="{DynamicResource Brush.Status.Blocked}"
                                             CornerRadius="4">
                                         <StackPanel>
-                                            <TextBlock Foreground="{DynamicResource Brush.Brand.DarkGreen}" Text="Blocked" />
+                                            <TextBlock Foreground="{DynamicResource Brush.Brand.DarkGreen}" Text="Waiting on dependencies" />
                                             <TextBlock FontSize="22"
                                                        FontWeight="SemiBold"
                                                        Foreground="{DynamicResource Brush.Brand.DarkGreen}"
@@ -2101,7 +2175,7 @@
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Text="Ready vs blocked over time" />
+                                        <TextBlock VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Text="Ready to start vs waiting on dependencies over time" />
                                         <Button Grid.Column="1" Margin="8,0,5,0" Padding="10,5"
                                                 AutomationProperties.Name="Save readiness chart as PNG"
                                                 Command="{Binding Progress.SaveChartCommand}"
@@ -2116,7 +2190,7 @@
                                                 ToolTip="Copy a report-ready PNG to the clipboard" />
                                     </Grid>
                                     <Border Grid.Row="1" Background="{DynamicResource Brush.Report.Canvas}">
-                                        <lvc:CartesianChart AutomationProperties.Name="Ready versus blocked over time chart" LegendPosition="Top"
+                                        <lvc:CartesianChart AutomationProperties.Name="Ready to start versus waiting on dependencies over time chart" LegendPosition="Top"
                                                             Series="{Binding Progress.ReadinessSeries}"
                                                             TooltipPosition="Top"
                                                             XAxes="{Binding Progress.ReadinessXAxes}"

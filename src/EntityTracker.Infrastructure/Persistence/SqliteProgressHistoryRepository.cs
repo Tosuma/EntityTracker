@@ -73,7 +73,8 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT recorded_at_utc, ready_count, blocked_count, in_progress_count,
-                   rework_needed_count, development_completed_count, reconciled_count, snapshot_id
+                   rework_needed_count, development_completed_count, reconciled_count, snapshot_id,
+                   manually_blocked_count, reworking_count
             FROM progress_snapshots
             WHERE tracker_id = $trackerId
             ORDER BY recorded_at_utc, id;
@@ -92,7 +93,8 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
                     reader.GetInt32(3),
                     reader.GetInt32(4),
                     reader.GetInt32(5),
-                    reader.GetInt32(6)), Guid.Parse(reader.GetString(7))));
+                    reader.GetInt32(6), reader.GetInt32(8), reader.GetInt32(9)),
+                Guid.Parse(reader.GetString(7))));
         }
 
         return snapshots;
@@ -108,7 +110,8 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT recorded_at_utc, ready_count, blocked_count, in_progress_count,
-                   rework_needed_count, development_completed_count, reconciled_count, snapshot_id
+                   rework_needed_count, development_completed_count, reconciled_count, snapshot_id,
+                   manually_blocked_count, reworking_count
             FROM progress_snapshots
             WHERE tracker_id = $trackerId
             ORDER BY recorded_at_utc DESC, id DESC
@@ -130,7 +133,8 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
                 reader.GetInt32(3),
                 reader.GetInt32(4),
                 reader.GetInt32(5),
-                reader.GetInt32(6)), Guid.Parse(reader.GetString(7)));
+                reader.GetInt32(6), reader.GetInt32(8), reader.GetInt32(9)),
+            Guid.Parse(reader.GetString(7)));
     }
 
     private static DateTimeOffset ParseTimestamp(string value)

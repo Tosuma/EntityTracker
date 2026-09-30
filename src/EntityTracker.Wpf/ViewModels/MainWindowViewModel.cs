@@ -51,6 +51,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private int _notStartedCount;
     private int _inProgressCount;
     private int _reworkNeededCount;
+    private int _reworkingCount;
+    private int _blockedCount;
     private int _developmentCompletedCount;
     private int _reconciledCount;
     private DevelopmentStatus _selectedBulkStatus = DevelopmentStatus.InProgress;
@@ -209,8 +211,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public IReadOnlyList<DevelopmentStatusOption> BulkStatusOptions { get; } =
     [
         new(DevelopmentStatus.NotStarted, "Not started"),
+        new(DevelopmentStatus.Blocked, "Blocked"),
         new(DevelopmentStatus.InProgress, "In progress"),
         new(DevelopmentStatus.ReworkNeeded, "Rework needed"),
+        new(DevelopmentStatus.Reworking, "Reworking"),
         new(DevelopmentStatus.DevelopmentCompleted, "Dev. completed"),
         new(DevelopmentStatus.Reconciled, "Reconciled")
     ];
@@ -368,8 +372,29 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(ImplementedPercentage));
                 OnPropertyChanged(nameof(ReworkNeededPercentage));
                 OnPropertyChanged(nameof(ReconciledAndReworkPercentage));
+                OnPropertyChanged(nameof(ReconciledAndReworkAndReworkingPercentage));
             }
         }
+    }
+
+    public int ReworkingCount
+    {
+        get => _reworkingCount;
+        private set
+        {
+            if (SetField(ref _reworkingCount, value))
+            {
+                OnPropertyChanged(nameof(ImplementedPercentage));
+                OnPropertyChanged(nameof(ReworkingPercentage));
+                OnPropertyChanged(nameof(ReconciledAndReworkAndReworkingPercentage));
+            }
+        }
+    }
+
+    public int BlockedCount
+    {
+        get => _blockedCount;
+        private set => SetField(ref _blockedCount, value);
     }
 
     public int DevelopmentCompletedCount
@@ -394,6 +419,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(ImplementedPercentage));
                 OnPropertyChanged(nameof(ReconciledPercentage));
                 OnPropertyChanged(nameof(ReconciledAndReworkPercentage));
+                OnPropertyChanged(nameof(ReconciledAndReworkAndReworkingPercentage));
             }
         }
     }
@@ -404,12 +430,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public double ImplementedPercentage => TotalEntityCount == 0
         ? 0
-        : (ReworkNeededCount + DevelopmentCompletedCount + ReconciledCount) * 100.0 /
+        : (ReworkNeededCount + ReworkingCount + DevelopmentCompletedCount + ReconciledCount) * 100.0 /
           TotalEntityCount;
 
     public double ReworkNeededPercentage => TotalEntityCount == 0
         ? 0
         : ReworkNeededCount * 100.0 / TotalEntityCount;
+
+    public double ReworkingPercentage => TotalEntityCount == 0
+        ? 0
+        : ReworkingCount * 100.0 / TotalEntityCount;
+
+    public double ReconciledAndReworkAndReworkingPercentage =>
+        ReconciledAndReworkPercentage + ReworkingPercentage;
 
     public double ReconciledAndReworkPercentage =>
         ReconciledPercentage + ReworkNeededPercentage;
@@ -453,6 +486,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public bool IsReworkNeededSummarySelected =>
         ActiveTable.IncludesStatus(DevelopmentStatus.ReworkNeeded);
+
+    public bool IsReworkingSummarySelected =>
+        ActiveTable.IncludesStatus(DevelopmentStatus.Reworking);
+
+    public bool IsBlockedSummarySelected =>
+        ActiveTable.IncludesStatus(DevelopmentStatus.Blocked);
 
     public bool IsDevelopmentCompletedSummarySelected =>
         ActiveTable.IncludesStatus(DevelopmentStatus.DevelopmentCompleted);
@@ -781,7 +820,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(ArchivedEntityCount));
         OnPropertyChanged(nameof(ImplementedPercentage));
         OnPropertyChanged(nameof(ReworkNeededPercentage));
+        OnPropertyChanged(nameof(ReworkingPercentage));
         OnPropertyChanged(nameof(ReconciledAndReworkPercentage));
+        OnPropertyChanged(nameof(ReconciledAndReworkAndReworkingPercentage));
         OnPropertyChanged(nameof(ReconciledPercentage));
         OnPropertyChanged(nameof(OverviewSearchResultSummary));
         OnPropertyChanged(nameof(ArchivedSearchResultSummary));
@@ -794,13 +835,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         InProgressCount = itemArray.Count(static item => item.Status == DevelopmentStatus.InProgress);
         ReworkNeededCount = itemArray.Count(static item =>
             item.Status == DevelopmentStatus.ReworkNeeded);
+        ReworkingCount = itemArray.Count(static item =>
+            item.Status == DevelopmentStatus.Reworking);
+        BlockedCount = itemArray.Count(static item =>
+            item.Status == DevelopmentStatus.Blocked);
         DevelopmentCompletedCount = itemArray.Count(static item =>
             item.Status == DevelopmentStatus.DevelopmentCompleted);
         ReconciledCount = itemArray.Count(static item =>
             item.Status == DevelopmentStatus.Reconciled);
         OnPropertyChanged(nameof(ImplementedPercentage));
         OnPropertyChanged(nameof(ReworkNeededPercentage));
+        OnPropertyChanged(nameof(ReworkingPercentage));
         OnPropertyChanged(nameof(ReconciledAndReworkPercentage));
+        OnPropertyChanged(nameof(ReconciledAndReworkAndReworkingPercentage));
         OnPropertyChanged(nameof(ReconciledPercentage));
     }
 
@@ -1122,6 +1169,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(IsNotStartedSummarySelected));
         OnPropertyChanged(nameof(IsInProgressSummarySelected));
         OnPropertyChanged(nameof(IsReworkNeededSummarySelected));
+        OnPropertyChanged(nameof(IsReworkingSummarySelected));
+        OnPropertyChanged(nameof(IsBlockedSummarySelected));
         OnPropertyChanged(nameof(IsDevelopmentCompletedSummarySelected));
         OnPropertyChanged(nameof(IsReconciledSummarySelected));
     }
@@ -1165,6 +1214,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         DevelopmentStatus.NotStarted => "Not started",
         DevelopmentStatus.InProgress => "In progress",
         DevelopmentStatus.ReworkNeeded => "Rework needed",
+        DevelopmentStatus.Reworking => "Reworking",
+        DevelopmentStatus.Blocked => "Blocked",
         DevelopmentStatus.DevelopmentCompleted => "Dev. completed",
         DevelopmentStatus.Reconciled => "Reconciled",
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)

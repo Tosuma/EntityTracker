@@ -427,7 +427,8 @@ public sealed partial class ProjectGitSyncService
             SnapshotProgress next = new(id, time,
                 counts.ReadyCount, counts.BlockedCount, counts.InProgressCount,
                 counts.ReworkNeededCount, counts.DevelopmentCompletedCount,
-                counts.ReconciledCount, tracker.ProgressHistory.Count);
+                counts.ReconciledCount, tracker.ProgressHistory.Count,
+                counts.ManuallyBlockedCount, counts.ReworkingCount);
             return tracker with { ProgressHistory = tracker.ProgressHistory.Append(next).ToArray() };
         }).ToArray();
         return snapshot with { Trackers = trackers };

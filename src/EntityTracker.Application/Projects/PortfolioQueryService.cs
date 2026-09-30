@@ -129,7 +129,9 @@ public sealed class PortfolioQueryService(
             items.Sum(static item => item.InProgressCount),
             items.Sum(static item => item.ReworkNeededCount),
             items.Sum(static item => item.DevelopmentCompletedCount),
-            items.Sum(static item => item.ReconciledCount));
+            items.Sum(static item => item.ReconciledCount),
+            items.Sum(static item => item.State.ManuallyBlockedCount),
+            items.Sum(static item => item.State.ReworkingCount));
         return new TrackerProgressSummary(
             state,
             items.Sum(static item => item.UnresolvedReferenceCount),

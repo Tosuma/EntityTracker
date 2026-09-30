@@ -600,8 +600,10 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     public IReadOnlyList<DevelopmentStatusOption> StatusOptions { get; } =
     [
         new(DevelopmentStatus.NotStarted, "Not started"),
+        new(DevelopmentStatus.Blocked, "Blocked"),
         new(DevelopmentStatus.InProgress, "In progress"),
         new(DevelopmentStatus.ReworkNeeded, "Rework needed"),
+        new(DevelopmentStatus.Reworking, "Reworking"),
         new(DevelopmentStatus.DevelopmentCompleted, "Dev. completed"),
         new(DevelopmentStatus.Reconciled, "Reconciled")
     ];

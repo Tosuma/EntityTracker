@@ -64,6 +64,37 @@ public sealed class ProjectSnapshotTests
     }
 
     [Fact]
+    public void ProgressSnapshots_OmitZeroNewCountsAndRoundTripNonzeroCounts()
+    {
+        ProjectSnapshotJsonCodec codec = new();
+        ProjectSnapshot seed = CompleteSnapshot();
+        ProjectSnapshotPackage legacyCompatible = codec.Encode(seed);
+        byte[] oldProgress = legacyCompatible.Files.First(static file =>
+            file.Key.Contains("/progress-history/", StringComparison.Ordinal)).Value;
+        Assert.DoesNotContain("manuallyBlockedCount", Encoding.UTF8.GetString(oldProgress));
+        Assert.DoesNotContain("reworkingCount", Encoding.UTF8.GetString(oldProgress));
+
+        ProjectSnapshot updated = seed with
+        {
+            Trackers = seed.Trackers.Select(tracker => tracker with
+            {
+                ProgressHistory = tracker.ProgressHistory.Select(progress => progress with
+                {
+                    ManuallyBlockedCount = 2,
+                    ReworkingCount = 1
+                }).ToArray()
+            }).ToArray()
+        };
+        ProjectSnapshot roundTrip = codec.Decode(codec.Encode(updated).Files);
+        Assert.All(roundTrip.Trackers.SelectMany(static tracker => tracker.ProgressHistory),
+            static progress =>
+            {
+                Assert.Equal(2, progress.ManuallyBlockedCount);
+                Assert.Equal(1, progress.ReworkingCount);
+            });
+    }
+
+    [Fact]
     public async Task TrackerSyncBaseline_RoundTripsWithProjectSnapshot()
     {
         await using TemporarySqliteFile sourceFile = new();

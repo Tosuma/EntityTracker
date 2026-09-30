@@ -44,7 +44,9 @@ public sealed class AggregateProgressDashboardBuilder(
                 current.Values.Sum(static item => item.InProgressCount),
                 current.Values.Sum(static item => item.ReworkNeededCount),
                 current.Values.Sum(static item => item.DevelopmentCompletedCount),
-                current.Values.Sum(static item => item.ReconciledCount));
+                current.Values.Sum(static item => item.ReconciledCount),
+                current.Values.Sum(static item => item.ManuallyBlockedCount),
+                current.Values.Sum(static item => item.ReworkingCount));
             aggregate.Add(new ProgressSnapshot(timestampGroup.Key, state));
         }
 

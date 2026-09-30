@@ -62,7 +62,7 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(100, viewModel.ReworkNeededPercentage);
         EntityOverviewRow row = Assert.Single(viewModel.OverviewItems);
         Assert.Equal("Rework needed", row.Status);
-        Assert.Equal("In progress", row.WorkStatus);
+        Assert.Equal("Ready", row.WorkStatus);
         viewModel.ActiveTable.SetSingleStatusFilter(DevelopmentStatus.ReworkNeeded);
         Assert.Single(viewModel.OverviewItems);
         Assert.Contains(
@@ -142,7 +142,7 @@ public sealed class MainWindowViewModelTests
 
         ApplySingleFilter(viewModel.ActiveTable.WorkStatusFilter!, "Ready");
         Assert.Equal("Ready", Assert.Single(viewModel.OverviewItems).SourceName);
-        ApplySingleFilter(viewModel.ActiveTable.WorkStatusFilter!, "Blocked");
+        ApplySingleFilter(viewModel.ActiveTable.WorkStatusFilter!, "Waiting on dependencies");
         Assert.Equal("Blocked", Assert.Single(viewModel.OverviewItems).SourceName);
         viewModel.ActiveTable.ClearAllFiltersAndSort();
         viewModel.ActiveTable.SetSingleStatusFilter(DevelopmentStatus.InProgress);

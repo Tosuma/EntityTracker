@@ -18,6 +18,10 @@ public sealed record TrackerProgressSummary(
 
     public int ReworkNeededCount => State.ReworkNeededCount;
 
+    public int ReworkingCount => State.ReworkingCount;
+
+    public int ManuallyBlockedCount => State.ManuallyBlockedCount;
+
     public int DevelopmentCompletedCount => State.DevelopmentCompletedCount;
 
     public int ReconciledCount => State.ReconciledCount;
@@ -25,6 +29,8 @@ public sealed record TrackerProgressSummary(
     public int ReadyCount => State.ReadyCount;
 
     public int BlockedCount => State.BlockedCount;
+
+    public int WaitingOnDependenciesCount => State.WaitingOnDependenciesCount;
 
     public int DependencyIssueCount => UnresolvedReferenceCount;
 

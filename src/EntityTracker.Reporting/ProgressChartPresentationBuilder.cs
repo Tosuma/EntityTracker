@@ -18,7 +18,9 @@ public sealed class ProgressChartPresentationBuilder
             [ProgressStatusCategory.InProgress] = ProgressChartPalette.Green80,
             [ProgressStatusCategory.ReworkNeeded] = ProgressChartPalette.Coral,
             [ProgressStatusCategory.DevelopmentCompleted] = ProgressChartPalette.Green60,
-            [ProgressStatusCategory.Reconciled] = ProgressChartPalette.Green100
+            [ProgressStatusCategory.Reconciled] = ProgressChartPalette.Green100,
+            [ProgressStatusCategory.Blocked] = ProgressChartPalette.Coral,
+            [ProgressStatusCategory.Reworking] = ProgressChartPalette.Green80
         };
 
     public ProgressChartPresentation Build(ProgressDashboardReport report) =>
@@ -66,7 +68,7 @@ public sealed class ProgressChartPresentationBuilder
         [
             new LineSeries<int>
             {
-                Name = "Ready",
+                Name = "Ready to start",
                 Values = report.ReadyAndBlockedOverTime
                     .Select(static point => point.ReadyCount)
                     .ToArray(),
@@ -76,7 +78,7 @@ public sealed class ProgressChartPresentationBuilder
             },
             new LineSeries<int>
             {
-                Name = "Blocked",
+                Name = "Waiting on dependencies",
                 Values = report.ReadyAndBlockedOverTime
                     .Select(static point => point.BlockedCount)
                     .ToArray(),
@@ -135,7 +137,7 @@ public sealed class ProgressChartPresentationBuilder
     {
         ProgressChartKind.CurrentStatus => "Entities by current work status",
         ProgressChartKind.ImplementedOverTime => "Implemented entities over time",
-        ProgressChartKind.ReadyAndBlockedOverTime => "Ready vs blocked over time",
+        ProgressChartKind.ReadyAndBlockedOverTime => "Ready to start vs waiting on dependencies over time",
         ProgressChartKind.WeeklyNetImplementedChange => "Weekly net implemented change",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
     };
@@ -190,6 +192,8 @@ public sealed class ProgressChartPresentationBuilder
         ProgressStatusCategory.ReworkNeeded => ProgressChartPalette.DarkGreen,
         ProgressStatusCategory.DevelopmentCompleted => ProgressChartPalette.DarkGreen,
         ProgressStatusCategory.Reconciled => ProgressChartPalette.White,
+        ProgressStatusCategory.Blocked => ProgressChartPalette.DarkGreen,
+        ProgressStatusCategory.Reworking => ProgressChartPalette.White,
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
     };
 
@@ -234,6 +238,8 @@ public sealed class ProgressChartPresentationBuilder
         ProgressStatusCategory.ReworkNeeded => "Rework needed",
         ProgressStatusCategory.DevelopmentCompleted => "Dev. completed",
         ProgressStatusCategory.Reconciled => "Reconciled",
+        ProgressStatusCategory.Blocked => "Blocked",
+        ProgressStatusCategory.Reworking => "Reworking",
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
     };
 }

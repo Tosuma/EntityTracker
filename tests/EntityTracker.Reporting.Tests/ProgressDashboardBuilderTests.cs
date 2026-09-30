@@ -58,6 +58,24 @@ public sealed class ProgressDashboardBuilderTests
     }
 
     [Fact]
+    public void Build_ReportsManualBlockAndActiveReworkSeparately()
+    {
+        ProgressSnapshot snapshot = new(
+            new DateTimeOffset(2026, 2, 1, 12, 0, 0, TimeSpan.Zero),
+            new ProgressSnapshotState(0, 1, 0, 1, 0, 0,
+                manuallyBlockedCount: 2, reworkingCount: 3));
+
+        ProgressDashboardReport report = _builder.Build(
+            [snapshot], ProgressDateRange.AllHistory, new DateOnly(2026, 2, 1), Utc);
+
+        Assert.Equal(2, Count(report, ProgressStatusCategory.Blocked));
+        Assert.Equal(3, Count(report, ProgressStatusCategory.Reworking));
+        Assert.Equal(4, report.ManagerSummary.ImplementedEntityCount);
+        Assert.Equal(1, report.ManagerSummary.BlockedEntityCount);
+        Assert.Equal(7, report.ManagerSummary.ActiveEntityCount);
+    }
+
+    [Fact]
     public void Build_EmptyHistoryReturnsEmptyManagerSummary()
     {
         ProgressDashboardReport report = _builder.Build(

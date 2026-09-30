@@ -54,7 +54,11 @@ public sealed record SnapshotProgress(
     Guid SnapshotId, DateTimeOffset RecordedAtUtc,
     int ReadyCount, int BlockedCount, int InProgressCount,
     int ReworkNeededCount, int DevelopmentCompletedCount, int ReconciledCount,
-    int Order);
+    int Order,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    int ManuallyBlockedCount = 0,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    int ReworkingCount = 0);
 
 public sealed record SnapshotImportSummary(
     DateTimeOffset AppliedAtUtc, string SourceFileName, string Mode,

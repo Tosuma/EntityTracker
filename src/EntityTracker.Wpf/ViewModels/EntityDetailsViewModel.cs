@@ -131,6 +131,8 @@ public sealed class EntityDetailsViewModel
         Domain.DevelopmentStatus.NotStarted => "Not started",
         Domain.DevelopmentStatus.InProgress => "In progress",
         Domain.DevelopmentStatus.ReworkNeeded => "Rework needed",
+        Domain.DevelopmentStatus.Reworking => "Reworking",
+        Domain.DevelopmentStatus.Blocked => "Blocked",
         Domain.DevelopmentStatus.DevelopmentCompleted => "Dev. completed",
         Domain.DevelopmentStatus.Reconciled => "Reconciled",
         null => "Unknown status",

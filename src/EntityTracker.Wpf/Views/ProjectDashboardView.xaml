@@ -84,6 +84,15 @@
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.ReworkNeeded}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Rework needed" />
                 </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.Reworking}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Reworking}" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Reworking" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.Blocked}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Blocked}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Blocked" />
+                </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.DevelopmentCompleted}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.DevelopmentCompleted}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Dev. completed" />
@@ -118,6 +127,12 @@
                     <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Blocked" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.WaitingOnDependencies}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Blocked}" />
+                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Waiting on dependencies" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.InProgress}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.InProgress}" />
@@ -274,9 +289,11 @@
                                     <TextBlock Text="{Binding Progress.ActiveEntityCount, StringFormat={}{0} active entities}" />
                                     <TextBlock Margin="0,4,0,0" Text="{Binding Progress.ImplementedProgressText}" />
                                     <TextBlock Margin="0,4,0,0" Text="{Binding Progress.ReconciledProgressText}" />
-                                    <TextBlock Margin="0,4,0,0" Text="{Binding Progress.ReadyCount, StringFormat={}{0} ready}" />
-                                    <TextBlock Margin="0,4,0,0" Text="{Binding Progress.BlockedCount, StringFormat={}{0} blocked}" />
+                                    <TextBlock Margin="0,4,0,0" Text="{Binding Progress.ReadyCount, StringFormat={}{0} ready to start}" />
+                                    <TextBlock Margin="0,4,0,0" Text="{Binding Progress.BlockedCount, StringFormat={}{0} waiting on dependencies}" />
+                                    <TextBlock Margin="0,4,0,0" Text="{Binding Progress.ManuallyBlockedCount, StringFormat={}{0} blocked}" />
                                     <TextBlock Margin="0,4,0,0" Text="{Binding Progress.ReworkNeededCount, StringFormat={}{0} rework needed}" />
+                                    <TextBlock Margin="0,4,0,0" Text="{Binding Progress.ReworkingCount, StringFormat={}{0} reworking}" />
                                     <TextBlock Margin="0,4,0,0" Text="{Binding Progress.UnresolvedReferenceCount, StringFormat={}{0} unresolved references}" />
                                     <TextBlock Margin="0,7,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
                                                Text="{Binding Progress.LastActivityText}" />
@@ -389,6 +406,28 @@
                                 <TextBlock Text="Blocked" />
                                 <TextBlock Margin="0,2,0,0" FontSize="18" FontWeight="SemiBold"
                                            Text="{Binding ProjectReporting.BlockedCount}" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton AutomationProperties.Name="Filter comparison to entities waiting on dependencies"
+                                IsChecked="{Binding ProjectReporting.IsWaitingOnDependenciesSelected, Mode=OneWay}"
+                                ToolTip="Filter to entities waiting on dependencies. Unavailable when the count is zero."
+                                Command="{Binding ProjectReporting.SelectCategoryCommand}"
+                                CommandParameter="{x:Static projects:ProjectComparisonCategory.WaitingOnDependencies}">
+                            <ToggleButton.Style>
+                                <Style TargetType="ToggleButton" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ProjectReporting.IsWaitingOnDependenciesSelected}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                                            <Setter Property="BorderThickness" Value="2" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ToggleButton.Style>
+                            <StackPanel>
+                                <TextBlock Text="Waiting on dependencies" />
+                                <TextBlock Margin="0,2,0,0" FontSize="18" FontWeight="SemiBold"
+                                           Text="{Binding ProjectReporting.WaitingOnDependenciesCount}" />
                             </StackPanel>
                         </ToggleButton>
                         <ToggleButton AutomationProperties.Name="Filter comparison to rework entities"

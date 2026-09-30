@@ -9,9 +9,11 @@ public sealed class WorkStatusDisplayTests
 {
     [Theory]
     [InlineData(EntityWorkflowState.Ready, WorkStatusDisplay.Ready, "Ready")]
-    [InlineData(EntityWorkflowState.Blocked, WorkStatusDisplay.Blocked, "Blocked")]
+    [InlineData(EntityWorkflowState.Blocked, WorkStatusDisplay.WaitingOnDependencies, "Waiting on dependencies")]
+    [InlineData(EntityWorkflowState.ManuallyBlocked, WorkStatusDisplay.Blocked, "Blocked")]
     [InlineData(EntityWorkflowState.InProgress, WorkStatusDisplay.InProgress, "In progress")]
-    [InlineData(EntityWorkflowState.ReworkNeeded, WorkStatusDisplay.InProgress, "In progress")]
+    [InlineData(EntityWorkflowState.ReworkNeeded, WorkStatusDisplay.Ready, "Ready")]
+    [InlineData(EntityWorkflowState.Reworking, WorkStatusDisplay.InProgress, "In progress")]
     [InlineData(EntityWorkflowState.DevelopmentCompleted, WorkStatusDisplay.Completed, "Completed")]
     [InlineData(EntityWorkflowState.Reconciled, WorkStatusDisplay.Reconciled, "Reconciled")]
     [InlineData(EntityWorkflowState.Archived, WorkStatusDisplay.Archived, "Archived")]
@@ -37,8 +39,8 @@ public sealed class WorkStatusDisplayTests
             "Orders", "Backend", cell);
 
         Assert.Equal("Rework needed", display.DevelopmentStatus);
-        Assert.Equal("In progress", display.WorkStatus);
-        Assert.Equal(WorkStatusDisplay.InProgress, display.WorkStatusValue);
-        Assert.Contains("work status In progress", display.AutomationName);
+        Assert.Equal("Ready", display.WorkStatus);
+        Assert.Equal(WorkStatusDisplay.Ready, display.WorkStatusValue);
+        Assert.Contains("work status Ready", display.AutomationName);
     }
 }
