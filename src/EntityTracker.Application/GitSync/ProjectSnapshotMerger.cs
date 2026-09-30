@@ -32,10 +32,15 @@ public sealed class ProjectSnapshotMerger
             (basis is not null && basis.Project.Id != local.Project.Id))
             throw new InvalidDataException("Merge inputs belong to different Projects.");
         _twoWay = basis is null;
-        ProjectSnapshot merged = new(local.FormatVersion,
+        IReadOnlyList<SnapshotDeveloper> developers = ThreeWayMerge.Keyed("Developer",
+            basis?.Developers, local.Developers ?? [], remote.Developers ?? [],
+            d => d.Id, MergeDeveloper);
+        developers = ResolveDuplicateInitials(developers, local.Developers ?? [],
+            remote.Developers ?? []);
+        ProjectSnapshot merged = new(ProjectSnapshot.CurrentFormatVersion,
             MergeProject(basis?.Project ?? local.Project, local.Project, remote.Project),
             ThreeWayMerge.Keyed("Tracker", basis?.Trackers, local.Trackers, remote.Trackers,
-                t => t.Id, MergeTracker));
+                t => t.Id, MergeTracker), developers);
         if (_conflicts.Count == 0) ProjectSnapshotValidator.Validate(merged);
         return new ProjectMergeResult(merged, _conflicts.ToArray());
     }
@@ -52,6 +57,50 @@ public sealed class ProjectSnapshotMerger
             RecycledAtUtc = Field("Project/RecycledAtUtc", b.RecycledAtUtc,
                 l.RecycledAtUtc, r.RecycledAtUtc, ProjectConflictKind.Lifecycle)
         };
+
+    private SnapshotDeveloper? MergeDeveloper(string path, SnapshotDeveloper? basis,
+        SnapshotDeveloper? local, SnapshotDeveloper? remote)
+    {
+        if (Same(local, remote)) return local;
+        if (!_twoWay && Same(local, basis)) return remote;
+        if (!_twoWay && Same(remote, basis)) return local;
+        if (basis is null || local is null || remote is null)
+            return Object(path, basis, local, remote,
+                basis is null ? ProjectConflictKind.Addition : ProjectConflictKind.Deletion);
+        return local with
+        {
+            Initials = Field(path + "/Initials", basis.Initials, local.Initials, remote.Initials),
+            DisplayName = Field(path + "/DisplayName", basis.DisplayName,
+                local.DisplayName, remote.DisplayName),
+            IsRetired = Field(path + "/IsRetired", basis.IsRetired,
+                local.IsRetired, remote.IsRetired, ProjectConflictKind.Lifecycle)
+        };
+    }
+
+    private IReadOnlyList<SnapshotDeveloper> ResolveDuplicateInitials(
+        IReadOnlyList<SnapshotDeveloper> developers,
+        IReadOnlyList<SnapshotDeveloper> local, IReadOnlyList<SnapshotDeveloper> remote)
+    {
+        List<SnapshotDeveloper> resolved = developers.ToList();
+        foreach (IGrouping<string, SnapshotDeveloper> group in developers
+                     .Where(d => !d.IsRetired)
+                     .GroupBy(d => d.Initials.Trim(), StringComparer.OrdinalIgnoreCase)
+                     .Where(g => g.Count() > 1))
+        {
+            string path = "DeveloperInitials/" + group.Key.ToUpperInvariant();
+            _conflicts.Add(new ProjectMergeConflict(path, ProjectConflictKind.Relationship,
+                null, Display(local.Where(d => group.Any(g => g.Id == d.Id)).ToArray()),
+                Display(remote.Where(d => group.Any(g => g.Id == d.Id)).ToArray())));
+            IReadOnlyList<SnapshotDeveloper> preferred =
+                _choices.GetValueOrDefault(path) == MergeSide.Remote ? remote : local;
+            Guid winner = group.FirstOrDefault(d => preferred.Any(p => p.Id == d.Id && !p.IsRetired))?.Id
+                ?? group.OrderBy(d => d.Id).First().Id;
+            for (int index = 0; index < resolved.Count; index++)
+                if (group.Any(g => g.Id == resolved[index].Id) && resolved[index].Id != winner)
+                    resolved[index] = resolved[index] with { IsRetired = true };
+        }
+        return resolved;
+    }
 
     private SnapshotTracker? MergeTracker(string path, SnapshotTracker? b,
         SnapshotTracker? l, SnapshotTracker? r)

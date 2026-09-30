@@ -29,6 +29,11 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
             [Root + "project.json"] = JsonSerializer.SerializeToUtf8Bytes(snapshot.Project, JsonOptions)
         };
 
+        if (snapshot.FormatVersion >= 2)
+            foreach (SnapshotDeveloper developer in snapshot.Developers!.OrderBy(d => d.Id))
+                files[Root + $"developers/{developer.Id:D}.json"] =
+                    JsonSerializer.SerializeToUtf8Bytes(developer, JsonOptions);
+
         foreach (SnapshotTracker tracker in snapshot.Trackers.OrderBy(t => t.Id))
         {
             string prefix = TrackerPrefix(tracker.Id);
@@ -67,7 +72,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
     {
         ArgumentNullException.ThrowIfNull(files);
         Manifest manifest = Read<Manifest>(files, Root + "manifest.json");
-        if (manifest.FormatVersion != ProjectSnapshot.CurrentFormatVersion)
+        if (manifest.FormatVersion is not (1 or ProjectSnapshot.CurrentFormatVersion))
             throw new InvalidDataException($"Unsupported Project snapshot format version {manifest.FormatVersion}.");
         SnapshotProject project = Read<SnapshotProject>(files, Root + "project.json");
         if (project.Id != manifest.ProjectId)
@@ -94,7 +99,11 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                 doc.CreatedAtUtc, doc.UpdatedAtUtc, doc.RecycledAtUtc, doc.CopiedFromTrackerId,
                 entities, events, progress, summary, doc.SyncBaselineJson));
         }
-        ProjectSnapshot snapshot = new(manifest.FormatVersion, project, trackers);
+        SnapshotDeveloper[]? developers = manifest.FormatVersion >= 2
+            ? files.Keys.Where(p => p.StartsWith(Root + "developers/", StringComparison.Ordinal))
+                .Order(StringComparer.Ordinal).Select(p => Read<SnapshotDeveloper>(files, p)).ToArray()
+            : null;
+        ProjectSnapshot snapshot = new(manifest.FormatVersion, project, trackers, developers);
         ProjectSnapshotValidator.Validate(snapshot);
 
         ProjectSnapshotPackage canonical = Encode(snapshot);
@@ -141,7 +150,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
 
     private static void ValidateTombstone(ProjectTombstone tombstone)
     {
-        if (tombstone.FormatVersion != ProjectSnapshot.CurrentFormatVersion ||
+        if (tombstone.FormatVersion is not (1 or ProjectSnapshot.CurrentFormatVersion) ||
             tombstone.ProjectId == Guid.Empty || tombstone.DeletedAtUtc.Offset != TimeSpan.Zero ||
             tombstone.BaseSnapshotHash.Length != 64 ||
             !tombstone.BaseSnapshotHash.All(Uri.IsHexDigit))

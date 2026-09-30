@@ -7,7 +7,7 @@ public static class ProjectSnapshotValidator
     public static void Validate(ProjectSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        if (snapshot.FormatVersion != ProjectSnapshot.CurrentFormatVersion)
+        if (snapshot.FormatVersion is not (1 or ProjectSnapshot.CurrentFormatVersion))
         {
             throw new InvalidDataException($"Unsupported Project snapshot format version {snapshot.FormatVersion}.");
         }
@@ -18,6 +18,23 @@ public static class ProjectSnapshotValidator
         ValidateCatalog(snapshot.Project.Name, snapshot.Project.LifecycleState,
             snapshot.Project.CreatedAtUtc, snapshot.Project.UpdatedAtUtc,
             snapshot.Project.RecycledAtUtc);
+
+        if (snapshot.FormatVersion == ProjectSnapshot.CurrentFormatVersion && snapshot.Developers is null)
+            throw new InvalidDataException("The Project developer directory is missing.");
+        if (snapshot.FormatVersion == 1 && snapshot.Developers is { Count: > 0 })
+            throw new InvalidDataException("A version 1 snapshot cannot contain developers.");
+        HashSet<Guid> developerIds = [];
+        HashSet<string> availableInitials = new(StringComparer.OrdinalIgnoreCase);
+        foreach (SnapshotDeveloper developer in snapshot.Developers ?? [])
+        {
+            if (developer is null || developer.Id == Guid.Empty ||
+                developer.ProjectId != snapshot.Project.Id || !developerIds.Add(developer.Id) ||
+                string.IsNullOrWhiteSpace(developer.Initials) ||
+                developer.Initials != developer.Initials.Trim() ||
+                developer.DisplayName is null || developer.DisplayName != developer.DisplayName.Trim() ||
+                (!developer.IsRetired && !availableInitials.Add(developer.Initials)))
+                throw new InvalidDataException("The Project developer directory is invalid.");
+        }
 
         HashSet<Guid> trackerIds = [];
         HashSet<Guid> allEntityIds = [];

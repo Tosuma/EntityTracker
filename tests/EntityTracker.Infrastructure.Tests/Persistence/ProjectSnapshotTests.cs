@@ -179,7 +179,7 @@ public sealed class ProjectSnapshotTests
         long revision = (await store.ReadAsync(new ProjectId(snapshot.Project.Id))).Revision;
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => store.ApplyAsync(snapshot, revision - 1));
-        Assert.Throws<InvalidDataException>(() => ProjectSnapshotValidator.Validate(snapshot with { FormatVersion = 2 }));
+        Assert.Throws<InvalidDataException>(() => ProjectSnapshotValidator.Validate(snapshot with { FormatVersion = 3 }));
         Assert.Throws<InvalidDataException>(() => ProjectSnapshotValidator.Validate(snapshot with
         {
             Trackers = [snapshot.Trackers[0], snapshot.Trackers[0]]
@@ -203,7 +203,7 @@ public sealed class ProjectSnapshotTests
         Assert.Throws<InvalidDataException>(() => codec.Decode(malformed));
         malformed[".entitytracker/project.json"] = package.Files[".entitytracker/project.json"];
         malformed[".entitytracker/manifest.json"] = Encoding.UTF8.GetBytes(
-            "{\"formatVersion\":2,\"projectId\":\"" + snapshot.Project.Id + "\"}");
+            "{\"formatVersion\":3,\"projectId\":\"" + snapshot.Project.Id + "\"}");
         Assert.Throws<InvalidDataException>(() => codec.Decode(malformed));
 
         ProjectSnapshotRead after = await store.ReadAsync(new ProjectId(snapshot.Project.Id));
@@ -359,7 +359,7 @@ public sealed class ProjectSnapshotTests
             new SnapshotImportSummary(T2, "schema.csv", "Partial", 1, 2, 3, 4, 5));
         SnapshotTracker b = new(trackerB, project, "Archive", "Recycled", T0, T2, T2,
             trackerA, [third], [], [new SnapshotProgress(Guid.NewGuid(), T1, 1, 0, 0, 0, 0, 0, 0)], null);
-        return new ProjectSnapshot(1,
-            new SnapshotProject(project, "Portable project", "Active", T0, T2, null), [a, b]);
+        return new ProjectSnapshot(ProjectSnapshot.CurrentFormatVersion,
+            new SnapshotProject(project, "Portable project", "Active", T0, T2, null), [a, b], []);
     }
 }

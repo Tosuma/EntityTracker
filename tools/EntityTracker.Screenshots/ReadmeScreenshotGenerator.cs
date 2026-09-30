@@ -8,6 +8,7 @@ using EntityTracker.Application.History;
 using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Projects;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Application.GitSync;
 using EntityTracker.Wpf.Views;
@@ -86,6 +87,24 @@ internal sealed class ReadmeScreenshotGenerator
                 "The project dashboard did not finish loading.",
                 cancellationToken);
             await renderer.CaptureAsync("project-dashboard.png", settleMilliseconds: 900);
+            ProjectDeveloperService developerService = provider.GetRequiredService<ProjectDeveloperService>();
+            await developerService.CreateAsync(project.Id, "AB", "Alice Brown", cancellationToken);
+            await developerService.CreateAsync(project.Id, "CD", "Chris Davis", cancellationToken);
+            await shell.NavigateAsync(ShellDestination.Developers, cancellationToken);
+            await renderer.CaptureAsync("project-developers.png", settleMilliseconds: 500);
+            ProjectDeveloper alice = (await developerService.ListAsync(project.Id, cancellationToken))
+                .Single(developer => developer.Initials == "AB");
+            shell.Developers!.BeginRetirement(alice);
+            await renderer.CaptureAsync("project-developer-retirement.png", settleMilliseconds: 500);
+            shell.Developers.CancelRetirement();
+            ProjectDeveloper chris = (await developerService.ListAsync(project.Id, cancellationToken))
+                .Single(developer => developer.Initials == "CD");
+            await developerService.SetRetiredAsync(project.Id, chris.Id, true, cancellationToken);
+            await shell.Developers.RefreshAsync(cancellationToken);
+            shell.Developers.OpenRetired();
+            await renderer.CaptureAsync("project-developers-retired.png", settleMilliseconds: 500);
+            shell.Developers.CloseRetired();
+            await shell.NavigateAsync(ShellDestination.ProjectDashboard, cancellationToken);
             // Presentation fixture only. The real folder stays in the disposable workspace.
             string repositoryFixturePath = Directory.CreateDirectory(
                 Path.Combine(workspace.RootDirectory, "example-repository")).FullName;

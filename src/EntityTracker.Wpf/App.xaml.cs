@@ -124,6 +124,8 @@ public partial class App : System.Windows.Application
             services.AddSingleton<EntityDependencyEditorService>();
             services.AddSingleton<EntityLifecycleService>();
             services.AddSingleton<ProjectManagementService>();
+            services.AddSingleton<ProjectDeveloperService>();
+            services.AddSingleton<ProjectDeveloperService>();
             services.AddSingleton<TrackerManagementService>();
             services.AddSingleton<TrackerSyncService>();
             services.AddSingleton<TrackerCsvCreationService>();
@@ -243,6 +245,8 @@ public partial class App : System.Windows.Application
             provider.GetRequiredService<SqliteTrackedStateStore>());
         services.AddSingleton<IProgressHistoryRepository, SqliteProgressHistoryRepository>();
         services.AddSingleton<IProjectRepository, SqliteProjectRepository>();
+        services.AddSingleton<IProjectDeveloperStore, SqliteProjectDeveloperStore>();
+        services.AddSingleton<IProjectDeveloperStore, SqliteProjectDeveloperStore>();
         services.AddSingleton<ITrackerRepository, SqliteTrackerRepository>();
         services.AddSingleton<IProjectTrackerStore, SqliteProjectTrackerStore>();
         services.AddSingleton<EntityTracker.Application.Snapshots.IProjectSnapshotStore, SqliteProjectSnapshotStore>();

@@ -373,6 +373,7 @@ public sealed partial class ProjectGitSyncService
     private static IReadOnlyList<string> FullDeletionSet(ProjectSnapshot snapshot)
     {
         List<string> deleted = [$"Project {snapshot.Project.Id:D}"];
+        deleted.AddRange((snapshot.Developers ?? []).Select(d => $"Developer {d.Id:D}"));
         foreach (SnapshotTracker tracker in snapshot.Trackers)
         {
             deleted.Add($"Tracker {tracker.Id:D}");

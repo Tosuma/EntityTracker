@@ -67,6 +67,15 @@ The deterministic screenshot suite contains matching [`images/light`](images/lig
 [`images/dark`](images/dark) captures for every state shown below. The README uses the light set
 for consistency.
 
+From a Project dashboard, select **Developers** to manage that Project's developer directory.
+Search by initials or display name in the left column; the available-developers list scrolls
+independently. Use the form on the right to add a developer or edit a selected one.
+Initials are required and unique among available developers in the Project; retired records can
+be restored when their initials are free. Retiring a developer requires entering their exact initials.
+The retired list stays hidden until you select **Retired developers**.
+Entity responsibility still uses the existing text field
+until RESP-02.
+
 <table>
   <tr>
     <td width="50%">
@@ -105,6 +114,10 @@ for consistency.
     </td>
   </tr>
 </table>
+
+| Project developers | Confirm retirement | Retired developers |
+| --- | --- | --- |
+| ![Project Developers directory with available developers](images/light/project-developers.png) | ![Single initials confirmation for retiring a developer](images/light/project-developer-retirement.png) | ![Retired developers dialog with restore action](images/light/project-developers-retired.png) |
 
 ### Import and synchronize an existing Git checkout
 

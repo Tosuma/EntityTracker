@@ -28,6 +28,9 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
 
         List<Row> trackerRows = await RowsAsync(connection, transaction,
             "SELECT * FROM trackers WHERE project_id = $projectId;", id, cancellationToken);
+        List<Row> developerRows = await RowsAsync(connection, transaction,
+            "SELECT * FROM project_developers WHERE project_id = $projectId ORDER BY id;",
+            id, cancellationToken);
         List<Row> entityRows = await RowsAsync(connection, transaction, """
             SELECT entity.* FROM tracked_entities entity
             JOIN trackers tracker ON tracker.id = entity.tracker_id
@@ -137,7 +140,11 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                     summary.Int("unresolved_entity_count")),
                 baselinesByTracker[trackerId].SingleOrDefault()?.Str("baseline_json"));
         }).ToArray();
-        ProjectSnapshot snapshot = new(ProjectSnapshot.CurrentFormatVersion, projectModel, trackers);
+        SnapshotDeveloper[] developers = developerRows.Select(row => new SnapshotDeveloper(
+            row.Guid("id"), row.Guid("project_id"), row.Str("initials"),
+            row.Str("display_name"), row.Int("is_retired") != 0)).ToArray();
+        ProjectSnapshot snapshot = new(ProjectSnapshot.CurrentFormatVersion, projectModel,
+            trackers, developers);
         ProjectSnapshotValidator.Validate(snapshot);
         return new ProjectSnapshotRead(snapshot, revision);
     }
@@ -182,6 +189,12 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         if (!string.Equals(storedName, snapshot.Project.Name, StringComparison.Ordinal))
             await InsertAsync(connection, transaction, "project_snapshot_names",
                 ["project_id", "canonical_name"], [projectId, snapshot.Project.Name], cancellationToken);
+        foreach (SnapshotDeveloper developer in snapshot.Developers ?? [])
+            await InsertAsync(connection, transaction, "project_developers",
+                ["id", "project_id", "initials_key", "initials", "display_name", "is_retired"],
+                [Id(developer.Id), projectId, developer.Initials.ToUpperInvariant(),
+                 developer.Initials, developer.DisplayName, developer.IsRetired ? 1 : 0],
+                cancellationToken);
         foreach (SnapshotTracker tracker in snapshot.Trackers)
         {
             await InsertAsync(connection, transaction, "trackers",

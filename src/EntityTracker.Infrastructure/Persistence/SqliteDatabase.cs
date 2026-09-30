@@ -5,7 +5,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    internal const int CurrentSchemaVersion = 16;
+    internal const int CurrentSchemaVersion = 17;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -831,6 +831,36 @@ public sealed class SqliteDatabase
                 await SqliteSnapshotMigration.CreateRevisionTriggersAsync(
                     connection, transaction, cancellationToken);
                 await EnsureNoForeignKeyViolationsAsync(connection, transaction, cancellationToken);
+            }
+
+            if (schemaVersion < 17)
+            {
+                await ExecuteAsync(connection, transaction, """
+                    CREATE TABLE IF NOT EXISTS project_developers
+                    (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        project_id TEXT NOT NULL,
+                        initials_key TEXT NOT NULL,
+                        initials TEXT NOT NULL CHECK (length(trim(initials)) > 0),
+                        display_name TEXT NOT NULL DEFAULT '',
+                        is_retired INTEGER NOT NULL DEFAULT 0 CHECK (is_retired IN (0, 1)),
+                        FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+                    );
+                    CREATE INDEX IF NOT EXISTS ix_project_developers_project
+                        ON project_developers (project_id, is_retired, initials_key, id);
+                    CREATE UNIQUE INDEX IF NOT EXISTS ux_project_developers_available_initials
+                        ON project_developers (project_id, initials_key)
+                        WHERE is_retired = 0;
+                    CREATE TRIGGER IF NOT EXISTS rev_project_developers_insert AFTER INSERT ON project_developers BEGIN
+                        UPDATE project_revisions SET revision = revision + 1 WHERE project_id = NEW.project_id;
+                    END;
+                    CREATE TRIGGER IF NOT EXISTS rev_project_developers_update AFTER UPDATE ON project_developers BEGIN
+                        UPDATE project_revisions SET revision = revision + 1 WHERE project_id = NEW.project_id;
+                    END;
+                    CREATE TRIGGER IF NOT EXISTS rev_project_developers_delete AFTER DELETE ON project_developers BEGIN
+                        UPDATE project_revisions SET revision = revision + 1 WHERE project_id = OLD.project_id;
+                    END;
+                    """, cancellationToken);
             }
 
             await ExecuteAsync(

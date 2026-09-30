@@ -4,6 +4,7 @@ public enum ShellDestination
 {
     Portfolio,
     ProjectDashboard,
+    Developers,
     Overview,
     Archived,
     Reports,

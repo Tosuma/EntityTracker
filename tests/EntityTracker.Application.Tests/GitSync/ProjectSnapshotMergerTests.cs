@@ -209,15 +209,74 @@ public sealed class ProjectSnapshotMergerTests
             c => c.Path == "Project/CreatedAtUtc");
     }
 
+    [Fact]
+    public void IndependentDeveloperEditsMergeByStableId()
+    {
+        ProjectSnapshot basis = Snapshot();
+        SnapshotDeveloper developer = new(Guid.NewGuid(), basis.Project.Id, "AB", "Alice", false);
+        basis = basis with { Developers = [developer] };
+        ProjectSnapshot local = basis with { Developers = [developer with { DisplayName = "Alice B" }] };
+        ProjectSnapshot remote = basis with { Developers = [developer with { Initials = "AL" }] };
+
+        ProjectMergeResult result = new ProjectSnapshotMerger().Merge(basis, local, remote);
+
+        Assert.Empty(result.Conflicts);
+        SnapshotDeveloper merged = Assert.Single(result.Snapshot.Developers!);
+        Assert.Equal(developer.Id, merged.Id);
+        Assert.Equal("AL", merged.Initials);
+        Assert.Equal("Alice B", merged.DisplayName);
+    }
+
+    [Fact]
+    public void ConcurrentDeveloperInitialsCollisionRequiresReview()
+    {
+        ProjectSnapshot basis = Snapshot();
+        SnapshotDeveloper left = new(Guid.NewGuid(), basis.Project.Id, "AB", "Alice", false);
+        SnapshotDeveloper right = new(Guid.NewGuid(), basis.Project.Id, "ab", "Bob", false);
+        ProjectSnapshot local = basis with { Developers = [left] };
+        ProjectSnapshot remote = basis with { Developers = [right] };
+
+        ProjectMergeResult proposal = new ProjectSnapshotMerger().Merge(basis, local, remote);
+        ProjectMergeConflict conflict = Assert.Single(proposal.Conflicts);
+        Assert.Equal(ProjectConflictKind.Relationship, conflict.Kind);
+        Assert.StartsWith("DeveloperInitials/", conflict.Path, StringComparison.Ordinal);
+
+        ProjectMergeResult selected = new ProjectSnapshotMerger(new Dictionary<string, MergeSide>
+        {
+            [conflict.Path] = MergeSide.Remote
+        }).Merge(basis, local, remote);
+        Assert.Equal(right.Id, Assert.Single(selected.Snapshot.Developers!, d => !d.IsRetired).Id);
+        Assert.Equal(left.Id, Assert.Single(selected.Snapshot.Developers!, d => d.IsRetired).Id);
+    }
+
+    [Fact]
+    public void ConcurrentDeveloperDetailConflictRequiresChoice()
+    {
+        ProjectSnapshot basis = Snapshot();
+        SnapshotDeveloper developer = new(Guid.NewGuid(), basis.Project.Id, "AB", "Alice", false);
+        basis = basis with { Developers = [developer] };
+        ProjectSnapshot local = basis with { Developers = [developer with { DisplayName = "Alice B" }] };
+        ProjectSnapshot remote = basis with { Developers = [developer with { DisplayName = "Alice C" }] };
+
+        ProjectMergeConflict conflict = Assert.Single(new ProjectSnapshotMerger()
+            .Merge(basis, local, remote).Conflicts);
+        Assert.EndsWith("/DisplayName", conflict.Path, StringComparison.Ordinal);
+        ProjectMergeResult result = new ProjectSnapshotMerger(new Dictionary<string, MergeSide>
+        {
+            [conflict.Path] = MergeSide.Remote
+        }).Merge(basis, local, remote);
+        Assert.Equal("Alice C", Assert.Single(result.Snapshot.Developers!).DisplayName);
+    }
+
     private static ProjectSnapshot Snapshot()
     {
         Guid projectId = Guid.NewGuid();
         Guid trackerId = Guid.NewGuid();
         SnapshotEntity entity = Entity(Guid.NewGuid(), trackerId, "Original");
-        return new ProjectSnapshot(1,
+        return new ProjectSnapshot(ProjectSnapshot.CurrentFormatVersion,
             new SnapshotProject(projectId, "Project", "Active", Time, Time, null),
             [new SnapshotTracker(trackerId, projectId, "Tracker", "Active",
-                Time, Time, null, null, [entity], [], [], null)]);
+                Time, Time, null, null, [entity], [], [], null)], []);
     }
 
     private static SnapshotEntity Entity(Guid id, Guid trackerId, string name) =>

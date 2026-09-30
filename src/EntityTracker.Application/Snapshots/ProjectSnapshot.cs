@@ -3,10 +3,14 @@ namespace EntityTracker.Application.Snapshots;
 public sealed record ProjectSnapshot(
     int FormatVersion,
     SnapshotProject Project,
-    IReadOnlyList<SnapshotTracker> Trackers)
+    IReadOnlyList<SnapshotTracker> Trackers,
+    IReadOnlyList<SnapshotDeveloper>? Developers = null)
 {
-    public const int CurrentFormatVersion = 1;
+    public const int CurrentFormatVersion = 2;
 }
+
+public sealed record SnapshotDeveloper(
+    Guid Id, Guid ProjectId, string Initials, string DisplayName, bool IsRetired);
 
 public sealed record SnapshotProject(
     Guid Id, string Name, string LifecycleState,

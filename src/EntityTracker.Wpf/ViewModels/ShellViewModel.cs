@@ -21,6 +21,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly IProjectRepository _projectRepository;
     private readonly ITrackerRepository _trackerRepository;
+    private readonly ProjectDeveloperService? _developerService;
     private readonly DashboardViewModelFactory _dashboardFactory;
     private readonly ProgressHistoryInitializer _historyInitializer;
     private readonly EntityTrackerSettingsStore _settingsStore;
@@ -42,6 +43,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private PortfolioDashboard? _portfolio;
     private ProjectDashboard? _projectDashboard;
     private ProjectDashboardViewModel? _projectReporting;
+    private ProjectDevelopersViewModel? _developers;
     private IReadOnlyList<ProjectSyncLink> _pendingProjectDeletions = [];
     private bool _isBusy;
     private string _busyMessage = string.Empty;
@@ -64,10 +66,12 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         WpfProjectUnsavedEditsGate? syncEditGate = null,
         NotificationCenter? notifications = null,
         AutoSyncSettingsViewModel? autoSyncSettings = null,
-        ProjectAutoSyncService? autoSync = null)
+        ProjectAutoSyncService? autoSync = null,
+        ProjectDeveloperService? developerService = null)
     {
         _projectRepository = projectRepository;
         _trackerRepository = trackerRepository;
+        _developerService = developerService;
         _dashboardFactory = dashboardFactory;
         _historyInitializer = historyInitializer;
         _settingsStore = settingsStore;
@@ -96,6 +100,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         [
             new(ShellDestination.Portfolio, string.Empty, "Portfolio", false, false),
             new(ShellDestination.ProjectDashboard, string.Empty, "Project dashboard", true, false),
+            new(ShellDestination.Developers, string.Empty, "Developers", true, false),
             new(ShellDestination.Overview, "Tracker", "Overview", true, true),
             new(ShellDestination.Archived, "Tracker", "Archived", true, true),
             new(ShellDestination.Reports, "Tracker", "Reports", true, true),
@@ -137,6 +142,12 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     {
         get => _projectReporting;
         private set => SetField(ref _projectReporting, value);
+    }
+
+    public ProjectDevelopersViewModel? Developers
+    {
+        get => _developers;
+        private set => SetField(ref _developers, value);
     }
 
     public PortfolioDashboard? Portfolio
@@ -217,6 +228,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             {
                 OnPropertyChanged(nameof(IsPortfolio));
                 OnPropertyChanged(nameof(IsProjectDashboard));
+                OnPropertyChanged(nameof(IsDevelopers));
                 OnPropertyChanged(nameof(IsOverview));
                 OnPropertyChanged(nameof(IsArchived));
                 OnPropertyChanged(nameof(IsReports));
@@ -278,6 +290,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     public bool IsPortfolio => SelectedDestination == ShellDestination.Portfolio;
     public bool IsProjectDashboard => SelectedDestination == ShellDestination.ProjectDashboard;
+    public bool IsDevelopers => SelectedDestination == ShellDestination.Developers;
     public bool IsOverview => SelectedDestination == ShellDestination.Overview;
     public bool IsArchived => SelectedDestination == ShellDestination.Archived;
     public bool IsReports => SelectedDestination == ShellDestination.Reports;
@@ -381,11 +394,15 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         }
 
         CurrentWorkspace?.PrepareForDeactivation();
+        if (SelectedDestination == ShellDestination.Developers)
+            Developers?.CloseRetired();
         SetDestination(destination);
         if (destination is ShellDestination.Portfolio or ShellDestination.ProjectDashboard)
         {
             await RefreshDashboardsAsync(cancellationToken);
         }
+        if (destination == ShellDestination.Developers && Developers is not null)
+            await Developers.RefreshAsync(cancellationToken);
 
         return true;
     }
@@ -513,6 +530,14 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     private bool ConfirmLeavingDirtyWorkspace()
     {
+        if (SelectedDestination == ShellDestination.Developers &&
+            (Developers?.HasUnsavedForm == true || Developers?.IsRetirementOpen == true))
+        {
+            if (!_discardConfirmation.ConfirmDiscard("The developer form has unfinished changes."))
+                return false;
+            Developers.Cancel();
+            Developers.CancelRetirement();
+        }
         if (CurrentWorkspace?.HasUnsavedWork != true)
         {
             return true;
@@ -529,7 +554,10 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     }
 
     private bool WouldLeaveDirtyFlow(ShellDestination destination) =>
-        CurrentWorkspace?.HasUnsavedWork == true && destination != SelectedDestination;
+        destination != SelectedDestination &&
+        (CurrentWorkspace?.HasUnsavedWork == true ||
+         SelectedDestination == ShellDestination.Developers &&
+         (Developers?.HasUnsavedForm == true || Developers?.IsRetirementOpen == true));
 
     private async Task<bool> ApplyContextAsync(
         Project? project,
@@ -541,6 +569,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         Project? previousProject = SelectedProject;
         Tracker? previousTracker = SelectedTracker;
         MainWindowViewModel? previousWorkspace = CurrentWorkspace;
+        ProjectDevelopersViewModel? previousDevelopers = Developers;
         ShellDestination previousDestination = SelectedDestination;
         Tracker[] previousTrackers = Trackers.ToArray();
         IsBusy = true;
@@ -562,6 +591,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                     "The selected tracker is not active in the selected project.");
             }
             SelectedProject = project;
+            Developers = project is null || _developerService is null ? null :
+                new ProjectDevelopersViewModel(project.Id, _developerService);
+            if (Developers is not null) await Developers.RefreshAsync(cancellationToken);
             Replace(Trackers, availableTrackers);
             SelectedTracker = selectedTracker;
 
@@ -618,6 +650,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             SelectedProject = previousProject;
             SelectedTracker = previousTracker;
             CurrentWorkspace = previousWorkspace;
+            Developers = previousDevelopers;
             Replace(Trackers, previousTrackers);
             SetDestination(previousDestination);
             _logger.LogError(exception, "Application context could not be changed.");
