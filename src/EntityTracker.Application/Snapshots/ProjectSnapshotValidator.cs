@@ -152,7 +152,8 @@ public static class ProjectSnapshotValidator
                     progress.Order < 0 ||
                     !allProgressIds.Add(progress.SnapshotId) ||
                     progress.ReadyCount < 0 || progress.BlockedCount < 0 || progress.InProgressCount < 0 ||
-                    progress.ReworkNeededCount < 0 || progress.DevelopmentCompletedCount < 0 ||
+                    progress.ReworkNeededCount < 0 || progress.ManuallyBlockedCount < 0 ||
+                    progress.ReworkingCount < 0 || progress.DevelopmentCompletedCount < 0 ||
                     progress.ReconciledCount < 0)
                     throw new InvalidDataException("A progress snapshot is invalid.");
                 Utc(progress.RecordedAtUtc);

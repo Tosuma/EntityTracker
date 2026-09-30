@@ -69,6 +69,7 @@
     <SolidColorBrush x:Key="Brush.Status.NotStarted" Color="{StaticResource Color.Brand.Green40}" />
     <SolidColorBrush x:Key="Brush.Status.InProgress" Color="{StaticResource Color.Brand.Green80}" />
     <SolidColorBrush x:Key="Brush.Status.ReworkNeeded" Color="{StaticResource Color.Brand.Coral}" />
+    <SolidColorBrush x:Key="Brush.Status.Reworking" Color="{StaticResource Color.Brand.Green80}" />
     <SolidColorBrush x:Key="Brush.Status.DevelopmentCompleted" Color="{StaticResource Color.Brand.Green60}" />
     <SolidColorBrush x:Key="Brush.Status.Reconciled" Color="{StaticResource Color.Brand.Green100}" />
     <SolidColorBrush x:Key="Brush.Status.Ready" Color="{StaticResource Color.Brand.Green80}" />

@@ -6,5 +6,7 @@ public enum DevelopmentStatus
     InProgress,
     ReworkNeeded,
     DevelopmentCompleted,
-    Reconciled
+    Reconciled,
+    Blocked,
+    Reworking
 }

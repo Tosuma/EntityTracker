@@ -150,6 +150,9 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
 
     public bool IsBlockedSelected => SelectedCategory == ProjectComparisonCategory.Blocked;
 
+    public bool IsWaitingOnDependenciesSelected =>
+        SelectedCategory == ProjectComparisonCategory.WaitingOnDependencies;
+
     public bool IsReworkSelected => SelectedCategory == ProjectComparisonCategory.ReworkNeeded;
 
     public bool IsUnresolvedSelected => SelectedCategory == ProjectComparisonCategory.Unresolved;
@@ -159,6 +162,9 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
     public int DivergentCount => Comparison?.CategoryCounts.Divergent ?? 0;
 
     public int BlockedCount => Comparison?.CategoryCounts.Blocked ?? 0;
+
+    public int WaitingOnDependenciesCount =>
+        Comparison?.CategoryCounts.WaitingOnDependencies ?? 0;
 
     public int ReworkCount => Comparison?.CategoryCounts.ReworkNeeded ?? 0;
 
@@ -280,6 +286,7 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
         ProjectComparisonCategory.Missing => MissingCount,
         ProjectComparisonCategory.Divergent => DivergentCount,
         ProjectComparisonCategory.Blocked => BlockedCount,
+        ProjectComparisonCategory.WaitingOnDependencies => WaitingOnDependenciesCount,
         ProjectComparisonCategory.ReworkNeeded => ReworkCount,
         ProjectComparisonCategory.Unresolved => UnresolvedCount,
         _ => 0
@@ -292,11 +299,13 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(IsMissingSelected));
         OnPropertyChanged(nameof(IsDivergentSelected));
         OnPropertyChanged(nameof(IsBlockedSelected));
+        OnPropertyChanged(nameof(IsWaitingOnDependenciesSelected));
         OnPropertyChanged(nameof(IsReworkSelected));
         OnPropertyChanged(nameof(IsUnresolvedSelected));
         OnPropertyChanged(nameof(MissingCount));
         OnPropertyChanged(nameof(DivergentCount));
         OnPropertyChanged(nameof(BlockedCount));
+        OnPropertyChanged(nameof(WaitingOnDependenciesCount));
         OnPropertyChanged(nameof(ReworkCount));
         OnPropertyChanged(nameof(UnresolvedCount));
         OnPropertyChanged(nameof(ComparisonSummary));
@@ -311,6 +320,7 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
         ProjectComparisonCategory.Missing => "Missing",
         ProjectComparisonCategory.Divergent => "Divergent",
         ProjectComparisonCategory.Blocked => "Blocked",
+        ProjectComparisonCategory.WaitingOnDependencies => "Waiting on dependencies",
         ProjectComparisonCategory.ReworkNeeded => "Rework",
         ProjectComparisonCategory.Unresolved => "Unresolved",
         _ => "Actionable"

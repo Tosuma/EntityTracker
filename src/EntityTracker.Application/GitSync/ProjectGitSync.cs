@@ -277,7 +277,8 @@ public sealed partial class ProjectGitSyncService(
             tracker.ProgressHistory.Count <= 1 &&
             tracker.ProgressHistory.All(progress => progress.ReadyCount == 0 &&
                 progress.BlockedCount == 0 && progress.InProgressCount == 0 &&
-                progress.ReworkNeededCount == 0 && progress.DevelopmentCompletedCount == 0 &&
+                progress.ReworkNeededCount == 0 && progress.ManuallyBlockedCount == 0 &&
+                progress.ReworkingCount == 0 && progress.DevelopmentCompletedCount == 0 &&
                 progress.ReconciledCount == 0);
     }
 

@@ -182,9 +182,11 @@ different columns work together. Status summary cards remain useful one-click sh
 entity names and, when needed, dependency names from the overview; the same search opens with
 <kbd>Ctrl</kbd>+<kbd>F</kbd>.
 
-Development status keeps the user-set detail. Work status groups it into Ready or Blocked before
-work starts, In progress for development or rework, Completed after development, and Reconciled
-after reconciliation. The Blockers column still shows unmet dependencies during active work.
+Development status keeps the user-set detail: **Rework needed** means work is pending,
+**Reworking** means it is active, and **Blocked** manually pauses an entity. Work status shows
+Ready for Not started or Rework needed, In progress for development or Reworking, and
+Waiting on dependencies for unstarted entities with unmet dependencies. A manually Blocked
+entity shows Blocked. The Blockers column shows unmet dependencies during active work.
 
 ![EntityTracker Work status column filter with staged choices and typed sorting](images/light/overview-filter-flyout.png)
 

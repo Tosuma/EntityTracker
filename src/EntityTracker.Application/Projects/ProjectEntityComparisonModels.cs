@@ -17,7 +17,8 @@ public enum ProjectComparisonCategory
     Divergent = 2,
     Blocked = 4,
     ReworkNeeded = 8,
-    Unresolved = 16
+    Unresolved = 16,
+    WaitingOnDependencies = 32
 }
 
 public sealed record ProjectComparisonCategoryCounts(
@@ -25,7 +26,8 @@ public sealed record ProjectComparisonCategoryCounts(
     int Divergent,
     int Blocked,
     int ReworkNeeded,
-    int Unresolved)
+    int Unresolved,
+    int WaitingOnDependencies = 0)
 {
     public static ProjectComparisonCategoryCounts Empty { get; } = new(0, 0, 0, 0, 0);
 }

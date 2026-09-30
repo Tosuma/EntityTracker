@@ -32,7 +32,7 @@ public sealed class EntityTableViewModelTests
             table.Items.Select(row => row.SourceName));
 
         ApplyFilter(table.ResponsibleDeveloperFilter, "Alice");
-        ApplyFilter(table.WorkStatusFilter!, "In progress");
+        ApplyFilter(table.WorkStatusFilter!, "Ready");
 
         Assert.Equal("Billing Alice", Assert.Single(table.Items).SourceName);
     }
@@ -174,7 +174,7 @@ public sealed class EntityTableViewModelTests
 
         table.WorkStatusFilter!.SortDescendingCommand.Execute(null);
         Assert.Equal(
-            ["Reconciled", "Completed", "Rework", "In progress", "Not started"],
+            ["Reconciled", "Completed", "In progress", "Not started", "Rework"],
             table.Items.Select(row => row.SourceName));
         Assert.False(table.StatusFilter.IsSorted);
         Assert.True(table.WorkStatusFilter.IsSortDescending);
@@ -188,7 +188,7 @@ public sealed class EntityTableViewModelTests
     }
 
     [Fact]
-    public void WorkStatusFilter_GroupsReworkAndInProgressWithoutChangingDevelopmentStatusFilter()
+    public void WorkStatusFilter_ShowsPendingReworkAsReady()
     {
         EntityTableViewModel table = EntityTableViewModel.CreateActive();
         table.ReplaceSourceItems(
@@ -202,13 +202,15 @@ public sealed class EntityTableViewModelTests
         ]);
 
         table.WorkStatusFilter!.OpenCommand.Execute(null);
-        Assert.Equal(["In progress", "Completed"],
+        Assert.Equal(["Ready", "In progress", "Completed"],
             table.WorkStatusFilter.Options.Select(option => option.DisplayName));
         table.WorkStatusFilter.IsOpen = false;
 
         ApplyFilter(table.WorkStatusFilter, "In progress");
-        Assert.Equal(["Started", "Rework"], table.Items.Select(row => row.SourceName));
+        Assert.Equal(["Started"], table.Items.Select(row => row.SourceName));
 
+        table.WorkStatusFilter.ClearFilterCommand.Execute(null);
+        ApplyFilter(table.WorkStatusFilter, "Ready");
         ApplyFilter(table.StatusFilter, "Rework needed");
         Assert.Equal("Rework", Assert.Single(table.Items).SourceName);
     }

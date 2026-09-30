@@ -673,7 +673,8 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
     {
         using SqliteCommand command = CreateCommand(connection, transaction, """
             SELECT ready_count, blocked_count, in_progress_count, rework_needed_count,
-                   development_completed_count, reconciled_count
+                   development_completed_count, reconciled_count,
+                   manually_blocked_count, reworking_count
             FROM progress_snapshots
             WHERE tracker_id = $trackerId
             ORDER BY id DESC
@@ -690,7 +691,9 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                 reader.GetInt32(2) == snapshot.InProgressCount &&
                 reader.GetInt32(3) == snapshot.ReworkNeededCount &&
                 reader.GetInt32(4) == snapshot.DevelopmentCompletedCount &&
-                reader.GetInt32(5) == snapshot.ReconciledCount;
+                reader.GetInt32(5) == snapshot.ReconciledCount &&
+                reader.GetInt32(6) == snapshot.ManuallyBlockedCount &&
+                reader.GetInt32(7) == snapshot.ReworkingCount;
         }
 
         if (!unchanged)
@@ -717,12 +720,13 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
             INSERT INTO progress_snapshots
             (
                 tracker_id, recorded_at_utc, ready_count, blocked_count, in_progress_count,
-                rework_needed_count, development_completed_count, reconciled_count, snapshot_id
+                rework_needed_count, development_completed_count, reconciled_count, snapshot_id,
+                manually_blocked_count, reworking_count
             )
             VALUES
             (
                 $trackerId, $timestamp, $ready, $blocked, $inProgress, $rework,
-                $developmentCompleted, $reconciled, $snapshotId
+                $developmentCompleted, $reconciled, $snapshotId, $manualBlocked, $reworking
             );
             """);
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
@@ -735,6 +739,8 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
             "$developmentCompleted",
             snapshot.DevelopmentCompletedCount);
         command.Parameters.AddWithValue("$reconciled", snapshot.ReconciledCount);
+        command.Parameters.AddWithValue("$manualBlocked", snapshot.ManuallyBlockedCount);
+        command.Parameters.AddWithValue("$reworking", snapshot.ReworkingCount);
         command.Parameters.AddWithValue("$snapshotId", Guid.NewGuid().ToString("D"));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

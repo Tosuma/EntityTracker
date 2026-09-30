@@ -12,21 +12,24 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
         new Dictionary<DevelopmentStatus, int>
         {
             [DevelopmentStatus.NotStarted] = 0,
-            [DevelopmentStatus.InProgress] = 1,
-            [DevelopmentStatus.ReworkNeeded] = 2,
-            [DevelopmentStatus.DevelopmentCompleted] = 3,
-            [DevelopmentStatus.Reconciled] = 4
+            [DevelopmentStatus.Blocked] = 1,
+            [DevelopmentStatus.InProgress] = 2,
+            [DevelopmentStatus.ReworkNeeded] = 3,
+            [DevelopmentStatus.Reworking] = 4,
+            [DevelopmentStatus.DevelopmentCompleted] = 5,
+            [DevelopmentStatus.Reconciled] = 6
         };
 
     private static readonly IReadOnlyDictionary<WorkStatusDisplay, int> WorkStatusOrder =
         new Dictionary<WorkStatusDisplay, int>
         {
             [WorkStatusDisplay.Ready] = 0,
-            [WorkStatusDisplay.Blocked] = 1,
-            [WorkStatusDisplay.InProgress] = 2,
-            [WorkStatusDisplay.Completed] = 3,
-            [WorkStatusDisplay.Reconciled] = 4,
-            [WorkStatusDisplay.Archived] = 5
+            [WorkStatusDisplay.WaitingOnDependencies] = 1,
+            [WorkStatusDisplay.Blocked] = 2,
+            [WorkStatusDisplay.InProgress] = 3,
+            [WorkStatusDisplay.Completed] = 4,
+            [WorkStatusDisplay.Reconciled] = 5,
+            [WorkStatusDisplay.Archived] = 6
         };
 
     private readonly IReadOnlyList<OverviewColumnFilterState> _filters;
@@ -441,6 +444,8 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
         DevelopmentStatus.NotStarted => "Not started",
         DevelopmentStatus.InProgress => "In progress",
         DevelopmentStatus.ReworkNeeded => "Rework needed",
+        DevelopmentStatus.Reworking => "Reworking",
+        DevelopmentStatus.Blocked => "Blocked",
         DevelopmentStatus.DevelopmentCompleted => "Dev. completed",
         DevelopmentStatus.Reconciled => "Reconciled",
         _ => status.ToString()

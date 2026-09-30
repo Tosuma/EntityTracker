@@ -128,7 +128,8 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                     .Select((p, order) => new SnapshotProgress(p.Guid("snapshot_id"), p.Time("recorded_at_utc"),
                         p.Int("ready_count"), p.Int("blocked_count"), p.Int("in_progress_count"),
                         p.Int("rework_needed_count"), p.Int("development_completed_count"),
-                        p.Int("reconciled_count"), order)).ToArray(),
+                        p.Int("reconciled_count"), order, p.Int("manually_blocked_count"),
+                        p.Int("reworking_count"))).ToArray(),
                 summary is null ? null : new SnapshotImportSummary(summary.Time("applied_at_utc"),
                     summary.Str("source_file_name"), summary.Str("import_mode"),
                     summary.Int("new_entity_count"), summary.Int("changed_entity_count"),
@@ -267,10 +268,11 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                  entry.PreviousEventId is { } prior ? Id(prior) : null], cancellationToken);
         foreach (SnapshotProgress progress in tracker.ProgressHistory.OrderBy(p => p.Order))
             await InsertAsync(connection, transaction, "progress_snapshots",
-                ["tracker_id", "recorded_at_utc", "ready_count", "blocked_count", "in_progress_count", "rework_needed_count", "development_completed_count", "reconciled_count", "snapshot_id"],
+                ["tracker_id", "recorded_at_utc", "ready_count", "blocked_count", "in_progress_count", "rework_needed_count", "development_completed_count", "reconciled_count", "snapshot_id", "manually_blocked_count", "reworking_count"],
                 [Id(tracker.Id), Time(progress.RecordedAtUtc), progress.ReadyCount,
                  progress.BlockedCount, progress.InProgressCount, progress.ReworkNeededCount,
-                 progress.DevelopmentCompletedCount, progress.ReconciledCount, Id(progress.SnapshotId)], cancellationToken);
+                 progress.DevelopmentCompletedCount, progress.ReconciledCount, Id(progress.SnapshotId),
+                 progress.ManuallyBlockedCount, progress.ReworkingCount], cancellationToken);
         if (tracker.ImportSummary is { } summary)
             await InsertAsync(connection, transaction, "schema_import_summary",
                 ["tracker_id", "applied_at_utc", "source_file_name", "import_mode", "new_entity_count", "changed_entity_count", "archived_entity_count", "unchanged_entity_count", "unresolved_entity_count"],
@@ -323,7 +325,8 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
               AND (SELECT COUNT(*) FROM progress_snapshots
                    WHERE ready_count <> 0 OR blocked_count <> 0 OR in_progress_count <> 0
                       OR rework_needed_count <> 0 OR development_completed_count <> 0
-                      OR reconciled_count <> 0) = 0;
+                      OR reconciled_count <> 0 OR manually_blocked_count <> 0
+                      OR reworking_count <> 0) = 0;
             """);
         command.Parameters.AddWithValue("$projectId", incomingProjectId);
         string? placeholderId = (string?)await command.ExecuteScalarAsync(cancellationToken);

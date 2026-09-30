@@ -27,8 +27,10 @@ public sealed class ProgressDashboardBuilder
         ProgressStatusCount[] currentCounts =
         [
             new(ProgressStatusCategory.NotStarted, current.NotStartedCount),
+            new(ProgressStatusCategory.Blocked, current.ManuallyBlockedCount),
             new(ProgressStatusCategory.InProgress, current.InProgressCount),
             new(ProgressStatusCategory.ReworkNeeded, current.ReworkNeededCount),
+            new(ProgressStatusCategory.Reworking, current.ReworkingCount),
             new(ProgressStatusCategory.DevelopmentCompleted, current.DevelopmentCompletedCount),
             new(ProgressStatusCategory.Reconciled, current.ReconciledCount)
         ];

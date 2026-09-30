@@ -113,6 +113,34 @@ public sealed class WorkflowReadinessEvaluatorTests
                 lifecycleState: EntityLifecycleState.Archived)));
     }
 
+    [Fact]
+    public void ManualBlockStopsDependentsWhileBothReworkStatesSatisfyThem()
+    {
+        TrackedEntity owner = Entity(10, "Owner");
+        TrackedEntity manualBlock = Entity(11, "Manual block", DevelopmentStatus.Blocked);
+        TrackedEntity pendingRework = Entity(12, "Pending rework", DevelopmentStatus.ReworkNeeded);
+        TrackedEntity activeRework = Entity(13, "Active rework", DevelopmentStatus.Reworking);
+        TrackedEntity[] entities = [owner, manualBlock, pendingRework, activeRework];
+        EffectiveDependencyState effective = new EffectiveDependencyResolver().Resolve(
+            entities,
+            [Dependency(owner, manualBlock, ImportedDependencyKind.Mandatory),
+             Dependency(owner, pendingRework, ImportedDependencyKind.Mandatory),
+             Dependency(owner, activeRework, ImportedDependencyKind.Mandatory)],
+            [], []);
+
+        WorkflowReadinessEvaluator evaluator = new();
+        IReadOnlyDictionary<EntityId, EntityReadiness> readiness = evaluator.Evaluate(entities, effective);
+
+        Assert.Equal(["Manual block"],
+            readiness[owner.Id].Blockers.Select(static blocker => blocker.SourceName));
+        Assert.Equal(EntityWorkflowState.ManuallyBlocked,
+            evaluator.Classify(manualBlock, readiness[manualBlock.Id]));
+        Assert.Equal(EntityWorkflowState.ReworkNeeded,
+            evaluator.Classify(pendingRework, readiness[pendingRework.Id]));
+        Assert.Equal(EntityWorkflowState.Reworking,
+            evaluator.Classify(activeRework, readiness[activeRework.Id]));
+    }
+
     private static TrackedEntity Entity(
         int id,
         string name,

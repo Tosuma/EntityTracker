@@ -88,6 +88,8 @@ internal static class Program
         DevelopmentStatus.ReworkNeeded => "Rework needed",
         DevelopmentStatus.DevelopmentCompleted => "Dev. completed",
         DevelopmentStatus.Reconciled => "Reconciled",
+        DevelopmentStatus.Blocked => "Blocked",
+        DevelopmentStatus.Reworking => "Reworking",
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
     };
 

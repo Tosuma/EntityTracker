@@ -32,6 +32,8 @@ public sealed class ProgressSnapshotCalculator
         int rework = 0;
         int completed = 0;
         int reconciled = 0;
+        int manuallyBlocked = 0;
+        int reworking = 0;
 
         foreach (TrackedEntity entity in active)
         {
@@ -49,6 +51,12 @@ public sealed class ProgressSnapshotCalculator
                 case EntityWorkflowState.ReworkNeeded:
                     rework++;
                     break;
+                case EntityWorkflowState.Reworking:
+                    reworking++;
+                    break;
+                case EntityWorkflowState.ManuallyBlocked:
+                    manuallyBlocked++;
+                    break;
                 case EntityWorkflowState.DevelopmentCompleted:
                     completed++;
                     break;
@@ -62,6 +70,7 @@ public sealed class ProgressSnapshotCalculator
             }
         }
 
-        return new ProgressSnapshotState(ready, blocked, inProgress, rework, completed, reconciled);
+        return new ProgressSnapshotState(ready, blocked, inProgress, rework, completed,
+            reconciled, manuallyBlocked, reworking);
     }
 }

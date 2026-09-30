@@ -187,6 +187,14 @@ internal static class SqliteSnapshotMigration
             END;
             """, cancellationToken);
 
+        await CreateRevisionTriggersAsync(connection, transaction, cancellationToken);
+    }
+
+    internal static async Task CreateRevisionTriggersAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
         foreach ((string table, string owner) in new[]
         {
             ("trackers", "tracker"),

@@ -6,5 +6,7 @@ public enum ProgressStatusCategory
     InProgress,
     ReworkNeeded,
     DevelopmentCompleted,
-    Reconciled
+    Reconciled,
+    Blocked,
+    Reworking
 }

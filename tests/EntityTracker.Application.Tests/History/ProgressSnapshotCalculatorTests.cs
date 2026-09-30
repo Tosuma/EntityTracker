@@ -46,6 +46,31 @@ public sealed class ProgressSnapshotCalculatorTests
         Assert.Equal(6, result.TotalActiveCount);
     }
 
+    [Fact]
+    public void Calculate_SeparatesManualBlockAndReworkingFromDependencyWaiting()
+    {
+        TrackedEntity waiting = Entity(1, "Waiting");
+        TrackedEntity manualBlock = Entity(2, "Manual block", DevelopmentStatus.Blocked);
+        TrackedEntity reworking = Entity(3, "Reworking", DevelopmentStatus.Reworking);
+        TrackedEntity pendingRework = Entity(4, "Pending rework", DevelopmentStatus.ReworkNeeded);
+        TrackedEntity[] entities = [waiting, manualBlock, reworking, pendingRework];
+        EffectiveDependencyState effective = new EffectiveDependencyResolver().Resolve(
+            entities, [],
+            [new PersistedUnresolvedDependency(
+                new UnresolvedDependency(waiting.Id, "Missing"),
+                ImportedDependencyKind.Mandatory)], []);
+
+        ProgressSnapshotState result = new ProgressSnapshotCalculator().Calculate(entities, effective);
+
+        Assert.Equal(1, result.WaitingOnDependenciesCount);
+        Assert.Equal(1, result.ManuallyBlockedCount);
+        Assert.Equal(1, result.ReworkingCount);
+        Assert.Equal(1, result.ReworkNeededCount);
+        Assert.Equal(2, result.ImplementedCount);
+        Assert.Equal(4, result.TotalActiveCount);
+        Assert.Equal(1, result.NotStartedCount);
+    }
+
     private static TrackedEntity Entity(
         int id,
         string name,

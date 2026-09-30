@@ -5,7 +5,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    internal const int CurrentSchemaVersion = 15;
+    internal const int CurrentSchemaVersion = 16;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -530,7 +530,7 @@ public sealed class SqliteDatabase
             return;
         }
 
-        bool requiresForeignKeyRebuild = schemaVersion < 13;
+        bool requiresForeignKeyRebuild = schemaVersion < 16;
         bool rebuildWorkflowTrackedEntities = schemaVersion is > 0 and < 7;
         if (requiresForeignKeyRebuild)
         {
@@ -737,6 +737,100 @@ public sealed class SqliteDatabase
                         FOREIGN KEY (tracker_id) REFERENCES trackers (id) ON DELETE CASCADE
                     );
                     """, cancellationToken);
+            }
+
+            if (schemaVersion < 16)
+            {
+                foreach (string table in new[] { "trackers", "tracked_entities",
+                             "schema_dependencies", "unresolved_schema_dependencies",
+                             "manual_dependency_overrides", "entity_status_history",
+                             "progress_snapshots", "schema_import_summary" })
+                foreach (string operation in new[] { "insert", "update", "delete" })
+                    await ExecuteAsync(connection, transaction,
+                        $"DROP TRIGGER IF EXISTS rev_{table}_{operation};", cancellationToken);
+                await ExecuteAsync(connection, transaction, """
+                    CREATE TABLE tracked_entities_v16
+                    (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        tracker_id TEXT NOT NULL,
+                        source_key TEXT NOT NULL,
+                        source_name TEXT NOT NULL,
+                        development_status TEXT NOT NULL CHECK (development_status IN
+                            ('NotStarted', 'InProgress', 'ReworkNeeded', 'DevelopmentCompleted',
+                             'Reconciled', 'Blocked', 'Reworking')),
+                        notes TEXT NOT NULL,
+                        created_at_utc TEXT NOT NULL,
+                        schema_updated_at_utc TEXT NOT NULL,
+                        progress_updated_at_utc TEXT NOT NULL,
+                        lifecycle_state TEXT NOT NULL CHECK (lifecycle_state IN ('Active', 'Archived')),
+                        provenance TEXT NOT NULL CHECK (provenance IN
+                            ('Imported', 'ManualOnly', 'ManualAndImported', 'Copied', 'CopiedAndImported')),
+                        requested_priority INTEGER NULL CHECK
+                            (requested_priority IS NULL OR requested_priority BETWEEN 1 AND 5),
+                        responsible_developer TEXT NOT NULL,
+                        group_name TEXT NOT NULL,
+                        UNIQUE (tracker_id, source_key),
+                        FOREIGN KEY (tracker_id) REFERENCES trackers (id) ON DELETE RESTRICT
+                    );
+                    INSERT INTO tracked_entities_v16
+                    (id, tracker_id, source_key, source_name, development_status, notes,
+                     created_at_utc, schema_updated_at_utc, progress_updated_at_utc,
+                     lifecycle_state, provenance, requested_priority, responsible_developer, group_name)
+                    SELECT id, tracker_id, source_key, source_name, development_status, notes,
+                           created_at_utc, schema_updated_at_utc, progress_updated_at_utc,
+                           lifecycle_state, provenance, requested_priority,
+                           COALESCE(responsible_developer, ''), COALESCE(group_name, '')
+                    FROM tracked_entities;
+                    DROP TABLE tracked_entities;
+                    ALTER TABLE tracked_entities_v16 RENAME TO tracked_entities;
+                    CREATE INDEX ix_tracked_entities_tracker_lifecycle
+                        ON tracked_entities (tracker_id, lifecycle_state, source_key);
+
+                    CREATE TABLE entity_status_history_v16
+                    (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        entity_id TEXT NOT NULL,
+                        previous_status TEXT NULL CHECK (previous_status IS NULL OR previous_status IN
+                            ('NotStarted', 'InProgress', 'ReworkNeeded', 'DevelopmentCompleted',
+                             'Reconciled', 'Blocked', 'Reworking')),
+                        new_status TEXT NOT NULL CHECK (new_status IN
+                            ('NotStarted', 'InProgress', 'ReworkNeeded', 'DevelopmentCompleted',
+                             'Reconciled', 'Blocked', 'Reworking')),
+                        entry_kind TEXT NOT NULL CHECK (entry_kind IN ('Baseline', 'Created', 'Transition')),
+                        occurred_at_utc TEXT NOT NULL,
+                        event_id TEXT NOT NULL,
+                        previous_event_id TEXT NULL,
+                        CHECK ((entry_kind = 'Transition' AND previous_status IS NOT NULL) OR
+                               (entry_kind IN ('Baseline', 'Created') AND previous_status IS NULL)),
+                        FOREIGN KEY (entity_id) REFERENCES tracked_entities (id) ON DELETE RESTRICT
+                    );
+                    INSERT INTO entity_status_history_v16 SELECT * FROM entity_status_history;
+                    DROP TABLE entity_status_history;
+                    ALTER TABLE entity_status_history_v16 RENAME TO entity_status_history;
+                    CREATE INDEX ix_entity_status_history_entity_time
+                        ON entity_status_history (entity_id, occurred_at_utc, id);
+                    CREATE INDEX ix_entity_status_history_time
+                        ON entity_status_history (occurred_at_utc, id);
+                    CREATE UNIQUE INDEX ux_entity_status_history_event_id
+                        ON entity_status_history (event_id);
+                    CREATE TRIGGER require_status_event_id BEFORE INSERT ON entity_status_history
+                    WHEN NEW.event_id IS NULL OR length(NEW.event_id) <> 36
+                    BEGIN SELECT RAISE(ABORT, 'A status event ID is required.'); END;
+
+                    """, cancellationToken);
+                if (!await ColumnExistsAsync(connection, transaction, "progress_snapshots",
+                        "manually_blocked_count", cancellationToken))
+                    await ExecuteAsync(connection, transaction,
+                        "ALTER TABLE progress_snapshots ADD COLUMN manually_blocked_count INTEGER NOT NULL DEFAULT 0 CHECK (manually_blocked_count >= 0);",
+                        cancellationToken);
+                if (!await ColumnExistsAsync(connection, transaction, "progress_snapshots",
+                        "reworking_count", cancellationToken))
+                    await ExecuteAsync(connection, transaction,
+                        "ALTER TABLE progress_snapshots ADD COLUMN reworking_count INTEGER NOT NULL DEFAULT 0 CHECK (reworking_count >= 0);",
+                        cancellationToken);
+                await SqliteSnapshotMigration.CreateRevisionTriggersAsync(
+                    connection, transaction, cancellationToken);
+                await EnsureNoForeignKeyViolationsAsync(connection, transaction, cancellationToken);
             }
 
             await ExecuteAsync(

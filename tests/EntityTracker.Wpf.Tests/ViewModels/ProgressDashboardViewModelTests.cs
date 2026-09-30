@@ -27,7 +27,7 @@ public sealed class ProgressDashboardViewModelTests
 
         Assert.False(viewModel.HasError);
         Assert.True(viewModel.HasHistoricalData);
-        Assert.Equal(5, viewModel.CurrentStatusSeries.Length);
+        Assert.Equal(7, viewModel.CurrentStatusSeries.Length);
         Assert.Single(viewModel.ImplementedSeries);
         Assert.Equal(2, viewModel.ReadinessSeries.Length);
         Assert.Equal(2, viewModel.WeeklySeries.Length);
