@@ -418,6 +418,31 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task EntityDetails_EditActionOpensSelectedEntityInEditor()
+    {
+        TrackedEntity entity = Entity(1, "Customer");
+        MainWindowViewModel viewModel = CreateViewModel(
+            [entity],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+        await viewModel.InitializeAsync();
+        EntityOverviewRow row = Assert.Single(viewModel.OverviewItems);
+        viewModel.OpenEntityDetailsCommand.Execute(row);
+        EntityDetailsViewModel details = Assert.IsType<EntityDetailsViewModel>(
+            viewModel.SelectedEntityDetails);
+
+        Assert.True(details.CanEdit);
+        Assert.Same(row, details.OverviewRow);
+        viewModel.EditOverviewEntityCommand.Execute(details.OverviewRow);
+
+        await WaitUntilAsync(() => viewModel.Editor.IsOpen);
+        Assert.False(viewModel.IsEntityDetailsOpen);
+        Assert.Equal("Customer", viewModel.Editor.SelectedEntityName);
+    }
+
+    [Fact]
     public async Task EntityDetails_AreReadOnlyPreserveSelectionAndCloseOnProjectionChange()
     {
         TrackedEntity dependency = Entity(1, "Foundation");
@@ -493,6 +518,7 @@ public sealed class MainWindowViewModelTests
         EntityDetailsViewModel details = Assert.IsType<EntityDetailsViewModel>(
             viewModel.SelectedEntityDetails);
         Assert.True(details.IsArchived);
+        Assert.False(details.CanEdit);
         Assert.Equal("4", details.RequestedPriority);
         Assert.Equal("Not applicable while archived", details.EffectivePriority);
         Assert.Equal("Legacy target", Assert.Single(details.Dependencies).Name);

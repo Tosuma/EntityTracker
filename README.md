@@ -216,8 +216,8 @@ deliberately restored from the archived view.
 
 Entity names and each row's **View details** action open a read-only side pane with priorities,
 rank, provenance, assignment, full notes, effective dependencies, blockers, and audit timestamps.
-Opening or closing this pane does not disturb bulk row selection; editing remains in the row action
-menu.
+Use **Edit** in the details header to open the entity editor. Opening or closing the pane does not
+disturb bulk row selection.
 
 The Add Entity and edit workflows use searchable Fluent suggestion controls. Unknown dependency
 names are added only through the explicit **Add as unresolved** action, while archive remains a

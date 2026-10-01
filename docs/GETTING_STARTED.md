@@ -82,8 +82,9 @@ installed app, so close one before opening the other.
 ### Assign developers
 
 Open an entity or create a new one, then search the Project developer picker and select one or
-more available developers. Create new developers from the Project Developers page. Entity details
-show all current assignments and up to three timeline entries; **View full history** opens the
+more available developers. Create new developers from the Project Developers page. Use **Edit** in
+an active entity's details pane to open its editor. Entity details show all current assignments
+and up to three timeline entries; **View full history** opens the
 complete timeline in the details pane, and **Back** returns to the summary. Current assignments
 appear newest first, followed by past assignments ordered by when they ended, newest first.
 Removing a developer ends their current period; assigning them again starts a new one. Retiring a

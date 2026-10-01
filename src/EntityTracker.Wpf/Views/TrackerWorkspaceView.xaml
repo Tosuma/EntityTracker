@@ -2284,16 +2284,24 @@
 
                 <DockPanel Margin="0,0,0,14"
                            Visibility="{Binding IsSummaryOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <Button x:Name="CloseEntityDetailsButton"
-                            DockPanel.Dock="Right"
-                            Width="34"
-                            Height="34"
-                            Padding="0"
-                            AutomationProperties.Name="Close entity details"
-                            Command="{Binding DataContext.CloseEntityDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                            Content="✕"
-                            Style="{StaticResource SecondaryButtonStyle}"
-                            ToolTip="Close details (Esc)" />
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <Button Margin="0,0,8,0"
+                                Content="Edit"
+                                AutomationProperties.Name="{Binding SourceName, StringFormat=Edit entity {0}}"
+                                Command="{Binding DataContext.EditOverviewEntityCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding OverviewRow}"
+                                Style="{StaticResource PrimaryButtonStyle}"
+                                Visibility="{Binding CanEdit, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <Button x:Name="CloseEntityDetailsButton"
+                                Width="34"
+                                Height="34"
+                                Padding="0"
+                                AutomationProperties.Name="Close entity details"
+                                Command="{Binding DataContext.CloseEntityDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                Content="✕"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                ToolTip="Close details (Esc)" />
+                    </StackPanel>
                     <StackPanel>
                         <TextBlock AutomationProperties.HeadingLevel="Level2"
                                    FontSize="20"

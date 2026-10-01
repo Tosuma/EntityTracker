@@ -19,6 +19,7 @@ public sealed class EntityDetailsViewModel : INotifyPropertyChanged
     {
         ArgumentNullException.ThrowIfNull(row);
 
+        OverviewRow = row;
         EntityId = row.EntityId;
         SourceName = row.SourceName;
         Lifecycle = row.LifecycleState == EntityLifecycleState.Archived ? "Archived" : "Active";
@@ -59,11 +60,15 @@ public sealed class EntityDetailsViewModel : INotifyPropertyChanged
 
     public EntityId EntityId { get; }
 
+    public EntityOverviewRow OverviewRow { get; }
+
     public string SourceName { get; }
 
     public string Lifecycle { get; }
 
     public bool IsArchived { get; }
+
+    public bool CanEdit => !IsArchived;
 
     public string Provenance { get; }
 
