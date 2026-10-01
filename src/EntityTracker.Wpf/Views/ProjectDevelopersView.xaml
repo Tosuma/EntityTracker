@@ -82,7 +82,8 @@
                         </Grid>
                     </Border>
                 </Grid>
-                <Border Grid.Column="2" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                <Border Grid.Column="2" Padding="16" VerticalAlignment="Top"
+                        Style="{StaticResource EntityTrackerCardStyle}">
                     <StackPanel>
                         <TextBlock FontSize="18" FontWeight="SemiBold" Text="{Binding Developers.EditorTitle}" />
                         <TextBlock Margin="0,8,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
