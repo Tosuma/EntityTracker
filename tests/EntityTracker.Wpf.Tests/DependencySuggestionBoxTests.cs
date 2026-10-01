@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Domain;
@@ -122,6 +123,55 @@ public sealed class DependencySuggestionBoxTests
             }
             finally { window.Close(); }
         });
+    }
+
+    [Fact]
+    public void SuggestionListScrollsWithinAnItem()
+    {
+        RunOnSta(() =>
+        {
+            DependencySuggestionBox box = new();
+            Window window = new()
+            {
+                Content = box,
+                Width = 400,
+                Height = 200,
+                ShowInTaskbar = false,
+                WindowStyle = WindowStyle.None,
+                Opacity = 0
+            };
+            try
+            {
+                window.Show();
+                ListBox list = Assert.IsType<ListBox>(box.FindName("SuggestionsList"));
+                list.FontSize = 20;
+                box.Suggestions = Enumerable.Range(0, 10)
+                    .Select(index => new ManualDependencySuggestion(EntityId.New(), $"Entity {index}"))
+                    .ToArray();
+                box.IsSuggestionsOpen = true;
+                FlushDispatcher();
+
+                ScrollViewer scroll = Assert.IsType<ScrollViewer>(FindVisualChild<ScrollViewer>(list));
+                ListBoxItem first = Assert.IsType<ListBoxItem>(
+                    list.ItemContainerGenerator.ContainerFromIndex(0));
+                Assert.True(scroll.ScrollableHeight > first.ActualHeight);
+                scroll.LineDown();
+                FlushDispatcher();
+                Assert.InRange(scroll.VerticalOffset, 0.1, first.ActualHeight - 0.1);
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T match) return match;
+            if (FindVisualChild<T>(child) is T descendant) return descendant;
+        }
+        return null;
     }
 
     private static void RaiseKey(TextBox input, Key key)

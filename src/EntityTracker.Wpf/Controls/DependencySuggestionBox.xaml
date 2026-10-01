@@ -26,6 +26,7 @@
                          Background="{DynamicResource Brush.Surface.Page}"
                          DisplayMemberPath="SourceName"
                          ItemsSource="{Binding Suggestions, ElementName=Root}"
+                         ScrollViewer.CanContentScroll="False"
                          ScrollViewer.VerticalScrollBarVisibility="Auto"
                          AutomationProperties.Name="Matching entities"
                          PreviewMouseLeftButtonUp="OnSuggestionMouseUp"

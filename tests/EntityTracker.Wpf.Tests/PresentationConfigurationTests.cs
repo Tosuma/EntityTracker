@@ -529,8 +529,10 @@ public sealed class PresentationConfigurationTests
             element.Name.LocalName == "Border");
         Assert.Equal("{DynamicResource Brush.Surface.Page}",
             (string?)popupBorder.Attribute("Background"));
+        XElement suggestionList = Assert.Single(popupBorder.Elements());
         Assert.Equal("{DynamicResource Brush.Surface.Page}",
-            (string?)Assert.Single(popupBorder.Elements()).Attribute("Background"));
+            (string?)suggestionList.Attribute("Background"));
+        Assert.Equal("False", (string?)suggestionList.Attribute("ScrollViewer.CanContentScroll"));
 
         XElement editorSurface = Assert.Single(document.Descendants(), element =>
             (string?)element.Attribute(x + "Name") == "EditorSurface");
