@@ -77,7 +77,8 @@ In entity creation or editing, search available Project developers and select ev
 responsible. Add new developers on the Project Developers page. Removing someone ends their current
 assignment; reassigning them starts a new dated period. Entity details show all current assignments
 and up to three timeline entries. Select **View full history** for the complete timeline, then
-**Back** to return to the entity. Retiring a developer ends all their open assignments, including
+**Back** to return to the entity. Current assignments appear by newest start time, followed by
+past assignments by newest end time. Retiring a developer ends all their open assignments, including
 archived entities, without deleting their history.
 
 <table>

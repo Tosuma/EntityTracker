@@ -84,7 +84,8 @@ installed app, so close one before opening the other.
 Open an entity or create a new one, then search the Project developer picker and select one or
 more available developers. Create new developers from the Project Developers page. Entity details
 show all current assignments and up to three timeline entries; **View full history** opens the
-complete timeline in the details pane, and **Back** returns to the summary.
+complete timeline in the details pane, and **Back** returns to the summary. Current assignments
+appear newest first, followed by past assignments ordered by when they ended, newest first.
 Removing a developer ends their current period; assigning them again starts a new one. Retiring a
 developer from the Project dashboard ends all their open assignments, including on archived
 entities. The overview displays current initials; developer-specific filtering is planned for

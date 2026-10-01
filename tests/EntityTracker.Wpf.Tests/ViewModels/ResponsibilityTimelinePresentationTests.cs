@@ -16,16 +16,17 @@ public sealed class ResponsibilityTimelinePresentationTests
             new ProjectDeveloper(DeveloperId.New(), projectId, $"D{index}")).ToArray();
         ResponsibilityPeriod[] periods = developers.Select((developer, index) =>
             new ResponsibilityPeriod(Guid.NewGuid(), entityId, developer.Id,
-                Time.AddDays(index), index < 2 ? null : Time.AddDays(index + 1))).ToArray();
+                Time.AddDays(index), index < 2 ? null :
+                    Time.AddDays(index switch { 2 => 8, 3 => 6, _ => 7 }))).ToArray();
 
         ResponsibilityTimelinePresentation presentation =
             ResponsibilityTimelinePresentation.Create(periods, developers);
 
         Assert.Equal(5, presentation.FullHistory.Count);
-        Assert.Equal(["D1", "D2", "D5"], presentation.Preview.Select(item => item.Name));
-        Assert.Equal("D1, D2", presentation.CurrentDevelopers);
+        Assert.Equal(["D2", "D1", "D3"], presentation.Preview.Select(item => item.Name));
+        Assert.Equal("D2, D1", presentation.CurrentDevelopers);
         Assert.True(presentation.HasHiddenHistory);
-        Assert.Equal(["D1", "D2", "D3", "D4", "D5"],
+        Assert.Equal(["D2", "D1", "D3", "D5", "D4"],
             presentation.FullHistory.Select(item => item.Name));
     }
 
@@ -43,7 +44,7 @@ public sealed class ResponsibilityTimelinePresentationTests
         ResponsibilityTimelinePresentation presentation =
             ResponsibilityTimelinePresentation.Create(periods, developers);
 
-        Assert.Equal(["D2", "D3", "D4", "D5"],
+        Assert.Equal(["D5", "D4", "D3", "D2"],
             presentation.Preview.Select(item => item.Name));
         Assert.True(presentation.HasHiddenHistory);
     }

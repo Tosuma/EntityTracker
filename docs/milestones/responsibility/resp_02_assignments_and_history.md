@@ -90,3 +90,7 @@ each developer was assigned.
   tests across seven projects. After the final placeholder adjustment, all 189 WPF and 12
   screenshot tests passed again. The screenshot generator produced 36 Light and 36 Dark images;
   the changed editor, preview, and full-history views were inspected in both themes.
+- Timeline ordering was refined: current assignments appear first by newest start time, followed
+  by ended assignments by newest end time, in both the preview and full details. All 189 WPF and
+  12 screenshot tests passed; the solution built with 0 warnings and 0 errors, and the updated
+  history captures were inspected in both themes.

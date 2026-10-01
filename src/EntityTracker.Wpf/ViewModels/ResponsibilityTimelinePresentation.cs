@@ -15,19 +15,20 @@ internal sealed record ResponsibilityTimelinePresentation(
         IEnumerable<ProjectDeveloper> developers)
     {
         Dictionary<DeveloperId, ProjectDeveloper> byId = developers.ToDictionary(d => d.Id);
-        ResponsibilityPeriod[] ordered = periods.OrderBy(p => p.StartedAtUtc)
-            .ThenBy(p => p.Id).ToArray();
-        ResponsibilityPeriod[] current = ordered.Where(p => p.IsCurrent).ToArray();
-        ResponsibilityPeriod[] recentEnded = ordered.Where(p => !p.IsCurrent)
+        ResponsibilityPeriod[] all = periods.ToArray();
+        ResponsibilityPeriod[] current = all.Where(p => p.IsCurrent)
+            .OrderByDescending(p => p.StartedAtUtc).ThenBy(p => p.Id).ToArray();
+        ResponsibilityPeriod[] ended = all.Where(p => !p.IsCurrent)
             .OrderByDescending(p => p.EndedAtUtc).ThenByDescending(p => p.StartedAtUtc)
-            .ThenBy(p => p.Id).Take(Math.Max(0, 3 - current.Length)).ToArray();
+            .ThenBy(p => p.Id).ToArray();
         string names = string.Join(", ", current.Select(p =>
                 byId.GetValueOrDefault(p.DeveloperId)?.Initials ?? "Unknown developer")
             .Distinct(StringComparer.OrdinalIgnoreCase));
         return new ResponsibilityTimelinePresentation(
             names.Length == 0 ? "—" : names,
-            current.Concat(recentEnded).Select(Format).ToArray(),
-            ordered.Select(Format).ToArray());
+            current.Concat(ended.Take(Math.Max(0, 3 - current.Length)))
+                .Select(Format).ToArray(),
+            current.Concat(ended).Select(Format).ToArray());
 
         EntityDetailListItem Format(ResponsibilityPeriod period)
         {
