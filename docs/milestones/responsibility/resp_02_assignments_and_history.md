@@ -18,9 +18,10 @@ each developer was assigned.
   at one operation time, including assignments on archived entities. Keep the developer and all
   closed periods. Restoring a developer does not reopen assignments.
 - Replace the responsible text field in entity creation and editing with a searchable,
-  multi-developer picker scoped to available developers in the current Project. Let users create
-  a developer from the picker. Show current developers separately and a chronological assignment
-  timeline in entity details. Archived details retain current and past assignment information.
+  multi-developer picker scoped to available developers in the current Project. Create Developers
+  from the Project Developers page. Show current developers separately and a chronological
+  assignment timeline in entity details. Archived details retain current and past assignment
+  information.
 - Preserve assignments through schema synchronization, dependency edits, priority changes,
   archive/restore, and Tracker copy within the same Project. A same-Project copy keeps its
   historical periods, remapped to copied entity and period IDs while retaining Developer IDs.
@@ -54,10 +55,10 @@ each developer was assigned.
   Project/developer checks, interval overlap protection, and one open period per developer and
   entity. The migration splits and deduplicates legacy initials, reuses available Project
   Developers, records one migration time, and drops the scalar database column.
-- Creating and editing an entity uses a searchable, multiple-selection Project Developer picker
-  with inline Developer creation. Entity details and archived details show current Developers
-  separately from the chronological timeline. Retirement closes open periods, including on
-  archived entities; restoration does not reopen them.
+- Creating and editing an entity uses a searchable, multiple-selection Project Developer picker.
+  Developer creation is on the Project Developers page. Entity details and archived details show
+  current Developers separately from the chronological timeline. Retirement closes open periods,
+  including on archived entities; restoration does not reopen them.
 - Project snapshot format 3 and SQLite backups contain full history. Older snapshots are converted
   at import/merge with stable identities. Collaborative merge reconciles periods by ID and raises
   reviewable conflicts for incompatible interval edits, overlaps, and retirement against a new
@@ -72,3 +73,20 @@ each developer was assigned.
   rendered 35 Light and 35 Dark images; the changed creation, editing, current details, and
   archived details views were inspected for readable labels, keyboard-accessible controls,
   bounded smooth picker scrolling, and legible presentation in both themes.
+
+### UI follow-up — 2026-10-01
+
+- Developer creation was removed from the entity creation and edit pickers; new Developers are
+  added on the Project Developers page. The editor search field now displays a visible placeholder
+  until typing begins.
+- Current assignments remain visible in the entity history preview. Recent ended periods fill up
+  to three rows; when more than three assignments are current, all current rows remain visible.
+  A full-history action opens the complete timeline in the details pane, with Back returning to
+  the summary or archived entity editor.
+- The editor places status and Notes to the left of responsibility selection and adds inner
+  padding to the progress and dependencies cards. Keyboard focus moves to and from the history
+  Back button, and both history viewers use pixel scrolling.
+- The complete solution built with 0 warnings and 0 errors. The regression suite passed all 707
+  tests across seven projects. After the final placeholder adjustment, all 189 WPF and 12
+  screenshot tests passed again. The screenshot generator produced 36 Light and 36 Dark images;
+  the changed editor, preview, and full-history views were inspected in both themes.

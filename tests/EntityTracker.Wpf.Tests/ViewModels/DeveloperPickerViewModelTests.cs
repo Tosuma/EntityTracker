@@ -8,7 +8,7 @@ namespace EntityTracker.Wpf.Tests.ViewModels;
 public sealed class DeveloperPickerViewModelTests
 {
     [Fact]
-    public async Task SearchSelectAndCreateStayWithinTrackerProject()
+    public async Task SearchAndSelectStayWithinTrackerProject()
     {
         ProjectId project = ProjectId.New();
         Tracker tracker = new(TrackerId.New(), project, "Tracker",
@@ -22,17 +22,18 @@ public sealed class DeveloperPickerViewModelTests
         DeveloperPickerViewModel picker = new(tracker.Id, service);
 
         await picker.LoadAsync([alice.Id]);
+        Assert.True(picker.HasAvailableDevelopers);
+        Assert.True(picker.IsQueryEmpty);
         Assert.Equal(alice.Id, Assert.Single(picker.SelectedIds));
         picker.Query = "alice";
+        Assert.False(picker.IsQueryEmpty);
         Assert.Equal("AL — Alice", Assert.Single(picker.FilteredChoices).Label);
-        picker.NewInitials = "CH";
-        picker.NewDisplayName = "Chris";
-        await picker.CreateAsync();
-        Assert.Equal(2, picker.SelectedIds.Count);
         Assert.DoesNotContain(picker.Choices, choice => choice.Developer.IsRetired);
         Assert.DoesNotContain(picker.Choices, choice => choice.Developer.Initials == "OT");
         picker.ClearSelection();
         Assert.Empty(picker.SelectedIds);
+        Assert.True(picker.IsQueryEmpty);
+        Assert.Equal(2, (await service.ListAsync(project)).Count);
     }
 
     private sealed class MemoryStore : IProjectDeveloperStore

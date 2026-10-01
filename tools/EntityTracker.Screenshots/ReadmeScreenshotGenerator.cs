@@ -44,10 +44,11 @@ internal sealed class ReadmeScreenshotGenerator
         await ScreenshotDataSeeder.SeedAsync(repositoryRoot, workspace, cancellationToken);
 
         ScreenshotCsvFilePicker picker = new();
+        FixedTimeProvider captureTime = new(ScreenshotDataSeeder.FixedNow);
         await using ServiceProvider provider = ScreenshotServiceProviderFactory.Create(
             workspace.Paths,
             picker,
-            new FixedTimeProvider(ScreenshotDataSeeder.FixedNow),
+            captureTime,
             appearance);
         await provider.GetRequiredService<IPersistenceInitializer>()
             .InitializeAsync(cancellationToken);
@@ -217,7 +218,33 @@ internal sealed class ReadmeScreenshotGenerator
             await responsibilityStore.ApplyAsync(tracker.Id,
                 new TrackedStateChangeSet([], [], [], [], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
+                        [alice.Id])]), cancellationToken);
+            captureTime.Advance(TimeSpan.FromMinutes(1));
+            await responsibilityStore.ApplyAsync(tracker.Id,
+                new TrackedStateChangeSet([], [], [], [], [], [],
+                    responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
                         [alice.Id, platform.Id])]), cancellationToken);
+            captureTime.Advance(TimeSpan.FromMinutes(1));
+            await responsibilityStore.ApplyAsync(tracker.Id,
+                new TrackedStateChangeSet([], [], [], [], [], [],
+                    responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
+                        [platform.Id])]), cancellationToken);
+            captureTime.Advance(TimeSpan.FromMinutes(1));
+            await responsibilityStore.ApplyAsync(tracker.Id,
+                new TrackedStateChangeSet([], [], [], [], [], [],
+                    responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
+                        [alice.Id, platform.Id])]), cancellationToken);
+            captureTime.Advance(TimeSpan.FromMinutes(1));
+            await responsibilityStore.ApplyAsync(tracker.Id,
+                new TrackedStateChangeSet([], [], [], [], [], [],
+                    responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
+                        [platform.Id])]), cancellationToken);
+            captureTime.Advance(TimeSpan.FromMinutes(1));
+            await responsibilityStore.ApplyAsync(tracker.Id,
+                new TrackedStateChangeSet([], [], [], [], [], [],
+                    responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
+                        [alice.Id, platform.Id])]), cancellationToken);
+            captureTime.Advance(TimeSpan.FromMinutes(1));
             await responsibilityStore.ApplyAsync(tracker.Id,
                 new TrackedStateChangeSet([], [], [], [], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
@@ -408,6 +435,8 @@ internal sealed class ReadmeScreenshotGenerator
         await WaitUntilAsync(() => viewModel.SelectedEntityDetails?.ResponsibilityTimeline.Count > 0,
             "Responsibility details did not load.", cancellationToken);
         await renderer.CaptureAsync("overview-details.png");
+        viewModel.ShowFullResponsibilityHistoryCommand.Execute(null);
+        await renderer.CaptureAsync("responsibility-history.png");
         viewModel.CloseEntityDetails();
 
         viewModel.OpenOverviewSearchCommand.Execute(null);

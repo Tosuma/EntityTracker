@@ -192,6 +192,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         get => _archivedResponsibilityTimeline;
         private set => SetField(ref _archivedResponsibilityTimeline, value);
     }
+    public bool HasArchivedHiddenResponsibilityHistory { get; private set; }
 
     public IReadOnlyList<EntityDependencyEditRow> Dependencies
     {
@@ -883,26 +884,14 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             ArchivedDetails = details;
             if (_responsibilityPeriods is not null && _developers is not null)
             {
-                ResponsibilityPeriod[] periods = (await _responsibilityPeriods
-                    .GetByEntityAsync(entityId, cancellationToken)).OrderBy(p => p.StartedAtUtc)
-                    .ThenBy(p => p.Id).ToArray();
-                Dictionary<DeveloperId, ProjectDeveloper> byId = (await _developers
-                    .ListForTrackerAsync(_trackerId, cancellationToken)).ToDictionary(d => d.Id);
-                string[] current = periods.Where(p => p.IsCurrent)
-                    .Select(p => byId.GetValueOrDefault(p.DeveloperId)?.Initials ?? "Unknown developer")
-                    .ToArray();
-                ArchivedCurrentDevelopers = current.Length == 0 ? "—" : string.Join(", ", current);
-                ArchivedResponsibilityTimeline = periods.Select(p =>
-                {
-                    ProjectDeveloper? developer = byId.GetValueOrDefault(p.DeveloperId);
-                    string name = developer is null ? "Unknown developer" :
-                        string.IsNullOrEmpty(developer.DisplayName) ? developer.Initials :
-                        $"{developer.Initials} — {developer.DisplayName}";
-                    string start = p.StartedAtUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
-                    string end = p.EndedAtUtc is { } ended
-                        ? ended.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) : "Current";
-                    return new EntityDetailListItem(name, $"{start} → {end}");
-                }).ToArray();
+                ResponsibilityTimelinePresentation presentation =
+                    ResponsibilityTimelinePresentation.Create(
+                        await _responsibilityPeriods.GetByEntityAsync(entityId, cancellationToken),
+                        await _developers.ListForTrackerAsync(_trackerId, cancellationToken));
+                ArchivedCurrentDevelopers = presentation.CurrentDevelopers;
+                ArchivedResponsibilityTimeline = presentation.Preview;
+                HasArchivedHiddenResponsibilityHistory = presentation.HasHiddenHistory;
+                OnPropertyChanged(nameof(HasArchivedHiddenResponsibilityHistory));
             }
             _selectedStatus = details.Entity.Status;
             OnPropertyChanged(nameof(SelectedStatus));
@@ -1464,6 +1453,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         ArchivedDetails = null;
         ArchivedCurrentDevelopers = "—";
         ArchivedResponsibilityTimeline = [];
+        HasArchivedHiddenResponsibilityHistory = false;
+        OnPropertyChanged(nameof(HasArchivedHiddenResponsibilityHistory));
         Dependencies = [];
         Warnings = [];
         Errors = [];

@@ -74,10 +74,11 @@ Initials are required and unique among available developers in the Project; reti
 be restored when their initials are free. Retiring a developer requires entering their exact initials.
 The retired list stays hidden until you select **Retired developers**.
 In entity creation or editing, search available Project developers and select everyone currently
-responsible. You can add a developer in the picker. Removing someone ends their current assignment;
-reassigning them starts a new dated period. Entity details show current developers and the full
-responsibility timeline. Retiring a developer ends all their open assignments, including archived
-entities, without deleting their history.
+responsible. Add new developers on the Project Developers page. Removing someone ends their current
+assignment; reassigning them starts a new dated period. Entity details show all current assignments
+and up to three timeline entries. Select **View full history** for the complete timeline, then
+**Back** to return to the entity. Retiring a developer ends all their open assignments, including
+archived entities, without deleting their history.
 
 <table>
   <tr>
@@ -222,6 +223,8 @@ names are added only through the explicit **Add as unresolved** action, while ar
 separate reversible action with confirmation.
 
 ![EntityTracker read-only entity details pane](images/light/overview-details.png)
+
+![EntityTracker full responsibility history in the entity details pane](images/light/responsibility-history.png)
 
 ![EntityTracker edit modal focused on dependencies and explicit unresolved additions](images/light/edit-entity-dependencies.png)
 

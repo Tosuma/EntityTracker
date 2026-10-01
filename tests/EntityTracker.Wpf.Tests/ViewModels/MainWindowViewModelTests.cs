@@ -452,6 +452,12 @@ public sealed class MainWindowViewModelTests
         Assert.Equal("Foundation", Assert.Single(details.Dependencies).Name);
         Assert.Equal("Foundation", Assert.Single(details.Blockers).Name);
 
+        viewModel.ShowFullResponsibilityHistoryCommand.Execute(null);
+        Assert.True(details.IsFullHistoryOpen);
+        viewModel.BackFromResponsibilityHistoryCommand.Execute(null);
+        await WaitUntilAsync(() => details.IsSummaryOpen);
+        Assert.Same(details, viewModel.SelectedEntityDetails);
+
         viewModel.CloseEntityDetailsCommand.Execute(null);
         Assert.False(viewModel.IsEntityDetailsOpen);
         Assert.Equal(1, viewModel.SelectedActiveEntityCount);
@@ -496,6 +502,14 @@ public sealed class MainWindowViewModelTests
         await WaitUntilAsync(() => viewModel.Editor.IsOpen);
         Assert.False(viewModel.IsEntityDetailsOpen);
         Assert.True(viewModel.Editor.CanRestoreEntity);
+
+        viewModel.ShowArchivedResponsibilityHistoryCommand.Execute(null);
+        Assert.False(viewModel.Editor.IsOpen);
+        Assert.True(Assert.IsType<EntityDetailsViewModel>(viewModel.SelectedEntityDetails).IsFullHistoryOpen);
+        viewModel.BackFromResponsibilityHistoryCommand.Execute(null);
+        await WaitUntilAsync(() => viewModel.Editor.IsOpen);
+        Assert.True(viewModel.Editor.IsArchivedMode);
+        Assert.False(viewModel.IsEntityDetailsOpen);
     }
 
     [Fact]

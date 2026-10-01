@@ -1,10 +1,8 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using System.Windows.Input;
 using EntityTracker.Application.Projects;
 using EntityTracker.Domain;
-using EntityTracker.Wpf.Commands;
 
 namespace EntityTracker.Wpf.ViewModels;
 
@@ -13,43 +11,29 @@ public sealed class DeveloperPickerViewModel : INotifyPropertyChanged
     private readonly TrackerId _trackerId;
     private readonly ProjectDeveloperService _service;
     private string _query = string.Empty;
-    private string _newInitials = string.Empty;
-    private string _newDisplayName = string.Empty;
-    private string? _error;
-    private bool _busy;
 
     public DeveloperPickerViewModel(TrackerId trackerId, ProjectDeveloperService service)
     {
         _trackerId = trackerId;
         _service = service;
-        CreateCommand = new AsyncCommand(CreateAsync, () => !_busy && !string.IsNullOrWhiteSpace(NewInitials));
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
     public event EventHandler? SelectionChanged;
     public ObservableCollection<DeveloperChoice> Choices { get; } = [];
     public ObservableCollection<DeveloperChoice> FilteredChoices { get; } = [];
-    public ICommand CreateCommand { get; }
+    public bool IsQueryEmpty => string.IsNullOrEmpty(Query);
+    public bool HasAvailableDevelopers => Choices.Count > 0;
     public string Query
     {
         get => _query;
-        set { if (Set(ref _query, value ?? string.Empty)) Filter(); }
-    }
-    public string NewInitials
-    {
-        get => _newInitials;
         set
         {
-            if (Set(ref _newInitials, value ?? string.Empty))
-                ((AsyncCommand)CreateCommand).NotifyCanExecuteChanged();
+            if (!Set(ref _query, value ?? string.Empty)) return;
+            OnPropertyChanged(nameof(IsQueryEmpty));
+            Filter();
         }
     }
-    public string NewDisplayName
-    {
-        get => _newDisplayName;
-        set => Set(ref _newDisplayName, value ?? string.Empty);
-    }
-    public string? Error { get => _error; private set => Set(ref _error, value); }
     public IReadOnlyList<DeveloperId> SelectedIds => Choices.Where(c => c.IsSelected)
         .Select(c => c.Developer.Id).ToArray();
 
@@ -70,6 +54,7 @@ public sealed class DeveloperPickerViewModel : INotifyPropertyChanged
             };
             Choices.Add(choice);
         }
+        OnPropertyChanged(nameof(HasAvailableDevelopers));
         Filter();
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -78,24 +63,6 @@ public sealed class DeveloperPickerViewModel : INotifyPropertyChanged
     {
         foreach (DeveloperChoice choice in Choices) choice.IsSelected = false;
         Query = string.Empty;
-    }
-
-    public async Task CreateAsync()
-    {
-        _busy = true;
-        Error = null;
-        try
-        {
-            ProjectDeveloper developer = await _service.CreateForTrackerAsync(
-                _trackerId, NewInitials, NewDisplayName);
-            DeveloperId[] selected = [.. SelectedIds, developer.Id];
-            await LoadAsync(selected);
-            NewInitials = string.Empty;
-            NewDisplayName = string.Empty;
-            Query = string.Empty;
-        }
-        catch (Exception exception) { Error = exception.Message; }
-        finally { _busy = false; ((AsyncCommand)CreateCommand).NotifyCanExecuteChanged(); }
     }
 
     private void Filter()
@@ -114,6 +81,9 @@ public sealed class DeveloperPickerViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         return true;
     }
+
+    private void OnPropertyChanged(string name) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
 public sealed class DeveloperChoice(ProjectDeveloper developer, bool isSelected) : INotifyPropertyChanged

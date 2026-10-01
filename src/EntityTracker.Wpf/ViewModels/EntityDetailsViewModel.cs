@@ -12,7 +12,9 @@ namespace EntityTracker.Wpf.ViewModels;
 public sealed class EntityDetailsViewModel : INotifyPropertyChanged
 {
     private IReadOnlyList<EntityDetailListItem> _responsibilityTimeline = [];
+    private IReadOnlyList<EntityDetailListItem> _fullResponsibilityTimeline = [];
     private string _currentDevelopers = "—";
+    private bool _isFullHistoryOpen;
     public EntityDetailsViewModel(EntityOverviewRow row)
     {
         ArgumentNullException.ThrowIfNull(row);
@@ -92,29 +94,39 @@ public sealed class EntityDetailsViewModel : INotifyPropertyChanged
         get => _responsibilityTimeline;
         private set { _responsibilityTimeline = value; OnPropertyChanged(); }
     }
+    public IReadOnlyList<EntityDetailListItem> FullResponsibilityTimeline
+    {
+        get => _fullResponsibilityTimeline;
+        private set { _fullResponsibilityTimeline = value; OnPropertyChanged(); }
+    }
+    public bool HasHiddenResponsibilityHistory =>
+        FullResponsibilityTimeline.Count > ResponsibilityTimeline.Count;
+    public bool IsFullHistoryOpen
+    {
+        get => _isFullHistoryOpen;
+        private set
+        {
+            if (_isFullHistoryOpen == value) return;
+            _isFullHistoryOpen = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsSummaryOpen));
+        }
+    }
+    public bool IsSummaryOpen => !IsFullHistoryOpen;
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    public void ShowFullHistory() => IsFullHistoryOpen = true;
+    public void ShowSummary() => IsFullHistoryOpen = false;
 
     public void SetResponsibility(IEnumerable<ResponsibilityPeriod> periods,
         IEnumerable<ProjectDeveloper> developers)
     {
-        Dictionary<DeveloperId, ProjectDeveloper> byId = developers.ToDictionary(d => d.Id);
-        ResponsibilityPeriod[] ordered = periods.OrderBy(p => p.StartedAtUtc)
-            .ThenBy(p => p.Id).ToArray();
-        CurrentDevelopers = string.Join(", ", ordered.Where(p => p.IsCurrent)
-            .Select(p => byId.TryGetValue(p.DeveloperId, out ProjectDeveloper? d)
-                ? d.Initials : "Unknown developer").Distinct(StringComparer.OrdinalIgnoreCase));
-        if (CurrentDevelopers.Length == 0) CurrentDevelopers = "—";
-        ResponsibilityTimeline = ordered.Select(p =>
-        {
-            string name = byId.TryGetValue(p.DeveloperId, out ProjectDeveloper? developer)
-                ? string.IsNullOrEmpty(developer.DisplayName) ? developer.Initials
-                    : $"{developer.Initials} — {developer.DisplayName}"
-                : "Unknown developer";
-            string start = p.StartedAtUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
-            string end = p.EndedAtUtc is { } ended
-                ? ended.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) : "Current";
-            return new EntityDetailListItem(name, $"{start} → {end}");
-        }).ToArray();
+        ResponsibilityTimelinePresentation presentation =
+            ResponsibilityTimelinePresentation.Create(periods, developers);
+        CurrentDevelopers = presentation.CurrentDevelopers;
+        ResponsibilityTimeline = presentation.Preview;
+        FullResponsibilityTimeline = presentation.FullHistory;
+        OnPropertyChanged(nameof(HasHiddenResponsibilityHistory));
     }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>

@@ -40,6 +40,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private readonly AsyncCommand _applyBulkStatusCommand;
     private readonly RelayCommand<EntityOverviewRow> _openEntityDetailsCommand;
     private readonly RelayCommand _closeEntityDetailsCommand;
+    private readonly RelayCommand _showFullResponsibilityHistoryCommand;
+    private readonly AsyncCommand _backFromResponsibilityHistoryCommand;
+    private readonly RelayCommand _showArchivedResponsibilityHistoryCommand;
     private readonly AsyncCommand<EntityOverviewRow> _editOverviewEntityCommand;
     private readonly AsyncCommand<SchemaSynchronizationReviewRow> _editReviewEntityCommand;
     private readonly RelayCommand<DevelopmentStatus> _selectOverviewStatusCommand;
@@ -61,6 +64,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private int _reconciledCount;
     private DevelopmentStatus _selectedBulkStatus = DevelopmentStatus.InProgress;
     private EntityDetailsViewModel? _selectedEntityDetails;
+    private EntityId? _historyReturnToArchivedEntityId;
 
     public MainWindowViewModel(
         TrackerId trackerId,
@@ -157,6 +161,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         _closeEntityDetailsCommand = new RelayCommand(
             CloseEntityDetails,
             () => IsEntityDetailsOpen);
+        _showFullResponsibilityHistoryCommand = new RelayCommand(
+            () => SelectedEntityDetails?.ShowFullHistory());
+        _backFromResponsibilityHistoryCommand = new AsyncCommand(BackFromResponsibilityHistoryAsync);
+        _showArchivedResponsibilityHistoryCommand = new RelayCommand(
+            ShowArchivedResponsibilityHistory);
         _editOverviewEntityCommand = new AsyncCommand<EntityOverviewRow>(
             OpenOverviewEntityAsync,
             _ => !IsBusy &&
@@ -524,6 +533,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public ICommand OpenEntityDetailsCommand => _openEntityDetailsCommand;
 
     public ICommand CloseEntityDetailsCommand => _closeEntityDetailsCommand;
+    public ICommand ShowFullResponsibilityHistoryCommand => _showFullResponsibilityHistoryCommand;
+    public ICommand BackFromResponsibilityHistoryCommand => _backFromResponsibilityHistoryCommand;
+    public ICommand ShowArchivedResponsibilityHistoryCommand => _showArchivedResponsibilityHistoryCommand;
 
     public ICommand EditOverviewEntityCommand => _editOverviewEntityCommand;
 
@@ -1048,9 +1060,35 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private void OpenEntityDetails(EntityOverviewRow row)
     {
         ArgumentNullException.ThrowIfNull(row);
+        _historyReturnToArchivedEntityId = null;
         SelectedEntityDetails = new EntityDetailsViewModel(row);
         if (_developers is not null && _responsibilityPeriods is not null)
             _ = LoadResponsibilityDetailsAsync(SelectedEntityDetails);
+    }
+
+    private void ShowArchivedResponsibilityHistory()
+    {
+        EntityId? entityId = Editor.ArchivedDetails?.Entity.Id;
+        if (!Editor.IsArchivedMode || entityId is null) return;
+        EntityOverviewRow? row = ArchivedTable.SourceItems.FirstOrDefault(item =>
+            item.EntityId == entityId);
+        if (row is null) return;
+        Editor.DiscardAndClose();
+        OpenEntityDetails(row);
+        _historyReturnToArchivedEntityId = entityId;
+        SelectedEntityDetails?.ShowFullHistory();
+    }
+
+    private async Task BackFromResponsibilityHistoryAsync()
+    {
+        EntityId? archivedEntityId = _historyReturnToArchivedEntityId;
+        if (archivedEntityId is null)
+        {
+            SelectedEntityDetails?.ShowSummary();
+            return;
+        }
+        CloseEntityDetails();
+        await Editor.BeginArchivedAsync(archivedEntityId);
     }
 
     private async Task LoadResponsibilityDetailsAsync(EntityDetailsViewModel details)
@@ -1100,7 +1138,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         return true;
     }
 
-    public void CloseEntityDetails() => SelectedEntityDetails = null;
+    public void CloseEntityDetails()
+    {
+        _historyReturnToArchivedEntityId = null;
+        SelectedEntityDetails = null;
+    }
 
     private async Task OpenArchivedFromCreationAsync(EntityId entityId)
     {

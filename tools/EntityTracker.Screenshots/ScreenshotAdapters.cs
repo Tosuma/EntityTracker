@@ -49,5 +49,7 @@ internal sealed class ScreenshotContextDiscardConfirmation : IContextDiscardConf
 
 internal sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
 {
-    public override DateTimeOffset GetUtcNow() => utcNow;
+    private DateTimeOffset _utcNow = utcNow;
+    public override DateTimeOffset GetUtcNow() => _utcNow;
+    public void Advance(TimeSpan duration) => _utcNow = _utcNow.Add(duration);
 }

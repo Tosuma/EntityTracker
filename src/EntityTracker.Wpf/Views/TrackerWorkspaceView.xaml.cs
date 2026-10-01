@@ -16,6 +16,7 @@ public partial class TrackerWorkspaceView : UserControl
     private const double ColumnResizeHitArea = 8;
 
     private MainWindowViewModel? _viewModel;
+    private EntityDetailsViewModel? _observedDetails;
     private IInputElement? _focusBeforeEditor;
     private IInputElement? _focusBeforeDetails;
     private IInputElement? _focusBeforeArchiveConfirmation;
@@ -71,6 +72,7 @@ public partial class TrackerWorkspaceView : UserControl
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
         viewModel.Editor.PropertyChanged += OnEditorPropertyChanged;
         viewModel.Review.PropertyChanged += OnSynchronizationReviewPropertyChanged;
+        ObserveDetails(viewModel.SelectedEntityDetails);
     }
 
     private void Detach()
@@ -85,7 +87,33 @@ public partial class TrackerWorkspaceView : UserControl
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         _viewModel.Editor.PropertyChanged -= OnEditorPropertyChanged;
         _viewModel.Review.PropertyChanged -= OnSynchronizationReviewPropertyChanged;
+        ObserveDetails(null);
         _viewModel = null;
+    }
+
+    private void ObserveDetails(EntityDetailsViewModel? details)
+    {
+        if (_observedDetails is not null)
+            _observedDetails.PropertyChanged -= OnDetailsPropertyChanged;
+        _observedDetails = details;
+        if (details is not null)
+            details.PropertyChanged += OnDetailsPropertyChanged;
+    }
+
+    private void OnDetailsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(EntityDetailsViewModel.IsFullHistoryOpen)) return;
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            MainWindowViewModel? viewModel = _viewModel;
+            if (viewModel is null || !ReferenceEquals(sender, viewModel.SelectedEntityDetails)) return;
+            if (viewModel.SelectedEntityDetails?.IsFullHistoryOpen == true)
+                BackFromResponsibilityHistoryButton.Focus();
+            else if (ViewFullResponsibilityHistoryButton.IsVisible)
+                ViewFullResponsibilityHistoryButton.Focus();
+            else
+                CloseEntityDetailsButton.Focus();
+        }));
     }
 
     private void OnSynchronizationReviewPropertyChanged(
@@ -204,6 +232,11 @@ public partial class TrackerWorkspaceView : UserControl
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(MainWindowViewModel.SelectedEntityDetails))
+        {
+            ObserveDetails(_viewModel?.SelectedEntityDetails);
+            return;
+        }
         if (e.PropertyName == nameof(MainWindowViewModel.SelectedTab) &&
             _viewModel?.SelectedTab == MainWindowTab.AddEntity)
         {
@@ -223,7 +256,13 @@ public partial class TrackerWorkspaceView : UserControl
         if (_viewModel?.IsEntityDetailsOpen == true)
         {
             _focusBeforeDetails = Keyboard.FocusedElement;
-            Dispatcher.BeginInvoke(new Action(() => CloseEntityDetailsButton.Focus()));
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (_viewModel.SelectedEntityDetails?.IsFullHistoryOpen == true)
+                    BackFromResponsibilityHistoryButton.Focus();
+                else
+                    CloseEntityDetailsButton.Focus();
+            }));
             return;
         }
 

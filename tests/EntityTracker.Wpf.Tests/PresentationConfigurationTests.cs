@@ -664,6 +664,34 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void EntityEditor_UsesSearchOnlyDeveloperPickerAndPaddedTwoColumnCards()
+    {
+        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement header = Assert.Single(document.Descendants(), element =>
+            (string?)element.Attribute("Text") == "Progress and ownership");
+        XElement card = header.Ancestors().First(element => element.Name.LocalName == "Border");
+        Assert.Equal("16", (string?)card.Attribute("Padding"));
+        XElement columns = Assert.Single(card.Descendants(), element =>
+            element.Name.LocalName == "Grid.ColumnDefinitions" &&
+            element.Elements().Any(column => (string?)column.Attribute("Width") == "3*"));
+        Assert.Equal(["3*", "16", "2*"], columns.Elements()
+            .Select(column => (string?)column.Attribute("Width")));
+        XElement dependencies = Assert.Single(document.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "EditorDependenciesSection");
+        Assert.Equal("16", (string?)dependencies.Attribute("Padding"));
+        Assert.Contains(card.Descendants(), element =>
+            (string?)element.Attribute("Text") == "Search developers by initials or name" &&
+            ((string?)element.Attribute("Visibility"))?.Contains("IsQueryEmpty", StringComparison.Ordinal) == true &&
+            (string?)element.Attribute("IsHitTestVisible") == "False");
+        Assert.DoesNotContain(document.Descendants(), element =>
+            (string?)element.Attribute("Content") == "Create developer" ||
+            ((string?)element.Attribute("Text"))?.Contains("DeveloperPicker.NewInitials", StringComparison.Ordinal) == true);
+        Assert.Contains(document.Descendants(), element =>
+            (string?)element.Attribute("AutomationProperties.Name") == "Back to entity details");
+    }
+
+    [Fact]
     public void ProjectComparison_DisabledFilterCardsRetainSurfaceWithMildFade()
     {
         XDocument document = LoadWpfXaml("Views", "ProjectDashboardView.xaml");

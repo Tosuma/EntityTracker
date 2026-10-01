@@ -29,6 +29,7 @@ internal static class ScreenshotManifest
         "create-tracker-copy.png",
         "overview.png",
         "overview-details.png",
+        "responsibility-history.png",
         "overview-filter-flyout.png",
         "overview-search.png",
         "overview-missing-entities-as-dependencies.png",
