@@ -1837,18 +1837,12 @@
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <ComboBox x:Name="ManualDependencyComboBox"
-                                                  Padding="9,7"
-                                                  AutomationProperties.HelpText="Type to search active entities."
-                                                  AutomationProperties.Name="Dependency"
-                                                  DisplayMemberPath="SourceName"
-                                                  IsEditable="True"
-                                                  IsTextSearchEnabled="False"
-                                                  ItemsSource="{Binding ManualCreation.Suggestions}"
-                                                  SelectedItem="{Binding ManualCreation.SelectedDependencySuggestion}"
-                                                  StaysOpenOnEdit="True"
-                                                  Text="{Binding ManualCreation.DependencyQuery, UpdateSourceTrigger=PropertyChanged}"
-                                                  IsDropDownOpen="{Binding ManualCreation.IsDependencySuggestionsOpen}" />
+                                        <controls:DependencySuggestionBox x:Name="ManualDependencySuggestionBox"
+                                                                          InputName="Dependency"
+                                                                          Query="{Binding ManualCreation.DependencyQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                          Suggestions="{Binding ManualCreation.Suggestions}"
+                                                                          IsSuggestionsOpen="{Binding ManualCreation.IsDependencySuggestionsOpen, Mode=TwoWay}"
+                                                                          AddExistingCommand="{Binding ManualCreation.AddExistingCommand}" />
                                         <Button Grid.Column="1"
                                                 Margin="8,0,0,0"
                                                 AutomationProperties.HelpText="Add the typed dependency even though it does not match an active entity."
@@ -2684,18 +2678,12 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <ComboBox x:Name="EditorDependencyComboBox"
-                                              Padding="9,7"
-                                              AutomationProperties.HelpText="Type to search active entities."
-                                              AutomationProperties.Name="Manual dependency"
-                                              DisplayMemberPath="SourceName"
-                                              IsEditable="True"
-                                              IsTextSearchEnabled="False"
-                                              ItemsSource="{Binding Editor.Suggestions}"
-                                              SelectedItem="{Binding Editor.SelectedDependencySuggestion}"
-                                              StaysOpenOnEdit="True"
-                                              Text="{Binding Editor.DependencyQuery, UpdateSourceTrigger=PropertyChanged}"
-                                              IsDropDownOpen="{Binding Editor.IsDependencySuggestionsOpen}" />
+                                    <controls:DependencySuggestionBox x:Name="EditorDependencySuggestionBox"
+                                                                      InputName="Manual dependency"
+                                                                      Query="{Binding Editor.DependencyQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                      Suggestions="{Binding Editor.Suggestions}"
+                                                                      IsSuggestionsOpen="{Binding Editor.IsDependencySuggestionsOpen, Mode=TwoWay}"
+                                                                      AddExistingCommand="{Binding Editor.AddExistingCommand}" />
                                     <Button Grid.Column="1"
                                             Margin="8,0,0,0"
                                             Command="{Binding Editor.AddUnresolvedCommand}"
