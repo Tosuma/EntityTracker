@@ -180,13 +180,13 @@ public partial class TrackerWorkspaceView : UserControl
                 : Keyboard.FocusedElement;
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                FrameworkElement preferred = _viewModel.Editor.Mode switch
+                bool focused = _viewModel.Editor.Mode switch
                 {
-                    EntityEditorMode.ArchivedDetails => RestoreEntityButton,
-                    EntityEditorMode.SynchronizationReview => EditorDependencyComboBox,
-                    _ => EditorStatusComboBox
+                    EntityEditorMode.ArchivedDetails => RestoreEntityButton.Focus(),
+                    EntityEditorMode.SynchronizationReview => EditorDependencySuggestionBox.FocusQuery(),
+                    _ => EditorStatusComboBox.Focus()
                 };
-                if (!preferred.Focus())
+                if (!focused)
                 {
                     EditorSurface.Focus();
                 }

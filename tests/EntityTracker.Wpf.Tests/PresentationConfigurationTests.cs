@@ -500,9 +500,7 @@ public sealed class PresentationConfigurationTests
         string[] editableSuggestionControls =
         [
             "ManualGroupComboBox",
-            "ManualDependencyComboBox",
-            "EditorGroupComboBox",
-            "EditorDependencyComboBox"
+            "EditorGroupComboBox"
         ];
         foreach (string name in editableSuggestionControls)
         {
@@ -512,6 +510,27 @@ public sealed class PresentationConfigurationTests
             Assert.Equal("True", (string?)comboBox.Attribute("IsEditable"));
             Assert.Equal("False", (string?)comboBox.Attribute("IsTextSearchEnabled"));
         }
+
+        foreach (string name in new[] { "ManualDependencySuggestionBox", "EditorDependencySuggestionBox" })
+        {
+            XElement suggestionBox = Assert.Single(document.Descendants(), element =>
+                (string?)element.Attribute(x + "Name") == name);
+            Assert.Equal("DependencySuggestionBox", suggestionBox.Name.LocalName);
+            Assert.Contains("DependencyQuery", (string?)suggestionBox.Attribute("Query"));
+            Assert.Contains("Suggestions", (string?)suggestionBox.Attribute("Suggestions"));
+            Assert.Contains("AddExistingCommand", (string?)suggestionBox.Attribute("AddExistingCommand"));
+        }
+
+        XDocument suggestionControl = LoadWpfXaml("Controls", "DependencySuggestionBox.xaml");
+        XElement popup = Assert.Single(suggestionControl.Descendants(), element =>
+            element.Name.LocalName == "Popup");
+        Assert.Equal("False", (string?)popup.Attribute("AllowsTransparency"));
+        XElement popupBorder = Assert.Single(popup.Elements(), element =>
+            element.Name.LocalName == "Border");
+        Assert.Equal("{DynamicResource Brush.Surface.Page}",
+            (string?)popupBorder.Attribute("Background"));
+        Assert.Equal("{DynamicResource Brush.Surface.Page}",
+            (string?)Assert.Single(popupBorder.Elements()).Attribute("Background"));
 
         XElement editorSurface = Assert.Single(document.Descendants(), element =>
             (string?)element.Attribute(x + "Name") == "EditorSurface");
