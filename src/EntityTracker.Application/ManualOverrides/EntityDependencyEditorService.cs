@@ -297,7 +297,8 @@ public sealed class EntityDependencyEditorService
         int? requestedPriority,
         string? responsibleDeveloper,
         string? groupName,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<DeveloperId>? developerIds = null)
     {
         ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(plan);
@@ -363,7 +364,9 @@ public sealed class EntityDependencyEditorService
                     plan.EffectiveState),
                 entitiesWithRequestedPriorityToUpdate: priorityUpdates,
                 entitiesWithResponsibleDeveloperToUpdate: responsibleDeveloperUpdates,
-                entitiesWithGroupNameToUpdate: groupNameUpdates),
+                entitiesWithGroupNameToUpdate: groupNameUpdates,
+                responsibilitySelections: developerIds is null ? [] :
+                    [new ResponsibilitySelection(plan.Entity.Id, developerIds)]),
             cancellationToken);
     }
 

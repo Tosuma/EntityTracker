@@ -141,7 +141,8 @@ public sealed class ProjectSnapshotTests
                 UnresolvedDependencies = [new SnapshotUnresolvedDependency(id,
                     $"External {index:D3}", "Optional", T0, T2)],
                 ManualOverrides = [new SnapshotOverride(id,
-                    $"External {index:D3}", "Suppress", T1, T2)]
+                    $"External {index:D3}", "Suppress", T1, T2)],
+                ResponsibilityPeriods = []
             };
         }).ToArray();
         ProjectSnapshot expanded = seed with { Trackers =
@@ -179,7 +180,7 @@ public sealed class ProjectSnapshotTests
         long revision = (await store.ReadAsync(new ProjectId(snapshot.Project.Id))).Revision;
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => store.ApplyAsync(snapshot, revision - 1));
-        Assert.Throws<InvalidDataException>(() => ProjectSnapshotValidator.Validate(snapshot with { FormatVersion = 3 }));
+        Assert.Throws<InvalidDataException>(() => ProjectSnapshotValidator.Validate(snapshot with { FormatVersion = 4 }));
         Assert.Throws<InvalidDataException>(() => ProjectSnapshotValidator.Validate(snapshot with
         {
             Trackers = [snapshot.Trackers[0], snapshot.Trackers[0]]
@@ -203,7 +204,7 @@ public sealed class ProjectSnapshotTests
         Assert.Throws<InvalidDataException>(() => codec.Decode(malformed));
         malformed[".entitytracker/project.json"] = package.Files[".entitytracker/project.json"];
         malformed[".entitytracker/manifest.json"] = Encoding.UTF8.GetBytes(
-            "{\"formatVersion\":3,\"projectId\":\"" + snapshot.Project.Id + "\"}");
+            "{\"formatVersion\":4,\"projectId\":\"" + snapshot.Project.Id + "\"}");
         Assert.Throws<InvalidDataException>(() => codec.Decode(malformed));
 
         ProjectSnapshotRead after = await store.ReadAsync(new ProjectId(snapshot.Project.Id));
@@ -340,12 +341,16 @@ public sealed class ProjectSnapshotTests
         Guid eventA = Guid.Parse("40000000-0000-0000-0000-000000000001");
         Guid eventB = Guid.Parse("40000000-0000-0000-0000-000000000002");
         SnapshotEntity first = new(entityA, trackerA, "Orders", "InProgress", "Keep notes",
-            "Active", "ManualAndImported", 2, "Ada", "Core", T0, T1, T2,
+            "Active", "ManualAndImported", 2, "", "Core", T0, T1, T2,
             [new SnapshotDependency(entityA, entityB, "Mandatory", T0, T1)],
             [new SnapshotUnresolvedDependency(entityA, "External", "Optional", T0, T2)],
-            [new SnapshotOverride(entityA, "External", "Suppress", T1, T2)]);
+            [new SnapshotOverride(entityA, "External", "Suppress", T1, T2)],
+            [new SnapshotResponsibilityPeriod(Guid.Parse("50000000-0000-0000-0000-000000000001"),
+                entityA, Guid.Parse("60000000-0000-0000-0000-000000000001"), T2, null)]);
         SnapshotEntity second = new(entityB, trackerA, "Customers", "Reconciled", "Archived notes",
-            "Archived", "Imported", 4, "Grace", "Legacy", T0, T1, T2, [], [], []);
+            "Archived", "Imported", 4, "", "Legacy", T0, T1, T2, [], [], [],
+            [new SnapshotResponsibilityPeriod(Guid.Parse("50000000-0000-0000-0000-000000000002"),
+                entityB, Guid.Parse("60000000-0000-0000-0000-000000000002"), T2, null)]);
         SnapshotEntity third = new(entityC, trackerB, "Copied entity", "NotStarted", "",
             "Active", "Copied", null, "", "", T0, T1, T2, [], [], []);
         SnapshotTracker a = new(trackerA, project, "Delivery", "Active", T0, T2, null,
@@ -360,6 +365,10 @@ public sealed class ProjectSnapshotTests
         SnapshotTracker b = new(trackerB, project, "Archive", "Recycled", T0, T2, T2,
             trackerA, [third], [], [new SnapshotProgress(Guid.NewGuid(), T1, 1, 0, 0, 0, 0, 0, 0)], null);
         return new ProjectSnapshot(ProjectSnapshot.CurrentFormatVersion,
-            new SnapshotProject(project, "Portable project", "Active", T0, T2, null), [a, b], []);
+            new SnapshotProject(project, "Portable project", "Active", T0, T2, null), [a, b],
+            [new SnapshotDeveloper(Guid.Parse("60000000-0000-0000-0000-000000000001"),
+                project, "Ada", "", false),
+             new SnapshotDeveloper(Guid.Parse("60000000-0000-0000-0000-000000000002"),
+                project, "Grace", "", false)]);
     }
 }

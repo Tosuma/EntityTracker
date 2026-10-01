@@ -17,9 +17,11 @@ public sealed class TrackerManagementService(
     IProjectTrackerStore store,
     EffectiveDependencyResolver effectiveDependencyResolver,
     ProgressSnapshotCalculator snapshotCalculator,
-    TimeProvider? timeProvider = null)
+    TimeProvider? timeProvider = null,
+    IResponsibilityPeriodRepository? responsibilityPeriods = null)
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+    private readonly IResponsibilityPeriodRepository? _responsibilityPeriods = responsibilityPeriods;
 
     public async Task<Tracker> CreateBlankAsync(
         ProjectId projectId,
@@ -84,6 +86,14 @@ public sealed class TrackerManagementService(
         Dictionary<EntityId, EntityId> idMap = activeSource.ToDictionary(
             static entity => entity.Id,
             static _ => EntityId.New());
+        ResponsibilityPeriod[] copiedPeriods = source.ProjectId == destinationProjectId &&
+            _responsibilityPeriods is not null
+            ? (await _responsibilityPeriods.GetByTrackerAsync(sourceTrackerId, cancellationToken))
+                .Where(period => idMap.ContainsKey(period.EntityId))
+                .Select(period => new ResponsibilityPeriod(Guid.NewGuid(),
+                    idMap[period.EntityId], period.DeveloperId,
+                    period.StartedAtUtc, period.EndedAtUtc)).ToArray()
+            : [];
         Dictionary<EntityId, TrackedEntity> sourceById = sourceEntities.ToDictionary(
             static entity => entity.Id);
         TrackedEntity[] copiedEntities = activeSource.Select(entity => new TrackedEntity(
@@ -146,7 +156,8 @@ public sealed class TrackerManagementService(
             copiedUnresolved,
             ownerIds,
             copiedOverrides,
-            progressSnapshotAfterChanges: baseline);
+            progressSnapshotAfterChanges: baseline,
+            responsibilityPeriodsToCopy: copiedPeriods);
         await store.CreateTrackerAsync(
             new TrackerCreationState(tracker, changeSet, baseline,
                 SyncBaseline: new TrackerSyncBaseline(

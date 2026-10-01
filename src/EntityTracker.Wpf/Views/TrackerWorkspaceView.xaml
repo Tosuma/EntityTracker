@@ -1776,12 +1776,41 @@
                                              AutomationProperties.Name="Entity name"
                                              Text="{Binding ManualCreation.EntityName, UpdateSourceTrigger=PropertyChanged}" />
 
-                                    <Label Target="{Binding ElementName=ManualResponsibleDeveloperTextBox}" Content="Responsible developer" />
-                                    <TextBox x:Name="ManualResponsibleDeveloperTextBox"
-                                             Margin="0,4,0,12"
-                                             Padding="9,7"
-                                             AutomationProperties.Name="Responsible developer"
-                                             Text="{Binding ManualCreation.ResponsibleDeveloper, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock FontWeight="SemiBold" Text="Responsible developers" />
+                                    <TextBlock Margin="0,3,0,5" Text="Select one or more Project developers." />
+                                    <TextBox Margin="0,0,0,5" Padding="9,7"
+                                             AutomationProperties.Name="Search Project developers"
+                                             Text="{Binding ManualCreation.DeveloperPicker.Query, UpdateSourceTrigger=PropertyChanged}" />
+                                    <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto"
+                                                  CanContentScroll="False">
+                                        <ItemsControl ItemsSource="{Binding ManualCreation.DeveloperPicker.FilteredChoices}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <CheckBox Margin="2,3" Content="{Binding Label}"
+                                                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                              AutomationProperties.Name="{Binding Label}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                    <StackPanel Orientation="Horizontal" Margin="0,7,0,12">
+                                        <StackPanel Margin="0,0,8,0">
+                                            <Label Target="{Binding ElementName=ManualNewDeveloperInitials}" Content="New initials" />
+                                            <TextBox x:Name="ManualNewDeveloperInitials" Width="95" Padding="8,6"
+                                                     AutomationProperties.Name="New developer initials"
+                                                     Text="{Binding ManualCreation.DeveloperPicker.NewInitials, UpdateSourceTrigger=PropertyChanged}" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,8,0">
+                                            <Label Target="{Binding ElementName=ManualNewDeveloperName}" Content="Display name" />
+                                            <TextBox x:Name="ManualNewDeveloperName" Width="180" Padding="8,6"
+                                                     AutomationProperties.Name="New developer display name"
+                                                     Text="{Binding ManualCreation.DeveloperPicker.NewDisplayName, UpdateSourceTrigger=PropertyChanged}" />
+                                        </StackPanel>
+                                        <Button Content="Create developer" VerticalAlignment="Bottom"
+                                                Command="{Binding ManualCreation.DeveloperPicker.CreateCommand}" />
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding ManualCreation.DeveloperPicker.Error}"
+                                               TextWrapping="Wrap" />
 
                                     <Grid>
                                         <Grid.ColumnDefinitions>
@@ -2332,14 +2361,27 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Margin="0,0,12,0">
-                                <TextBlock FontWeight="SemiBold" Text="Responsible developer" />
-                                <TextBlock Margin="0,3,0,0" Text="{Binding ResponsibleDeveloper}" TextWrapping="Wrap" />
+                                <TextBlock FontWeight="SemiBold" Text="Current developers" />
+                                <TextBlock Margin="0,3,0,0" Text="{Binding CurrentDevelopers}" TextWrapping="Wrap" />
                             </StackPanel>
                             <StackPanel Grid.Column="1">
                                 <TextBlock FontWeight="SemiBold" Text="Group" />
                                 <TextBlock Margin="0,3,0,0" Text="{Binding GroupName}" TextWrapping="Wrap" />
                             </StackPanel>
                         </Grid>
+
+                        <TextBlock FontWeight="SemiBold" Text="Responsibility timeline" />
+                        <ItemsControl Margin="0,5,0,16" ItemsSource="{Binding ResponsibilityTimeline}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,6">
+                                        <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
+                                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                   Text="{Binding Description}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
 
                         <TextBlock FontWeight="SemiBold" Text="Notes" />
                         <TextBlock Margin="0,4,0,18"
@@ -2510,7 +2552,19 @@
                                     <StackPanel>
                                         <TextBlock FontSize="16" FontWeight="SemiBold" Text="Archived entity" />
                                         <TextBlock Margin="0,6,0,0" Text="{Binding Editor.SelectedStatusDisplay, StringFormat=Status: {0}}" />
-                                        <TextBlock Margin="0,3,0,0" Text="{Binding Editor.EditedResponsibleDeveloper, StringFormat=Responsible developer: {0}}" TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,3,0,0" Text="{Binding Editor.ArchivedCurrentDevelopers, StringFormat=Current developers: {0}}" TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,8,0,3" FontWeight="SemiBold" Text="Responsibility timeline" />
+                                        <ItemsControl ItemsSource="{Binding Editor.ArchivedResponsibilityTimeline}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Margin="0,0,0,5">
+                                                        <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
+                                                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                                   Text="{Binding Description}" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
                                         <TextBlock Margin="0,3,0,0" Text="{Binding Editor.EditedGroupName, StringFormat=Group: {0}}" TextWrapping="Wrap" />
                                         <TextBlock Margin="0,3,0,0" Text="{Binding Editor.EffectivePriority, StringFormat=Effective priority: {0}}" />
                                         <TextBlock Margin="0,8,0,0"
@@ -2553,13 +2607,40 @@
                                     </StackPanel>
                                 </Grid>
 
-                                <StackPanel Margin="0,0,0,12">
-                                    <TextBlock FontWeight="SemiBold" Text="Responsible developer" />
-                                    <TextBox Margin="0,5,0,0"
-                                             AutomationProperties.Name="Responsible developer"
-                                             Padding="8,6"
-                                             IsEnabled="{Binding Editor.CanEditProgress}"
-                                             Text="{Binding Editor.EditedResponsibleDeveloper, UpdateSourceTrigger=PropertyChanged}" />
+                                <StackPanel Margin="0,0,0,12" IsEnabled="{Binding Editor.CanEditProgress}">
+                                    <TextBlock FontWeight="SemiBold" Text="Responsible developers" />
+                                    <TextBox Margin="0,5,0,5" Padding="8,6"
+                                             AutomationProperties.Name="Search Project developers"
+                                             Text="{Binding Editor.DeveloperPicker.Query, UpdateSourceTrigger=PropertyChanged}" />
+                                    <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto"
+                                                  CanContentScroll="False">
+                                        <ItemsControl ItemsSource="{Binding Editor.DeveloperPicker.FilteredChoices}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <CheckBox Margin="2,3" Content="{Binding Label}"
+                                                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                              AutomationProperties.Name="{Binding Label}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                    <StackPanel Orientation="Horizontal" Margin="0,7,0,0">
+                                        <StackPanel Margin="0,0,8,0">
+                                            <Label Target="{Binding ElementName=EditorNewDeveloperInitials}" Content="New initials" />
+                                            <TextBox x:Name="EditorNewDeveloperInitials" Width="95" Padding="8,6"
+                                                     AutomationProperties.Name="New developer initials"
+                                                     Text="{Binding Editor.DeveloperPicker.NewInitials, UpdateSourceTrigger=PropertyChanged}" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,8,0">
+                                            <Label Target="{Binding ElementName=EditorNewDeveloperName}" Content="Display name" />
+                                            <TextBox x:Name="EditorNewDeveloperName" Width="180" Padding="8,6"
+                                                     AutomationProperties.Name="New developer display name"
+                                                     Text="{Binding Editor.DeveloperPicker.NewDisplayName, UpdateSourceTrigger=PropertyChanged}" />
+                                        </StackPanel>
+                                        <Button Content="Create developer" VerticalAlignment="Bottom"
+                                                Command="{Binding Editor.DeveloperPicker.CreateCommand}" />
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Editor.DeveloperPicker.Error}" TextWrapping="Wrap" />
                                 </StackPanel>
 
                                 <StackPanel Margin="0,0,0,12">

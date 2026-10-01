@@ -31,6 +31,12 @@ public sealed class ProjectSnapshotMerger
         if (local.Project.Id != remote.Project.Id ||
             (basis is not null && basis.Project.Id != local.Project.Id))
             throw new InvalidDataException("Merge inputs belong to different Projects.");
+        DateTimeOffset convertedAtUtc = DateTimeOffset.UtcNow;
+        ProjectSnapshot reference = local.FormatVersion == ProjectSnapshot.CurrentFormatVersion
+            ? local : remote;
+        basis = basis is null ? null : ProjectSnapshotUpgrade.ToCurrent(basis, convertedAtUtc, reference);
+        local = ProjectSnapshotUpgrade.ToCurrent(local, convertedAtUtc, reference);
+        remote = ProjectSnapshotUpgrade.ToCurrent(remote, convertedAtUtc, reference);
         _twoWay = basis is null;
         IReadOnlyList<SnapshotDeveloper> developers = ThreeWayMerge.Keyed("Developer",
             basis?.Developers, local.Developers ?? [], remote.Developers ?? [],
@@ -41,9 +47,63 @@ public sealed class ProjectSnapshotMerger
             MergeProject(basis?.Project ?? local.Project, local.Project, remote.Project),
             ThreeWayMerge.Keyed("Tracker", basis?.Trackers, local.Trackers, remote.Trackers,
                 t => t.Id, MergeTracker), developers);
+        merged = ResolveRetiredAssignments(merged, basis, local, remote);
         if (_conflicts.Count == 0) ProjectSnapshotValidator.Validate(merged);
         return new ProjectMergeResult(merged, _conflicts.ToArray());
     }
+
+    private ProjectSnapshot ResolveRetiredAssignments(ProjectSnapshot merged,
+        ProjectSnapshot? basis, ProjectSnapshot local, ProjectSnapshot remote)
+    {
+        foreach (SnapshotDeveloper developer in merged.Developers ?? [])
+        {
+            if (!developer.IsRetired || !merged.Trackers.SelectMany(t => t.Entities)
+                    .SelectMany(e => e.ResponsibilityPeriods ?? [])
+                    .Any(p => p.DeveloperId == developer.Id && p.EndedAtUtc is null)) continue;
+
+            string path = $"Developer/{developer.Id:D}/ResponsibilityLifecycle";
+            _conflicts.Add(new ProjectMergeConflict(path, ProjectConflictKind.Relationship,
+                Display(DeveloperHistory(basis, developer.Id)),
+                Display(DeveloperHistory(local, developer.Id)),
+                Display(DeveloperHistory(remote, developer.Id))));
+            ProjectSnapshot selected = _choices.GetValueOrDefault(path) == MergeSide.Remote
+                ? remote : local;
+            SnapshotDeveloper? selectedDeveloper = selected.Developers?
+                .FirstOrDefault(d => d.Id == developer.Id);
+            if (selectedDeveloper is null) continue;
+            merged = merged with
+            {
+                Developers = merged.Developers!.Select(d => d.Id == developer.Id
+                    ? selectedDeveloper : d).ToArray(),
+                Trackers = merged.Trackers.Select(tracker => tracker with
+                {
+                    Entities = tracker.Entities.Select(entity =>
+                    {
+                        SnapshotEntity? source = selected.Trackers.SelectMany(t => t.Entities)
+                            .FirstOrDefault(e => e.Id == entity.Id);
+                        return entity with
+                        {
+                            ResponsibilityPeriods = (entity.ResponsibilityPeriods ?? [])
+                                .Where(p => p.DeveloperId != developer.Id)
+                                .Concat((source?.ResponsibilityPeriods ?? [])
+                                    .Where(p => p.DeveloperId == developer.Id))
+                                .OrderBy(p => p.StartedAtUtc).ThenBy(p => p.Id).ToArray()
+                        };
+                    }).ToArray()
+                }).ToArray()
+            };
+        }
+        return merged;
+    }
+
+    private static object? DeveloperHistory(ProjectSnapshot? snapshot, Guid developerId) =>
+        snapshot is null ? null : new
+        {
+            Developer = snapshot.Developers?.FirstOrDefault(d => d.Id == developerId),
+            Periods = snapshot.Trackers.SelectMany(t => t.Entities)
+                .SelectMany(e => e.ResponsibilityPeriods ?? [])
+                .Where(p => p.DeveloperId == developerId).OrderBy(p => p.StartedAtUtc).ToArray()
+        };
 
     private SnapshotProject MergeProject(SnapshotProject b, SnapshotProject l, SnapshotProject r) =>
         l with
@@ -176,8 +236,8 @@ public sealed class ProjectSnapshotMerger
             Provenance = Field(path + "/Provenance", b.Provenance, l.Provenance, r.Provenance),
             RequestedPriority = Field(path + "/RequestedPriority", b.RequestedPriority,
                 l.RequestedPriority, r.RequestedPriority),
-            ResponsibleDeveloper = Field(path + "/ResponsibleDeveloper", b.ResponsibleDeveloper,
-                l.ResponsibleDeveloper, r.ResponsibleDeveloper),
+            ResponsibleDeveloper = string.Empty,
+            ResponsibilityPeriods = MergeResponsibility(path, b, l, r),
             GroupName = Field(path + "/GroupName", b.GroupName, l.GroupName, r.GroupName),
             SchemaUpdatedAtUtc = l.SchemaUpdatedAtUtc > r.SchemaUpdatedAtUtc ?
                 l.SchemaUpdatedAtUtc : r.SchemaUpdatedAtUtc,
@@ -194,6 +254,52 @@ public sealed class ProjectSnapshotMerger
                 l.ManualOverrides, r.ManualOverrides,
                 d => d.DependencySourceName.ToUpperInvariant(),
                 (p, prior, own, other) => Object(p, prior, own, other, ProjectConflictKind.Relationship))
+        };
+    }
+
+    private IReadOnlyList<SnapshotResponsibilityPeriod> MergeResponsibility(string path,
+        SnapshotEntity basis, SnapshotEntity local, SnapshotEntity remote)
+    {
+        IReadOnlyList<SnapshotResponsibilityPeriod> merged = ThreeWayMerge.Keyed(
+            path + "/ResponsibilityPeriod", basis.ResponsibilityPeriods,
+            local.ResponsibilityPeriods ?? [], remote.ResponsibilityPeriods ?? [],
+            p => p.Id, MergeResponsibilityPeriod);
+        List<SnapshotResponsibilityPeriod> resolved = merged.ToList();
+        foreach (IGrouping<Guid, SnapshotResponsibilityPeriod> group in merged.GroupBy(p => p.DeveloperId))
+        {
+            SnapshotResponsibilityPeriod[] ordered = group.OrderBy(p => p.StartedAtUtc)
+                .ThenBy(p => p.Id).ToArray();
+            if (!ordered.Skip(1).Where((period, index) => ordered[index].EndedAtUtc is null ||
+                    period.StartedAtUtc < ordered[index].EndedAtUtc).Any()) continue;
+            string conflictPath = path + "/ResponsibilityOverlap/" + group.Key.ToString("D");
+            _conflicts.Add(new ProjectMergeConflict(conflictPath, ProjectConflictKind.Relationship,
+                Display(basis.ResponsibilityPeriods?.Where(p => p.DeveloperId == group.Key).ToArray()),
+                Display(local.ResponsibilityPeriods?.Where(p => p.DeveloperId == group.Key).ToArray()),
+                Display(remote.ResponsibilityPeriods?.Where(p => p.DeveloperId == group.Key).ToArray())));
+            resolved.RemoveAll(p => p.DeveloperId == group.Key);
+            SnapshotEntity selected = _choices.GetValueOrDefault(conflictPath) == MergeSide.Remote
+                ? remote : local;
+            resolved.AddRange((selected.ResponsibilityPeriods ?? []).Where(p => p.DeveloperId == group.Key));
+        }
+        return resolved.OrderBy(p => p.StartedAtUtc).ThenBy(p => p.Id).ToArray();
+    }
+
+    private SnapshotResponsibilityPeriod? MergeResponsibilityPeriod(string path,
+        SnapshotResponsibilityPeriod? basis, SnapshotResponsibilityPeriod? local,
+        SnapshotResponsibilityPeriod? remote)
+    {
+        if (Same(local, remote)) return local;
+        if (!_twoWay && Same(local, basis)) return remote;
+        if (!_twoWay && Same(remote, basis)) return local;
+        if (basis is null || local is null || remote is null)
+            return Object(path, basis, local, remote,
+                basis is null ? ProjectConflictKind.Addition : ProjectConflictKind.Deletion);
+        return local with
+        {
+            StartedAtUtc = Field(path + "/StartedAtUtc", basis.StartedAtUtc,
+                local.StartedAtUtc, remote.StartedAtUtc),
+            EndedAtUtc = Field(path + "/EndedAtUtc", basis.EndedAtUtc,
+                local.EndedAtUtc, remote.EndedAtUtc)
         };
     }
 

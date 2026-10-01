@@ -3,8 +3,24 @@ using EntityTracker.Domain;
 
 namespace EntityTracker.Application.Projects;
 
-public sealed class ProjectDeveloperService(IProjectDeveloperStore store)
+public sealed class ProjectDeveloperService(IProjectDeveloperStore store, TimeProvider? timeProvider = null,
+    ITrackerRepository? trackers = null)
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+    public async Task<ProjectId> ProjectForTrackerAsync(TrackerId trackerId,
+        CancellationToken cancellationToken = default) =>
+        (await (trackers ?? throw new InvalidOperationException("Tracker lookup is unavailable."))
+            .GetAsync(trackerId, cancellationToken))?.ProjectId
+        ?? throw new InvalidOperationException("The Tracker no longer exists.");
+
+    public async Task<IReadOnlyList<ProjectDeveloper>> ListForTrackerAsync(TrackerId trackerId,
+        CancellationToken cancellationToken = default) =>
+        await ListAsync(await ProjectForTrackerAsync(trackerId, cancellationToken), cancellationToken);
+
+    public async Task<ProjectDeveloper> CreateForTrackerAsync(TrackerId trackerId, string initials,
+        string? displayName = null, CancellationToken cancellationToken = default) =>
+        await CreateAsync(await ProjectForTrackerAsync(trackerId, cancellationToken),
+            initials, displayName, cancellationToken);
     public Task<IReadOnlyList<ProjectDeveloper>> ListAsync(ProjectId projectId,
         CancellationToken cancellationToken = default) =>
         store.GetByProjectAsync(projectId, cancellationToken);
@@ -31,7 +47,7 @@ public sealed class ProjectDeveloperService(IProjectDeveloperStore store)
     {
         ProjectDeveloper developer = await RequireAsync(projectId, id, cancellationToken);
         if (retired) developer.Retire(); else developer.Restore();
-        await store.UpdateAsync(developer, cancellationToken);
+        await store.SetRetiredAsync(developer, _timeProvider.GetUtcNow().ToUniversalTime(), cancellationToken);
         return developer;
     }
 

@@ -2,6 +2,7 @@ using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Planning;
+using EntityTracker.Application.Projects;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Application.Tracking;
@@ -19,6 +20,8 @@ public sealed class EntityOverviewService
     private readonly EffectiveDependencyResolver _effectiveDependencyResolver;
     private readonly WorkflowReadinessEvaluator _readinessEvaluator;
     private readonly PriorityPlanningService _priorityPlanningService;
+    private readonly IResponsibilityPeriodRepository? _responsibilityPeriods;
+    private readonly ProjectDeveloperService? _developers;
 
     public EntityOverviewService(
         IEntityRepository entityRepository,
@@ -28,7 +31,9 @@ public sealed class EntityOverviewService
         IDependencyRankingService dependencyRanker,
         EffectiveDependencyResolver effectiveDependencyResolver,
         WorkflowReadinessEvaluator readinessEvaluator,
-        PriorityPlanningService priorityPlanningService)
+        PriorityPlanningService priorityPlanningService,
+        IResponsibilityPeriodRepository? responsibilityPeriods = null,
+        ProjectDeveloperService? developers = null)
     {
         ArgumentNullException.ThrowIfNull(entityRepository);
         ArgumentNullException.ThrowIfNull(entityAuditReader);
@@ -47,6 +52,8 @@ public sealed class EntityOverviewService
         _effectiveDependencyResolver = effectiveDependencyResolver;
         _readinessEvaluator = readinessEvaluator;
         _priorityPlanningService = priorityPlanningService;
+        _responsibilityPeriods = responsibilityPeriods;
+        _developers = developers;
     }
 
     public async Task<EntityOverviewResult> GetAsync(
@@ -73,6 +80,8 @@ public sealed class EntityOverviewService
             overrideTask);
 
         IReadOnlyList<TrackedEntity> allEntities = await entityTask;
+        IReadOnlyDictionary<EntityId, string> currentDevelopers =
+            await CurrentDevelopersAsync(trackerId, cancellationToken);
         IReadOnlyList<PersistedDependency> persistedDependencies = await dependencyTask;
         IReadOnlyList<PersistedUnresolvedDependency> persistedUnresolvedDependencies =
             await unresolvedDependencyTask;
@@ -202,7 +211,7 @@ public sealed class EntityOverviewService
                     entity.Provenance,
                     entity.Status,
                     entity.Notes,
-                    entity.ResponsibleDeveloper,
+                    currentDevelopers.GetValueOrDefault(entity.Id, entity.ResponsibleDeveloper),
                     entity.GroupName,
                     entity.LifecycleState,
                     dependencyCounts[entity.Id],
@@ -228,7 +237,7 @@ public sealed class EntityOverviewService
                     entity.Provenance,
                     entity.Status,
                     entity.Notes,
-                    entity.ResponsibleDeveloper,
+                    currentDevelopers.GetValueOrDefault(entity.Id, entity.ResponsibleDeveloper),
                     entity.GroupName,
                     entity.LifecycleState,
                     dependencyCounts[entity.Id],
@@ -260,7 +269,7 @@ public sealed class EntityOverviewService
                 entity.Provenance,
                 entity.Status,
                 entity.Notes,
-                entity.ResponsibleDeveloper,
+                currentDevelopers.GetValueOrDefault(entity.Id, entity.ResponsibleDeveloper),
                 entity.GroupName,
                 entity.LifecycleState,
                 archivedDependencyNames[entity.Id].Length,
@@ -282,6 +291,23 @@ public sealed class EntityOverviewService
                 .ThenBy(static item => item.EntityId.Value),
             [],
             archivedItems);
+    }
+
+    private async Task<IReadOnlyDictionary<EntityId, string>> CurrentDevelopersAsync(
+        TrackerId trackerId, CancellationToken cancellationToken)
+    {
+        if (_responsibilityPeriods is null || _developers is null)
+            return new Dictionary<EntityId, string>();
+        IReadOnlyList<ResponsibilityPeriod> periods =
+            await _responsibilityPeriods.GetByTrackerAsync(trackerId, cancellationToken);
+        Dictionary<DeveloperId, ProjectDeveloper> developers =
+            (await _developers.ListForTrackerAsync(trackerId, cancellationToken))
+            .ToDictionary(d => d.Id);
+        return periods.Where(p => p.IsCurrent).GroupBy(p => p.EntityId)
+            .ToDictionary(group => group.Key, group => string.Join(", ", group
+                .Select(p => developers.TryGetValue(p.DeveloperId, out ProjectDeveloper? d)
+                    ? d.Initials : string.Empty)
+                .Where(s => s.Length > 0).Order(StringComparer.OrdinalIgnoreCase)));
     }
 
     private static IReadOnlyDictionary<EntityId, string[]> BuildArchivedDependencyNames(

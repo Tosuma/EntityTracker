@@ -9,6 +9,85 @@ public sealed class ProjectSnapshotMergerTests
     private static readonly DateTimeOffset Time = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public void IndependentResponsibilityAndNoteEditsMergeByPeriodId()
+    {
+        ProjectSnapshot basis = Snapshot();
+        SnapshotEntity entity = basis.Trackers[0].Entities[0];
+        SnapshotDeveloper developer = new(Guid.NewGuid(), basis.Project.Id, "AL", "Alice", false);
+        SnapshotResponsibilityPeriod period = new(Guid.NewGuid(), entity.Id, developer.Id, Time, null);
+        ProjectSnapshot local = EditEntity(basis with { Developers = [developer] },
+            e => e with { ResponsibilityPeriods = [period] });
+        ProjectSnapshot remote = EditEntity(basis, e => e with { Notes = "Remote note" });
+
+        ProjectMergeResult result = new ProjectSnapshotMerger().Merge(basis, local, remote);
+
+        Assert.Empty(result.Conflicts);
+        SnapshotEntity merged = Assert.Single(result.Snapshot.Trackers[0].Entities);
+        Assert.Equal("Remote note", merged.Notes);
+        Assert.Equal(period, Assert.Single(merged.ResponsibilityPeriods!));
+    }
+
+    [Fact]
+    public void ConcurrentOverlappingPeriodsRequireReview()
+    {
+        ProjectSnapshot basis = Snapshot();
+        SnapshotEntity entity = basis.Trackers[0].Entities[0];
+        SnapshotDeveloper developer = new(Guid.NewGuid(), basis.Project.Id, "AL", "Alice", false);
+        basis = basis with { Developers = [developer] };
+        SnapshotResponsibilityPeriod left = new(Guid.NewGuid(), entity.Id, developer.Id, Time, null);
+        SnapshotResponsibilityPeriod right = new(Guid.NewGuid(), entity.Id, developer.Id,
+            Time.AddMinutes(1), null);
+        ProjectSnapshot local = EditEntity(basis, e => e with { ResponsibilityPeriods = [left] });
+        ProjectSnapshot remote = EditEntity(basis, e => e with { ResponsibilityPeriods = [right] });
+
+        ProjectMergeConflict conflict = Assert.Single(new ProjectSnapshotMerger()
+            .Merge(basis, local, remote).Conflicts);
+        Assert.Contains("ResponsibilityOverlap", conflict.Path, StringComparison.Ordinal);
+        ProjectMergeResult reviewed = new ProjectSnapshotMerger(new Dictionary<string, MergeSide>
+        {
+            [conflict.Path] = MergeSide.Remote
+        }).Merge(basis, local, remote);
+        Assert.Equal(right, Assert.Single(reviewed.Snapshot.Trackers[0].Entities[0].ResponsibilityPeriods!));
+    }
+
+    [Fact]
+    public void RetirementAgainstNewAssignmentRequiresCoherentHistoryChoice()
+    {
+        ProjectSnapshot basis = Snapshot();
+        SnapshotEntity entity = basis.Trackers[0].Entities[0];
+        SnapshotDeveloper developer = new(Guid.NewGuid(), basis.Project.Id, "AL", "Alice", false);
+        SnapshotResponsibilityPeriod original = new(Guid.NewGuid(), entity.Id,
+            developer.Id, Time, null);
+        basis = EditEntity(basis with { Developers = [developer] },
+            e => e with { ResponsibilityPeriods = [original] });
+        ProjectSnapshot local = EditEntity(basis with
+        {
+            Developers = [developer with { IsRetired = true }]
+        }, e => e with { ResponsibilityPeriods =
+            [original with { EndedAtUtc = Time.AddMinutes(1) }] });
+        SnapshotResponsibilityPeriod reassigned = new(Guid.NewGuid(), entity.Id,
+            developer.Id, Time.AddMinutes(2), null);
+        ProjectSnapshot remote = EditEntity(basis, e => e with { ResponsibilityPeriods =
+        [original with { EndedAtUtc = Time.AddMinutes(2) }, reassigned] });
+
+        ProjectMergeResult proposal = new ProjectSnapshotMerger().Merge(basis, local, remote);
+        ProjectMergeConflict lifecycle = Assert.Single(proposal.Conflicts,
+            c => c.Path.EndsWith("/ResponsibilityLifecycle", StringComparison.Ordinal));
+        Assert.True(Assert.Single(proposal.Snapshot.Developers!).IsRetired);
+        Assert.DoesNotContain(proposal.Snapshot.Trackers[0].Entities[0].ResponsibilityPeriods!,
+            p => p.EndedAtUtc is null);
+
+        ProjectMergeResult reviewed = new ProjectSnapshotMerger(new Dictionary<string, MergeSide>
+        {
+            [lifecycle.Path] = MergeSide.Remote
+        }).Merge(basis, local, remote);
+        Assert.False(Assert.Single(reviewed.Snapshot.Developers!).IsRetired);
+        Assert.Equal(reassigned, Assert.Single(reviewed.Snapshot.Trackers[0].Entities[0]
+            .ResponsibilityPeriods!, p => p.EndedAtUtc is null));
+        ProjectSnapshotValidator.Validate(reviewed.Snapshot);
+    }
+
+    [Fact]
     public void IndependentFieldsAndRelationshipsMergeWithoutReview()
     {
         ProjectSnapshot basis = Snapshot();
@@ -41,7 +120,9 @@ public sealed class ProjectSnapshotMergerTests
         Assert.Equal(2, result.Snapshot.Trackers[0].Entities.Count);
         SnapshotEntity merged = result.Snapshot.Trackers[0].Entities.Single(e => e.Id == entity.Id);
         Assert.Equal("Local note", merged.Notes);
-        Assert.Equal("Remote developer", merged.ResponsibleDeveloper);
+        SnapshotResponsibilityPeriod assignment = Assert.Single(merged.ResponsibilityPeriods!);
+        Assert.Equal("Remote developer", Assert.Single(result.Snapshot.Developers!).Initials);
+        Assert.Equal(assignment.DeveloperId, Assert.Single(result.Snapshot.Developers!).Id);
         Assert.Single(merged.UnresolvedDependencies);
     }
 

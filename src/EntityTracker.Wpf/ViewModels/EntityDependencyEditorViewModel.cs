@@ -7,6 +7,9 @@ using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Planning;
+using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Projects;
+using System.Globalization;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
@@ -29,6 +32,10 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private readonly Action<SchemaSynchronizationPlan> _onReviewStaged;
     private readonly Func<bool> _canOperate;
     private readonly ILogger<EntityDependencyEditorViewModel> _logger;
+    private readonly IResponsibilityPeriodRepository? _responsibilityPeriods;
+    private readonly ProjectDeveloperService? _developers;
+    private string _archivedCurrentDevelopers = "—";
+    private IReadOnlyList<EntityDetailListItem> _archivedResponsibilityTimeline = [];
     private readonly AsyncCommand _saveCommand;
     private readonly AsyncCommand _confirmArchiveCommand;
     private readonly AsyncCommand _restoreEntityCommand;
@@ -81,6 +88,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private IReadOnlyList<string> _priorityUnresolvedDependencyNames = [];
     private bool _hasPendingPriorityChange;
     private string? _initialOverrideSignature;
+    private HashSet<DeveloperId> _initialDeveloperIds = [];
 
     public EntityDependencyEditorViewModel(
         TrackerId trackerId,
@@ -93,7 +101,10 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         Func<Task> onPurged,
         Action<SchemaSynchronizationPlan> onReviewStaged,
         Func<bool>? canOperate = null,
-        ILogger<EntityDependencyEditorViewModel>? logger = null)
+        ILogger<EntityDependencyEditorViewModel>? logger = null,
+        DeveloperPickerViewModel? developerPicker = null,
+        IResponsibilityPeriodRepository? responsibilityPeriods = null,
+        ProjectDeveloperService? developers = null)
     {
         ArgumentNullException.ThrowIfNull(editorService);
         ArgumentNullException.ThrowIfNull(lifecycleService);
@@ -115,6 +126,11 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _onReviewStaged = onReviewStaged;
         _canOperate = canOperate ?? (() => true);
         _logger = logger ?? NullLogger<EntityDependencyEditorViewModel>.Instance;
+        DeveloperPicker = developerPicker;
+        _responsibilityPeriods = responsibilityPeriods;
+        _developers = developers;
+        if (DeveloperPicker is not null)
+            DeveloperPicker.SelectionChanged += (_, _) => OnPropertyChanged(nameof(IsDirty));
         _addExistingCommand = new RelayCommand<ManualDependencySuggestion>(
             AddExisting,
             _ => CanEdit);
@@ -165,6 +181,17 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+    public DeveloperPickerViewModel? DeveloperPicker { get; }
+    public string ArchivedCurrentDevelopers
+    {
+        get => _archivedCurrentDevelopers;
+        private set => SetField(ref _archivedCurrentDevelopers, value);
+    }
+    public IReadOnlyList<EntityDetailListItem> ArchivedResponsibilityTimeline
+    {
+        get => _archivedResponsibilityTimeline;
+        private set => SetField(ref _archivedResponsibilityTimeline, value);
+    }
 
     public IReadOnlyList<EntityDependencyEditRow> Dependencies
     {
@@ -679,6 +706,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             return SelectedStatus != entity.Status ||
                    EditedNotes != entity.Notes ||
                    EditedResponsibleDeveloper != entity.ResponsibleDeveloper ||
+                   DeveloperPicker is not null &&
+                   !_initialDeveloperIds.SetEquals(DeveloperPicker.SelectedIds) ||
                    EditedGroupName != entity.GroupName ||
                    SelectedRequestedPriority != entity.RequestedPriority ||
                    OverrideSignature(CurrentEditPlan.DesiredOverrides) != _initialOverrideSignature;
@@ -770,6 +799,13 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         try
         {
             LoadPlan(await _editorService.LoadAsync(_trackerId, entityId, cancellationToken), true);
+            if (DeveloperPicker is not null && _responsibilityPeriods is not null)
+            {
+                DeveloperId[] selected = (await _responsibilityPeriods.GetByEntityAsync(entityId, cancellationToken))
+                    .Where(p => p.IsCurrent).Select(p => p.DeveloperId).ToArray();
+                await DeveloperPicker.LoadAsync(selected, cancellationToken);
+                _initialDeveloperIds = selected.ToHashSet();
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -845,6 +881,29 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                     entityId,
                     cancellationToken);
             ArchivedDetails = details;
+            if (_responsibilityPeriods is not null && _developers is not null)
+            {
+                ResponsibilityPeriod[] periods = (await _responsibilityPeriods
+                    .GetByEntityAsync(entityId, cancellationToken)).OrderBy(p => p.StartedAtUtc)
+                    .ThenBy(p => p.Id).ToArray();
+                Dictionary<DeveloperId, ProjectDeveloper> byId = (await _developers
+                    .ListForTrackerAsync(_trackerId, cancellationToken)).ToDictionary(d => d.Id);
+                string[] current = periods.Where(p => p.IsCurrent)
+                    .Select(p => byId.GetValueOrDefault(p.DeveloperId)?.Initials ?? "Unknown developer")
+                    .ToArray();
+                ArchivedCurrentDevelopers = current.Length == 0 ? "—" : string.Join(", ", current);
+                ArchivedResponsibilityTimeline = periods.Select(p =>
+                {
+                    ProjectDeveloper? developer = byId.GetValueOrDefault(p.DeveloperId);
+                    string name = developer is null ? "Unknown developer" :
+                        string.IsNullOrEmpty(developer.DisplayName) ? developer.Initials :
+                        $"{developer.Initials} — {developer.DisplayName}";
+                    string start = p.StartedAtUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
+                    string end = p.EndedAtUtc is { } ended
+                        ? ended.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) : "Current";
+                    return new EntityDetailListItem(name, $"{start} → {end}");
+                }).ToArray();
+            }
             _selectedStatus = details.Entity.Status;
             OnPropertyChanged(nameof(SelectedStatus));
             OnPropertyChanged(nameof(SelectedStatusDisplay));
@@ -1157,7 +1216,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                     EditedNotes,
                     SelectedRequestedPriority,
                     EditedResponsibleDeveloper,
-                    EditedGroupName);
+                    EditedGroupName,
+                    developerIds: DeveloperPicker?.SelectedIds);
                 await _onPersisted();
             }
 
@@ -1402,6 +1462,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _previewVersion++;
         CurrentEditPlan = null;
         ArchivedDetails = null;
+        ArchivedCurrentDevelopers = "—";
+        ArchivedResponsibilityTimeline = [];
         Dependencies = [];
         Warnings = [];
         Errors = [];

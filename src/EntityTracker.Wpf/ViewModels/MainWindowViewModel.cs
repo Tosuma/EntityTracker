@@ -7,6 +7,8 @@ using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Overview;
+using EntityTracker.Application.Projects;
+using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Workflow;
@@ -23,6 +25,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly EntityOverviewService _overviewService;
     private readonly TrackerId _trackerId;
+    private readonly ProjectDeveloperService? _developers;
+    private readonly IResponsibilityPeriodRepository? _responsibilityPeriods;
     private readonly SchemaSynchronizationService _synchronizationService;
     private readonly BulkStatusUpdateService _bulkStatusUpdateService;
     private readonly ICsvFilePicker _filePicker;
@@ -70,7 +74,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         ProgressDashboardViewModel progressDashboard,
         ISchemaSynchronizationConfirmation confirmationService,
         IContextDiscardConfirmation discardConfirmation,
-        ILoggerFactory? loggerFactory = null)
+        ILoggerFactory? loggerFactory = null,
+        ProjectDeveloperService? developers = null,
+        IResponsibilityPeriodRepository? responsibilityPeriods = null)
     {
         ArgumentNullException.ThrowIfNull(overviewService);
         ArgumentNullException.ThrowIfNull(synchronizationService);
@@ -83,6 +89,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         ArgumentNullException.ThrowIfNull(confirmationService);
         ArgumentNullException.ThrowIfNull(discardConfirmation);
         _trackerId = trackerId;
+        _developers = developers;
+        _responsibilityPeriods = responsibilityPeriods;
         _overviewService = overviewService;
         _synchronizationService = synchronizationService;
         _bulkStatusUpdateService = bulkStatusUpdateService;
@@ -106,7 +114,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             OpenArchivedFromCreationAsync,
             () => SelectedTab = MainWindowTab.Overview,
             () => !IsBusy,
-            effectiveLoggerFactory.CreateLogger<ManualEntityCreationViewModel>());
+            effectiveLoggerFactory.CreateLogger<ManualEntityCreationViewModel>(),
+            developers is null ? null : new DeveloperPickerViewModel(trackerId, developers));
         ManualCreation.PropertyChanged += OnManualCreationPropertyChanged;
         Editor = new EntityDependencyEditorViewModel(
             trackerId,
@@ -119,7 +128,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             OnEntityPurgedAsync,
             OnReviewDependencyEditsStaged,
             () => !IsBusy && !ManualCreation.IsBusy,
-            effectiveLoggerFactory.CreateLogger<EntityDependencyEditorViewModel>());
+            effectiveLoggerFactory.CreateLogger<EntityDependencyEditorViewModel>(),
+            developers is null ? null : new DeveloperPickerViewModel(trackerId, developers),
+            responsibilityPeriods,
+            developers);
         Editor.PropertyChanged += OnEditorPropertyChanged;
         _refreshCommand = new AsyncCommand(
             () => RefreshAsync(),
@@ -531,6 +543,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
+        if (ManualCreation.DeveloperPicker is not null)
+            await ManualCreation.DeveloperPicker.LoadAsync(cancellationToken: cancellationToken);
         await RefreshAsync(cancellationToken);
     }
 
@@ -1035,6 +1049,25 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     {
         ArgumentNullException.ThrowIfNull(row);
         SelectedEntityDetails = new EntityDetailsViewModel(row);
+        if (_developers is not null && _responsibilityPeriods is not null)
+            _ = LoadResponsibilityDetailsAsync(SelectedEntityDetails);
+    }
+
+    private async Task LoadResponsibilityDetailsAsync(EntityDetailsViewModel details)
+    {
+        try
+        {
+            IReadOnlyList<ResponsibilityPeriod> periods =
+                await _responsibilityPeriods!.GetByEntityAsync(details.EntityId);
+            IReadOnlyList<ProjectDeveloper> developers =
+                await _developers!.ListForTrackerAsync(_trackerId);
+            if (ReferenceEquals(SelectedEntityDetails, details))
+                details.SetResponsibility(periods, developers);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Responsibility history could not be loaded.");
+        }
     }
 
     public bool TryCloseEditor()

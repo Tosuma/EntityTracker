@@ -73,8 +73,11 @@ independently. Use the form on the right to add a developer or edit a selected o
 Initials are required and unique among available developers in the Project; retired records can
 be restored when their initials are free. Retiring a developer requires entering their exact initials.
 The retired list stays hidden until you select **Retired developers**.
-Entity responsibility still uses the existing text field
-until RESP-02.
+In entity creation or editing, search available Project developers and select everyone currently
+responsible. You can add a developer in the picker. Removing someone ends their current assignment;
+reassigning them starts a new dated period. Entity details show current developers and the full
+responsibility timeline. Retiring a developer ends all their open assignments, including archived
+entities, without deleting their history.
 
 <table>
   <tr>
@@ -189,7 +192,7 @@ exact Tracker name, and starts with focus on the safe Cancel action.
 
 ### Find and maintain tracked entities
 
-Use the dropdown on a supported column header to select any combination of responsible developers,
+Use the dropdown on a supported column header to select current developer summaries,
 groups, statuses, or work statuses. Selections within a column are alternatives, while filters on
 different columns work together. Status summary cards remain useful one-click shortcuts. Search
 entity names and, when needed, dependency names from the overview; the same search opens with
@@ -276,9 +279,10 @@ existing checkouts.
 A separate
 [PF-01–PF-05 product feedback milestone group](docs/milestones/product-feedback/00_README.md)
 records the implemented bulk status updates, customer priority, responsible-developer and group
-metadata, and column filtering with status-order sorting. The planned
-[RESP-01–RESP-04 Responsibility roadmap](docs/milestones/responsibility/00_README.md) covers
-project developers, dated assignments, responsibility search, and local `Assign me`. The independent
+metadata, and column filtering with status-order sorting. The
+[RESP-01–RESP-04 Responsibility roadmap](docs/milestones/responsibility/00_README.md) records
+completed Project developers and dated assignments, with responsibility search and local `Assign me`
+planned. The independent
 [CI-01 engineering milestone](docs/milestones/engineering/ci_01_continuous_integration.md) defines
 CI validation for pull requests, pushes to `main`, and app release tags; successful pushes are packaged.
 The live badge above reports the current `main` build status.

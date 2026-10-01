@@ -1,3 +1,5 @@
+using EntityTracker.Domain;
+
 namespace EntityTracker.Application.ManualCreation;
 
 public sealed class ManualEntityCreationRequest
@@ -7,7 +9,8 @@ public sealed class ManualEntityCreationRequest
         IEnumerable<ManualDependencySelection> dependencies,
         string? responsibleDeveloper = null,
         string? groupName = null,
-        int? requestedPriority = null)
+        int? requestedPriority = null,
+        IEnumerable<DeveloperId>? developerIds = null)
     {
         ArgumentNullException.ThrowIfNull(entityName);
         ArgumentNullException.ThrowIfNull(dependencies);
@@ -17,6 +20,7 @@ public sealed class ManualEntityCreationRequest
         ResponsibleDeveloper = responsibleDeveloper;
         GroupName = groupName;
         RequestedPriority = requestedPriority;
+        DeveloperIds = (developerIds ?? []).Distinct().ToArray();
 
         if (Dependencies.Any(static dependency => dependency is null))
         {
@@ -35,4 +39,5 @@ public sealed class ManualEntityCreationRequest
     public string? GroupName { get; }
 
     public int? RequestedPriority { get; }
+    public IReadOnlyList<DeveloperId> DeveloperIds { get; }
 }

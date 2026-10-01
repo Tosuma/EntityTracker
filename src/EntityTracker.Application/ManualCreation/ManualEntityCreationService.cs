@@ -227,6 +227,7 @@ public sealed class ManualEntityCreationService
                 reconciledOwnerIds.Contains(dependency.Dependency.DependentEntityId)),
             [createdEntity.Id],
             createdOverrides,
+            responsibilitySelections: [new ResponsibilitySelection(createdEntity.Id, request.DeveloperIds)],
             progressSnapshotAfterChanges: _snapshotCalculator.Calculate(
                 candidateEntities,
                 effectiveState));

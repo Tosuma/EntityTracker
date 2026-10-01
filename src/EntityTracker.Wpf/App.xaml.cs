@@ -125,7 +125,6 @@ public partial class App : System.Windows.Application
             services.AddSingleton<EntityLifecycleService>();
             services.AddSingleton<ProjectManagementService>();
             services.AddSingleton<ProjectDeveloperService>();
-            services.AddSingleton<ProjectDeveloperService>();
             services.AddSingleton<TrackerManagementService>();
             services.AddSingleton<TrackerSyncService>();
             services.AddSingleton<TrackerCsvCreationService>();
@@ -232,6 +231,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IProjectSyncBackup>(provider => provider.GetRequiredService<SqliteBackupService>());
         services.AddSingleton<IPersistenceInitializer, SqlitePersistenceInitializer>();
         services.AddSingleton<IEntityRepository, SqliteEntityRepository>();
+        services.AddSingleton<IResponsibilityPeriodRepository, SqliteResponsibilityPeriodRepository>();
         services.AddSingleton<IEntityAuditReader, SqliteEntityAuditReader>();
         services.AddSingleton<IDependencyRepository, SqliteDependencyRepository>();
         services.AddSingleton<IManualDependencyOverrideRepository,

@@ -31,7 +31,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT id, tracker_id, source_name, development_status, notes, lifecycle_state, provenance,
-                   requested_priority, responsible_developer, group_name
+                   requested_priority, group_name
             FROM tracked_entities
             WHERE tracker_id = $trackerId AND id = $id;
             """;
@@ -54,7 +54,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT id, tracker_id, source_name, development_status, notes, lifecycle_state, provenance,
-                   requested_priority, responsible_developer, group_name
+                   requested_priority, group_name
             FROM tracked_entities
             WHERE tracker_id = $trackerId
             ORDER BY source_name COLLATE NOCASE, id;
@@ -101,7 +101,6 @@ public sealed class SqliteEntityRepository : IEntityRepository
                 lifecycle_state,
                 provenance,
                 requested_priority,
-                responsible_developer,
                 group_name,
                 created_at_utc,
                 schema_updated_at_utc,
@@ -118,7 +117,6 @@ public sealed class SqliteEntityRepository : IEntityRepository
                 $lifecycleState,
                 $provenance,
                 $requestedPriority,
-                $responsibleDeveloper,
                 $groupName,
                 $createdAtUtc,
                 $schemaUpdatedAtUtc,
@@ -193,9 +191,6 @@ public sealed class SqliteEntityRepository : IEntityRepository
         command.Parameters.AddWithValue(
             "$requestedPriority",
             entity.RequestedPriority is null ? DBNull.Value : entity.RequestedPriority.Value);
-        command.Parameters.AddWithValue(
-            "$responsibleDeveloper",
-            entity.ResponsibleDeveloper);
         command.Parameters.AddWithValue("$groupName", entity.GroupName);
     }
 
@@ -216,8 +211,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
             reader.GetString(6),
             "entity provenance");
         int? requestedPriority = reader.IsDBNull(7) ? null : reader.GetInt32(7);
-        string responsibleDeveloper = reader.GetString(8);
-        string groupName = reader.GetString(9);
+        string groupName = reader.GetString(8);
 
         return new TrackedEntity(
             id,
@@ -228,7 +222,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
             lifecycleState,
             provenance,
             requestedPriority,
-            responsibleDeveloper,
+            null,
             groupName);
     }
 }

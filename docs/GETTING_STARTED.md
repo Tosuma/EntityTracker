@@ -79,6 +79,16 @@ installed app, so close one before opening the other.
 5. **Review reports** — Open **Reports** to see status distribution, implementation history,
    and blocker trends.
 
+### Assign developers
+
+Open an entity or create a new one, then search the Project developer picker and select one or
+more available developers. Enter initials and an optional display name in the picker to create a
+new Project developer. Entity details show current assignments and a timeline of past periods.
+Removing a developer ends their current period; assigning them again starts a new one. Retiring a
+developer from the Project dashboard ends all their open assignments, including on archived
+entities. The overview displays current initials; developer-specific filtering is planned for
+RESP-03.
+
 ### Sync a copied tracker
 
 On the Project dashboard, choose **Sync from source** on a tracker created with **Copy tracker**.

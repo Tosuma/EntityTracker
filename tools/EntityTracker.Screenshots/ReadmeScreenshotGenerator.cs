@@ -208,6 +208,21 @@ internal sealed class ReadmeScreenshotGenerator
             await renderer.CaptureAsync("create-tracker-copy.png");
             shell.Catalog.CancelCommand.Execute(null);
 
+            EntityId featuredEntity = (await provider.GetRequiredService<IEntityRepository>()
+                    .GetAllAsync(tracker.Id, cancellationToken))
+                .Single(entity => entity.SourceName == "customer_preference").Id;
+            ProjectDeveloper platform = (await developerService.ListAsync(project.Id, cancellationToken))
+                .Single(developer => developer.Initials == "PT");
+            ITrackedStateStore responsibilityStore = provider.GetRequiredService<ITrackedStateStore>();
+            await responsibilityStore.ApplyAsync(tracker.Id,
+                new TrackedStateChangeSet([], [], [], [], [], [],
+                    responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
+                        [alice.Id, platform.Id])]), cancellationToken);
+            await responsibilityStore.ApplyAsync(tracker.Id,
+                new TrackedStateChangeSet([], [], [], [], [], [],
+                    responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
+                        [platform.Id])]), cancellationToken);
+
             await shell.OpenTrackerAsync(tracker.Id);
             MainWindowViewModel viewModel = shell.CurrentWorkspace
                 ?? throw new InvalidOperationException("The tracker workspace was not created.");
@@ -390,6 +405,8 @@ internal sealed class ReadmeScreenshotGenerator
         EntityOverviewRow detailsRow = viewModel.OverviewItems.Single(static item =>
             item.SourceName == "customer_preference");
         viewModel.OpenEntityDetailsCommand.Execute(detailsRow);
+        await WaitUntilAsync(() => viewModel.SelectedEntityDetails?.ResponsibilityTimeline.Count > 0,
+            "Responsibility details did not load.", cancellationToken);
         await renderer.CaptureAsync("overview-details.png");
         viewModel.CloseEntityDetails();
 
@@ -507,7 +524,8 @@ internal sealed class ReadmeScreenshotGenerator
         CancellationToken cancellationToken)
     {
         viewModel.ManualCreation.EntityName = "shipment_schedule";
-        viewModel.ManualCreation.ResponsibleDeveloper = "Platform Team";
+        viewModel.ManualCreation.DeveloperPicker!.Choices
+            .Single(choice => choice.Developer.Initials == "PT").IsSelected = true;
         viewModel.ManualCreation.GroupName = "Operations";
         viewModel.ManualCreation.SelectedRequestedPriority = 2;
 
@@ -554,6 +572,14 @@ internal sealed class ReadmeScreenshotGenerator
             .OrderBy(static entity => entity.SourceName, StringComparer.Ordinal)
             .First();
 
+        ProjectDeveloper platform = (await provider.GetRequiredService<ProjectDeveloperService>()
+                .ListAsync(tracker.ProjectId, cancellationToken))
+            .Single(developer => developer.Initials == "PT");
+        await provider.GetRequiredService<ITrackedStateStore>().ApplyAsync(tracker.Id,
+            new TrackedStateChangeSet([], [], [], [], [], [],
+                responsibilitySelections: [new ResponsibilitySelection(leaf.Id, [platform.Id])]),
+            cancellationToken);
+
         bool archived = await provider.GetRequiredService<EntityLifecycleService>()
             .TryArchiveAsync(tracker.Id, leaf.Id, cancellationToken);
         if (!archived)
@@ -565,6 +591,8 @@ internal sealed class ReadmeScreenshotGenerator
         await shell.NavigateAsync(ShellDestination.Archived, cancellationToken);
         EntityOverviewRow archivedRow = viewModel.ArchivedItems.Single(item => item.EntityId == leaf.Id);
         viewModel.OpenEntityDetailsCommand.Execute(archivedRow);
+        await WaitUntilAsync(() => viewModel.SelectedEntityDetails?.ResponsibilityTimeline.Count > 0,
+            "Archived responsibility details did not load.", cancellationToken);
         await renderer.CaptureAsync("archived-details.png");
         viewModel.CloseEntityDetails();
         await viewModel.Editor.BeginArchivedAsync(archivedRow.EntityId, cancellationToken);

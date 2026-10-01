@@ -2,6 +2,8 @@ using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Overview;
+using EntityTracker.Application.Projects;
+using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
@@ -27,7 +29,9 @@ public sealed class TrackerWorkspaceViewModelFactory(
     IClipboardService clipboard,
     ISchemaSynchronizationConfirmation synchronizationConfirmation,
     IContextDiscardConfirmation discardConfirmation,
-    ILoggerFactory loggerFactory)
+    ILoggerFactory loggerFactory,
+    ProjectDeveloperService? developers = null,
+    IResponsibilityPeriodRepository? responsibilityPeriods = null)
 {
     public MainWindowViewModel Create(TrackerId trackerId)
     {
@@ -51,6 +55,8 @@ public sealed class TrackerWorkspaceViewModelFactory(
             progress,
             synchronizationConfirmation,
             discardConfirmation,
-            loggerFactory);
+            loggerFactory,
+            developers,
+            responsibilityPeriods);
     }
 }

@@ -76,6 +76,7 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<IProgressHistoryRepository, SqliteProgressHistoryRepository>();
         services.AddSingleton<IProjectRepository, SqliteProjectRepository>();
         services.AddSingleton<IProjectDeveloperStore, SqliteProjectDeveloperStore>();
+        services.AddSingleton<IResponsibilityPeriodRepository, SqliteResponsibilityPeriodRepository>();
         services.AddSingleton<ITrackerRepository, SqliteTrackerRepository>();
         services.AddSingleton<IProjectTrackerStore, SqliteProjectTrackerStore>();
         services.AddSingleton<IProjectSnapshotStore, SqliteProjectSnapshotStore>();

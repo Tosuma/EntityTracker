@@ -131,6 +131,10 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                     cancellationToken);
             }
 
+            foreach (ResponsibilitySelection selection in changeSet.ResponsibilitySelections)
+                await SqliteResponsibilityWriter.ApplySelectionAsync(connection, transaction,
+                    trackerId, selection, appliedAtUtc.ToUniversalTime(), cancellationToken);
+
             foreach (TrackedEntity entity in changeSet.EntitiesToUpdate)
             {
                 await UpdateEntityAsync(
@@ -160,15 +164,6 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
             foreach (TrackedEntity entity in changeSet.EntitiesWithRequestedPriorityToUpdate)
             {
                 await UpdateRequestedPriorityAsync(
-                    connection,
-                    transaction,
-                    entity,
-                    cancellationToken);
-            }
-
-            foreach (TrackedEntity entity in changeSet.EntitiesWithResponsibleDeveloperToUpdate)
-            {
-                await UpdateResponsibleDeveloperAsync(
                     connection,
                     transaction,
                     entity,
@@ -340,11 +335,12 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         string[] queries =
         [
             "SELECT id, project_id, lifecycle_state, copied_from_tracker_id FROM trackers WHERE id = $id ORDER BY id;",
-            "SELECT id, source_name, development_status, notes, lifecycle_state, provenance, requested_priority, responsible_developer, group_name, schema_updated_at_utc, progress_updated_at_utc FROM tracked_entities WHERE tracker_id = $id ORDER BY id;",
+            "SELECT id, source_name, development_status, notes, lifecycle_state, provenance, requested_priority, group_name, schema_updated_at_utc, progress_updated_at_utc FROM tracked_entities WHERE tracker_id = $id ORDER BY id;",
             "SELECT d.dependent_entity_id, d.dependency_entity_id, d.dependency_kind, d.updated_at_utc FROM schema_dependencies d JOIN tracked_entities e ON e.id = d.dependent_entity_id WHERE e.tracker_id = $id ORDER BY d.dependent_entity_id, d.dependency_entity_id;",
             "SELECT d.dependent_entity_id, d.dependency_source_key, d.dependency_kind, d.updated_at_utc FROM unresolved_schema_dependencies d JOIN tracked_entities e ON e.id = d.dependent_entity_id WHERE e.tracker_id = $id ORDER BY d.dependent_entity_id, d.dependency_source_key;",
             "SELECT d.dependent_entity_id, d.dependency_source_key, d.override_action, d.updated_at_utc FROM manual_dependency_overrides d JOIN tracked_entities e ON e.id = d.dependent_entity_id WHERE e.tracker_id = $id ORDER BY d.dependent_entity_id, d.dependency_source_key;",
-            "SELECT baseline_json FROM tracker_sync_baselines WHERE tracker_id = $id;"
+            "SELECT baseline_json FROM tracker_sync_baselines WHERE tracker_id = $id;",
+            "SELECT p.id, p.entity_id, p.developer_id, p.started_at_utc, p.ended_at_utc FROM responsibility_periods p JOIN tracked_entities e ON e.id = p.entity_id WHERE e.tracker_id = $id ORDER BY p.id;"
         ];
         foreach (string query in queries)
         {
@@ -761,14 +757,14 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
             INSERT INTO tracked_entities
             (
                 id, tracker_id, source_key, source_name, development_status, notes,
-                lifecycle_state, provenance, requested_priority, responsible_developer, group_name,
+                lifecycle_state, provenance, requested_priority, group_name,
                 created_at_utc, schema_updated_at_utc,
                 progress_updated_at_utc
             )
             VALUES
             (
                 $id, $trackerId, $sourceKey, $sourceName, $developmentStatus, $notes,
-                $lifecycleState, $provenance, $requestedPriority, $responsibleDeveloper, $groupName,
+                $lifecycleState, $provenance, $requestedPriority, $groupName,
                 $timestamp, $timestamp, $timestamp
             );
             """);
@@ -906,25 +902,6 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         command.Parameters.AddWithValue(
             "$requestedPriority",
             entity.RequestedPriority is null ? DBNull.Value : entity.RequestedPriority.Value);
-        await command.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    private static async Task UpdateResponsibleDeveloperAsync(
-        SqliteConnection connection,
-        SqliteTransaction transaction,
-        TrackedEntity entity,
-        CancellationToken cancellationToken)
-    {
-        using SqliteCommand command = CreateCommand(connection, transaction, """
-            UPDATE tracked_entities
-            SET responsible_developer = $responsibleDeveloper
-            WHERE id = $id
-              AND responsible_developer <> $responsibleDeveloper;
-            """);
-        command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
-        command.Parameters.AddWithValue(
-            "$responsibleDeveloper",
-            entity.ResponsibleDeveloper);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -1118,9 +1095,6 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         command.Parameters.AddWithValue(
             "$requestedPriority",
             entity.RequestedPriority is null ? DBNull.Value : entity.RequestedPriority.Value);
-        command.Parameters.AddWithValue(
-            "$responsibleDeveloper",
-            entity.ResponsibleDeveloper);
         command.Parameters.AddWithValue("$groupName", entity.GroupName);
     }
 

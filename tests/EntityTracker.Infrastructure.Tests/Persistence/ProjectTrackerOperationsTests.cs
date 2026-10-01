@@ -15,6 +15,41 @@ namespace EntityTracker.Infrastructure.Tests.Persistence;
 public sealed class ProjectTrackerOperationsTests
 {
     [Fact]
+    public async Task CopyPreservesSameProjectHistoryAndOmitsItAcrossProjects()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        Tracker source = Assert.Single(await new SqliteTrackerRepository(database).GetAllAsync());
+        ProjectDeveloper developer = await new ProjectDeveloperService(
+            new SqliteProjectDeveloperStore(database)).CreateAsync(source.ProjectId, "AL");
+        TrackedEntity entity = new(EntityId.New(), source.Id, "Owned feature");
+        await new SqliteTrackedStateStore(database).ApplyAsync(source.Id,
+            new TrackedStateChangeSet([entity], [], [], [], [], [],
+                responsibilitySelections: [new ResponsibilitySelection(entity.Id, [developer.Id])]));
+        SqliteResponsibilityPeriodRepository periods = new(database);
+        ResponsibilityPeriod original = Assert.Single(await periods.GetByEntityAsync(entity.Id));
+
+        Tracker sameProject = await CreateTrackerService(database).CopyAsync(
+            source.Id, source.ProjectId, "Same Project copy");
+        TrackedEntity copied = Assert.Single(await new SqliteEntityRepository(database)
+            .GetAllAsync(sameProject.Id));
+        ResponsibilityPeriod retained = Assert.Single(await periods.GetByEntityAsync(copied.Id));
+        Assert.Equal(original.StartedAtUtc, retained.StartedAtUtc);
+        Assert.Equal(developer.Id, retained.DeveloperId);
+        Assert.NotEqual(original.Id, retained.Id);
+
+        Project destination = await new ProjectManagementService(
+            new SqliteProjectRepository(database), new SqliteProjectTrackerStore(database))
+            .CreateAsync("Other Project");
+        Tracker otherProject = await CreateTrackerService(database).CopyAsync(
+            source.Id, destination.Id, "Other Project copy");
+        TrackedEntity otherEntity = Assert.Single(await new SqliteEntityRepository(database)
+            .GetAllAsync(otherProject.Id));
+        Assert.Empty(await periods.GetByEntityAsync(otherEntity.Id));
+    }
+
+    [Fact]
     public async Task TrackerSync_ReviewsIndependentChangesAndPreservesDestinationProgress()
     {
         await using TemporarySqliteFile file = new();
@@ -625,7 +660,8 @@ public sealed class ProjectTrackerOperationsTests
         new SqliteManualDependencyOverrideRepository(database),
         new SqliteProjectTrackerStore(database),
         new EffectiveDependencyResolver(),
-        new ProgressSnapshotCalculator());
+        new ProgressSnapshotCalculator(),
+        responsibilityPeriods: new SqliteResponsibilityPeriodRepository(database));
 
     private static TrackerSyncService CreateSyncService(SqliteDatabase database) => new(
         new SqliteProjectRepository(database),

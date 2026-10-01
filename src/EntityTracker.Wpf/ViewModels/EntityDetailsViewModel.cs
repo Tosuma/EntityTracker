@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Workflow;
@@ -7,8 +9,10 @@ using Domain = EntityTracker.Domain;
 
 namespace EntityTracker.Wpf.ViewModels;
 
-public sealed class EntityDetailsViewModel
+public sealed class EntityDetailsViewModel : INotifyPropertyChanged
 {
+    private IReadOnlyList<EntityDetailListItem> _responsibilityTimeline = [];
+    private string _currentDevelopers = "—";
     public EntityDetailsViewModel(EntityOverviewRow row)
     {
         ArgumentNullException.ThrowIfNull(row);
@@ -27,6 +31,7 @@ public sealed class EntityDetailsViewModel
         DevelopmentStatusValue = row.DevelopmentStatus;
         WorkStatusDisplayValue = row.WorkStatusDisplay;
         ResponsibleDeveloper = row.ResponsibleDeveloperDisplay;
+        _currentDevelopers = ResponsibleDeveloper;
         GroupName = row.GroupNameDisplay;
         DependencyCount = row.DependencyCount;
         DependencySectionTitle = IsArchived
@@ -77,6 +82,43 @@ public sealed class EntityDetailsViewModel
     public WorkStatusDisplay WorkStatusDisplayValue { get; }
 
     public string ResponsibleDeveloper { get; }
+    public string CurrentDevelopers
+    {
+        get => _currentDevelopers;
+        private set { _currentDevelopers = value; OnPropertyChanged(); }
+    }
+    public IReadOnlyList<EntityDetailListItem> ResponsibilityTimeline
+    {
+        get => _responsibilityTimeline;
+        private set { _responsibilityTimeline = value; OnPropertyChanged(); }
+    }
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public void SetResponsibility(IEnumerable<ResponsibilityPeriod> periods,
+        IEnumerable<ProjectDeveloper> developers)
+    {
+        Dictionary<DeveloperId, ProjectDeveloper> byId = developers.ToDictionary(d => d.Id);
+        ResponsibilityPeriod[] ordered = periods.OrderBy(p => p.StartedAtUtc)
+            .ThenBy(p => p.Id).ToArray();
+        CurrentDevelopers = string.Join(", ", ordered.Where(p => p.IsCurrent)
+            .Select(p => byId.TryGetValue(p.DeveloperId, out ProjectDeveloper? d)
+                ? d.Initials : "Unknown developer").Distinct(StringComparer.OrdinalIgnoreCase));
+        if (CurrentDevelopers.Length == 0) CurrentDevelopers = "—";
+        ResponsibilityTimeline = ordered.Select(p =>
+        {
+            string name = byId.TryGetValue(p.DeveloperId, out ProjectDeveloper? developer)
+                ? string.IsNullOrEmpty(developer.DisplayName) ? developer.Initials
+                    : $"{developer.Initials} — {developer.DisplayName}"
+                : "Unknown developer";
+            string start = p.StartedAtUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
+            string end = p.EndedAtUtc is { } ended
+                ? ended.ToLocalTime().ToString("g", CultureInfo.CurrentCulture) : "Current";
+            return new EntityDetailListItem(name, $"{start} → {end}");
+        }).ToArray();
+    }
+
+    private void OnPropertyChanged([CallerMemberName] string? name = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
     public string GroupName { get; }
 
