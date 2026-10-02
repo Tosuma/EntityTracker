@@ -500,9 +500,7 @@ public sealed class PresentationConfigurationTests
         string[] editableSuggestionControls =
         [
             "ManualGroupComboBox",
-            "ManualDependencyComboBox",
-            "EditorGroupComboBox",
-            "EditorDependencyComboBox"
+            "EditorGroupComboBox"
         ];
         foreach (string name in editableSuggestionControls)
         {
@@ -512,6 +510,29 @@ public sealed class PresentationConfigurationTests
             Assert.Equal("True", (string?)comboBox.Attribute("IsEditable"));
             Assert.Equal("False", (string?)comboBox.Attribute("IsTextSearchEnabled"));
         }
+
+        foreach (string name in new[] { "ManualDependencySuggestionBox", "EditorDependencySuggestionBox" })
+        {
+            XElement suggestionBox = Assert.Single(document.Descendants(), element =>
+                (string?)element.Attribute(x + "Name") == name);
+            Assert.Equal("DependencySuggestionBox", suggestionBox.Name.LocalName);
+            Assert.Contains("DependencyQuery", (string?)suggestionBox.Attribute("Query"));
+            Assert.Contains("Suggestions", (string?)suggestionBox.Attribute("Suggestions"));
+            Assert.Contains("AddExistingCommand", (string?)suggestionBox.Attribute("AddExistingCommand"));
+        }
+
+        XDocument suggestionControl = LoadWpfXaml("Controls", "DependencySuggestionBox.xaml");
+        XElement popup = Assert.Single(suggestionControl.Descendants(), element =>
+            element.Name.LocalName == "Popup");
+        Assert.Equal("False", (string?)popup.Attribute("AllowsTransparency"));
+        XElement popupBorder = Assert.Single(popup.Elements(), element =>
+            element.Name.LocalName == "Border");
+        Assert.Equal("{DynamicResource Brush.Surface.Page}",
+            (string?)popupBorder.Attribute("Background"));
+        XElement suggestionList = Assert.Single(popupBorder.Elements());
+        Assert.Equal("{DynamicResource Brush.Surface.Page}",
+            (string?)suggestionList.Attribute("Background"));
+        Assert.Equal("False", (string?)suggestionList.Attribute("ScrollViewer.CanContentScroll"));
 
         XElement editorSurface = Assert.Single(document.Descendants(), element =>
             (string?)element.Attribute(x + "Name") == "EditorSurface");
@@ -640,6 +661,34 @@ public sealed class PresentationConfigurationTests
         Assert.Contains(document.Descendants(), element =>
             (string?)element.Attribute("Command") ==
             "{Binding DataContext.OpenEntityDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}");
+    }
+
+    [Fact]
+    public void EntityEditor_UsesSearchOnlyDeveloperPickerAndPaddedTwoColumnCards()
+    {
+        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement header = Assert.Single(document.Descendants(), element =>
+            (string?)element.Attribute("Text") == "Progress and ownership");
+        XElement card = header.Ancestors().First(element => element.Name.LocalName == "Border");
+        Assert.Equal("16", (string?)card.Attribute("Padding"));
+        XElement columns = Assert.Single(card.Descendants(), element =>
+            element.Name.LocalName == "Grid.ColumnDefinitions" &&
+            element.Elements().Any(column => (string?)column.Attribute("Width") == "3*"));
+        Assert.Equal(["3*", "16", "2*"], columns.Elements()
+            .Select(column => (string?)column.Attribute("Width")));
+        XElement dependencies = Assert.Single(document.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "EditorDependenciesSection");
+        Assert.Equal("16", (string?)dependencies.Attribute("Padding"));
+        Assert.Contains(card.Descendants(), element =>
+            (string?)element.Attribute("Text") == "Search developers by initials or name" &&
+            ((string?)element.Attribute("Visibility"))?.Contains("IsQueryEmpty", StringComparison.Ordinal) == true &&
+            (string?)element.Attribute("IsHitTestVisible") == "False");
+        Assert.DoesNotContain(document.Descendants(), element =>
+            (string?)element.Attribute("Content") == "Create developer" ||
+            ((string?)element.Attribute("Text"))?.Contains("DeveloperPicker.NewInitials", StringComparison.Ordinal) == true);
+        Assert.Contains(document.Descendants(), element =>
+            (string?)element.Attribute("AutomationProperties.Name") == "Back to entity details");
     }
 
     [Fact]

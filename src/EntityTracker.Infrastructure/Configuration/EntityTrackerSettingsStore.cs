@@ -11,6 +11,8 @@ public sealed class EntityTrackerSettingsStore
     private const int AppearanceVersion = 2;
     private const int ContextVersion = 3;
     private const int PreviousVersion = 4;
+    private const int AutoSyncVersion = 5;
+    private const int ResponsibilitySearchVersion = 6;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -62,7 +64,8 @@ public sealed class EntityTrackerSettingsStore
                     current.LastProjectId,
                     current.LastTrackerId,
                     current.AutoSyncEnabled,
-                    current.AutoSyncIntervalMinutes),
+                    current.AutoSyncIntervalMinutes,
+                    current.SearchResponsibleNames, current.ProjectDeveloperChoices),
                 cancellationToken);
         }
         finally
@@ -91,7 +94,8 @@ public sealed class EntityTrackerSettingsStore
                     projectId,
                     trackerId,
                     current.AutoSyncEnabled,
-                    current.AutoSyncIntervalMinutes),
+                    current.AutoSyncIntervalMinutes,
+                    current.SearchResponsibleNames, current.ProjectDeveloperChoices),
                 cancellationToken);
         }
         finally
@@ -110,8 +114,40 @@ public sealed class EntityTrackerSettingsStore
         {
             EntityTrackerSettings current = await LoadSettingsForUpdateAsync(cancellationToken);
             await WriteAsync(new EntityTrackerSettings(current.Appearance,
-                current.LastProjectId, current.LastTrackerId, enabled, intervalMinutes),
+                current.LastProjectId, current.LastTrackerId, enabled, intervalMinutes,
+                current.SearchResponsibleNames, current.ProjectDeveloperChoices),
                 cancellationToken);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task SaveSearchResponsibleNamesAsync(bool enabled,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            EntityTrackerSettings current = await LoadSettingsForUpdateAsync(cancellationToken);
+            await WriteAsync(new EntityTrackerSettings(current.Appearance,
+                current.LastProjectId, current.LastTrackerId, current.AutoSyncEnabled,
+                current.AutoSyncIntervalMinutes, enabled, current.ProjectDeveloperChoices), cancellationToken);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task SaveProjectDeveloperChoiceAsync(ProjectId projectId, DeveloperId? developerId,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            EntityTrackerSettings current = await LoadSettingsForUpdateAsync(cancellationToken);
+            Dictionary<ProjectId, DeveloperId> choices = new(current.ProjectDeveloperChoices);
+            if (developerId is null) choices.Remove(projectId);
+            else choices[projectId] = developerId;
+            await WriteAsync(new EntityTrackerSettings(current.Appearance, current.LastProjectId,
+                current.LastTrackerId, current.AutoSyncEnabled, current.AutoSyncIntervalMinutes,
+                current.SearchResponsibleNames, choices), cancellationToken);
         }
         finally { _gate.Release(); }
     }
@@ -208,7 +244,10 @@ public sealed class EntityTrackerSettingsStore
             LastProjectId = settings.LastProjectId?.Value.ToString("D"),
             LastTrackerId = settings.LastTrackerId?.Value.ToString("D"),
             AutoSyncEnabled = settings.AutoSyncEnabled,
-            AutoSyncIntervalMinutes = settings.AutoSyncIntervalMinutes
+            AutoSyncIntervalMinutes = settings.AutoSyncIntervalMinutes,
+            SearchResponsibleNames = settings.SearchResponsibleNames,
+            ProjectDeveloperChoices = settings.ProjectDeveloperChoices.ToDictionary(
+                pair => pair.Key.Value.ToString("D"), pair => pair.Value.Value.ToString("D"))
         };
 
         string directory = Path.GetDirectoryName(SettingsPath)
@@ -254,15 +293,35 @@ public sealed class EntityTrackerSettingsStore
             appearance,
             projectId,
             trackerId,
-            document.Version < EntityTrackerSettings.CurrentVersion
+            document.Version < AutoSyncVersion
                 ? true : document.AutoSyncEnabled ?? true,
-            ParseAutoSyncInterval(document, warnings));
+            ParseAutoSyncInterval(document, warnings),
+            document.Version < ResponsibilitySearchVersion
+                ? true : document.SearchResponsibleNames ?? true,
+            ParseProjectDeveloperChoices(document, warnings));
+    }
+
+    private static IReadOnlyDictionary<ProjectId, DeveloperId> ParseProjectDeveloperChoices(
+        SettingsDocument document, ICollection<string> warnings)
+    {
+        Dictionary<ProjectId, DeveloperId> choices = [];
+        if (document.Version < EntityTrackerSettings.CurrentVersion ||
+            document.ProjectDeveloperChoices is null) return choices;
+        foreach ((string project, string developer) in document.ProjectDeveloperChoices)
+        {
+            if (Guid.TryParseExact(project, "D", out Guid projectGuid) &&
+                Guid.TryParseExact(developer, "D", out Guid developerGuid) &&
+                projectGuid != Guid.Empty && developerGuid != Guid.Empty)
+                choices[new ProjectId(projectGuid)] = new DeveloperId(developerGuid);
+            else warnings.Add("An invalid local Project Developer choice was ignored.");
+        }
+        return choices;
     }
 
     private static int ParseAutoSyncInterval(SettingsDocument document,
         ICollection<string> warnings)
     {
-        if (document.Version < EntityTrackerSettings.CurrentVersion) return 5;
+        if (document.Version < AutoSyncVersion) return 5;
         int value = document.AutoSyncIntervalMinutes ?? 5;
         if (EntityTrackerSettings.AutoSyncIntervals.Contains(value)) return value;
         warnings.Add("The automatic sync interval is invalid. Five minutes is active; the settings file was not changed.");
@@ -340,7 +399,7 @@ public sealed class EntityTrackerSettingsStore
             UnauthorizedAccessException;
 
     private static bool IsSupportedVersion(int version) =>
-        version is LegacyVersion or AppearanceVersion or ContextVersion or PreviousVersion or EntityTrackerSettings.CurrentVersion;
+        version is LegacyVersion or AppearanceVersion or ContextVersion or PreviousVersion or AutoSyncVersion or ResponsibilitySearchVersion or EntityTrackerSettings.CurrentVersion;
 
     private static SettingsLoadResult DefaultResult(string? warning = null) =>
         new(
@@ -364,6 +423,10 @@ public sealed class EntityTrackerSettingsStore
         public bool? AutoSyncEnabled { get; init; }
 
         public int? AutoSyncIntervalMinutes { get; init; }
+
+        public bool? SearchResponsibleNames { get; init; }
+
+        public Dictionary<string, string>? ProjectDeveloperChoices { get; init; }
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public JsonElement? SharePoint { get; init; }

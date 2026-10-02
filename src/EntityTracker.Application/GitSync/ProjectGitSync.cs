@@ -646,6 +646,9 @@ public sealed partial class ProjectGitSyncService(
     private static IReadOnlyList<string> FindDeletions(ProjectSnapshot previous, ProjectSnapshot current)
     {
         List<string> deleted = [];
+        deleted.AddRange((previous.Developers ?? []).Select(d => d.Id)
+            .Except((current.Developers ?? []).Select(d => d.Id))
+            .Select(id => $"Developer {id:D}"));
         HashSet<Guid> trackerIds = current.Trackers.Select(t => t.Id).ToHashSet();
         foreach (SnapshotTracker tracker in previous.Trackers)
         {

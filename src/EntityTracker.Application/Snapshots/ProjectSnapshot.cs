@@ -3,10 +3,14 @@ namespace EntityTracker.Application.Snapshots;
 public sealed record ProjectSnapshot(
     int FormatVersion,
     SnapshotProject Project,
-    IReadOnlyList<SnapshotTracker> Trackers)
+    IReadOnlyList<SnapshotTracker> Trackers,
+    IReadOnlyList<SnapshotDeveloper>? Developers = null)
 {
-    public const int CurrentFormatVersion = 1;
+    public const int CurrentFormatVersion = 3;
 }
+
+public sealed record SnapshotDeveloper(
+    Guid Id, Guid ProjectId, string Initials, string DisplayName, bool IsRetired);
 
 public sealed record SnapshotProject(
     Guid Id, string Name, string LifecycleState,
@@ -31,7 +35,11 @@ public sealed record SnapshotEntity(
     DateTimeOffset ProgressUpdatedAtUtc,
     IReadOnlyList<SnapshotDependency> Dependencies,
     IReadOnlyList<SnapshotUnresolvedDependency> UnresolvedDependencies,
-    IReadOnlyList<SnapshotOverride> ManualOverrides);
+    IReadOnlyList<SnapshotOverride> ManualOverrides,
+    IReadOnlyList<SnapshotResponsibilityPeriod>? ResponsibilityPeriods = null);
+
+public sealed record SnapshotResponsibilityPeriod(Guid Id, Guid EntityId, Guid DeveloperId,
+    DateTimeOffset StartedAtUtc, DateTimeOffset? EndedAtUtc);
 
 public sealed record SnapshotDependency(
     Guid DependentEntityId, Guid DependencyEntityId, string Kind,

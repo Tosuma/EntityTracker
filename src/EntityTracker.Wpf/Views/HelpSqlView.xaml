@@ -25,7 +25,7 @@
                     <StackPanel>
                         <TextBlock FontWeight="SemiBold" Text="Portfolio, Project, and Tracker" />
                         <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}"
-                                   Text="Portfolio lists Projects. A Project dashboard lists its Trackers. Opening a Tracker makes it the active context for Overview, Archived, Schema synchronization, Add entity, and Reports." />
+                                   Text="Portfolio lists Projects. A Project dashboard lists its Trackers and opens the Project Developers directory. Opening a Tracker makes it the active context for Overview, Archived, Schema synchronization, Add entity, and Reports. Developers can be added, edited, retired, and restored; entity responsibility still uses its existing text field." />
                     </StackPanel>
                 </Border>
                 <Border Margin="6,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">

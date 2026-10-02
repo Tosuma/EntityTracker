@@ -91,6 +91,10 @@ public sealed class SqliteProjectTrackerStore(
                 await InsertEntityAsync(connection, transaction, entity, timestamp, cancellationToken);
             }
 
+            foreach (ResponsibilityPeriod period in changeSet.ResponsibilityPeriodsToCopy)
+                await SqliteResponsibilityWriter.InsertCopiedPeriodAsync(connection, transaction,
+                    tracker.ProjectId, period, cancellationToken);
+
             foreach (PersistedDependency dependency in changeSet.ResolvedDependencies)
             {
                 using SqliteCommand command = CreateCommand(connection, transaction, """
@@ -300,11 +304,11 @@ public sealed class SqliteProjectTrackerStore(
         using SqliteCommand command = CreateCommand(connection, transaction, """
             INSERT INTO tracked_entities
             (id, tracker_id, source_key, source_name, development_status, notes,
-             lifecycle_state, provenance, requested_priority, responsible_developer, group_name,
+             lifecycle_state, provenance, requested_priority, group_name,
              created_at_utc, schema_updated_at_utc, progress_updated_at_utc)
             VALUES
             ($id, $trackerId, $sourceKey, $sourceName, $status, $notes,
-             $lifecycle, $provenance, $priority, $developer, $group,
+             $lifecycle, $provenance, $priority, $group,
              $timestamp, $timestamp, $timestamp);
 
             INSERT INTO entity_status_history
@@ -321,7 +325,6 @@ public sealed class SqliteProjectTrackerStore(
         command.Parameters.AddWithValue("$lifecycle", entity.LifecycleState.ToString());
         command.Parameters.AddWithValue("$provenance", entity.Provenance.ToString());
         command.Parameters.AddWithValue("$priority", entity.RequestedPriority is null ? DBNull.Value : entity.RequestedPriority.Value);
-        command.Parameters.AddWithValue("$developer", entity.ResponsibleDeveloper);
         command.Parameters.AddWithValue("$group", entity.GroupName);
         command.Parameters.AddWithValue("$timestamp", timestamp);
         command.Parameters.AddWithValue("$eventId", Guid.NewGuid().ToString("D"));

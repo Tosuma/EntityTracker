@@ -63,7 +63,8 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         Func<EntityId, Task> onRestoreArchived,
         Action onCancelled,
         Func<bool>? canOperate = null,
-        ILogger<ManualEntityCreationViewModel>? logger = null)
+        ILogger<ManualEntityCreationViewModel>? logger = null,
+        DeveloperPickerViewModel? developerPicker = null)
     {
         ArgumentNullException.ThrowIfNull(service);
         ArgumentNullException.ThrowIfNull(onCreated);
@@ -77,6 +78,9 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         _onCancelled = onCancelled;
         _canOperate = canOperate ?? (() => true);
         _logger = logger ?? NullLogger<ManualEntityCreationViewModel>.Instance;
+        DeveloperPicker = developerPicker;
+        if (DeveloperPicker is not null)
+            DeveloperPicker.SelectionChanged += (_, _) => OnPropertyChanged(nameof(IsDirty));
         SelectedDependencies = [];
         _addExistingCommand = new RelayCommand<ManualDependencySuggestion>(
             AddExisting,
@@ -103,6 +107,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+    public DeveloperPickerViewModel? DeveloperPicker { get; }
 
     public string EntityName
     {
@@ -396,6 +401,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     public bool IsDirty =>
         !string.IsNullOrWhiteSpace(EntityName) ||
         !string.IsNullOrWhiteSpace(ResponsibleDeveloper) ||
+        DeveloperPicker?.SelectedIds.Count > 0 ||
         !string.IsNullOrWhiteSpace(GroupName) ||
         SelectedRequestedPriority is not null ||
         SelectedDependencies.Count > 0;
@@ -548,7 +554,8 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
                     SelectedDependencies.Select(static row => row.Selection),
                     ResponsibleDeveloper,
                     GroupName,
-                    SelectedRequestedPriority),
+                    SelectedRequestedPriority,
+                    DeveloperPicker?.SelectedIds),
                 cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -876,6 +883,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(EntityName));
         _responsibleDeveloper = string.Empty;
         OnPropertyChanged(nameof(ResponsibleDeveloper));
+        DeveloperPicker?.ClearSelection();
         _groupName = string.Empty;
         OnPropertyChanged(nameof(GroupName));
         _selectedRequestedPriority = null;

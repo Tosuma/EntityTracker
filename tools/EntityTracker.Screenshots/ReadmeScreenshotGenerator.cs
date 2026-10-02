@@ -8,6 +8,7 @@ using EntityTracker.Application.History;
 using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Projects;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Application.GitSync;
 using EntityTracker.Wpf.Views;
@@ -43,10 +44,11 @@ internal sealed class ReadmeScreenshotGenerator
         await ScreenshotDataSeeder.SeedAsync(repositoryRoot, workspace, cancellationToken);
 
         ScreenshotCsvFilePicker picker = new();
+        FixedTimeProvider captureTime = new(ScreenshotDataSeeder.FixedNow);
         await using ServiceProvider provider = ScreenshotServiceProviderFactory.Create(
             workspace.Paths,
             picker,
-            new FixedTimeProvider(ScreenshotDataSeeder.FixedNow),
+            captureTime,
             appearance);
         await provider.GetRequiredService<IPersistenceInitializer>()
             .InitializeAsync(cancellationToken);
@@ -86,6 +88,24 @@ internal sealed class ReadmeScreenshotGenerator
                 "The project dashboard did not finish loading.",
                 cancellationToken);
             await renderer.CaptureAsync("project-dashboard.png", settleMilliseconds: 900);
+            ProjectDeveloperService developerService = provider.GetRequiredService<ProjectDeveloperService>();
+            await developerService.CreateAsync(project.Id, "AB", "Alice Brown", cancellationToken);
+            await developerService.CreateAsync(project.Id, "CD", "Chris Davis", cancellationToken);
+            await shell.NavigateAsync(ShellDestination.Developers, cancellationToken);
+            await renderer.CaptureAsync("project-developers.png", settleMilliseconds: 500);
+            ProjectDeveloper alice = (await developerService.ListAsync(project.Id, cancellationToken))
+                .Single(developer => developer.Initials == "AB");
+            shell.Developers!.BeginRetirement(alice);
+            await renderer.CaptureAsync("project-developer-retirement.png", settleMilliseconds: 500);
+            shell.Developers.CancelRetirement();
+            ProjectDeveloper chris = (await developerService.ListAsync(project.Id, cancellationToken))
+                .Single(developer => developer.Initials == "CD");
+            await developerService.SetRetiredAsync(project.Id, chris.Id, true, cancellationToken);
+            await shell.Developers.RefreshAsync(cancellationToken);
+            shell.Developers.OpenRetired();
+            await renderer.CaptureAsync("project-developers-retired.png", settleMilliseconds: 500);
+            shell.Developers.CloseRetired();
+            await shell.NavigateAsync(ShellDestination.ProjectDashboard, cancellationToken);
             // Presentation fixture only. The real folder stays in the disposable workspace.
             string repositoryFixturePath = Directory.CreateDirectory(
                 Path.Combine(workspace.RootDirectory, "example-repository")).FullName;
@@ -189,6 +209,56 @@ internal sealed class ReadmeScreenshotGenerator
             await renderer.CaptureAsync("create-tracker-copy.png");
             shell.Catalog.CancelCommand.Execute(null);
 
+            EntityId featuredEntity = (await provider.GetRequiredService<IEntityRepository>()
+                    .GetAllAsync(tracker.Id, cancellationToken))
+                .Single(entity => entity.SourceName == "customer_preference").Id;
+            ProjectDeveloper platform = (await developerService.ListAsync(project.Id, cancellationToken))
+                .Single(developer => developer.Initials == "PT");
+            ITrackedStateStore responsibilityStore = provider.GetRequiredService<ITrackedStateStore>();
+            await responsibilityStore.ApplyAsync(tracker.Id,
+                new TrackedStateChangeSet([], [], [], [], [], [],
+                    responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
+                        [alice.Id])]), cancellationToken);
+            captureTime.Advance(TimeSpan.FromMinutes(1));
+            await responsibilityStore.ApplyAsync(tracker.Id,
+                new TrackedStateChangeSet([], [], [], [], [], [],
+                    responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
+                        [alice.Id, platform.Id])]), cancellationToken);
+            captureTime.Advance(TimeSpan.FromMinutes(1));
+            await responsibilityStore.ApplyAsync(tracker.Id,
+                new TrackedStateChangeSet([], [], [], [], [], [],
+                    responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
+                        [platform.Id])]), cancellationToken);
+
+            captureTime.Advance(TimeSpan.FromMinutes(1));
+            await responsibilityStore.ApplyAsync(tracker.Id,
+                new TrackedStateChangeSet([], [], [], [], [], [],
+                    responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
+                        [alice.Id, platform.Id])]), cancellationToken);
+            captureTime.Advance(TimeSpan.FromMinutes(1));
+            await responsibilityStore.ApplyAsync(tracker.Id,
+                new TrackedStateChangeSet([], [], [], [], [], [],
+                    responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
+                        [platform.Id])]), cancellationToken);
+
+            captureTime.Advance(TimeSpan.FromMinutes(1));
+            await responsibilityStore.ApplyAsync(tracker.Id,
+                new TrackedStateChangeSet([], [], [], [], [], [],
+                    responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
+                        [alice.Id, platform.Id])]), cancellationToken);
+            captureTime.Advance(TimeSpan.FromMinutes(1));
+            await responsibilityStore.ApplyAsync(tracker.Id,
+                new TrackedStateChangeSet([], [], [], [], [], [],
+                    responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
+                        [platform.Id])]), cancellationToken);
+
+            // Show two separate current Developers in the overview and filter screenshots.
+            captureTime.Advance(TimeSpan.FromMinutes(1));
+            await responsibilityStore.ApplyAsync(tracker.Id,
+                new TrackedStateChangeSet([], [], [], [], [], [],
+                    responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
+                        [alice.Id, platform.Id])]), cancellationToken);
+
             await shell.OpenTrackerAsync(tracker.Id);
             MainWindowViewModel viewModel = shell.CurrentWorkspace
                 ?? throw new InvalidOperationException("The tracker workspace was not created.");
@@ -198,7 +268,7 @@ internal sealed class ReadmeScreenshotGenerator
                       viewModel.Progress.HasReport,
                 "The tracker workspace did not finish loading.",
                 cancellationToken);
-            await CaptureOverviewAsync(viewModel, renderer, cancellationToken);
+            await CaptureOverviewAsync(viewModel, window, renderer, cancellationToken);
 
             viewModel.Review.Clear();
             await shell.NavigateAsync(ShellDestination.SchemaSynchronization, cancellationToken);
@@ -361,6 +431,7 @@ internal sealed class ReadmeScreenshotGenerator
 
     private static async Task CaptureOverviewAsync(
         MainWindowViewModel viewModel,
+        MainWindow window,
         WpfScreenshotRenderer renderer,
         CancellationToken cancellationToken)
     {
@@ -370,9 +441,17 @@ internal sealed class ReadmeScreenshotGenerator
 
         EntityOverviewRow detailsRow = viewModel.OverviewItems.Single(static item =>
             item.SourceName == "customer_preference");
+        DataGrid overview = (DataGrid)(window.FindWorkspaceElement("OverviewDataGrid")
+            ?? throw new InvalidOperationException("The overview table was not rendered."));
+        overview.SelectedItem = detailsRow;
         viewModel.OpenEntityDetailsCommand.Execute(detailsRow);
+        await WaitUntilAsync(() => viewModel.SelectedEntityDetails?.ResponsibilityTimeline.Count > 0,
+            "Responsibility details did not load.", cancellationToken);
         await renderer.CaptureAsync("overview-details.png");
+        viewModel.ShowFullResponsibilityHistoryCommand.Execute(null);
+        await renderer.CaptureAsync("responsibility-history.png");
         viewModel.CloseEntityDetails();
+        overview.UnselectAll();
 
         viewModel.OpenOverviewSearchCommand.Execute(null);
         viewModel.SearchOverviewDependencies = true;
@@ -384,9 +463,27 @@ internal sealed class ReadmeScreenshotGenerator
         await renderer.CaptureAsync("overview-search.png");
 
         viewModel.CloseOverviewSearchCommand.Execute(null);
+        await Task.Delay(300, cancellationToken);
+        OverviewColumnFilterState responsibleFilter = viewModel.ActiveTable.ResponsibleDeveloperFilter;
+        responsibleFilter.OpenCommand.Execute(null);
+        if (responsibleFilter.Options.Count == 0 ||
+            responsibleFilter.Options.Any(static option => option.IsSelected))
+            throw new InvalidDataException(
+                "The responsible filter did not open with unchecked choices.");
+        responsibleFilter.Options.Single(static option =>
+            option.DisplayName == "AB — Alice Brown").IsSelected = true;
+        responsibleFilter.ApplyCommand.Execute(null);
+        await Task.Delay(300, cancellationToken);
+        responsibleFilter.OpenCommand.Execute(null);
+        responsibleFilter.ClearFilterCommand.Execute(null);
+        if (!responsibleFilter.IsOpen || responsibleFilter.IsApplied ||
+            responsibleFilter.Options.Any(static option => option.IsSelected))
+            throw new InvalidDataException(
+                "Clearing the responsible filter did not leave the menu open and unchecked.");
+        await renderer.CaptureOpenPopupAsync("overview-filter-flyout.png");
+        responsibleFilter.CloseWithoutApplying();
         OverviewColumnFilterState workStatusFilter = viewModel.ActiveTable.WorkStatusFilter!;
         workStatusFilter.OpenCommand.Execute(null);
-        await renderer.CaptureOpenPopupAsync("overview-filter-flyout.png");
         foreach (OverviewFilterOption option in workStatusFilter.Options)
         {
             option.IsSelected = option.DisplayName == "Blocked";
@@ -488,7 +585,8 @@ internal sealed class ReadmeScreenshotGenerator
         CancellationToken cancellationToken)
     {
         viewModel.ManualCreation.EntityName = "shipment_schedule";
-        viewModel.ManualCreation.ResponsibleDeveloper = "Platform Team";
+        viewModel.ManualCreation.DeveloperPicker!.Choices
+            .Single(choice => choice.Developer.Initials == "PT").IsSelected = true;
         viewModel.ManualCreation.GroupName = "Operations";
         viewModel.ManualCreation.SelectedRequestedPriority = 2;
 
@@ -535,6 +633,14 @@ internal sealed class ReadmeScreenshotGenerator
             .OrderBy(static entity => entity.SourceName, StringComparer.Ordinal)
             .First();
 
+        ProjectDeveloper platform = (await provider.GetRequiredService<ProjectDeveloperService>()
+                .ListAsync(tracker.ProjectId, cancellationToken))
+            .Single(developer => developer.Initials == "PT");
+        await provider.GetRequiredService<ITrackedStateStore>().ApplyAsync(tracker.Id,
+            new TrackedStateChangeSet([], [], [], [], [], [],
+                responsibilitySelections: [new ResponsibilitySelection(leaf.Id, [platform.Id])]),
+            cancellationToken);
+
         bool archived = await provider.GetRequiredService<EntityLifecycleService>()
             .TryArchiveAsync(tracker.Id, leaf.Id, cancellationToken);
         if (!archived)
@@ -546,6 +652,8 @@ internal sealed class ReadmeScreenshotGenerator
         await shell.NavigateAsync(ShellDestination.Archived, cancellationToken);
         EntityOverviewRow archivedRow = viewModel.ArchivedItems.Single(item => item.EntityId == leaf.Id);
         viewModel.OpenEntityDetailsCommand.Execute(archivedRow);
+        await WaitUntilAsync(() => viewModel.SelectedEntityDetails?.ResponsibilityTimeline.Count > 0,
+            "Archived responsibility details did not load.", cancellationToken);
         await renderer.CaptureAsync("archived-details.png");
         viewModel.CloseEntityDetails();
         await viewModel.Editor.BeginArchivedAsync(archivedRow.EntityId, cancellationToken);

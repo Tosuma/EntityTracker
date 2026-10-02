@@ -921,12 +921,46 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTextColumn Width="150"
-                                                    Binding="{Binding ResponsibleDeveloperDisplay}">
-                                    <DataGridTextColumn.Header>
+                                <DataGridTemplateColumn Width="150">
+                                    <DataGridTemplateColumn.Header>
                                         <controls:FilterableColumnHeader Filter="{Binding DataContext.ActiveTable.ResponsibleDeveloperFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                    </DataGridTextColumn.Header>
-                                </DataGridTextColumn>
+                                    </DataGridTemplateColumn.Header>
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <ItemsControl ItemsSource="{Binding DeveloperItems}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Margin="0,2,4,2" Padding="5,2" CornerRadius="3"
+                                                                    Background="{DynamicResource Brush.Surface.Card}"
+                                                                    BorderBrush="{DynamicResource Brush.Border.Strong}"
+                                                                    BorderThickness="1"
+                                                                    ToolTip="{Binding Label}">
+                                                                <TextBlock Text="{Binding Initials}"
+                                                                           Foreground="{DynamicResource Brush.Text.Primary}"
+                                                                           AutomationProperties.Name="{Binding Label}" />
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <TextBlock Text="{Binding ResponsibleDeveloperDisplay}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasCurrentDevelopers}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                                 <DataGridTextColumn Width="145"
                                                     Binding="{Binding GroupNameDisplay}">
                                     <DataGridTextColumn.Header>
@@ -1142,11 +1176,46 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTextColumn Width="150" Binding="{Binding ResponsibleDeveloperDisplay}">
-                                    <DataGridTextColumn.Header>
+                                <DataGridTemplateColumn Width="150">
+                                    <DataGridTemplateColumn.Header>
                                         <controls:FilterableColumnHeader Filter="{Binding DataContext.ArchivedTable.ResponsibleDeveloperFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                    </DataGridTextColumn.Header>
-                                </DataGridTextColumn>
+                                    </DataGridTemplateColumn.Header>
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <ItemsControl ItemsSource="{Binding DeveloperItems}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Margin="0,2,4,2" Padding="5,2" CornerRadius="3"
+                                                                    Background="{DynamicResource Brush.Surface.Card}"
+                                                                    BorderBrush="{DynamicResource Brush.Border.Strong}"
+                                                                    BorderThickness="1"
+                                                                    ToolTip="{Binding Label}">
+                                                                <TextBlock Text="{Binding Initials}"
+                                                                           Foreground="{DynamicResource Brush.Text.Primary}"
+                                                                           AutomationProperties.Name="{Binding Label}" />
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <TextBlock Text="{Binding ResponsibleDeveloperDisplay}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasCurrentDevelopers}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                                 <DataGridTextColumn Width="145" Binding="{Binding GroupNameDisplay}">
                                     <DataGridTextColumn.Header>
                                         <controls:FilterableColumnHeader Filter="{Binding DataContext.ArchivedTable.GroupFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
@@ -1776,12 +1845,38 @@
                                              AutomationProperties.Name="Entity name"
                                              Text="{Binding ManualCreation.EntityName, UpdateSourceTrigger=PropertyChanged}" />
 
-                                    <Label Target="{Binding ElementName=ManualResponsibleDeveloperTextBox}" Content="Responsible developer" />
-                                    <TextBox x:Name="ManualResponsibleDeveloperTextBox"
-                                             Margin="0,4,0,12"
-                                             Padding="9,7"
-                                             AutomationProperties.Name="Responsible developer"
-                                             Text="{Binding ManualCreation.ResponsibleDeveloper, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock FontWeight="SemiBold" Text="Responsible developers" />
+                                    <TextBlock Margin="0,3,0,5" Text="Select one or more Project developers." />
+                                    <TextBox Margin="0,0,0,5" Padding="9,7"
+                                             AutomationProperties.Name="Search Project developers"
+                                             Text="{Binding ManualCreation.DeveloperPicker.Query, UpdateSourceTrigger=PropertyChanged}" />
+                                    <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto"
+                                                  CanContentScroll="False">
+                                        <ItemsControl ItemsSource="{Binding ManualCreation.DeveloperPicker.FilteredChoices}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <CheckBox Margin="2,3" Content="{Binding Label}"
+                                                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                              AutomationProperties.Name="{Binding Label}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                    <TextBlock Margin="0,7,0,12"
+                                               Foreground="{DynamicResource Brush.Text.Secondary}"
+                                               Text="No available developers. Add one from Project → Developers."
+                                               TextWrapping="Wrap">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding ManualCreation.DeveloperPicker.HasAvailableDevelopers}" Value="False">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
 
                                     <Grid>
                                         <Grid.ColumnDefinitions>
@@ -1837,18 +1932,12 @@
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <ComboBox x:Name="ManualDependencyComboBox"
-                                                  Padding="9,7"
-                                                  AutomationProperties.HelpText="Type to search active entities."
-                                                  AutomationProperties.Name="Dependency"
-                                                  DisplayMemberPath="SourceName"
-                                                  IsEditable="True"
-                                                  IsTextSearchEnabled="False"
-                                                  ItemsSource="{Binding ManualCreation.Suggestions}"
-                                                  SelectedItem="{Binding ManualCreation.SelectedDependencySuggestion}"
-                                                  StaysOpenOnEdit="True"
-                                                  Text="{Binding ManualCreation.DependencyQuery, UpdateSourceTrigger=PropertyChanged}"
-                                                  IsDropDownOpen="{Binding ManualCreation.IsDependencySuggestionsOpen}" />
+                                        <controls:DependencySuggestionBox x:Name="ManualDependencySuggestionBox"
+                                                                          InputName="Dependency"
+                                                                          Query="{Binding ManualCreation.DependencyQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                          Suggestions="{Binding ManualCreation.Suggestions}"
+                                                                          IsSuggestionsOpen="{Binding ManualCreation.IsDependencySuggestionsOpen, Mode=TwoWay}"
+                                                                          AddExistingCommand="{Binding ManualCreation.AddExistingCommand}" />
                                         <Button Grid.Column="1"
                                                 Margin="8,0,0,0"
                                                 AutomationProperties.HelpText="Add the typed dependency even though it does not match an active entity."
@@ -2262,18 +2351,36 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <DockPanel Margin="0,0,0,14">
-                    <Button x:Name="CloseEntityDetailsButton"
-                            DockPanel.Dock="Right"
-                            Width="34"
-                            Height="34"
-                            Padding="0"
-                            AutomationProperties.Name="Close entity details"
-                            Command="{Binding DataContext.CloseEntityDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                            Content="✕"
-                            Style="{StaticResource SecondaryButtonStyle}"
-                            ToolTip="Close details (Esc)" />
-                    <StackPanel>
+                <Grid Margin="0,0,0,14"
+                           Visibility="{Binding IsSummaryOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" HorizontalAlignment="Right" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Margin="0,0,8,0" Content="{Binding SelfAssignmentActionLabel}"
+                                AutomationProperties.Name="{Binding SelfAssignmentAccessibleName}"
+                                Command="{Binding DataContext.AssignMeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Visibility="{Binding CanEdit, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <Button Margin="0,0,8,0"
+                                Content="Edit"
+                                AutomationProperties.Name="{Binding SourceName, StringFormat=Edit entity {0}}"
+                                Command="{Binding DataContext.EditOverviewEntityCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding OverviewRow}"
+                                Style="{StaticResource PrimaryButtonStyle}"
+                                Visibility="{Binding CanEdit, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <Button x:Name="CloseEntityDetailsButton"
+                                Width="34"
+                                Height="34"
+                                Padding="0"
+                                AutomationProperties.Name="Close entity details"
+                                Command="{Binding DataContext.CloseEntityDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                Content="✕"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                ToolTip="Close details (Esc)" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="1">
                         <TextBlock AutomationProperties.HeadingLevel="Level2"
                                    FontSize="20"
                                    FontWeight="SemiBold"
@@ -2284,12 +2391,38 @@
                                    Foreground="{DynamicResource Brush.Text.Secondary}"
                                    Text="{Binding Lifecycle}" />
                     </StackPanel>
+                </Grid>
+
+                <DockPanel Grid.Row="0" Margin="0,0,0,14"
+                           Visibility="{Binding IsFullHistoryOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Button x:Name="BackFromResponsibilityHistoryButton"
+                            DockPanel.Dock="Left" Content="Back"
+                            AutomationProperties.Name="Back to entity details"
+                            Command="{Binding DataContext.BackFromResponsibilityHistoryCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            Style="{StaticResource SecondaryButtonStyle}" />
+                    <StackPanel Margin="12,0,0,0">
+                        <TextBlock AutomationProperties.HeadingLevel="Level2" FontSize="20"
+                                   FontWeight="SemiBold" Text="Responsibility history" />
+                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Text="{Binding SourceName}" TextWrapping="Wrap" />
+                    </StackPanel>
                 </DockPanel>
 
                 <ScrollViewer Grid.Row="1"
                               HorizontalScrollBarVisibility="Disabled"
-                              VerticalScrollBarVisibility="Auto">
+                              VerticalScrollBarVisibility="Auto"
+                              CanContentScroll="False"
+                              Visibility="{Binding IsSummaryOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <StackPanel>
+                        <StackPanel Margin="0,0,0,12"
+                                    Visibility="{Binding DataContext.HasAssignmentGuidance, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock Text="{Binding DataContext.AssignmentGuidance, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                       TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
+                            <Button Margin="0,6,0,0" HorizontalAlignment="Left" Content="Open Settings"
+                                    AutomationProperties.Name="Open Settings to choose You in this Project"
+                                    Command="{Binding DataContext.OpenIdentitySettingsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                        </StackPanel>
                         <WrapPanel Margin="0,0,0,16">
                             <StackPanel Margin="0,0,16,0">
                                 <TextBlock Margin="0,0,0,7" FontWeight="SemiBold" Text="Work status" />
@@ -2338,14 +2471,34 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Margin="0,0,12,0">
-                                <TextBlock FontWeight="SemiBold" Text="Responsible developer" />
-                                <TextBlock Margin="0,3,0,0" Text="{Binding ResponsibleDeveloper}" TextWrapping="Wrap" />
+                                <TextBlock FontWeight="SemiBold" Text="Current developers" />
+                                <TextBlock Margin="0,3,0,0" Text="{Binding CurrentDevelopers}" TextWrapping="Wrap" />
                             </StackPanel>
                             <StackPanel Grid.Column="1">
                                 <TextBlock FontWeight="SemiBold" Text="Group" />
                                 <TextBlock Margin="0,3,0,0" Text="{Binding GroupName}" TextWrapping="Wrap" />
                             </StackPanel>
                         </Grid>
+
+                        <TextBlock FontWeight="SemiBold" Text="Responsibility timeline" />
+                        <ItemsControl Margin="0,5,0,5" ItemsSource="{Binding ResponsibilityTimeline}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,6">
+                                        <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
+                                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                   Text="{Binding Description}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button x:Name="ViewFullResponsibilityHistoryButton"
+                                Margin="0,0,0,16" HorizontalAlignment="Left"
+                                Content="View full history"
+                                AutomationProperties.Name="View full responsibility history"
+                                Command="{Binding DataContext.ShowFullResponsibilityHistoryCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Visibility="{Binding HasHiddenResponsibilityHistory, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
                         <TextBlock FontWeight="SemiBold" Text="Notes" />
                         <TextBlock Margin="0,4,0,18"
@@ -2456,6 +2609,21 @@
                         </Grid>
                     </StackPanel>
                 </ScrollViewer>
+                <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto" CanContentScroll="False"
+                              Visibility="{Binding IsFullHistoryOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <ItemsControl ItemsSource="{Binding FullResponsibilityTimeline}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="0,0,0,12">
+                                    <TextBlock FontWeight="SemiBold" Text="{Binding Name}" TextWrapping="Wrap" />
+                                    <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}"
+                                               Text="{Binding Description}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
             </Grid>
         </Border>
 
@@ -2511,12 +2679,31 @@
                                        Text="{Binding Editor.EntityDetails}" />
                             <StackPanel Visibility="{Binding Editor.HasSelectedEntity, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <Border Margin="0,0,0,14"
+                                        Padding="16"
                                         Style="{StaticResource EntityTrackerCardStyle}"
                                         Visibility="{Binding Editor.ShowArchivedSections, Converter={StaticResource BooleanToVisibilityConverter}}">
                                     <StackPanel>
                                         <TextBlock FontSize="16" FontWeight="SemiBold" Text="Archived entity" />
                                         <TextBlock Margin="0,6,0,0" Text="{Binding Editor.SelectedStatusDisplay, StringFormat=Status: {0}}" />
-                                        <TextBlock Margin="0,3,0,0" Text="{Binding Editor.EditedResponsibleDeveloper, StringFormat=Responsible developer: {0}}" TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,3,0,0" Text="{Binding Editor.ArchivedCurrentDevelopers, StringFormat=Current developers: {0}}" TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,8,0,3" FontWeight="SemiBold" Text="Responsibility timeline" />
+                                        <ItemsControl ItemsSource="{Binding Editor.ArchivedResponsibilityTimeline}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Margin="0,0,0,5">
+                                                        <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
+                                                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                                   Text="{Binding Description}" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <Button Margin="0,7,0,0" HorizontalAlignment="Left"
+                                                Content="View full history"
+                                                AutomationProperties.Name="View full archived responsibility history"
+                                                Command="{Binding ShowArchivedResponsibilityHistoryCommand}"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                Visibility="{Binding Editor.HasArchivedHiddenResponsibilityHistory, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                         <TextBlock Margin="0,3,0,0" Text="{Binding Editor.EditedGroupName, StringFormat=Group: {0}}" TextWrapping="Wrap" />
                                         <TextBlock Margin="0,3,0,0" Text="{Binding Editor.EffectivePriority, StringFormat=Effective priority: {0}}" />
                                         <TextBlock Margin="0,8,0,0"
@@ -2527,15 +2714,16 @@
                                 </Border>
 
                                 <StackPanel Visibility="{Binding Editor.ShowStandaloneSections, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <Border Margin="0,0,0,14" Style="{StaticResource EntityTrackerCardStyle}">
+                                <Border Margin="0,0,0,14" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
                                 <StackPanel>
                                 <TextBlock Margin="0,0,0,12" FontSize="16" FontWeight="SemiBold" Text="Progress and ownership" />
                                 <Grid Margin="0,0,0,12">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="220" />
-                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="3*" />
+                                        <ColumnDefinition Width="16" />
+                                        <ColumnDefinition Width="2*" />
                                     </Grid.ColumnDefinitions>
-                                    <StackPanel Margin="0,0,12,0">
+                                    <StackPanel Grid.Column="0">
                                         <TextBlock FontWeight="SemiBold" Text="Development status" />
                                         <ComboBox x:Name="EditorStatusComboBox"
                                                   AutomationProperties.Name="Development status"
@@ -2545,9 +2733,7 @@
                                                   ItemsSource="{Binding Editor.StatusOptions}"
                                                   SelectedValue="{Binding Editor.SelectedStatus}"
                                                   SelectedValuePath="Value" />
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="1">
-                                        <TextBlock FontWeight="SemiBold" Text="Notes" />
+                                        <TextBlock Margin="0,12,0,0" FontWeight="SemiBold" Text="Notes" />
                                         <TextBox MinHeight="64"
                                                  AutomationProperties.Name="Notes"
                                                  Margin="0,5,0,0"
@@ -2557,16 +2743,60 @@
                                                  Text="{Binding Editor.EditedNotes, UpdateSourceTrigger=PropertyChanged}"
                                                  TextWrapping="Wrap" />
                                     </StackPanel>
+                                    <StackPanel Grid.Column="2" IsEnabled="{Binding Editor.CanEditProgress}">
+                                    <TextBlock FontWeight="SemiBold" Text="Responsible developers" />
+                                    <Button Margin="0,7,0,4" HorizontalAlignment="Left" Content="{Binding Editor.SelfAssignmentActionLabel}"
+                                            AutomationProperties.Name="{Binding Editor.SelfAssignmentAccessibleName}"
+                                            Command="{Binding Editor.AssignMeCommand}"
+                                            Style="{StaticResource SecondaryButtonStyle}" />
+                                    <StackPanel Visibility="{Binding Editor.HasAssignmentGuidance, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <TextBlock Text="{Binding Editor.AssignmentGuidance}" TextWrapping="Wrap"
+                                                   AutomationProperties.LiveSetting="Assertive" />
+                                        <Button Margin="0,6,0,4" HorizontalAlignment="Left" Content="Open Settings"
+                                                AutomationProperties.Name="Open Settings to choose You in this Project"
+                                                Command="{Binding Editor.OpenIdentitySettingsCommand}"
+                                                Style="{StaticResource SecondaryButtonStyle}" />
+                                    </StackPanel>
+                                    <Grid Margin="0,5,0,5">
+                                        <TextBox x:Name="EditorDeveloperSearchBox" Padding="8,6"
+                                                 AutomationProperties.Name="Search Project developers"
+                                                 Text="{Binding Editor.DeveloperPicker.Query, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Margin="10,0,10,0" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                   IsHitTestVisible="False" Focusable="False"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Text="Search developers by initials or name"
+                                                   Visibility="{Binding Editor.DeveloperPicker.IsQueryEmpty, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                    </Grid>
+                                    <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto"
+                                                  CanContentScroll="False">
+                                        <ItemsControl ItemsSource="{Binding Editor.DeveloperPicker.FilteredChoices}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <CheckBox Margin="2,3" Content="{Binding Label}"
+                                                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                              AutomationProperties.Name="{Binding Label}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                    <TextBlock Margin="0,7,0,0"
+                                               Foreground="{DynamicResource Brush.Text.Secondary}"
+                                               Text="No available developers. Add one from Project → Developers."
+                                               TextWrapping="Wrap">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Editor.DeveloperPicker.HasAvailableDevelopers}" Value="False">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    </StackPanel>
                                 </Grid>
-
-                                <StackPanel Margin="0,0,0,12">
-                                    <TextBlock FontWeight="SemiBold" Text="Responsible developer" />
-                                    <TextBox Margin="0,5,0,0"
-                                             AutomationProperties.Name="Responsible developer"
-                                             Padding="8,6"
-                                             IsEnabled="{Binding Editor.CanEditProgress}"
-                                             Text="{Binding Editor.EditedResponsibleDeveloper, UpdateSourceTrigger=PropertyChanged}" />
-                                </StackPanel>
 
                                 <StackPanel Margin="0,0,0,12">
                                     <TextBlock FontWeight="SemiBold" Text="Group" />
@@ -2670,6 +2900,7 @@
 
                                 <Border x:Name="EditorDependenciesSection"
                                         Margin="0,0,0,14"
+                                        Padding="16"
                                         Style="{StaticResource EntityTrackerCardStyle}">
                                 <StackPanel>
                                 <TextBlock Margin="0,0,0,12" FontSize="16" FontWeight="SemiBold" Text="Dependencies" />
@@ -2684,18 +2915,12 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <ComboBox x:Name="EditorDependencyComboBox"
-                                              Padding="9,7"
-                                              AutomationProperties.HelpText="Type to search active entities."
-                                              AutomationProperties.Name="Manual dependency"
-                                              DisplayMemberPath="SourceName"
-                                              IsEditable="True"
-                                              IsTextSearchEnabled="False"
-                                              ItemsSource="{Binding Editor.Suggestions}"
-                                              SelectedItem="{Binding Editor.SelectedDependencySuggestion}"
-                                              StaysOpenOnEdit="True"
-                                              Text="{Binding Editor.DependencyQuery, UpdateSourceTrigger=PropertyChanged}"
-                                              IsDropDownOpen="{Binding Editor.IsDependencySuggestionsOpen}" />
+                                    <controls:DependencySuggestionBox x:Name="EditorDependencySuggestionBox"
+                                                                      InputName="Manual dependency"
+                                                                      Query="{Binding Editor.DependencyQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                      Suggestions="{Binding Editor.Suggestions}"
+                                                                      IsSuggestionsOpen="{Binding Editor.IsDependencySuggestionsOpen, Mode=TwoWay}"
+                                                                      AddExistingCommand="{Binding Editor.AddExistingCommand}" />
                                     <Button Grid.Column="1"
                                             Margin="8,0,0,0"
                                             Command="{Binding Editor.AddUnresolvedCommand}"

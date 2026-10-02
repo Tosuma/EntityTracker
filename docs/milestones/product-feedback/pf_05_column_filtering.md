@@ -23,10 +23,12 @@ each header.
 Each filterable header shows a dropdown action. The menu contains:
 
 - a search field for the column's available values;
-- `Select all`;
 - a checkbox for every available distinct value;
 - a `(Blank)` option for an empty responsible developer or group;
 - explicit `Apply` and `Clear filter` actions.
+
+Current follow-up behavior: with no values checked, all rows are shown. Checked values opt in to that
+column's filter. `Clear filter` unchecks every value and keeps the menu open.
 
 Closing the menu without applying must not change the active filter. A filtered header uses an
 accented filter indicator. The table also provides a visible `Clear all filters` action.
@@ -110,7 +112,7 @@ Only `Status` and `Work status` support sorting. Responsible developer and Group
 - Verify available-value lists honor search and all other filters while ignoring their own applied
   selection.
 - Verify case-insensitive metadata matching and deduplication, preserved display casing, `(Blank)`,
-  value search, Select all, Apply, Clear, and closing without Apply.
+  value search, unchecked defaults, Apply, Clear, and closing without Apply.
 - Verify filter indicators, result summaries, filtered empty states, `Clear all filters`, refresh,
   and editing while filters are active.
 - Verify summary-card shortcuts preserve other column filters, while Total clears column filters and

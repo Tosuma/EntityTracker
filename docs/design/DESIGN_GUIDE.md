@@ -93,6 +93,31 @@ Destructive actions require confirmation where the workflow already calls for it
 - Charts use Dark Green for axes and labels, Green 20% for grid lines, the status mapping above for
   categories, Green 80% for positive/ready trends, and Coral for negative/blocked trends.
 
+## Scrolling
+
+Scrollable content must move by pixels, including lists of suggestions. WPF list controls can
+default to logical item scrolling, which jumps by whole rows. Choose the setting for the control:
+
+| Content | WPF setting |
+| --- | --- |
+| Short `ListBox`, including a suggestion popup | Set `ScrollViewer.CanContentScroll="False"` on the list. |
+| Page content or `ItemsControl` inside a `ScrollViewer` | Set `CanContentScroll="False"` on the viewer. |
+| Large virtualized `DataGrid` or list | Keep `ScrollViewer.CanContentScroll="True"` and set `VirtualizingPanel.ScrollUnit="Pixel"` with virtualization and recycling enabled. The shared DataGrid style already sets the pixel scroll unit. |
+
+Give an independently scrolling list a finite height or `MaxHeight` so its own viewer can scroll.
+Avoid placing it inside an unbounded `StackPanel` or another `ScrollViewer` that takes over its
+scrolling. Use `VerticalScrollBarVisibility="Auto"` unless the layout calls for a persistent bar.
+
+`MainWindow` routes mouse-wheel input through `MouseWheelScrollRouter` so nested viewers use
+the Windows wheel setting and keep one scroll owner during a gesture. Do not add a local wheel
+handler to compensate for item scrolling; set the scroll unit correctly. WPF `Popup` content is
+hosted in a separate window, so the main-window router does not receive its wheel events. Give
+scrollable popup content an explicit pixel-scrolling setting and verify it with the mouse wheel.
+
+When adding or changing a scrollable area, check that a wheel step can stop partway through a
+row, that the intended viewer owns the scroll, and that scrolling remains usable at its top and
+bottom boundaries. Check with enough content to overflow the viewport.
+
 ## Implementation rules
 
 WPF resources are composed by

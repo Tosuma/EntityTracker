@@ -27,7 +27,6 @@ public abstract class OverviewColumnFilterState : INotifyPropertyChanged
         OpenCommand = new RelayCommand(() => _owner.OpenFilter(this));
         ApplyCommand = new RelayCommand(Apply);
         ClearFilterCommand = new RelayCommand(ClearFilter);
-        SelectAllCommand = new RelayCommand(SelectAll);
         SortAscendingCommand = new RelayCommand(
             () => SetSort(OverviewSortDirection.Ascending),
             () => CanSort);
@@ -122,8 +121,6 @@ public abstract class OverviewColumnFilterState : INotifyPropertyChanged
 
     public ICommand ClearFilterCommand { get; }
 
-    public ICommand SelectAllCommand { get; }
-
     public ICommand SortAscendingCommand { get; }
 
     public ICommand SortDescendingCommand { get; }
@@ -171,17 +168,14 @@ public abstract class OverviewColumnFilterState : INotifyPropertyChanged
 
     private void ClearFilter()
     {
-        ClearAppliedSelection();
-        _owner.ApplyFilterChange();
-        IsOpen = false;
-    }
-
-    private void SelectAll()
-    {
         foreach (OverviewFilterOption option in Options)
         {
-            option.IsSelected = true;
+            option.IsSelected = false;
         }
+
+        OptionSearchQuery = string.Empty;
+        ClearAppliedSelection();
+        _owner.ApplyFilterChange();
     }
 
     private void SetSort(OverviewSortDirection direction)
@@ -271,7 +265,7 @@ internal sealed class OverviewColumnFilterState<T> : OverviewColumnFilterState
             .Select(value => new OverviewFilterOption(
                 value,
                 _display(value),
-                _appliedSelection is null || _appliedSelection.Contains(value)))
+                _appliedSelection?.Contains(value) == true))
             .ToArray());
     }
 
@@ -282,7 +276,7 @@ internal sealed class OverviewColumnFilterState<T> : OverviewColumnFilterState
             .Select(option => (T)option.Value!)
             .ToArray();
 
-        _appliedSelection = Options.Count > 0 && selected.Length == Options.Count
+        _appliedSelection = selected.Length == 0
             ? null
             : new HashSet<T>(selected, _equalityComparer);
         NotifyAppliedChanged();

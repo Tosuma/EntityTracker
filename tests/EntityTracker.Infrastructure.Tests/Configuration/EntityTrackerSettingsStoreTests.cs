@@ -6,6 +6,54 @@ namespace EntityTracker.Infrastructure.Tests.Configuration;
 public sealed class EntityTrackerSettingsStoreTests
 {
     [Fact]
+    public async Task LocalProjectChoices_ArePerInstallationAndSurviveOtherSettingsWrites()
+    {
+        using TemporarySettingsDirectory firstDirectory = new();
+        using TemporarySettingsDirectory secondDirectory = new();
+        EntityTrackerSettingsStore first = new(firstDirectory.SettingsPath);
+        EntityTrackerSettingsStore second = new(secondDirectory.SettingsPath);
+        ProjectId project = ProjectId.New();
+        ProjectId otherProject = ProjectId.New();
+        DeveloperId alice = DeveloperId.New();
+        DeveloperId bob = DeveloperId.New();
+        await first.SaveProjectDeveloperChoiceAsync(project, alice);
+        await first.SaveProjectDeveloperChoiceAsync(otherProject, bob);
+        await second.SaveProjectDeveloperChoiceAsync(project, bob);
+        await first.SaveAppearanceAsync(ApplicationAppearance.Dark);
+        await first.SaveAutoSyncAsync(false, 15);
+        await first.SaveSearchResponsibleNamesAsync(false);
+        await first.SaveActiveContextAsync(otherProject, null);
+
+        EntityTrackerSettings firstSettings = (await new EntityTrackerSettingsStore(firstDirectory.SettingsPath)
+            .LoadAsync()).Settings;
+        Assert.Equal(alice, firstSettings.ProjectDeveloperChoices[project]);
+        Assert.Equal(bob, firstSettings.ProjectDeveloperChoices[otherProject]);
+        Assert.Equal(bob, (await second.LoadAsync()).Settings.ProjectDeveloperChoices[project]);
+        await first.SaveProjectDeveloperChoiceAsync(project, null);
+        Assert.False((await first.LoadAsync()).Settings.ProjectDeveloperChoices.ContainsKey(project));
+        Assert.Equal(bob, (await first.LoadAsync()).Settings.ProjectDeveloperChoices[otherProject]);
+    }
+
+    [Fact]
+    public async Task VersionSixChoiceMigration_DefaultsUnsetAndKeepsResponsibleSearch()
+    {
+        using TemporarySettingsDirectory directory = new();
+        Directory.CreateDirectory(directory.DirectoryPath);
+        await File.WriteAllTextAsync(directory.SettingsPath, """
+            {"version":6,"appearance":"Dark","searchResponsibleNames":false,
+             "autoSyncEnabled":false,"autoSyncIntervalMinutes":30}
+            """);
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+        EntityTrackerSettings migrated = (await store.LoadAsync()).Settings;
+        Assert.Empty(migrated.ProjectDeveloperChoices);
+        Assert.False(migrated.SearchResponsibleNames);
+        Assert.False(migrated.AutoSyncEnabled);
+        await store.SaveProjectDeveloperChoiceAsync(ProjectId.New(), DeveloperId.New());
+        Assert.False((await store.LoadAsync()).Settings.SearchResponsibleNames);
+        Assert.Contains("\"version\": 7", await File.ReadAllTextAsync(directory.SettingsPath));
+    }
+
+    [Fact]
     public async Task LoadAsync_WhenFileIsMissing_ReturnsDefaultsWithoutCreatingSettings()
     {
         using TemporarySettingsDirectory directory = new();
@@ -24,7 +72,7 @@ public sealed class EntityTrackerSettingsStoreTests
     [InlineData(ApplicationAppearance.System)]
     [InlineData(ApplicationAppearance.Light)]
     [InlineData(ApplicationAppearance.Dark)]
-    public async Task SaveAppearanceAsync_WritesVersionFiveWithoutRetiredProviderFields(
+    public async Task SaveAppearanceAsync_WritesVersionSevenWithoutRetiredProviderFields(
         ApplicationAppearance appearance)
     {
         using TemporarySettingsDirectory directory = new();
@@ -35,7 +83,8 @@ public sealed class EntityTrackerSettingsStoreTests
 
         Assert.Equal(appearance, result.Settings.Appearance);
         string json = await File.ReadAllTextAsync(directory.SettingsPath);
-        Assert.Contains("\"version\": 5", json, StringComparison.Ordinal);
+        Assert.Contains("\"version\": 7", json, StringComparison.Ordinal);
+        Assert.True(result.Settings.SearchResponsibleNames);
         Assert.True(result.Settings.AutoSyncEnabled);
         Assert.Equal(5, result.Settings.AutoSyncIntervalMinutes);
         Assert.Contains($"\"appearance\": \"{appearance}\"", json, StringComparison.Ordinal);
@@ -63,7 +112,49 @@ public sealed class EntityTrackerSettingsStoreTests
         Assert.Equal(minutes, result.Settings.AutoSyncIntervalMinutes);
         Assert.Equal(project, result.Settings.LastProjectId);
         Assert.Equal(ApplicationAppearance.Dark, result.Settings.Appearance);
-        Assert.Contains("\"version\": 5", await File.ReadAllTextAsync(directory.SettingsPath));
+        Assert.Contains("\"version\": 7", await File.ReadAllTextAsync(directory.SettingsPath));
+    }
+
+    [Fact]
+    public async Task VersionFiveSettings_DefaultResponsibleSearchOnAndPreserveAutoSyncChoices()
+    {
+        using TemporarySettingsDirectory directory = new();
+        Directory.CreateDirectory(directory.DirectoryPath);
+        await File.WriteAllTextAsync(directory.SettingsPath, """
+            { "version": 5, "appearance": "Dark", "autoSyncEnabled": false,
+              "autoSyncIntervalMinutes": 30 }
+            """);
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+
+        SettingsLoadResult migrated = await store.LoadAsync();
+        Assert.True(migrated.Settings.SearchResponsibleNames);
+        Assert.False(migrated.Settings.AutoSyncEnabled);
+        Assert.Equal(30, migrated.Settings.AutoSyncIntervalMinutes);
+
+        await store.SaveSearchResponsibleNamesAsync(false);
+        SettingsLoadResult saved = await store.LoadAsync();
+        Assert.False(saved.Settings.SearchResponsibleNames);
+        Assert.False(saved.Settings.AutoSyncEnabled);
+        Assert.Equal(30, saved.Settings.AutoSyncIntervalMinutes);
+        Assert.Contains("\"version\": 7", await File.ReadAllTextAsync(directory.SettingsPath));
+    }
+
+    [Fact]
+    public async Task SearchResponsibleNames_RoundTripsAndSurvivesOtherSettingsWrites()
+    {
+        using TemporarySettingsDirectory directory = new();
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+        Assert.True((await store.LoadAsync()).Settings.SearchResponsibleNames);
+
+        await store.SaveSearchResponsibleNamesAsync(false);
+        await store.SaveAppearanceAsync(ApplicationAppearance.Light);
+        await store.SaveAutoSyncAsync(false, 15);
+        await store.SaveActiveContextAsync(ProjectId.New(), null);
+
+        EntityTrackerSettingsStore restarted = new(directory.SettingsPath);
+        Assert.False((await restarted.LoadAsync()).Settings.SearchResponsibleNames);
+        await restarted.SaveSearchResponsibleNamesAsync(true);
+        Assert.True((await restarted.LoadAsync()).Settings.SearchResponsibleNames);
     }
 
     [Theory]
@@ -143,7 +234,7 @@ public sealed class EntityTrackerSettingsStoreTests
         Assert.Equal(projectId, result.Settings.LastProjectId);
         Assert.Equal(trackerId, result.Settings.LastTrackerId);
         string json = await File.ReadAllTextAsync(directory.SettingsPath);
-        Assert.Contains("\"version\": 5", json, StringComparison.Ordinal);
+        Assert.Contains("\"version\": 7", json, StringComparison.Ordinal);
         Assert.DoesNotContain("activeStorage", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("sharePoint", json, StringComparison.OrdinalIgnoreCase);
     }

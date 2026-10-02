@@ -600,7 +600,7 @@ public sealed class ExistingCheckoutRemoteSyncTests
         Assert.Throws<InvalidDataException>(() => codec.TryDecodeTombstone(invalid, out _));
         Assert.Throws<InvalidDataException>(() => codec.EncodeTombstone(tombstone with
         {
-            FormatVersion = 2
+            FormatVersion = 4
         }));
     }
 
@@ -856,8 +856,8 @@ public sealed class ExistingCheckoutRemoteSyncTests
         ProjectGitSyncService sync = catalog.Sync(checkout);
         string manifestPath = Path.Combine(checkout, ".entitytracker", "manifest.json");
         string manifest = File.ReadAllText(manifestPath);
-        Assert.Contains("\"formatVersion\":1", manifest);
-        File.WriteAllText(manifestPath, manifest.Replace("\"formatVersion\":1", "\"formatVersion\":99"));
+        Assert.Contains("\"formatVersion\":3", manifest);
+        File.WriteAllText(manifestPath, manifest.Replace("\"formatVersion\":3", "\"formatVersion\":99"));
         workspace.Git(checkout, "add", ".entitytracker");
         workspace.Git(checkout, "commit", "-m", "Unsupported version");
         await Assert.ThrowsAsync<InvalidDataException>(() => sync.ImportAsync(checkout));
@@ -1114,12 +1114,14 @@ public sealed class ExistingCheckoutRemoteSyncTests
         Guid copiedEntityId = Derive(id, 5);
         Guid firstEvent = Derive(id, 6);
         SnapshotEntity entity = new(entityId, trackerId, "Orders", "InProgress", "Keep notes",
-            "Active", "ManualAndImported", 2, "Ada", "Core", time, later, later,
+            "Active", "ManualAndImported", 2, "", "Core", time, later, later,
             [new SnapshotDependency(entityId, dependencyId, "Mandatory", time, later)],
             [new SnapshotUnresolvedDependency(entityId, "External", "Optional", time, later)],
-            [new SnapshotOverride(entityId, "External", "Suppress", time, later)]);
+            [new SnapshotOverride(entityId, "External", "Suppress", time, later)],
+            [new SnapshotResponsibilityPeriod(Derive(id, 12), entityId, Derive(id, 14), later, null)]);
         SnapshotEntity dependency = new(dependencyId, trackerId, "Customers", "Reconciled", "Archived notes",
-            "Archived", "Imported", 4, "Grace", "Legacy", time, later, later, [], [], []);
+            "Archived", "Imported", 4, "", "Legacy", time, later, later, [], [], [],
+            [new SnapshotResponsibilityPeriod(Derive(id, 13), dependencyId, Derive(id, 15), later, null)]);
         SnapshotEntity copied = new(copiedEntityId, recycledTrackerId, "Copied entity", "NotStarted", "",
             "Active", "Copied", null, "", "", time, later, later, [], [], []);
         SnapshotTracker tracker = new(trackerId, id, "Delivery", "Active", time, later, null, null,
@@ -1132,8 +1134,11 @@ public sealed class ExistingCheckoutRemoteSyncTests
             new SnapshotImportSummary(later, "schema.csv", "Partial", 1, 2, 3, 4, 5));
         SnapshotTracker recycled = new(recycledTrackerId, id, "Archive", "Recycled", time, later, later,
             trackerId, [copied], [], [new SnapshotProgress(Derive(id, 11), later, 1, 0, 0, 0, 0, 0, 0)], null);
-        return new ProjectSnapshot(1, new SnapshotProject(id, name, "Active", time, later, null),
-            [tracker, recycled]);
+        return new ProjectSnapshot(ProjectSnapshot.CurrentFormatVersion,
+            new SnapshotProject(id, name, "Active", time, later, null),
+            [tracker, recycled],
+            [new SnapshotDeveloper(Derive(id, 14), id, "Ada", "", false),
+             new SnapshotDeveloper(Derive(id, 15), id, "Grace", "", false)]);
     }
 
     private static Guid Derive(Guid id, byte salt)

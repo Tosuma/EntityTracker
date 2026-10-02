@@ -29,6 +29,11 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
             [Root + "project.json"] = JsonSerializer.SerializeToUtf8Bytes(snapshot.Project, JsonOptions)
         };
 
+        if (snapshot.FormatVersion >= 2)
+            foreach (SnapshotDeveloper developer in snapshot.Developers!.OrderBy(d => d.Id))
+                files[Root + $"developers/{developer.Id:D}.json"] =
+                    JsonSerializer.SerializeToUtf8Bytes(developer, JsonOptions);
+
         foreach (SnapshotTracker tracker in snapshot.Trackers.OrderBy(t => t.Id))
         {
             string prefix = TrackerPrefix(tracker.Id);
@@ -45,10 +50,17 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                     UnresolvedDependencies = entity.UnresolvedDependencies.OrderBy(
                         d => d.DependencySourceName, StringComparer.Ordinal).ToArray(),
                     ManualOverrides = entity.ManualOverrides.OrderBy(
-                        d => d.DependencySourceName, StringComparer.Ordinal).ToArray()
+                        d => d.DependencySourceName, StringComparer.Ordinal).ToArray(),
+                    ResponsibilityPeriods = snapshot.FormatVersion >= 3
+                        ? (entity.ResponsibilityPeriods ?? []).OrderBy(p => p.StartedAtUtc)
+                            .ThenBy(p => p.Id).ToArray()
+                        : entity.ResponsibilityPeriods
                 };
-                files[prefix + $"entities/{entity.Id:D}.json"] =
-                    JsonSerializer.SerializeToUtf8Bytes(ordered, JsonOptions);
+                if (snapshot.FormatVersion >= 3 && ordered.ResponsibleDeveloper.Length > 0)
+                    throw new InvalidDataException("Current snapshots cannot contain responsible text.");
+                files[prefix + $"entities/{entity.Id:D}.json"] = snapshot.FormatVersion >= 3
+                    ? JsonSerializer.SerializeToUtf8Bytes(SnapshotEntityV3.From(ordered), JsonOptions)
+                    : JsonSerializer.SerializeToUtf8Bytes(ordered, JsonOptions);
             }
             foreach (SnapshotStatusEvent entry in tracker.StatusHistory.OrderBy(e => e.EventId))
                 files[prefix + $"status-history/{entry.EventId:D}.json"] =
@@ -67,7 +79,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
     {
         ArgumentNullException.ThrowIfNull(files);
         Manifest manifest = Read<Manifest>(files, Root + "manifest.json");
-        if (manifest.FormatVersion != ProjectSnapshot.CurrentFormatVersion)
+        if (manifest.FormatVersion is not (1 or 2 or ProjectSnapshot.CurrentFormatVersion))
             throw new InvalidDataException($"Unsupported Project snapshot format version {manifest.FormatVersion}.");
         SnapshotProject project = Read<SnapshotProject>(files, Root + "project.json");
         if (project.Id != manifest.ProjectId)
@@ -82,7 +94,9 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
             if (trackerPath != prefix + "tracker.json")
                 throw new InvalidDataException("A Tracker document path does not match its ID.");
             SnapshotEntity[] entities = files.Keys.Where(p => p.StartsWith(prefix + "entities/", StringComparison.Ordinal))
-                .Order(StringComparer.Ordinal).Select(p => Read<SnapshotEntity>(files, p)).ToArray();
+                .Order(StringComparer.Ordinal).Select(p => manifest.FormatVersion >= 3
+                    ? Read<SnapshotEntityV3>(files, p).ToSnapshotEntity()
+                    : Read<SnapshotEntity>(files, p)).ToArray();
             SnapshotStatusEvent[] events = files.Keys.Where(p => p.StartsWith(prefix + "status-history/", StringComparison.Ordinal))
                 .Order(StringComparer.Ordinal).Select(p => Read<SnapshotStatusEvent>(files, p)).ToArray();
             SnapshotProgress[] progress = files.Keys.Where(p => p.StartsWith(prefix + "progress-history/", StringComparison.Ordinal))
@@ -94,7 +108,11 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                 doc.CreatedAtUtc, doc.UpdatedAtUtc, doc.RecycledAtUtc, doc.CopiedFromTrackerId,
                 entities, events, progress, summary, doc.SyncBaselineJson));
         }
-        ProjectSnapshot snapshot = new(manifest.FormatVersion, project, trackers);
+        SnapshotDeveloper[]? developers = manifest.FormatVersion >= 2
+            ? files.Keys.Where(p => p.StartsWith(Root + "developers/", StringComparison.Ordinal))
+                .Order(StringComparer.Ordinal).Select(p => Read<SnapshotDeveloper>(files, p)).ToArray()
+            : null;
+        ProjectSnapshot snapshot = new(manifest.FormatVersion, project, trackers, developers);
         ProjectSnapshotValidator.Validate(snapshot);
 
         ProjectSnapshotPackage canonical = Encode(snapshot);
@@ -141,7 +159,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
 
     private static void ValidateTombstone(ProjectTombstone tombstone)
     {
-        if (tombstone.FormatVersion != ProjectSnapshot.CurrentFormatVersion ||
+        if (tombstone.FormatVersion is not (1 or 2 or ProjectSnapshot.CurrentFormatVersion) ||
             tombstone.ProjectId == Guid.Empty || tombstone.DeletedAtUtc.Offset != TimeSpan.Zero ||
             tombstone.BaseSnapshotHash.Length != 64 ||
             !tombstone.BaseSnapshotHash.All(Uri.IsHexDigit))
@@ -200,6 +218,32 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
     }
 
     private sealed record Manifest(int FormatVersion, Guid ProjectId);
+
+    private sealed record SnapshotEntityV3(
+        Guid Id, Guid TrackerId, string SourceName, string DevelopmentStatus,
+        string Notes, string LifecycleState, string Provenance,
+        int? RequestedPriority, string GroupName,
+        DateTimeOffset CreatedAtUtc, DateTimeOffset SchemaUpdatedAtUtc,
+        DateTimeOffset ProgressUpdatedAtUtc,
+        IReadOnlyList<SnapshotDependency> Dependencies,
+        IReadOnlyList<SnapshotUnresolvedDependency> UnresolvedDependencies,
+        IReadOnlyList<SnapshotOverride> ManualOverrides,
+        IReadOnlyList<SnapshotResponsibilityPeriod> ResponsibilityPeriods)
+    {
+        public static SnapshotEntityV3 From(SnapshotEntity entity) => new(
+            entity.Id, entity.TrackerId, entity.SourceName, entity.DevelopmentStatus,
+            entity.Notes, entity.LifecycleState, entity.Provenance,
+            entity.RequestedPriority, entity.GroupName,
+            entity.CreatedAtUtc, entity.SchemaUpdatedAtUtc, entity.ProgressUpdatedAtUtc,
+            entity.Dependencies, entity.UnresolvedDependencies, entity.ManualOverrides,
+            entity.ResponsibilityPeriods ?? []);
+
+        public SnapshotEntity ToSnapshotEntity() => new(Id, TrackerId, SourceName,
+            DevelopmentStatus, Notes, LifecycleState, Provenance, RequestedPriority,
+            string.Empty, GroupName, CreatedAtUtc, SchemaUpdatedAtUtc,
+            ProgressUpdatedAtUtc, Dependencies, UnresolvedDependencies,
+            ManualOverrides, ResponsibilityPeriods);
+    }
     private sealed record TrackerDocument(
         Guid Id, Guid ProjectId, string Name, string LifecycleState,
         DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc,

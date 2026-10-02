@@ -14,6 +14,9 @@ internal static class ScreenshotManifest
     [
         "portfolio.png",
         "project-dashboard.png",
+        "project-developers.png",
+        "project-developer-retirement.png",
+        "project-developers-retired.png",
         "project-git-repository.png",
         "project-sync-progress.png",
         "project-sync-action-needed.png",
@@ -26,6 +29,7 @@ internal static class ScreenshotManifest
         "create-tracker-copy.png",
         "overview.png",
         "overview-details.png",
+        "responsibility-history.png",
         "overview-filter-flyout.png",
         "overview-search.png",
         "overview-missing-entities-as-dependencies.png",

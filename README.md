@@ -67,6 +67,20 @@ The deterministic screenshot suite contains matching [`images/light`](images/lig
 [`images/dark`](images/dark) captures for every state shown below. The README uses the light set
 for consistency.
 
+From a Project dashboard, select **Developers** to manage that Project's developer directory.
+Search by initials or display name in the left column; the available-developers list scrolls
+independently. Use the form on the right to add a developer or edit a selected one.
+Initials are required and unique among available developers in the Project; retired records can
+be restored when their initials are free. Retiring a developer requires entering their exact initials.
+The retired list stays hidden until you select **Retired developers**.
+In entity creation or editing, search available Project developers and select everyone currently
+responsible. Add new developers on the Project Developers page. Removing someone ends their current
+assignment; reassigning them starts a new dated period. Entity details show all current assignments
+and up to three timeline entries. Select **View full history** for the complete timeline, then
+**Back** to return to the entity. Current assignments appear by newest start time, followed by
+past assignments by newest end time. Retiring a developer ends all their open assignments, including
+archived entities, without deleting their history.
+
 <table>
   <tr>
     <td width="50%">
@@ -106,6 +120,10 @@ for consistency.
   </tr>
 </table>
 
+| Project developers | Confirm retirement | Retired developers |
+| --- | --- | --- |
+| ![Project Developers directory with available developers](images/light/project-developers.png) | ![Single initials confirmation for retiring a developer](images/light/project-developer-retirement.png) | ![Retired developers dialog with restore action](images/light/project-developers-retired.png) |
+
 ### Import and synchronize an existing Git checkout
 
 Clone and configure a dedicated Project repository with command-line Git first. On the Portfolio,
@@ -128,7 +146,7 @@ the edit is saved or closed; other Projects continue. Conflict and deletion revi
 manual action. Routine automatic checks are quiet; a notification stays visible when action is
 needed.
 
-![Settings showing automatic Project sync and interval choices](images/light/settings.png)
+![Settings showing the local Project Developer choice and overview search](images/light/settings.png)
 
 For slow syncs, the daily application log records stage durations, fetch time, snapshot read time,
 and the number of snapshot files read or reused. The remote may still take time to fetch or push;
@@ -176,11 +194,21 @@ exact Tracker name, and starts with focus on the safe Cancel action.
 
 ### Find and maintain tracked entities
 
-Use the dropdown on a supported column header to select any combination of responsible developers,
-groups, statuses, or work statuses. Selections within a column are alternatives, while filters on
-different columns work together. Status summary cards remain useful one-click shortcuts. Search
-entity names and, when needed, dependency names from the overview; the same search opens with
-<kbd>Ctrl</kbd>+<kbd>F</kbd>.
+In **Settings**, choose **You in this Project** from the available Project Developers. This
+choice is local to this installation and can differ by Project. **Assign me** in active entity
+details adds that Developer immediately; **Assign me** in the editor stages the assignment until
+you save. If no available Developer is selected, the action offers a link to Settings. Changing
+the choice does not change existing assignments or their history.
+
+Use the dropdown on a supported column header to select individual current Project Developers,
+groups, statuses, or work statuses. An entity with several Developers appears under each one;
+**(Blank)** finds entities with no current Developer. Selections within a column are alternatives,
+while filters on different columns work together. With no values checked, all rows are shown; choose values
+and press **Apply** to narrow the list. **Clear filter** unchecks every value and leaves the menu
+open. Status summary cards remain useful one-click shortcuts. Ordinary search matches entity names
+and, by default, current Developer initials and
+display names. Turn off **Search responsible names** in Settings to search entity names only.
+**Search dependency names** remains a separate mode. Open search with <kbd>Ctrl</kbd>+<kbd>F</kbd>.
 
 Development status keeps the user-set detail: **Rework needed** means work is pending,
 **Reworking** means it is active, and **Blocked** manually pauses an entity. Work status shows
@@ -188,7 +216,7 @@ Ready for Not started or Rework needed, In progress for development or Reworking
 Waiting on dependencies for unstarted entities with unmet dependencies. A manually Blocked
 entity shows Blocked. The Blockers column shows unmet dependencies during active work.
 
-![EntityTracker Work status column filter with staged choices and typed sorting](images/light/overview-filter-flyout.png)
+![EntityTracker Responsible dev filter with separate Project Developers and a Blank option](images/light/overview-filter-flyout.png)
 
 ![EntityTracker overview filtered by the dependency name unit](images/light/overview-search.png)
 
@@ -198,14 +226,16 @@ deliberately restored from the archived view.
 
 Entity names and each row's **View details** action open a read-only side pane with priorities,
 rank, provenance, assignment, full notes, effective dependencies, blockers, and audit timestamps.
-Opening or closing this pane does not disturb bulk row selection; editing remains in the row action
-menu.
+Use **Edit** in the details header to open the entity editor. Opening or closing the pane does not
+disturb bulk row selection.
 
 The Add Entity and edit workflows use searchable Fluent suggestion controls. Unknown dependency
 names are added only through the explicit **Add as unresolved** action, while archive remains a
 separate reversible action with confirmation.
 
 ![EntityTracker read-only entity details pane](images/light/overview-details.png)
+
+![EntityTracker full responsibility history in the entity details pane](images/light/responsibility-history.png)
 
 ![EntityTracker edit modal focused on dependencies and explicit unresolved additions](images/light/edit-entity-dependencies.png)
 
@@ -255,15 +285,18 @@ compatible schema CSV without requiring a live database connection inside Entity
 
 ## Project status
 
-Product Milestones 1–12 and UX Milestones UX-01 through UX-08 are complete. EntityTracker uses
+Product Milestones 1–12, PF-01 through PF-05, and UX-01 through UX-08 are complete. EntityTracker uses
 SQLite as its local catalog and working store. Obsolete SharePoint presentation and runtime
 configuration have been retired. Manual and automatic Git synchronization are available for
 existing checkouts.
 
 A separate
 [PF-01–PF-05 product feedback milestone group](docs/milestones/product-feedback/00_README.md)
-plans bulk status updates, customer priority, responsible-developer and group metadata, and
-column filtering with status-order sorting without extending the numbered roadmap. The independent
+records the implemented bulk status updates, customer priority, responsible-developer and group
+metadata, and column filtering with status-order sorting. The
+[RESP-01–RESP-04 Responsibility roadmap](docs/milestones/responsibility/00_README.md) records
+completed Project developers, dated assignments, responsibility search, and local `Assign me`.
+The independent
 [CI-01 engineering milestone](docs/milestones/engineering/ci_01_continuous_integration.md) defines
 CI validation for pull requests, pushes to `main`, and app release tags; successful pushes are packaged.
 The live badge above reports the current `main` build status.

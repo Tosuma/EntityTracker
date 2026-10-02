@@ -435,7 +435,7 @@ public sealed class SqliteTrackedStateStoreTests
         Assert.Equal("Preserved notes", loaded.Notes);
         Assert.Equal(EntityProvenance.ManualAndImported, loaded.Provenance);
         Assert.Equal(3, loaded.RequestedPriority);
-        Assert.Equal("Legacy Team", loaded.ResponsibleDeveloper);
+        Assert.Empty(loaded.ResponsibleDeveloper);
         Assert.Equal("Legacy Data", loaded.GroupName);
         Assert.Equal(preservedOverride, Assert.Single(await overrides.GetAllAsync()));
         Assert.Single(await dependencies.GetAllUnresolvedAsync());
@@ -519,7 +519,7 @@ public sealed class SqliteTrackedStateStoreTests
     }
 
     [Fact]
-    public async Task ApplyAsync_ResponsibleDeveloperOnlyUpdatePreservesProgressAndTimestamps()
+    public async Task ApplyAsync_ResponsibilitySelectionPreservesProgressAndTimestamps()
     {
         await using TemporarySqliteFile file = new();
         MutableTimeProvider time = new(
@@ -541,17 +541,9 @@ public sealed class SqliteTrackedStateStoreTests
         (string schemaTimestamp, string progressTimestamp) =
             await ReadEntityTimestampsAsync(file.DatabasePath, entity.Id);
         time.Advance(TimeSpan.FromHours(1));
-        TrackedEntity assigned = new(
-            entity.Id,
-            database.GetTrackerId(),
-            entity.SourceName,
-            entity.Status,
-            entity.Notes,
-            entity.LifecycleState,
-            entity.Provenance,
-            entity.RequestedPriority,
-            "  Platform Team  ");
-
+        Tracker tracker = Assert.Single(await new SqliteTrackerRepository(database).GetAllAsync());
+        ProjectDeveloper developer = await new EntityTracker.Application.Projects.ProjectDeveloperService(
+            new SqliteProjectDeveloperStore(database)).CreateAsync(tracker.ProjectId, "PT", "Platform Team");
         await store.ApplyAsync(new TrackedStateChangeSet(
             [],
             [],
@@ -559,10 +551,10 @@ public sealed class SqliteTrackedStateStoreTests
             [],
             [],
             [],
-            entitiesWithResponsibleDeveloperToUpdate: [assigned]));
+            responsibilitySelections: [new ResponsibilitySelection(entity.Id, [developer.Id])]));
 
         TrackedEntity loaded = Assert.IsType<TrackedEntity>(await entities.GetAsync(entity.Id));
-        Assert.Equal("Platform Team", loaded.ResponsibleDeveloper);
+        Assert.Single(await new SqliteResponsibilityPeriodRepository(database).GetByEntityAsync(entity.Id));
         Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
         Assert.Equal("Keep notes", loaded.Notes);
         Assert.Equal(4, loaded.RequestedPriority);
@@ -571,7 +563,6 @@ public sealed class SqliteTrackedStateStoreTests
             (schemaTimestamp, progressTimestamp),
             await ReadEntityTimestampsAsync(file.DatabasePath, entity.Id));
 
-        assigned.ChangeResponsibleDeveloper(null);
         await store.ApplyAsync(new TrackedStateChangeSet(
             [],
             [],
@@ -579,11 +570,11 @@ public sealed class SqliteTrackedStateStoreTests
             [],
             [],
             [],
-            entitiesWithResponsibleDeveloperToUpdate: [assigned]));
+            responsibilitySelections: [new ResponsibilitySelection(entity.Id, [])]));
 
-        Assert.Equal(
-            string.Empty,
-            (await entities.GetAsync(entity.Id))!.ResponsibleDeveloper);
+        Assert.Empty((await entities.GetAsync(entity.Id))!.ResponsibleDeveloper);
+        Assert.NotNull(Assert.Single(await new SqliteResponsibilityPeriodRepository(database)
+            .GetByEntityAsync(entity.Id)).EndedAtUtc);
         Assert.Equal(historyCount, (await history.GetStatusHistoryAsync()).Count);
     }
 
@@ -627,7 +618,7 @@ public sealed class SqliteTrackedStateStoreTests
         Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
         Assert.Equal("Keep notes", loaded.Notes);
         Assert.Equal(3, loaded.RequestedPriority);
-        Assert.Equal("Platform Team", loaded.ResponsibleDeveloper);
+        Assert.Empty(loaded.ResponsibleDeveloper);
         Assert.Equal(historyCount, (await history.GetStatusHistoryAsync()).Count);
         Assert.Equal(
             (schemaTimestamp, progressTimestamp),

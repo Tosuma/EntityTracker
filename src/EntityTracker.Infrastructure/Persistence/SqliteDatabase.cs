@@ -5,7 +5,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    internal const int CurrentSchemaVersion = 16;
+    internal const int CurrentSchemaVersion = 18;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -552,6 +552,13 @@ public sealed class SqliteDatabase
                 "tracked_entities",
                 "tracker_id",
                 cancellationToken);
+            if (schemaVersion < 18)
+                await ExecuteAsync(connection, transaction, """
+                    DROP TRIGGER IF EXISTS rev_responsibility_insert;
+                    DROP TRIGGER IF EXISTS rev_responsibility_update;
+                    DROP TRIGGER IF EXISTS validate_responsibility_insert;
+                    DROP TRIGGER IF EXISTS validate_responsibility_update;
+                    """, cancellationToken);
 
             if (schemaVersion < 1)
             {
@@ -658,6 +665,11 @@ public sealed class SqliteDatabase
                     ResponsibleDeveloperSchemaSql,
                     cancellationToken);
             }
+            if (schemaVersion is >= 10 and < 18 && !await ColumnExistsAsync(
+                    connection, transaction, "tracked_entities", "responsible_developer",
+                    cancellationToken))
+                await ExecuteAsync(connection, transaction, ResponsibleDeveloperSchemaSql,
+                    cancellationToken);
 
             if (schemaVersion < 11 && !await ColumnExistsAsync(
                     connection,
@@ -833,6 +845,107 @@ public sealed class SqliteDatabase
                 await EnsureNoForeignKeyViolationsAsync(connection, transaction, cancellationToken);
             }
 
+            if (schemaVersion < 17)
+            {
+                await ExecuteAsync(connection, transaction, """
+                    CREATE TABLE IF NOT EXISTS project_developers
+                    (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        project_id TEXT NOT NULL,
+                        initials_key TEXT NOT NULL,
+                        initials TEXT NOT NULL CHECK (length(trim(initials)) > 0),
+                        display_name TEXT NOT NULL DEFAULT '',
+                        is_retired INTEGER NOT NULL DEFAULT 0 CHECK (is_retired IN (0, 1)),
+                        FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+                    );
+                    CREATE INDEX IF NOT EXISTS ix_project_developers_project
+                        ON project_developers (project_id, is_retired, initials_key, id);
+                    CREATE UNIQUE INDEX IF NOT EXISTS ux_project_developers_available_initials
+                        ON project_developers (project_id, initials_key)
+                        WHERE is_retired = 0;
+                    CREATE TRIGGER IF NOT EXISTS rev_project_developers_insert AFTER INSERT ON project_developers BEGIN
+                        UPDATE project_revisions SET revision = revision + 1 WHERE project_id = NEW.project_id;
+                    END;
+                    CREATE TRIGGER IF NOT EXISTS rev_project_developers_update AFTER UPDATE ON project_developers BEGIN
+                        UPDATE project_revisions SET revision = revision + 1 WHERE project_id = NEW.project_id;
+                    END;
+                    CREATE TRIGGER IF NOT EXISTS rev_project_developers_delete AFTER DELETE ON project_developers BEGIN
+                        UPDATE project_revisions SET revision = revision + 1 WHERE project_id = OLD.project_id;
+                    END;
+                    """, cancellationToken);
+            }
+
+            if (schemaVersion < 18)
+            {
+                await ExecuteAsync(connection, transaction, """
+                    CREATE TABLE IF NOT EXISTS responsibility_periods
+                    (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        entity_id TEXT NOT NULL,
+                        developer_id TEXT NOT NULL,
+                        started_at_utc TEXT NOT NULL,
+                        ended_at_utc TEXT NULL,
+                        CHECK (ended_at_utc IS NULL OR ended_at_utc >= started_at_utc),
+                        FOREIGN KEY (entity_id) REFERENCES tracked_entities (id) ON DELETE CASCADE,
+                        FOREIGN KEY (developer_id) REFERENCES project_developers (id) ON DELETE CASCADE
+                    );
+                    CREATE INDEX IF NOT EXISTS ix_responsibility_entity_start
+                        ON responsibility_periods (entity_id, started_at_utc, id);
+                    CREATE INDEX IF NOT EXISTS ix_responsibility_developer
+                        ON responsibility_periods (developer_id, ended_at_utc);
+                    CREATE UNIQUE INDEX IF NOT EXISTS ux_responsibility_open
+                        ON responsibility_periods (entity_id, developer_id)
+                        WHERE ended_at_utc IS NULL;
+                    CREATE TRIGGER IF NOT EXISTS validate_responsibility_insert
+                    BEFORE INSERT ON responsibility_periods BEGIN
+                        SELECT RAISE(ABORT, 'responsibility Project or developer is invalid')
+                        WHERE NOT EXISTS (
+                            SELECT 1 FROM tracked_entities entity
+                            JOIN trackers tracker ON tracker.id = entity.tracker_id
+                            JOIN project_developers developer
+                                ON developer.project_id = tracker.project_id
+                            WHERE entity.id = NEW.entity_id AND developer.id = NEW.developer_id
+                              AND (NEW.ended_at_utc IS NOT NULL OR developer.is_retired = 0));
+                        SELECT RAISE(ABORT, 'responsibility periods overlap')
+                        WHERE EXISTS (SELECT 1 FROM responsibility_periods prior
+                            WHERE prior.entity_id = NEW.entity_id
+                              AND prior.developer_id = NEW.developer_id
+                              AND prior.started_at_utc < COALESCE(NEW.ended_at_utc, '9999-12-31')
+                              AND NEW.started_at_utc < COALESCE(prior.ended_at_utc, '9999-12-31'));
+                    END;
+                    CREATE TRIGGER IF NOT EXISTS validate_responsibility_update
+                    BEFORE UPDATE ON responsibility_periods BEGIN
+                        SELECT RAISE(ABORT, 'responsibility period identity cannot change')
+                        WHERE NEW.id <> OLD.id OR NEW.entity_id <> OLD.entity_id
+                            OR NEW.developer_id <> OLD.developer_id
+                            OR NEW.started_at_utc <> OLD.started_at_utc;
+                        SELECT RAISE(ABORT, 'retired developer cannot hold an open assignment')
+                        WHERE NEW.ended_at_utc IS NULL AND EXISTS (
+                            SELECT 1 FROM project_developers developer
+                            WHERE developer.id = NEW.developer_id AND developer.is_retired = 1);
+                        SELECT RAISE(ABORT, 'responsibility periods overlap')
+                        WHERE EXISTS (SELECT 1 FROM responsibility_periods prior
+                            WHERE prior.id <> OLD.id AND prior.entity_id = NEW.entity_id
+                              AND prior.developer_id = NEW.developer_id
+                              AND prior.started_at_utc < COALESCE(NEW.ended_at_utc, '9999-12-31')
+                              AND NEW.started_at_utc < COALESCE(prior.ended_at_utc, '9999-12-31'));
+                    END;
+                    CREATE TRIGGER IF NOT EXISTS rev_responsibility_insert AFTER INSERT ON responsibility_periods BEGIN
+                        UPDATE project_revisions SET revision = revision + 1
+                        WHERE project_id = (SELECT tracker.project_id FROM tracked_entities entity
+                            JOIN trackers tracker ON tracker.id = entity.tracker_id
+                            WHERE entity.id = NEW.entity_id);
+                    END;
+                    CREATE TRIGGER IF NOT EXISTS rev_responsibility_update AFTER UPDATE ON responsibility_periods BEGIN
+                        UPDATE project_revisions SET revision = revision + 1
+                        WHERE project_id = (SELECT tracker.project_id FROM tracked_entities entity
+                            JOIN trackers tracker ON tracker.id = entity.tracker_id
+                            WHERE entity.id = NEW.entity_id);
+                    END;
+                    """, cancellationToken);
+                await MigrateResponsibilityAsync(connection, transaction, cancellationToken);
+            }
+
             await ExecuteAsync(
                 connection,
                 transaction,
@@ -848,6 +961,77 @@ public sealed class SqliteDatabase
                 await ExecuteAsync(connection, "PRAGMA foreign_keys = ON;", CancellationToken.None);
             }
         }
+    }
+
+    private async Task MigrateResponsibilityAsync(SqliteConnection connection,
+        SqliteTransaction transaction, CancellationToken cancellationToken)
+    {
+        List<(string EntityId, string ProjectId, string Text)> legacy = [];
+        using (SqliteCommand read = connection.CreateCommand())
+        {
+            read.Transaction = transaction;
+            read.CommandText = """
+                SELECT entity.id, tracker.project_id, entity.responsible_developer
+                FROM tracked_entities entity JOIN trackers tracker ON tracker.id = entity.tracker_id
+                WHERE trim(entity.responsible_developer) <> '' ORDER BY entity.id;
+                """;
+            await using SqliteDataReader reader = await read.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                legacy.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2)));
+        }
+        string migrationTime = SqlitePersistenceValues.FormatTimestamp(
+            TimeProvider.GetUtcNow().ToUniversalTime());
+        foreach ((string entityId, string projectId, string value) in legacy)
+        {
+            HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+            foreach (string component in value.Split(','))
+            {
+                string initials = component.Trim();
+                if (initials.Length == 0 || !seen.Add(initials)) continue;
+                string? developerId;
+                using (SqliteCommand lookup = connection.CreateCommand())
+                {
+                    lookup.Transaction = transaction;
+                    lookup.CommandText = """
+                        SELECT id FROM project_developers
+                        WHERE project_id = $project AND initials_key = $key AND is_retired = 0;
+                        """;
+                    lookup.Parameters.AddWithValue("$project", projectId);
+                    lookup.Parameters.AddWithValue("$key", initials.ToUpperInvariant());
+                    developerId = (string?)await lookup.ExecuteScalarAsync(cancellationToken);
+                }
+                if (developerId is null)
+                {
+                    developerId = Guid.NewGuid().ToString("D");
+                    using SqliteCommand create = connection.CreateCommand();
+                    create.Transaction = transaction;
+                    create.CommandText = """
+                        INSERT INTO project_developers
+                            (id, project_id, initials_key, initials, display_name, is_retired)
+                        VALUES ($id, $project, $key, $initials, '', 0);
+                        """;
+                    create.Parameters.AddWithValue("$id", developerId);
+                    create.Parameters.AddWithValue("$project", projectId);
+                    create.Parameters.AddWithValue("$key", initials.ToUpperInvariant());
+                    create.Parameters.AddWithValue("$initials", initials);
+                    await create.ExecuteNonQueryAsync(cancellationToken);
+                }
+                using SqliteCommand insert = connection.CreateCommand();
+                insert.Transaction = transaction;
+                insert.CommandText = """
+                    INSERT OR IGNORE INTO responsibility_periods
+                        (id, entity_id, developer_id, started_at_utc)
+                    VALUES ($id, $entity, $developer, $started);
+                    """;
+                insert.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("D"));
+                insert.Parameters.AddWithValue("$entity", entityId);
+                insert.Parameters.AddWithValue("$developer", developerId);
+                insert.Parameters.AddWithValue("$started", migrationTime);
+                await insert.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+        await ExecuteAsync(connection, transaction,
+            "ALTER TABLE tracked_entities DROP COLUMN responsible_developer;", cancellationToken);
     }
 
     private static async Task<bool> ColumnExistsAsync(

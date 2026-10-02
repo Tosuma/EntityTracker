@@ -7,7 +7,7 @@ public static class ProjectSnapshotValidator
     public static void Validate(ProjectSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        if (snapshot.FormatVersion != ProjectSnapshot.CurrentFormatVersion)
+        if (snapshot.FormatVersion is not (1 or 2 or ProjectSnapshot.CurrentFormatVersion))
         {
             throw new InvalidDataException($"Unsupported Project snapshot format version {snapshot.FormatVersion}.");
         }
@@ -19,10 +19,28 @@ public static class ProjectSnapshotValidator
             snapshot.Project.CreatedAtUtc, snapshot.Project.UpdatedAtUtc,
             snapshot.Project.RecycledAtUtc);
 
+        if (snapshot.FormatVersion >= 2 && snapshot.Developers is null)
+            throw new InvalidDataException("The Project developer directory is missing.");
+        if (snapshot.FormatVersion == 1 && snapshot.Developers is { Count: > 0 })
+            throw new InvalidDataException("A version 1 snapshot cannot contain developers.");
+        HashSet<Guid> developerIds = [];
+        HashSet<string> availableInitials = new(StringComparer.OrdinalIgnoreCase);
+        foreach (SnapshotDeveloper developer in snapshot.Developers ?? [])
+        {
+            if (developer is null || developer.Id == Guid.Empty ||
+                developer.ProjectId != snapshot.Project.Id || !developerIds.Add(developer.Id) ||
+                string.IsNullOrWhiteSpace(developer.Initials) ||
+                developer.Initials != developer.Initials.Trim() ||
+                developer.DisplayName is null || developer.DisplayName != developer.DisplayName.Trim() ||
+                (!developer.IsRetired && !availableInitials.Add(developer.Initials)))
+                throw new InvalidDataException("The Project developer directory is invalid.");
+        }
+
         HashSet<Guid> trackerIds = [];
         HashSet<Guid> allEntityIds = [];
         HashSet<Guid> allEventIds = [];
         HashSet<Guid> allProgressIds = [];
+        HashSet<Guid> allPeriodIds = [];
         foreach (SnapshotTracker tracker in snapshot.Trackers)
         {
             if (tracker is null || tracker.Id == Guid.Empty ||
@@ -55,6 +73,32 @@ public static class ProjectSnapshotValidator
                     throw new InvalidDataException("An entity priority is invalid.");
                 }
                 Utc(entity.CreatedAtUtc); Utc(entity.SchemaUpdatedAtUtc); Utc(entity.ProgressUpdatedAtUtc);
+                if (snapshot.FormatVersion >= 3)
+                {
+                    foreach (SnapshotResponsibilityPeriod period in entity.ResponsibilityPeriods ?? [])
+                    {
+                        if (period is null || period.Id == Guid.Empty || !allPeriodIds.Add(period.Id) ||
+                            period.EntityId != entity.Id || !developerIds.Contains(period.DeveloperId) ||
+                            period.EndedAtUtc is null && snapshot.Developers!.Single(d => d.Id == period.DeveloperId).IsRetired ||
+                            (period.EndedAtUtc is { } end && end < period.StartedAtUtc))
+                            throw new InvalidDataException("A responsibility period is invalid.");
+                        Utc(period.StartedAtUtc);
+                        if (period.EndedAtUtc is { } ended) Utc(ended);
+                    }
+                    foreach (IGrouping<Guid, SnapshotResponsibilityPeriod> group in
+                             (entity.ResponsibilityPeriods ?? []).GroupBy(p => p.DeveloperId))
+                    {
+                        SnapshotResponsibilityPeriod? previous = null;
+                        foreach (SnapshotResponsibilityPeriod period in group.OrderBy(p => p.StartedAtUtc)
+                                     .ThenBy(p => p.Id))
+                        {
+                            if (previous is not null &&
+                                (previous.EndedAtUtc is null || period.StartedAtUtc < previous.EndedAtUtc))
+                                throw new InvalidDataException("Responsibility periods overlap.");
+                            previous = period;
+                        }
+                    }
+                }
             }
             foreach (SnapshotEntity entity in tracker.Entities)
             {

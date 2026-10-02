@@ -57,7 +57,14 @@ public sealed class ProjectTrackerMigrationTests
         Assert.Equal(EntityLifecycleState.Active, active.LifecycleState);
         Assert.Equal(EntityProvenance.ManualAndImported, active.Provenance);
         Assert.Equal(4, active.RequestedPriority);
-        Assert.Equal("Ada", active.ResponsibleDeveloper);
+        Assert.Equal(string.Empty, active.ResponsibleDeveloper);
+        ResponsibilityPeriod migratedAssignment = Assert.Single(
+            await new SqliteResponsibilityPeriodRepository(database).GetByEntityAsync(active.Id));
+        ProjectDeveloper migratedDeveloper = Assert.Single(
+            await new SqliteProjectDeveloperStore(database).GetByProjectAsync(project.Id),
+            developer => developer.Initials == "Ada");
+        Assert.Equal(migratedDeveloper.Id, migratedAssignment.DeveloperId);
+        Assert.Equal("Ada", migratedDeveloper.Initials);
         Assert.Equal("Core", active.GroupName);
         TrackedEntity archived = Assert.Single(migrated, entity => entity.Id == ArchivedId);
         Assert.Equal(EntityLifecycleState.Archived, archived.LifecycleState);
@@ -123,7 +130,7 @@ public sealed class ProjectTrackerMigrationTests
         Assert.Equal(5, summary.UnresolvedEntityCount);
 
         await using SqliteConnection connection = await OpenAsync(file.DatabasePath);
-        Assert.Equal(16L, await ScalarInt64Async(connection, "PRAGMA user_version;"));
+        Assert.Equal(18L, await ScalarInt64Async(connection, "PRAGMA user_version;"));
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT source_key, created_at_utc, schema_updated_at_utc, progress_updated_at_utc

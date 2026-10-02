@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Projects;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Persistence;
 
@@ -22,6 +23,12 @@ public sealed class SqliteBackupServiceTests
             responsibleDeveloper: "Platform Team",
             groupName: "Core Data");
         Assert.True(await new SqliteEntityRepository(database).TryAddAsync(prioritized));
+        Tracker tracker = Assert.Single(await new SqliteTrackerRepository(database).GetAllAsync());
+        ProjectDeveloper developer = await new ProjectDeveloperService(
+            new SqliteProjectDeveloperStore(database)).CreateAsync(tracker.ProjectId, "PT", "Platform Team");
+        await new SqliteTrackedStateStore(database).ApplyAsync(tracker.Id,
+            new TrackedStateChangeSet([], [], [], [], [], [],
+                responsibilitySelections: [new ResponsibilitySelection(prioritized.Id, [developer.Id])]));
         string backupDirectory = Path.Combine(
             Path.GetDirectoryName(file.DatabasePath)!,
             "backups");
@@ -44,9 +51,7 @@ public sealed class SqliteBackupServiceTests
         Assert.Equal(
             4,
             await ReadRequestedPriorityAsync(first.CreatedBackupPaths[0], prioritized.Id));
-        Assert.Equal(
-            "Platform Team",
-            await ReadResponsibleDeveloperAsync(first.CreatedBackupPaths[0], prioritized.Id));
+        Assert.Equal(1, await ReadResponsibilityCountAsync(first.CreatedBackupPaths[0], prioritized.Id));
         Assert.Equal(
             "Core Data",
             await ReadGroupNameAsync(first.CreatedBackupPaths[0], prioritized.Id));
@@ -177,7 +182,7 @@ public sealed class SqliteBackupServiceTests
         return value is null or DBNull ? null : Convert.ToInt32(value);
     }
 
-    private static async Task<string> ReadResponsibleDeveloperAsync(
+    private static async Task<long> ReadResponsibilityCountAsync(
         string databasePath,
         EntityId entityId)
     {
@@ -185,9 +190,9 @@ public sealed class SqliteBackupServiceTests
         await connection.OpenAsync();
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText =
-            "SELECT responsible_developer FROM tracked_entities WHERE id = $id;";
+            "SELECT COUNT(*) FROM responsibility_periods WHERE entity_id = $id;";
         command.Parameters.AddWithValue("$id", entityId.Value.ToString("D"));
-        return (string)(await command.ExecuteScalarAsync())!;
+        return (long)(await command.ExecuteScalarAsync())!;
     }
 
     private static async Task<string> ReadGroupNameAsync(

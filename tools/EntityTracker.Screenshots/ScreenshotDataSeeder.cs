@@ -90,8 +90,14 @@ internal static class ScreenshotDataSeeder
                 noteEntity.Status,
                 "Coordinate rollout with the platform team.",
                 noteEntity.RequestedPriority,
-                noteEntity.ResponsibleDeveloper,
+                null,
                 noteEntity.GroupName,
+                cancellationToken);
+            ProjectDeveloper platform = await provider.GetRequiredService<ProjectDeveloperService>()
+                .CreateAsync(tracker.ProjectId, "PT", "Platform Team", cancellationToken);
+            await provider.GetRequiredService<ITrackedStateStore>().ApplyAsync(tracker.Id,
+                new TrackedStateChangeSet([], [], [], [], [], [],
+                    responsibilitySelections: [new ResponsibilitySelection(noteEntity.Id, [platform.Id])]),
                 cancellationToken);
         }
 

@@ -79,6 +79,30 @@ installed app, so close one before opening the other.
 5. **Review reports** — Open **Reports** to see status distribution, implementation history,
    and blocker trends.
 
+### Assign developers
+
+Choose **You in this Project** in Settings to identify your local Developer for the selected
+Project. The choice stays on this installation; you can change or clear it at any time. Use
+**Assign me** in active entity details to assign immediately, or in the entity editor to stage
+the assignment until **Save Changes**. The action opens guidance to Settings when no available
+Developer is selected. Other current Developers remain assigned.
+
+Open an entity or create a new one, then search the Project developer picker and select one or
+more available developers. Create new developers from the Project Developers page. Use **Edit** in
+an active entity's details pane to open its editor. Entity details show all current assignments
+and up to three timeline entries; **View full history** opens the
+complete timeline in the details pane, and **Back** returns to the summary. Current assignments
+appear newest first, followed by past assignments ordered by when they ended, newest first.
+Removing a developer ends their current period; assigning them again starts a new one. Retiring a
+developer from the Project dashboard ends all their open assignments, including on archived
+entities. The active and archived overviews show each current Developer separately. Use the
+**Responsible dev** column filter to find one or more Developers or **(Blank)** for unassigned
+entities. All overview column filters start with no checked values, which shows all rows. Check
+the values you want and choose **Apply**; **Clear filter** unchecks them and keeps the menu open.
+Ordinary search includes current Developer initials and display names by default; turn off
+**Search responsible names** in Settings to search entity names only. **Search dependency
+names** remains a separate search mode.
+
 ### Sync a copied tracker
 
 On the Project dashboard, choose **Sync from source** on a tracker created with **Copy tracker**.

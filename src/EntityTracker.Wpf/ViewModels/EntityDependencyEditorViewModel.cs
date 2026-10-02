@@ -7,9 +7,13 @@ using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Planning;
+using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Projects;
+using System.Globalization;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
+using EntityTracker.Wpf.Services;
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -29,6 +33,10 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private readonly Action<SchemaSynchronizationPlan> _onReviewStaged;
     private readonly Func<bool> _canOperate;
     private readonly ILogger<EntityDependencyEditorViewModel> _logger;
+    private readonly IResponsibilityPeriodRepository? _responsibilityPeriods;
+    private readonly ProjectDeveloperService? _developers;
+    private string _archivedCurrentDevelopers = "—";
+    private IReadOnlyList<EntityDetailListItem> _archivedResponsibilityTimeline = [];
     private readonly AsyncCommand _saveCommand;
     private readonly AsyncCommand _confirmArchiveCommand;
     private readonly AsyncCommand _restoreEntityCommand;
@@ -81,6 +89,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private IReadOnlyList<string> _priorityUnresolvedDependencyNames = [];
     private bool _hasPendingPriorityChange;
     private string? _initialOverrideSignature;
+    private HashSet<DeveloperId> _initialDeveloperIds = [];
 
     public EntityDependencyEditorViewModel(
         TrackerId trackerId,
@@ -93,7 +102,12 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         Func<Task> onPurged,
         Action<SchemaSynchronizationPlan> onReviewStaged,
         Func<bool>? canOperate = null,
-        ILogger<EntityDependencyEditorViewModel>? logger = null)
+        ILogger<EntityDependencyEditorViewModel>? logger = null,
+        DeveloperPickerViewModel? developerPicker = null,
+        IResponsibilityPeriodRepository? responsibilityPeriods = null,
+        ProjectDeveloperService? developers = null,
+        LocalProjectIdentityService? localIdentity = null,
+        Func<Task>? openSettings = null)
     {
         ArgumentNullException.ThrowIfNull(editorService);
         ArgumentNullException.ThrowIfNull(lifecycleService);
@@ -115,6 +129,20 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _onReviewStaged = onReviewStaged;
         _canOperate = canOperate ?? (() => true);
         _logger = logger ?? NullLogger<EntityDependencyEditorViewModel>.Instance;
+        DeveloperPicker = developerPicker;
+        _responsibilityPeriods = responsibilityPeriods;
+        _developers = developers;
+        _localIdentity = localIdentity;
+        _openSettings = openSettings;
+        _assignMeCommand = new AsyncCommand(AssignMeAsync, () => CanEditProgress);
+        _openIdentitySettingsCommand = new AsyncCommand(OpenIdentitySettingsAsync);
+        if (DeveloperPicker is not null)
+            DeveloperPicker.SelectionChanged += (_, _) =>
+            {
+                OnPropertyChanged(nameof(IsDirty));
+                OnPropertyChanged(nameof(SelfAssignmentActionLabel));
+                OnPropertyChanged(nameof(SelfAssignmentAccessibleName));
+            };
         _addExistingCommand = new RelayCommand<ManualDependencySuggestion>(
             AddExisting,
             _ => CanEdit);
@@ -165,6 +193,71 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+    public DeveloperPickerViewModel? DeveloperPicker { get; }
+    private readonly LocalProjectIdentityService? _localIdentity;
+    private readonly Func<Task>? _openSettings;
+    private readonly AsyncCommand _assignMeCommand;
+    private readonly AsyncCommand _openIdentitySettingsCommand;
+    private DeveloperId? _selfDeveloperId;
+    private string? _assignmentGuidance;
+    public string? AssignmentGuidance
+    {
+        get => _assignmentGuidance;
+        private set { if (SetField(ref _assignmentGuidance, value))
+            OnPropertyChanged(nameof(HasAssignmentGuidance)); }
+    }
+    public bool HasAssignmentGuidance => !string.IsNullOrWhiteSpace(AssignmentGuidance);
+    public ICommand AssignMeCommand => _assignMeCommand;
+    public string SelfAssignmentActionLabel => IsSelfSelected ? "Remove me" : "Assign me";
+    public string SelfAssignmentAccessibleName => IsSelfSelected
+        ? "Remove me from this entity when saved" : "Assign me to this entity when saved";
+    private bool IsSelfSelected => _selfDeveloperId is { } id &&
+        DeveloperPicker?.SelectedIds.Contains(id) == true;
+    public ICommand OpenIdentitySettingsCommand => _openIdentitySettingsCommand;
+
+    private async Task AssignMeAsync()
+    {
+        if (!CanEditProgress || _localIdentity is null || DeveloperPicker is null) return;
+        try
+        {
+            ProjectDeveloper? developer = await _localIdentity.ResolveForTrackerAsync(_trackerId);
+            if (developer is null)
+            {
+                AssignmentGuidance = "Choose You in this Project in Settings before assigning yourself.";
+                return;
+            }
+            _selfDeveloperId = developer.Id;
+            DeveloperChoice? choice = DeveloperPicker.Choices.FirstOrDefault(item =>
+                item.Developer.Id == developer.Id);
+            if (choice is null)
+            {
+                AssignmentGuidance = "Choose You in this Project in Settings before assigning yourself.";
+                return;
+            }
+            choice.IsSelected = !choice.IsSelected;
+            AssignmentGuidance = null;
+        }
+        catch (Exception)
+        {
+            AssignmentGuidance = "Your local Developer choice could not be checked. Open Settings and try again.";
+        }
+    }
+
+    private async Task OpenIdentitySettingsAsync()
+    {
+        if (_openSettings is not null) await _openSettings();
+    }
+    public string ArchivedCurrentDevelopers
+    {
+        get => _archivedCurrentDevelopers;
+        private set => SetField(ref _archivedCurrentDevelopers, value);
+    }
+    public IReadOnlyList<EntityDetailListItem> ArchivedResponsibilityTimeline
+    {
+        get => _archivedResponsibilityTimeline;
+        private set => SetField(ref _archivedResponsibilityTimeline, value);
+    }
+    public bool HasArchivedHiddenResponsibilityHistory { get; private set; }
 
     public IReadOnlyList<EntityDependencyEditRow> Dependencies
     {
@@ -679,6 +772,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             return SelectedStatus != entity.Status ||
                    EditedNotes != entity.Notes ||
                    EditedResponsibleDeveloper != entity.ResponsibleDeveloper ||
+                   DeveloperPicker is not null &&
+                   !_initialDeveloperIds.SetEquals(DeveloperPicker.SelectedIds) ||
                    EditedGroupName != entity.GroupName ||
                    SelectedRequestedPriority != entity.RequestedPriority ||
                    OverrideSignature(CurrentEditPlan.DesiredOverrides) != _initialOverrideSignature;
@@ -764,12 +859,24 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
 
         ResetSessionState();
+        AssignmentGuidance = null;
         Mode = EntityEditorMode.Standalone;
         IsOpen = true;
         IsBusy = true;
         try
         {
             LoadPlan(await _editorService.LoadAsync(_trackerId, entityId, cancellationToken), true);
+            if (DeveloperPicker is not null && _responsibilityPeriods is not null)
+            {
+                DeveloperId[] selected = (await _responsibilityPeriods.GetByEntityAsync(entityId, cancellationToken))
+                    .Where(p => p.IsCurrent).Select(p => p.DeveloperId).ToArray();
+                await DeveloperPicker.LoadAsync(selected, cancellationToken);
+                _initialDeveloperIds = selected.ToHashSet();
+                _selfDeveloperId = _localIdentity is null ? null
+                    : (await _localIdentity.ResolveForTrackerAsync(_trackerId))?.Id;
+                OnPropertyChanged(nameof(SelfAssignmentActionLabel));
+                OnPropertyChanged(nameof(SelfAssignmentAccessibleName));
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -845,6 +952,17 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                     entityId,
                     cancellationToken);
             ArchivedDetails = details;
+            if (_responsibilityPeriods is not null && _developers is not null)
+            {
+                ResponsibilityTimelinePresentation presentation =
+                    ResponsibilityTimelinePresentation.Create(
+                        await _responsibilityPeriods.GetByEntityAsync(entityId, cancellationToken),
+                        await _developers.ListForTrackerAsync(_trackerId, cancellationToken));
+                ArchivedCurrentDevelopers = presentation.CurrentDevelopers;
+                ArchivedResponsibilityTimeline = presentation.Preview;
+                HasArchivedHiddenResponsibilityHistory = presentation.HasHiddenHistory;
+                OnPropertyChanged(nameof(HasArchivedHiddenResponsibilityHistory));
+            }
             _selectedStatus = details.Entity.Status;
             OnPropertyChanged(nameof(SelectedStatus));
             OnPropertyChanged(nameof(SelectedStatusDisplay));
@@ -1157,7 +1275,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                     EditedNotes,
                     SelectedRequestedPriority,
                     EditedResponsibleDeveloper,
-                    EditedGroupName);
+                    EditedGroupName,
+                    developerIds: DeveloperPicker?.SelectedIds);
                 await _onPersisted();
             }
 
@@ -1399,9 +1518,16 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
     private void ResetSessionState()
     {
+        _selfDeveloperId = null;
+        OnPropertyChanged(nameof(SelfAssignmentActionLabel));
+        OnPropertyChanged(nameof(SelfAssignmentAccessibleName));
         _previewVersion++;
         CurrentEditPlan = null;
         ArchivedDetails = null;
+        ArchivedCurrentDevelopers = "—";
+        ArchivedResponsibilityTimeline = [];
+        HasArchivedHiddenResponsibilityHistory = false;
+        OnPropertyChanged(nameof(HasArchivedHiddenResponsibilityHistory));
         Dependencies = [];
         Warnings = [];
         Errors = [];
@@ -1463,6 +1589,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private void NotifyCommandsChanged()
     {
         _saveCommand.NotifyCanExecuteChanged();
+        _assignMeCommand.NotifyCanExecuteChanged();
         _addExistingCommand.NotifyCanExecuteChanged();
         _useGroupSuggestionCommand.NotifyCanExecuteChanged();
         _addUnresolvedCommand.NotifyCanExecuteChanged();

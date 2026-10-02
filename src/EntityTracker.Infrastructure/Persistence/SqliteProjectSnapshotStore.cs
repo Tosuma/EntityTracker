@@ -28,8 +28,17 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
 
         List<Row> trackerRows = await RowsAsync(connection, transaction,
             "SELECT * FROM trackers WHERE project_id = $projectId;", id, cancellationToken);
+        List<Row> developerRows = await RowsAsync(connection, transaction,
+            "SELECT * FROM project_developers WHERE project_id = $projectId ORDER BY id;",
+            id, cancellationToken);
         List<Row> entityRows = await RowsAsync(connection, transaction, """
             SELECT entity.* FROM tracked_entities entity
+            JOIN trackers tracker ON tracker.id = entity.tracker_id
+            WHERE tracker.project_id = $projectId;
+            """, id, cancellationToken);
+        List<Row> responsibilityRows = await RowsAsync(connection, transaction, """
+            SELECT period.* FROM responsibility_periods period
+            JOIN tracked_entities entity ON entity.id = period.entity_id
             JOIN trackers tracker ON tracker.id = entity.tracker_id
             WHERE tracker.project_id = $projectId;
             """, id, cancellationToken);
@@ -77,6 +86,7 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         await transaction.CommitAsync(cancellationToken);
 
         var entitiesByTracker = entityRows.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
+        var responsibilityByEntity = responsibilityRows.ToLookup(row => row.Str("entity_id"), StringComparer.Ordinal);
         var dependenciesByEntity = dependencies.ToLookup(row => row.Str("dependent_entity_id"), StringComparer.Ordinal);
         var unresolvedByEntity = unresolved.ToLookup(row => row.Str("dependent_entity_id"), StringComparer.Ordinal);
         var overridesByEntity = overrides.ToLookup(row => row.Str("dependent_entity_id"), StringComparer.Ordinal);
@@ -98,7 +108,7 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                     return new SnapshotEntity(entity.Guid("id"), entity.Guid("tracker_id"),
                         entity.Str("source_name"), entity.Str("development_status"), entity.Str("notes"),
                         entity.Str("lifecycle_state"), entity.Str("provenance"), entity.IntOrNull("requested_priority"),
-                        entity.Str("responsible_developer"), entity.Str("group_name"),
+                        string.Empty, entity.Str("group_name"),
                         entity.Time("created_at_utc"), entity.Time("schema_updated_at_utc"),
                         entity.Time("progress_updated_at_utc"),
                         dependenciesByEntity[entityId]
@@ -112,7 +122,12 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                         overridesByEntity[entityId]
                             .Select(d => new SnapshotOverride(d.Guid("dependent_entity_id"),
                                 d.Str("dependency_source_name"), d.Str("override_action"),
-                                d.Time("created_at_utc"), d.Time("updated_at_utc"))).ToArray());
+                                d.Time("created_at_utc"), d.Time("updated_at_utc"))).ToArray(),
+                        responsibilityByEntity[entityId]
+                            .Select(d => new SnapshotResponsibilityPeriod(d.Guid("id"),
+                                d.Guid("entity_id"), d.Guid("developer_id"),
+                                d.Time("started_at_utc"), d.TimeOrNull("ended_at_utc")))
+                            .OrderBy(d => d.StartedAtUtc).ThenBy(d => d.Id).ToArray());
                 }).ToArray();
             Row? summary = summariesByTracker[trackerId].SingleOrDefault();
             return new SnapshotTracker(tracker.Guid("id"), tracker.Guid("project_id"),
@@ -137,7 +152,11 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                     summary.Int("unresolved_entity_count")),
                 baselinesByTracker[trackerId].SingleOrDefault()?.Str("baseline_json"));
         }).ToArray();
-        ProjectSnapshot snapshot = new(ProjectSnapshot.CurrentFormatVersion, projectModel, trackers);
+        SnapshotDeveloper[] developers = developerRows.Select(row => new SnapshotDeveloper(
+            row.Guid("id"), row.Guid("project_id"), row.Str("initials"),
+            row.Str("display_name"), row.Int("is_retired") != 0)).ToArray();
+        ProjectSnapshot snapshot = new(ProjectSnapshot.CurrentFormatVersion, projectModel,
+            trackers, developers);
         ProjectSnapshotValidator.Validate(snapshot);
         return new ProjectSnapshotRead(snapshot, revision);
     }
@@ -151,6 +170,7 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         ProjectSnapshot snapshot, long expectedRevision, string? localName,
         CancellationToken cancellationToken = default)
     {
+        snapshot = ProjectSnapshotUpgrade.ToCurrent(snapshot, database.TimeProvider.GetUtcNow().ToUniversalTime());
         ProjectSnapshotValidator.Validate(snapshot);
         if (expectedRevision < 0) throw new ArgumentOutOfRangeException(nameof(expectedRevision));
         string projectId = snapshot.Project.Id.ToString("D");
@@ -182,6 +202,12 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         if (!string.Equals(storedName, snapshot.Project.Name, StringComparison.Ordinal))
             await InsertAsync(connection, transaction, "project_snapshot_names",
                 ["project_id", "canonical_name"], [projectId, snapshot.Project.Name], cancellationToken);
+        foreach (SnapshotDeveloper developer in snapshot.Developers ?? [])
+            await InsertAsync(connection, transaction, "project_developers",
+                ["id", "project_id", "initials_key", "initials", "display_name", "is_retired"],
+                [Id(developer.Id), projectId, developer.Initials.ToUpperInvariant(),
+                 developer.Initials, developer.DisplayName, developer.IsRetired ? 1 : 0],
+                cancellationToken);
         foreach (SnapshotTracker tracker in snapshot.Trackers)
         {
             await InsertAsync(connection, transaction, "trackers",
@@ -194,12 +220,19 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         foreach (SnapshotEntity entity in tracker.Entities)
         {
             await InsertAsync(connection, transaction, "tracked_entities",
-                ["id", "tracker_id", "source_key", "source_name", "development_status", "notes", "lifecycle_state", "provenance", "requested_priority", "responsible_developer", "group_name", "created_at_utc", "schema_updated_at_utc", "progress_updated_at_utc"],
+                ["id", "tracker_id", "source_key", "source_name", "development_status", "notes", "lifecycle_state", "provenance", "requested_priority", "group_name", "created_at_utc", "schema_updated_at_utc", "progress_updated_at_utc"],
                 [Id(entity.Id), Id(tracker.Id), EntitySourceKey.From(entity.SourceName).Value,
                  entity.SourceName, entity.DevelopmentStatus, entity.Notes, entity.LifecycleState,
-                 entity.Provenance, entity.RequestedPriority, entity.ResponsibleDeveloper, entity.GroupName,
+                 entity.Provenance, entity.RequestedPriority, entity.GroupName,
                  Time(entity.CreatedAtUtc), Time(entity.SchemaUpdatedAtUtc), Time(entity.ProgressUpdatedAtUtc)], cancellationToken);
         }
+        foreach (SnapshotTracker tracker in snapshot.Trackers)
+        foreach (SnapshotEntity entity in tracker.Entities)
+        foreach (SnapshotResponsibilityPeriod period in entity.ResponsibilityPeriods ?? [])
+            await InsertAsync(connection, transaction, "responsibility_periods",
+                ["id", "entity_id", "developer_id", "started_at_utc", "ended_at_utc"],
+                [Id(period.Id), Id(entity.Id), Id(period.DeveloperId),
+                 Time(period.StartedAtUtc), TimeOrNull(period.EndedAtUtc)], cancellationToken);
         foreach (SnapshotTracker tracker in snapshot.Trackers)
         {
             await InsertTrackerContentsAsync(connection, transaction, tracker, cancellationToken);

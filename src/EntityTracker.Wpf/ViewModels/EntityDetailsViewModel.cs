@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Workflow;
@@ -7,12 +9,18 @@ using Domain = EntityTracker.Domain;
 
 namespace EntityTracker.Wpf.ViewModels;
 
-public sealed class EntityDetailsViewModel
+public sealed class EntityDetailsViewModel : INotifyPropertyChanged
 {
+    private IReadOnlyList<EntityDetailListItem> _responsibilityTimeline = [];
+    private IReadOnlyList<EntityDetailListItem> _fullResponsibilityTimeline = [];
+    private string _currentDevelopers = "—";
+    private bool _isFullHistoryOpen;
+    private bool _isSelfAssigned;
     public EntityDetailsViewModel(EntityOverviewRow row)
     {
         ArgumentNullException.ThrowIfNull(row);
 
+        OverviewRow = row;
         EntityId = row.EntityId;
         SourceName = row.SourceName;
         Lifecycle = row.LifecycleState == EntityLifecycleState.Archived ? "Archived" : "Active";
@@ -27,6 +35,7 @@ public sealed class EntityDetailsViewModel
         DevelopmentStatusValue = row.DevelopmentStatus;
         WorkStatusDisplayValue = row.WorkStatusDisplay;
         ResponsibleDeveloper = row.ResponsibleDeveloperDisplay;
+        _currentDevelopers = ResponsibleDeveloper;
         GroupName = row.GroupNameDisplay;
         DependencyCount = row.DependencyCount;
         DependencySectionTitle = IsArchived
@@ -52,11 +61,26 @@ public sealed class EntityDetailsViewModel
 
     public EntityId EntityId { get; }
 
+    public EntityOverviewRow OverviewRow { get; }
+
     public string SourceName { get; }
 
     public string Lifecycle { get; }
 
     public bool IsArchived { get; }
+
+    public bool CanEdit => !IsArchived;
+    public string SelfAssignmentActionLabel => _isSelfAssigned ? "Remove me" : "Assign me";
+    public string SelfAssignmentAccessibleName => _isSelfAssigned
+        ? "Remove me from this entity" : "Assign me to this entity";
+
+    public void SetSelfAssigned(bool assigned)
+    {
+        if (_isSelfAssigned == assigned) return;
+        _isSelfAssigned = assigned;
+        OnPropertyChanged(nameof(SelfAssignmentActionLabel));
+        OnPropertyChanged(nameof(SelfAssignmentAccessibleName));
+    }
 
     public string Provenance { get; }
 
@@ -77,6 +101,53 @@ public sealed class EntityDetailsViewModel
     public WorkStatusDisplay WorkStatusDisplayValue { get; }
 
     public string ResponsibleDeveloper { get; }
+    public string CurrentDevelopers
+    {
+        get => _currentDevelopers;
+        private set { _currentDevelopers = value; OnPropertyChanged(); }
+    }
+    public IReadOnlyList<EntityDetailListItem> ResponsibilityTimeline
+    {
+        get => _responsibilityTimeline;
+        private set { _responsibilityTimeline = value; OnPropertyChanged(); }
+    }
+    public IReadOnlyList<EntityDetailListItem> FullResponsibilityTimeline
+    {
+        get => _fullResponsibilityTimeline;
+        private set { _fullResponsibilityTimeline = value; OnPropertyChanged(); }
+    }
+    public bool HasHiddenResponsibilityHistory =>
+        FullResponsibilityTimeline.Count > ResponsibilityTimeline.Count;
+    public bool IsFullHistoryOpen
+    {
+        get => _isFullHistoryOpen;
+        private set
+        {
+            if (_isFullHistoryOpen == value) return;
+            _isFullHistoryOpen = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsSummaryOpen));
+        }
+    }
+    public bool IsSummaryOpen => !IsFullHistoryOpen;
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public void ShowFullHistory() => IsFullHistoryOpen = true;
+    public void ShowSummary() => IsFullHistoryOpen = false;
+
+    public void SetResponsibility(IEnumerable<ResponsibilityPeriod> periods,
+        IEnumerable<ProjectDeveloper> developers)
+    {
+        ResponsibilityTimelinePresentation presentation =
+            ResponsibilityTimelinePresentation.Create(periods, developers);
+        CurrentDevelopers = presentation.CurrentDevelopers;
+        ResponsibilityTimeline = presentation.Preview;
+        FullResponsibilityTimeline = presentation.FullHistory;
+        OnPropertyChanged(nameof(HasHiddenResponsibilityHistory));
+    }
+
+    private void OnPropertyChanged([CallerMemberName] string? name = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
     public string GroupName { get; }
 

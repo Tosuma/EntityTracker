@@ -75,6 +75,8 @@ internal static class ScreenshotServiceProviderFactory
             provider.GetRequiredService<SqliteTrackedStateStore>());
         services.AddSingleton<IProgressHistoryRepository, SqliteProgressHistoryRepository>();
         services.AddSingleton<IProjectRepository, SqliteProjectRepository>();
+        services.AddSingleton<IProjectDeveloperStore, SqliteProjectDeveloperStore>();
+        services.AddSingleton<IResponsibilityPeriodRepository, SqliteResponsibilityPeriodRepository>();
         services.AddSingleton<ITrackerRepository, SqliteTrackerRepository>();
         services.AddSingleton<IProjectTrackerStore, SqliteProjectTrackerStore>();
         services.AddSingleton<IProjectSnapshotStore, SqliteProjectSnapshotStore>();
@@ -92,6 +94,9 @@ internal static class ScreenshotServiceProviderFactory
             enabled: false));
         services.AddSingleton(provider => new AutoSyncSettingsViewModel(settingsStore,
             provider.GetRequiredService<ProjectAutoSyncService>(),
+            provider.GetRequiredService<EntityTrackerSettings>()));
+        services.AddSingleton(provider => new ResponsibilitySearchSettingsViewModel(
+            settingsStore,
             provider.GetRequiredService<EntityTrackerSettings>()));
         services.AddSingleton<NotificationCenter>();
         services.AddSingleton<ProjectRepositoryCardViewModelFactory>();
@@ -134,6 +139,9 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<EntityDependencyEditorService>();
         services.AddSingleton<EntityLifecycleService>();
         services.AddSingleton<ProjectManagementService>();
+        services.AddSingleton<ProjectDeveloperService>();
+        services.AddSingleton<LocalProjectIdentityService>();
+        services.AddSingleton<LocalProjectIdentitySettingsViewModel>();
         services.AddSingleton<TrackerManagementService>();
         services.AddSingleton<TrackerSyncService>();
         services.AddSingleton<TrackerCsvCreationService>();

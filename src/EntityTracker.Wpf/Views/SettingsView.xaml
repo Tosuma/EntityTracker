@@ -8,7 +8,7 @@
     <StackPanel MaxWidth="720" HorizontalAlignment="Left">
         <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Settings" />
         <TextBlock Margin="0,4,0,20" Style="{StaticResource PageDescriptionTextStyle}"
-                   Text="Choose appearance and application-wide automatic Project sync. Changes apply immediately and are saved locally." />
+                   Text="Choose appearance, search, and automatic Project sync. Changes apply immediately and are saved locally." />
         <Border Margin="0,0,0,16" Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -42,6 +42,47 @@
                                    Text="{Binding Appearance.ErrorMessage}" TextWrapping="Wrap" />
                     </ScrollViewer>
                 </Border>
+            </StackPanel>
+        </Border>
+        <Border Margin="0,16,0,0" Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
+            <StackPanel>
+                <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="You in this Project" />
+                <TextBlock Margin="0,4,0,10" Style="{StaticResource PageDescriptionTextStyle}"
+                           Text="Choose the Developer used by Assign me. This choice stays on this installation and can be changed at any time."
+                           TextWrapping="Wrap" />
+                <TextBlock FontWeight="SemiBold" Text="{Binding LocalIdentity.ProjectName}" />
+                <ComboBox Margin="0,7,0,0" MinWidth="280"
+                          AutomationProperties.Name="You in this Project Developer"
+                          AutomationProperties.HelpText="Select an available Developer for the current Project."
+                          ItemsSource="{Binding LocalIdentity.AvailableDevelopers}"
+                          DisplayMemberPath="Label"
+                          SelectedItem="{Binding LocalIdentity.SelectedDeveloper, Mode=TwoWay}"
+                          IsEnabled="{Binding LocalIdentity.CanChoose}" />
+                <TextBlock Margin="0,7,0,0" Text="{Binding LocalIdentity.SelectionDescription}"
+                           AutomationProperties.LiveSetting="Polite" />
+                <Button Margin="0,10,0,0" HorizontalAlignment="Left" Content="Clear choice"
+                        AutomationProperties.Name="Clear You in this Project choice"
+                        Command="{Binding LocalIdentity.ClearCommand}"
+                        Style="{StaticResource SecondaryButtonStyle}" />
+                <TextBlock Margin="0,8,0,0" Text="{Binding LocalIdentity.ErrorMessage}"
+                           AutomationProperties.LiveSetting="Assertive" TextWrapping="Wrap"
+                           Visibility="{Binding LocalIdentity.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            </StackPanel>
+        </Border>
+        <Border Margin="0,16,0,0" Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
+            <StackPanel>
+                <TextBlock Margin="0,0,0,4" Style="{StaticResource SectionHeadingTextStyle}"
+                           Text="Overview search" />
+                <TextBlock Margin="0,0,0,12" Style="{StaticResource PageDescriptionTextStyle}"
+                           Text="Include current developers' initials and names when searching entities. Dependency search stays separate."
+                           TextWrapping="Wrap" />
+                <CheckBox Content="Search responsible names"
+                          AutomationProperties.Name="Search responsible names in entity overviews"
+                          Command="{Binding ResponsibilitySearch.ToggleCommand}"
+                          IsChecked="{Binding ResponsibilitySearch.IsEnabled, Mode=OneWay}" />
+                <TextBlock Margin="0,8,0,0" AutomationProperties.LiveSetting="Assertive"
+                           Text="{Binding ResponsibilitySearch.ErrorMessage}" TextWrapping="Wrap"
+                           Visibility="{Binding ResponsibilitySearch.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
             </StackPanel>
         </Border>
         <Border Margin="0,16,0,0" Padding="18" Style="{StaticResource EntityTrackerCardStyle}">

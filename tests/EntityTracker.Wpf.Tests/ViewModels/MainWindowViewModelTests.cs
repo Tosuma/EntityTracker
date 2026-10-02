@@ -418,6 +418,31 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task EntityDetails_EditActionOpensSelectedEntityInEditor()
+    {
+        TrackedEntity entity = Entity(1, "Customer");
+        MainWindowViewModel viewModel = CreateViewModel(
+            [entity],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out _);
+        await viewModel.InitializeAsync();
+        EntityOverviewRow row = Assert.Single(viewModel.OverviewItems);
+        viewModel.OpenEntityDetailsCommand.Execute(row);
+        EntityDetailsViewModel details = Assert.IsType<EntityDetailsViewModel>(
+            viewModel.SelectedEntityDetails);
+
+        Assert.True(details.CanEdit);
+        Assert.Same(row, details.OverviewRow);
+        viewModel.EditOverviewEntityCommand.Execute(details.OverviewRow);
+
+        await WaitUntilAsync(() => viewModel.Editor.IsOpen);
+        Assert.False(viewModel.IsEntityDetailsOpen);
+        Assert.Equal("Customer", viewModel.Editor.SelectedEntityName);
+    }
+
+    [Fact]
     public async Task EntityDetails_AreReadOnlyPreserveSelectionAndCloseOnProjectionChange()
     {
         TrackedEntity dependency = Entity(1, "Foundation");
@@ -452,6 +477,12 @@ public sealed class MainWindowViewModelTests
         Assert.Equal("Foundation", Assert.Single(details.Dependencies).Name);
         Assert.Equal("Foundation", Assert.Single(details.Blockers).Name);
 
+        viewModel.ShowFullResponsibilityHistoryCommand.Execute(null);
+        Assert.True(details.IsFullHistoryOpen);
+        viewModel.BackFromResponsibilityHistoryCommand.Execute(null);
+        await WaitUntilAsync(() => details.IsSummaryOpen);
+        Assert.Same(details, viewModel.SelectedEntityDetails);
+
         viewModel.CloseEntityDetailsCommand.Execute(null);
         Assert.False(viewModel.IsEntityDetailsOpen);
         Assert.Equal(1, viewModel.SelectedActiveEntityCount);
@@ -461,6 +492,23 @@ public sealed class MainWindowViewModelTests
         Assert.False(viewModel.IsEntityDetailsOpen);
         Assert.Equal(0, viewModel.SelectedActiveEntityCount);
     }
+
+    [Fact]
+    public async Task SearchPreferenceChangeClearsBulkSelectionBeforeReprojection()
+    {
+        MainWindowViewModel viewModel = CreateViewModel(
+            [Entity(1, "Invoice")], [], FailureResult(), new StubFilePicker(), out _);
+        await viewModel.InitializeAsync();
+        viewModel.UpdateOverviewSelection([Assert.Single(viewModel.OverviewItems)]);
+        Assert.Equal(1, viewModel.SelectedActiveEntityCount);
+
+        viewModel.SetSearchResponsibleNames(false);
+
+        Assert.Equal(0, viewModel.SelectedActiveEntityCount);
+        Assert.False(viewModel.ActiveTable.SearchResponsibleNames);
+        Assert.False(viewModel.ArchivedTable.SearchResponsibleNames);
+    }
+
 
     [Fact]
     public async Task ArchivedDetails_UsePreservedContextAndRestoreRemainsInExistingEditor()
@@ -487,6 +535,7 @@ public sealed class MainWindowViewModelTests
         EntityDetailsViewModel details = Assert.IsType<EntityDetailsViewModel>(
             viewModel.SelectedEntityDetails);
         Assert.True(details.IsArchived);
+        Assert.False(details.CanEdit);
         Assert.Equal("4", details.RequestedPriority);
         Assert.Equal("Not applicable while archived", details.EffectivePriority);
         Assert.Equal("Legacy target", Assert.Single(details.Dependencies).Name);
@@ -496,6 +545,14 @@ public sealed class MainWindowViewModelTests
         await WaitUntilAsync(() => viewModel.Editor.IsOpen);
         Assert.False(viewModel.IsEntityDetailsOpen);
         Assert.True(viewModel.Editor.CanRestoreEntity);
+
+        viewModel.ShowArchivedResponsibilityHistoryCommand.Execute(null);
+        Assert.False(viewModel.Editor.IsOpen);
+        Assert.True(Assert.IsType<EntityDetailsViewModel>(viewModel.SelectedEntityDetails).IsFullHistoryOpen);
+        viewModel.BackFromResponsibilityHistoryCommand.Execute(null);
+        await WaitUntilAsync(() => viewModel.Editor.IsOpen);
+        Assert.True(viewModel.Editor.IsArchivedMode);
+        Assert.False(viewModel.IsEntityDetailsOpen);
     }
 
     [Fact]

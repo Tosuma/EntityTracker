@@ -47,10 +47,7 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
         IsArchived = isArchived;
         _searchDependencies = !isArchived;
 
-        ResponsibleDeveloperFilter = CreateStringFilter(
-            OverviewColumnKey.ResponsibleDeveloper,
-            "Responsible dev",
-            row => row.ResponsibleDeveloper);
+        ResponsibleDeveloperFilter = new ResponsibleDeveloperFilterState(this);
         GroupFilter = CreateStringFilter(
             OverviewColumnKey.Group,
             "Group",
@@ -174,6 +171,20 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
     }
 
     public bool HasSearchQuery => !string.IsNullOrWhiteSpace(SearchQuery);
+
+    private bool _searchResponsibleNames = true;
+
+    public bool SearchResponsibleNames
+    {
+        get => _searchResponsibleNames;
+        set
+        {
+            if (_searchResponsibleNames == value) return;
+            _searchResponsibleNames = value;
+            OnPropertyChanged();
+            RebuildProjectionWithSelectionClear();
+        }
+    }
 
     public bool CanSearchDependencies => _searchDependencies;
 
@@ -432,7 +443,10 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
 
         if (!SearchDependenciesInstead)
         {
-            return row.SourceName.Contains(query, StringComparison.OrdinalIgnoreCase);
+            return row.SourceName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                   SearchResponsibleNames && row.DeveloperItems.Any(developer =>
+                       developer.Initials.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                       developer.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
         }
 
         return row.DependencyNames.Any(name =>

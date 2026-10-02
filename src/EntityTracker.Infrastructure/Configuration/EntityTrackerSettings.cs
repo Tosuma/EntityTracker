@@ -4,7 +4,7 @@ using EntityTracker.Domain;
 
 public sealed class EntityTrackerSettings
 {
-    public const int CurrentVersion = 5;
+    public const int CurrentVersion = 7;
     public static readonly IReadOnlyList<int> AutoSyncIntervals = [1, 5, 15, 30, 60];
 
     public EntityTrackerSettings(
@@ -12,7 +12,9 @@ public sealed class EntityTrackerSettings
         ProjectId? lastProjectId = null,
         TrackerId? lastTrackerId = null,
         bool autoSyncEnabled = true,
-        int autoSyncIntervalMinutes = 5)
+        int autoSyncIntervalMinutes = 5,
+        bool searchResponsibleNames = true,
+        IReadOnlyDictionary<ProjectId, DeveloperId>? projectDeveloperChoices = null)
     {
         if (!Enum.IsDefined(appearance))
         {
@@ -26,6 +28,9 @@ public sealed class EntityTrackerSettings
         LastTrackerId = lastTrackerId;
         AutoSyncEnabled = autoSyncEnabled;
         AutoSyncIntervalMinutes = autoSyncIntervalMinutes;
+        SearchResponsibleNames = searchResponsibleNames;
+        ProjectDeveloperChoices = new Dictionary<ProjectId, DeveloperId>(projectDeveloperChoices ??
+            new Dictionary<ProjectId, DeveloperId>());
     }
 
     public ApplicationAppearance Appearance { get; }
@@ -35,6 +40,8 @@ public sealed class EntityTrackerSettings
     public TrackerId? LastTrackerId { get; }
     public bool AutoSyncEnabled { get; }
     public int AutoSyncIntervalMinutes { get; }
+    public bool SearchResponsibleNames { get; }
+    public IReadOnlyDictionary<ProjectId, DeveloperId> ProjectDeveloperChoices { get; }
 
     public static EntityTrackerSettings Default { get; } = new();
 }

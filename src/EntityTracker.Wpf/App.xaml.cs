@@ -124,6 +124,9 @@ public partial class App : System.Windows.Application
             services.AddSingleton<EntityDependencyEditorService>();
             services.AddSingleton<EntityLifecycleService>();
             services.AddSingleton<ProjectManagementService>();
+            services.AddSingleton<ProjectDeveloperService>();
+            services.AddSingleton<LocalProjectIdentityService>();
+            services.AddSingleton<LocalProjectIdentitySettingsViewModel>();
             services.AddSingleton<TrackerManagementService>();
             services.AddSingleton<TrackerSyncService>();
             services.AddSingleton<TrackerCsvCreationService>();
@@ -157,6 +160,8 @@ public partial class App : System.Windows.Application
             services.AddSingleton(provider => new AutoSyncSettingsViewModel(
                 settingsStore, provider.GetRequiredService<ProjectAutoSyncService>(),
                 settings.Settings));
+            services.AddSingleton(new ResponsibilitySearchSettingsViewModel(
+                settingsStore, settings.Settings));
             services.AddSingleton<NotificationCenter>();
             services.AddSingleton<ProjectRepositoryCardViewModelFactory>();
             services.AddSingleton<CatalogManagementViewModel>();
@@ -230,6 +235,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IProjectSyncBackup>(provider => provider.GetRequiredService<SqliteBackupService>());
         services.AddSingleton<IPersistenceInitializer, SqlitePersistenceInitializer>();
         services.AddSingleton<IEntityRepository, SqliteEntityRepository>();
+        services.AddSingleton<IResponsibilityPeriodRepository, SqliteResponsibilityPeriodRepository>();
         services.AddSingleton<IEntityAuditReader, SqliteEntityAuditReader>();
         services.AddSingleton<IDependencyRepository, SqliteDependencyRepository>();
         services.AddSingleton<IManualDependencyOverrideRepository,
@@ -243,6 +249,8 @@ public partial class App : System.Windows.Application
             provider.GetRequiredService<SqliteTrackedStateStore>());
         services.AddSingleton<IProgressHistoryRepository, SqliteProgressHistoryRepository>();
         services.AddSingleton<IProjectRepository, SqliteProjectRepository>();
+        services.AddSingleton<IProjectDeveloperStore, SqliteProjectDeveloperStore>();
+        services.AddSingleton<IProjectDeveloperStore, SqliteProjectDeveloperStore>();
         services.AddSingleton<ITrackerRepository, SqliteTrackerRepository>();
         services.AddSingleton<IProjectTrackerStore, SqliteProjectTrackerStore>();
         services.AddSingleton<EntityTracker.Application.Snapshots.IProjectSnapshotStore, SqliteProjectSnapshotStore>();

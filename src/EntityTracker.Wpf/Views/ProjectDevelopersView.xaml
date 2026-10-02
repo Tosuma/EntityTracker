@@ -1,0 +1,206 @@
+<UserControl x:Class="EntityTracker.Wpf.Views.ProjectDevelopersView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels">
+    <Grid>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid Margin="0,0,0,14">
+                <Button HorizontalAlignment="Left" Content="Back to project"
+                        Command="{Binding NavigateCommand}"
+                        CommandParameter="{x:Static viewModels:ShellDestination.ProjectDashboard}" />
+                <Button HorizontalAlignment="Right" Content="Retired developers"
+                        Command="{Binding Developers.OpenRetiredCommand}"
+                        AutomationProperties.Name="Open retired developers" />
+            </Grid>
+            <StackPanel Grid.Row="1" Margin="0,0,0,18">
+                <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Developers" />
+                <TextBlock Margin="0,4,0,0" Style="{StaticResource PageDescriptionTextStyle}"
+                           Text="Manage the developers available within this Project." TextWrapping="Wrap" />
+            </StackPanel>
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="24" />
+                    <ColumnDefinition Width="1*" />
+                </Grid.ColumnDefinitions>
+                <Grid Grid.Column="0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Border Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                        <StackPanel>
+                            <Label FontSize="18" FontWeight="SemiBold" Padding="0" Margin="0,0,0,8"
+                                   Target="{Binding ElementName=DeveloperSearchBox}" Content="Search developers" />
+                            <TextBox x:Name="DeveloperSearchBox" Padding="9,7"
+                                     AutomationProperties.Name="Search developers by initials or display name"
+                                     ToolTip="Search initials or display names"
+                                     Text="{Binding Developers.SearchQuery, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBlock Margin="0,8,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
+                                       Text="Filter by initials or display name." TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Row="1" Margin="0,16,0,0" Padding="16"
+                            Style="{StaticResource EntityTrackerCardStyle}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Available developers" />
+                            <DataGrid Grid.Row="1" Margin="0,12,0,0" AutoGenerateColumns="False"
+                                      CanUserAddRows="False" IsReadOnly="True"
+                                      VerticalScrollBarVisibility="Auto"
+                                      ItemsSource="{Binding Developers.Available}"
+                                      AutomationProperties.Name="Available developers">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Initials" Width="90" Binding="{Binding Initials}" />
+                                    <DataGridTextColumn Header="Display name" Width="*" Binding="{Binding DisplayName}" />
+                                    <DataGridTemplateColumn Header="Actions" Width="145">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Button Content="Edit" Margin="0,0,6,0"
+                                                            AutomationProperties.Name="{Binding Initials, StringFormat=Edit developer {0}}"
+                                                            Command="{Binding DataContext.Developers.EditCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding}" />
+                                                    <Button Content="Retire"
+                                                            AutomationProperties.Name="{Binding Initials, StringFormat=Retire developer {0}}"
+                                                            Command="{Binding DataContext.Developers.RetireCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding}" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </Border>
+                </Grid>
+                <Border Grid.Column="2" Padding="16" VerticalAlignment="Top"
+                        Style="{StaticResource EntityTrackerCardStyle}">
+                    <StackPanel>
+                        <TextBlock FontSize="18" FontWeight="SemiBold" Text="{Binding Developers.EditorTitle}" />
+                        <TextBlock Margin="0,8,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Text="Initials are unique among available developers in this Project."
+                                   TextWrapping="Wrap" />
+                        <Label Margin="0,16,0,0" Target="{Binding ElementName=DeveloperInitialsBox}" Content="Initials" />
+                        <TextBox x:Name="DeveloperInitialsBox" Margin="0,4,0,0" Padding="9,7"
+                                 AutomationProperties.Name="Developer initials"
+                                 Text="{Binding Developers.Initials, UpdateSourceTrigger=PropertyChanged}" />
+                        <Label Margin="0,12,0,0" Target="{Binding ElementName=DeveloperDisplayNameBox}" Content="Display name (optional)" />
+                        <TextBox x:Name="DeveloperDisplayNameBox" Margin="0,4,0,0" Padding="9,7"
+                                 AutomationProperties.Name="Developer display name"
+                                 Text="{Binding Developers.DisplayName, UpdateSourceTrigger=PropertyChanged}" />
+                        <WrapPanel Margin="0,16,0,0">
+                            <Button Command="{Binding Developers.SaveCommand}"
+                                    Content="{Binding Developers.SaveLabel}"
+                                    Style="{StaticResource PrimaryButtonStyle}" />
+                            <Button Margin="8,0,0,0" Command="{Binding Developers.CancelCommand}"
+                                    Content="{Binding Developers.ResetLabel}"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                        </WrapPanel>
+                        <Border Margin="0,16,0,0" Padding="12" Style="{StaticResource ErrorMessageStyle}"
+                                Visibility="{Binding Developers.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock AutomationProperties.LiveSetting="Assertive"
+                                       Text="{Binding Developers.ErrorMessage}" TextWrapping="Wrap" />
+                        </Border>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Grid>
+        <Grid Background="{DynamicResource Brush.Overlay.Strong}"
+              Visibility="{Binding Developers.IsRetirementOpen, Converter={StaticResource BooleanToVisibilityConverter}}"
+              IsVisibleChanged="OnRetirementDialogVisibilityChanged"
+              PreviewKeyDown="OnRetirementDialogPreviewKeyDown"
+              FocusManager.IsFocusScope="True"
+              KeyboardNavigation.TabNavigation="Cycle"
+              KeyboardNavigation.ControlTabNavigation="Cycle">
+            <Border Width="460" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="{DynamicResource Brush.Surface.Page}"
+                    Style="{StaticResource EntityTrackerCardStyle}">
+                <StackPanel>
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="Confirm retirement" />
+                    <TextBlock Margin="0,12,0,12" TextWrapping="Wrap"
+                               Text="{Binding Developers.PendingRetirementInitials, StringFormat=Type the exact initials {0} to retire this developer.}" />
+                    <TextBox x:Name="RetirementConfirmationBox"
+                             AutomationProperties.Name="Exact developer initials confirmation"
+                             Text="{Binding Developers.RetirementConfirmation, UpdateSourceTrigger=PropertyChanged}" />
+                    <Border Margin="0,12,0,0" Padding="12" Style="{StaticResource ErrorMessageStyle}"
+                            Visibility="{Binding Developers.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <TextBlock AutomationProperties.LiveSetting="Assertive"
+                                   Text="{Binding Developers.ErrorMessage}" TextWrapping="Wrap" />
+                    </Border>
+                    <StackPanel Margin="0,16,0,0" Orientation="Horizontal">
+                        <Button Content="Confirm retirement" Command="{Binding Developers.ConfirmRetirementCommand}"
+                                Style="{StaticResource PrimaryButtonStyle}" />
+                        <Button Margin="8,0,0,0" Content="Cancel" Command="{Binding Developers.CancelRetirementCommand}"
+                                Style="{StaticResource SecondaryButtonStyle}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+        <Grid Background="{DynamicResource Brush.Overlay.Strong}"
+              Visibility="{Binding Developers.IsRetiredDialogOpen, Converter={StaticResource BooleanToVisibilityConverter}}"
+              IsVisibleChanged="OnRetiredDialogVisibilityChanged"
+              PreviewKeyDown="OnRetiredDialogPreviewKeyDown"
+              FocusManager.IsFocusScope="True"
+              KeyboardNavigation.TabNavigation="Cycle"
+              KeyboardNavigation.ControlTabNavigation="Cycle">
+            <Border Width="680" MaxHeight="680" Padding="24"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="{DynamicResource Brush.Surface.Page}"
+                    Style="{StaticResource EntityTrackerCardStyle}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="Retired developers" />
+                    <ScrollViewer Grid.Row="1" Margin="0,18" VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <TextBlock Text="Retired developers remain in this Project and may be restored."
+                                       TextWrapping="Wrap" />
+                            <TextBlock Margin="0,12,0,0" Text="No retired developers match the current search."
+                                       Visibility="{Binding Developers.ShowNoRetired, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <ItemsControl Margin="0,10,0,0" ItemsSource="{Binding Developers.Retired}"
+                                          AutomationProperties.Name="Retired developers">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <DockPanel Margin="0,3">
+                                            <Button DockPanel.Dock="Right" Margin="8,0,0,0" Content="Restore"
+                                                    AutomationProperties.Name="{Binding Initials, StringFormat=Restore developer {0}}"
+                                                    Command="{Binding DataContext.Developers.RestoreCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}" />
+                                            <Button DockPanel.Dock="Right" Content="Edit"
+                                                    AutomationProperties.Name="{Binding Initials, StringFormat=Edit retired developer {0}}"
+                                                    Command="{Binding DataContext.Developers.EditCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}" />
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock FontWeight="SemiBold" Text="{Binding Initials}" />
+                                                <TextBlock Margin="8,0,0,0" Text="{Binding DisplayName}" />
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Border Margin="0,12,0,0" Padding="12" Style="{StaticResource ErrorMessageStyle}"
+                                    Visibility="{Binding Developers.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <TextBlock AutomationProperties.LiveSetting="Assertive"
+                                           Text="{Binding Developers.ErrorMessage}" TextWrapping="Wrap" />
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                    <Button x:Name="CloseRetiredButton" Grid.Row="2" HorizontalAlignment="Right"
+                            Content="Close" Command="{Binding Developers.CloseRetiredCommand}" IsCancel="True" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>
