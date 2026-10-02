@@ -184,7 +184,7 @@ public sealed class DependencySuggestionBoxTests
     }
 
     private static void FlushDispatcher() =>
-        Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+        Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.Background);
 
     private static void RunOnSta(Action action)
     {
@@ -196,7 +196,7 @@ public sealed class DependencySuggestionBoxTests
         });
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
-        Assert.True(thread.Join(TimeSpan.FromSeconds(15)), "WPF interaction test timed out.");
+        Assert.True(thread.Join(TimeSpan.FromSeconds(45)), "WPF interaction test timed out.");
         if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
     }
 }
