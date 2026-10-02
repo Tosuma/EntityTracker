@@ -935,11 +935,12 @@
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
                                                             <Border Margin="0,2,4,2" Padding="5,2" CornerRadius="3"
-                                                                    Background="{DynamicResource Brush.Surface.Subtle}"
+                                                                    Background="{DynamicResource Brush.Surface.Card}"
                                                                     BorderBrush="{DynamicResource Brush.Border.Strong}"
                                                                     BorderThickness="1"
                                                                     ToolTip="{Binding Label}">
                                                                 <TextBlock Text="{Binding Initials}"
+                                                                           Foreground="{DynamicResource Brush.Text.Primary}"
                                                                            AutomationProperties.Name="{Binding Label}" />
                                                             </Border>
                                                         </DataTemplate>
@@ -1189,11 +1190,12 @@
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
                                                             <Border Margin="0,2,4,2" Padding="5,2" CornerRadius="3"
-                                                                    Background="{DynamicResource Brush.Surface.Subtle}"
+                                                                    Background="{DynamicResource Brush.Surface.Card}"
                                                                     BorderBrush="{DynamicResource Brush.Border.Strong}"
                                                                     BorderThickness="1"
                                                                     ToolTip="{Binding Label}">
                                                                 <TextBlock Text="{Binding Initials}"
+                                                                           Foreground="{DynamicResource Brush.Text.Primary}"
                                                                            AutomationProperties.Name="{Binding Label}" />
                                                             </Border>
                                                         </DataTemplate>
@@ -2356,8 +2358,8 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <StackPanel Grid.Row="0" HorizontalAlignment="Right" Orientation="Horizontal" Margin="0,0,0,8">
-                        <Button Margin="0,0,8,0" Content="Assign me"
-                                AutomationProperties.Name="Assign me to this entity"
+                        <Button Margin="0,0,8,0" Content="{Binding SelfAssignmentActionLabel}"
+                                AutomationProperties.Name="{Binding SelfAssignmentAccessibleName}"
                                 Command="{Binding DataContext.AssignMeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                 Style="{StaticResource SecondaryButtonStyle}"
                                 Visibility="{Binding CanEdit, Converter={StaticResource BooleanToVisibilityConverter}}" />
@@ -2743,8 +2745,8 @@
                                     </StackPanel>
                                     <StackPanel Grid.Column="2" IsEnabled="{Binding Editor.CanEditProgress}">
                                     <TextBlock FontWeight="SemiBold" Text="Responsible developers" />
-                                    <Button Margin="0,7,0,4" HorizontalAlignment="Left" Content="Assign me"
-                                            AutomationProperties.Name="Stage Assign me to this entity"
+                                    <Button Margin="0,7,0,4" HorizontalAlignment="Left" Content="{Binding Editor.SelfAssignmentActionLabel}"
+                                            AutomationProperties.Name="{Binding Editor.SelfAssignmentAccessibleName}"
                                             Command="{Binding Editor.AssignMeCommand}"
                                             Style="{StaticResource SecondaryButtonStyle}" />
                                     <StackPanel Visibility="{Binding Editor.HasAssignmentGuidance, Converter={StaticResource BooleanToVisibilityConverter}}">

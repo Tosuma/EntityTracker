@@ -268,7 +268,7 @@ internal sealed class ReadmeScreenshotGenerator
                       viewModel.Progress.HasReport,
                 "The tracker workspace did not finish loading.",
                 cancellationToken);
-            await CaptureOverviewAsync(viewModel, renderer, cancellationToken);
+            await CaptureOverviewAsync(viewModel, window, renderer, cancellationToken);
 
             viewModel.Review.Clear();
             await shell.NavigateAsync(ShellDestination.SchemaSynchronization, cancellationToken);
@@ -431,6 +431,7 @@ internal sealed class ReadmeScreenshotGenerator
 
     private static async Task CaptureOverviewAsync(
         MainWindowViewModel viewModel,
+        MainWindow window,
         WpfScreenshotRenderer renderer,
         CancellationToken cancellationToken)
     {
@@ -440,6 +441,9 @@ internal sealed class ReadmeScreenshotGenerator
 
         EntityOverviewRow detailsRow = viewModel.OverviewItems.Single(static item =>
             item.SourceName == "customer_preference");
+        DataGrid overview = (DataGrid)(window.FindWorkspaceElement("OverviewDataGrid")
+            ?? throw new InvalidOperationException("The overview table was not rendered."));
+        overview.SelectedItem = detailsRow;
         viewModel.OpenEntityDetailsCommand.Execute(detailsRow);
         await WaitUntilAsync(() => viewModel.SelectedEntityDetails?.ResponsibilityTimeline.Count > 0,
             "Responsibility details did not load.", cancellationToken);
@@ -447,6 +451,7 @@ internal sealed class ReadmeScreenshotGenerator
         viewModel.ShowFullResponsibilityHistoryCommand.Execute(null);
         await renderer.CaptureAsync("responsibility-history.png");
         viewModel.CloseEntityDetails();
+        overview.UnselectAll();
 
         viewModel.OpenOverviewSearchCommand.Execute(null);
         viewModel.SearchOverviewDependencies = true;

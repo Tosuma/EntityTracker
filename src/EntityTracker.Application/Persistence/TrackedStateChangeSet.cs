@@ -26,7 +26,8 @@ public sealed class TrackedStateChangeSet
         IEnumerable<EntityId>? entityIdsToPurge = null,
         IEnumerable<ResponsibilitySelection>? responsibilitySelections = null,
         IEnumerable<ResponsibilityPeriod>? responsibilityPeriodsToCopy = null,
-        IEnumerable<ResponsibilityAddition>? responsibilityAdditions = null)
+        IEnumerable<ResponsibilityAddition>? responsibilityAdditions = null,
+        IEnumerable<ResponsibilityRemoval>? responsibilityRemovals = null)
     {
         EntitiesToAdd = entitiesToAdd.ToArray();
         EntitiesToUpdate = entitiesToUpdate.ToArray();
@@ -49,6 +50,7 @@ public sealed class TrackedStateChangeSet
         ResponsibilitySelections = (responsibilitySelections ?? []).ToArray();
         ResponsibilityPeriodsToCopy = (responsibilityPeriodsToCopy ?? []).ToArray();
         ResponsibilityAdditions = (responsibilityAdditions ?? []).ToArray();
+        ResponsibilityRemovals = (responsibilityRemovals ?? []).ToArray();
     }
 
     public IReadOnlyList<TrackedEntity> EntitiesToAdd { get; }
@@ -83,6 +85,7 @@ public sealed class TrackedStateChangeSet
     public IReadOnlyList<ResponsibilitySelection> ResponsibilitySelections { get; }
     public IReadOnlyList<ResponsibilityPeriod> ResponsibilityPeriodsToCopy { get; }
     public IReadOnlyList<ResponsibilityAddition> ResponsibilityAdditions { get; }
+    public IReadOnlyList<ResponsibilityRemoval> ResponsibilityRemovals { get; }
 
     public bool HasChanges =>
         EntitiesToAdd.Count > 0 ||
@@ -98,5 +101,6 @@ public sealed class TrackedStateChangeSet
             EntityIdsToPurge.Count > 0 ||
             ResponsibilitySelections.Count > 0 ||
             ResponsibilityPeriodsToCopy.Count > 0 ||
-            ResponsibilityAdditions.Count > 0;
+            ResponsibilityAdditions.Count > 0 ||
+            ResponsibilityRemovals.Count > 0;
 }

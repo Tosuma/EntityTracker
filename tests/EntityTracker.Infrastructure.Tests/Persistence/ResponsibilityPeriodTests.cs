@@ -16,6 +16,41 @@ namespace EntityTracker.Infrastructure.Tests.Persistence;
 public sealed class ResponsibilityPeriodTests
 {
     [Fact]
+    public async Task RemoveCurrent_EndsOnlySelectedDeveloperAndKeepsHistory()
+    {
+        await using TemporarySqliteFile file = new();
+        MutableTimeProvider time = new(new DateTimeOffset(2026, 10, 2, 10, 0, 0, TimeSpan.Zero));
+        SqliteDatabase database = new(file.DatabasePath, time);
+        await database.InitializeAsync();
+        Tracker tracker = Assert.Single(await new SqliteTrackerRepository(database).GetAllAsync());
+        ProjectDeveloperService developers = new(new SqliteProjectDeveloperStore(database), time);
+        ProjectDeveloper alice = await developers.CreateAsync(tracker.ProjectId, "AL");
+        ProjectDeveloper bob = await developers.CreateAsync(tracker.ProjectId, "BO");
+        TrackedEntity entity = new(EntityId.New(), tracker.Id, "Feature");
+        SqliteTrackedStateStore store = new(database);
+        SqliteResponsibilityPeriodRepository periods = new(database);
+        await store.ApplyAsync(tracker.Id, new TrackedStateChangeSet([entity], [], [], [], [], [],
+            responsibilitySelections: [new ResponsibilitySelection(entity.Id, [alice.Id, bob.Id])]));
+        time.Advance(TimeSpan.FromHours(1));
+        TrackedStateChangeSet remove = new([], [], [], [], [], [], responsibilityRemovals:
+            [new ResponsibilityRemoval(entity.Id, alice.Id)]);
+        await store.ApplyAsync(tracker.Id, remove);
+        await store.ApplyAsync(tracker.Id, remove);
+        ResponsibilityPeriod[] after = (await periods.GetByEntityAsync(entity.Id)).ToArray();
+        Assert.Equal(time.GetUtcNow(), after.Single(period => period.DeveloperId == alice.Id).EndedAtUtc);
+        Assert.True(after.Single(period => period.DeveloperId == bob.Id).IsCurrent);
+
+        time.Advance(TimeSpan.FromHours(1));
+        await store.ApplyAsync(tracker.Id, new TrackedStateChangeSet([], [], [], [], [], [],
+            responsibilityAdditions: [new ResponsibilityAddition(entity.Id, alice.Id)]));
+        ResponsibilityPeriod[] alicePeriods = (await periods.GetByEntityAsync(entity.Id))
+            .Where(period => period.DeveloperId == alice.Id).ToArray();
+        Assert.Equal(2, alicePeriods.Length);
+        Assert.Single(alicePeriods, period => period.IsCurrent &&
+            period.StartedAtUtc == time.GetUtcNow());
+    }
+
+    [Fact]
     public async Task AddCurrent_AssignsAlongsideOthersOnceAtWriteTimeAndRejectsRetiredDeveloper()
     {
         await using TemporarySqliteFile file = new();

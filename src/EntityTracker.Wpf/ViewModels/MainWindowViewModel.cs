@@ -229,7 +229,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         if (details?.CanEdit != true || _localIdentity is null ||
             _trackedState is null || _responsibilityPeriods is null) return;
         IsBusy = true;
-        BusyMessage = "Assigning Developer…";
+        BusyMessage = "Updating responsibility…";
         try
         {
             ProjectDeveloper? developer = await _localIdentity.ResolveForTrackerAsync(_trackerId);
@@ -240,13 +240,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             }
             IReadOnlyList<ResponsibilityPeriod> periods =
                 await _responsibilityPeriods.GetByEntityAsync(details.EntityId);
-            if (periods.Any(period => period.IsCurrent && period.DeveloperId == developer.Id))
-            {
-                AssignmentGuidance = null;
-                return;
-            }
-            await _trackedState.ApplyAsync(_trackerId, new TrackedStateChangeSet(
-                [], [], [], [], [], [], responsibilityAdditions:
+            bool assigned = periods.Any(period => period.IsCurrent && period.DeveloperId == developer.Id);
+            await _trackedState.ApplyAsync(_trackerId, assigned
+                ? new TrackedStateChangeSet([], [], [], [], [], [], responsibilityRemovals:
+                    [new ResponsibilityRemoval(details.EntityId, developer.Id)])
+                : new TrackedStateChangeSet([], [], [], [], [], [], responsibilityAdditions:
                     [new ResponsibilityAddition(details.EntityId, developer.Id)]));
             await LoadOverviewAndProgressAsync(CancellationToken.None);
             EntityOverviewRow? row = ActiveTable.SourceItems.FirstOrDefault(item =>
@@ -256,8 +254,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Assign me could not be applied.");
-            AssignmentGuidance = "Assignment could not be saved. Check You in this Project in Settings and retry.";
+            _logger.LogError(exception, "Self-assignment could not be changed.");
+            AssignmentGuidance = "Responsibility could not be saved. Check You in this Project in Settings and retry.";
         }
         finally
         {
@@ -1179,8 +1177,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
                 await _responsibilityPeriods!.GetByEntityAsync(details.EntityId);
             IReadOnlyList<ProjectDeveloper> developers =
                 await _developers!.ListForTrackerAsync(_trackerId);
+            if (!ReferenceEquals(SelectedEntityDetails, details)) return;
+            details.SetResponsibility(periods, developers);
+            ProjectDeveloper? self = _localIdentity is null ? null
+                : await _localIdentity.ResolveForTrackerAsync(_trackerId);
             if (ReferenceEquals(SelectedEntityDetails, details))
-                details.SetResponsibility(periods, developers);
+                details.SetSelfAssigned(self is not null && periods.Any(period =>
+                    period.IsCurrent && period.DeveloperId == self.Id));
         }
         catch (Exception exception)
         {

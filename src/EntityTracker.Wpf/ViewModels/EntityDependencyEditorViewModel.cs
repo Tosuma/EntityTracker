@@ -137,7 +137,12 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _assignMeCommand = new AsyncCommand(AssignMeAsync, () => CanEditProgress);
         _openIdentitySettingsCommand = new AsyncCommand(OpenIdentitySettingsAsync);
         if (DeveloperPicker is not null)
-            DeveloperPicker.SelectionChanged += (_, _) => OnPropertyChanged(nameof(IsDirty));
+            DeveloperPicker.SelectionChanged += (_, _) =>
+            {
+                OnPropertyChanged(nameof(IsDirty));
+                OnPropertyChanged(nameof(SelfAssignmentActionLabel));
+                OnPropertyChanged(nameof(SelfAssignmentAccessibleName));
+            };
         _addExistingCommand = new RelayCommand<ManualDependencySuggestion>(
             AddExisting,
             _ => CanEdit);
@@ -193,6 +198,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private readonly Func<Task>? _openSettings;
     private readonly AsyncCommand _assignMeCommand;
     private readonly AsyncCommand _openIdentitySettingsCommand;
+    private DeveloperId? _selfDeveloperId;
     private string? _assignmentGuidance;
     public string? AssignmentGuidance
     {
@@ -202,6 +208,11 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     }
     public bool HasAssignmentGuidance => !string.IsNullOrWhiteSpace(AssignmentGuidance);
     public ICommand AssignMeCommand => _assignMeCommand;
+    public string SelfAssignmentActionLabel => IsSelfSelected ? "Remove me" : "Assign me";
+    public string SelfAssignmentAccessibleName => IsSelfSelected
+        ? "Remove me from this entity when saved" : "Assign me to this entity when saved";
+    private bool IsSelfSelected => _selfDeveloperId is { } id &&
+        DeveloperPicker?.SelectedIds.Contains(id) == true;
     public ICommand OpenIdentitySettingsCommand => _openIdentitySettingsCommand;
 
     private async Task AssignMeAsync()
@@ -210,11 +221,20 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         try
         {
             ProjectDeveloper? developer = await _localIdentity.ResolveForTrackerAsync(_trackerId);
-            if (developer is null || !DeveloperPicker.Select(developer.Id))
+            if (developer is null)
             {
                 AssignmentGuidance = "Choose You in this Project in Settings before assigning yourself.";
                 return;
             }
+            _selfDeveloperId = developer.Id;
+            DeveloperChoice? choice = DeveloperPicker.Choices.FirstOrDefault(item =>
+                item.Developer.Id == developer.Id);
+            if (choice is null)
+            {
+                AssignmentGuidance = "Choose You in this Project in Settings before assigning yourself.";
+                return;
+            }
+            choice.IsSelected = !choice.IsSelected;
             AssignmentGuidance = null;
         }
         catch (Exception)
@@ -852,6 +872,10 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                     .Where(p => p.IsCurrent).Select(p => p.DeveloperId).ToArray();
                 await DeveloperPicker.LoadAsync(selected, cancellationToken);
                 _initialDeveloperIds = selected.ToHashSet();
+                _selfDeveloperId = _localIdentity is null ? null
+                    : (await _localIdentity.ResolveForTrackerAsync(_trackerId))?.Id;
+                OnPropertyChanged(nameof(SelfAssignmentActionLabel));
+                OnPropertyChanged(nameof(SelfAssignmentAccessibleName));
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -1494,6 +1518,9 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
     private void ResetSessionState()
     {
+        _selfDeveloperId = null;
+        OnPropertyChanged(nameof(SelfAssignmentActionLabel));
+        OnPropertyChanged(nameof(SelfAssignmentAccessibleName));
         _previewVersion++;
         CurrentEditPlan = null;
         ArchivedDetails = null;

@@ -6,6 +6,45 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 internal static class SqliteResponsibilityWriter
 {
+    public static async Task RemoveCurrentAsync(SqliteConnection connection,
+        SqliteTransaction transaction, TrackerId trackerId, ResponsibilityRemoval removal,
+        DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            UPDATE responsibility_periods SET ended_at_utc = $now
+            WHERE entity_id = $entity AND developer_id = $developer
+              AND ended_at_utc IS NULL
+              AND EXISTS (
+                  SELECT 1 FROM tracked_entities entity
+                  JOIN trackers tracker ON tracker.id = entity.tracker_id
+                  JOIN project_developers developer ON developer.project_id = tracker.project_id
+                  WHERE entity.id = $entity AND tracker.id = $tracker
+                    AND entity.lifecycle_state = 'Active' AND developer.id = $developer);
+            """;
+        command.Parameters.AddWithValue("$entity", SqlitePersistenceValues.Format(removal.EntityId));
+        command.Parameters.AddWithValue("$tracker", SqlitePersistenceValues.Format(trackerId));
+        command.Parameters.AddWithValue("$developer", removal.DeveloperId.Value.ToString("D"));
+        command.Parameters.AddWithValue("$now", SqlitePersistenceValues.FormatTimestamp(now));
+        if (await command.ExecuteNonQueryAsync(cancellationToken) > 0) return;
+
+        using SqliteCommand validate = connection.CreateCommand();
+        validate.Transaction = transaction;
+        validate.CommandText = """
+            SELECT 1 FROM tracked_entities entity
+            JOIN trackers tracker ON tracker.id = entity.tracker_id
+            JOIN project_developers developer ON developer.project_id = tracker.project_id
+            WHERE entity.id = $entity AND tracker.id = $tracker
+              AND entity.lifecycle_state = 'Active' AND developer.id = $developer;
+            """;
+        validate.Parameters.AddWithValue("$entity", SqlitePersistenceValues.Format(removal.EntityId));
+        validate.Parameters.AddWithValue("$tracker", SqlitePersistenceValues.Format(trackerId));
+        validate.Parameters.AddWithValue("$developer", removal.DeveloperId.Value.ToString("D"));
+        if (await validate.ExecuteScalarAsync(cancellationToken) is null)
+            throw new InvalidOperationException("The entity or selected Developer is no longer available.");
+    }
+
     public static async Task AddCurrentAsync(SqliteConnection connection,
         SqliteTransaction transaction, TrackerId trackerId, ResponsibilityAddition addition,
         DateTimeOffset now, CancellationToken cancellationToken)

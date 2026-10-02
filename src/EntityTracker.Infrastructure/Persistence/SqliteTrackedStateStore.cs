@@ -139,6 +139,10 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                 await SqliteResponsibilityWriter.AddCurrentAsync(connection, transaction,
                     trackerId, addition, appliedAtUtc.ToUniversalTime(), cancellationToken);
 
+            foreach (ResponsibilityRemoval removal in changeSet.ResponsibilityRemovals)
+                await SqliteResponsibilityWriter.RemoveCurrentAsync(connection, transaction,
+                    trackerId, removal, appliedAtUtc.ToUniversalTime(), cancellationToken);
+
             foreach (TrackedEntity entity in changeSet.EntitiesToUpdate)
             {
                 await UpdateEntityAsync(
@@ -1170,6 +1174,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         referencedIds.UnionWith(changeSet.UnresolvedDependencies.Select(static item => item.Dependency.DependentEntityId));
         referencedIds.UnionWith(changeSet.ManualDependencyOverrides.Select(static item => item.DependentEntityId));
         referencedIds.UnionWith(changeSet.ResponsibilityAdditions.Select(static item => item.EntityId));
+        referencedIds.UnionWith(changeSet.ResponsibilityRemovals.Select(static item => item.EntityId));
         referencedIds.ExceptWith(addedIds);
 
         foreach (TrackedEntity entity in changeSet.EntitiesToUpdate

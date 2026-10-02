@@ -15,6 +15,7 @@ public sealed class EntityDetailsViewModel : INotifyPropertyChanged
     private IReadOnlyList<EntityDetailListItem> _fullResponsibilityTimeline = [];
     private string _currentDevelopers = "—";
     private bool _isFullHistoryOpen;
+    private bool _isSelfAssigned;
     public EntityDetailsViewModel(EntityOverviewRow row)
     {
         ArgumentNullException.ThrowIfNull(row);
@@ -69,6 +70,17 @@ public sealed class EntityDetailsViewModel : INotifyPropertyChanged
     public bool IsArchived { get; }
 
     public bool CanEdit => !IsArchived;
+    public string SelfAssignmentActionLabel => _isSelfAssigned ? "Remove me" : "Assign me";
+    public string SelfAssignmentAccessibleName => _isSelfAssigned
+        ? "Remove me from this entity" : "Assign me to this entity";
+
+    public void SetSelfAssigned(bool assigned)
+    {
+        if (_isSelfAssigned == assigned) return;
+        _isSelfAssigned = assigned;
+        OnPropertyChanged(nameof(SelfAssignmentActionLabel));
+        OnPropertyChanged(nameof(SelfAssignmentAccessibleName));
+    }
 
     public string Provenance { get; }
 

@@ -30,7 +30,7 @@ namespace EntityTracker.Wpf.Tests.ViewModels;
 public sealed class ShellViewModelTests
 {
     [Fact]
-    public async Task AssignMe_DetailsPersistsOnceAndEditorCancelDiscardsStagedChoice()
+    public async Task AssignMe_TogglesDetailsAndStagesEditorChangesUntilSave()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
         ProjectDeveloper alice = await harness.CreateDeveloperAsync("AL");
@@ -47,9 +47,19 @@ public sealed class ShellViewModelTests
         await WaitUntilAsync(async () => (await harness.Periods.GetByEntityAsync(entityId))
             .Count(period => period.IsCurrent) == 1);
         Assert.Equal(alice.Id, Assert.Single(await harness.Periods.GetByEntityAsync(entityId)).DeveloperId);
+        await WaitUntilAsync(() => Task.FromResult(
+            workspace.SelectedEntityDetails?.SelfAssignmentActionLabel == "Remove me" && !workspace.IsBusy));
         workspace.AssignMeCommand.Execute(null);
-        await Task.Delay(100);
-        Assert.Single(await harness.Periods.GetByEntityAsync(entityId));
+        await WaitUntilAsync(async () => (await harness.Periods.GetByEntityAsync(entityId))
+            .All(period => !period.IsCurrent));
+        Assert.NotNull(Assert.Single(await harness.Periods.GetByEntityAsync(entityId)).EndedAtUtc);
+        await WaitUntilAsync(() => Task.FromResult(
+            workspace.SelectedEntityDetails?.SelfAssignmentActionLabel == "Assign me" && !workspace.IsBusy));
+        workspace.AssignMeCommand.Execute(null);
+        await WaitUntilAsync(async () => (await harness.Periods.GetByEntityAsync(entityId))
+            .Count(period => period.IsCurrent) == 1);
+        Assert.Equal(2, (await harness.Periods.GetByEntityAsync(entityId)).Count);
+        await WaitUntilAsync(() => Task.FromResult(!workspace.IsBusy));
 
         await harness.Identity.SetAsync(harness.DefaultProject.Id, bob.Id);
         workspace.EditOverviewEntityCommand.Execute(workspace.ActiveTable.SourceItems.Single(item =>
@@ -57,13 +67,19 @@ public sealed class ShellViewModelTests
         await WaitUntilAsync(() => Task.FromResult(workspace.Editor.IsOpen && !workspace.Editor.IsBusy));
         workspace.Editor.AssignMeCommand.Execute(null);
         await WaitUntilAsync(() => Task.FromResult(workspace.Editor.DeveloperPicker?.SelectedIds.Contains(bob.Id) == true));
+        Assert.Equal("Remove me", workspace.Editor.SelfAssignmentActionLabel);
         Assert.True(workspace.Editor.IsDirty);
         workspace.Editor.CancelCommand.Execute(null);
-        Assert.Single(await harness.Periods.GetByEntityAsync(entityId));
+        Assert.Equal(2, (await harness.Periods.GetByEntityAsync(entityId)).Count);
 
         workspace.EditOverviewEntityCommand.Execute(workspace.ActiveTable.SourceItems.Single(item =>
             item.EntityId == entityId));
         await WaitUntilAsync(() => workspace.Editor.IsOpen && !workspace.Editor.IsBusy);
+        workspace.Editor.AssignMeCommand.Execute(null);
+        await WaitUntilAsync(() => workspace.Editor.DeveloperPicker?.SelectedIds.Contains(bob.Id) == true);
+        workspace.Editor.AssignMeCommand.Execute(null);
+        await WaitUntilAsync(() => workspace.Editor.DeveloperPicker?.SelectedIds.Contains(bob.Id) == false);
+        Assert.Equal("Assign me", workspace.Editor.SelfAssignmentActionLabel);
         workspace.Editor.AssignMeCommand.Execute(null);
         await WaitUntilAsync(() => workspace.Editor.DeveloperPicker?.SelectedIds.Contains(bob.Id) == true);
         Assert.DoesNotContain(await harness.Periods.GetByEntityAsync(entityId), period =>
@@ -75,6 +91,28 @@ public sealed class ShellViewModelTests
         ResponsibilityPeriod savedBob = Assert.Single(await harness.Periods.GetByEntityAsync(entityId),
             period => period.DeveloperId == bob.Id);
         Assert.True(savedBob.StartedAtUtc >= beforeSave);
+
+        await WaitUntilAsync(() => Task.FromResult(!workspace.Editor.IsOpen && !workspace.IsBusy));
+        workspace.EditOverviewEntityCommand.Execute(workspace.ActiveTable.SourceItems.Single(item =>
+            item.EntityId == entityId));
+        await WaitUntilAsync(() => workspace.Editor.IsOpen && !workspace.Editor.IsBusy);
+        Assert.Equal("Remove me", workspace.Editor.SelfAssignmentActionLabel);
+        workspace.Editor.AssignMeCommand.Execute(null);
+        await WaitUntilAsync(() => workspace.Editor.DeveloperPicker?.SelectedIds.Contains(bob.Id) == false);
+        workspace.Editor.CancelCommand.Execute(null);
+        Assert.True(Assert.Single(await harness.Periods.GetByEntityAsync(entityId),
+            period => period.DeveloperId == bob.Id).IsCurrent);
+
+        workspace.EditOverviewEntityCommand.Execute(workspace.ActiveTable.SourceItems.Single(item =>
+            item.EntityId == entityId));
+        await WaitUntilAsync(() => workspace.Editor.IsOpen && !workspace.Editor.IsBusy);
+        workspace.Editor.AssignMeCommand.Execute(null);
+        await WaitUntilAsync(() => workspace.Editor.DeveloperPicker?.SelectedIds.Contains(bob.Id) == false);
+        workspace.Editor.SaveCommand.Execute(null);
+        await WaitUntilAsync(async () => (await harness.Periods.GetByEntityAsync(entityId))
+            .Any(period => period.DeveloperId == bob.Id && !period.IsCurrent));
+        Assert.Contains(await harness.Periods.GetByEntityAsync(entityId),
+            period => period.DeveloperId == alice.Id && period.IsCurrent);
 
         await harness.Identity.SetAsync(harness.DefaultProject.Id, null);
         Assert.True(workspace.OpenEntityDetails(entityId));
