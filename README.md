@@ -194,11 +194,13 @@ exact Tracker name, and starts with focus on the safe Cancel action.
 
 ### Find and maintain tracked entities
 
-Use the dropdown on a supported column header to select current developer summaries,
-groups, statuses, or work statuses. Selections within a column are alternatives, while filters on
-different columns work together. Status summary cards remain useful one-click shortcuts. Search
-entity names and, when needed, dependency names from the overview; the same search opens with
-<kbd>Ctrl</kbd>+<kbd>F</kbd>.
+Use the dropdown on a supported column header to select individual current Project Developers,
+groups, statuses, or work statuses. An entity with several Developers appears under each one;
+**(Blank)** finds entities with no current Developer. Selections within a column are alternatives,
+while filters on different columns work together. Status summary cards remain useful one-click
+shortcuts. Ordinary search matches entity names and, by default, current Developer initials and
+display names. Turn off **Search responsible names** in Settings to search entity names only.
+**Search dependency names** remains a separate mode. Open search with <kbd>Ctrl</kbd>+<kbd>F</kbd>.
 
 Development status keeps the user-set detail: **Rework needed** means work is pending,
 **Reworking** means it is active, and **Blocked** manually pauses an entity. Work status shows
@@ -206,7 +208,7 @@ Ready for Not started or Rework needed, In progress for development or Reworking
 Waiting on dependencies for unstarted entities with unmet dependencies. A manually Blocked
 entity shows Blocked. The Blockers column shows unmet dependencies during active work.
 
-![EntityTracker Work status column filter with staged choices and typed sorting](images/light/overview-filter-flyout.png)
+![EntityTracker Responsible dev filter with separate Project Developers and a Blank option](images/light/overview-filter-flyout.png)
 
 ![EntityTracker overview filtered by the dependency name unit](images/light/overview-search.png)
 
@@ -285,8 +287,8 @@ A separate
 records the implemented bulk status updates, customer priority, responsible-developer and group
 metadata, and column filtering with status-order sorting. The
 [RESP-01–RESP-04 Responsibility roadmap](docs/milestones/responsibility/00_README.md) records
-completed Project developers and dated assignments, with responsibility search and local `Assign me`
-planned. The independent
+completed Project developers, dated assignments, and responsibility search; local `Assign me`
+remains planned. The independent
 [CI-01 engineering milestone](docs/milestones/engineering/ci_01_continuous_integration.md) defines
 CI validation for pull requests, pushes to `main`, and app release tags; successful pushes are packaged.
 The live badge above reports the current `main` build status.

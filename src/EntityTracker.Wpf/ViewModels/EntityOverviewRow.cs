@@ -1,4 +1,5 @@
 using EntityTracker.Application.Ranking;
+using EntityTracker.Application.Overview;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 
@@ -31,8 +32,13 @@ public sealed record EntityOverviewRow(
     IReadOnlyList<DependencyBlocker>? Blockers = null,
     DateTimeOffset? CreatedAtUtc = null,
     DateTimeOffset? SchemaUpdatedAtUtc = null,
-    DateTimeOffset? ProgressUpdatedAtUtc = null)
+    DateTimeOffset? ProgressUpdatedAtUtc = null,
+    IReadOnlyList<EntityOverviewDeveloper>? CurrentDevelopers = null)
 {
+    public IReadOnlyList<EntityOverviewDeveloper> DeveloperItems => CurrentDevelopers ?? [];
+
+    public bool HasCurrentDevelopers => DeveloperItems.Count > 0;
+
     public string ResponsibleDeveloperDisplay =>
         string.IsNullOrWhiteSpace(ResponsibleDeveloper) ? "—" : ResponsibleDeveloper;
 

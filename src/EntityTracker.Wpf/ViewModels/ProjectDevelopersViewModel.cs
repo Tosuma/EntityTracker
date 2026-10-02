@@ -11,6 +11,7 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
 {
     private readonly ProjectDeveloperService _service;
     private readonly ProjectId _projectId;
+    private readonly Func<ProjectId, Task>? _onPersisted;
     private readonly AsyncCommand _saveCommand;
     private readonly AsyncCommand _confirmRetireCommand;
     private IReadOnlyList<ProjectDeveloper> _all = [];
@@ -28,10 +29,12 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
     private ProjectDeveloper? _pendingRetirement;
     private string _retirementConfirmation = string.Empty;
 
-    public ProjectDevelopersViewModel(ProjectId projectId, ProjectDeveloperService service)
+    public ProjectDevelopersViewModel(ProjectId projectId, ProjectDeveloperService service,
+        Func<ProjectId, Task>? onPersisted = null)
     {
         _projectId = projectId;
         _service = service;
+        _onPersisted = onPersisted;
         EditCommand = new RelayCommand<ProjectDeveloper>(Edit, _ => !IsBusy && !HasUnsavedForm);
         CancelCommand = new RelayCommand(Cancel, () => !IsBusy && (IsEditing || HasUnsavedForm));
         _saveCommand = new AsyncCommand(SaveAsync,
@@ -155,6 +158,7 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
                 await _service.ChangeDetailsAsync(_projectId, _editingId, Initials, DisplayName);
             New();
             await RefreshAsync();
+            if (_onPersisted is not null) await _onPersisted(_projectId);
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
@@ -172,6 +176,7 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
         {
             await _service.SetRetiredAsync(_projectId, developer.Id, retired);
             await RefreshAsync();
+            if (_onPersisted is not null) await _onPersisted(_projectId);
         }
         catch (InvalidOperationException exception) { ErrorMessage = exception.Message; }
         finally { IsBusy = false; NotifyCommands(); }

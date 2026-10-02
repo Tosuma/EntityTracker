@@ -67,7 +67,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         NotificationCenter? notifications = null,
         AutoSyncSettingsViewModel? autoSyncSettings = null,
         ProjectAutoSyncService? autoSync = null,
-        ProjectDeveloperService? developerService = null)
+        ProjectDeveloperService? developerService = null,
+        ResponsibilitySearchSettingsViewModel? responsibilitySearch = null)
     {
         _projectRepository = projectRepository;
         _trackerRepository = trackerRepository;
@@ -87,6 +88,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         Catalog = catalogManagement;
         Appearance = appearance;
         AutoSync = autoSyncSettings;
+        ResponsibilitySearch = responsibilitySearch;
+        if (ResponsibilitySearch is not null)
+            ResponsibilitySearch.Changed += OnResponsibilitySearchChanged;
         Help = new SqlQueryHelpViewModel(
             clipboard,
             () => _ = NavigateAsync(ShellDestination.SchemaSynchronization));
@@ -131,6 +135,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     public AppearanceViewModel Appearance { get; }
     public AutoSyncSettingsViewModel? AutoSync { get; }
+    public ResponsibilitySearchSettingsViewModel? ResponsibilitySearch { get; }
     public NotificationCenter Notifications { get; }
     public bool HasActiveProjectSync => _autoSync?.HasActiveSync == true;
 
@@ -592,7 +597,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             }
             SelectedProject = project;
             Developers = project is null || _developerService is null ? null :
-                new ProjectDevelopersViewModel(project.Id, _developerService);
+                new ProjectDevelopersViewModel(project.Id, _developerService,
+                    OnProjectDevelopersChangedAsync);
             if (Developers is not null) await Developers.RefreshAsync(cancellationToken);
             Replace(Trackers, availableTrackers);
             SelectedTracker = selectedTracker;
@@ -607,6 +613,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 if (!_workspaces.TryGetValue(selectedTracker.Id, out MainWindowViewModel? workspace))
                 {
                     workspace = _workspaceFactory.Create(selectedTracker.Id);
+                    workspace.SetSearchResponsibleNames(
+                        ResponsibilitySearch?.IsEnabled ?? true);
                     workspace.PersistedStateChanged += OnWorkspacePersistedStateChanged;
                     workspace.PropertyChanged += OnWorkspacePropertyChanged;
                     try
@@ -624,6 +632,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 }
                 else
                 {
+                    workspace.SetSearchResponsibleNames(
+                        ResponsibilitySearch?.IsEnabled ?? true);
                     await workspace.RefreshAsync(cancellationToken);
                 }
 
@@ -753,6 +763,22 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    private void OnResponsibilitySearchChanged(object? sender, bool enabled)
+    {
+        foreach (MainWindowViewModel workspace in _workspaces.Values)
+            workspace.SetSearchResponsibleNames(enabled);
+    }
+
+    private async Task OnProjectDevelopersChangedAsync(ProjectId projectId)
+    {
+        if (SelectedProject?.Id != projectId || CurrentWorkspace is null) return;
+        try { await CurrentWorkspace.RefreshAsync(); }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "The overview could not be refreshed after a Developer change.");
+        }
+    }
+
     private async void OnCatalogChanged(object? sender, EventArgs e)
     {
         await ReloadAfterCatalogChangeAsync();
@@ -835,6 +861,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public void Dispose()
     {
         if (_autoSync is not null) _autoSync.StateChanged -= OnAutoSyncStateChanged;
+        if (ResponsibilitySearch is not null)
+            ResponsibilitySearch.Changed -= OnResponsibilitySearchChanged;
         foreach (ProjectDashboardViewModel dashboard in _projectDashboards.Values)
             dashboard.RepositoryCard?.Dispose();
         Catalog.Changed -= OnCatalogChanged;

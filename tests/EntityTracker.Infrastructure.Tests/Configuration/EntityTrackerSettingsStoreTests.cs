@@ -24,7 +24,7 @@ public sealed class EntityTrackerSettingsStoreTests
     [InlineData(ApplicationAppearance.System)]
     [InlineData(ApplicationAppearance.Light)]
     [InlineData(ApplicationAppearance.Dark)]
-    public async Task SaveAppearanceAsync_WritesVersionFiveWithoutRetiredProviderFields(
+    public async Task SaveAppearanceAsync_WritesVersionSixWithoutRetiredProviderFields(
         ApplicationAppearance appearance)
     {
         using TemporarySettingsDirectory directory = new();
@@ -35,7 +35,8 @@ public sealed class EntityTrackerSettingsStoreTests
 
         Assert.Equal(appearance, result.Settings.Appearance);
         string json = await File.ReadAllTextAsync(directory.SettingsPath);
-        Assert.Contains("\"version\": 5", json, StringComparison.Ordinal);
+        Assert.Contains("\"version\": 6", json, StringComparison.Ordinal);
+        Assert.True(result.Settings.SearchResponsibleNames);
         Assert.True(result.Settings.AutoSyncEnabled);
         Assert.Equal(5, result.Settings.AutoSyncIntervalMinutes);
         Assert.Contains($"\"appearance\": \"{appearance}\"", json, StringComparison.Ordinal);
@@ -63,7 +64,49 @@ public sealed class EntityTrackerSettingsStoreTests
         Assert.Equal(minutes, result.Settings.AutoSyncIntervalMinutes);
         Assert.Equal(project, result.Settings.LastProjectId);
         Assert.Equal(ApplicationAppearance.Dark, result.Settings.Appearance);
-        Assert.Contains("\"version\": 5", await File.ReadAllTextAsync(directory.SettingsPath));
+        Assert.Contains("\"version\": 6", await File.ReadAllTextAsync(directory.SettingsPath));
+    }
+
+    [Fact]
+    public async Task VersionFiveSettings_DefaultResponsibleSearchOnAndPreserveAutoSyncChoices()
+    {
+        using TemporarySettingsDirectory directory = new();
+        Directory.CreateDirectory(directory.DirectoryPath);
+        await File.WriteAllTextAsync(directory.SettingsPath, """
+            { "version": 5, "appearance": "Dark", "autoSyncEnabled": false,
+              "autoSyncIntervalMinutes": 30 }
+            """);
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+
+        SettingsLoadResult migrated = await store.LoadAsync();
+        Assert.True(migrated.Settings.SearchResponsibleNames);
+        Assert.False(migrated.Settings.AutoSyncEnabled);
+        Assert.Equal(30, migrated.Settings.AutoSyncIntervalMinutes);
+
+        await store.SaveSearchResponsibleNamesAsync(false);
+        SettingsLoadResult saved = await store.LoadAsync();
+        Assert.False(saved.Settings.SearchResponsibleNames);
+        Assert.False(saved.Settings.AutoSyncEnabled);
+        Assert.Equal(30, saved.Settings.AutoSyncIntervalMinutes);
+        Assert.Contains("\"version\": 6", await File.ReadAllTextAsync(directory.SettingsPath));
+    }
+
+    [Fact]
+    public async Task SearchResponsibleNames_RoundTripsAndSurvivesOtherSettingsWrites()
+    {
+        using TemporarySettingsDirectory directory = new();
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+        Assert.True((await store.LoadAsync()).Settings.SearchResponsibleNames);
+
+        await store.SaveSearchResponsibleNamesAsync(false);
+        await store.SaveAppearanceAsync(ApplicationAppearance.Light);
+        await store.SaveAutoSyncAsync(false, 15);
+        await store.SaveActiveContextAsync(ProjectId.New(), null);
+
+        EntityTrackerSettingsStore restarted = new(directory.SettingsPath);
+        Assert.False((await restarted.LoadAsync()).Settings.SearchResponsibleNames);
+        await restarted.SaveSearchResponsibleNamesAsync(true);
+        Assert.True((await restarted.LoadAsync()).Settings.SearchResponsibleNames);
     }
 
     [Theory]
@@ -143,7 +186,7 @@ public sealed class EntityTrackerSettingsStoreTests
         Assert.Equal(projectId, result.Settings.LastProjectId);
         Assert.Equal(trackerId, result.Settings.LastTrackerId);
         string json = await File.ReadAllTextAsync(directory.SettingsPath);
-        Assert.Contains("\"version\": 5", json, StringComparison.Ordinal);
+        Assert.Contains("\"version\": 6", json, StringComparison.Ordinal);
         Assert.DoesNotContain("activeStorage", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("sharePoint", json, StringComparison.OrdinalIgnoreCase);
     }

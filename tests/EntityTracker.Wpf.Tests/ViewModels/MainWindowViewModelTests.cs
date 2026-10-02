@@ -494,6 +494,23 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task SearchPreferenceChangeClearsBulkSelectionBeforeReprojection()
+    {
+        MainWindowViewModel viewModel = CreateViewModel(
+            [Entity(1, "Invoice")], [], FailureResult(), new StubFilePicker(), out _);
+        await viewModel.InitializeAsync();
+        viewModel.UpdateOverviewSelection([Assert.Single(viewModel.OverviewItems)]);
+        Assert.Equal(1, viewModel.SelectedActiveEntityCount);
+
+        viewModel.SetSearchResponsibleNames(false);
+
+        Assert.Equal(0, viewModel.SelectedActiveEntityCount);
+        Assert.False(viewModel.ActiveTable.SearchResponsibleNames);
+        Assert.False(viewModel.ArchivedTable.SearchResponsibleNames);
+    }
+
+
+    [Fact]
     public async Task ArchivedDetails_UsePreservedContextAndRestoreRemainsInExistingEditor()
     {
         TrackedEntity target = Entity(1, "Legacy target");

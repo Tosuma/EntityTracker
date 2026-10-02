@@ -95,6 +95,9 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton(provider => new AutoSyncSettingsViewModel(settingsStore,
             provider.GetRequiredService<ProjectAutoSyncService>(),
             provider.GetRequiredService<EntityTrackerSettings>()));
+        services.AddSingleton(provider => new ResponsibilitySearchSettingsViewModel(
+            settingsStore,
+            provider.GetRequiredService<EntityTrackerSettings>()));
         services.AddSingleton<NotificationCenter>();
         services.AddSingleton<ProjectRepositoryCardViewModelFactory>();
 

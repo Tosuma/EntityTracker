@@ -158,6 +158,8 @@ public partial class App : System.Windows.Application
             services.AddSingleton(provider => new AutoSyncSettingsViewModel(
                 settingsStore, provider.GetRequiredService<ProjectAutoSyncService>(),
                 settings.Settings));
+            services.AddSingleton(new ResponsibilitySearchSettingsViewModel(
+                settingsStore, settings.Settings));
             services.AddSingleton<NotificationCenter>();
             services.AddSingleton<ProjectRepositoryCardViewModelFactory>();
             services.AddSingleton<CatalogManagementViewModel>();

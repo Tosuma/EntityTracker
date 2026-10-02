@@ -921,12 +921,45 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTextColumn Width="150"
-                                                    Binding="{Binding ResponsibleDeveloperDisplay}">
-                                    <DataGridTextColumn.Header>
+                                <DataGridTemplateColumn Width="150">
+                                    <DataGridTemplateColumn.Header>
                                         <controls:FilterableColumnHeader Filter="{Binding DataContext.ActiveTable.ResponsibleDeveloperFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                    </DataGridTextColumn.Header>
-                                </DataGridTextColumn>
+                                    </DataGridTemplateColumn.Header>
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <ItemsControl ItemsSource="{Binding DeveloperItems}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Margin="0,2,4,2" Padding="5,2" CornerRadius="3"
+                                                                    Background="{DynamicResource Brush.Surface.Subtle}"
+                                                                    BorderBrush="{DynamicResource Brush.Border.Strong}"
+                                                                    BorderThickness="1"
+                                                                    ToolTip="{Binding Label}">
+                                                                <TextBlock Text="{Binding Initials}"
+                                                                           AutomationProperties.Name="{Binding Label}" />
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <TextBlock Text="{Binding ResponsibleDeveloperDisplay}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasCurrentDevelopers}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                                 <DataGridTextColumn Width="145"
                                                     Binding="{Binding GroupNameDisplay}">
                                     <DataGridTextColumn.Header>
@@ -1142,11 +1175,45 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTextColumn Width="150" Binding="{Binding ResponsibleDeveloperDisplay}">
-                                    <DataGridTextColumn.Header>
+                                <DataGridTemplateColumn Width="150">
+                                    <DataGridTemplateColumn.Header>
                                         <controls:FilterableColumnHeader Filter="{Binding DataContext.ArchivedTable.ResponsibleDeveloperFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                                    </DataGridTextColumn.Header>
-                                </DataGridTextColumn>
+                                    </DataGridTemplateColumn.Header>
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <ItemsControl ItemsSource="{Binding DeveloperItems}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Margin="0,2,4,2" Padding="5,2" CornerRadius="3"
+                                                                    Background="{DynamicResource Brush.Surface.Subtle}"
+                                                                    BorderBrush="{DynamicResource Brush.Border.Strong}"
+                                                                    BorderThickness="1"
+                                                                    ToolTip="{Binding Label}">
+                                                                <TextBlock Text="{Binding Initials}"
+                                                                           AutomationProperties.Name="{Binding Label}" />
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <TextBlock Text="{Binding ResponsibleDeveloperDisplay}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasCurrentDevelopers}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                                 <DataGridTextColumn Width="145" Binding="{Binding GroupNameDisplay}">
                                     <DataGridTextColumn.Header>
                                         <controls:FilterableColumnHeader Filter="{Binding DataContext.ArchivedTable.GroupFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />

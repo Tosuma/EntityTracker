@@ -89,8 +89,11 @@ complete timeline in the details pane, and **Back** returns to the summary. Curr
 appear newest first, followed by past assignments ordered by when they ended, newest first.
 Removing a developer ends their current period; assigning them again starts a new one. Retiring a
 developer from the Project dashboard ends all their open assignments, including on archived
-entities. The overview displays current initials; developer-specific filtering is planned for
-RESP-03.
+entities. The active and archived overviews show each current Developer separately. Use the
+**Responsible dev** column filter to find one or more Developers or **(Blank)** for unassigned
+entities. Ordinary search includes current Developer initials and display names by default; turn
+off **Search responsible names** in Settings to search entity names only. **Search dependency
+names** remains a separate search mode.
 
 ### Sync a copied tracker
 

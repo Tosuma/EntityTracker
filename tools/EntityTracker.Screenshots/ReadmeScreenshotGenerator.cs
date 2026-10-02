@@ -229,6 +229,7 @@ internal sealed class ReadmeScreenshotGenerator
                 new TrackedStateChangeSet([], [], [], [], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
                         [platform.Id])]), cancellationToken);
+
             captureTime.Advance(TimeSpan.FromMinutes(1));
             await responsibilityStore.ApplyAsync(tracker.Id,
                 new TrackedStateChangeSet([], [], [], [], [], [],
@@ -239,6 +240,7 @@ internal sealed class ReadmeScreenshotGenerator
                 new TrackedStateChangeSet([], [], [], [], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
                         [platform.Id])]), cancellationToken);
+
             captureTime.Advance(TimeSpan.FromMinutes(1));
             await responsibilityStore.ApplyAsync(tracker.Id,
                 new TrackedStateChangeSet([], [], [], [], [], [],
@@ -249,6 +251,13 @@ internal sealed class ReadmeScreenshotGenerator
                 new TrackedStateChangeSet([], [], [], [], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
                         [platform.Id])]), cancellationToken);
+
+            // Show two separate current Developers in the overview and filter screenshots.
+            captureTime.Advance(TimeSpan.FromMinutes(1));
+            await responsibilityStore.ApplyAsync(tracker.Id,
+                new TrackedStateChangeSet([], [], [], [], [], [],
+                    responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
+                        [alice.Id, platform.Id])]), cancellationToken);
 
             await shell.OpenTrackerAsync(tracker.Id);
             MainWindowViewModel viewModel = shell.CurrentWorkspace
@@ -449,9 +458,13 @@ internal sealed class ReadmeScreenshotGenerator
         await renderer.CaptureAsync("overview-search.png");
 
         viewModel.CloseOverviewSearchCommand.Execute(null);
+        await Task.Delay(300, cancellationToken);
+        OverviewColumnFilterState responsibleFilter = viewModel.ActiveTable.ResponsibleDeveloperFilter;
+        responsibleFilter.OpenCommand.Execute(null);
+        await renderer.CaptureOpenPopupAsync("overview-filter-flyout.png");
+        responsibleFilter.CloseWithoutApplying();
         OverviewColumnFilterState workStatusFilter = viewModel.ActiveTable.WorkStatusFilter!;
         workStatusFilter.OpenCommand.Execute(null);
-        await renderer.CaptureOpenPopupAsync("overview-filter-flyout.png");
         foreach (OverviewFilterOption option in workStatusFilter.Options)
         {
             option.IsSelected = option.DisplayName == "Blocked";

@@ -8,6 +8,27 @@ namespace EntityTracker.Wpf.Tests.ViewModels;
 public sealed class ProjectDevelopersViewModelTests
 {
     [Fact]
+    public async Task SuccessfulDeveloperChangesNotifyOverviewRefresh()
+    {
+        ProjectId projectId = ProjectId.New();
+        List<ProjectId> refreshed = [];
+        ProjectDevelopersViewModel viewModel = new(projectId,
+            new ProjectDeveloperService(new MemoryStore()),
+            id => { refreshed.Add(id); return Task.CompletedTask; });
+        viewModel.Initials = "AB";
+        await viewModel.SaveAsync();
+        ProjectDeveloper developer = Assert.Single(viewModel.Available);
+        viewModel.Edit(developer);
+        viewModel.DisplayName = "Alice";
+        await viewModel.SaveAsync();
+        await viewModel.SetRetiredAsync(developer, true);
+        await viewModel.SetRetiredAsync(developer, false);
+
+        Assert.Equal(4, refreshed.Count);
+        Assert.All(refreshed, id => Assert.Equal(projectId, id));
+    }
+
+    [Fact]
     public async Task EditorAndSearchShowAvailableAndRetiredDevelopers()
     {
         ProjectId projectId = ProjectId.New();

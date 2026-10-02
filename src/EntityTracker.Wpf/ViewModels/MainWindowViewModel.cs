@@ -1066,6 +1066,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             _ = LoadResponsibilityDetailsAsync(SelectedEntityDetails);
     }
 
+    public void SetSearchResponsibleNames(bool enabled)
+    {
+        ActiveTable.SearchResponsibleNames = enabled;
+        ArchivedTable.SearchResponsibleNames = enabled;
+    }
+
     private void ShowArchivedResponsibilityHistory()
     {
         EntityId? entityId = Editor.ArchivedDetails?.Entity.Id;
@@ -1281,7 +1287,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             item.Blockers,
             item.AuditTimestamps.CreatedAtUtc,
             item.AuditTimestamps.SchemaUpdatedAtUtc,
-            item.AuditTimestamps.ProgressUpdatedAtUtc);
+            item.AuditTimestamps.ProgressUpdatedAtUtc,
+            item.CurrentDevelopers);
     }
 
     private static string FormatStatus(DevelopmentStatus status) => status switch

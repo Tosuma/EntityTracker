@@ -25,7 +25,8 @@ public sealed class EntityOverviewItem
         IEnumerable<string> dependencyResolutionIssueNames,
         EntityWorkflowState workflowState,
         IEnumerable<DependencyBlocker> blockers,
-        EntityAuditTimestamps auditTimestamps)
+        EntityAuditTimestamps auditTimestamps,
+        IEnumerable<EntityOverviewDeveloper>? currentDevelopers = null)
     {
         EntityId = entityId;
         Rank = rank;
@@ -36,6 +37,7 @@ public sealed class EntityOverviewItem
         Status = status;
         Notes = notes;
         ResponsibleDeveloper = responsibleDeveloper;
+        CurrentDevelopers = Array.AsReadOnly((currentDevelopers ?? []).ToArray());
         GroupName = groupName;
         LifecycleState = lifecycleState;
         DependencyCount = dependencyCount;
@@ -65,6 +67,8 @@ public sealed class EntityOverviewItem
     public string Notes { get; }
 
     public string ResponsibleDeveloper { get; }
+
+    public IReadOnlyList<EntityOverviewDeveloper> CurrentDevelopers { get; }
 
     public string GroupName { get; }
 

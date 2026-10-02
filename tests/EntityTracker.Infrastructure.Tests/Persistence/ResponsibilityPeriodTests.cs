@@ -1,4 +1,9 @@
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Overview;
+using EntityTracker.Application.Dependencies;
+using EntityTracker.Application.Planning;
+using EntityTracker.Application.Ranking;
+using EntityTracker.Application.Workflow;
 using EntityTracker.Application.Projects;
 using EntityTracker.Application.Snapshots;
 using EntityTracker.Domain;
@@ -10,6 +15,51 @@ namespace EntityTracker.Infrastructure.Tests.Persistence;
 
 public sealed class ResponsibilityPeriodTests
 {
+    [Fact]
+    public async Task OverviewProjectsIndividualCurrentDevelopersForActiveAndArchivedEntities()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        Tracker tracker = Assert.Single(await new SqliteTrackerRepository(database).GetAllAsync());
+        ProjectDeveloperService developers = new(new SqliteProjectDeveloperStore(database),
+            trackers: new SqliteTrackerRepository(database));
+        ProjectDeveloper alice = await developers.CreateAsync(tracker.ProjectId, "AL", "Alice");
+        ProjectDeveloper bob = await developers.CreateAsync(tracker.ProjectId, "BO", "Bob");
+        TrackedEntity active = new(EntityId.New(), tracker.Id, "Active");
+        TrackedEntity archived = new(EntityId.New(), tracker.Id, "Archived");
+        TrackedEntity blank = new(EntityId.New(), tracker.Id, "Blank");
+        SqliteTrackedStateStore store = new(database);
+        await store.ApplyAsync(tracker.Id, new TrackedStateChangeSet(
+            [active, archived, blank], [], [], [], [], [],
+            responsibilitySelections:
+            [new ResponsibilitySelection(active.Id, [alice.Id, bob.Id]),
+             new ResponsibilitySelection(archived.Id, [bob.Id])]));
+        await store.ApplyAsync(tracker.Id,
+            new TrackedStateChangeSet([], [], [archived.Id], [], [], []));
+
+        EntityOverviewService overview = new(
+            new SqliteEntityRepository(database), new SqliteEntityAuditReader(database),
+            new SqliteDependencyRepository(database),
+            new SqliteManualDependencyOverrideRepository(database), new DependencyRanker(),
+            new EffectiveDependencyResolver(), new WorkflowReadinessEvaluator(),
+            new PriorityPlanningService(), new SqliteResponsibilityPeriodRepository(database),
+            developers);
+        EntityOverviewResult result = await overview.GetAsync(tracker.Id);
+        Assert.Equal([alice.Id, bob.Id], result.Items.Single(item => item.EntityId == active.Id)
+            .CurrentDevelopers.Select(developer => developer.Id));
+        Assert.Equal([bob.Id], result.ArchivedItems.Single(item => item.EntityId == archived.Id)
+            .CurrentDevelopers.Select(developer => developer.Id));
+        Assert.Empty(result.Items.Single(item => item.EntityId == blank.Id).CurrentDevelopers);
+
+        await developers.ChangeDetailsAsync(tracker.ProjectId, alice.Id, "AX", "Alex");
+        EntityOverviewResult renamed = await overview.GetAsync(tracker.Id);
+        EntityOverviewDeveloper current = renamed.Items.Single(item => item.EntityId == active.Id)
+            .CurrentDevelopers.Single(developer => developer.Id == alice.Id);
+        Assert.Equal("AX", current.Initials);
+        Assert.Equal("Alex", current.DisplayName);
+    }
+
     [Fact]
     public async Task SelectionHistoryAndRetirementAreAtomicAndRoundTripThroughSnapshot()
     {
