@@ -10,6 +10,7 @@
         xmlns:synchronization="clr-namespace:EntityTracker.Application.Synchronization;assembly=EntityTracker.Application"
         xmlns:workflow="clr-namespace:EntityTracker.Application.Workflow;assembly=EntityTracker.Application"
         xmlns:reporting="clr-namespace:EntityTracker.Reporting;assembly=EntityTracker.Reporting"
+        xmlns:services="clr-namespace:EntityTracker.Wpf.Services"
         xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels"
         mc:Ignorable="d"
         Background="{DynamicResource Brush.Surface.Page}"
@@ -396,6 +397,37 @@
                                     Content="Search"
                                     ToolTip="Search entities (Ctrl+F)"
                                     Style="{StaticResource SecondaryButtonStyle}" />
+                            <ToggleButton x:Name="OverviewExportToggle" Margin="0,0,8,0"
+                                          Padding="12,5"
+                                          Content="Export"
+                                          AutomationProperties.Name="Export overview"
+                                          AutomationProperties.HelpText="Choose Excel or CSV export" />
+                            <Popup x:Name="OverviewExportPopup"
+                                   PlacementTarget="{Binding ElementName=OverviewExportToggle}"
+                                   Placement="Bottom" HorizontalOffset="-110" VerticalOffset="4"
+                                   IsOpen="{Binding IsChecked, ElementName=OverviewExportToggle, Mode=TwoWay}"
+                                   DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
+                                   StaysOpen="False" AllowsTransparency="True"
+                                   Opened="OnOverviewExportPopupOpened"
+                                   PreviewKeyDown="OnOverviewExportPopupKeyDown">
+                                <Border Padding="6" MinWidth="190"
+                                        Background="{DynamicResource Brush.Surface.Page}"
+                                        BorderBrush="{DynamicResource Brush.Border.Strong}"
+                                        BorderThickness="1" CornerRadius="5">
+                                    <StackPanel>
+                                        <Button x:Name="OverviewExcelExportButton" Content="Excel workbook (.xlsx)"
+                                                Command="{Binding ExportOverviewCommand}"
+                                                CommandParameter="{x:Static services:OverviewExportFormat.Excel}"
+                                                Click="OnOverviewExportChosen"
+                                                Style="{StaticResource SecondaryButtonStyle}" />
+                                        <Button Margin="0,4,0,0" Content="CSV file (.csv)"
+                                                Command="{Binding ExportOverviewCommand}"
+                                                CommandParameter="{x:Static services:OverviewExportFormat.Csv}"
+                                                Click="OnOverviewExportChosen"
+                                                Style="{StaticResource SecondaryButtonStyle}" />
+                                    </StackPanel>
+                                </Border>
+                            </Popup>
                             <Button Command="{Binding RefreshCommand}"
                                     Content="Refresh"
                                     Style="{StaticResource SecondaryButtonStyle}" />

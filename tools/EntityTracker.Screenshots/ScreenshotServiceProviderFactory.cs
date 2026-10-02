@@ -98,7 +98,11 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton(provider => new ResponsibilitySearchSettingsViewModel(
             settingsStore,
             provider.GetRequiredService<EntityTrackerSettings>()));
+        services.AddSingleton(provider => new OverviewExportSettingsViewModel(
+            settingsStore, provider.GetRequiredService<EntityTrackerSettings>()));
         services.AddSingleton<NotificationCenter>();
+        services.AddSingleton<OverviewExportService>();
+        services.AddSingleton<IOverviewExportFilePicker, OverviewExportFilePicker>();
         services.AddSingleton<ProjectRepositoryCardViewModelFactory>();
 
         services.AddSingleton<ISchemaImportParser, CsvSchemaImportParser>();

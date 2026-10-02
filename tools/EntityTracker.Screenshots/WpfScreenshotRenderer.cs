@@ -95,12 +95,19 @@ internal sealed class WpfScreenshotRenderer(Window window, string outputDirector
 
     internal async Task CaptureOpenPopupAsync(string fileName)
     {
-        await SettleAsync();
         Popup popup = FindVisualDescendants<FilterableColumnHeader>(Root)
             .Select(static header => header.FindName("FilterPopup"))
             .OfType<Popup>()
             .FirstOrDefault(static candidate => candidate.IsOpen && candidate.Child is FrameworkElement)
             ?? throw new InvalidOperationException("An open filter popup could not be found.");
+        await CapturePopupAsync(popup, fileName);
+    }
+
+    internal async Task CapturePopupAsync(Popup popup, string fileName)
+    {
+        await SettleAsync();
+        if (!popup.IsOpen || popup.Child is not FrameworkElement)
+            throw new InvalidOperationException("The popup is not open.");
         FrameworkElement popupContent = (FrameworkElement)popup.Child;
         FrameworkElement placementTarget = popup.PlacementTarget as FrameworkElement
             ?? throw new InvalidOperationException("The open popup has no placement target.");
@@ -109,8 +116,10 @@ internal sealed class WpfScreenshotRenderer(Window window, string outputDirector
         RenderTargetBitmap popupBitmap = RenderVisual(popupContent);
         Point anchor = placementTarget.TransformToAncestor(Root)
             .Transform(new Point(0, placementTarget.ActualHeight + 4));
-        double left = Math.Clamp(anchor.X, 0, Root.ActualWidth - popupBitmap.PixelWidth);
-        double top = Math.Clamp(anchor.Y, 0, Root.ActualHeight - popupBitmap.PixelHeight);
+        double left = Math.Clamp(anchor.X + popup.HorizontalOffset, 0,
+            Root.ActualWidth - popupBitmap.PixelWidth);
+        double top = Math.Clamp(anchor.Y + popup.VerticalOffset, 0,
+            Root.ActualHeight - popupBitmap.PixelHeight);
 
         DrawingVisual drawing = new();
         using (DrawingContext context = drawing.RenderOpen())

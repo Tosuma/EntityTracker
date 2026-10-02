@@ -146,7 +146,18 @@ the edit is saved or closed; other Projects continue. Conflict and deletion revi
 manual action. Routine automatic checks are quiet; a notification stays visible when action is
 needed.
 
+The Tracker Overview **Export** menu saves the active entity table as an Excel workbook or CSV file.
+
+![Overview Export menu with Excel and CSV options](images/light/overview-export-menu.png)
+
+In **Settings**, choose **Shown entities** to export the current search, filters, and sort, or
+**All active entities** to ignore search and filters while keeping the sort. The CSV separator is
+also selected there. Choose the file location and name in the save dialog; a notification reports
+when the export finishes or fails.
+
 ![Settings showing the local Project Developer choice and overview search](images/light/settings.png)
+
+![Overview export settings with row scope and CSV separator drop-downs](images/light/settings-export.png)
 
 For slow syncs, the daily application log records stage durations, fetch time, snapshot read time,
 and the number of snapshot files read or reused. The remote may still take time to fetch or push;

@@ -6,6 +6,54 @@ namespace EntityTracker.Infrastructure.Tests.Configuration;
 public sealed class EntityTrackerSettingsStoreTests
 {
     [Fact]
+    public async Task ExportPreferences_DefaultAndRoundTripWithoutLosingDeveloperChoices()
+    {
+        using TemporarySettingsDirectory directory = new();
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+        ProjectId project = ProjectId.New();
+        DeveloperId developer = DeveloperId.New();
+        Assert.Equal(OverviewExportRows.ShownEntities, (await store.LoadAsync()).Settings.OverviewExportRows);
+        Assert.Equal(OverviewCsvSeparator.Semicolon, (await store.LoadAsync()).Settings.OverviewCsvSeparator);
+        await store.SaveProjectDeveloperChoiceAsync(project, developer);
+        await store.SaveOverviewExportPreferencesAsync(OverviewExportRows.AllActiveEntities,
+            OverviewCsvSeparator.Comma);
+        await store.SaveAppearanceAsync(ApplicationAppearance.Dark);
+        await store.SaveSearchResponsibleNamesAsync(false);
+        EntityTrackerSettings result = (await new EntityTrackerSettingsStore(directory.SettingsPath)
+            .LoadAsync()).Settings;
+        Assert.Equal(OverviewExportRows.AllActiveEntities, result.OverviewExportRows);
+        Assert.Equal(OverviewCsvSeparator.Comma, result.OverviewCsvSeparator);
+        Assert.Equal(developer, result.ProjectDeveloperChoices[project]);
+    }
+
+    [Fact]
+    public async Task VersionSevenMigration_PreservesProjectDeveloperChoiceAndDefaultsExport()
+    {
+        using TemporarySettingsDirectory directory = new();
+        Directory.CreateDirectory(directory.DirectoryPath);
+        ProjectId project = ProjectId.New();
+        DeveloperId developer = DeveloperId.New();
+        await File.WriteAllTextAsync(directory.SettingsPath,
+            System.Text.Json.JsonSerializer.Serialize(new
+            {
+                version = 7,
+                appearance = "Dark",
+                projectDeveloperChoices = new Dictionary<string, string>
+                {
+                    [project.Value.ToString("D")] = developer.Value.ToString("D")
+                }
+            }));
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+        EntityTrackerSettings loaded = (await store.LoadAsync()).Settings;
+        Assert.Equal(developer, loaded.ProjectDeveloperChoices[project]);
+        Assert.Equal(OverviewExportRows.ShownEntities, loaded.OverviewExportRows);
+        Assert.Equal(OverviewCsvSeparator.Semicolon, loaded.OverviewCsvSeparator);
+        await store.SaveOverviewExportPreferencesAsync(OverviewExportRows.AllActiveEntities,
+            OverviewCsvSeparator.Comma);
+        Assert.Equal(developer, (await store.LoadAsync()).Settings.ProjectDeveloperChoices[project]);
+    }
+
+    [Fact]
     public async Task LocalProjectChoices_ArePerInstallationAndSurviveOtherSettingsWrites()
     {
         using TemporarySettingsDirectory firstDirectory = new();
@@ -50,7 +98,7 @@ public sealed class EntityTrackerSettingsStoreTests
         Assert.False(migrated.AutoSyncEnabled);
         await store.SaveProjectDeveloperChoiceAsync(ProjectId.New(), DeveloperId.New());
         Assert.False((await store.LoadAsync()).Settings.SearchResponsibleNames);
-        Assert.Contains("\"version\": 7", await File.ReadAllTextAsync(directory.SettingsPath));
+        Assert.Contains("\"version\": 8", await File.ReadAllTextAsync(directory.SettingsPath));
     }
 
     [Fact]
@@ -72,7 +120,7 @@ public sealed class EntityTrackerSettingsStoreTests
     [InlineData(ApplicationAppearance.System)]
     [InlineData(ApplicationAppearance.Light)]
     [InlineData(ApplicationAppearance.Dark)]
-    public async Task SaveAppearanceAsync_WritesVersionSevenWithoutRetiredProviderFields(
+    public async Task SaveAppearanceAsync_WritesVersionEightWithoutRetiredProviderFields(
         ApplicationAppearance appearance)
     {
         using TemporarySettingsDirectory directory = new();
@@ -83,7 +131,7 @@ public sealed class EntityTrackerSettingsStoreTests
 
         Assert.Equal(appearance, result.Settings.Appearance);
         string json = await File.ReadAllTextAsync(directory.SettingsPath);
-        Assert.Contains("\"version\": 7", json, StringComparison.Ordinal);
+        Assert.Contains("\"version\": 8", json, StringComparison.Ordinal);
         Assert.True(result.Settings.SearchResponsibleNames);
         Assert.True(result.Settings.AutoSyncEnabled);
         Assert.Equal(5, result.Settings.AutoSyncIntervalMinutes);
@@ -112,7 +160,7 @@ public sealed class EntityTrackerSettingsStoreTests
         Assert.Equal(minutes, result.Settings.AutoSyncIntervalMinutes);
         Assert.Equal(project, result.Settings.LastProjectId);
         Assert.Equal(ApplicationAppearance.Dark, result.Settings.Appearance);
-        Assert.Contains("\"version\": 7", await File.ReadAllTextAsync(directory.SettingsPath));
+        Assert.Contains("\"version\": 8", await File.ReadAllTextAsync(directory.SettingsPath));
     }
 
     [Fact]
@@ -136,7 +184,7 @@ public sealed class EntityTrackerSettingsStoreTests
         Assert.False(saved.Settings.SearchResponsibleNames);
         Assert.False(saved.Settings.AutoSyncEnabled);
         Assert.Equal(30, saved.Settings.AutoSyncIntervalMinutes);
-        Assert.Contains("\"version\": 7", await File.ReadAllTextAsync(directory.SettingsPath));
+        Assert.Contains("\"version\": 8", await File.ReadAllTextAsync(directory.SettingsPath));
     }
 
     [Fact]
@@ -234,7 +282,7 @@ public sealed class EntityTrackerSettingsStoreTests
         Assert.Equal(projectId, result.Settings.LastProjectId);
         Assert.Equal(trackerId, result.Settings.LastTrackerId);
         string json = await File.ReadAllTextAsync(directory.SettingsPath);
-        Assert.Contains("\"version\": 7", json, StringComparison.Ordinal);
+        Assert.Contains("\"version\": 8", json, StringComparison.Ordinal);
         Assert.DoesNotContain("activeStorage", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("sharePoint", json, StringComparison.OrdinalIgnoreCase);
     }

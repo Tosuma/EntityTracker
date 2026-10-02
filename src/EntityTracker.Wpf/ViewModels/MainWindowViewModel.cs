@@ -13,6 +13,7 @@ using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
+using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
 
@@ -29,6 +30,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private readonly IResponsibilityPeriodRepository? _responsibilityPeriods;
     private readonly ITrackedStateStore? _trackedState;
     private readonly LocalProjectIdentityService? _localIdentity;
+    private readonly OverviewExportService? _overviewExportService;
+    private readonly IOverviewExportFilePicker? _overviewExportFilePicker;
+    private readonly OverviewExportSettingsViewModel? _overviewExportSettings;
+    private readonly NotificationCenter? _notifications;
+    private readonly AsyncCommand<OverviewExportFormat> _exportOverviewCommand;
+    private bool _isExporting;
     private readonly AsyncCommand _assignMeCommand;
     private readonly AsyncCommand _openIdentitySettingsCommand;
     private string? _assignmentGuidance;
@@ -87,7 +94,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         ProjectDeveloperService? developers = null,
         IResponsibilityPeriodRepository? responsibilityPeriods = null,
         ITrackedStateStore? trackedState = null,
-        LocalProjectIdentityService? localIdentity = null)
+        LocalProjectIdentityService? localIdentity = null,
+        OverviewExportService? overviewExportService = null,
+        IOverviewExportFilePicker? overviewExportFilePicker = null,
+        OverviewExportSettingsViewModel? overviewExportSettings = null,
+        NotificationCenter? notifications = null)
     {
         ArgumentNullException.ThrowIfNull(overviewService);
         ArgumentNullException.ThrowIfNull(synchronizationService);
@@ -104,6 +115,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         _responsibilityPeriods = responsibilityPeriods;
         _trackedState = trackedState;
         _localIdentity = localIdentity;
+        _overviewExportService = overviewExportService;
+        _overviewExportFilePicker = overviewExportFilePicker;
+        _overviewExportSettings = overviewExportSettings;
+        _notifications = notifications;
         _overviewService = overviewService;
         _synchronizationService = synchronizationService;
         _bulkStatusUpdateService = bulkStatusUpdateService;
@@ -149,6 +164,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         _refreshCommand = new AsyncCommand(
             () => RefreshAsync(),
             () => !IsBusy && !ManualCreation.IsBusy && !Editor.IsOpen);
+        _exportOverviewCommand = new AsyncCommand<OverviewExportFormat>(ExportOverviewAsync,
+            _ => !_isExporting && !IsBusy && !Editor.IsOpen && ActiveTable.SourceItems.Count > 0);
         _importCsvCommand = new AsyncCommand(
             () => ImportCsvAsync(),
             () => !IsBusy && !ManualCreation.IsBusy && !Editor.IsOpen);
@@ -216,6 +233,42 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     }
     public bool HasAssignmentGuidance => !string.IsNullOrWhiteSpace(AssignmentGuidance);
     public ICommand AssignMeCommand => _assignMeCommand;
+    public ICommand ExportOverviewCommand => _exportOverviewCommand;
+
+    private async Task ExportOverviewAsync(OverviewExportFormat format)
+    {
+        if (_overviewExportService is null || _overviewExportFilePicker is null ||
+            _notifications is null || _isExporting) return;
+        string extension = format == OverviewExportFormat.Excel ? "xlsx" : "csv";
+        string suggestedName = $"EntityTracker-overview-{DateTime.Now:yyyy-MM-dd}.{extension}";
+        string? path = _overviewExportFilePicker.SelectPath(format, suggestedName);
+        if (path is null) return;
+        IReadOnlyList<EntityOverviewRow> rows = _overviewExportSettings?.Rows ==
+            OverviewExportRows.AllActiveEntities
+            ? ActiveTable.GetAllItemsInCurrentSortOrder() : ActiveTable.Items.ToArray();
+        OverviewCsvSeparator separator = _overviewExportSettings?.Separator ?? OverviewCsvSeparator.Semicolon;
+        _isExporting = true;
+        _exportOverviewCommand.NotifyCanExecuteChanged();
+        NotificationItem notice = _notifications.BeginProgress("Overview export",
+            $"Preparing {rows.Count} entities for {extension.ToUpperInvariant()} export…");
+        try
+        {
+            _notifications.Progress(notice, $"Writing {extension.ToUpperInvariant()} file…");
+            await _overviewExportService.ExportAsync(path, format, rows, separator);
+            _notifications.Complete(notice, $"Exported {rows.Count} entities to {Path.GetFileName(path)}.");
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Overview export failed");
+            _notifications.Complete(notice, "Overview export failed. Check the destination and try again.",
+                NotificationKind.Failure);
+        }
+        finally
+        {
+            _isExporting = false;
+            _exportOverviewCommand.NotifyCanExecuteChanged();
+        }
+    }
     public ICommand OpenIdentitySettingsCommand => _openIdentitySettingsCommand;
 
     private async Task OpenIdentitySettingsAsync()
@@ -956,6 +1009,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     private void NotifyCommandsChanged()
     {
+        _exportOverviewCommand.NotifyCanExecuteChanged();
         _refreshCommand.NotifyCanExecuteChanged();
         _importCsvCommand.NotifyCanExecuteChanged();
         _applySynchronizationCommand.NotifyCanExecuteChanged();
@@ -1291,6 +1345,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     {
         switch (e.PropertyName)
         {
+            case nameof(EntityTableViewModel.SourceItems):
+                _exportOverviewCommand.NotifyCanExecuteChanged();
+                break;
             case nameof(EntityTableViewModel.Items):
                 OnPropertyChanged(nameof(OverviewItems));
                 OnPropertyChanged(nameof(OverviewSearchResultSummary));

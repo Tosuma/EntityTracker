@@ -28,6 +28,7 @@ internal static class ScreenshotManifest
         "project-dashboard-tracker-restored.png",
         "create-tracker-copy.png",
         "overview.png",
+        "overview-export-menu.png",
         "overview-details.png",
         "responsibility-history.png",
         "overview-filter-flyout.png",
@@ -47,6 +48,7 @@ internal static class ScreenshotManifest
         "help-and-sql.png",
         "sql-query.png",
         "settings.png",
+        "settings-export.png",
         "app-update-required.png"
     ];
 

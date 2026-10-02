@@ -417,6 +417,14 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
         Items = filtered.Select(item => item.Row).ToArray();
     }
 
+    public IReadOnlyList<EntityOverviewRow> GetAllItemsInCurrentSortOrder()
+    {
+        IEnumerable<(EntityOverviewRow Row, int SourcePosition)> rows = SourceItems
+            .Select((row, index) => (row, index));
+        return (Sort is { } sort ? ApplySort(rows, sort) : rows)
+            .Select(item => item.Row).ToArray();
+    }
+
     private IEnumerable<(EntityOverviewRow Row, int SourcePosition)> ApplySort(
         IEnumerable<(EntityOverviewRow Row, int SourcePosition)> rows,
         OverviewSort sort)

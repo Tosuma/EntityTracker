@@ -1,3 +1,4 @@
+using System.IO;
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
@@ -11,6 +12,7 @@ using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
+using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Reporting;
 using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels;
@@ -19,6 +21,65 @@ namespace EntityTracker.Wpf.Tests.ViewModels;
 
 public sealed class MainWindowViewModelTests
 {
+    [Fact]
+    public async Task OverviewExport_UsesScopeAndReportsCompletionOrFailure()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "EntityTracker.ExportCommandTests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            EntityTrackerSettingsStore store = new(Path.Combine(directory, "settings.json"));
+            OverviewExportSettingsViewModel settings = new(store, (await store.LoadAsync()).Settings);
+            NotificationCenter notifications = new(displayTime: TimeSpan.FromMinutes(1));
+            StubOverviewExportFilePicker picker = new(Path.Combine(directory, "overview.csv"));
+            MainWindowViewModel viewModel = CreateViewModel(
+                [Entity(1, "First"), Entity(2, "Second")], [], FailureResult(),
+                new StubFilePicker(), out _, overviewExportService: new OverviewExportService(),
+                overviewExportFilePicker: picker, overviewExportSettings: settings,
+                notifications: notifications);
+            await viewModel.InitializeAsync();
+            viewModel.OverviewSearchQuery = "First";
+            using (CancellationTokenSource searchTimeout = new(TimeSpan.FromSeconds(5)))
+                while (viewModel.OverviewItems.Count != 1)
+                    await Task.Delay(10, searchTimeout.Token);
+            viewModel.ExportOverviewCommand.Execute(OverviewExportFormat.Csv);
+            await WaitForExportAsync(notifications);
+            Assert.Equal(NotificationKind.Success, notifications.Items.Last().Kind);
+            Assert.Equal(2, File.ReadAllLines(picker.Path!).Length);
+
+            await settings.SetRowsAsync(OverviewExportRows.AllActiveEntities);
+            viewModel.ExportOverviewCommand.Execute(OverviewExportFormat.Csv);
+            await WaitForExportAsync(notifications);
+            Assert.Equal(3, File.ReadAllLines(picker.Path!).Length);
+
+            picker.Path = Path.Combine(directory, "missing", "overview.csv");
+            viewModel.ExportOverviewCommand.Execute(OverviewExportFormat.Csv);
+            await WaitForExportAsync(notifications);
+            Assert.Equal(NotificationKind.Failure, notifications.Items.Last().Kind);
+
+            int noticeCount = notifications.Items.Count;
+            picker.Path = null;
+            viewModel.ExportOverviewCommand.Execute(OverviewExportFormat.Csv);
+            Assert.Equal(noticeCount, notifications.Items.Count);
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    private static async Task WaitForExportAsync(NotificationCenter notifications)
+    {
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
+        while (notifications.Items.Count == 0 ||
+               notifications.Items.Last().Kind == NotificationKind.Progress)
+            await Task.Delay(10, timeout.Token);
+    }
+
+    private sealed class StubOverviewExportFilePicker(string path) : IOverviewExportFilePicker
+    {
+        public string? Path { get; set; } = path;
+        public string? SelectPath(OverviewExportFormat format, string suggestedFileName) => Path;
+    }
+
     [Fact]
     public async Task InitializeAsync_PopulatesRankedRowsAndProgressSummary()
     {
@@ -1430,7 +1491,11 @@ public sealed class MainWindowViewModelTests
         out StubSynchronizationStore store,
         IReadOnlyList<PersistedUnresolvedDependency>? unresolvedDependencies = null,
         ISchemaSynchronizationConfirmation? confirmationService = null,
-        IContextDiscardConfirmation? discardConfirmation = null)
+        IContextDiscardConfirmation? discardConfirmation = null,
+        OverviewExportService? overviewExportService = null,
+        IOverviewExportFilePicker? overviewExportFilePicker = null,
+        OverviewExportSettingsViewModel? overviewExportSettings = null,
+        NotificationCenter? notifications = null)
     {
         StubEntityRepository entityRepository = new(entities);
         StubDependencyRepository dependencyRepository = new(
@@ -1492,7 +1557,11 @@ public sealed class MainWindowViewModelTests
             picker,
             CreateProgressDashboardViewModel(),
             confirmationService ?? new AlwaysConfirmService(),
-            discardConfirmation ?? new AlwaysDiscardConfirmation());
+            discardConfirmation ?? new AlwaysDiscardConfirmation(),
+            overviewExportService: overviewExportService,
+            overviewExportFilePicker: overviewExportFilePicker,
+            overviewExportSettings: overviewExportSettings,
+            notifications: notifications);
     }
 
     private static ProgressDashboardViewModel CreateProgressDashboardViewModel()

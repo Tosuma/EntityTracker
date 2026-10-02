@@ -41,6 +41,20 @@ public partial class TrackerWorkspaceView : UserControl
         Attach(DataContext as MainWindowViewModel);
     }
 
+    private void OnOverviewExportPopupOpened(object sender, EventArgs e) =>
+        OverviewExcelExportButton.Focus();
+
+    private void OnOverviewExportPopupKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape) return;
+        OverviewExportToggle.IsChecked = false;
+        OverviewExportToggle.Focus();
+        e.Handled = true;
+    }
+
+    private void OnOverviewExportChosen(object sender, RoutedEventArgs e) =>
+        OverviewExportToggle.IsChecked = false;
+
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         Detach();
