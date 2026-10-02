@@ -81,6 +81,12 @@ installed app, so close one before opening the other.
 
 ### Assign developers
 
+Choose **You in this Project** in Settings to identify your local Developer for the selected
+Project. The choice stays on this installation; you can change or clear it at any time. Use
+**Assign me** in active entity details to assign immediately, or in the entity editor to stage
+the assignment until **Save Changes**. The action opens guidance to Settings when no available
+Developer is selected. Other current Developers remain assigned.
+
 Open an entity or create a new one, then search the Project developer picker and select one or
 more available developers. Create new developers from the Project Developers page. Use **Edit** in
 an active entity's details pane to open its editor. Entity details show all current assignments

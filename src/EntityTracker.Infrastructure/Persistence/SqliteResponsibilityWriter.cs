@@ -6,6 +6,50 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 internal static class SqliteResponsibilityWriter
 {
+    public static async Task AddCurrentAsync(SqliteConnection connection,
+        SqliteTransaction transaction, TrackerId trackerId, ResponsibilityAddition addition,
+        DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO responsibility_periods (id, entity_id, developer_id, started_at_utc)
+            SELECT $id, entity.id, developer.id, $now
+            FROM tracked_entities entity
+            JOIN trackers tracker ON tracker.id = entity.tracker_id
+            JOIN project_developers developer ON developer.project_id = tracker.project_id
+            WHERE entity.id = $entity AND tracker.id = $tracker
+              AND entity.lifecycle_state = 'Active'
+              AND developer.id = $developer AND developer.is_retired = 0
+              AND NOT EXISTS (
+                  SELECT 1 FROM responsibility_periods current
+                  WHERE current.entity_id = entity.id AND current.developer_id = developer.id
+                    AND current.ended_at_utc IS NULL);
+            """;
+        command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("D"));
+        command.Parameters.AddWithValue("$entity", SqlitePersistenceValues.Format(addition.EntityId));
+        command.Parameters.AddWithValue("$tracker", SqlitePersistenceValues.Format(trackerId));
+        command.Parameters.AddWithValue("$developer", addition.DeveloperId.Value.ToString("D"));
+        command.Parameters.AddWithValue("$now", SqlitePersistenceValues.FormatTimestamp(now));
+        int inserted = await command.ExecuteNonQueryAsync(cancellationToken);
+        if (inserted == 1) return;
+        using SqliteCommand validate = connection.CreateCommand();
+        validate.Transaction = transaction;
+        validate.CommandText = """
+            SELECT 1 FROM tracked_entities entity
+            JOIN trackers tracker ON tracker.id = entity.tracker_id
+            JOIN project_developers developer ON developer.project_id = tracker.project_id
+            WHERE entity.id = $entity AND tracker.id = $tracker
+              AND entity.lifecycle_state = 'Active'
+              AND developer.id = $developer AND developer.is_retired = 0;
+            """;
+        validate.Parameters.AddWithValue("$entity", SqlitePersistenceValues.Format(addition.EntityId));
+        validate.Parameters.AddWithValue("$tracker", SqlitePersistenceValues.Format(trackerId));
+        validate.Parameters.AddWithValue("$developer", addition.DeveloperId.Value.ToString("D"));
+        if (await validate.ExecuteScalarAsync(cancellationToken) is null)
+            throw new InvalidOperationException("The entity or selected Developer is no longer available.");
+    }
+
     public static async Task ApplySelectionAsync(SqliteConnection connection,
         SqliteTransaction transaction, TrackerId trackerId, ResponsibilitySelection selection,
         DateTimeOffset now, CancellationToken cancellationToken)

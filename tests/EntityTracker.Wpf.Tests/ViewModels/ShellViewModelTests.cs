@@ -30,6 +30,61 @@ namespace EntityTracker.Wpf.Tests.ViewModels;
 public sealed class ShellViewModelTests
 {
     [Fact]
+    public async Task AssignMe_DetailsPersistsOnceAndEditorCancelDiscardsStagedChoice()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        ProjectDeveloper alice = await harness.CreateDeveloperAsync("AL");
+        ProjectDeveloper bob = await harness.CreateDeveloperAsync("BO");
+        EntityId entityId = await harness.AddEntityAndReturnIdAsync(harness.DefaultTracker.Id, "Feature");
+        await harness.Identity.SetAsync(harness.DefaultProject.Id, alice.Id);
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        MainWindowViewModel workspace = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
+        Assert.True(workspace.OpenEntityDetails(entityId));
+        workspace.AssignMeCommand.Execute(null);
+        await WaitUntilAsync(async () => (await harness.Periods.GetByEntityAsync(entityId))
+            .Count(period => period.IsCurrent) == 1);
+        Assert.Equal(alice.Id, Assert.Single(await harness.Periods.GetByEntityAsync(entityId)).DeveloperId);
+        workspace.AssignMeCommand.Execute(null);
+        await Task.Delay(100);
+        Assert.Single(await harness.Periods.GetByEntityAsync(entityId));
+
+        await harness.Identity.SetAsync(harness.DefaultProject.Id, bob.Id);
+        workspace.EditOverviewEntityCommand.Execute(workspace.ActiveTable.SourceItems.Single(item =>
+            item.EntityId == entityId));
+        await WaitUntilAsync(() => Task.FromResult(workspace.Editor.IsOpen && !workspace.Editor.IsBusy));
+        workspace.Editor.AssignMeCommand.Execute(null);
+        await WaitUntilAsync(() => Task.FromResult(workspace.Editor.DeveloperPicker?.SelectedIds.Contains(bob.Id) == true));
+        Assert.True(workspace.Editor.IsDirty);
+        workspace.Editor.CancelCommand.Execute(null);
+        Assert.Single(await harness.Periods.GetByEntityAsync(entityId));
+
+        workspace.EditOverviewEntityCommand.Execute(workspace.ActiveTable.SourceItems.Single(item =>
+            item.EntityId == entityId));
+        await WaitUntilAsync(() => workspace.Editor.IsOpen && !workspace.Editor.IsBusy);
+        workspace.Editor.AssignMeCommand.Execute(null);
+        await WaitUntilAsync(() => workspace.Editor.DeveloperPicker?.SelectedIds.Contains(bob.Id) == true);
+        Assert.DoesNotContain(await harness.Periods.GetByEntityAsync(entityId), period =>
+            period.DeveloperId == bob.Id);
+        DateTimeOffset beforeSave = DateTimeOffset.UtcNow;
+        workspace.Editor.SaveCommand.Execute(null);
+        await WaitUntilAsync(async () => (await harness.Periods.GetByEntityAsync(entityId))
+            .Any(period => period.DeveloperId == bob.Id));
+        ResponsibilityPeriod savedBob = Assert.Single(await harness.Periods.GetByEntityAsync(entityId),
+            period => period.DeveloperId == bob.Id);
+        Assert.True(savedBob.StartedAtUtc >= beforeSave);
+
+        await harness.Identity.SetAsync(harness.DefaultProject.Id, null);
+        Assert.True(workspace.OpenEntityDetails(entityId));
+        workspace.AssignMeCommand.Execute(null);
+        await WaitUntilAsync(() => Task.FromResult(workspace.HasAssignmentGuidance));
+        workspace.OpenIdentitySettingsCommand.Execute(null);
+        await WaitUntilAsync(() => Task.FromResult(shell.SelectedDestination == ShellDestination.Settings));
+    }
+
+    [Fact]
     public async Task InitializeAsync_RestoresValidContextAndUsesTypedNavigation()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
@@ -384,6 +439,12 @@ public sealed class ShellViewModelTests
         }
     }
 
+    private static async Task WaitUntilAsync(Func<Task<bool>> condition)
+    {
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(3));
+        while (!await condition()) await Task.Delay(10, timeout.Token);
+    }
+
     private sealed class ShellHarness : IAsyncDisposable
     {
         private readonly string _directory;
@@ -397,6 +458,9 @@ public sealed class ShellViewModelTests
         private readonly AppearanceViewModel _appearance;
         private readonly TestAdapters _adapters;
         private readonly TestClipboard _clipboard = new();
+        private readonly ProjectDeveloperService _developers;
+        public LocalProjectIdentityService Identity { get; }
+        public SqliteResponsibilityPeriodRepository Periods { get; }
 
         private ShellHarness(
             string directory,
@@ -412,7 +476,10 @@ public sealed class ShellViewModelTests
             CatalogManagementViewModel catalog,
             EntityTrackerSettingsStore settingsStore,
             AppearanceViewModel appearance,
-            TestAdapters adapters)
+            TestAdapters adapters,
+            ProjectDeveloperService developers,
+            LocalProjectIdentityService identity,
+            SqliteResponsibilityPeriodRepository periods)
         {
             _directory = directory;
             _stateStore = stateStore;
@@ -428,6 +495,9 @@ public sealed class ShellViewModelTests
             SettingsStore = settingsStore;
             _appearance = appearance;
             _adapters = adapters;
+            _developers = developers;
+            Identity = identity;
+            Periods = periods;
         }
 
         public Project DefaultProject { get; }
@@ -455,6 +525,11 @@ public sealed class ShellViewModelTests
             SqliteTrackedStateStore stateStore = new(database);
             SqliteProgressHistoryRepository history = new(database);
             SqliteProjectTrackerStore catalogStore = new(database);
+            ProjectDeveloperService developers = new(new SqliteProjectDeveloperStore(database),
+                trackers: trackers);
+            SqliteResponsibilityPeriodRepository periods = new(database);
+            EntityTrackerSettingsStore settings = new(Path.Combine(directory, "settings.json"));
+            LocalProjectIdentityService identity = new(settings, developers);
             EffectiveDependencyResolver resolver = new();
             DependencyRanker ranker = new();
             PriorityPlanningService priorities = new();
@@ -485,7 +560,7 @@ public sealed class ShellViewModelTests
                 ranker,
                 resolver,
                 new WorkflowReadinessEvaluator(),
-                priorities);
+                priorities, periods, developers);
             TrackerManagementService trackerManagement = new(
                 projects,
                 trackers,
@@ -561,7 +636,7 @@ public sealed class ShellViewModelTests
                 adapters,
                 adapters,
                 adapters,
-                NullLoggerFactory.Instance);
+                NullLoggerFactory.Instance, developers, periods, stateStore, identity);
             CatalogManagementViewModel catalog = new(
                 projectManagement,
                 trackerManagement,
@@ -578,7 +653,6 @@ public sealed class ShellViewModelTests
                 adapters,
                 new TrackerSyncService(projects, trackers, entities, dependencies, overrides,
                     stateStore, resolver, snapshots, (IDependencyRankingService)ranker));
-            EntityTrackerSettingsStore settings = new(Path.Combine(directory, "settings.json"));
             AppearanceViewModel appearance = new(
                 settings,
                 new TestThemeService());
@@ -599,7 +673,7 @@ public sealed class ShellViewModelTests
                 catalog,
                 settings,
                 appearance,
-                adapters);
+                adapters, developers, identity, periods);
         }
 
         public ShellViewModel CreateShell(
@@ -615,7 +689,21 @@ public sealed class ShellViewModelTests
                 _catalog,
                 _appearance,
                 _clipboard,
-                initialSettings);
+                initialSettings,
+                developerService: _developers,
+                localIdentitySettings: new LocalProjectIdentitySettingsViewModel(Identity));
+
+        public Task<ProjectDeveloper> CreateDeveloperAsync(string initials) =>
+            _developers.CreateAsync(DefaultProject.Id, initials);
+
+        public async Task<EntityId> AddEntityAndReturnIdAsync(TrackerId trackerId, string name)
+        {
+            EntityId id = EntityId.New();
+            await _stateStore.ApplyAsync(trackerId, new TrackedStateChangeSet(
+                [new TrackedEntity(id, trackerId, name)], [], [], [], [], [],
+                progressSnapshotAfterChanges: new ProgressSnapshotState(1, 0, 0, 0, 0, 0)));
+            return id;
+        }
 
         public Task AddEntityAsync(TrackerId trackerId, string name) =>
             _stateStore.ApplyAsync(
@@ -633,15 +721,22 @@ public sealed class ShellViewModelTests
             _adapters.CsvPath = path;
         }
 
-        public ValueTask DisposeAsync()
+        public async ValueTask DisposeAsync()
         {
-            SqliteConnection.ClearAllPools();
-            if (Directory.Exists(_directory))
+            for (int attempt = 0; attempt < 30; attempt++)
             {
-                Directory.Delete(_directory, recursive: true);
+                SqliteConnection.ClearAllPools();
+                if (!Directory.Exists(_directory)) return;
+                try
+                {
+                    Directory.Delete(_directory, recursive: true);
+                    return;
+                }
+                catch (IOException) when (attempt < 29)
+                {
+                    await Task.Delay(100);
+                }
             }
-
-            return ValueTask.CompletedTask;
         }
     }
 

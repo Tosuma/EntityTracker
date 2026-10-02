@@ -16,6 +16,42 @@ namespace EntityTracker.Infrastructure.Tests.Persistence;
 public sealed class ResponsibilityPeriodTests
 {
     [Fact]
+    public async Task AddCurrent_AssignsAlongsideOthersOnceAtWriteTimeAndRejectsRetiredDeveloper()
+    {
+        await using TemporarySqliteFile file = new();
+        MutableTimeProvider time = new(new DateTimeOffset(2026, 10, 2, 10, 0, 0, TimeSpan.Zero));
+        SqliteDatabase database = new(file.DatabasePath, time);
+        await database.InitializeAsync();
+        Tracker tracker = Assert.Single(await new SqliteTrackerRepository(database).GetAllAsync());
+        ProjectDeveloperService developers = new(new SqliteProjectDeveloperStore(database), time);
+        ProjectDeveloper alice = await developers.CreateAsync(tracker.ProjectId, "AL");
+        ProjectDeveloper bob = await developers.CreateAsync(tracker.ProjectId, "BO");
+        TrackedEntity entity = new(EntityId.New(), tracker.Id, "Feature");
+        SqliteTrackedStateStore store = new(database);
+        SqliteResponsibilityPeriodRepository periods = new(database);
+        await store.ApplyAsync(tracker.Id, new TrackedStateChangeSet([entity], [], [], [], [], [],
+            responsibilitySelections: [new ResponsibilitySelection(entity.Id, [alice.Id])]));
+        time.Advance(TimeSpan.FromHours(1));
+        TrackedStateChangeSet addBob = new([], [], [], [], [], [], responsibilityAdditions:
+            [new ResponsibilityAddition(entity.Id, bob.Id)]);
+        await store.ApplyAsync(tracker.Id, addBob);
+        await store.ApplyAsync(tracker.Id, addBob);
+        ResponsibilityPeriod[] current = (await periods.GetByEntityAsync(entity.Id))
+            .Where(period => period.IsCurrent).ToArray();
+        Assert.Equal(2, current.Length);
+        Assert.Equal(time.GetUtcNow(), current.Single(period => period.DeveloperId == bob.Id).StartedAtUtc);
+        Assert.Equal(time.GetUtcNow().AddHours(-1),
+            current.Single(period => period.DeveloperId == alice.Id).StartedAtUtc);
+        await developers.SetRetiredAsync(tracker.ProjectId, bob.Id, true);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.ApplyAsync(tracker.Id, addBob));
+        await store.ApplyAsync(tracker.Id,
+            new TrackedStateChangeSet([], [], [entity.Id], [], [], []));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.ApplyAsync(tracker.Id,
+            new TrackedStateChangeSet([], [], [], [], [], [], responsibilityAdditions:
+                [new ResponsibilityAddition(entity.Id, alice.Id)])));
+    }
+
+    [Fact]
     public async Task OverviewProjectsIndividualCurrentDevelopersForActiveAndArchivedEntities()
     {
         await using TemporarySqliteFile file = new();

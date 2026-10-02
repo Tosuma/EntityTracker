@@ -31,7 +31,9 @@ public sealed class TrackerWorkspaceViewModelFactory(
     IContextDiscardConfirmation discardConfirmation,
     ILoggerFactory loggerFactory,
     ProjectDeveloperService? developers = null,
-    IResponsibilityPeriodRepository? responsibilityPeriods = null)
+    IResponsibilityPeriodRepository? responsibilityPeriods = null,
+    ITrackedStateStore? trackedState = null,
+    LocalProjectIdentityService? localIdentity = null)
 {
     public MainWindowViewModel Create(TrackerId trackerId)
     {
@@ -57,6 +59,8 @@ public sealed class TrackerWorkspaceViewModelFactory(
             discardConfirmation,
             loggerFactory,
             developers,
-            responsibilityPeriods);
+            responsibilityPeriods,
+            trackedState,
+            localIdentity);
     }
 }

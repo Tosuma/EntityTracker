@@ -1,6 +1,6 @@
 # RESP-04 — Local identity and Assign me
 
-**Status: planned.** Depends on RESP-01 through RESP-03.
+**Status: completed.** RESP-01 through RESP-03 were complete before implementation.
 
 ## Goal
 
@@ -31,3 +31,27 @@ without assuming a login or sharing that choice with collaborators.
   stale/retired selections, and assignment timestamps. Check keyboard and accessible labels.
 - A user can change their local choice and assign themselves in one action without affecting
   another collaborator's local choice.
+
+## Completion evidence
+
+- Settings version 7 stores one optional Developer ID per Project in the local settings file.
+  The Settings selector shows available Developers and clears retired or missing selections
+  without matching initials. The selected ID is absent from Project records, SQLite backups,
+  portable snapshots, and Git sync; a snapshot hash remains unchanged when two installations
+  choose different Developers for the same Project.
+- **Assign me** in active details adds a period atomically through the tracked-state transaction,
+  leaves other assignments open, and is idempotent. The editor stages the same choice in its
+  Developer picker; saving starts the period at the database UTC write time, and cancellation
+  discards it. Missing choices show inline Settings guidance, and editor navigation uses the
+  existing unsaved-work confirmation.
+- Focused settings, SQLite, snapshot, and ViewModel tests cover migration, switching Projects,
+  separate installations, retirement, repeated actions, archive protection, editor save and
+  cancellation, and timestamps. `dotnet build EntityTracker.slnx --no-restore -m:1 --nologo -v:q`
+  passed on 2026-10-02 with 0 errors; seven `NU1900` warnings reported that NuGet vulnerability
+  data was unavailable. `dotnet test EntityTracker.slnx --no-build --no-restore -m:1 --verbosity quiet`
+  passed all 726 tests across seven projects (191 Application, 8 DemoData, 60 Domain,
+  230 Infrastructure, 23 Reporting, 12 Screenshots, 202 WPF).
+- The new selector and action buttons have accessible names and use native keyboard controls;
+  guidance uses a live announcement. Deterministic Light and Dark screenshots were regenerated;
+  Settings, entity details, and editor captures were inspected in both themes, and affected
+  README images and user guidance were updated.

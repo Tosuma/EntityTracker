@@ -146,7 +146,7 @@ the edit is saved or closed; other Projects continue. Conflict and deletion revi
 manual action. Routine automatic checks are quiet; a notification stays visible when action is
 needed.
 
-![Settings showing automatic Project sync and interval choices](images/light/settings.png)
+![Settings showing the local Project Developer choice and overview search](images/light/settings.png)
 
 For slow syncs, the daily application log records stage durations, fetch time, snapshot read time,
 and the number of snapshot files read or reused. The remote may still take time to fetch or push;
@@ -193,6 +193,12 @@ exact Tracker name, and starts with focus on the safe Cancel action.
 ![Guarded permanent Tracker deletion confirmation](images/light/tracker-permanent-delete-confirmation.png)
 
 ### Find and maintain tracked entities
+
+In **Settings**, choose **You in this Project** from the available Project Developers. This
+choice is local to this installation and can differ by Project. **Assign me** in active entity
+details adds that Developer immediately; **Assign me** in the editor stages the assignment until
+you save. If no available Developer is selected, the action offers a link to Settings. Changing
+the choice does not change existing assignments or their history.
 
 Use the dropdown on a supported column header to select individual current Project Developers,
 groups, statuses, or work statuses. An entity with several Developers appears under each one;
@@ -289,8 +295,8 @@ A separate
 records the implemented bulk status updates, customer priority, responsible-developer and group
 metadata, and column filtering with status-order sorting. The
 [RESP-01–RESP-04 Responsibility roadmap](docs/milestones/responsibility/00_README.md) records
-completed Project developers, dated assignments, and responsibility search; local `Assign me`
-remains planned. The independent
+completed Project developers, dated assignments, responsibility search, and local `Assign me`.
+The independent
 [CI-01 engineering milestone](docs/milestones/engineering/ci_01_continuous_integration.md) defines
 CI validation for pull requests, pushes to `main`, and app release tags; successful pushes are packaged.
 The live badge above reports the current `main` build status.

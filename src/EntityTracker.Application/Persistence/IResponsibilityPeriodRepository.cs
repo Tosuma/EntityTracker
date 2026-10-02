@@ -11,3 +11,4 @@ public interface IResponsibilityPeriodRepository
 }
 
 public sealed record ResponsibilitySelection(EntityId EntityId, IReadOnlyList<DeveloperId> DeveloperIds);
+public sealed record ResponsibilityAddition(EntityId EntityId, DeveloperId DeveloperId);

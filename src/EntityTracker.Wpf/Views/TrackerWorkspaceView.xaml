@@ -2349,9 +2349,18 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <DockPanel Margin="0,0,0,14"
+                <Grid Margin="0,0,0,14"
                            Visibility="{Binding IsSummaryOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" HorizontalAlignment="Right" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Margin="0,0,8,0" Content="Assign me"
+                                AutomationProperties.Name="Assign me to this entity"
+                                Command="{Binding DataContext.AssignMeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Visibility="{Binding CanEdit, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         <Button Margin="0,0,8,0"
                                 Content="Edit"
                                 AutomationProperties.Name="{Binding SourceName, StringFormat=Edit entity {0}}"
@@ -2369,7 +2378,7 @@
                                 Style="{StaticResource SecondaryButtonStyle}"
                                 ToolTip="Close details (Esc)" />
                     </StackPanel>
-                    <StackPanel>
+                    <StackPanel Grid.Row="1">
                         <TextBlock AutomationProperties.HeadingLevel="Level2"
                                    FontSize="20"
                                    FontWeight="SemiBold"
@@ -2380,7 +2389,7 @@
                                    Foreground="{DynamicResource Brush.Text.Secondary}"
                                    Text="{Binding Lifecycle}" />
                     </StackPanel>
-                </DockPanel>
+                </Grid>
 
                 <DockPanel Grid.Row="0" Margin="0,0,0,14"
                            Visibility="{Binding IsFullHistoryOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -2403,6 +2412,15 @@
                               CanContentScroll="False"
                               Visibility="{Binding IsSummaryOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <StackPanel>
+                        <StackPanel Margin="0,0,0,12"
+                                    Visibility="{Binding DataContext.HasAssignmentGuidance, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock Text="{Binding DataContext.AssignmentGuidance, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                       TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive" />
+                            <Button Margin="0,6,0,0" HorizontalAlignment="Left" Content="Open Settings"
+                                    AutomationProperties.Name="Open Settings to choose You in this Project"
+                                    Command="{Binding DataContext.OpenIdentitySettingsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                        </StackPanel>
                         <WrapPanel Margin="0,0,0,16">
                             <StackPanel Margin="0,0,16,0">
                                 <TextBlock Margin="0,0,0,7" FontWeight="SemiBold" Text="Work status" />
@@ -2725,6 +2743,18 @@
                                     </StackPanel>
                                     <StackPanel Grid.Column="2" IsEnabled="{Binding Editor.CanEditProgress}">
                                     <TextBlock FontWeight="SemiBold" Text="Responsible developers" />
+                                    <Button Margin="0,7,0,4" HorizontalAlignment="Left" Content="Assign me"
+                                            AutomationProperties.Name="Stage Assign me to this entity"
+                                            Command="{Binding Editor.AssignMeCommand}"
+                                            Style="{StaticResource SecondaryButtonStyle}" />
+                                    <StackPanel Visibility="{Binding Editor.HasAssignmentGuidance, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <TextBlock Text="{Binding Editor.AssignmentGuidance}" TextWrapping="Wrap"
+                                                   AutomationProperties.LiveSetting="Assertive" />
+                                        <Button Margin="0,6,0,4" HorizontalAlignment="Left" Content="Open Settings"
+                                                AutomationProperties.Name="Open Settings to choose You in this Project"
+                                                Command="{Binding Editor.OpenIdentitySettingsCommand}"
+                                                Style="{StaticResource SecondaryButtonStyle}" />
+                                    </StackPanel>
                                     <Grid Margin="0,5,0,5">
                                         <TextBox x:Name="EditorDeveloperSearchBox" Padding="8,6"
                                                  AutomationProperties.Name="Search Project developers"

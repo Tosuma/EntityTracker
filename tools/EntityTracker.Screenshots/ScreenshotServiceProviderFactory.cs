@@ -140,6 +140,8 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<EntityLifecycleService>();
         services.AddSingleton<ProjectManagementService>();
         services.AddSingleton<ProjectDeveloperService>();
+        services.AddSingleton<LocalProjectIdentityService>();
+        services.AddSingleton<LocalProjectIdentitySettingsViewModel>();
         services.AddSingleton<TrackerManagementService>();
         services.AddSingleton<TrackerSyncService>();
         services.AddSingleton<TrackerCsvCreationService>();

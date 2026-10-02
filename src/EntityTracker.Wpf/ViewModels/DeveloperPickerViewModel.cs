@@ -65,6 +65,14 @@ public sealed class DeveloperPickerViewModel : INotifyPropertyChanged
         Query = string.Empty;
     }
 
+    public bool Select(DeveloperId id)
+    {
+        DeveloperChoice? choice = Choices.FirstOrDefault(item => item.Developer.Id == id);
+        if (choice is null) return false;
+        choice.IsSelected = true;
+        return true;
+    }
+
     private void Filter()
     {
         FilteredChoices.Clear();

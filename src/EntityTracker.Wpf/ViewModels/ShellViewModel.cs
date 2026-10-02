@@ -22,6 +22,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private readonly IProjectRepository _projectRepository;
     private readonly ITrackerRepository _trackerRepository;
     private readonly ProjectDeveloperService? _developerService;
+    private readonly LocalProjectIdentitySettingsViewModel? _localIdentitySettings;
     private readonly DashboardViewModelFactory _dashboardFactory;
     private readonly ProgressHistoryInitializer _historyInitializer;
     private readonly EntityTrackerSettingsStore _settingsStore;
@@ -68,11 +69,13 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         AutoSyncSettingsViewModel? autoSyncSettings = null,
         ProjectAutoSyncService? autoSync = null,
         ProjectDeveloperService? developerService = null,
-        ResponsibilitySearchSettingsViewModel? responsibilitySearch = null)
+        ResponsibilitySearchSettingsViewModel? responsibilitySearch = null,
+        LocalProjectIdentitySettingsViewModel? localIdentitySettings = null)
     {
         _projectRepository = projectRepository;
         _trackerRepository = trackerRepository;
         _developerService = developerService;
+        _localIdentitySettings = localIdentitySettings;
         _dashboardFactory = dashboardFactory;
         _historyInitializer = historyInitializer;
         _settingsStore = settingsStore;
@@ -136,6 +139,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public AppearanceViewModel Appearance { get; }
     public AutoSyncSettingsViewModel? AutoSync { get; }
     public ResponsibilitySearchSettingsViewModel? ResponsibilitySearch { get; }
+    public LocalProjectIdentitySettingsViewModel? LocalIdentity => _localIdentitySettings;
     public NotificationCenter Notifications { get; }
     public bool HasActiveProjectSync => _autoSync?.HasActiveSync == true;
 
@@ -309,6 +313,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private async Task NavigateFromCommandAsync(ShellDestination destination) =>
         await NavigateAsync(destination);
 
+    private async Task OpenIdentitySettingsAsync() =>
+        await NavigateAsync(ShellDestination.Settings);
+
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         await ReloadCatalogAsync(cancellationToken);
@@ -408,6 +415,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         }
         if (destination == ShellDestination.Developers && Developers is not null)
             await Developers.RefreshAsync(cancellationToken);
+        if (destination == ShellDestination.Settings && _localIdentitySettings is not null)
+            await _localIdentitySettings.RefreshAsync(cancellationToken);
 
         return true;
     }
@@ -442,7 +451,11 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                     "Open Project", () => OpenProjectAsync(projectId), projectId);
         }
         else if (state.Kind is ProjectSyncStateKind.UpToDate or ProjectSyncStateKind.Unlinked)
+        {
             Notifications.DismissProjectActions(projectId);
+            if (SelectedProject?.Id == projectId && _localIdentitySettings is not null)
+                _ = _localIdentitySettings.RefreshAsync();
+        }
     }
 
     public async Task<ProjectSyncLink> ImportProjectAsync(string repositoryPath, string? localName = null)
@@ -596,6 +609,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                     "The selected tracker is not active in the selected project.");
             }
             SelectedProject = project;
+            if (_localIdentitySettings is not null)
+                await _localIdentitySettings.SetProjectAsync(project?.Id, project?.Name, cancellationToken);
             Developers = project is null || _developerService is null ? null :
                 new ProjectDevelopersViewModel(project.Id, _developerService,
                     OnProjectDevelopersChangedAsync);
@@ -616,6 +631,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                     workspace.SetSearchResponsibleNames(
                         ResponsibilitySearch?.IsEnabled ?? true);
                     workspace.PersistedStateChanged += OnWorkspacePersistedStateChanged;
+                    workspace.IdentitySettingsRequested += OpenIdentitySettingsAsync;
                     workspace.PropertyChanged += OnWorkspacePropertyChanged;
                     try
                     {
@@ -625,6 +641,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                     catch
                     {
                         workspace.PersistedStateChanged -= OnWorkspacePersistedStateChanged;
+                        workspace.IdentitySettingsRequested -= OpenIdentitySettingsAsync;
                         workspace.PropertyChanged -= OnWorkspacePropertyChanged;
                         workspace.Dispose();
                         throw;
@@ -658,6 +675,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         catch (Exception exception)
         {
             SelectedProject = previousProject;
+            if (_localIdentitySettings is not null)
+                await _localIdentitySettings.SetProjectAsync(previousProject?.Id, previousProject?.Name, cancellationToken);
             SelectedTracker = previousTracker;
             CurrentWorkspace = previousWorkspace;
             Developers = previousDevelopers;
@@ -771,6 +790,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     private async Task OnProjectDevelopersChangedAsync(ProjectId projectId)
     {
+        if (SelectedProject?.Id == projectId && _localIdentitySettings is not null)
+            await _localIdentitySettings.RefreshAsync();
         if (SelectedProject?.Id != projectId || CurrentWorkspace is null) return;
         try { await CurrentWorkspace.RefreshAsync(); }
         catch (Exception exception)
@@ -870,6 +891,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         foreach (MainWindowViewModel workspace in _workspaces.Values)
         {
             workspace.PersistedStateChanged -= OnWorkspacePersistedStateChanged;
+            workspace.IdentitySettingsRequested -= OpenIdentitySettingsAsync;
             workspace.PropertyChanged -= OnWorkspacePropertyChanged;
             workspace.Dispose();
         }

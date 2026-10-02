@@ -13,6 +13,7 @@ using System.Globalization;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
+using EntityTracker.Wpf.Services;
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -104,7 +105,9 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         ILogger<EntityDependencyEditorViewModel>? logger = null,
         DeveloperPickerViewModel? developerPicker = null,
         IResponsibilityPeriodRepository? responsibilityPeriods = null,
-        ProjectDeveloperService? developers = null)
+        ProjectDeveloperService? developers = null,
+        LocalProjectIdentityService? localIdentity = null,
+        Func<Task>? openSettings = null)
     {
         ArgumentNullException.ThrowIfNull(editorService);
         ArgumentNullException.ThrowIfNull(lifecycleService);
@@ -129,6 +132,10 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         DeveloperPicker = developerPicker;
         _responsibilityPeriods = responsibilityPeriods;
         _developers = developers;
+        _localIdentity = localIdentity;
+        _openSettings = openSettings;
+        _assignMeCommand = new AsyncCommand(AssignMeAsync, () => CanEditProgress);
+        _openIdentitySettingsCommand = new AsyncCommand(OpenIdentitySettingsAsync);
         if (DeveloperPicker is not null)
             DeveloperPicker.SelectionChanged += (_, _) => OnPropertyChanged(nameof(IsDirty));
         _addExistingCommand = new RelayCommand<ManualDependencySuggestion>(
@@ -182,6 +189,44 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
     public DeveloperPickerViewModel? DeveloperPicker { get; }
+    private readonly LocalProjectIdentityService? _localIdentity;
+    private readonly Func<Task>? _openSettings;
+    private readonly AsyncCommand _assignMeCommand;
+    private readonly AsyncCommand _openIdentitySettingsCommand;
+    private string? _assignmentGuidance;
+    public string? AssignmentGuidance
+    {
+        get => _assignmentGuidance;
+        private set { if (SetField(ref _assignmentGuidance, value))
+            OnPropertyChanged(nameof(HasAssignmentGuidance)); }
+    }
+    public bool HasAssignmentGuidance => !string.IsNullOrWhiteSpace(AssignmentGuidance);
+    public ICommand AssignMeCommand => _assignMeCommand;
+    public ICommand OpenIdentitySettingsCommand => _openIdentitySettingsCommand;
+
+    private async Task AssignMeAsync()
+    {
+        if (!CanEditProgress || _localIdentity is null || DeveloperPicker is null) return;
+        try
+        {
+            ProjectDeveloper? developer = await _localIdentity.ResolveForTrackerAsync(_trackerId);
+            if (developer is null || !DeveloperPicker.Select(developer.Id))
+            {
+                AssignmentGuidance = "Choose You in this Project in Settings before assigning yourself.";
+                return;
+            }
+            AssignmentGuidance = null;
+        }
+        catch (Exception)
+        {
+            AssignmentGuidance = "Your local Developer choice could not be checked. Open Settings and try again.";
+        }
+    }
+
+    private async Task OpenIdentitySettingsAsync()
+    {
+        if (_openSettings is not null) await _openSettings();
+    }
     public string ArchivedCurrentDevelopers
     {
         get => _archivedCurrentDevelopers;
@@ -794,6 +839,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
 
         ResetSessionState();
+        AssignmentGuidance = null;
         Mode = EntityEditorMode.Standalone;
         IsOpen = true;
         IsBusy = true;
@@ -1516,6 +1562,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private void NotifyCommandsChanged()
     {
         _saveCommand.NotifyCanExecuteChanged();
+        _assignMeCommand.NotifyCanExecuteChanged();
         _addExistingCommand.NotifyCanExecuteChanged();
         _useGroupSuggestionCommand.NotifyCanExecuteChanged();
         _addUnresolvedCommand.NotifyCanExecuteChanged();

@@ -2,7 +2,7 @@
 
 The `RESP-` category replaces the single responsible-developer string with project developers,
 time-bounded entity assignments, individual-developer search, and a local `Assign me` shortcut.
-RESP-01 through RESP-03 are complete; RESP-04 remains planned. The existing
+RESP-01 through RESP-04 are complete. The existing
 [PF-03](../product-feedback/pf_03_responsible_developer.md) single-field feature remains the
 starting point, not a milestone to rerun.
 
@@ -11,7 +11,7 @@ starting point, not a milestone to rerun.
 1. [RESP-01 — Project developers](resp_01_project_developers.md) — completed: shared developer records and management.
 2. [RESP-02 — Assignments and history](resp_02_assignments_and_history.md) — completed: multiple current developers and dated assignment periods.
 3. [RESP-03 — Responsibility search](resp_03_responsibility_search.md) — completed: per-developer filters and optional name search.
-4. [RESP-04 — Local identity and Assign me](resp_04_local_identity_and_assign_me.md): a changeable, local developer choice per Project.
+4. [RESP-04 — Local identity and Assign me](resp_04_local_identity_and_assign_me.md) — completed: a changeable, local developer choice per Project.
 
 Implement in order. Each milestone must leave the solution runnable and preserve the Project and
 Tracker boundaries established by the completed UX and Git-sync series. `Developer` means a

@@ -27,6 +27,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private readonly TrackerId _trackerId;
     private readonly ProjectDeveloperService? _developers;
     private readonly IResponsibilityPeriodRepository? _responsibilityPeriods;
+    private readonly ITrackedStateStore? _trackedState;
+    private readonly LocalProjectIdentityService? _localIdentity;
+    private readonly AsyncCommand _assignMeCommand;
+    private readonly AsyncCommand _openIdentitySettingsCommand;
+    private string? _assignmentGuidance;
     private readonly SchemaSynchronizationService _synchronizationService;
     private readonly BulkStatusUpdateService _bulkStatusUpdateService;
     private readonly ICsvFilePicker _filePicker;
@@ -80,7 +85,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         IContextDiscardConfirmation discardConfirmation,
         ILoggerFactory? loggerFactory = null,
         ProjectDeveloperService? developers = null,
-        IResponsibilityPeriodRepository? responsibilityPeriods = null)
+        IResponsibilityPeriodRepository? responsibilityPeriods = null,
+        ITrackedStateStore? trackedState = null,
+        LocalProjectIdentityService? localIdentity = null)
     {
         ArgumentNullException.ThrowIfNull(overviewService);
         ArgumentNullException.ThrowIfNull(synchronizationService);
@@ -95,6 +102,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         _trackerId = trackerId;
         _developers = developers;
         _responsibilityPeriods = responsibilityPeriods;
+        _trackedState = trackedState;
+        _localIdentity = localIdentity;
         _overviewService = overviewService;
         _synchronizationService = synchronizationService;
         _bulkStatusUpdateService = bulkStatusUpdateService;
@@ -135,7 +144,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             effectiveLoggerFactory.CreateLogger<EntityDependencyEditorViewModel>(),
             developers is null ? null : new DeveloperPickerViewModel(trackerId, developers),
             responsibilityPeriods,
-            developers);
+            developers, localIdentity, () => OpenIdentitySettingsAsync());
         Editor.PropertyChanged += OnEditorPropertyChanged;
         _refreshCommand = new AsyncCommand(
             () => RefreshAsync(),
@@ -166,6 +175,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         _backFromResponsibilityHistoryCommand = new AsyncCommand(BackFromResponsibilityHistoryAsync);
         _showArchivedResponsibilityHistoryCommand = new RelayCommand(
             ShowArchivedResponsibilityHistory);
+        _assignMeCommand = new AsyncCommand(AssignMeAsync,
+            () => SelectedEntityDetails?.CanEdit == true && !IsBusy);
+        _openIdentitySettingsCommand = new AsyncCommand(OpenIdentitySettingsAsync);
         _editOverviewEntityCommand = new AsyncCommand<EntityOverviewRow>(
             OpenOverviewEntityAsync,
             _ => !IsBusy &&
@@ -194,6 +206,65 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public event EventHandler? OverviewSelectionClearRequested;
 
     public event EventHandler? PersistedStateChanged;
+    public event Func<Task>? IdentitySettingsRequested;
+
+    public string? AssignmentGuidance
+    {
+        get => _assignmentGuidance;
+        private set { if (SetField(ref _assignmentGuidance, value))
+            OnPropertyChanged(nameof(HasAssignmentGuidance)); }
+    }
+    public bool HasAssignmentGuidance => !string.IsNullOrWhiteSpace(AssignmentGuidance);
+    public ICommand AssignMeCommand => _assignMeCommand;
+    public ICommand OpenIdentitySettingsCommand => _openIdentitySettingsCommand;
+
+    private async Task OpenIdentitySettingsAsync()
+    {
+        if (IdentitySettingsRequested is { } handler) await handler();
+    }
+
+    private async Task AssignMeAsync()
+    {
+        EntityDetailsViewModel? details = SelectedEntityDetails;
+        if (details?.CanEdit != true || _localIdentity is null ||
+            _trackedState is null || _responsibilityPeriods is null) return;
+        IsBusy = true;
+        BusyMessage = "Assigning Developer…";
+        try
+        {
+            ProjectDeveloper? developer = await _localIdentity.ResolveForTrackerAsync(_trackerId);
+            if (developer is null)
+            {
+                AssignmentGuidance = "Choose You in this Project in Settings before assigning yourself.";
+                return;
+            }
+            IReadOnlyList<ResponsibilityPeriod> periods =
+                await _responsibilityPeriods.GetByEntityAsync(details.EntityId);
+            if (periods.Any(period => period.IsCurrent && period.DeveloperId == developer.Id))
+            {
+                AssignmentGuidance = null;
+                return;
+            }
+            await _trackedState.ApplyAsync(_trackerId, new TrackedStateChangeSet(
+                [], [], [], [], [], [], responsibilityAdditions:
+                    [new ResponsibilityAddition(details.EntityId, developer.Id)]));
+            await LoadOverviewAndProgressAsync(CancellationToken.None);
+            EntityOverviewRow? row = ActiveTable.SourceItems.FirstOrDefault(item =>
+                item.EntityId == details.EntityId);
+            if (row is not null) OpenEntityDetails(row);
+            PersistedStateChanged?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Assign me could not be applied.");
+            AssignmentGuidance = "Assignment could not be saved. Check You in this Project in Settings and retry.";
+        }
+        finally
+        {
+            IsBusy = false;
+            BusyMessage = string.Empty;
+        }
+    }
 
     public event Action<EntityId>? EntityRevealRequested;
 
@@ -223,6 +294,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             {
                 OnPropertyChanged(nameof(IsEntityDetailsOpen));
                 _closeEntityDetailsCommand.NotifyCanExecuteChanged();
+                _assignMeCommand.NotifyCanExecuteChanged();
             }
         }
     }
@@ -892,6 +964,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         _cancelSynchronizationCommand.NotifyCanExecuteChanged();
         _applyBulkStatusCommand.NotifyCanExecuteChanged();
         _openEntityDetailsCommand.NotifyCanExecuteChanged();
+        _assignMeCommand.NotifyCanExecuteChanged();
         _editOverviewEntityCommand.NotifyCanExecuteChanged();
         _editReviewEntityCommand.NotifyCanExecuteChanged();
         _keepSynchronizationStatusCommand.NotifyCanExecuteChanged();
@@ -1060,6 +1133,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private void OpenEntityDetails(EntityOverviewRow row)
     {
         ArgumentNullException.ThrowIfNull(row);
+        AssignmentGuidance = null;
         _historyReturnToArchivedEntityId = null;
         SelectedEntityDetails = new EntityDetailsViewModel(row);
         if (_developers is not null && _responsibilityPeriods is not null)
