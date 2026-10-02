@@ -397,14 +397,18 @@
                                     Content="Search"
                                     ToolTip="Search entities (Ctrl+F)"
                                     Style="{StaticResource SecondaryButtonStyle}" />
-                            <ToggleButton x:Name="OverviewExportToggle" Margin="0,0,8,0"
-                                          Padding="12,5"
+                            <Button Margin="0,0,8,0"
+                                    Command="{Binding RefreshCommand}"
+                                    Content="Refresh"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                            <ToggleButton x:Name="OverviewExportToggle"
                                           Content="Export"
                                           AutomationProperties.Name="Export overview"
-                                          AutomationProperties.HelpText="Choose Excel or CSV export" />
+                                          AutomationProperties.HelpText="Choose Excel or CSV export"
+                                          Style="{StaticResource PrimaryToggleButtonStyle}" />
                             <Popup x:Name="OverviewExportPopup"
                                    PlacementTarget="{Binding ElementName=OverviewExportToggle}"
-                                   Placement="Bottom" HorizontalOffset="-110" VerticalOffset="4"
+                                   Placement="Bottom" VerticalOffset="4"
                                    IsOpen="{Binding IsChecked, ElementName=OverviewExportToggle, Mode=TwoWay}"
                                    DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
                                    StaysOpen="False" AllowsTransparency="True"
@@ -428,9 +432,6 @@
                                     </StackPanel>
                                 </Border>
                             </Popup>
-                            <Button Command="{Binding RefreshCommand}"
-                                    Content="Refresh"
-                                    Style="{StaticResource SecondaryButtonStyle}" />
                         </StackPanel>
                         <StackPanel>
                             <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Overview" />
