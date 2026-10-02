@@ -8,7 +8,7 @@
     <StackPanel MaxWidth="720" HorizontalAlignment="Left">
         <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Settings" />
         <TextBlock Margin="0,4,0,20" Style="{StaticResource PageDescriptionTextStyle}"
-                   Text="Choose appearance, search, and automatic Project sync. Changes apply immediately and are saved locally." />
+                   Text="Choose appearance, search, export, and automatic Project sync. Changes apply immediately and are saved locally." />
         <Border Margin="0,0,0,16" Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -83,6 +83,38 @@
                 <TextBlock Margin="0,8,0,0" AutomationProperties.LiveSetting="Assertive"
                            Text="{Binding ResponsibilitySearch.ErrorMessage}" TextWrapping="Wrap"
                            Visibility="{Binding ResponsibilitySearch.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            </StackPanel>
+        </Border>
+        <Border x:Name="OverviewExportSettingsCard" Margin="0,16,0,0" Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
+            <StackPanel>
+                <TextBlock Margin="0,0,0,4" Style="{StaticResource SectionHeadingTextStyle}"
+                           Text="Overview export" />
+                <TextBlock Margin="0,0,0,12" Style="{StaticResource PageDescriptionTextStyle}"
+                           Text="Choose which active entities are exported. Shown entities follow the current search, filters and sort; all active entities keep the sort."
+                           TextWrapping="Wrap" />
+                <TextBlock FontWeight="SemiBold" Text="Rows to export" />
+                <ComboBox Margin="0,5,0,10" MinWidth="240" HorizontalAlignment="Left"
+                          AutomationProperties.Name="Rows to export"
+                          IsEnabled="{Binding OverviewExport.CanEdit}"
+                          SelectedValuePath="Tag"
+                          SelectedValue="{Binding OverviewExport.Rows, Mode=OneWay}"
+                          SelectionChanged="OnExportRowsChanged">
+                    <ComboBoxItem Content="Shown entities" Tag="{x:Static configuration:OverviewExportRows.ShownEntities}" />
+                    <ComboBoxItem Content="All active entities" Tag="{x:Static configuration:OverviewExportRows.AllActiveEntities}" />
+                </ComboBox>
+                <TextBlock FontWeight="SemiBold" Text="CSV separator" />
+                <ComboBox Margin="0,5,0,0" MinWidth="240" HorizontalAlignment="Left"
+                          AutomationProperties.Name="CSV separator"
+                          IsEnabled="{Binding OverviewExport.CanEdit}"
+                          SelectedValuePath="Tag"
+                          SelectedValue="{Binding OverviewExport.Separator, Mode=OneWay}"
+                          SelectionChanged="OnCsvSeparatorChanged">
+                    <ComboBoxItem Content="Semicolon" Tag="{x:Static configuration:OverviewCsvSeparator.Semicolon}" />
+                    <ComboBoxItem Content="Comma" Tag="{x:Static configuration:OverviewCsvSeparator.Comma}" />
+                </ComboBox>
+                <TextBlock Margin="0,8,0,0" AutomationProperties.LiveSetting="Assertive"
+                           Text="{Binding OverviewExport.ErrorMessage}" TextWrapping="Wrap"
+                           Visibility="{Binding OverviewExport.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
             </StackPanel>
         </Border>
         <Border Margin="0,16,0,0" Padding="18" Style="{StaticResource EntityTrackerCardStyle}">

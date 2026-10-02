@@ -33,7 +33,11 @@ public sealed class TrackerWorkspaceViewModelFactory(
     ProjectDeveloperService? developers = null,
     IResponsibilityPeriodRepository? responsibilityPeriods = null,
     ITrackedStateStore? trackedState = null,
-    LocalProjectIdentityService? localIdentity = null)
+    LocalProjectIdentityService? localIdentity = null,
+    OverviewExportService? overviewExportService = null,
+    IOverviewExportFilePicker? overviewExportFilePicker = null,
+    OverviewExportSettingsViewModel? overviewExportSettings = null,
+    NotificationCenter? notifications = null)
 {
     public MainWindowViewModel Create(TrackerId trackerId)
     {
@@ -61,6 +65,10 @@ public sealed class TrackerWorkspaceViewModelFactory(
             developers,
             responsibilityPeriods,
             trackedState,
-            localIdentity);
+            localIdentity,
+            overviewExportService,
+            overviewExportFilePicker,
+            overviewExportSettings,
+            notifications);
     }
 }

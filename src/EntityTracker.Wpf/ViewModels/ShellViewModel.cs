@@ -70,7 +70,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         ProjectAutoSyncService? autoSync = null,
         ProjectDeveloperService? developerService = null,
         ResponsibilitySearchSettingsViewModel? responsibilitySearch = null,
-        LocalProjectIdentitySettingsViewModel? localIdentitySettings = null)
+        LocalProjectIdentitySettingsViewModel? localIdentitySettings = null,
+        OverviewExportSettingsViewModel? overviewExport = null)
     {
         _projectRepository = projectRepository;
         _trackerRepository = trackerRepository;
@@ -92,6 +93,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         Appearance = appearance;
         AutoSync = autoSyncSettings;
         ResponsibilitySearch = responsibilitySearch;
+        OverviewExport = overviewExport;
         if (ResponsibilitySearch is not null)
             ResponsibilitySearch.Changed += OnResponsibilitySearchChanged;
         Help = new SqlQueryHelpViewModel(
@@ -139,6 +141,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public AppearanceViewModel Appearance { get; }
     public AutoSyncSettingsViewModel? AutoSync { get; }
     public ResponsibilitySearchSettingsViewModel? ResponsibilitySearch { get; }
+    public OverviewExportSettingsViewModel? OverviewExport { get; }
     public LocalProjectIdentitySettingsViewModel? LocalIdentity => _localIdentitySettings;
     public NotificationCenter Notifications { get; }
     public bool HasActiveProjectSync => _autoSync?.HasActiveSync == true;

@@ -4,7 +4,7 @@ using EntityTracker.Domain;
 
 public sealed class EntityTrackerSettings
 {
-    public const int CurrentVersion = 7;
+    public const int CurrentVersion = 8;
     public static readonly IReadOnlyList<int> AutoSyncIntervals = [1, 5, 15, 30, 60];
 
     public EntityTrackerSettings(
@@ -14,7 +14,9 @@ public sealed class EntityTrackerSettings
         bool autoSyncEnabled = true,
         int autoSyncIntervalMinutes = 5,
         bool searchResponsibleNames = true,
-        IReadOnlyDictionary<ProjectId, DeveloperId>? projectDeveloperChoices = null)
+        IReadOnlyDictionary<ProjectId, DeveloperId>? projectDeveloperChoices = null,
+        OverviewExportRows overviewExportRows = OverviewExportRows.ShownEntities,
+        OverviewCsvSeparator overviewCsvSeparator = OverviewCsvSeparator.Semicolon)
     {
         if (!Enum.IsDefined(appearance))
         {
@@ -22,6 +24,10 @@ public sealed class EntityTrackerSettings
         }
         if (!AutoSyncIntervals.Contains(autoSyncIntervalMinutes))
             throw new ArgumentOutOfRangeException(nameof(autoSyncIntervalMinutes));
+        if (!Enum.IsDefined(overviewExportRows))
+            throw new ArgumentOutOfRangeException(nameof(overviewExportRows));
+        if (!Enum.IsDefined(overviewCsvSeparator))
+            throw new ArgumentOutOfRangeException(nameof(overviewCsvSeparator));
 
         Appearance = appearance;
         LastProjectId = lastProjectId;
@@ -31,6 +37,8 @@ public sealed class EntityTrackerSettings
         SearchResponsibleNames = searchResponsibleNames;
         ProjectDeveloperChoices = new Dictionary<ProjectId, DeveloperId>(projectDeveloperChoices ??
             new Dictionary<ProjectId, DeveloperId>());
+        OverviewExportRows = overviewExportRows;
+        OverviewCsvSeparator = overviewCsvSeparator;
     }
 
     public ApplicationAppearance Appearance { get; }
@@ -42,6 +50,8 @@ public sealed class EntityTrackerSettings
     public int AutoSyncIntervalMinutes { get; }
     public bool SearchResponsibleNames { get; }
     public IReadOnlyDictionary<ProjectId, DeveloperId> ProjectDeveloperChoices { get; }
+    public OverviewExportRows OverviewExportRows { get; }
+    public OverviewCsvSeparator OverviewCsvSeparator { get; }
 
     public static EntityTrackerSettings Default { get; } = new();
 }

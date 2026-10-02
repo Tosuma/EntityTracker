@@ -115,6 +115,8 @@ public partial class App : System.Windows.Application
             services.AddSingleton<ProgressChartPresentationBuilder>();
             services.AddSingleton<ProgressChartPngExporter>();
             services.AddSingleton<IProgressChartFilePicker, ProgressChartFilePicker>();
+            services.AddSingleton<IOverviewExportFilePicker, OverviewExportFilePicker>();
+            services.AddSingleton<OverviewExportService>();
             services.AddSingleton<IClipboardService, WpfClipboardService>();
             services.AddSingleton<ISchemaSynchronizationConfirmation,
                 WpfSchemaSynchronizationConfirmation>();
@@ -162,6 +164,7 @@ public partial class App : System.Windows.Application
                 settings.Settings));
             services.AddSingleton(new ResponsibilitySearchSettingsViewModel(
                 settingsStore, settings.Settings));
+            services.AddSingleton(new OverviewExportSettingsViewModel(settingsStore, settings.Settings));
             services.AddSingleton<NotificationCenter>();
             services.AddSingleton<ProjectRepositoryCardViewModelFactory>();
             services.AddSingleton<CatalogManagementViewModel>();

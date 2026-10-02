@@ -10,6 +10,21 @@ namespace EntityTracker.Wpf.Tests.ViewModels;
 public sealed class EntityTableViewModelTests
 {
     [Fact]
+    public void ExportAllScope_IgnoresSearchAndFiltersButKeepsCurrentSort()
+    {
+        EntityTableViewModel table = EntityTableViewModel.CreateActive();
+        table.ReplaceSourceItems([
+            Row(1, "First", "", "A", DevelopmentStatus.NotStarted, EntityWorkflowState.Ready),
+            Row(2, "Second", "", "B", DevelopmentStatus.InProgress, EntityWorkflowState.Ready)
+        ]);
+        table.SearchQuery = "First";
+        table.StatusFilter.SortDescendingCommand.Execute(null);
+        Assert.Single(table.Items);
+        Assert.Equal(["Second", "First"], table.GetAllItemsInCurrentSortOrder()
+            .Select(row => row.SourceName));
+    }
+
+    [Fact]
     public void ResponsibleFilter_MatchesEachAssignedDeveloperAndBlankInBothTables()
     {
         EntityOverviewDeveloper alice = Developer(1, "AB", "Alex Brown");
