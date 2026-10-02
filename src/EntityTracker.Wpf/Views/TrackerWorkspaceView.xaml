@@ -401,15 +401,16 @@
                                     Command="{Binding RefreshCommand}"
                                     Content="Refresh"
                                     Style="{StaticResource SecondaryButtonStyle}" />
-                            <ToggleButton x:Name="OverviewExportToggle"
-                                          Content="Export"
-                                          AutomationProperties.Name="Export overview"
-                                          AutomationProperties.HelpText="Choose Excel or CSV export"
-                                          Style="{StaticResource PrimaryToggleButtonStyle}" />
+                            <Button x:Name="OverviewExportButton"
+                                    Content="Export"
+                                    AutomationProperties.Name="Export overview"
+                                    AutomationProperties.HelpText="Choose Excel or CSV export"
+                                    PreviewMouseDown="OnOverviewExportButtonPreviewMouseDown"
+                                    Click="OnOverviewExportButtonClick"
+                                    Style="{StaticResource PrimaryButtonStyle}" />
                             <Popup x:Name="OverviewExportPopup"
-                                   PlacementTarget="{Binding ElementName=OverviewExportToggle}"
+                                   PlacementTarget="{Binding ElementName=OverviewExportButton}"
                                    Placement="Bottom" VerticalOffset="4"
-                                   IsOpen="{Binding IsChecked, ElementName=OverviewExportToggle, Mode=TwoWay}"
                                    DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
                                    StaysOpen="False" AllowsTransparency="True"
                                    Opened="OnOverviewExportPopupOpened"

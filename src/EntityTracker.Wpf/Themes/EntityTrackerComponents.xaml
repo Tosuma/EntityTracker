@@ -46,52 +46,6 @@
         </Style.Triggers>
     </Style>
 
-    <Style x:Key="PrimaryToggleButtonStyle"
-           TargetType="{x:Type ToggleButton}"
-           BasedOn="{StaticResource {x:Type ToggleButton}}">
-        <Setter Property="MinHeight" Value="{DynamicResource Height.Control}" />
-        <Setter Property="Padding" Value="16,6" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="HorizontalContentAlignment" Value="Center" />
-        <Setter Property="VerticalContentAlignment" Value="Center" />
-        <Setter Property="Background" Value="{DynamicResource Brush.Brand.Green100}" />
-        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green100}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="ToggleButton">
-                    <Border x:Name="ButtonSurface"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="4" SnapsToDevicePixels="True">
-                        <ContentPresenter Margin="{TemplateBinding Padding}"
-                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                          RecognizesAccessKey="True" />
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="ButtonSurface" Property="BorderBrush"
-                                    Value="{DynamicResource Brush.Focus}" />
-                            <Setter TargetName="ButtonSurface" Property="BorderThickness" Value="2" />
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-        <Style.Triggers>
-            <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Background" Value="{DynamicResource Brush.Brand.Green90}" />
-                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green90}" />
-            </Trigger>
-            <Trigger Property="IsPressed" Value="True">
-                <Setter Property="Background" Value="{DynamicResource Brush.Brand.Green80}" />
-            </Trigger>
-        </Style.Triggers>
-    </Style>
-
     <Style x:Key="SecondaryButtonStyle"
            TargetType="{x:Type Button}"
            BasedOn="{StaticResource {x:Type Button}}">

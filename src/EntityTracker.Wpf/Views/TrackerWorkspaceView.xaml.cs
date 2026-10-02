@@ -27,6 +27,7 @@ public partial class TrackerWorkspaceView : UserControl
     private DataGridColumn? _resizingColumn;
     private double _resizeStartX;
     private double _resizeStartWidth;
+    private bool _exportPopupWasOpenAtPointerDown;
 
     public TrackerWorkspaceView()
     {
@@ -41,19 +42,29 @@ public partial class TrackerWorkspaceView : UserControl
         Attach(DataContext as MainWindowViewModel);
     }
 
+    private void OnOverviewExportButtonPreviewMouseDown(object sender, MouseButtonEventArgs e) =>
+        _exportPopupWasOpenAtPointerDown = OverviewExportPopup.IsOpen;
+
+    private void OnOverviewExportButtonClick(object sender, RoutedEventArgs e)
+    {
+        OverviewExportPopup.IsOpen = !_exportPopupWasOpenAtPointerDown &&
+                                     !OverviewExportPopup.IsOpen;
+        _exportPopupWasOpenAtPointerDown = false;
+    }
+
     private void OnOverviewExportPopupOpened(object sender, EventArgs e) =>
         OverviewExcelExportButton.Focus();
 
     private void OnOverviewExportPopupKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Escape) return;
-        OverviewExportToggle.IsChecked = false;
-        OverviewExportToggle.Focus();
+        OverviewExportPopup.IsOpen = false;
+        OverviewExportButton.Focus();
         e.Handled = true;
     }
 
     private void OnOverviewExportChosen(object sender, RoutedEventArgs e) =>
-        OverviewExportToggle.IsChecked = false;
+        OverviewExportPopup.IsOpen = false;
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {

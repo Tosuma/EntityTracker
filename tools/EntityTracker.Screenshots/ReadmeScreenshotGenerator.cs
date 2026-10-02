@@ -441,13 +441,13 @@ internal sealed class ReadmeScreenshotGenerator
         viewModel.SelectedTab = MainWindowTab.Overview;
         viewModel.ActiveTable.ClearAllFiltersAndSort();
         await renderer.CaptureAsync("overview.png");
-        ToggleButton exportToggle = (ToggleButton)(window.FindWorkspaceElement("OverviewExportToggle")
-            ?? throw new InvalidOperationException("The Overview export button was not rendered."));
+        if (window.FindWorkspaceElement("OverviewExportButton") is not Button)
+            throw new InvalidOperationException("The Overview export button was not rendered.");
         Popup exportPopup = (Popup)(window.FindWorkspaceElement("OverviewExportPopup")
             ?? throw new InvalidOperationException("The Overview export menu was not rendered."));
-        exportToggle.IsChecked = true;
+        exportPopup.IsOpen = true;
         await renderer.CapturePopupAsync(exportPopup, "overview-export-menu.png");
-        exportToggle.IsChecked = false;
+        exportPopup.IsOpen = false;
 
         EntityOverviewRow detailsRow = viewModel.OverviewItems.Single(static item =>
             item.SourceName == "customer_preference");
