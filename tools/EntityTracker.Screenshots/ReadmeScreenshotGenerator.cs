@@ -461,6 +461,20 @@ internal sealed class ReadmeScreenshotGenerator
         await Task.Delay(300, cancellationToken);
         OverviewColumnFilterState responsibleFilter = viewModel.ActiveTable.ResponsibleDeveloperFilter;
         responsibleFilter.OpenCommand.Execute(null);
+        if (responsibleFilter.Options.Count == 0 ||
+            responsibleFilter.Options.Any(static option => option.IsSelected))
+            throw new InvalidDataException(
+                "The responsible filter did not open with unchecked choices.");
+        responsibleFilter.Options.Single(static option =>
+            option.DisplayName == "AB — Alice Brown").IsSelected = true;
+        responsibleFilter.ApplyCommand.Execute(null);
+        await Task.Delay(300, cancellationToken);
+        responsibleFilter.OpenCommand.Execute(null);
+        responsibleFilter.ClearFilterCommand.Execute(null);
+        if (!responsibleFilter.IsOpen || responsibleFilter.IsApplied ||
+            responsibleFilter.Options.Any(static option => option.IsSelected))
+            throw new InvalidDataException(
+                "Clearing the responsible filter did not leave the menu open and unchecked.");
         await renderer.CaptureOpenPopupAsync("overview-filter-flyout.png");
         responsibleFilter.CloseWithoutApplying();
         OverviewColumnFilterState workStatusFilter = viewModel.ActiveTable.WorkStatusFilter!;

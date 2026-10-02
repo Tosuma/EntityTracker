@@ -197,8 +197,10 @@ exact Tracker name, and starts with focus on the safe Cancel action.
 Use the dropdown on a supported column header to select individual current Project Developers,
 groups, statuses, or work statuses. An entity with several Developers appears under each one;
 **(Blank)** finds entities with no current Developer. Selections within a column are alternatives,
-while filters on different columns work together. Status summary cards remain useful one-click
-shortcuts. Ordinary search matches entity names and, by default, current Developer initials and
+while filters on different columns work together. With no values checked, all rows are shown; choose values
+and press **Apply** to narrow the list. **Clear filter** unchecks every value and leaves the menu
+open. Status summary cards remain useful one-click shortcuts. Ordinary search matches entity names
+and, by default, current Developer initials and
 display names. Turn off **Search responsible names** in Settings to search entity names only.
 **Search dependency names** remains a separate mode. Open search with <kbd>Ctrl</kbd>+<kbd>F</kbd>.
 

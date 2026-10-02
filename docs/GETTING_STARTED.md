@@ -91,8 +91,10 @@ Removing a developer ends their current period; assigning them again starts a ne
 developer from the Project dashboard ends all their open assignments, including on archived
 entities. The active and archived overviews show each current Developer separately. Use the
 **Responsible dev** column filter to find one or more Developers or **(Blank)** for unassigned
-entities. Ordinary search includes current Developer initials and display names by default; turn
-off **Search responsible names** in Settings to search entity names only. **Search dependency
+entities. All overview column filters start with no checked values, which shows all rows. Check
+the values you want and choose **Apply**; **Clear filter** unchecks them and keeps the menu open.
+Ordinary search includes current Developer initials and display names by default; turn off
+**Search responsible names** in Settings to search entity names only. **Search dependency
 names** remains a separate search mode.
 
 ### Sync a copied tracker

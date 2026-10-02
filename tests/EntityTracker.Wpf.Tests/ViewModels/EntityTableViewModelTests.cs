@@ -31,6 +31,15 @@ public sealed class EntityTableViewModelTests
         Assert.Equal(["Shared", "Unassigned"], active.Items.Select(row => row.SourceName));
         ApplyFilter(active.GroupFilter, "Core");
         Assert.Equal(2, active.Items.Count);
+        ApplyFilter(active.ResponsibleDeveloperFilter, "(Blank)");
+        Assert.Equal("Unassigned", Assert.Single(active.Items).SourceName);
+        active.ResponsibleDeveloperFilter.OpenCommand.Execute(null);
+        active.ResponsibleDeveloperFilter.ClearFilterCommand.Execute(null);
+        Assert.True(active.ResponsibleDeveloperFilter.IsOpen);
+        Assert.All(active.ResponsibleDeveloperFilter.Options,
+            option => Assert.False(option.IsSelected));
+        Assert.Equal(2, active.Items.Count);
+        active.ResponsibleDeveloperFilter.IsOpen = false;
 
         EntityTableViewModel archived = EntityTableViewModel.CreateArchived();
         archived.ReplaceSourceItems([assigned with { LifecycleState = EntityLifecycleState.Archived },
@@ -55,7 +64,9 @@ public sealed class EntityTableViewModelTests
         ]);
         table.ResponsibleDeveloperFilter.OpenCommand.Execute(null);
         Assert.Equal(2, table.ResponsibleDeveloperFilter.Options.Count);
-        table.ResponsibleDeveloperFilter.Options[1].IsSelected = false;
+        Assert.All(table.ResponsibleDeveloperFilter.Options,
+            option => Assert.False(option.IsSelected));
+        table.ResponsibleDeveloperFilter.Options[0].IsSelected = true;
         table.ResponsibleDeveloperFilter.ApplyCommand.Execute(null);
         Assert.Equal("First", Assert.Single(table.Items).SourceName);
 
@@ -167,7 +178,33 @@ public sealed class EntityTableViewModelTests
     }
 
     [Fact]
-    public void FilterMenus_AreStagedSupportZeroSelectionsSelectAllAndClear()
+    public void EveryOverviewColumnStartsUncheckedAndNoSelectionKeepsAllRows()
+    {
+        EntityOverviewRow activeRow = Row(1, "Active", "Alice", "Core",
+            DevelopmentStatus.NotStarted, EntityWorkflowState.Ready);
+        EntityOverviewRow archivedRow = Row(2, "Archived", "", "",
+            DevelopmentStatus.Reconciled, EntityWorkflowState.Archived, archived: true);
+        EntityTableViewModel active = EntityTableViewModel.CreateActive();
+        EntityTableViewModel archived = EntityTableViewModel.CreateArchived();
+        active.ReplaceSourceItems([activeRow]);
+        archived.ReplaceSourceItems([archivedRow]);
+
+        foreach (EntityTableViewModel table in new[] { active, archived })
+        {
+            foreach (OverviewColumnFilterState filter in table.Filters)
+            {
+                filter.OpenCommand.Execute(null);
+                Assert.NotEmpty(filter.Options);
+                Assert.All(filter.Options, option => Assert.False(option.IsSelected));
+                filter.ApplyCommand.Execute(null);
+                Assert.False(filter.IsApplied);
+                Assert.Single(table.Items);
+            }
+        }
+    }
+
+    [Fact]
+    public void FilterMenus_AreStagedAndNoSelectionShowsAll()
     {
         EntityTableViewModel table = EntityTableViewModel.CreateActive();
         table.ReplaceSourceItems(
@@ -179,32 +216,86 @@ public sealed class EntityTableViewModelTests
         ]);
 
         table.GroupFilter.OpenCommand.Execute(null);
-        table.GroupFilter.Options.Single(option => option.DisplayName == "Core").IsSelected = false;
+        Assert.All(table.GroupFilter.Options, option => Assert.False(option.IsSelected));
+        table.GroupFilter.Options.Single(option => option.DisplayName == "Core").IsSelected = true;
         table.GroupFilter.IsOpen = false;
 
         Assert.False(table.GroupFilter.IsApplied);
         Assert.Equal(2, table.Items.Count);
 
         table.GroupFilter.OpenCommand.Execute(null);
-        foreach (OverviewFilterOption option in table.GroupFilter.Options)
-        {
-            option.IsSelected = false;
-        }
-
-        table.GroupFilter.ApplyCommand.Execute(null);
-        Assert.True(table.GroupFilter.IsApplied);
-        Assert.Empty(table.Items);
-
-        table.GroupFilter.OpenCommand.Execute(null);
-        table.GroupFilter.SelectAllCommand.Execute(null);
         table.GroupFilter.ApplyCommand.Execute(null);
         Assert.False(table.GroupFilter.IsApplied);
         Assert.Equal(2, table.Items.Count);
 
         ApplyFilter(table.GroupFilter, "Billing");
-        table.GroupFilter.ClearFilterCommand.Execute(null);
+        Assert.Equal("One", Assert.Single(table.Items).SourceName);
+        table.GroupFilter.OpenCommand.Execute(null);
+        Assert.True(table.GroupFilter.Options.Single(option =>
+            option.DisplayName == "Billing").IsSelected);
+        table.GroupFilter.Options.Single(option => option.DisplayName == "Billing")
+            .IsSelected = false;
+        table.GroupFilter.ApplyCommand.Execute(null);
         Assert.False(table.GroupFilter.IsApplied);
         Assert.Equal(2, table.Items.Count);
+    }
+
+    [Fact]
+    public void ClearFilter_UnchecksHiddenValuesAndKeepsMenuOpen()
+    {
+        EntityTableViewModel table = EntityTableViewModel.CreateActive();
+        table.ReplaceSourceItems(
+        [
+            Row(1, "One", "Alice", "Billing", DevelopmentStatus.NotStarted,
+                EntityWorkflowState.Ready),
+            Row(2, "Two", "Bob", "Core", DevelopmentStatus.InProgress,
+                EntityWorkflowState.InProgress)
+        ]);
+        ApplyFilter(table.GroupFilter, "Billing");
+        table.GroupFilter.OpenCommand.Execute(null);
+        table.GroupFilter.OptionSearchQuery = "Core";
+        Assert.Equal("Core", Assert.Single(table.GroupFilter.VisibleOptions).DisplayName);
+        table.GroupFilter.ClearFilterCommand.Execute(null);
+
+        Assert.False(table.GroupFilter.IsApplied);
+        Assert.True(table.GroupFilter.IsOpen);
+        Assert.Empty(table.GroupFilter.OptionSearchQuery);
+        Assert.Equal(2, table.GroupFilter.VisibleOptions.Count);
+        Assert.All(table.GroupFilter.Options, option => Assert.False(option.IsSelected));
+        Assert.Equal(2, table.Items.Count);
+
+        table.GroupFilter.Options.Single(option => option.DisplayName == "Core").IsSelected = true;
+        table.GroupFilter.ApplyCommand.Execute(null);
+        Assert.False(table.GroupFilter.IsOpen);
+        Assert.Equal("Two", Assert.Single(table.Items).SourceName);
+    }
+
+    [Fact]
+    public void SelectingEveryValueRemainsAnAppliedFilterWhenNewValuesArrive()
+    {
+        EntityTableViewModel table = EntityTableViewModel.CreateActive();
+        table.ReplaceSourceItems(
+        [
+            Row(1, "One", "Alice", "Billing", DevelopmentStatus.NotStarted,
+                EntityWorkflowState.Ready),
+            Row(2, "Two", "Bob", "Core", DevelopmentStatus.InProgress,
+                EntityWorkflowState.InProgress)
+        ]);
+
+        ApplyFilter(table.GroupFilter, "Billing", "Core");
+        Assert.True(table.GroupFilter.IsApplied);
+        Assert.Equal(2, table.Items.Count);
+        table.ReplaceSourceItems(
+        [
+            Row(1, "One", "Alice", "Billing", DevelopmentStatus.NotStarted,
+                EntityWorkflowState.Ready),
+            Row(2, "Two", "Bob", "Core", DevelopmentStatus.InProgress,
+                EntityWorkflowState.InProgress),
+            Row(3, "Three", "Cara", "New", DevelopmentStatus.NotStarted,
+                EntityWorkflowState.Ready)
+        ]);
+
+        Assert.Equal(["One", "Two"], table.Items.Select(row => row.SourceName));
     }
 
     [Fact]

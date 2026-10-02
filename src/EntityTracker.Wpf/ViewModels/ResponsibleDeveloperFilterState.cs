@@ -37,7 +37,7 @@ internal sealed class ResponsibleDeveloperFilterState(EntityTableViewModel owner
         {
             DeveloperFilterValue blank = DeveloperFilterValue.Blank;
             options.Add(new OverviewFilterOption(blank, "(Blank)",
-                _appliedSelection is null || _appliedSelection.Contains(blank)));
+                _appliedSelection?.Contains(blank) == true));
         }
 
         options.AddRange(developers.Values
@@ -48,7 +48,7 @@ internal sealed class ResponsibleDeveloperFilterState(EntityTableViewModel owner
             {
                 DeveloperFilterValue value = new(developer.Id);
                 return new OverviewFilterOption(value, developer.Label,
-                    _appliedSelection is null || _appliedSelection.Contains(value));
+                    _appliedSelection?.Contains(value) == true);
             }));
         SetOptions(options);
     }
@@ -58,8 +58,7 @@ internal sealed class ResponsibleDeveloperFilterState(EntityTableViewModel owner
         DeveloperFilterValue[] selected = Options.Where(static option => option.IsSelected)
             .Select(static option => (DeveloperFilterValue)option.Value!)
             .ToArray();
-        _appliedSelection = Options.Count > 0 && selected.Length == Options.Count
-            ? null : selected.ToHashSet();
+        _appliedSelection = selected.Length == 0 ? null : selected.ToHashSet();
         NotifyAppliedChanged();
     }
 

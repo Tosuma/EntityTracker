@@ -93,15 +93,16 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <DockPanel Margin="0,0,0,12">
-                        <TextBlock DockPanel.Dock="Right"
-                                   Foreground="{DynamicResource Brush.Text.Secondary}"
-                                   Text="Staged until Apply" />
+                    <StackPanel Margin="0,0,0,12">
                         <TextBlock FontSize="15"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource Brush.Text.Primary}"
                                    Text="{Binding Title}" />
-                    </DockPanel>
+                        <TextBlock Margin="0,3,0,0"
+                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Text="Select values, then Apply. None shows all."
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
 
                     <StackPanel Grid.Row="1"
                                 Visibility="{Binding CanSort, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -137,11 +138,6 @@
                                   MaxHeight="220"
                                   VerticalScrollBarVisibility="Auto">
                         <StackPanel>
-                            <Button Margin="0,0,0,5"
-                                    HorizontalAlignment="Left"
-                                    Command="{Binding SelectAllCommand}"
-                                    Content="Select all"
-                                    Style="{StaticResource SecondaryButtonStyle}" />
                             <ItemsControl ItemsSource="{Binding VisibleOptions}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
