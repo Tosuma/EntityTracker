@@ -305,9 +305,15 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         if (_dragNode is not null)
         {
             _dragNode.IsPinned = false;
-            if (_hasMoved) graph?.Layout.MoveAnchor(_dragNode);
-            graph?.Layout.Reheat();
-            StartAnimationIfNeeded();
+
+            // Only a real drag wakes the layout. A plain click must leave the map still, or the
+            // entity drifts away from the pointer before the second click of a double-click.
+            if (_hasMoved)
+            {
+                graph?.Layout.MoveAnchor(_dragNode);
+                graph?.Layout.Reheat();
+                StartAnimationIfNeeded();
+            }
         }
 
         _dragNode = null;

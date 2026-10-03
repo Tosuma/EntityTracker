@@ -1145,7 +1145,7 @@
                                 Style="{StaticResource SecondaryButtonStyle}" />
                     </WrapPanel>
 
-                    <DockPanel Grid.Row="2" Margin="0,0,0,8" LastChildFill="True">
+                    <DockPanel Grid.Row="2" Margin="0,0,0,8" LastChildFill="False">
                         <TextBlock DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
                                    FontSize="12" Foreground="{DynamicResource Brush.Text.Secondary}"
                                    Text="Dot size: entities referring to it" />
@@ -1170,10 +1170,6 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        <TextBlock VerticalAlignment="Center"
-                                   AutomationProperties.LiveSetting="Polite"
-                                   Text="{Binding SelectionDescription}"
-                                   TextWrapping="Wrap" />
                     </DockPanel>
 
                     <Border Grid.Row="3"

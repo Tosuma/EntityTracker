@@ -121,20 +121,12 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
             if (!SetField(ref _selectedNode, value)) return;
             UpdateHighlight();
             OnPropertyChanged(nameof(HasSelection));
-            OnPropertyChanged(nameof(SelectionDescription));
             NotifyCommands();
             OnVisualStateChanged();
         }
     }
 
     public bool HasSelection => SelectedNode is not null;
-
-    public string SelectionDescription => SelectedNode is null
-        ? "Click an entity to highlight everything it depends on. Double-click to open its details."
-        : SelectedNode.IsPlaceholder
-            ? $"{SelectedNode.Label} is a missing dependency."
-            : $"{SelectedNode.Label} depends on {_highlightedNodes.Count - 1} " +
-              $"{(_highlightedNodes.Count == 2 ? "entity" : "entities")} in its chain.";
 
     public IReadOnlySet<DependencyGraphNode> HighlightedNodes => _highlightedNodes;
     public IReadOnlySet<DependencyGraphEdge> HighlightedEdges => _highlightedEdges;
@@ -284,7 +276,6 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
         _highlightedEdges = edges;
         OnPropertyChanged(nameof(HighlightedNodes));
         OnPropertyChanged(nameof(HighlightedEdges));
-        OnPropertyChanged(nameof(SelectionDescription));
     }
 
     private void NotifyCommands()

@@ -300,7 +300,6 @@ public sealed class DependencyGraphViewModelTests
             graph.HighlightedNodes.Select(node => node.Label).Order());
         Assert.Equal(3, graph.HighlightedEdges.Count);
         Assert.DoesNotContain(graph.HighlightedNodes, node => node.Label == "invoice");
-        Assert.Contains("3 entities", graph.SelectionDescription);
 
         graph.SelectedNode = graph.Model.Find(Rows[2].EntityId); // invoice
         Assert.Contains(graph.HighlightedNodes, node => node.Label == "tax");
