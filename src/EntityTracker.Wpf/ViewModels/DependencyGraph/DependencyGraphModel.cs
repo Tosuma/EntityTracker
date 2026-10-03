@@ -5,12 +5,14 @@ namespace EntityTracker.Wpf.ViewModels.DependencyGraph;
 /// <summary>An entity, or a missing dependency placeholder, positioned on the dependency map.</summary>
 public sealed class DependencyGraphNode
 {
-    internal DependencyGraphNode(string key, string label, EntityId? entityId, DevelopmentStatus? status)
+    internal DependencyGraphNode(string key, string label, EntityId? entityId, DevelopmentStatus? status,
+        int? rank = null)
     {
         Key = key;
         Label = label;
         EntityId = entityId;
         Status = status;
+        Rank = rank;
     }
 
     public string Key { get; }
@@ -18,20 +20,23 @@ public sealed class DependencyGraphNode
     public EntityId? EntityId { get; }
     public DevelopmentStatus? Status { get; }
     public bool IsPlaceholder => EntityId is null;
+
+    /// <summary>Gets the dependency-safe rank shown in Overview, or null when the entity is unranked.</summary>
+    public int? Rank { get; }
     public int DependencyCount { get; internal set; }
     public int DependentCount { get; internal set; }
     public bool IsConnected => DependencyCount + DependentCount > 0;
 
     /// <summary>
-    /// Gets the orbit: 0 for entities nothing depends on, increasing towards foundation
-    /// entities; -1 for entities without any links.
+    /// Gets the orbit: 0 for foundation entities without dependencies, increasing by one for each
+    /// layer of dependencies beneath an entity; -1 for entities without any links.
     /// </summary>
     public int Level { get; internal set; }
 
-    /// <summary>Gets the number of entities this entity depends on directly or transitively.</summary>
-    public int TransitiveDependencyCount { get; internal set; }
+    /// <summary>Gets the impact: how many entities depend on this one directly or transitively.</summary>
+    public int TransitiveDependentCount { get; internal set; }
 
-    /// <summary>Gets the drawing radius; entities many others depend on are drawn larger.</summary>
+    /// <summary>Gets the drawing radius; entities that more entities refer to directly are drawn larger.</summary>
     public double Radius => 6 + 2.2 * Math.Sqrt(DependentCount);
 
     public double X { get; set; }
@@ -99,7 +104,8 @@ public static class DependencyGraphBuilder
         {
             if (byName.ContainsKey(row.SourceName)) continue;
             DependencyGraphNode node = new(DependencyGraphModel.EntityKey(row.EntityId),
-                row.SourceName, row.EntityId, row.DevelopmentStatus);
+                row.SourceName, row.EntityId, row.DevelopmentStatus,
+                int.TryParse(row.Rank, out int rank) ? rank : null);
             byName.Add(row.SourceName, node);
             nodes.Add(node);
         }

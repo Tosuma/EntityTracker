@@ -1,17 +1,19 @@
 namespace EntityTracker.Wpf.ViewModels.DependencyGraph;
 
 /// <summary>
-/// Deterministic radial ("solar system") layout. Entities nothing depends on sit in the centre,
-/// with the most dependent hub at the origin; every dependency orbits one level further out than
-/// the entity using it. Each entity owns a slice of the circle sized by how many entities fan out
-/// behind it, so dependency chains run outward side by side instead of crossing the whole map.
+/// Deterministic radial ("solar system") layout. Foundation entities without dependencies sit in
+/// the centre, with a clearly dominant one (by impact) at the origin; every entity orbits one level
+/// further out than its deepest dependency, so the map reads outward in build order. Within an
+/// orbit, entities earlier in the dependency-safe rank sit on the inner edge. Each entity owns a
+/// slice of the circle sized by how many entities fan out behind it, so chains run outward side by
+/// side instead of crossing the whole map.
 /// Unconnected entities form an outer belt. A light simulation settles nodes towards these
 /// anchors and only nudges overlapping neighbours apart, so entities stay on their orbit.
 /// </summary>
 public sealed class RadialDependencyLayout
 {
     internal const double RingGap = 70;
-    internal const double NodeSpacing = 30;
+    internal const double NodeSpacing = 40;
     internal const double BandDepth = 22;
     internal const double AnchorStrength = 0.12;
     internal const double CollisionDistance = 20;
@@ -145,16 +147,19 @@ public sealed class RadialDependencyLayout
         DependencyGraphNode[] orphans = nodes.Where(static node => node.Level < 0)
             .OrderBy(static node => node.Label, StringComparer.Ordinal).ToArray();
 
-        // Each entity hangs below its heaviest dependent on the next orbit inward.
+        // Each entity hangs off its most important dependency on the next orbit inward.
         ILookup<DependencyGraphNode, DependencyGraphNode> dependents = _model.EssentialEdges
             .ToLookup(static edge => edge.From, static edge => edge.To);
+        ILookup<DependencyGraphNode, DependencyGraphNode> dependencies = _model.EssentialEdges
+            .ToLookup(static edge => edge.To, static edge => edge.From);
         Dictionary<DependencyGraphNode, List<DependencyGraphNode>> children = new(ReferenceEqualityComparer.Instance);
         List<DependencyGraphNode> roots = [];
         foreach (DependencyGraphNode node in connected)
         {
-            DependencyGraphNode? parent = dependents[node]
+            DependencyGraphNode? parent = dependencies[node]
                 .Where(item => item.Level == node.Level - 1)
-                .OrderByDescending(static item => item.TransitiveDependencyCount)
+                .OrderByDescending(static item => item.TransitiveDependentCount)
+                .ThenBy(static item => item.Rank ?? int.MaxValue)
                 .ThenBy(static item => item.Label, StringComparer.Ordinal)
                 .FirstOrDefault();
             if (parent is null)
@@ -176,7 +181,8 @@ public sealed class RadialDependencyLayout
                 : 1;
         }
 
-        roots = roots.OrderByDescending(static node => node.TransitiveDependencyCount)
+        roots = roots.OrderByDescending(static node => node.TransitiveDependentCount)
+            .ThenBy(static node => node.Rank ?? int.MaxValue)
             .ThenBy(static node => node.Label, StringComparer.Ordinal).ToList();
         foreach (List<DependencyGraphNode> list in children.Values)
             list.Sort(static (a, b) => string.CompareOrdinal(a.Label, b.Label));
@@ -184,43 +190,53 @@ public sealed class RadialDependencyLayout
         AssignSectors(roots, children, width, sectors);
 
         // Reduce crossings: order every slice by where each entity's other links point,
-        // alternating outward (towards dependents) and inward (towards dependencies).
-        ILookup<DependencyGraphNode, DependencyGraphNode> dependencies = _model.EssentialEdges
-            .ToLookup(static edge => edge.To, static edge => edge.From);
+        // alternating inward (towards dependencies) and outward (towards dependents).
         for (int pass = 0; pass < 6; pass++)
         {
-            ILookup<DependencyGraphNode, DependencyGraphNode> towards = pass % 2 == 0 ? dependents : dependencies;
+            ILookup<DependencyGraphNode, DependencyGraphNode> towards = pass % 2 == 0 ? dependencies : dependents;
             OrderByNeighbours(roots, -Math.PI / 2, towards, sectors);
             foreach ((DependencyGraphNode parent, List<DependencyGraphNode> list) in children)
                 OrderByNeighbours(list, sectors[parent].Start, towards, sectors);
             AssignSectors(roots, children, width, sectors);
         }
 
-        // Size each orbit so its narrowest slice still fits a node.
+        // Size each orbit so the entities on it fit around its circumference.
         int maxLevel = _model.MaxLevel;
         double[] radius = new double[Math.Max(maxLevel + 1, 1)];
-        int heaviestRoot = roots.Count == 0 ? 0 : roots.Max(static node => node.TransitiveDependencyCount);
-        radius[0] = Math.Max(RingGap, roots.Count * NodeSpacing / (2 * Math.PI) + BandDepth);
+        int heaviestRoot = roots.Count == 0 ? 0 : roots.Max(static node => node.TransitiveDependentCount);
+        int[] perLevel = new int[radius.Length];
+        foreach (DependencyGraphNode node in connected) perLevel[node.Level]++;
+        radius[0] = Math.Max(RingGap * 1.5, perLevel[0] * NodeSpacing / (2 * Math.PI) + BandDepth);
         for (int level = 1; level <= maxLevel; level++)
-        {
-            double narrowest = connected.Where(node => node.Level == level)
-                .Select(node => sectors[node].Sweep).DefaultIfEmpty(2 * Math.PI).Min();
-            radius[level] = Math.Max(radius[level - 1] + RingGap, NodeSpacing / Math.Max(narrowest, 1e-3));
-        }
+            radius[level] = Math.Max(radius[level - 1] + RingGap, perLevel[level] * NodeSpacing / (2 * Math.PI));
 
         List<double> rings = [];
         for (int level = 0; level <= maxLevel; level++) rings.Add(radius[level] - BandDepth / 2);
-        // A clearly dominant hub sits in the exact centre; other top-level entities share the inner orbit.
-        int runnerUp = roots.Count < 2 ? 0 : roots[1].TransitiveDependencyCount;
+        // A clearly dominant foundation sits in the exact centre; the others share the inner orbit.
+        DependencyGraphNode? strongest = roots.MaxBy(static node => node.TransitiveDependentCount);
+        int runnerUp = roots.Where(node => !ReferenceEquals(node, strongest))
+            .Select(static node => node.TransitiveDependentCount).DefaultIfEmpty(0).Max();
         DependencyGraphNode? centre = roots.Count == 1 || (roots.Count > 1 && heaviestRoot >= runnerUp * 1.5)
-            ? roots[0]
+            ? strongest
             : null;
+
+        // Within an orbit, entities earlier in the dependency-safe rank sit on the inner edge.
+        Dictionary<DependencyGraphNode, double> rankShare = new(ReferenceEqualityComparer.Instance);
+        foreach (IGrouping<int, DependencyGraphNode> orbit in connected.GroupBy(static node => node.Level))
+        {
+            DependencyGraphNode[] ordered = orbit.OrderBy(static node => node.Rank ?? int.MaxValue)
+                .ThenByDescending(static node => node.TransitiveDependentCount)
+                .ThenBy(static node => node.Label, StringComparer.Ordinal).ToArray();
+            for (int position = 0; position < ordered.Length; position++)
+                rankShare[ordered[position]] = ordered.Length == 1 ? 0 : (double)position / (ordered.Length - 1);
+        }
+
         foreach (DependencyGraphNode node in connected)
         {
             (double start, double sweep) = sectors[node];
             double distance = ReferenceEquals(node, centre)
                 ? 0
-                : radius[node.Level] - BandDepth * Math.Min(1, node.TransitiveDependencyCount / 10.0);
+                : radius[node.Level] - BandDepth * (1 - rankShare[node]);
             double theta = start + sweep / 2;
             _anchors[node] = (distance * Math.Cos(theta), distance * Math.Sin(theta));
         }

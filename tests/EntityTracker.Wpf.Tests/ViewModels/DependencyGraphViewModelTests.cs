@@ -101,17 +101,38 @@ public sealed class DependencyGraphViewModelTests
     }
 
     [Fact]
-    public void Levels_PlaceHubsInTheCentreAndDependenciesFurtherOut()
+    public void Levels_PlaceFoundationsInTheCentreAndDependentsFurtherOut()
     {
         DependencyGraphModel model = DependencyGraphBuilder.Build(Rows);
 
-        Assert.Equal(0, model.Find(Rows[2].EntityId)!.Level); // invoice: nothing depends on it
-        Assert.Equal(1, model.Find(Rows[1].EntityId)!.Level); // order
-        Assert.Equal(2, model.Find(Rows[0].EntityId)!.Level); // customer
-        Assert.Equal(3, model.Find(Rows[3].EntityId)!.Level); // address
+        Assert.Equal(0, model.Find(Rows[3].EntityId)!.Level); // address: no dependencies
+        Assert.Equal(0, model.Find(Rows[4].EntityId)!.Level); // product
+        Assert.Equal(0, model.Nodes.Single(node => node.Label == "tax").Level); // missing placeholder
+        Assert.Equal(1, model.Find(Rows[0].EntityId)!.Level); // customer
+        Assert.Equal(2, model.Find(Rows[1].EntityId)!.Level); // order: customer is its deepest dependency
+        Assert.Equal(3, model.Find(Rows[2].EntityId)!.Level); // invoice
         Assert.Equal(-1, model.Nodes.Single(node => node.Label == "lonely").Level);
-        Assert.Equal(5, model.Find(Rows[2].EntityId)!.TransitiveDependencyCount);
-        Assert.All(model.EssentialEdges, edge => Assert.True(edge.From.Level > edge.To.Level));
+        Assert.Equal(3, model.Find(Rows[3].EntityId)!.TransitiveDependentCount); // customer, order, invoice
+        Assert.Equal(0, model.Find(Rows[2].EntityId)!.TransitiveDependentCount);
+        Assert.All(model.EssentialEdges, edge => Assert.True(edge.From.Level < edge.To.Level));
+    }
+
+    [Fact]
+    public void RadialLayout_PlacesEarlierRankedEntitiesOnTheInnerEdgeOfTheirOrbit()
+    {
+        EntityOverviewRow[] rows =
+        [
+            Row(1, "base", DevelopmentStatus.NotStarted),
+            Row(2, "late", DevelopmentStatus.NotStarted, "base") with { Rank = "3" },
+            Row(3, "early", DevelopmentStatus.NotStarted, "base") with { Rank = "2" }
+        ];
+        DependencyGraphModel model = DependencyGraphBuilder.Build(rows);
+        new RadialDependencyLayout(model).Settle(2000);
+
+        DependencyGraphNode Node(string label) => model.Nodes.Single(node => node.Label == label);
+        Assert.Equal(2, Node("early").Rank);
+        Assert.True(Radius(Node("early")) < Radius(Node("late")));
+        Assert.True(Radius(Node("base")) < Radius(Node("early")));
     }
 
     [Fact]
@@ -144,7 +165,7 @@ public sealed class DependencyGraphViewModelTests
         for (int level = 1; level < averageRadius.Length; level++)
             Assert.True(averageRadius[level] > averageRadius[level - 1],
                 $"Level {level} should orbit outside level {level - 1}.");
-        DependencyGraphNode hub = model.Nodes.MaxBy(node => node.TransitiveDependencyCount)!;
+        DependencyGraphNode hub = model.Nodes.MaxBy(node => node.TransitiveDependentCount)!; // address
         Assert.Equal(hub, model.Nodes.MinBy(Radius));
         double lastRing = model.Nodes.Where(node => node.Level >= 0).Max(Radius);
         Assert.True(Radius(model.Nodes.Single(node => node.Level < 0)) > lastRing);

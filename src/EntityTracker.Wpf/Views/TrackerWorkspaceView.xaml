@@ -1118,7 +1118,7 @@
                             <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Dependency graph" />
                             <TextBlock Margin="0,3,0,0"
                                        Foreground="{DynamicResource Brush.Text.Secondary}"
-                                       Text="Entities with the most dependencies sit in the centre; their dependencies orbit further out. Only direct links are drawn, never ones implied by a longer chain. Hover an entity to see its links."
+                                       Text="Foundation entities without dependencies sit in the centre; each ring outward is one more layer of dependencies, so the map reads outward in build order. Larger dots are referred to by more entities. Only direct links are drawn, never ones implied by a longer chain."
                                        TextWrapping="Wrap" />
                         </StackPanel>
                     </DockPanel>
@@ -1152,6 +1152,9 @@
                     </WrapPanel>
 
                     <DockPanel Grid.Row="2" Margin="0,0,0,8" LastChildFill="True">
+                        <TextBlock DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
+                                   FontSize="12" Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Text="Dot size: entities referring to it" />
                         <ItemsControl DockPanel.Dock="Right" Focusable="False"
                                       AutomationProperties.Name="Dependency graph legend"
                                       ItemsSource="{x:Static viewModels:DependencyGraphViewModel.Legend}">

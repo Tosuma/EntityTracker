@@ -277,15 +277,17 @@ implemented direct dependencies.
 
 ### Explore the dependency graph
 
-**Dependency graph** shows the selected Tracker's active entities as a solar system. Entities
-that nothing else depends on sit in the centre, with the entity that has the most dependencies
-in the exact middle, and every dependency orbits one ring further out than the entities that use
-it. Each entity gets its own slice of the circle, so a dependency chain runs outward instead of
-across the map. Only direct links are drawn, never ones a longer chain already implies. Links stay
-faint until you hover over an entity. Click an entity to highlight everything it depends on,
-all the way out; **Focus on selection** hides the rest, and **Hide unconnected** removes entities
-without links. Find an entity by name, double-click it to open its details, drag it to a new spot,
-or export the current view as a PNG.
+**Dependency graph** shows the selected Tracker's active entities as a solar system. Foundation
+entities without dependencies sit in the centre, with a clearly dominant one, the entity most
+others need, in the exact middle. Each ring outward adds one more layer of dependencies, so the map
+reads from the centre outward in build order; within a ring, entities earlier in the
+dependency-safe rank sit closer to the centre. A larger dot means more entities refer to it
+directly. Each entity gets its own slice of the circle, so a chain runs outward instead of across
+the map, and only direct links are drawn, never ones a longer chain already implies. Links stay
+faint until you hover over an entity. Click an entity to highlight everything it depends on, back
+towards the centre; **Focus on selection** hides the rest, and **Hide unconnected** removes
+entities without links. Find an entity by name, double-click it to open its details, drag it to a
+new spot, or export the current view as a PNG.
 
 ![EntityTracker dependency graph showing every active entity colored by status](images/light/dependency-graph.png)
 

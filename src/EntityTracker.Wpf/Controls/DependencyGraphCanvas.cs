@@ -173,7 +173,6 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         Brush highlightBrush = HighlightBrush ?? Brushes.Black;
         Pen edgePen = Freeze(new Pen(edgeBrush, 1));
         Pen highlightPen = Freeze(new Pen(highlightBrush, 2));
-        double arrowSize = Math.Clamp(5 * _scale, 3, 9);
 
         // Orbit guides: hubs sit in the centre, dependencies orbit further out.
         Pen orbitPen = Freeze(new Pen(edgeBrush, 1) { DashStyle = DashStyles.Dash });
@@ -198,8 +197,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
             bool emphasized = hovered || graph.HighlightedEdges.Contains(edge);
             double opacity = emphasized ? 1 : hasSelection ? DimOpacity : RestingLinkOpacity;
             if (opacity < 1) context.PushOpacity(opacity);
-            DrawEdge(context, edge, emphasized ? highlightPen : edgePen,
-                emphasized ? highlightBrush : edgeBrush, arrowSize);
+            DrawEdge(context, edge, emphasized ? highlightPen : edgePen);
             if (opacity < 1) context.Pop();
         }
 
@@ -448,32 +446,18 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         InvalidateVisual();
     }
 
-    private void DrawEdge(DrawingContext context, DependencyGraphEdge edge, Pen pen, Brush arrowBrush,
-        double arrowSize)
+    /// <summary>Draws a plain line between the two node edges; the orbits already show direction.</summary>
+    private void DrawEdge(DrawingContext context, DependencyGraphEdge edge, Pen pen)
     {
         Point from = ToScreen(edge.From);
         Point to = ToScreen(edge.To);
         Vector direction = to - from;
         double length = direction.Length;
         double fromRadius = Math.Max(edge.From.Radius * _scale, 2.5);
-        double toRadius = Math.Max(edge.To.Radius * _scale, 2.5) + 1.5;
-        if (length <= fromRadius + toRadius + 1) return;
+        double toRadius = Math.Max(edge.To.Radius * _scale, 2.5);
+        if (length <= fromRadius + toRadius) return;
         direction /= length;
-        Point start = from + direction * fromRadius;
-        Point tip = to - direction * toRadius;
-        Point arrowBase = tip - direction * arrowSize;
-        context.DrawLine(pen, start, arrowBase);
-        Vector normal = new(-direction.Y, direction.X);
-        StreamGeometry arrow = new();
-        using (StreamGeometryContext geometry = arrow.Open())
-        {
-            geometry.BeginFigure(tip, true, true);
-            geometry.LineTo(arrowBase + normal * arrowSize * 0.55, false, false);
-            geometry.LineTo(arrowBase - normal * arrowSize * 0.55, false, false);
-        }
-
-        arrow.Freeze();
-        context.DrawGeometry(arrowBrush, null, arrow);
+        context.DrawLine(pen, from + direction * fromRadius, to - direction * toRadius);
     }
 
     private DependencyGraphNode? HitTestNode(Point point)

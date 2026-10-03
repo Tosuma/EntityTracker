@@ -4,7 +4,7 @@ namespace EntityTracker.Wpf.ViewModels.DependencyGraph;
 
 /// <summary>
 /// Derives the structure the map is drawn from: which links are essential (not implied by a
-/// longer chain), each entity's orbit level, and how many entities it depends on transitively.
+/// longer chain), each entity's orbit level, and how many entities depend on it transitively.
 /// </summary>
 internal static class DependencyGraphAnalysis
 {
@@ -47,7 +47,6 @@ internal static class DependencyGraphAnalysis
 
         foreach (int node in order)
         {
-            nodes[node].TransitiveDependencyCount = reach[node].Sum(static word => BitOperations.PopCount(word));
             foreach (DependencyGraphEdge edge in incoming[node])
             {
                 int dependency = index[edge.From];
@@ -57,15 +56,32 @@ internal static class DependencyGraphAnalysis
             }
         }
 
-        // Longest path to an entity nothing depends on: hubs sit at level 0, foundations furthest out.
-        int[] level = new int[count];
+        // Impact: every entity that depends on this one, directly or through a chain.
+        ulong[][] downstream = new ulong[count][];
         for (int position = order.Count - 1; position >= 0; position--)
         {
             int node = order[position];
+            ulong[] bits = downstream[node] = new ulong[words];
             foreach (DependencyGraphEdge edge in outgoing[node])
             {
                 if (cycleEdges.Contains(edge)) continue;
-                level[node] = Math.Max(level[node], level[index[edge.To]] + 1);
+                int dependent = index[edge.To];
+                Or(bits, downstream[dependent]);
+                Set(bits, dependent);
+            }
+
+            nodes[node].TransitiveDependentCount = bits.Sum(static word => BitOperations.PopCount(word));
+        }
+
+        // Longest dependency chain beneath an entity: foundations sit at level 0 in the centre and
+        // every entity orbits one level further out than its deepest dependency.
+        int[] level = new int[count];
+        foreach (int node in order)
+        {
+            foreach (DependencyGraphEdge edge in incoming[node])
+            {
+                if (cycleEdges.Contains(edge)) continue;
+                level[node] = Math.Max(level[node], level[index[edge.From]] + 1);
             }
         }
 
