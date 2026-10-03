@@ -10,6 +10,7 @@ using EntityTracker.Wpf.Controls;
 
 namespace EntityTracker.Wpf.Tests;
 
+[Collection(WpfWindowCollection.Name)]
 public sealed class DependencyComboBoxTests
 {
     [Fact]

@@ -21,6 +21,7 @@ using EntityTracker.Infrastructure.Persistence;
 using EntityTracker.Reporting;
 using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels;
+using EntityTracker.Wpf.ViewModels.DependencyGraph;
 
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -124,6 +125,56 @@ public sealed class ShellViewModelTests
     }
 
     [Fact]
+    public async Task DependencyGraph_FollowsTheOverviewAndOpensTheRealDetailsPane()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "customer");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        Assert.True(await shell.NavigateAsync(ShellDestination.DependencyGraph));
+        MainWindowViewModel workspace = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
+        Assert.Contains(workspace.DependencyGraph.Model.Nodes, node => node.Label == "customer");
+
+        EntityId added = await harness.AddEntityAndReturnIdAsync(harness.DefaultTracker.Id, "invoice");
+        await workspace.RefreshAsync();
+        DependencyGraphNode invoice = Assert.Single(workspace.DependencyGraph.Model.Nodes,
+            node => node.Label == "invoice");
+        Assert.Equal(added, invoice.EntityId);
+        Assert.Equal(workspace.OverviewItems.Count, workspace.DependencyGraph.Model.Nodes.Count);
+
+        Assert.True(workspace.DependencyGraph.OpenDetails(invoice));
+        Assert.Equal("invoice", workspace.SelectedEntityDetails?.SourceName);
+        Assert.Equal(MainWindowTab.DependencyGraph, workspace.SelectedTab);
+    }
+
+    [Fact]
+    public async Task GraphSettings_ReachTrackerWorkspacesAndFollowChanges()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.SettingsStore.SaveAnimateDependencyGraphAsync(false);
+        DependencyGraphSettingsViewModel graphSettings = new(harness.SettingsStore,
+            (await harness.SettingsStore.LoadAsync()).Settings);
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true), graphSettings);
+        await shell.InitializeAsync();
+        MainWindowViewModel workspace = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
+        Assert.Same(graphSettings, shell.GraphSettings);
+        Assert.False(workspace.DependencyGraph.IsAnimationEnabled);
+        Assert.False(workspace.DependencyGraph.ShowRings);
+
+        graphSettings.ToggleAnimationCommand.Execute(null);
+        await WaitUntilAsync(() => Task.FromResult(workspace.DependencyGraph.IsAnimationEnabled && !graphSettings.IsBusy));
+        graphSettings.ToggleRingsCommand.Execute(null);
+        await WaitUntilAsync(() => Task.FromResult(workspace.DependencyGraph.ShowRings));
+        EntityTrackerSettings saved = (await harness.SettingsStore.LoadAsync()).Settings;
+        Assert.True(saved.AnimateDependencyGraph);
+        Assert.True(saved.ShowDependencyGraphRings);
+    }
+
+    [Fact]
     public async Task SettingsProject_EditsLocalIdentityWithoutChangingContext()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
@@ -132,6 +183,7 @@ public sealed class ShellViewModelTests
             new RecordingDiscardConfirmation(true));
         await shell.InitializeAsync();
         Assert.Equal(SettingsCategory.General, shell.SelectedSettingsCategory);
+        Assert.False(shell.NavigateCommand.CanExecute(ShellDestination.DependencyGraph));
         Assert.Equal(Enum.GetValues<SettingsCategory>(), shell.SettingsCategories);
 
         Assert.True(await shell.NavigateAsync(ShellDestination.Settings));
@@ -170,6 +222,10 @@ public sealed class ShellViewModelTests
 
         Assert.True(await shell.NavigateAsync(ShellDestination.Reports));
         Assert.Equal(MainWindowTab.Reports, shell.CurrentWorkspace?.SelectedTab);
+        Assert.True(await shell.NavigateAsync(ShellDestination.DependencyGraph));
+        Assert.Equal(MainWindowTab.DependencyGraph, shell.CurrentWorkspace?.SelectedTab);
+        Assert.True(shell.IsDependencyGraph);
+        Assert.True(shell.IsTrackerWorkspace);
         Assert.True(await shell.NavigateAsync(ShellDestination.Settings));
         Assert.False(shell.IsTrackerWorkspace);
         Assert.Equal(harness.DefaultTracker.Id, shell.SelectedTracker?.Id);
@@ -743,7 +799,8 @@ public sealed class ShellViewModelTests
 
         public ShellViewModel CreateShell(
             EntityTrackerSettings initialSettings,
-            IContextDiscardConfirmation confirmation) => new(
+            IContextDiscardConfirmation confirmation,
+            DependencyGraphSettingsViewModel? graphSettings = null) => new(
                 _projects,
                 _trackers,
                 _dashboardFactory,
@@ -756,7 +813,8 @@ public sealed class ShellViewModelTests
                 _clipboard,
                 initialSettings,
                 developerService: _developers,
-                localIdentitySettings: new LocalProjectIdentitySettingsViewModel(Identity));
+                localIdentitySettings: new LocalProjectIdentitySettingsViewModel(Identity),
+                graphSettings: graphSettings);
 
         public Task<ProjectDeveloper> CreateDeveloperAsync(string initials) =>
             _developers.CreateAsync(DefaultProject.Id, initials);

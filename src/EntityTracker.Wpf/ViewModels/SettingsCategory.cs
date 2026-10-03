@@ -4,7 +4,7 @@ public enum SettingsCategory
 {
     General,
     Project,
-    Overview,
+    Tracker,
     Sync,
     About
 }

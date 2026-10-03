@@ -38,6 +38,69 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void TrackerSettingsGroupOverviewAndDependencyGraphUnderHeadings()
+    {
+        XDocument settings = LoadWpfXaml("Views", "SettingsView.xaml");
+        XElement page = settings.Descendants().Single(element =>
+            (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "TrackerSettingsPage");
+        Assert.Equal(["Overview", "Dependency graph"], page.Elements()
+            .Where(element => (string?)element.Attribute("Style") == "{StaticResource SettingsGroupHeadingStyle}")
+            .Select(element => (string?)element.Attribute("Text")));
+        Assert.Contains(page.Descendants(), element =>
+            element.Name.LocalName == "CheckBox" &&
+            (string?)element.Attribute("Command") == "{Binding ResponsibilitySearch.ToggleCommand}");
+        Assert.Contains(page.Descendants(), element =>
+            element.Name.LocalName == "CheckBox" &&
+            (string?)element.Attribute("Command") == "{Binding GraphSettings.ToggleAnimationCommand}" &&
+            (string?)element.Attribute("IsChecked") == "{Binding GraphSettings.IsAnimationEnabled, Mode=OneWay}");
+        Assert.Contains(page.Descendants(), element =>
+            element.Name.LocalName == "CheckBox" &&
+            (string?)element.Attribute("Command") == "{Binding GraphSettings.ToggleRingsCommand}" &&
+            (string?)element.Attribute("IsChecked") == "{Binding GraphSettings.ShowRings, Mode=OneWay}");
+    }
+
+    [Fact]
+    public void DependencyGraphToolbarCannotResizeAndMoveTheMap()
+    {
+        // Regression: a selection description above the map wrapped onto a second line when an
+        // entity was clicked, pushing the map down so a double-click missed the entity.
+        XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XElement page = workspace.Descendants().Single(element =>
+            (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "DependencyGraphPage");
+        XElement[] aboveMap = page.Elements()
+            .Where(element => (string?)element.Attribute("Grid.Row") is null or "0" or "1" or "2")
+            .SelectMany(element => element.DescendantsAndSelf())
+            .ToArray();
+
+        Assert.DoesNotContain(aboveMap, element =>
+            element.Name.LocalName == "TextBlock" &&
+            ((string?)element.Attribute("Text"))?.StartsWith("{Binding", StringComparison.Ordinal) == true &&
+            (string?)element.Attribute("TextWrapping") == "Wrap");
+        Assert.DoesNotContain(aboveMap, element => element.Attributes().Any(attribute =>
+            attribute.Value.Contains("Selected", StringComparison.Ordinal) ||
+            attribute.Value.Contains("SelectionDescription", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void DependencyGraphIsATrackerPageWithAccessibleMap()
+    {
+        XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        Assert.Contains(workspace.Descendants(), element =>
+            element.Name.LocalName == "TabItem" &&
+            (string?)element.Attribute("Tag") == "{x:Static viewModels:MainWindowTab.DependencyGraph}");
+        Assert.Contains(workspace.Descendants(), element =>
+            element.Name.LocalName == "DependencyGraphCanvas" &&
+            (string?)element.Attribute("Graph") == "{Binding}" &&
+            (string?)element.Attribute("AutomationProperties.Name") == "Dependency graph");
+
+        XDocument window = LoadWpfXaml("MainWindow.xaml");
+        Assert.Contains(window.Descendants(), element =>
+            element.Name.LocalName == "ToggleButton" &&
+            (string?)element.Attribute("CommandParameter") == "{x:Static viewModels:ShellDestination.DependencyGraph}" &&
+            (string?)element.Attribute("IsChecked") == "{Binding IsDependencyGraph, Mode=OneWay}");
+    }
+
+    [Fact]
     public void AutomaticSyncSettingsAndProjectStatusAreAccessible()
     {
         XDocument settings = LoadWpfXaml("Views", "SettingsView.xaml");
