@@ -73,7 +73,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         ProjectDeveloperService? developerService = null,
         ResponsibilitySearchSettingsViewModel? responsibilitySearch = null,
         LocalProjectIdentitySettingsViewModel? localIdentitySettings = null,
-        OverviewExportSettingsViewModel? overviewExport = null)
+        OverviewExportSettingsViewModel? overviewExport = null,
+        DependencyGraphSettingsViewModel? graphSettings = null)
     {
         _projectRepository = projectRepository;
         _trackerRepository = trackerRepository;
@@ -98,6 +99,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         OverviewExport = overviewExport;
         if (ResponsibilitySearch is not null)
             ResponsibilitySearch.Changed += OnResponsibilitySearchChanged;
+        GraphSettings = graphSettings;
+        if (GraphSettings is not null)
+            GraphSettings.Changed += OnGraphSettingsChanged;
         Help = new SqlQueryHelpViewModel(
             clipboard,
             () => _ = NavigateAsync(ShellDestination.SchemaSynchronization));
@@ -113,6 +117,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             new(ShellDestination.ProjectDashboard, string.Empty, "Project dashboard", true, false),
             new(ShellDestination.Developers, string.Empty, "Developers", true, false),
             new(ShellDestination.Overview, "Tracker", "Overview", true, true),
+            new(ShellDestination.DependencyGraph, "Tracker", "Dependency graph", true, true),
             new(ShellDestination.Archived, "Tracker", "Archived", true, true),
             new(ShellDestination.Reports, "Tracker", "Reports", true, true),
             new(ShellDestination.SchemaSynchronization, "Manage", "Schema synchronization", true, true),
@@ -143,6 +148,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public AppearanceViewModel Appearance { get; }
     public AutoSyncSettingsViewModel? AutoSync { get; }
     public ResponsibilitySearchSettingsViewModel? ResponsibilitySearch { get; }
+    public DependencyGraphSettingsViewModel? GraphSettings { get; }
     public OverviewExportSettingsViewModel? OverviewExport { get; }
     public LocalProjectIdentitySettingsViewModel? LocalIdentity => _localIdentitySettings;
     public IReadOnlyList<SettingsCategory> SettingsCategories { get; } = Enum.GetValues<SettingsCategory>();
@@ -263,6 +269,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(IsProjectDashboard));
                 OnPropertyChanged(nameof(IsDevelopers));
                 OnPropertyChanged(nameof(IsOverview));
+                OnPropertyChanged(nameof(IsDependencyGraph));
                 OnPropertyChanged(nameof(IsArchived));
                 OnPropertyChanged(nameof(IsReports));
                 OnPropertyChanged(nameof(IsSchemaSynchronization));
@@ -325,6 +332,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public bool IsProjectDashboard => SelectedDestination == ShellDestination.ProjectDashboard;
     public bool IsDevelopers => SelectedDestination == ShellDestination.Developers;
     public bool IsOverview => SelectedDestination == ShellDestination.Overview;
+    public bool IsDependencyGraph => SelectedDestination == ShellDestination.DependencyGraph;
     public bool IsArchived => SelectedDestination == ShellDestination.Archived;
     public bool IsReports => SelectedDestination == ShellDestination.Reports;
     public bool IsSchemaSynchronization => SelectedDestination == ShellDestination.SchemaSynchronization;
@@ -656,6 +664,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                     workspace = _workspaceFactory.Create(selectedTracker.Id);
                     workspace.SetSearchResponsibleNames(
                         ResponsibilitySearch?.IsEnabled ?? true);
+                    ApplyGraphSettings(workspace);
                     workspace.PersistedStateChanged += OnWorkspacePersistedStateChanged;
                     workspace.IdentitySettingsRequested += OpenIdentitySettingsAsync;
                     workspace.PropertyChanged += OnWorkspacePropertyChanged;
@@ -727,6 +736,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             CurrentWorkspace.SelectedTab = destination switch
             {
                 ShellDestination.Overview => MainWindowTab.Overview,
+                ShellDestination.DependencyGraph => MainWindowTab.DependencyGraph,
                 ShellDestination.Archived => MainWindowTab.Archived,
                 ShellDestination.Reports => MainWindowTab.Reports,
                 ShellDestination.SchemaSynchronization => MainWindowTab.SchemaSynchronization,
@@ -794,6 +804,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         ShellDestination destination = workspace.SelectedTab switch
         {
             MainWindowTab.Overview => ShellDestination.Overview,
+            MainWindowTab.DependencyGraph => ShellDestination.DependencyGraph,
             MainWindowTab.Archived => ShellDestination.Archived,
             MainWindowTab.Reports => ShellDestination.Reports,
             MainWindowTab.SchemaSynchronization => ShellDestination.SchemaSynchronization,
@@ -805,6 +816,18 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         {
             SelectedDestination = destination;
         }
+    }
+
+    private void OnGraphSettingsChanged(object? sender, EventArgs e)
+    {
+        foreach (MainWindowViewModel workspace in _workspaces.Values)
+            ApplyGraphSettings(workspace);
+    }
+
+    private void ApplyGraphSettings(MainWindowViewModel workspace)
+    {
+        workspace.DependencyGraph.IsAnimationEnabled = GraphSettings?.IsAnimationEnabled ?? true;
+        workspace.DependencyGraph.ShowRings = GraphSettings?.ShowRings ?? false;
     }
 
     private void OnResponsibilitySearchChanged(object? sender, bool enabled)
@@ -884,6 +907,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     private static bool IsTrackerDestination(ShellDestination destination) => destination is
         ShellDestination.Overview or
+        ShellDestination.DependencyGraph or
         ShellDestination.Archived or
         ShellDestination.Reports or
         ShellDestination.SchemaSynchronization or
@@ -918,6 +942,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         if (_autoSync is not null) _autoSync.StateChanged -= OnAutoSyncStateChanged;
         if (ResponsibilitySearch is not null)
             ResponsibilitySearch.Changed -= OnResponsibilitySearchChanged;
+        if (GraphSettings is not null)
+            GraphSettings.Changed -= OnGraphSettingsChanged;
         foreach (ProjectDashboardViewModel dashboard in _projectDashboards.Values)
             dashboard.RepositoryCard?.Dispose();
         Catalog.Changed -= OnCatalogChanged;

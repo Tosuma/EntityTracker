@@ -98,7 +98,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         OverviewExportService? overviewExportService = null,
         IOverviewExportFilePicker? overviewExportFilePicker = null,
         OverviewExportSettingsViewModel? overviewExportSettings = null,
-        NotificationCenter? notifications = null)
+        NotificationCenter? notifications = null,
+        IProgressChartFilePicker? graphFilePicker = null)
     {
         ArgumentNullException.ThrowIfNull(overviewService);
         ArgumentNullException.ThrowIfNull(synchronizationService);
@@ -134,6 +135,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         ActiveTable.PropertyChanged += OnActiveTablePropertyChanged;
         ArchivedTable.PropertyChanged += OnArchivedTablePropertyChanged;
         Progress = progressDashboard;
+        DependencyGraph = new DependencyGraphViewModel(OpenEntityDetails, graphFilePicker, notifications,
+            effectiveLoggerFactory.CreateLogger<DependencyGraphViewModel>());
         Review = new SchemaSynchronizationReviewViewModel();
         ManualCreation = new ManualEntityCreationViewModel(
             trackerId,
@@ -331,6 +334,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public EntityDependencyEditorViewModel Editor { get; }
 
     public ProgressDashboardViewModel Progress { get; }
+
+    public DependencyGraphViewModel DependencyGraph { get; }
 
     public EntityTableViewModel ActiveTable { get; }
 
@@ -959,6 +964,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         ClearOverviewSelection();
         ActiveTable.ReplaceSourceItems(items);
         ArchivedTable.ReplaceSourceItems(archivedItems);
+        DependencyGraph.Rebuild(items);
         OnPropertyChanged(nameof(HasOverviewItems));
         OnPropertyChanged(nameof(HasArchivedItems));
         OnPropertyChanged(nameof(ShowOverviewEmptyState));

@@ -69,6 +69,7 @@ public sealed class TrackerWorkspaceViewModelFactory(
             overviewExportService,
             overviewExportFilePicker,
             overviewExportSettings,
-            notifications);
+            notifications,
+            chartFilePicker);
     }
 }

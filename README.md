@@ -150,20 +150,20 @@ The Tracker Overview **Export** menu saves the active entity table as an Excel w
 
 ![Overview Export menu with Excel and CSV options](images/light/overview-export-menu.png)
 
-In **Settings → Overview**, choose **Shown entities** to export the current search, filters, and
+In **Settings → Tracker**, choose **Shown entities** to export the current search, filters, and
 sort, or **All active entities** to ignore search and filters while keeping the sort. The CSV
 separator is also selected there. Choose the file location and name in the save dialog; a
 notification reports when the export finishes or fails.
 
 **Settings** is split into categories: **General** (appearance), **Project** (your local Developer
-for any Project, independent of the current context), **Overview** (search and export), **Sync**
+for any Project, independent of the current context), **Tracker** (Overview search and export, and the dependency graph's display), **Sync**
 (automatic Project sync), and **About** (app version).
 
 ![Settings General page with the appearance choice](images/light/settings.png)
 
 ![Settings Project page with the Project picker and local Developer choice](images/light/settings-project.png)
 
-![Settings Overview page with overview search and export options](images/light/settings-overview.png)
+![Settings Tracker page with Overview search and export, and Dependency graph display options](images/light/settings-tracker.png)
 
 ![Settings Sync page with automatic Project sync and interval](images/light/settings-sync.png)
 
@@ -274,6 +274,33 @@ unresolved names affecting that entity, while the Blockers column shows unresolv
 implemented direct dependencies.
 
 ![EntityTracker overview showing dependency warning icons, missing dependencies, and details for an upstream-unresolved entity](images/light/overview-missing-entities-as-dependencies.png)
+
+### Explore the dependency graph
+
+**Dependency graph** shows the selected Tracker's active entities as a solar system. Foundation
+entities without dependencies sit in the centre, with a clearly dominant one, the entity most
+others need, in the exact middle. Each ring outward adds one more layer of dependencies, so the map
+reads from the centre outward in build order; within a ring, entities earlier in the
+dependency-safe rank sit closer to the centre. A lone foundation is the centre itself, and
+missing dependencies orbit on the outermost ring, straight out from the entities that need them. A larger dot means more entities refer to it
+directly. Entities are placed straight out from what they link to, so chains run outward instead of
+across the map, and only direct links are drawn, never ones a longer chain already implies. The most used entities and the foundations keep their names visible at every zoom level, and
+names never pile on top of each other. Links stay faint until you hover over an entity; hovering
+also shows a card with its status, rank, ring, what it depends on, how many entities it unblocks,
+and any missing dependencies. Click an entity to highlight everything it depends on, back
+towards the centre; **Focus on selection** hides the rest, and **Hide unconnected** removes
+entities without links. Find an entity by name, double-click it to open its details, drag it to a
+new spot, or export the current view as a PNG. The solar system slowly turns around its centre and holds
+still while you hover, drag, pan, zoom or have an entity selected; turn this off, or switch on
+faint orbit rings for each level, under **Settings → Tracker**.
+
+![EntityTracker dependency graph showing every active entity colored by status](images/light/dependency-graph.png)
+
+![Dependency graph with one entity selected and its dependency chain highlighted](images/light/dependency-graph-selected.png)
+
+![Dependency graph hover card explaining an entity's status, rank, ring and usage](images/light/dependency-graph-hover.png)
+
+![Entity details pane opened from the dependency graph](images/light/dependency-graph-details.png)
 
 ### Import review details
 
