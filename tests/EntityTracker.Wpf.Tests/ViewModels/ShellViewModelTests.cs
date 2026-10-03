@@ -120,6 +120,33 @@ public sealed class ShellViewModelTests
         await WaitUntilAsync(() => Task.FromResult(workspace.HasAssignmentGuidance));
         workspace.OpenIdentitySettingsCommand.Execute(null);
         await WaitUntilAsync(() => Task.FromResult(shell.SelectedDestination == ShellDestination.Settings));
+        Assert.Equal(SettingsCategory.Project, shell.SelectedSettingsCategory);
+    }
+
+    [Fact]
+    public async Task SettingsProject_EditsLocalIdentityWithoutChangingContext()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        ProjectDeveloper alice = await harness.CreateDeveloperAsync("AL");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        Assert.Equal(SettingsCategory.General, shell.SelectedSettingsCategory);
+        Assert.Equal(Enum.GetValues<SettingsCategory>(), shell.SettingsCategories);
+
+        Assert.True(await shell.NavigateAsync(ShellDestination.Settings));
+        Assert.Null(shell.SettingsProject);
+        LocalProjectIdentitySettingsViewModel identity = Assert.IsType<LocalProjectIdentitySettingsViewModel>(shell.LocalIdentity);
+        Assert.False(identity.HasProject);
+
+        shell.SettingsProject = shell.Projects.Single(project => project.Id == harness.DefaultProject.Id);
+        await WaitUntilAsync(() => Task.FromResult(identity.HasAvailableDevelopers && !identity.IsBusy));
+        Assert.Null(shell.SelectedProject);
+        Assert.Equal(harness.DefaultProject.Name, identity.ProjectName);
+
+        identity.SelectedDeveloper = Assert.Single(identity.AvailableDevelopers);
+        await WaitUntilAsync(async () =>
+            (await harness.Identity.ResolveAsync(harness.DefaultProject.Id))?.Id == alice.Id);
     }
 
     [Fact]

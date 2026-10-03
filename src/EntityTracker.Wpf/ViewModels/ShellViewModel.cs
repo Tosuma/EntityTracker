@@ -38,6 +38,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private readonly TrackerId? _startupTrackerId;
     private readonly AsyncCommand<ShellDestination> _navigateCommand;
     private ShellDestination _selectedDestination = ShellDestination.Portfolio;
+    private SettingsCategory _selectedSettingsCategory = SettingsCategory.General;
+    private Project? _settingsProject;
     private Project? _selectedProject;
     private Tracker? _selectedTracker;
     private MainWindowViewModel? _currentWorkspace;
@@ -143,6 +145,25 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public ResponsibilitySearchSettingsViewModel? ResponsibilitySearch { get; }
     public OverviewExportSettingsViewModel? OverviewExport { get; }
     public LocalProjectIdentitySettingsViewModel? LocalIdentity => _localIdentitySettings;
+    public IReadOnlyList<SettingsCategory> SettingsCategories { get; } = Enum.GetValues<SettingsCategory>();
+
+    public SettingsCategory SelectedSettingsCategory
+    {
+        get => _selectedSettingsCategory;
+        set => SetField(ref _selectedSettingsCategory, value);
+    }
+
+    /// <summary>The Project whose local settings are edited; independent of the current context.</summary>
+    public Project? SettingsProject
+    {
+        get => _settingsProject;
+        set
+        {
+            if (SetField(ref _settingsProject, value) && _localIdentitySettings is not null)
+                _ = _localIdentitySettings.SetProjectAsync(value?.Id, value?.Name);
+        }
+    }
+
     public NotificationCenter Notifications { get; }
     public bool HasActiveProjectSync => _autoSync?.HasActiveSync == true;
 
@@ -316,8 +337,11 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private async Task NavigateFromCommandAsync(ShellDestination destination) =>
         await NavigateAsync(destination);
 
-    private async Task OpenIdentitySettingsAsync() =>
+    private async Task OpenIdentitySettingsAsync()
+    {
+        SelectedSettingsCategory = SettingsCategory.Project;
         await NavigateAsync(ShellDestination.Settings);
+    }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -418,8 +442,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         }
         if (destination == ShellDestination.Developers && Developers is not null)
             await Developers.RefreshAsync(cancellationToken);
-        if (destination == ShellDestination.Settings && _localIdentitySettings is not null)
-            await _localIdentitySettings.RefreshAsync(cancellationToken);
+        if (destination == ShellDestination.Settings)
+            await SetSettingsProjectAsync(SelectedProject, cancellationToken);
 
         return true;
     }
@@ -456,7 +480,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         else if (state.Kind is ProjectSyncStateKind.UpToDate or ProjectSyncStateKind.Unlinked)
         {
             Notifications.DismissProjectActions(projectId);
-            if (SelectedProject?.Id == projectId && _localIdentitySettings is not null)
+            if (SettingsProject?.Id == projectId && _localIdentitySettings is not null)
                 _ = _localIdentitySettings.RefreshAsync();
         }
     }
@@ -612,8 +636,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                     "The selected tracker is not active in the selected project.");
             }
             SelectedProject = project;
-            if (_localIdentitySettings is not null)
-                await _localIdentitySettings.SetProjectAsync(project?.Id, project?.Name, cancellationToken);
+            await SetSettingsProjectAsync(project, cancellationToken);
             Developers = project is null || _developerService is null ? null :
                 new ProjectDevelopersViewModel(project.Id, _developerService,
                     OnProjectDevelopersChangedAsync);
@@ -678,8 +701,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         catch (Exception exception)
         {
             SelectedProject = previousProject;
-            if (_localIdentitySettings is not null)
-                await _localIdentitySettings.SetProjectAsync(previousProject?.Id, previousProject?.Name, cancellationToken);
+            await SetSettingsProjectAsync(previousProject, cancellationToken);
             SelectedTracker = previousTracker;
             CurrentWorkspace = previousWorkspace;
             Developers = previousDevelopers;
@@ -791,9 +813,18 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             workspace.SetSearchResponsibleNames(enabled);
     }
 
+    private async Task SetSettingsProjectAsync(Project? project,
+        CancellationToken cancellationToken = default)
+    {
+        _settingsProject = project;
+        OnPropertyChanged(nameof(SettingsProject));
+        if (_localIdentitySettings is not null)
+            await _localIdentitySettings.SetProjectAsync(project?.Id, project?.Name, cancellationToken);
+    }
+
     private async Task OnProjectDevelopersChangedAsync(ProjectId projectId)
     {
-        if (SelectedProject?.Id == projectId && _localIdentitySettings is not null)
+        if (SettingsProject?.Id == projectId && _localIdentitySettings is not null)
             await _localIdentitySettings.RefreshAsync();
         if (SelectedProject?.Id != projectId || CurrentWorkspace is null) return;
         try { await CurrentWorkspace.RefreshAsync(); }

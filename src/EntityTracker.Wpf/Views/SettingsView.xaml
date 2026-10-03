@@ -3,158 +3,246 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:configuration="clr-namespace:EntityTracker.Infrastructure.Configuration;assembly=EntityTracker.Infrastructure"
              xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels">
-    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                  HorizontalScrollBarVisibility="Disabled">
-    <StackPanel MaxWidth="720" HorizontalAlignment="Left">
-        <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Settings" />
-        <TextBlock Margin="0,4,0,20" Style="{StaticResource PageDescriptionTextStyle}"
-                   Text="Choose appearance, search, export, and automatic Project sync. Changes apply immediately and are saved locally." />
-        <Border Margin="0,0,0,16" Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
+    <UserControl.Resources>
+        <Style x:Key="SettingsPageStyle" TargetType="StackPanel">
+            <Setter Property="MaxWidth" Value="720" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="Visibility" Value="Collapsed" />
+        </Style>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="180" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <StackPanel Grid.ColumnSpan="2">
+            <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Settings" />
+            <TextBlock Margin="0,4,0,20" Style="{StaticResource PageDescriptionTextStyle}"
+                       Text="Changes apply immediately and are saved locally." />
+        </StackPanel>
+        <ListBox x:Name="SettingsCategoryList" Grid.Row="1" Margin="0,0,20,0"
+                 VerticalAlignment="Top"
+                 Background="Transparent" BorderThickness="0"
+                 AutomationProperties.Name="Settings categories"
+                 ItemsSource="{Binding SettingsCategories}"
+                 SelectedItem="{Binding SelectedSettingsCategory, Mode=TwoWay}" />
+        <ScrollViewer Grid.Row="1" Grid.Column="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock FontWeight="SemiBold" Text="App version" />
-                <TextBlock Grid.Column="1"
-                           AutomationProperties.Name="{Binding AppVersion, StringFormat=App version {0}}"
-                           Text="{Binding AppVersion}" />
+                <StackPanel x:Name="GeneralSettingsPage">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel" BasedOn="{StaticResource SettingsPageStyle}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedSettingsCategory}" Value="{x:Static viewModels:SettingsCategory.General}">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <Border Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
+                        <StackPanel>
+                            <TextBlock Margin="0,0,0,4" Style="{StaticResource SectionHeadingTextStyle}" Text="Appearance" />
+                            <TextBlock Margin="0,0,0,12" Style="{StaticResource PageDescriptionTextStyle}"
+                                       Text="System follows the current Windows app theme. Light and Dark stay selected until you change this setting." />
+                            <RadioButton Margin="0,4" Content="System — follow Windows" GroupName="Appearance" Command="{Binding Appearance.SelectAppearanceCommand}"
+                                         AutomationProperties.HelpText="Use the current Windows app theme."
+                                         CommandParameter="{x:Static configuration:ApplicationAppearance.System}" IsChecked="{Binding Appearance.IsSystem, Mode=OneWay}" />
+                            <RadioButton Margin="0,4" Content="Light" GroupName="Appearance" Command="{Binding Appearance.SelectAppearanceCommand}"
+                                         AutomationProperties.HelpText="Always use the light appearance."
+                                         CommandParameter="{x:Static configuration:ApplicationAppearance.Light}" IsChecked="{Binding Appearance.IsLight, Mode=OneWay}" />
+                            <RadioButton Margin="0,4" Content="Dark" GroupName="Appearance" Command="{Binding Appearance.SelectAppearanceCommand}"
+                                         AutomationProperties.HelpText="Always use the dark appearance."
+                                         CommandParameter="{x:Static configuration:ApplicationAppearance.Dark}" IsChecked="{Binding Appearance.IsDark, Mode=OneWay}" />
+                            <Border Margin="0,12,0,0" MaxHeight="120" Style="{StaticResource ErrorMessageStyle}"
+                                    Visibility="{Binding Appearance.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <TextBlock AutomationProperties.LiveSetting="Assertive"
+                                               Text="{Binding Appearance.ErrorMessage}" TextWrapping="Wrap" />
+                                </ScrollViewer>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <StackPanel x:Name="ProjectSettingsPage">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel" BasedOn="{StaticResource SettingsPageStyle}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedSettingsCategory}" Value="{x:Static viewModels:SettingsCategory.Project}">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <Border Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="You in this Project" />
+                            <TextBlock Margin="0,4,0,10" Style="{StaticResource PageDescriptionTextStyle}"
+                                       Text="Choose the Developer used by Assign me. This choice stays on this installation and can be changed at any time."
+                                       TextWrapping="Wrap" />
+                            <TextBlock FontWeight="SemiBold" Text="Project" />
+                            <ComboBox Margin="0,5,0,10" MinWidth="280" HorizontalAlignment="Left"
+                                      AutomationProperties.Name="Project"
+                                      AutomationProperties.HelpText="Select the Project whose local settings you want to change."
+                                      ItemsSource="{Binding Projects}"
+                                      DisplayMemberPath="Name"
+                                      SelectedItem="{Binding SettingsProject, Mode=TwoWay}" />
+                            <TextBlock FontWeight="SemiBold" Text="Developer" />
+                            <ComboBox Margin="0,5,0,0" MinWidth="280" HorizontalAlignment="Left"
+                                      AutomationProperties.Name="You in this Project Developer"
+                                      AutomationProperties.HelpText="Select an available Developer for the selected Project."
+                                      ItemsSource="{Binding LocalIdentity.AvailableDevelopers}"
+                                      DisplayMemberPath="Label"
+                                      SelectedItem="{Binding LocalIdentity.SelectedDeveloper, Mode=TwoWay}"
+                                      IsEnabled="{Binding LocalIdentity.CanChoose}" />
+                            <TextBlock Margin="0,7,0,0" Text="{Binding LocalIdentity.SelectionDescription}"
+                                       AutomationProperties.LiveSetting="Polite" />
+                            <Button Margin="0,10,0,0" HorizontalAlignment="Left" Content="Clear choice"
+                                    AutomationProperties.Name="Clear You in this Project choice"
+                                    Command="{Binding LocalIdentity.ClearCommand}"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                            <TextBlock Margin="0,8,0,0" Text="{Binding LocalIdentity.ErrorMessage}"
+                                       AutomationProperties.LiveSetting="Assertive" TextWrapping="Wrap"
+                                       Visibility="{Binding LocalIdentity.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <StackPanel x:Name="OverviewSettingsPage">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel" BasedOn="{StaticResource SettingsPageStyle}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedSettingsCategory}" Value="{x:Static viewModels:SettingsCategory.Overview}">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <Border Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
+                        <StackPanel>
+                            <TextBlock Margin="0,0,0,4" Style="{StaticResource SectionHeadingTextStyle}"
+                                       Text="Overview search" />
+                            <TextBlock Margin="0,0,0,12" Style="{StaticResource PageDescriptionTextStyle}"
+                                       Text="Include current developers' initials and names when searching entities. Dependency search stays separate."
+                                       TextWrapping="Wrap" />
+                            <CheckBox Content="Search responsible names"
+                                      AutomationProperties.Name="Search responsible names in entity overviews"
+                                      Command="{Binding ResponsibilitySearch.ToggleCommand}"
+                                      IsChecked="{Binding ResponsibilitySearch.IsEnabled, Mode=OneWay}" />
+                            <TextBlock Margin="0,8,0,0" AutomationProperties.LiveSetting="Assertive"
+                                       Text="{Binding ResponsibilitySearch.ErrorMessage}" TextWrapping="Wrap"
+                                       Visibility="{Binding ResponsibilitySearch.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        </StackPanel>
+                    </Border>
+                    <Border x:Name="OverviewExportSettingsCard" Margin="0,16,0,0" Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
+                        <StackPanel>
+                            <TextBlock Margin="0,0,0,4" Style="{StaticResource SectionHeadingTextStyle}"
+                                       Text="Overview export" />
+                            <TextBlock Margin="0,0,0,12" Style="{StaticResource PageDescriptionTextStyle}"
+                                       Text="Choose which active entities are exported. Shown entities follow the current search, filters and sort; all active entities keep the sort."
+                                       TextWrapping="Wrap" />
+                            <TextBlock FontWeight="SemiBold" Text="Rows to export" />
+                            <ComboBox Margin="0,5,0,10" MinWidth="240" HorizontalAlignment="Left"
+                                      AutomationProperties.Name="Rows to export"
+                                      IsEnabled="{Binding OverviewExport.CanEdit}"
+                                      SelectedValuePath="Tag"
+                                      SelectedValue="{Binding OverviewExport.Rows, Mode=OneWay}"
+                                      SelectionChanged="OnExportRowsChanged">
+                                <ComboBoxItem Content="Shown entities" Tag="{x:Static configuration:OverviewExportRows.ShownEntities}" />
+                                <ComboBoxItem Content="All active entities" Tag="{x:Static configuration:OverviewExportRows.AllActiveEntities}" />
+                            </ComboBox>
+                            <TextBlock FontWeight="SemiBold" Text="CSV separator" />
+                            <ComboBox Margin="0,5,0,0" MinWidth="240" HorizontalAlignment="Left"
+                                      AutomationProperties.Name="CSV separator"
+                                      IsEnabled="{Binding OverviewExport.CanEdit}"
+                                      SelectedValuePath="Tag"
+                                      SelectedValue="{Binding OverviewExport.Separator, Mode=OneWay}"
+                                      SelectionChanged="OnCsvSeparatorChanged">
+                                <ComboBoxItem Content="Semicolon" Tag="{x:Static configuration:OverviewCsvSeparator.Semicolon}" />
+                                <ComboBoxItem Content="Comma" Tag="{x:Static configuration:OverviewCsvSeparator.Comma}" />
+                            </ComboBox>
+                            <TextBlock Margin="0,8,0,0" AutomationProperties.LiveSetting="Assertive"
+                                       Text="{Binding OverviewExport.ErrorMessage}" TextWrapping="Wrap"
+                                       Visibility="{Binding OverviewExport.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <StackPanel x:Name="SyncSettingsPage">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel" BasedOn="{StaticResource SettingsPageStyle}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedSettingsCategory}" Value="{x:Static viewModels:SettingsCategory.Sync}">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <Border Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
+                        <StackPanel>
+                            <TextBlock Margin="0,0,0,4" Style="{StaticResource SectionHeadingTextStyle}"
+                                       Text="Automatic Project sync" />
+                            <TextBlock Margin="0,0,0,12" Style="{StaticResource PageDescriptionTextStyle}"
+                                       Text="Checks linked Projects after startup and at the selected interval. Sync now remains available when automatic sync is off. Configure Git and credentials outside EntityTracker." TextWrapping="Wrap" />
+                            <CheckBox Content="Enable automatic sync"
+                                      AutomationProperties.Name="Enable automatic Project sync"
+                                      Command="{Binding AutoSync.ToggleCommand}"
+                                      IsChecked="{Binding AutoSync.IsEnabled, Mode=OneWay}" />
+                            <TextBlock Margin="0,14,0,5" FontWeight="SemiBold" Text="Check every" />
+                            <WrapPanel>
+                                <RadioButton Margin="0,4,16,4" GroupName="AutoSyncInterval" Content="1 minute"
+                                             Command="{Binding AutoSync.SelectIntervalCommand}"
+                                             CommandParameter="{x:Static viewModels:AutoSyncSettingsViewModel.OneMinute}"
+                                             IsChecked="{Binding AutoSync.IsOneMinute, Mode=OneWay}" />
+                                <RadioButton Margin="0,4,16,4" GroupName="AutoSyncInterval" Content="5 minutes"
+                                             Command="{Binding AutoSync.SelectIntervalCommand}"
+                                             CommandParameter="{x:Static viewModels:AutoSyncSettingsViewModel.FiveMinutes}"
+                                             IsChecked="{Binding AutoSync.IsFiveMinutes, Mode=OneWay}" />
+                                <RadioButton Margin="0,4,16,4" GroupName="AutoSyncInterval" Content="15 minutes"
+                                             Command="{Binding AutoSync.SelectIntervalCommand}"
+                                             CommandParameter="{x:Static viewModels:AutoSyncSettingsViewModel.FifteenMinutes}"
+                                             IsChecked="{Binding AutoSync.IsFifteenMinutes, Mode=OneWay}" />
+                                <RadioButton Margin="0,4,16,4" GroupName="AutoSyncInterval" Content="30 minutes"
+                                             Command="{Binding AutoSync.SelectIntervalCommand}"
+                                             CommandParameter="{x:Static viewModels:AutoSyncSettingsViewModel.ThirtyMinutes}"
+                                             IsChecked="{Binding AutoSync.IsThirtyMinutes, Mode=OneWay}" />
+                                <RadioButton Margin="0,4,16,4" GroupName="AutoSyncInterval" Content="60 minutes"
+                                             Command="{Binding AutoSync.SelectIntervalCommand}"
+                                             CommandParameter="{x:Static viewModels:AutoSyncSettingsViewModel.SixtyMinutes}"
+                                             IsChecked="{Binding AutoSync.IsSixtyMinutes, Mode=OneWay}" />
+                            </WrapPanel>
+                            <TextBlock Margin="0,8,0,0" AutomationProperties.LiveSetting="Assertive"
+                                       Text="{Binding AutoSync.ErrorMessage}" TextWrapping="Wrap"
+                                       Visibility="{Binding AutoSync.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <StackPanel x:Name="AboutSettingsPage">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel" BasedOn="{StaticResource SettingsPageStyle}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedSettingsCategory}" Value="{x:Static viewModels:SettingsCategory.About}">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <Border Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontWeight="SemiBold" Text="App version:" />
+                            <TextBlock Margin="6,0,0,0"
+                                       AutomationProperties.Name="{Binding AppVersion, StringFormat=App version {0}}"
+                                       Text="{Binding AppVersion}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
             </Grid>
-        </Border>
-        <Border Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
-            <StackPanel>
-                <TextBlock Margin="0,0,0,4" Style="{StaticResource SectionHeadingTextStyle}" Text="Appearance" />
-                <TextBlock Margin="0,0,0,12" Style="{StaticResource PageDescriptionTextStyle}"
-                           Text="System follows the current Windows app theme. Light and Dark stay selected until you change this setting." />
-                <RadioButton Margin="0,4" Content="System — follow Windows" GroupName="Appearance" Command="{Binding Appearance.SelectAppearanceCommand}"
-                             AutomationProperties.HelpText="Use the current Windows app theme."
-                             CommandParameter="{x:Static configuration:ApplicationAppearance.System}" IsChecked="{Binding Appearance.IsSystem, Mode=OneWay}" />
-                <RadioButton Margin="0,4" Content="Light" GroupName="Appearance" Command="{Binding Appearance.SelectAppearanceCommand}"
-                             AutomationProperties.HelpText="Always use the light appearance."
-                             CommandParameter="{x:Static configuration:ApplicationAppearance.Light}" IsChecked="{Binding Appearance.IsLight, Mode=OneWay}" />
-                <RadioButton Margin="0,4" Content="Dark" GroupName="Appearance" Command="{Binding Appearance.SelectAppearanceCommand}"
-                             AutomationProperties.HelpText="Always use the dark appearance."
-                             CommandParameter="{x:Static configuration:ApplicationAppearance.Dark}" IsChecked="{Binding Appearance.IsDark, Mode=OneWay}" />
-                <Border Margin="0,12,0,0" MaxHeight="120" Style="{StaticResource ErrorMessageStyle}"
-                        Visibility="{Binding Appearance.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <TextBlock AutomationProperties.LiveSetting="Assertive"
-                                   Text="{Binding Appearance.ErrorMessage}" TextWrapping="Wrap" />
-                    </ScrollViewer>
-                </Border>
-            </StackPanel>
-        </Border>
-        <Border Margin="0,16,0,0" Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
-            <StackPanel>
-                <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="You in this Project" />
-                <TextBlock Margin="0,4,0,10" Style="{StaticResource PageDescriptionTextStyle}"
-                           Text="Choose the Developer used by Assign me. This choice stays on this installation and can be changed at any time."
-                           TextWrapping="Wrap" />
-                <TextBlock FontWeight="SemiBold" Text="{Binding LocalIdentity.ProjectName}" />
-                <ComboBox Margin="0,7,0,0" MinWidth="280"
-                          AutomationProperties.Name="You in this Project Developer"
-                          AutomationProperties.HelpText="Select an available Developer for the current Project."
-                          ItemsSource="{Binding LocalIdentity.AvailableDevelopers}"
-                          DisplayMemberPath="Label"
-                          SelectedItem="{Binding LocalIdentity.SelectedDeveloper, Mode=TwoWay}"
-                          IsEnabled="{Binding LocalIdentity.CanChoose}" />
-                <TextBlock Margin="0,7,0,0" Text="{Binding LocalIdentity.SelectionDescription}"
-                           AutomationProperties.LiveSetting="Polite" />
-                <Button Margin="0,10,0,0" HorizontalAlignment="Left" Content="Clear choice"
-                        AutomationProperties.Name="Clear You in this Project choice"
-                        Command="{Binding LocalIdentity.ClearCommand}"
-                        Style="{StaticResource SecondaryButtonStyle}" />
-                <TextBlock Margin="0,8,0,0" Text="{Binding LocalIdentity.ErrorMessage}"
-                           AutomationProperties.LiveSetting="Assertive" TextWrapping="Wrap"
-                           Visibility="{Binding LocalIdentity.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
-            </StackPanel>
-        </Border>
-        <Border Margin="0,16,0,0" Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
-            <StackPanel>
-                <TextBlock Margin="0,0,0,4" Style="{StaticResource SectionHeadingTextStyle}"
-                           Text="Overview search" />
-                <TextBlock Margin="0,0,0,12" Style="{StaticResource PageDescriptionTextStyle}"
-                           Text="Include current developers' initials and names when searching entities. Dependency search stays separate."
-                           TextWrapping="Wrap" />
-                <CheckBox Content="Search responsible names"
-                          AutomationProperties.Name="Search responsible names in entity overviews"
-                          Command="{Binding ResponsibilitySearch.ToggleCommand}"
-                          IsChecked="{Binding ResponsibilitySearch.IsEnabled, Mode=OneWay}" />
-                <TextBlock Margin="0,8,0,0" AutomationProperties.LiveSetting="Assertive"
-                           Text="{Binding ResponsibilitySearch.ErrorMessage}" TextWrapping="Wrap"
-                           Visibility="{Binding ResponsibilitySearch.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
-            </StackPanel>
-        </Border>
-        <Border x:Name="OverviewExportSettingsCard" Margin="0,16,0,0" Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
-            <StackPanel>
-                <TextBlock Margin="0,0,0,4" Style="{StaticResource SectionHeadingTextStyle}"
-                           Text="Overview export" />
-                <TextBlock Margin="0,0,0,12" Style="{StaticResource PageDescriptionTextStyle}"
-                           Text="Choose which active entities are exported. Shown entities follow the current search, filters and sort; all active entities keep the sort."
-                           TextWrapping="Wrap" />
-                <TextBlock FontWeight="SemiBold" Text="Rows to export" />
-                <ComboBox Margin="0,5,0,10" MinWidth="240" HorizontalAlignment="Left"
-                          AutomationProperties.Name="Rows to export"
-                          IsEnabled="{Binding OverviewExport.CanEdit}"
-                          SelectedValuePath="Tag"
-                          SelectedValue="{Binding OverviewExport.Rows, Mode=OneWay}"
-                          SelectionChanged="OnExportRowsChanged">
-                    <ComboBoxItem Content="Shown entities" Tag="{x:Static configuration:OverviewExportRows.ShownEntities}" />
-                    <ComboBoxItem Content="All active entities" Tag="{x:Static configuration:OverviewExportRows.AllActiveEntities}" />
-                </ComboBox>
-                <TextBlock FontWeight="SemiBold" Text="CSV separator" />
-                <ComboBox Margin="0,5,0,0" MinWidth="240" HorizontalAlignment="Left"
-                          AutomationProperties.Name="CSV separator"
-                          IsEnabled="{Binding OverviewExport.CanEdit}"
-                          SelectedValuePath="Tag"
-                          SelectedValue="{Binding OverviewExport.Separator, Mode=OneWay}"
-                          SelectionChanged="OnCsvSeparatorChanged">
-                    <ComboBoxItem Content="Semicolon" Tag="{x:Static configuration:OverviewCsvSeparator.Semicolon}" />
-                    <ComboBoxItem Content="Comma" Tag="{x:Static configuration:OverviewCsvSeparator.Comma}" />
-                </ComboBox>
-                <TextBlock Margin="0,8,0,0" AutomationProperties.LiveSetting="Assertive"
-                           Text="{Binding OverviewExport.ErrorMessage}" TextWrapping="Wrap"
-                           Visibility="{Binding OverviewExport.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
-            </StackPanel>
-        </Border>
-        <Border Margin="0,16,0,0" Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
-            <StackPanel>
-                <TextBlock Margin="0,0,0,4" Style="{StaticResource SectionHeadingTextStyle}"
-                           Text="Automatic Project sync" />
-                <TextBlock Margin="0,0,0,12" Style="{StaticResource PageDescriptionTextStyle}"
-                           Text="Checks linked Projects after startup and at the selected interval. Sync now remains available when automatic sync is off. Configure Git and credentials outside EntityTracker." TextWrapping="Wrap" />
-                <CheckBox Content="Enable automatic sync"
-                          AutomationProperties.Name="Enable automatic Project sync"
-                          Command="{Binding AutoSync.ToggleCommand}"
-                          IsChecked="{Binding AutoSync.IsEnabled, Mode=OneWay}" />
-                <TextBlock Margin="0,14,0,5" FontWeight="SemiBold" Text="Check every" />
-                <WrapPanel>
-                    <RadioButton Margin="0,4,16,4" GroupName="AutoSyncInterval" Content="1 minute"
-                                 Command="{Binding AutoSync.SelectIntervalCommand}"
-                                 CommandParameter="{x:Static viewModels:AutoSyncSettingsViewModel.OneMinute}"
-                                 IsChecked="{Binding AutoSync.IsOneMinute, Mode=OneWay}" />
-                    <RadioButton Margin="0,4,16,4" GroupName="AutoSyncInterval" Content="5 minutes"
-                                 Command="{Binding AutoSync.SelectIntervalCommand}"
-                                 CommandParameter="{x:Static viewModels:AutoSyncSettingsViewModel.FiveMinutes}"
-                                 IsChecked="{Binding AutoSync.IsFiveMinutes, Mode=OneWay}" />
-                    <RadioButton Margin="0,4,16,4" GroupName="AutoSyncInterval" Content="15 minutes"
-                                 Command="{Binding AutoSync.SelectIntervalCommand}"
-                                 CommandParameter="{x:Static viewModels:AutoSyncSettingsViewModel.FifteenMinutes}"
-                                 IsChecked="{Binding AutoSync.IsFifteenMinutes, Mode=OneWay}" />
-                    <RadioButton Margin="0,4,16,4" GroupName="AutoSyncInterval" Content="30 minutes"
-                                 Command="{Binding AutoSync.SelectIntervalCommand}"
-                                 CommandParameter="{x:Static viewModels:AutoSyncSettingsViewModel.ThirtyMinutes}"
-                                 IsChecked="{Binding AutoSync.IsThirtyMinutes, Mode=OneWay}" />
-                    <RadioButton Margin="0,4,16,4" GroupName="AutoSyncInterval" Content="60 minutes"
-                                 Command="{Binding AutoSync.SelectIntervalCommand}"
-                                 CommandParameter="{x:Static viewModels:AutoSyncSettingsViewModel.SixtyMinutes}"
-                                 IsChecked="{Binding AutoSync.IsSixtyMinutes, Mode=OneWay}" />
-                </WrapPanel>
-                <TextBlock Margin="0,8,0,0" AutomationProperties.LiveSetting="Assertive"
-                           Text="{Binding AutoSync.ErrorMessage}" TextWrapping="Wrap"
-                           Visibility="{Binding AutoSync.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
-            </StackPanel>
-        </Border>
-    </StackPanel>
-    </ScrollViewer>
+        </ScrollViewer>
+    </Grid>
 </UserControl>
