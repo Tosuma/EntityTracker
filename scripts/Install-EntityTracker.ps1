@@ -2,13 +2,25 @@
 param(
     [string]$SourcePath = (Split-Path -Parent $PSScriptRoot),
     [string]$Tag,
-    [int]$WaitForProcess = 0
+    [int]$WaitForProcess = 0,
+    # Set by the updater; when run by hand the version is read from the source checkout.
+    [string]$UpdaterVersion = ''
 )
 
 . (Join-Path $PSScriptRoot 'Install-Common.ps1')
 $ErrorActionPreference = 'Stop'
 $env:GIT_TERMINAL_PROMPT = '0'
 $env:GCM_INTERACTIVE = 'never'
+
+if (-not $UpdaterVersion) {
+    try {
+        $described = & git -C $PSScriptRoot describe --tags --match 'app-v*' --always --dirty 2>$null
+        if ($LASTEXITCODE -eq 0 -and $described) { $UpdaterVersion = "$described (source checkout)" }
+    }
+    catch { }
+}
+if (-not $UpdaterVersion) { $UpdaterVersion = 'unknown version' }
+Write-Host "EntityTracker installer $UpdaterVersion"
 
 $SourcePath = [IO.Path]::GetFullPath($SourcePath)
 $actualRoot = (& git -C $SourcePath rev-parse --show-toplevel 2>$null)

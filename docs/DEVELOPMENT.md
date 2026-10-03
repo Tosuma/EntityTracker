@@ -103,6 +103,21 @@ selected with `-Tag app-v1.0.0` for recovery. The app's update notification uses
 through a separate updater window after the app closes. Neither script clones or initializes a
 repository, configures Git, or manages credentials.
 
+The updater scripts (`Update-EntityTracker.ps1`, `Install-EntityTracker.ps1` and
+`Install-Common.ps1`) are read from the release being installed, not from the installed app: the
+app verifies the tag against origin the same way the installer does and runs that tag's
+`scripts/` copies. A fix to the updater therefore applies on the update that ships it. If the
+release cannot be read, the app falls back to the scripts installed with the current version.
+Apps from before this change still run their installed updater once, for the update to the first
+release that contains it. Run `.\scripts\Test-UpdaterExitCode.ps1` to check that the updater
+reads the install's exit code under Windows PowerShell; CI also runs it.
+
+The updater window shows which version of the updater is running and whether it came from the
+release being installed or, after a fallback, from the current app. The installer's first output
+line names the same version; run by hand from a clone, it reports `git describe` for the checkout,
+for example `EntityTracker installer app-v1.5.0 (source checkout)`. CI checks both with
+`.\scripts\Test-InstallerVersion.ps1`.
+
 The ZIP includes EntityTracker's `LICENSE.txt`, the runtime dependency inventory in
 `THIRD-PARTY-NOTICES.txt`, common license texts, and the upstream .NET and native graphics
 third-party notices. Packaging fails if any required legal file cannot be collected.
