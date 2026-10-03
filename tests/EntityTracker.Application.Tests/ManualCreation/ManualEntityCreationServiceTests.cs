@@ -37,7 +37,7 @@ public sealed class ManualEntityCreationServiceTests
     }
 
     [Fact]
-    public async Task SearchDependenciesAsync_FillsLimitAfterSelectedEntitiesAreExcluded()
+    public async Task SearchDependenciesAsync_ExcludesSelectedEntitiesFromAllMatches()
     {
         TrackedEntity[] entities = Enumerable.Range(1, 18)
             .Select(index => Entity(index, $"Table{index:00}"))
@@ -123,7 +123,7 @@ public sealed class ManualEntityCreationServiceTests
     }
 
     [Fact]
-    public async Task SearchDependenciesAsync_LimitsSuggestionsToTen()
+    public async Task SearchDependenciesAsync_ReturnsAllMatchesBeyondTen()
     {
         TrackedEntity[] entities = Enumerable.Range(1, 15)
             .Select(index => Entity(index, $"Table{index:00}"))
@@ -133,9 +133,29 @@ public sealed class ManualEntityCreationServiceTests
         ManualDependencySearchResult result =
             await service.SearchDependenciesAsync("Table");
 
-        Assert.Equal(10, result.Suggestions.Count);
+        Assert.Equal(15, result.Suggestions.Count);
         Assert.Equal("Table01", result.Suggestions[0].SourceName);
-        Assert.Equal("Table10", result.Suggestions[9].SourceName);
+        Assert.Equal("Table15", result.Suggestions[^1].SourceName);
+    }
+
+    [Fact]
+    public async Task SearchDependenciesAsync_EmptyQueryBrowsesAllEligibleEntities()
+    {
+        TrackedEntity[] entities = Enumerable.Range(1, 15)
+            .Select(index => Entity(index, $"Table{index:00}"))
+            .Concat([Entity(16, "Owner"), Entity(17, "Archived", EntityLifecycleState.Archived)])
+            .ToArray();
+        ManualEntityCreationService service = Service(entities, [], [], out _);
+
+        ManualDependencySearchResult result = await service.SearchDependenciesAsync(
+            "  ", "owner", excludedKeys: [EntitySourceKey.From("table01")]);
+
+        Assert.Equal(14, result.Suggestions.Count);
+        Assert.Equal("Table02", result.Suggestions[0].SourceName);
+        Assert.Equal("Table15", result.Suggestions[^1].SourceName);
+        Assert.Null(result.EnteredKey);
+        Assert.False(result.CanAddAsUnresolved);
+        Assert.Null(result.BlockingMessage);
     }
 
     [Fact]

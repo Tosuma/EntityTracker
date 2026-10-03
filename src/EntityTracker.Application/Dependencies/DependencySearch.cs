@@ -6,8 +6,6 @@ namespace EntityTracker.Application.Dependencies;
 
 internal static class DependencySearch
 {
-    private const int MaximumSuggestions = 10;
-
     public static ManualDependencySearchResult Search(
         string query,
         string? proposedEntityName,
@@ -15,11 +13,6 @@ internal static class DependencySearch
         IReadOnlyCollection<EntitySourceKey>? excludedKeys = null)
     {
         string enteredName = query.Trim();
-        if (enteredName.Length == 0)
-        {
-            return new ManualDependencySearchResult(string.Empty, null, [], false, null);
-        }
-
         if (enteredName.Contains(',', StringComparison.Ordinal))
         {
             return new ManualDependencySearchResult(
@@ -31,7 +24,7 @@ internal static class DependencySearch
         }
 
         TrackedEntity[] entityArray = entities.ToArray();
-        EntitySourceKey queryKey = EntitySourceKey.From(enteredName);
+        EntitySourceKey? queryKey = enteredName.Length == 0 ? null : EntitySourceKey.From(enteredName);
         HashSet<EntitySourceKey> excluded = excludedKeys is null ? [] : [.. excludedKeys];
         EntitySourceKey? proposedEntityKey = string.IsNullOrWhiteSpace(proposedEntityName)
             ? null
@@ -53,9 +46,13 @@ internal static class DependencySearch
             .OrderBy(static match => match.Priority)
             .ThenBy(static match => match.Entity.SourceName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static match => match.Entity.SourceName, StringComparer.Ordinal)
-            .Take(MaximumSuggestions)
             .Select(static match => new ManualDependencySuggestion(match.Entity.Id, match.Entity.SourceName))
             .ToArray();
+
+        if (queryKey is null)
+        {
+            return new ManualDependencySearchResult(string.Empty, null, suggestions, false, null);
+        }
 
         if (proposedEntityKey == queryKey)
         {

@@ -502,39 +502,45 @@ public sealed class PresentationConfigurationTests
         string[] editableSuggestionControls =
         [
             "ManualGroupComboBox",
-            "EditorGroupComboBox"
+            "EditorGroupComboBox",
+            "ManualDependencyComboBox",
+            "EditorDependencyComboBox"
         ];
         foreach (string name in editableSuggestionControls)
         {
             XElement comboBox = Assert.Single(document.Descendants(), element =>
                 (string?)element.Attribute(x + "Name") == name);
-            Assert.Equal("ComboBox", comboBox.Name.LocalName);
+            Assert.EndsWith("ComboBox", comboBox.Name.LocalName);
             Assert.Equal("True", (string?)comboBox.Attribute("IsEditable"));
             Assert.Equal("False", (string?)comboBox.Attribute("IsTextSearchEnabled"));
         }
 
-        foreach (string name in new[] { "ManualDependencySuggestionBox", "EditorDependencySuggestionBox" })
+        foreach (string name in new[] { "ManualDependencyComboBox", "EditorDependencyComboBox" })
         {
-            XElement suggestionBox = Assert.Single(document.Descendants(), element =>
+            XElement comboBox = Assert.Single(document.Descendants(), element =>
                 (string?)element.Attribute(x + "Name") == name);
-            Assert.Equal("DependencySuggestionBox", suggestionBox.Name.LocalName);
-            Assert.Contains("DependencyQuery", (string?)suggestionBox.Attribute("Query"));
-            Assert.Contains("Suggestions", (string?)suggestionBox.Attribute("Suggestions"));
-            Assert.Contains("AddExistingCommand", (string?)suggestionBox.Attribute("AddExistingCommand"));
+            Assert.Equal("{StaticResource DependencyComboBoxStyle}", (string?)comboBox.Attribute("Style"));
+            Assert.Contains("DependencyQuery", (string?)comboBox.Attribute("Text"));
+            Assert.Contains("Suggestions", (string?)comboBox.Attribute("ItemsSource"));
+            Assert.Null(comboBox.Attribute("SelectedItem"));
+            Assert.Contains("IsDependencySuggestionsOpen", (string?)comboBox.Attribute("IsDropDownOpen"));
+            Assert.Contains("RefreshDependencySuggestionsCommand", (string?)comboBox.Attribute("RefreshCommand"));
+            Assert.Contains("AddExistingCommand", (string?)comboBox.Attribute("ChooseCommand"));
         }
 
-        XDocument suggestionControl = LoadWpfXaml("Controls", "DependencySuggestionBox.xaml");
-        XElement popup = Assert.Single(suggestionControl.Descendants(), element =>
-            element.Name.LocalName == "Popup");
-        Assert.Equal("False", (string?)popup.Attribute("AllowsTransparency"));
-        XElement popupBorder = Assert.Single(popup.Elements(), element =>
-            element.Name.LocalName == "Border");
-        Assert.Equal("{DynamicResource Brush.Surface.Page}",
-            (string?)popupBorder.Attribute("Background"));
-        XElement suggestionList = Assert.Single(popupBorder.Elements());
-        Assert.Equal("{DynamicResource Brush.Surface.Page}",
-            (string?)suggestionList.Attribute("Background"));
-        Assert.Equal("False", (string?)suggestionList.Attribute("ScrollViewer.CanContentScroll"));
+        XDocument components = LoadWpfXaml("Themes", "EntityTrackerComponents.xaml");
+        XElement dependencyStyle = Assert.Single(components.Descendants(), element =>
+            (string?)element.Attribute(x + "Key") == "DependencyComboBoxStyle");
+        Dictionary<string, string?> setters = dependencyStyle.Elements()
+            .Where(element => element.Name.LocalName == "Setter")
+            .ToDictionary(element => (string)element.Attribute("Property")!,
+                element => (string?)element.Attribute("Value"));
+        Assert.Equal("240", setters["MaxDropDownHeight"]);
+        Assert.Equal("True", setters["ScrollViewer.CanContentScroll"]);
+        Assert.Equal("Pixel", setters["VirtualizingPanel.ScrollUnit"]);
+        Assert.Equal("Recycling", setters["VirtualizingPanel.VirtualizationMode"]);
+        Assert.Contains(dependencyStyle.Descendants(), element =>
+            element.Name.LocalName == "VirtualizingStackPanel");
 
         XElement editorSurface = Assert.Single(document.Descendants(), element =>
             (string?)element.Attribute(x + "Name") == "EditorSurface");

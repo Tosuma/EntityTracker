@@ -11,6 +11,48 @@ namespace EntityTracker.Wpf.Tests.ViewModels;
 public sealed class ManualEntityCreationViewModelTests
 {
     [Fact]
+    public async Task DismissDropdown_WhileSearchIsPendingDoesNotReopenIt()
+    {
+        TaskCompletionSource<IReadOnlyList<TrackedEntity>> pending = new();
+        ManualEntityCreationViewModel viewModel = ViewModel([], out _, out _, out _,
+            pendingEntities: pending.Task);
+        viewModel.DependencyQuery = "target";
+        viewModel.IsDependencySuggestionsOpen = true;
+        Task search = viewModel.SearchDependenciesAsync();
+
+        Assert.True(viewModel.DismissOpenSuggestions());
+        pending.SetResult([Entity(1, "Target")]);
+        await search;
+
+        Assert.False(viewModel.IsDependencySuggestionsOpen);
+        Assert.Empty(viewModel.Suggestions);
+    }
+
+    [Fact]
+    public async Task EmptyDropdownRefresh_BrowsesWithoutAutomaticallyOpeningAndExcludesSelections()
+    {
+        TrackedEntity first = Entity(1, "TargetOne");
+        TrackedEntity second = Entity(2, "TargetTwo");
+        ManualEntityCreationViewModel viewModel = ViewModel([first, second], out _, out _, out _);
+        viewModel.EntityName = "Owner";
+        await viewModel.SearchDependenciesAsync();
+        Assert.False(viewModel.IsDependencySuggestionsOpen);
+
+        viewModel.IsDependencySuggestionsOpen = true;
+        viewModel.RefreshDependencySuggestionsCommand.Execute(null);
+        Assert.True(viewModel.IsDependencySuggestionsOpen);
+        Assert.Equal(2, viewModel.Suggestions.Count);
+        viewModel.AddExistingCommand.Execute(viewModel.Suggestions[0]);
+        Assert.False(viewModel.IsDependencySuggestionsOpen);
+
+        viewModel.IsDependencySuggestionsOpen = true;
+        viewModel.RefreshDependencySuggestionsCommand.Execute(null);
+        Assert.Equal(second.Id, Assert.Single(viewModel.Suggestions).EntityId);
+        Assert.False(viewModel.CanAddAsUnresolved);
+        Assert.Equal(string.Empty, viewModel.DependencyQuery);
+    }
+
+    [Fact]
     public async Task Search_AllowsExplicitUnresolvedSelectionAndRemoval()
     {
         ManualEntityCreationViewModel viewModel = ViewModel(
@@ -232,7 +274,8 @@ public sealed class ManualEntityCreationViewModelTests
         out RecordingStore store,
         out CallbackCounter created,
         out CallbackCounter cancelled,
-        ICollection<EntityId>? restoreRequests = null)
+        ICollection<EntityId>? restoreRequests = null,
+        Task<IReadOnlyList<TrackedEntity>>? pendingEntities = null)
     {
         store = new RecordingStore();
         created = new CallbackCounter();
@@ -240,7 +283,7 @@ public sealed class ManualEntityCreationViewModelTests
         CallbackCounter createdCounter = created;
         CallbackCounter cancelledCounter = cancelled;
         ManualEntityCreationService service = new(
-            new StubEntityRepository(entities),
+            new StubEntityRepository(entities, pendingEntities),
             new StubDependencyRepository(),
             new StubManualDependencyOverrideRepository(),
             new DependencyRanker(),
@@ -291,7 +334,8 @@ public sealed class ManualEntityCreationViewModelTests
         public EntityId? LastEntityId { get; set; }
     }
 
-    private sealed class StubEntityRepository(IReadOnlyList<TrackedEntity> entities)
+    private sealed class StubEntityRepository(IReadOnlyList<TrackedEntity> entities,
+        Task<IReadOnlyList<TrackedEntity>>? pendingEntities = null)
         : IEntityRepository
     {
         public Task<TrackedEntity?> GetAsync(
@@ -302,7 +346,7 @@ public sealed class ManualEntityCreationViewModelTests
 
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
             TrackerId trackerId,
-            CancellationToken cancellationToken = default) => Task.FromResult(entities);
+            CancellationToken cancellationToken = default) => pendingEntities ?? Task.FromResult(entities);
 
     }
 

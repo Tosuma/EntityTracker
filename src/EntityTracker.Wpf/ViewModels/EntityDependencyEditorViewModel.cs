@@ -42,6 +42,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private readonly AsyncCommand _restoreEntityCommand;
     private readonly AsyncCommand _confirmPurgeCommand;
     private readonly RelayCommand<ManualDependencySuggestion> _addExistingCommand;
+    private readonly RelayCommand _refreshDependencySuggestionsCommand;
     private readonly RelayCommand<string> _useGroupSuggestionCommand;
     private readonly RelayCommand<EntityDependencyEditRow> _suppressCommand;
     private readonly RelayCommand<EntityDependencyEditRow> _removeManualCommand;
@@ -58,7 +59,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private IReadOnlyList<string> _warnings = [];
     private IReadOnlyList<string> _errors = [];
     private string _dependencyQuery = string.Empty;
-    private ManualDependencySuggestion? _selectedDependencySuggestion;
     private string? _selectedGroupSuggestion;
     private string? _searchMessage;
     private string? _groupSearchMessage;
@@ -147,6 +147,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _addExistingCommand = new RelayCommand<ManualDependencySuggestion>(
             AddExisting,
             _ => CanEdit);
+        _refreshDependencySuggestionsCommand = new RelayCommand(
+            () => _ = SearchAsync(++_searchVersion), () => CanEdit);
         _useGroupSuggestionCommand = new RelayCommand<string>(
             UseGroupSuggestion,
             _ => CanEditProgress);
@@ -303,25 +305,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _dependencyQuery, value ?? string.Empty))
             {
-                IsDependencySuggestionsOpen = false;
                 _ = SearchAsync(++_searchVersion);
             }
-        }
-    }
-
-    public ManualDependencySuggestion? SelectedDependencySuggestion
-    {
-        get => _selectedDependencySuggestion;
-        set
-        {
-            if (!SetField(ref _selectedDependencySuggestion, value) || value is null)
-            {
-                return;
-            }
-
-            _selectedDependencySuggestion = null;
-            OnPropertyChanged();
-            AddExisting(value);
         }
     }
 
@@ -345,7 +330,11 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     public bool IsDependencySuggestionsOpen
     {
         get => _isDependencySuggestionsOpen;
-        set => SetField(ref _isDependencySuggestionsOpen, value);
+        set
+        {
+            if (SetField(ref _isDependencySuggestionsOpen, value) && !value)
+                _searchVersion++;
+        }
     }
 
     public bool IsGroupSuggestionsOpen
@@ -832,6 +821,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
     public ICommand AddExistingCommand => _addExistingCommand;
 
+    public ICommand RefreshDependencySuggestionsCommand => _refreshDependencySuggestionsCommand;
+
     public ICommand UseGroupSuggestionCommand => _useGroupSuggestionCommand;
 
     public ICommand AddUnresolvedCommand => _addUnresolvedCommand;
@@ -1081,7 +1072,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             }
 
             Suggestions = result.Suggestions;
-            IsDependencySuggestionsOpen = result.Suggestions.Count > 0;
+            if (!string.IsNullOrWhiteSpace(DependencyQuery))
+                IsDependencySuggestionsOpen = result.Suggestions.Count > 0;
             CanAddAsUnresolved = result.CanAddAsUnresolved &&
                                  !ContainsDependency(result.EnteredKey);
             SearchMessage = result.BlockingMessage ??
@@ -1588,8 +1580,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _searchVersion++;
         _dependencyQuery = string.Empty;
         OnPropertyChanged(nameof(DependencyQuery));
-        _selectedDependencySuggestion = null;
-        OnPropertyChanged(nameof(SelectedDependencySuggestion));
         Suggestions = [];
         IsDependencySuggestionsOpen = false;
         CanAddAsUnresolved = false;
@@ -1617,6 +1607,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _saveCommand.NotifyCanExecuteChanged();
         _assignMeCommand.NotifyCanExecuteChanged();
         _addExistingCommand.NotifyCanExecuteChanged();
+        _refreshDependencySuggestionsCommand.NotifyCanExecuteChanged();
         _useGroupSuggestionCommand.NotifyCanExecuteChanged();
         _addUnresolvedCommand.NotifyCanExecuteChanged();
         _suppressCommand.NotifyCanExecuteChanged();

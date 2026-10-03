@@ -16,6 +16,32 @@ namespace EntityTracker.Wpf.Tests.ViewModels;
 public sealed class EntityDependencyEditorViewModelTests
 {
     [Fact]
+    public async Task EmptyDropdownRefresh_ExcludesOwnerAndCurrentDependencies()
+    {
+        TrackedEntity owner = Entity(1, "Owner");
+        TrackedEntity first = Entity(2, "TargetOne");
+        TrackedEntity second = Entity(3, "TargetTwo");
+        EntityDependencyEditorViewModel viewModel = ViewModel([owner, first, second]);
+        await viewModel.BeginStandaloneAsync(owner.Id);
+        Assert.False(viewModel.IsDependencySuggestionsOpen);
+
+        viewModel.IsDependencySuggestionsOpen = true;
+        viewModel.RefreshDependencySuggestionsCommand.Execute(null);
+        await WaitUntilAsync(() => viewModel.Suggestions.Count == 2);
+        Assert.True(viewModel.IsDependencySuggestionsOpen);
+        viewModel.AddExistingCommand.Execute(viewModel.Suggestions[0]);
+        await WaitUntilAsync(() => viewModel.Dependencies.Count == 1);
+        Assert.False(viewModel.IsDependencySuggestionsOpen);
+
+        viewModel.IsDependencySuggestionsOpen = true;
+        viewModel.RefreshDependencySuggestionsCommand.Execute(null);
+        await WaitUntilAsync(() => viewModel.Suggestions.Count == 1);
+        Assert.Equal(second.Id, viewModel.Suggestions[0].EntityId);
+        Assert.False(viewModel.CanAddAsUnresolved);
+        Assert.Equal(string.Empty, viewModel.DependencyQuery);
+    }
+
+    [Fact]
     public async Task FilterActive_IsEditableAndCancelDiscardsTheDraft()
     {
         TrackedEntity owner = Entity(1, "Owner");
@@ -42,9 +68,7 @@ public sealed class EntityDependencyEditorViewModelTests
         viewModel.DependencyQuery = "target";
         await WaitUntilAsync(() => viewModel.Suggestions.Count == 1);
 
-        ManualDependencySuggestion suggestion = viewModel.Suggestions[0];
-        viewModel.SelectedDependencySuggestion = suggestion;
-        viewModel.SelectedDependencySuggestion = suggestion;
+        viewModel.AddExistingCommand.Execute(viewModel.Suggestions[0]);
 
         await WaitUntilAsync(() => viewModel.Dependencies.Count == 1);
         EntityDependencyEditRow dependency = Assert.Single(viewModel.Dependencies);
@@ -64,7 +88,7 @@ public sealed class EntityDependencyEditorViewModelTests
         await viewModel.BeginStandaloneAsync(owner.Id);
         viewModel.DependencyQuery = "target";
         await WaitUntilAsync(() => viewModel.Suggestions.Count == 1);
-        viewModel.SelectedDependencySuggestion = viewModel.Suggestions[0];
+        viewModel.AddExistingCommand.Execute(viewModel.Suggestions[0]);
         await WaitUntilAsync(() => viewModel.Dependencies.Count == 1);
 
         viewModel.DependencyQuery = "target";

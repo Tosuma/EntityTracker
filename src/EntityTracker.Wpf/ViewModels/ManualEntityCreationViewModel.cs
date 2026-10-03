@@ -30,6 +30,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     private readonly RelayCommand<string> _useGroupSuggestionCommand;
     private readonly RelayCommand<ManualDependencyRow> _removeDependencyCommand;
     private readonly RelayCommand _addUnresolvedCommand;
+    private readonly RelayCommand _refreshDependencySuggestionsCommand;
     private readonly RelayCommand _cancelCommand;
     private CancellationTokenSource? _searchCancellation;
     private CancellationTokenSource? _groupSearchCancellation;
@@ -40,7 +41,6 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     private string _groupName = string.Empty;
     private int? _selectedRequestedPriority;
     private string _dependencyQuery = string.Empty;
-    private ManualDependencySuggestion? _selectedDependencySuggestion;
     private string? _selectedGroupSuggestion;
     private IReadOnlyList<ManualDependencySuggestion> _suggestions = [];
     private IReadOnlyList<string> _groupSuggestions = [];
@@ -104,6 +104,8 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             RestoreArchivedAsync,
             () => !IsBusy && _canOperate() && ArchivedEntityMatch is not null);
         _cancelCommand = new RelayCommand(Cancel, () => !IsBusy && _canOperate());
+        _refreshDependencySuggestionsCommand = new RelayCommand(
+            () => _ = SearchDependenciesAsync(), () => !IsBusy && _canOperate());
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -179,25 +181,8 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             if (SetField(ref _dependencyQuery, value ?? string.Empty))
             {
                 ClearFatalValidation();
-                IsDependencySuggestionsOpen = false;
                 ScheduleSearch();
             }
-        }
-    }
-
-    public ManualDependencySuggestion? SelectedDependencySuggestion
-    {
-        get => _selectedDependencySuggestion;
-        set
-        {
-            if (!SetField(ref _selectedDependencySuggestion, value) || value is null)
-            {
-                return;
-            }
-
-            AddExisting(value);
-            _selectedDependencySuggestion = null;
-            OnPropertyChanged();
         }
     }
 
@@ -221,7 +206,11 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     public bool IsDependencySuggestionsOpen
     {
         get => _isDependencySuggestionsOpen;
-        set => SetField(ref _isDependencySuggestionsOpen, value);
+        set
+        {
+            if (SetField(ref _isDependencySuggestionsOpen, value) && !value)
+                _searchVersion++;
+        }
     }
 
     public bool IsGroupSuggestionsOpen
@@ -377,6 +366,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
                 _addUnresolvedCommand.NotifyCanExecuteChanged();
                 _cancelCommand.NotifyCanExecuteChanged();
                 _addExistingCommand.NotifyCanExecuteChanged();
+                _refreshDependencySuggestionsCommand.NotifyCanExecuteChanged();
                 _useGroupSuggestionCommand.NotifyCanExecuteChanged();
                 _removeDependencyCommand.NotifyCanExecuteChanged();
                 _restoreArchivedCommand.NotifyCanExecuteChanged();
@@ -407,6 +397,8 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         SelectedDependencies.Count > 0;
 
     public ICommand AddExistingCommand => _addExistingCommand;
+
+    public ICommand RefreshDependencySuggestionsCommand => _refreshDependencySuggestionsCommand;
 
     public ICommand UseGroupSuggestionCommand => _useGroupSuggestionCommand;
 
@@ -503,7 +495,8 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             }
 
             Suggestions = result.Suggestions;
-            IsDependencySuggestionsOpen = result.Suggestions.Count > 0;
+            if (!string.IsNullOrWhiteSpace(dependencyQuery))
+                IsDependencySuggestionsOpen = result.Suggestions.Count > 0;
             CanAddAsUnresolved = result.CanAddAsUnresolved &&
                                  (result.EnteredKey is null ||
                                   !ContainsDependency(result.EnteredKey));
@@ -665,6 +658,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         _addUnresolvedCommand.NotifyCanExecuteChanged();
         _cancelCommand.NotifyCanExecuteChanged();
         _addExistingCommand.NotifyCanExecuteChanged();
+        _refreshDependencySuggestionsCommand.NotifyCanExecuteChanged();
         _useGroupSuggestionCommand.NotifyCanExecuteChanged();
         _removeDependencyCommand.NotifyCanExecuteChanged();
         _restoreArchivedCommand.NotifyCanExecuteChanged();
@@ -896,8 +890,6 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(HasNoSelectedDependencies));
         Suggestions = [];
         GroupSuggestions = [];
-        _selectedDependencySuggestion = null;
-        OnPropertyChanged(nameof(SelectedDependencySuggestion));
         _selectedGroupSuggestion = null;
         OnPropertyChanged(nameof(SelectedGroupSuggestion));
         IsDependencySuggestionsOpen = false;
