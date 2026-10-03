@@ -14,7 +14,7 @@ The relevant paths are:
 entity-tracker.db              active SQLite database
 settings.json                  local appearance, active context, and automatic sync schedule
 git-sync-links.v1.json         local Project-to-checkout associations and sync state
-backups\                       automatic SQLite backups
+backups\v<schema-version>\    automatic SQLite backups grouped by source schema version
 logs\                          daily application logs
 ```
 
@@ -31,7 +31,12 @@ a consistent copy:
 - at most one normal backup per UTC day;
 - an additional timestamped backup whenever the stored schema version differs from the supported
   application schema, before migration begins;
-- the newest 14 backup files total are retained.
+- pre-sync backups before inbound SQLite changes.
+
+Backups are stored under `backups\v<schema-version>`, using the schema version recorded inside
+each database. At startup, older backups in the root `backups` folder are moved into the matching
+version folders. Pre-migration backups are kept for rollback; the newest 14 daily and pre-sync
+backups are retained across the version folders.
 
 A backup failure is logged and shown as a startup warning, but it does not by itself prevent the
 application from opening. A database initialization or migration failure still stops startup.
@@ -41,7 +46,8 @@ application from opening. A database initialization or migration failure still s
 1. Close every running EntityTracker instance.
 2. Open `%LOCALAPPDATA%\EntityTracker` in File Explorer.
 3. Make a safety copy of the current `entity-tracker.db` outside that folder.
-4. In `backups`, choose the required `.db` file by its UTC date/time.
+4. In `backups`, open the folder for the schema version you need (for example, `v18`) and choose
+   the required `.db` file by its UTC date/time.
 5. Copy that backup into `%LOCALAPPDATA%\EntityTracker` and name the copy
    `entity-tracker.db`, replacing the active file only after step 3.
 6. Start EntityTracker. The normal migration process will upgrade an older backup if needed and
