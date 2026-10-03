@@ -1114,13 +1114,7 @@
                                     AutomationProperties.Name="Export dependency graph as PNG"
                                     Style="{StaticResource PrimaryButtonStyle}" />
                         </StackPanel>
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Dependency graph" />
-                            <TextBlock Margin="0,3,0,0"
-                                       Foreground="{DynamicResource Brush.Text.Secondary}"
-                                       Text="Foundation entities without dependencies sit in the centre; each ring outward is one more layer of dependencies, so the map reads outward in build order. Missing dependencies orbit on the outermost ring. Larger dots are referred to by more entities. Only direct links are drawn, never ones implied by a longer chain."
-                                       TextWrapping="Wrap" />
-                        </StackPanel>
+                        <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Dependency graph" />
                     </DockPanel>
 
                     <WrapPanel Grid.Row="1" Margin="0,0,0,8">
