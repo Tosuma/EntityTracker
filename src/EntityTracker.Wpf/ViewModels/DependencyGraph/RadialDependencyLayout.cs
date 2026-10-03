@@ -333,36 +333,46 @@ public sealed class RadialDependencyLayout
         SweepOutward();
         if (orbits.Length == 0) return;
 
-        // Everything follows the foundations, so try swapping neighbouring foundations and keep
-        // each swap that shortens the links across the whole map.
+        // Everything follows the foundations, so try swapping neighbouring foundations. A swap is
+        // judged cheaply by the links of the two foundations involved; the map is re-placed once
+        // per pass and the pass is kept only when it shortens the links across the whole map.
         DependencyGraphNode[] foundations = orbits[0];
+        double LocalSpan(DependencyGraphNode node) => dependents[node]
+            .Where(item => _angles.ContainsKey(item) && !ReferenceEquals(item, centre))
+            .Sum(item => AngleBetween(_angles[node], _angles[item]));
         double best = MeanLinkAngle(_angles);
-        for (int pass = 0; pass < 6; pass++)
+        for (int pass = 0; pass < 6 && foundations.Length > 2; pass++)
         {
-            bool improved = false;
+            Dictionary<DependencyGraphNode, double> snapshot = new(_angles, ReferenceEqualityComparer.Instance);
+            bool swapped = false;
             DependencyGraphNode[] order = foundations.OrderBy(node => Normalize(_angles[node])).ToArray();
             for (int index = 0; index < order.Length; index++)
             {
                 DependencyGraphNode a = order[index];
                 DependencyGraphNode b = order[(index + 1) % order.Length];
-                if (ReferenceEquals(a, b)) continue;
-                Dictionary<DependencyGraphNode, double> snapshot = new(_angles, ReferenceEqualityComparer.Instance);
+                double before = LocalSpan(a) + LocalSpan(b);
                 (_angles[a], _angles[b]) = (_angles[b], _angles[a]);
-                SweepOutward();
-                double cost = MeanLinkAngle(_angles);
-                if (cost + 1e-9 < best)
+                if (LocalSpan(a) + LocalSpan(b) + 1e-9 < before)
                 {
-                    best = cost;
                     (order[index], order[(index + 1) % order.Length]) = (b, a);
-                    improved = true;
+                    swapped = true;
                 }
                 else
                 {
-                    foreach ((DependencyGraphNode node, double angle) in snapshot) _angles[node] = angle;
+                    (_angles[a], _angles[b]) = (_angles[b], _angles[a]);
                 }
             }
 
-            if (!improved) break;
+            if (!swapped) break;
+            SweepOutward();
+            double cost = MeanLinkAngle(_angles);
+            if (cost + 1e-9 >= best)
+            {
+                foreach ((DependencyGraphNode node, double angle) in snapshot) _angles[node] = angle;
+                break;
+            }
+
+            best = cost;
         }
     }
 

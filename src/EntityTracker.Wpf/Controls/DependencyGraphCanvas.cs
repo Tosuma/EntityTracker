@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 
 using EntityTracker.Domain;
 using EntityTracker.Wpf.ViewModels;
@@ -14,7 +15,10 @@ namespace EntityTracker.Wpf.Controls;
 
 /// <summary>
 /// Draws the dependency map and handles pan, zoom, node dragging, selection and double-click.
-/// The layout keeps animating only until it settles.
+/// The map is rasterised once into a cached layer; panning and zooming only move or scale that
+/// layer, and the map is redrawn sharply once the view has been still for a moment. Without this,
+/// every pan step re-rasterised every visible line, dot and name, which made panning over the
+/// entities stutter.
 /// </summary>
 public sealed class DependencyGraphCanvas : FrameworkElement
 {
@@ -36,8 +40,12 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     private const double RestingLinkOpacity = 0.25;
     private const double OrbitOpacity = 0.3;
     private const double DragThreshold = 3;
+    private static readonly TimeSpan SettleDelay = TimeSpan.FromMilliseconds(120);
 
-    private readonly Dictionary<(string Text, bool Bold), FormattedText> _labelCache = [];
+    private readonly Dictionary<(string Text, bool Bold, bool Dimmed), FormattedText> _labelCache = [];
+    private readonly Dictionary<DevelopmentStatus, Brush> _statusBrushes = [];
+    private readonly Dictionary<(Brush Brush, double Opacity), Brush> _fadedBrushes = [];
+    private readonly Dictionary<(Brush Brush, double Thickness, bool Dashed), Pen> _pens = [];
     private double _scale = 1;
     private Vector _offset;
     private bool _needsFit = true;
@@ -48,16 +56,37 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     private Point _lastPoint;
     private bool _isPanning;
     private bool _hasMoved;
+    private readonly DrawingVisual _content = new();
+    private readonly DrawingVisual _overlay = new();
+    private readonly MatrixTransform _contentTransform = new();
+    private readonly DispatcherTimer _settleTimer;
+    private double _renderedScale = 1;
+    private Vector _renderedOffset;
 
     public DependencyGraphCanvas()
     {
         Focusable = true;
         ClipToBounds = true;
+        _content.Transform = _contentTransform;
+        _content.CacheMode = new BitmapCache { SnapsToDevicePixels = true };
+        AddVisualChild(_content);
+        AddVisualChild(_overlay);
+        _settleTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = SettleDelay };
+        _settleTimer.Tick += (_, _) => Redraw();
         Loaded += (_, _) => StartAnimationIfNeeded();
-        Unloaded += (_, _) => StopAnimation();
-        SizeChanged += (_, _) => { if (_needsFit) FitToView(); };
-        IsVisibleChanged += (_, _) => { if (IsVisible) { if (_needsFit) FitToView(); StartAnimationIfNeeded(); } };
+        Unloaded += (_, _) => { StopAnimation(); _settleTimer.Stop(); };
+        SizeChanged += (_, _) => { if (_needsFit) FitToView(); else Redraw(); };
+        IsVisibleChanged += (_, _) => { if (IsVisible) { if (_needsFit) FitToView(); else Redraw(); StartAnimationIfNeeded(); } };
     }
+
+    protected override int VisualChildrenCount => 2;
+
+    protected override Visual GetVisualChild(int index) => index switch
+    {
+        0 => _content,
+        1 => _overlay,
+        _ => throw new ArgumentOutOfRangeException(nameof(index))
+    };
 
     public DependencyGraphViewModel? Graph
     {
@@ -118,7 +147,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         if (nodes.Length == 0)
         {
             _needsFit = true;
-            InvalidateVisual();
+            Redraw();
             return;
         }
 
@@ -135,7 +164,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
             ActualWidth / 2 - (left + right) / 2 * _scale,
             ActualHeight / 2 - (top + bottom) / 2 * _scale);
         _needsFit = false;
-        InvalidateVisual();
+        Redraw();
     }
 
     public void CenterOn(DependencyGraphNode node)
@@ -144,7 +173,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         _scale = Math.Max(_scale, 1);
         _offset = new Vector(ActualWidth / 2 - node.X * _scale, ActualHeight / 2 - node.Y * _scale);
         _needsFit = false;
-        InvalidateVisual();
+        Redraw();
     }
 
     /// <summary>Writes the current view, including its background, as a PNG file.</summary>
@@ -156,7 +185,10 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         int height = Math.Max(1, (int)Math.Ceiling(ActualHeight * dpi.DpiScaleY));
         DrawingVisual visual = new();
         using (DrawingContext context = visual.RenderOpen())
-            Draw(context, includeHoverCard: false);
+        {
+            context.DrawRectangle(Background ?? Brushes.Transparent, null, new Rect(0, 0, ActualWidth, ActualHeight));
+            if (Graph is { } graph) DrawScene(context, graph, area: null);
+        }
 
         RenderTargetBitmap bitmap = new(width, height, dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
         bitmap.Render(visual);
@@ -170,77 +202,146 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     internal void ShowHover(DependencyGraphNode? node)
     {
         _hoverNode = node;
-        InvalidateVisual();
+        Redraw();
     }
 
-    protected override void OnRender(DrawingContext context) => Draw(context, includeHoverCard: true);
+    /// <summary>Draws only the background; the map lives in the cached child layer.</summary>
+    protected override void OnRender(DrawingContext context) =>
+        context.DrawRectangle(Background ?? Brushes.Transparent, null, new Rect(RenderSize));
 
-    private void Draw(DrawingContext context, bool includeHoverCard)
+    /// <summary>
+    /// Re-renders the map for the current view into the cached layer and resets its transform.
+    /// Only the visible area plus a margin is drawn, which keeps the cached bitmap small.
+    /// </summary>
+    private void Redraw()
     {
-        Rect bounds = new(0, 0, ActualWidth, ActualHeight);
-        context.DrawRectangle(Background ?? Brushes.Transparent, null, bounds);
+        _settleTimer.Stop();
         DependencyGraphViewModel? graph = Graph;
-        if (graph is null) return;
+        using (DrawingContext context = _content.RenderOpen())
+        {
+            if (graph is not null && ActualWidth > 0 && ActualHeight > 0)
+            {
+                Rect area = new(0, 0, ActualWidth, ActualHeight);
+                area.Inflate(ActualWidth / 2, ActualHeight / 2);
+                context.PushClip(new RectangleGeometry(area));
+                DrawScene(context, graph, area);
+                context.Pop();
+            }
+        }
 
+        _renderedScale = _scale;
+        _renderedOffset = _offset;
+        _contentTransform.Matrix = Matrix.Identity;
+        using DrawingContext overlay = _overlay.RenderOpen();
+        if (graph is not null && _hoverNode is not null && !IsMouseCaptured && graph.IsVisible(_hoverNode))
+            DrawHoverCard(overlay, graph, _hoverNode);
+    }
+
+    /// <summary>
+    /// Follows a pan or zoom by moving and scaling the cached map instead of redrawing it, then
+    /// schedules a sharp redraw for when the view stops changing.
+    /// </summary>
+    private void ViewChanged()
+    {
+        double factor = _scale / _renderedScale;
+        _contentTransform.Matrix = new Matrix(factor, 0, 0, factor,
+            _offset.X - _renderedOffset.X * factor, _offset.Y - _renderedOffset.Y * factor);
+        _overlay.RenderOpen().Close();
+        _settleTimer.Stop();
+        _settleTimer.Start();
+    }
+
+    /// <summary>
+    /// Draws the map. Faint and dimmed parts use brushes with the opacity built in, and lines are
+    /// batched into one geometry per style, because per-element opacity layers make WPF render
+    /// every line and dot to its own off-screen surface, which is what made panning stutter.
+    /// </summary>
+    private void DrawScene(DrawingContext context, DependencyGraphViewModel graph, Rect? area)
+    {
         bool hasSelection = graph.HasSelection;
         Brush edgeBrush = EdgeBrush ?? Brushes.Gray;
         Brush highlightBrush = HighlightBrush ?? Brushes.Black;
-        Pen edgePen = Freeze(new Pen(edgeBrush, 1));
-        Pen highlightPen = Freeze(new Pen(highlightBrush, 2));
 
-        // Orbit guides: hubs sit in the centre, dependencies orbit further out.
-        Pen orbitPen = Freeze(new Pen(edgeBrush, 1) { DashStyle = DashStyles.Dash });
+        // Orbit guides: foundations in the centre, each ring one more layer of dependencies.
+        Pen orbitPen = CachedPen(Faded(edgeBrush, OrbitOpacity), 1);
         Point origin = new(_offset.X, _offset.Y);
-        context.PushOpacity(OrbitOpacity);
         foreach (double ring in graph.Layout.RingRadii)
             context.DrawEllipse(null, orbitPen, origin, ring * _scale, ring * _scale);
-        context.Pop();
 
         HashSet<DependencyGraphNode> hoverNeighbours = new(ReferenceEqualityComparer.Instance);
-        foreach (DependencyGraphEdge edge in graph.Model.EssentialEdges)
+        StreamGeometry faint = new();
+        StreamGeometry emphasized = new();
+        using (StreamGeometryContext faintLines = faint.Open())
+        using (StreamGeometryContext strongLines = emphasized.Open())
         {
-            if (!graph.IsVisible(edge)) continue;
-            bool hovered = _hoverNode is not null &&
-                (ReferenceEquals(edge.From, _hoverNode) || ReferenceEquals(edge.To, _hoverNode));
-            if (hovered)
+            foreach (DependencyGraphEdge edge in graph.Model.EssentialEdges)
             {
-                hoverNeighbours.Add(edge.From);
-                hoverNeighbours.Add(edge.To);
-            }
+                if (!graph.IsVisible(edge)) continue;
+                if (area is { } visibleArea && !new Rect(ToScreen(edge.From), ToScreen(edge.To)).IntersectsWith(visibleArea))
+                    continue;
+                bool hovered = _hoverNode is not null &&
+                    (ReferenceEquals(edge.From, _hoverNode) || ReferenceEquals(edge.To, _hoverNode));
+                if (hovered)
+                {
+                    hoverNeighbours.Add(edge.From);
+                    hoverNeighbours.Add(edge.To);
+                }
 
-            bool emphasized = hovered || graph.HighlightedEdges.Contains(edge);
-            double opacity = emphasized ? 1 : hasSelection ? DimOpacity : RestingLinkOpacity;
-            if (opacity < 1) context.PushOpacity(opacity);
-            DrawEdge(context, edge, emphasized ? highlightPen : edgePen);
-            if (opacity < 1) context.Pop();
+                AddEdge(hovered || graph.HighlightedEdges.Contains(edge) ? strongLines : faintLines, edge);
+            }
         }
 
-        Pen outlinePen = Freeze(new Pen(edgeBrush, 1));
-        Pen placeholderPen = Freeze(new Pen(PlaceholderBrush ?? Brushes.Gray, 1.5) { DashStyle = DashStyles.Dash });
-        Pen selectedPen = Freeze(new Pen(highlightBrush, 2.5));
-        Pen chainPen = Freeze(new Pen(highlightBrush, 1.5));
+        faint.Freeze();
+        emphasized.Freeze();
+        context.DrawGeometry(null, CachedPen(Faded(edgeBrush, hasSelection ? DimOpacity : RestingLinkOpacity), 1), faint);
+        context.DrawGeometry(null, CachedPen(highlightBrush, 2), emphasized);
+
+        // Dimmed entities first, so the highlighted ones are drawn on top of them.
+        List<DependencyGraphNode> dimmed = [];
+        List<DependencyGraphNode> normal = [];
         foreach (DependencyGraphNode node in graph.Model.Nodes)
         {
-            if (!graph.IsVisible(node)) continue;
-            bool highlighted = graph.HighlightedNodes.Contains(node);
-            bool dimmed = hasSelection && !highlighted && !hoverNeighbours.Contains(node);
-            Point center = ToScreen(node);
-            double radius = Math.Max(node.Radius * _scale, 2.5);
-            if (dimmed) context.PushOpacity(DimOpacity);
-            if (node.IsPlaceholder)
-                context.DrawEllipse(Background, placeholderPen, center, radius, radius);
-            else
-                context.DrawEllipse(StatusBrush(node.Status), outlinePen, center, radius, radius);
-            if (ReferenceEquals(node, graph.SelectedNode))
-                context.DrawEllipse(null, selectedPen, center, radius + 4, radius + 4);
-            else if (highlighted)
-                context.DrawEllipse(null, chainPen, center, radius + 2.5, radius + 2.5);
-            if (dimmed) context.Pop();
+            if (!graph.IsVisible(node) || !IsInArea(node, area)) continue;
+            bool isDimmed = hasSelection && !graph.HighlightedNodes.Contains(node) && !hoverNeighbours.Contains(node);
+            (isDimmed ? dimmed : normal).Add(node);
         }
 
-        DrawLabels(context, graph, hoverNeighbours);
-        if (includeHoverCard && _hoverNode is not null && !IsMouseCaptured && graph.IsVisible(_hoverNode))
-            DrawHoverCard(context, graph, _hoverNode);
+        foreach (DependencyGraphNode node in dimmed) DrawNode(context, graph, node, DimOpacity);
+        foreach (DependencyGraphNode node in normal) DrawNode(context, graph, node, 1);
+
+        DrawLabels(context, graph, hoverNeighbours, area);
+    }
+
+    private bool IsInArea(DependencyGraphNode node, Rect? area)
+    {
+        if (area is not { } visibleArea) return true;
+        double margin = Math.Max(node.Radius * _scale, 2.5) + 200;
+        visibleArea.Inflate(margin, margin);
+        return visibleArea.Contains(ToScreen(node));
+    }
+
+    private void DrawNode(DrawingContext context, DependencyGraphViewModel graph, DependencyGraphNode node,
+        double opacity)
+    {
+        Brush edgeBrush = EdgeBrush ?? Brushes.Gray;
+        Brush highlightBrush = HighlightBrush ?? Brushes.Black;
+        Point center = ToScreen(node);
+        double radius = Math.Max(node.Radius * _scale, 2.5);
+        if (node.IsPlaceholder)
+        {
+            context.DrawEllipse(Background, CachedPen(Faded(PlaceholderBrush ?? Brushes.Gray, opacity), 1.5, dashed: true),
+                center, radius, radius);
+        }
+        else
+        {
+            context.DrawEllipse(Faded(StatusBrush(node.Status), opacity), CachedPen(Faded(edgeBrush, opacity), 1),
+                center, radius, radius);
+        }
+
+        if (ReferenceEquals(node, graph.SelectedNode))
+            context.DrawEllipse(null, CachedPen(highlightBrush, 2.5), center, radius + 4, radius + 4);
+        else if (graph.HighlightedNodes.Contains(node))
+            context.DrawEllipse(null, CachedPen(Faded(highlightBrush, opacity), 1.5), center, radius + 2.5, radius + 2.5);
     }
 
     /// <summary>
@@ -248,13 +349,13 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     /// would overlap a more important one are skipped.
     /// </summary>
     private void DrawLabels(DrawingContext context, DependencyGraphViewModel graph,
-        HashSet<DependencyGraphNode> hoverNeighbours)
+        HashSet<DependencyGraphNode> hoverNeighbours, Rect? area)
     {
         bool hasSelection = graph.HasSelection;
-        List<DependencyGraphLabelCandidate<(FormattedText Text, bool Dimmed)>> candidates = [];
+        List<DependencyGraphLabelCandidate<FormattedText>> candidates = [];
         foreach (DependencyGraphNode node in graph.Model.Nodes)
         {
-            if (!graph.IsVisible(node)) continue;
+            if (!graph.IsVisible(node) || !IsInArea(node, area)) continue;
             bool highlighted = graph.HighlightedNodes.Contains(node);
             bool landmark = graph.Landmarks.Contains(node);
             int tier = ReferenceEquals(node, _hoverNode) ? 0
@@ -265,21 +366,16 @@ public sealed class DependencyGraphCanvas : FrameworkElement
                 : _scale >= LabelScale ? 5
                 : -1;
             if (tier < 0) continue;
-            FormattedText text = Label(node.Label, landmark);
+            bool dimmed = hasSelection && !highlighted && !hoverNeighbours.Contains(node);
+            FormattedText text = Label(node.Label, landmark, dimmed);
             Point center = ToScreen(node);
             double radius = Math.Max(node.Radius * _scale, 2.5);
             Rect bounds = new(center.X - text.Width / 2, center.Y + radius + 3, text.Width, text.Height);
-            bool dimmed = hasSelection && !highlighted && !hoverNeighbours.Contains(node);
-            candidates.Add(new((text, dimmed), bounds, tier * 100_000 - node.DependentCount, tier <= 1));
+            candidates.Add(new(text, bounds, tier * 100_000 - node.DependentCount, tier <= 1));
         }
 
-        foreach (DependencyGraphLabelCandidate<(FormattedText Text, bool Dimmed)> label in
-                 DependencyGraphLabelPlacer.Place(candidates))
-        {
-            if (label.Item.Dimmed) context.PushOpacity(DimOpacity);
-            context.DrawText(label.Item.Text, label.Bounds.TopLeft);
-            if (label.Item.Dimmed) context.Pop();
-        }
+        foreach (DependencyGraphLabelCandidate<FormattedText> label in DependencyGraphLabelPlacer.Place(candidates))
+            context.DrawText(label.Item, label.Bounds.TopLeft);
     }
 
     /// <summary>Draws a small card explaining the hovered entity's place on the map.</summary>
@@ -358,14 +454,15 @@ public sealed class DependencyGraphCanvas : FrameworkElement
                 _dragNode.Y = world.Y;
                 Graph?.Layout.Reheat();
                 StartAnimationIfNeeded();
+                Redraw();
             }
             else
             {
                 _offset += point - _lastPoint;
+                ViewChanged();
             }
 
             _lastPoint = point;
-            InvalidateVisual();
             return;
         }
 
@@ -374,7 +471,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         {
             _hoverNode = hover;
             Cursor = hover is null ? null : Cursors.Hand;
-            InvalidateVisual();
+            Redraw();
         }
     }
 
@@ -410,7 +507,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         base.OnMouseLeave(e);
         if (_hoverNode is null) return;
         _hoverNode = null;
-        InvalidateVisual();
+        Redraw();
     }
 
     protected override void OnMouseWheel(MouseWheelEventArgs e)
@@ -448,7 +545,14 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
-        if (e.Property == LabelBrushProperty) _labelCache.Clear();
+        if (e.Property.PropertyType != typeof(Brush)) return;
+
+        // A theme change swaps the brushes, so everything derived from them is rebuilt.
+        _labelCache.Clear();
+        _statusBrushes.Clear();
+        _fadedBrushes.Clear();
+        _pens.Clear();
+        Redraw();
     }
 
     private static DependencyProperty RegisterBrush(string name) => DependencyProperty.Register(
@@ -488,10 +592,10 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         _dragNode = null;
         if (_needsFit) FitToView();
         StartAnimationIfNeeded();
-        InvalidateVisual();
+        Redraw();
     }
 
-    private void OnGraphVisualStateChanged(object? sender, EventArgs e) => InvalidateVisual();
+    private void OnGraphVisualStateChanged(object? sender, EventArgs e) => Redraw();
 
     private void OnCenterOnRequested(object? sender, DependencyGraphNode node) => CenterOn(node);
 
@@ -521,7 +625,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         }
 
         graph.Layout.Step();
-        InvalidateVisual();
+        Redraw();
         if (graph.Layout.IsSettled && _dragNode is null) StopAnimation();
     }
 
@@ -532,11 +636,11 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         _scale = scale;
         _offset = new Vector(anchor.X - world.X * scale, anchor.Y - world.Y * scale);
         _needsFit = false;
-        InvalidateVisual();
+        ViewChanged();
     }
 
     /// <summary>Draws a plain line between the two node edges; the orbits already show direction.</summary>
-    private void DrawEdge(DrawingContext context, DependencyGraphEdge edge, Pen pen)
+    private void AddEdge(StreamGeometryContext lines, DependencyGraphEdge edge)
     {
         Point from = ToScreen(edge.From);
         Point to = ToScreen(edge.To);
@@ -546,7 +650,8 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         double toRadius = Math.Max(edge.To.Radius * _scale, 2.5);
         if (length <= fromRadius + toRadius) return;
         direction /= length;
-        context.DrawLine(pen, from + direction * fromRadius, to - direction * toRadius);
+        lines.BeginFigure(from + direction * fromRadius, false, false);
+        lines.LineTo(to - direction * toRadius, true, false);
     }
 
     private DependencyGraphNode? HitTestNode(Point point)
@@ -565,18 +670,46 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         return null;
     }
 
-    private Brush StatusBrush(DevelopmentStatus? status) =>
-        TryFindResource($"Brush.Status.{status}") as Brush ?? Brushes.Gray;
+    private Brush StatusBrush(DevelopmentStatus? nullableStatus)
+    {
+        if (nullableStatus is not { } status) return Brushes.Gray;
+        if (_statusBrushes.TryGetValue(status, out Brush? cached)) return cached;
+        Brush brush = TryFindResource($"Brush.Status.{status}") as Brush ?? Brushes.Gray;
+        _statusBrushes[status] = brush;
+        return brush;
+    }
+
+    /// <summary>Gets a frozen copy of a brush with the opacity built in, cached per brush.</summary>
+    private Brush Faded(Brush brush, double opacity)
+    {
+        if (opacity >= 1) return brush;
+        if (_fadedBrushes.TryGetValue((brush, opacity), out Brush? cached)) return cached;
+        Brush faded = brush.CloneCurrentValue();
+        faded.Opacity *= opacity;
+        if (faded.CanFreeze) faded.Freeze();
+        _fadedBrushes[(brush, opacity)] = faded;
+        return faded;
+    }
+
+    private Pen CachedPen(Brush brush, double thickness, bool dashed = false)
+    {
+        if (_pens.TryGetValue((brush, thickness, dashed), out Pen? cached)) return cached;
+        Pen pen = new(brush, thickness);
+        if (dashed) pen.DashStyle = DashStyles.Dash;
+        _pens[(brush, thickness, dashed)] = Freeze(pen);
+        return pen;
+    }
 
     /// <summary>Gets a cached name label; landmark names are drawn semibold.</summary>
-    private FormattedText Label(string text, bool bold = false)
+    private FormattedText Label(string text, bool bold = false, bool dimmed = false)
     {
-        if (_labelCache.TryGetValue((text, bold), out FormattedText? cached)) return cached;
+        if (_labelCache.TryGetValue((text, bold, dimmed), out FormattedText? cached)) return cached;
+        Brush brush = LabelBrush ?? Brushes.Black;
         FormattedText label = new(text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
             new Typeface(TextElementFontFamily(), FontStyles.Normal,
                 bold ? FontWeights.SemiBold : FontWeights.Normal, FontStretches.Normal),
-            12, LabelBrush ?? Brushes.Black, VisualTreeHelper.GetDpi(this).PixelsPerDip);
-        _labelCache[(text, bold)] = label;
+            12, dimmed ? Faded(brush, DimOpacity) : brush, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        _labelCache[(text, bold, dimmed)] = label;
         return label;
     }
 
