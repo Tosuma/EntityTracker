@@ -26,7 +26,8 @@ public sealed class EntityOverviewItem
         EntityWorkflowState workflowState,
         IEnumerable<DependencyBlocker> blockers,
         EntityAuditTimestamps auditTimestamps,
-        IEnumerable<EntityOverviewDeveloper>? currentDevelopers = null)
+        IEnumerable<EntityOverviewDeveloper>? currentDevelopers = null,
+        string filterActive = "")
     {
         EntityId = entityId;
         Rank = rank;
@@ -36,6 +37,7 @@ public sealed class EntityOverviewItem
         Provenance = provenance;
         Status = status;
         Notes = notes;
+        FilterActive = filterActive;
         ResponsibleDeveloper = responsibleDeveloper;
         CurrentDevelopers = Array.AsReadOnly((currentDevelopers ?? []).ToArray());
         GroupName = groupName;
@@ -65,6 +67,8 @@ public sealed class EntityOverviewItem
     public DevelopmentStatus Status { get; }
 
     public string Notes { get; }
+
+    public string FilterActive { get; }
 
     public string ResponsibleDeveloper { get; }
 

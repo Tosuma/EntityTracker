@@ -231,6 +231,7 @@ public sealed class ProjectSnapshotMerger
             DevelopmentStatus = Field(path + "/DevelopmentStatus", b.DevelopmentStatus,
                 l.DevelopmentStatus, r.DevelopmentStatus, ProjectConflictKind.StatusBranch),
             Notes = Field(path + "/Notes", b.Notes, l.Notes, r.Notes),
+            FilterActive = Field(path + "/FilterActive", b.FilterActive, l.FilterActive, r.FilterActive),
             LifecycleState = Field(path + "/LifecycleState", b.LifecycleState,
                 l.LifecycleState, r.LifecycleState, ProjectConflictKind.Lifecycle),
             Provenance = Field(path + "/Provenance", b.Provenance, l.Provenance, r.Provenance),

@@ -32,6 +32,8 @@ public sealed class OverviewExportServiceTests
             Assert.Contains($"Priority{delimiter}Rank{delimiter}Entity", csv);
             Assert.Contains("'=SUM(1,2)", csv);
             Assert.Contains("\"line 1\nline 2\"", csv);
+            Assert.Contains($"Notes{delimiter}Filter active", csv);
+            Assert.Contains("\"Active only\nBy region\"", csv);
             Assert.DoesNotContain(Directory.GetFiles(directory), file => file.EndsWith(".tmp"));
         }
         finally { Directory.Delete(directory, recursive: true); }
@@ -54,8 +56,17 @@ public sealed class OverviewExportServiceTests
             Assert.Equal("AB, CD", sheet.Cell(2, 6).GetString());
             Assert.Equal("Alice Brown, Chris Doe", sheet.Cell(2, 12).GetString());
             Assert.Equal("Notes", sheet.Cell(2, 15).GetString());
+            Assert.Equal("Filter active", sheet.Cell(1, 16).GetString());
+            Assert.Equal("Active only\nBy region", sheet.Cell(2, 16).GetString());
         }
         finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Fact]
+    public void DetailsShowFilterActiveInstructions()
+    {
+        EntityDetailsViewModel details = new(Row("Example", "Notes"));
+        Assert.Equal("Active only\nBy region", details.FilterActive);
     }
 
     private static EntityOverviewRow Row(string name, string notes) => new(
@@ -69,7 +80,8 @@ public sealed class OverviewExportServiceTests
         [
             new EntityOverviewDeveloper(DeveloperId.New(), "AB", "Alice Brown"),
             new EntityOverviewDeveloper(DeveloperId.New(), "CD", "Chris Doe")
-        ]);
+        ],
+        FilterActive: "Active only\nBy region");
 
     private static string TemporaryDirectory()
     {

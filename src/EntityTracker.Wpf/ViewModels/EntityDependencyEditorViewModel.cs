@@ -81,6 +81,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private SchemaSynchronizationPlan? _reviewPlan;
     private DevelopmentStatus _selectedStatus;
     private string _editedNotes = string.Empty;
+    private string _editedFilterActive = string.Empty;
     private string _editedResponsibleDeveloper = string.Empty;
     private string _editedGroupName = string.Empty;
     private int? _selectedRequestedPriority;
@@ -618,6 +619,16 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
     }
 
+    public string EditedFilterActive
+    {
+        get => _editedFilterActive;
+        set
+        {
+            if (CanEditProgress)
+                SetField(ref _editedFilterActive, value ?? string.Empty);
+        }
+    }
+
     public string EditedResponsibleDeveloper
     {
         get => _editedResponsibleDeveloper;
@@ -771,6 +782,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             TrackedEntity entity = CurrentEditPlan.Entity;
             return SelectedStatus != entity.Status ||
                    EditedNotes != entity.Notes ||
+                   EditedFilterActive != entity.FilterActive ||
                    EditedResponsibleDeveloper != entity.ResponsibleDeveloper ||
                    DeveloperPicker is not null &&
                    !_initialDeveloperIds.SetEquals(DeveloperPicker.SelectedIds) ||
@@ -968,6 +980,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(SelectedStatusDisplay));
             _editedNotes = details.Entity.Notes;
             OnPropertyChanged(nameof(EditedNotes));
+            _editedFilterActive = details.Entity.FilterActive;
+            OnPropertyChanged(nameof(EditedFilterActive));
             _editedResponsibleDeveloper = details.Entity.ResponsibleDeveloper;
             OnPropertyChanged(nameof(EditedResponsibleDeveloper));
             _editedGroupName = details.Entity.GroupName;
@@ -1276,7 +1290,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                     SelectedRequestedPriority,
                     EditedResponsibleDeveloper,
                     EditedGroupName,
-                    developerIds: DeveloperPicker?.SelectedIds);
+                    developerIds: DeveloperPicker?.SelectedIds,
+                    filterActive: EditedFilterActive);
                 await _onPersisted();
             }
 
@@ -1456,6 +1471,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(SelectedStatusDisplay));
             _editedNotes = plan.Entity.Notes;
             OnPropertyChanged(nameof(EditedNotes));
+            _editedFilterActive = plan.Entity.FilterActive;
+            OnPropertyChanged(nameof(EditedFilterActive));
             _editedResponsibleDeveloper = plan.Entity.ResponsibleDeveloper;
             OnPropertyChanged(nameof(EditedResponsibleDeveloper));
             _editedGroupName = plan.Entity.GroupName;
@@ -1543,6 +1560,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(SelectedStatusDisplay));
         _editedNotes = string.Empty;
         OnPropertyChanged(nameof(EditedNotes));
+        _editedFilterActive = string.Empty;
+        OnPropertyChanged(nameof(EditedFilterActive));
         _editedResponsibleDeveloper = string.Empty;
         OnPropertyChanged(nameof(EditedResponsibleDeveloper));
         _editedGroupName = string.Empty;

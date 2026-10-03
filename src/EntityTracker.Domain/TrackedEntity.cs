@@ -12,12 +12,14 @@ public sealed class TrackedEntity
         EntityProvenance provenance = EntityProvenance.Imported,
         int? requestedPriority = null,
         string? responsibleDeveloper = null,
-        string? groupName = null)
+        string? groupName = null,
+        string filterActive = "")
     {
         ArgumentNullException.ThrowIfNull(id);
         ArgumentNullException.ThrowIfNull(trackerId);
         ValidateSourceName(sourceName);
         ArgumentNullException.ThrowIfNull(notes);
+        ArgumentNullException.ThrowIfNull(filterActive);
 
         EnsureDefinedStatus(status);
         EnsureDefinedLifecycleState(lifecycleState);
@@ -29,6 +31,7 @@ public sealed class TrackedEntity
         SourceName = sourceName;
         Status = status;
         Notes = notes;
+        FilterActive = filterActive;
         LifecycleState = lifecycleState;
         Provenance = provenance;
         RequestedPriority = requestedPriority;
@@ -45,6 +48,8 @@ public sealed class TrackedEntity
     public DevelopmentStatus Status { get; private set; }
 
     public string Notes { get; private set; }
+
+    public string FilterActive { get; private set; }
 
     public EntityLifecycleState LifecycleState { get; private set; }
 
@@ -72,6 +77,12 @@ public sealed class TrackedEntity
     {
         ArgumentNullException.ThrowIfNull(notes);
         Notes = notes;
+    }
+
+    public void ChangeFilterActive(string filterActive)
+    {
+        ArgumentNullException.ThrowIfNull(filterActive);
+        FilterActive = filterActive;
     }
 
     public void ChangeLifecycleState(EntityLifecycleState lifecycleState)

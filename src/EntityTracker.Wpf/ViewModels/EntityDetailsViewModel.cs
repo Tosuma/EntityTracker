@@ -27,6 +27,7 @@ public sealed class EntityDetailsViewModel : INotifyPropertyChanged
         IsArchived = row.LifecycleState == EntityLifecycleState.Archived;
         Provenance = row.Provenance;
         Notes = string.IsNullOrWhiteSpace(row.Notes) ? "No notes" : row.Notes;
+        FilterActive = string.IsNullOrWhiteSpace(row.FilterActive) ? "No filter instructions" : row.FilterActive;
         RequestedPriority = FormatPriority(row.RequestedPriorityValue);
         EffectivePriority = IsArchived ? "Not applicable while archived" : row.Priority;
         Rank = IsArchived ? "Not applicable while archived" : row.Rank;
@@ -85,6 +86,8 @@ public sealed class EntityDetailsViewModel : INotifyPropertyChanged
     public string Provenance { get; }
 
     public string Notes { get; }
+
+    public string FilterActive { get; }
 
     public string RequestedPriority { get; }
 

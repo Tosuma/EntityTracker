@@ -600,7 +600,7 @@ public sealed class ExistingCheckoutRemoteSyncTests
         Assert.Throws<InvalidDataException>(() => codec.TryDecodeTombstone(invalid, out _));
         Assert.Throws<InvalidDataException>(() => codec.EncodeTombstone(tombstone with
         {
-            FormatVersion = 4
+            FormatVersion = 5
         }));
     }
 
@@ -856,8 +856,8 @@ public sealed class ExistingCheckoutRemoteSyncTests
         ProjectGitSyncService sync = catalog.Sync(checkout);
         string manifestPath = Path.Combine(checkout, ".entitytracker", "manifest.json");
         string manifest = File.ReadAllText(manifestPath);
-        Assert.Contains("\"formatVersion\":3", manifest);
-        File.WriteAllText(manifestPath, manifest.Replace("\"formatVersion\":3", "\"formatVersion\":99"));
+        Assert.Contains("\"formatVersion\":4", manifest);
+        File.WriteAllText(manifestPath, manifest.Replace("\"formatVersion\":4", "\"formatVersion\":99"));
         workspace.Git(checkout, "add", ".entitytracker");
         workspace.Git(checkout, "commit", "-m", "Unsupported version");
         await Assert.ThrowsAsync<InvalidDataException>(() => sync.ImportAsync(checkout));

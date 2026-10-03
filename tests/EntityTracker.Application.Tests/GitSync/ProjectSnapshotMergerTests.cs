@@ -9,6 +9,26 @@ public sealed class ProjectSnapshotMergerTests
     private static readonly DateTimeOffset Time = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public void FilterActive_MergesIndependentlyAndConflictingEditsRequireReview()
+    {
+        ProjectSnapshot basis = Snapshot();
+        ProjectSnapshot local = EditEntity(basis,
+            entity => entity with { FilterActive = "Active rows only" });
+        ProjectSnapshot remote = EditEntity(basis,
+            entity => entity with { Notes = "Migration note" });
+
+        ProjectMergeResult independent = new ProjectSnapshotMerger().Merge(basis, local, remote);
+        Assert.Empty(independent.Conflicts);
+        Assert.Equal("Active rows only", independent.Snapshot.Trackers[0].Entities[0].FilterActive);
+        Assert.Equal("Migration note", independent.Snapshot.Trackers[0].Entities[0].Notes);
+
+        ProjectSnapshot other = EditEntity(basis,
+            entity => entity with { FilterActive = "Region A only" });
+        ProjectMergeResult conflict = new ProjectSnapshotMerger().Merge(basis, local, other);
+        Assert.Contains(conflict.Conflicts, item => item.Path.EndsWith("/FilterActive", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void IndependentResponsibilityAndNoteEditsMergeByPeriodId()
     {
         ProjectSnapshot basis = Snapshot();

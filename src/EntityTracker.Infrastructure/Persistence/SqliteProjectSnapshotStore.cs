@@ -127,7 +127,8 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                             .Select(d => new SnapshotResponsibilityPeriod(d.Guid("id"),
                                 d.Guid("entity_id"), d.Guid("developer_id"),
                                 d.Time("started_at_utc"), d.TimeOrNull("ended_at_utc")))
-                            .OrderBy(d => d.StartedAtUtc).ThenBy(d => d.Id).ToArray());
+                            .OrderBy(d => d.StartedAtUtc).ThenBy(d => d.Id).ToArray(),
+                        entity.Str("filter_active"));
                 }).ToArray();
             Row? summary = summariesByTracker[trackerId].SingleOrDefault();
             return new SnapshotTracker(tracker.Guid("id"), tracker.Guid("project_id"),
@@ -220,9 +221,9 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         foreach (SnapshotEntity entity in tracker.Entities)
         {
             await InsertAsync(connection, transaction, "tracked_entities",
-                ["id", "tracker_id", "source_key", "source_name", "development_status", "notes", "lifecycle_state", "provenance", "requested_priority", "group_name", "created_at_utc", "schema_updated_at_utc", "progress_updated_at_utc"],
+                ["id", "tracker_id", "source_key", "source_name", "development_status", "notes", "filter_active", "lifecycle_state", "provenance", "requested_priority", "group_name", "created_at_utc", "schema_updated_at_utc", "progress_updated_at_utc"],
                 [Id(entity.Id), Id(tracker.Id), EntitySourceKey.From(entity.SourceName).Value,
-                 entity.SourceName, entity.DevelopmentStatus, entity.Notes, entity.LifecycleState,
+                 entity.SourceName, entity.DevelopmentStatus, entity.Notes, entity.FilterActive, entity.LifecycleState,
                  entity.Provenance, entity.RequestedPriority, entity.GroupName,
                  Time(entity.CreatedAtUtc), Time(entity.SchemaUpdatedAtUtc), Time(entity.ProgressUpdatedAtUtc)], cancellationToken);
         }
