@@ -9,7 +9,7 @@ public static class ProjectSnapshotValidator
         ArgumentNullException.ThrowIfNull(snapshot);
         if (snapshot.FormatVersion is not (1 or 2 or 3 or ProjectSnapshot.CurrentFormatVersion))
         {
-            throw new InvalidDataException($"Unsupported Project snapshot format version {snapshot.FormatVersion}.");
+            throw new ProjectSnapshotFormatVersionException(snapshot.FormatVersion);
         }
         if (snapshot.Project is null || snapshot.Trackers is null || snapshot.Project.Id == Guid.Empty)
         {

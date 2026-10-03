@@ -1,10 +1,34 @@
 using EntityTracker.Application.GitSync;
+using EntityTracker.Application.Snapshots;
 using EntityTracker.Domain;
 
 namespace EntityTracker.Application.Tests.GitSync;
 
 public sealed class ProjectAutoSyncServiceTests
 {
+    [Theory]
+    [InlineData(5, "behind")]
+    [InlineData(0, "ahead")]
+    public void UnsupportedProjectFormat_ReportsBothVersionsAndDirection(
+        int projectVersion, string direction)
+    {
+        ProjectSnapshotFormatVersionException error = new(projectVersion);
+        ProjectSyncState state = ProjectAutoSyncService.FromError(error, DateTimeOffset.UtcNow);
+
+        Assert.Equal(ProjectSnapshot.CurrentFormatVersion, error.ApplicationFormatVersion);
+        Assert.Equal(projectVersion, error.ProjectFormatVersion);
+        Assert.Contains($"app's Project format version is {ProjectSnapshot.CurrentFormatVersion}",
+            error.Message, StringComparison.Ordinal);
+        Assert.Contains($"Project's format version is {projectVersion}",
+            error.Message, StringComparison.Ordinal);
+        Assert.Contains(direction, error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(ProjectSyncStateKind.ConfigurationInvalid, state.Kind);
+        Assert.Equal(error.Message, state.LastResult);
+        Assert.Equal("The repository snapshot is invalid. Open the Project for details.",
+            ProjectAutoSyncService.FromError(new InvalidDataException("private detail"),
+                DateTimeOffset.UtcNow).LastResult);
+    }
+
     [Fact]
     public async Task ActiveSyncFlagTracksRunningAutomaticAndManualWork()
     {

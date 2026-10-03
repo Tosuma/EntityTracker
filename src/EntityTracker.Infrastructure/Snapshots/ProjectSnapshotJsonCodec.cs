@@ -80,7 +80,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
         ArgumentNullException.ThrowIfNull(files);
         Manifest manifest = Read<Manifest>(files, Root + "manifest.json");
         if (manifest.FormatVersion is not (1 or 2 or 3 or ProjectSnapshot.CurrentFormatVersion))
-            throw new InvalidDataException($"Unsupported Project snapshot format version {manifest.FormatVersion}.");
+            throw new ProjectSnapshotFormatVersionException(manifest.FormatVersion);
         SnapshotProject project = Read<SnapshotProject>(files, Root + "project.json");
         if (project.Id != manifest.ProjectId)
             throw new InvalidDataException("The manifest Project ID does not match project.json.");
@@ -148,6 +148,8 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
             (Root + "manifest.json" or Root + "deleted-project.json")))
             throw new InvalidDataException("A Project tombstone contains unexpected documents.");
         Manifest manifest = Read<Manifest>(files, Root + "manifest.json");
+        if (manifest.FormatVersion is not (1 or 2 or 3 or ProjectSnapshot.CurrentFormatVersion))
+            throw new ProjectSnapshotFormatVersionException(manifest.FormatVersion);
         ProjectTombstone candidate = Read<ProjectTombstone>(files, Root + "deleted-project.json");
         ValidateTombstone(candidate);
         if (manifest.FormatVersion != candidate.FormatVersion ||
@@ -159,8 +161,9 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
 
     private static void ValidateTombstone(ProjectTombstone tombstone)
     {
-        if (tombstone.FormatVersion is not (1 or 2 or 3 or ProjectSnapshot.CurrentFormatVersion) ||
-            tombstone.ProjectId == Guid.Empty || tombstone.DeletedAtUtc.Offset != TimeSpan.Zero ||
+        if (tombstone.FormatVersion is not (1 or 2 or 3 or ProjectSnapshot.CurrentFormatVersion))
+            throw new ProjectSnapshotFormatVersionException(tombstone.FormatVersion);
+        if (tombstone.ProjectId == Guid.Empty || tombstone.DeletedAtUtc.Offset != TimeSpan.Zero ||
             tombstone.BaseSnapshotHash.Length != 64 ||
             !tombstone.BaseSnapshotHash.All(Uri.IsHexDigit))
             throw new InvalidDataException("The Project tombstone is invalid or unsupported.");
