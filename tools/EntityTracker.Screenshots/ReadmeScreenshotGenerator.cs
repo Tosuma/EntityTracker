@@ -324,10 +324,17 @@ internal sealed class ReadmeScreenshotGenerator
                 "QueryTextBox",
                 "sql-query.png");
 
+            shell.SelectedSettingsCategory = SettingsCategory.General;
             await shell.NavigateAsync(ShellDestination.Settings, cancellationToken);
             await renderer.CaptureAsync("settings.png");
-            await renderer.BringNamedElementIntoViewAndCaptureAsync(
-                "OverviewExportSettingsCard", "settings-export.png");
+            shell.SelectedSettingsCategory = SettingsCategory.Project;
+            await renderer.CaptureAsync("settings-project.png");
+            shell.SelectedSettingsCategory = SettingsCategory.Overview;
+            await renderer.CaptureAsync("settings-overview.png");
+            shell.SelectedSettingsCategory = SettingsCategory.Sync;
+            await renderer.CaptureAsync("settings-sync.png");
+            shell.SelectedSettingsCategory = SettingsCategory.About;
+            await renderer.CaptureAsync("settings-about.png");
             window.ShowUpdatePreview("app-v1.0.0");
             await renderer.CaptureAsync("app-update-required.png");
         }

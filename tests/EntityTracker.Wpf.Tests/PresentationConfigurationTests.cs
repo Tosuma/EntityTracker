@@ -19,6 +19,25 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void SettingsIsSplitIntoCategoryPages()
+    {
+        XDocument settings = LoadWpfXaml("Views", "SettingsView.xaml");
+
+        Assert.Contains(settings.Descendants(), element =>
+            element.Name.LocalName == "ListBox" &&
+            (string?)element.Attribute("ItemsSource") == "{Binding SettingsCategories}" &&
+            (string?)element.Attribute("SelectedItem") == "{Binding SelectedSettingsCategory, Mode=TwoWay}" &&
+            (string?)element.Attribute("AutomationProperties.Name") == "Settings categories");
+        foreach (string category in Enum.GetNames<EntityTracker.Wpf.ViewModels.SettingsCategory>())
+        {
+            Assert.Contains(settings.Descendants(), element =>
+                element.Name.LocalName == "DataTrigger" &&
+                (string?)element.Attribute("Value") ==
+                    $"{{x:Static viewModels:SettingsCategory.{category}}}");
+        }
+    }
+
+    [Fact]
     public void AutomaticSyncSettingsAndProjectStatusAreAccessible()
     {
         XDocument settings = LoadWpfXaml("Views", "SettingsView.xaml");

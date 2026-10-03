@@ -150,14 +150,24 @@ The Tracker Overview **Export** menu saves the active entity table as an Excel w
 
 ![Overview Export menu with Excel and CSV options](images/light/overview-export-menu.png)
 
-In **Settings**, choose **Shown entities** to export the current search, filters, and sort, or
-**All active entities** to ignore search and filters while keeping the sort. The CSV separator is
-also selected there. Choose the file location and name in the save dialog; a notification reports
-when the export finishes or fails.
+In **Settings → Overview**, choose **Shown entities** to export the current search, filters, and
+sort, or **All active entities** to ignore search and filters while keeping the sort. The CSV
+separator is also selected there. Choose the file location and name in the save dialog; a
+notification reports when the export finishes or fails.
 
-![Settings showing the local Project Developer choice and overview search](images/light/settings.png)
+**Settings** is split into categories: **General** (appearance), **Project** (your local Developer
+for any Project, independent of the current context), **Overview** (search and export), **Sync**
+(automatic Project sync), and **About** (app version).
 
-![Overview export settings with row scope and CSV separator drop-downs](images/light/settings-export.png)
+![Settings General page with the appearance choice](images/light/settings.png)
+
+![Settings Project page with the Project picker and local Developer choice](images/light/settings-project.png)
+
+![Settings Overview page with overview search and export options](images/light/settings-overview.png)
+
+![Settings Sync page with automatic Project sync and interval](images/light/settings-sync.png)
+
+![Settings About page with the app version](images/light/settings-about.png)
 
 For slow syncs, the daily application log records stage durations, fetch time, snapshot read time,
 and the number of snapshot files read or reused. The remote may still take time to fetch or push;
