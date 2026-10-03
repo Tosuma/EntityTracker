@@ -11,6 +11,63 @@ namespace EntityTracker.Application.Tests.ManualCreation;
 public sealed class ManualEntityCreationServiceTests
 {
     [Fact]
+    public async Task SearchDependenciesAsync_MatchesWordPrefixesAcrossNamingStyles()
+    {
+        ManualEntityCreationService service = Service(
+            [Entity(1, "consumption_account_status"), Entity(2, "AccountStatus"),
+             Entity(3, "account status"), Entity(4, "account-status"),
+             Entity(5, "HTTPServer"), Entity(6, "Unassigned"),
+             Entity(7, "consumption_account")],
+            [], [], out _);
+
+        Assert.Equal(["Unassigned"],
+            (await service.SearchDependenciesAsync("un")).Suggestions
+                .Select(suggestion => suggestion.SourceName));
+        Assert.Equal(["account status", "account-status", "AccountStatus",
+                "consumption_account_status"],
+            (await service.SearchDependenciesAsync("account stat")).Suggestions
+                .Select(suggestion => suggestion.SourceName));
+        Assert.Equal(["HTTPServer"],
+            (await service.SearchDependenciesAsync("serv")).Suggestions
+                .Select(suggestion => suggestion.SourceName));
+        Assert.Equal(["consumption_account", "consumption_account_status"],
+            (await service.SearchDependenciesAsync("consumption_acc")).Suggestions
+                .Select(suggestion => suggestion.SourceName));
+        Assert.Empty((await service.SearchDependenciesAsync("sum")).Suggestions);
+    }
+
+    [Fact]
+    public async Task SearchDependenciesAsync_ExcludesSelectedEntitiesFromAllMatches()
+    {
+        TrackedEntity[] entities = Enumerable.Range(1, 18)
+            .Select(index => Entity(index, $"Table{index:00}"))
+            .ToArray();
+        ManualEntityCreationService service = Service(entities, [], [], out _);
+        EntitySourceKey[] selected = entities.Take(8)
+            .Select(entity => EntitySourceKey.From(entity.SourceName)).ToArray();
+
+        ManualDependencySearchResult result = await service.SearchDependenciesAsync(
+            "Table", excludedKeys: selected);
+
+        Assert.Equal(10, result.Suggestions.Count);
+        Assert.Equal("Table09", result.Suggestions[0].SourceName);
+        Assert.Equal("Table18", result.Suggestions[^1].SourceName);
+    }
+
+    [Fact]
+    public async Task SearchDependenciesAsync_ExactSelectedNameCannotBeAddedAsUnresolved()
+    {
+        ManualEntityCreationService service = Service([], [], [], out _);
+
+        ManualDependencySearchResult result = await service.SearchDependenciesAsync(
+            "Future", excludedKeys: [EntitySourceKey.From("Future")]);
+
+        Assert.Empty(result.Suggestions);
+        Assert.False(result.CanAddAsUnresolved);
+        Assert.Contains("already", result.BlockingMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task SearchDependenciesAsync_ReturnsActiveMatchesInPredictableOrder()
     {
         TrackedEntity alpha = Entity(1, "Alpha");
@@ -66,7 +123,7 @@ public sealed class ManualEntityCreationServiceTests
     }
 
     [Fact]
-    public async Task SearchDependenciesAsync_LimitsSuggestionsToTen()
+    public async Task SearchDependenciesAsync_ReturnsAllMatchesBeyondTen()
     {
         TrackedEntity[] entities = Enumerable.Range(1, 15)
             .Select(index => Entity(index, $"Table{index:00}"))
@@ -76,9 +133,29 @@ public sealed class ManualEntityCreationServiceTests
         ManualDependencySearchResult result =
             await service.SearchDependenciesAsync("Table");
 
-        Assert.Equal(10, result.Suggestions.Count);
+        Assert.Equal(15, result.Suggestions.Count);
         Assert.Equal("Table01", result.Suggestions[0].SourceName);
-        Assert.Equal("Table10", result.Suggestions[9].SourceName);
+        Assert.Equal("Table15", result.Suggestions[^1].SourceName);
+    }
+
+    [Fact]
+    public async Task SearchDependenciesAsync_EmptyQueryBrowsesAllEligibleEntities()
+    {
+        TrackedEntity[] entities = Enumerable.Range(1, 15)
+            .Select(index => Entity(index, $"Table{index:00}"))
+            .Concat([Entity(16, "Owner"), Entity(17, "Archived", EntityLifecycleState.Archived)])
+            .ToArray();
+        ManualEntityCreationService service = Service(entities, [], [], out _);
+
+        ManualDependencySearchResult result = await service.SearchDependenciesAsync(
+            "  ", "owner", excludedKeys: [EntitySourceKey.From("table01")]);
+
+        Assert.Equal(14, result.Suggestions.Count);
+        Assert.Equal("Table02", result.Suggestions[0].SourceName);
+        Assert.Equal("Table15", result.Suggestions[^1].SourceName);
+        Assert.Null(result.EnteredKey);
+        Assert.False(result.CanAddAsUnresolved);
+        Assert.Null(result.BlockingMessage);
     }
 
     [Fact]

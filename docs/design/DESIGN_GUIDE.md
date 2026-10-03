@@ -104,6 +104,10 @@ default to logical item scrolling, which jumps by whole rows. Choose the setting
 | Page content or `ItemsControl` inside a `ScrollViewer` | Set `CanContentScroll="False"` on the viewer. |
 | Large virtualized `DataGrid` or list | Keep `ScrollViewer.CanContentScroll="True"` and set `VirtualizingPanel.ScrollUnit="Pixel"` with virtualization and recycling enabled. The shared DataGrid style already sets the pixel scroll unit. |
 
+The dependency dropdown can browse every eligible entity. Its list uses virtualization with
+pixel scrolling and a maximum height of 240 pixels (about eight rows), rather than limiting
+the number of available results.
+
 Give an independently scrolling list a finite height or `MaxHeight` so its own viewer can scroll.
 Avoid placing it inside an unbounded `StackPanel` or another `ScrollViewer` that takes over its
 scrolling. Use `VerticalScrollBarVisibility="Auto"` unless the layout calls for a persistent bar.

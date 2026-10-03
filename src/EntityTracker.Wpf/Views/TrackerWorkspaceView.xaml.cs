@@ -236,7 +236,7 @@ public partial class TrackerWorkspaceView : UserControl
                 bool focused = _viewModel.Editor.Mode switch
                 {
                     EntityEditorMode.ArchivedDetails => RestoreEntityButton.Focus(),
-                    EntityEditorMode.SynchronizationReview => EditorDependencySuggestionBox.FocusQuery(),
+                    EntityEditorMode.SynchronizationReview => EditorDependencyComboBox.Focus(),
                     _ => EditorStatusComboBox.Focus()
                 };
                 if (!focused)
