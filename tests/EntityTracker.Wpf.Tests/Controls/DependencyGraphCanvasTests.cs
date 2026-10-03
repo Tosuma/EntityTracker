@@ -177,12 +177,23 @@ public sealed class DependencyGraphCanvasTests
         string path = Path.Combine(Path.GetTempPath(), $"graph-{Guid.NewGuid():N}.png");
         try
         {
-            Run(host => host.Canvas.SavePng(path));
+            // The expected size depends on the canvas inside the window border and on the display
+            // scaling, both of which differ between machines (CI runs at 100 %).
+            (int Width, int Height) expected = default;
+            Run(host =>
+            {
+                DpiScale dpi = VisualTreeHelper.GetDpi(host.Canvas);
+                expected = ((int)Math.Ceiling(host.Canvas.ActualWidth * dpi.DpiScaleX),
+                    (int)Math.Ceiling(host.Canvas.ActualHeight * dpi.DpiScaleY));
+                host.Canvas.SavePng(path);
+            });
 
             byte[] header = File.ReadAllBytes(path).Take(24).ToArray();
             Assert.Equal(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }, header[..8]);
             int width = (header[16] << 24) | (header[17] << 16) | (header[18] << 8) | header[19];
-            Assert.True(width >= 800, $"The image should cover the whole map ({width}px wide).");
+            int height = (header[20] << 24) | (header[21] << 16) | (header[22] << 8) | header[23];
+            Assert.True(expected.Width > 0);
+            Assert.Equal(expected, (width, height));
         }
         finally
         {
