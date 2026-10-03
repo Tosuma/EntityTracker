@@ -1058,16 +1058,23 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
         try
         {
+            EntitySourceKey[] excludedKeys = CurrentEditPlan.Dependencies
+                .Where(item => item.Origin is not DependencyEditOrigin.SuppressedImported and
+                    not DependencyEditOrigin.DormantSuppression)
+                .Select(item => item.DependencySourceKey)
+                .ToArray();
             ManualDependencySearchResult result = IsReviewMode
                 ? _editorService.SearchDependencies(
                     _trackerId,
                     CurrentEditPlan.Entity.Id,
                     DependencyQuery,
-                    _reviewPlan!.CandidateEntities)
+                    _reviewPlan!.CandidateEntities,
+                    excludedKeys)
                 : await _editorService.SearchDependenciesAsync(
                     _trackerId,
                     CurrentEditPlan.Entity.Id,
-                    DependencyQuery);
+                    DependencyQuery,
+                    excludedKeys: excludedKeys);
             if (searchVersion != _searchVersion)
             {
                 return;

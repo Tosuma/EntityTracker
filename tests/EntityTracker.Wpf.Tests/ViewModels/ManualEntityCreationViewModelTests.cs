@@ -62,6 +62,29 @@ public sealed class ManualEntityCreationViewModelTests
     }
 
     [Fact]
+    public async Task Search_HidesSelectedDependencyAndShowsItAfterRemoval()
+    {
+        TrackedEntity first = Entity(1, "TargetOne");
+        TrackedEntity second = Entity(2, "TargetTwo");
+        ManualEntityCreationViewModel viewModel = ViewModel(
+            [first, second], out _, out _, out _);
+        viewModel.EntityName = "Owner";
+        viewModel.DependencyQuery = "target";
+        await viewModel.SearchDependenciesAsync();
+
+        viewModel.AddExistingCommand.Execute(viewModel.Suggestions[0]);
+        ManualDependencyRow selected = Assert.Single(viewModel.SelectedDependencies);
+        viewModel.DependencyQuery = "target";
+        await viewModel.SearchDependenciesAsync();
+
+        Assert.Equal(second.Id, Assert.Single(viewModel.Suggestions).EntityId);
+        viewModel.RemoveDependencyCommand.Execute(selected);
+        await viewModel.SearchDependenciesAsync();
+        Assert.Equal([first.Id, second.Id],
+            viewModel.Suggestions.Select(suggestion => suggestion.EntityId));
+    }
+
+    [Fact]
     public async Task Search_ArchivedExactMatchShowsMessageAndCannotBeAddedUnresolved()
     {
         ManualEntityCreationViewModel viewModel = ViewModel(

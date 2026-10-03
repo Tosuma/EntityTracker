@@ -17,12 +17,14 @@ internal static class TestTrackerExtensions
         this ManualEntityCreationService service,
         string query,
         string? proposedEntityName = null,
-        CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken = default,
+        IReadOnlyCollection<EntitySourceKey>? excludedKeys = null) =>
         service.SearchDependenciesAsync(
             TestTrackerId,
             query,
             proposedEntityName,
-            cancellationToken);
+            cancellationToken,
+            excludedKeys);
 
     internal static Task<IReadOnlyList<string>> SearchGroupNamesAsync(
         this ManualEntityCreationService service,

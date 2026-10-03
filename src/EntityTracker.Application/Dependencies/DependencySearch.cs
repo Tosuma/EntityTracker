@@ -11,7 +11,8 @@ internal static class DependencySearch
     public static ManualDependencySearchResult Search(
         string query,
         string? proposedEntityName,
-        IEnumerable<TrackedEntity> entities)
+        IEnumerable<TrackedEntity> entities,
+        IReadOnlyCollection<EntitySourceKey>? excludedKeys = null)
     {
         string enteredName = query.Trim();
         if (enteredName.Length == 0)
@@ -31,6 +32,7 @@ internal static class DependencySearch
 
         TrackedEntity[] entityArray = entities.ToArray();
         EntitySourceKey queryKey = EntitySourceKey.From(enteredName);
+        HashSet<EntitySourceKey> excluded = excludedKeys is null ? [] : [.. excludedKeys];
         EntitySourceKey? proposedEntityKey = string.IsNullOrWhiteSpace(proposedEntityName)
             ? null
             : EntitySourceKey.From(proposedEntityName);
@@ -45,14 +47,14 @@ internal static class DependencySearch
             .Where(static entity => entity.LifecycleState == EntityLifecycleState.Active)
             .Where(entity => proposedEntityKey is null ||
                              EntitySourceKey.From(entity.SourceName) != proposedEntityKey)
-            .Where(entity => entity.SourceName.Contains(
-                enteredName,
-                StringComparison.OrdinalIgnoreCase))
-            .OrderBy(entity => MatchPriority(entity.SourceName, enteredName))
-            .ThenBy(static entity => entity.SourceName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static entity => entity.SourceName, StringComparer.Ordinal)
+            .Where(entity => !excluded.Contains(EntitySourceKey.From(entity.SourceName)))
+            .Select(entity => (Entity: entity, Priority: MatchPriority(entity.SourceName, enteredName)))
+            .Where(static match => match.Priority < int.MaxValue)
+            .OrderBy(static match => match.Priority)
+            .ThenBy(static match => match.Entity.SourceName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static match => match.Entity.SourceName, StringComparer.Ordinal)
             .Take(MaximumSuggestions)
-            .Select(static entity => new ManualDependencySuggestion(entity.Id, entity.SourceName))
+            .Select(static match => new ManualDependencySuggestion(match.Entity.Id, match.Entity.SourceName))
             .ToArray();
 
         if (proposedEntityKey == queryKey)
@@ -75,6 +77,16 @@ internal static class DependencySearch
                 $"'{archivedExactMatch.SourceName}' exists but is archived.");
         }
 
+        if (excluded.Contains(queryKey))
+        {
+            return new ManualDependencySearchResult(
+                enteredName,
+                queryKey,
+                suggestions,
+                false,
+                $"'{enteredName}' has already been added as a dependency.");
+        }
+
         return new ManualDependencySearchResult(
             enteredName,
             queryKey,
@@ -85,11 +97,59 @@ internal static class DependencySearch
 
     private static int MatchPriority(string sourceName, string query)
     {
-        if (sourceName.Equals(query, StringComparison.OrdinalIgnoreCase))
-        {
-            return 0;
-        }
+        if (sourceName.Equals(query, StringComparison.OrdinalIgnoreCase)) return 0;
+        if (sourceName.StartsWith(query, StringComparison.OrdinalIgnoreCase)) return 1;
 
-        return sourceName.StartsWith(query, StringComparison.OrdinalIgnoreCase) ? 1 : 2;
+        string[] nameWords = Words(sourceName);
+        string[] queryWords = Words(query);
+        if (queryWords.Length == 0) return int.MaxValue;
+        for (int start = 0; start <= nameWords.Length - queryWords.Length; start++)
+        {
+            bool matches = true;
+            for (int index = 0; index < queryWords.Length; index++)
+            {
+                if (nameWords[start + index].StartsWith(queryWords[index], StringComparison.OrdinalIgnoreCase))
+                    continue;
+                matches = false;
+                break;
+            }
+            if (matches) return start == 0 ? 2 : 3;
+        }
+        return int.MaxValue;
+    }
+
+    private static string[] Words(string value)
+    {
+        List<string> words = [];
+        int start = -1;
+        for (int index = 0; index < value.Length; index++)
+        {
+            char current = value[index];
+            if (!char.IsLetterOrDigit(current))
+            {
+                if (start >= 0) words.Add(value[start..index]);
+                start = -1;
+                continue;
+            }
+
+            if (start < 0)
+            {
+                start = index;
+                continue;
+            }
+
+            char previous = value[index - 1];
+            bool newWord = char.IsUpper(current) &&
+                           (char.IsLower(previous) || char.IsDigit(previous) ||
+                            char.IsUpper(previous) && index + 1 < value.Length &&
+                            char.IsLower(value[index + 1])) ||
+                           char.IsDigit(current) && char.IsLetter(previous) ||
+                           char.IsLetter(current) && char.IsDigit(previous);
+            if (!newWord) continue;
+            words.Add(value[start..index]);
+            start = index;
+        }
+        if (start >= 0) words.Add(value[start..]);
+        return words.ToArray();
     }
 }

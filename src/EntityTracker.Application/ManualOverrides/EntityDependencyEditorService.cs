@@ -66,10 +66,11 @@ public sealed class EntityDependencyEditorService
         TrackerId trackerId,
         EntityId ownerId,
         string query,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyCollection<EntitySourceKey>? excludedKeys = null)
     {
         Snapshot snapshot = await LoadSnapshotAsync(trackerId, cancellationToken);
-        return SearchDependencies(trackerId, ownerId, query, snapshot.Entities);
+        return SearchDependencies(trackerId, ownerId, query, snapshot.Entities, excludedKeys);
     }
 
     public async Task<IReadOnlyList<string>> SearchGroupNamesAsync(
@@ -88,7 +89,8 @@ public sealed class EntityDependencyEditorService
         TrackerId trackerId,
         EntityId ownerId,
         string query,
-        IEnumerable<TrackedEntity> entities)
+        IEnumerable<TrackedEntity> entities,
+        IReadOnlyCollection<EntitySourceKey>? excludedKeys = null)
     {
         ArgumentNullException.ThrowIfNull(trackerId);
         TrackedEntity[] entityArray = entities.ToArray();
@@ -97,7 +99,7 @@ public sealed class EntityDependencyEditorService
             throw new InvalidDataException("Dependency search received entities from another tracker.");
         }
         TrackedEntity owner = RequireActiveOwner(ownerId, entityArray);
-        return DependencySearch.Search(query, owner.SourceName, entityArray);
+        return DependencySearch.Search(query, owner.SourceName, entityArray, excludedKeys);
     }
 
     public async Task<EntityDependencyEditPlan> LoadAsync(

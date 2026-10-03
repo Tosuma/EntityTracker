@@ -55,6 +55,31 @@ public sealed class EntityDependencyEditorViewModelTests
         Assert.Empty(viewModel.Errors);
     }
 
+    [Fact]
+    public async Task Search_HidesCurrentDependencyUntilItIsRemoved()
+    {
+        TrackedEntity owner = Entity(1, "Owner");
+        TrackedEntity target = Entity(2, "Target");
+        EntityDependencyEditorViewModel viewModel = ViewModel([owner, target]);
+        await viewModel.BeginStandaloneAsync(owner.Id);
+        viewModel.DependencyQuery = "target";
+        await WaitUntilAsync(() => viewModel.Suggestions.Count == 1);
+        viewModel.SelectedDependencySuggestion = viewModel.Suggestions[0];
+        await WaitUntilAsync(() => viewModel.Dependencies.Count == 1);
+
+        viewModel.DependencyQuery = "target";
+        await WaitUntilAsync(() => viewModel.SearchMessage?.Contains("already",
+            StringComparison.OrdinalIgnoreCase) == true);
+        Assert.Empty(viewModel.Suggestions);
+        Assert.False(viewModel.CanAddAsUnresolved);
+
+        viewModel.RemoveManualCommand.Execute(viewModel.Dependencies[0]);
+        await WaitUntilAsync(() => viewModel.Dependencies.Count == 0);
+        viewModel.DependencyQuery = "target";
+        await WaitUntilAsync(() => viewModel.Suggestions.Count == 1);
+        Assert.Equal(target.Id, viewModel.Suggestions[0].EntityId);
+    }
+
     private static EntityDependencyEditorViewModel ViewModel(
         IReadOnlyList<TrackedEntity> entities)
     {

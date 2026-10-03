@@ -495,7 +495,8 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
                 _trackerId,
                 dependencyQuery,
                 entityName,
-                cancellationToken);
+                cancellationToken,
+                SelectedDependencies.Select(row => row.Selection.SourceKey).ToArray());
             if (version != _searchVersion)
             {
                 return;

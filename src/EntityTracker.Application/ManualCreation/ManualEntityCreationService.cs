@@ -48,14 +48,15 @@ public sealed class ManualEntityCreationService
         TrackerId trackerId,
         string query,
         string? proposedEntityName = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyCollection<EntitySourceKey>? excludedKeys = null)
     {
         ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(query);
 
         IReadOnlyList<TrackedEntity> entities =
             await _entityRepository.GetAllAsync(trackerId, cancellationToken);
-        return DependencySearch.Search(query, proposedEntityName, entities);
+        return DependencySearch.Search(query, proposedEntityName, entities, excludedKeys);
     }
 
     public async Task<IReadOnlyList<string>> SearchGroupNamesAsync(
