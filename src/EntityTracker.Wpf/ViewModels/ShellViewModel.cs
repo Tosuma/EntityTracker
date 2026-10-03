@@ -113,6 +113,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             new(ShellDestination.ProjectDashboard, string.Empty, "Project dashboard", true, false),
             new(ShellDestination.Developers, string.Empty, "Developers", true, false),
             new(ShellDestination.Overview, "Tracker", "Overview", true, true),
+            new(ShellDestination.DependencyGraph, "Tracker", "Dependency graph", true, true),
             new(ShellDestination.Archived, "Tracker", "Archived", true, true),
             new(ShellDestination.Reports, "Tracker", "Reports", true, true),
             new(ShellDestination.SchemaSynchronization, "Manage", "Schema synchronization", true, true),
@@ -263,6 +264,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(IsProjectDashboard));
                 OnPropertyChanged(nameof(IsDevelopers));
                 OnPropertyChanged(nameof(IsOverview));
+                OnPropertyChanged(nameof(IsDependencyGraph));
                 OnPropertyChanged(nameof(IsArchived));
                 OnPropertyChanged(nameof(IsReports));
                 OnPropertyChanged(nameof(IsSchemaSynchronization));
@@ -325,6 +327,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public bool IsProjectDashboard => SelectedDestination == ShellDestination.ProjectDashboard;
     public bool IsDevelopers => SelectedDestination == ShellDestination.Developers;
     public bool IsOverview => SelectedDestination == ShellDestination.Overview;
+    public bool IsDependencyGraph => SelectedDestination == ShellDestination.DependencyGraph;
     public bool IsArchived => SelectedDestination == ShellDestination.Archived;
     public bool IsReports => SelectedDestination == ShellDestination.Reports;
     public bool IsSchemaSynchronization => SelectedDestination == ShellDestination.SchemaSynchronization;
@@ -727,6 +730,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             CurrentWorkspace.SelectedTab = destination switch
             {
                 ShellDestination.Overview => MainWindowTab.Overview,
+                ShellDestination.DependencyGraph => MainWindowTab.DependencyGraph,
                 ShellDestination.Archived => MainWindowTab.Archived,
                 ShellDestination.Reports => MainWindowTab.Reports,
                 ShellDestination.SchemaSynchronization => MainWindowTab.SchemaSynchronization,
@@ -794,6 +798,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         ShellDestination destination = workspace.SelectedTab switch
         {
             MainWindowTab.Overview => ShellDestination.Overview,
+            MainWindowTab.DependencyGraph => ShellDestination.DependencyGraph,
             MainWindowTab.Archived => ShellDestination.Archived,
             MainWindowTab.Reports => ShellDestination.Reports,
             MainWindowTab.SchemaSynchronization => ShellDestination.SchemaSynchronization,
@@ -884,6 +889,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     private static bool IsTrackerDestination(ShellDestination destination) => destination is
         ShellDestination.Overview or
+        ShellDestination.DependencyGraph or
         ShellDestination.Archived or
         ShellDestination.Reports or
         ShellDestination.SchemaSynchronization or

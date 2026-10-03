@@ -1088,6 +1088,137 @@
                 </Grid>
             </TabItem>
 
+            <TabItem Header="Dependency graph" Focusable="False" IsTabStop="False" Tag="{x:Static viewModels:MainWindowTab.DependencyGraph}">
+                <Grid x:Name="DependencyGraphPage" Margin="12" DataContext="{Binding DependencyGraph}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <DockPanel Margin="0,0,0,12">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+                            <TextBlock Margin="0,0,12,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Brush.Text.Secondary}"
+                                       ToolTip="{Binding HiddenLinksDescription}"
+                                       Text="{Binding Summary}" />
+                            <Button Margin="0,0,8,0"
+                                    Command="{Binding FitToViewCommand}"
+                                    Content="Fit to view"
+                                    ToolTip="Fit the whole map in view (0)"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Command="{Binding ExportPngCommand}"
+                                    Content="Export PNG"
+                                    AutomationProperties.Name="Export dependency graph as PNG"
+                                    Style="{StaticResource PrimaryButtonStyle}" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Dependency graph" />
+                            <TextBlock Margin="0,3,0,0"
+                                       Foreground="{DynamicResource Brush.Text.Secondary}"
+                                       Text="Entities with the most dependencies sit in the centre; their dependencies orbit further out. Only direct links are drawn, never ones implied by a longer chain. Hover an entity to see its links."
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </DockPanel>
+
+                    <WrapPanel Grid.Row="1" Margin="0,0,0,8">
+                        <TextBox x:Name="DependencyGraphSearchBox"
+                                 Width="240" Margin="0,0,8,6" VerticalAlignment="Center"
+                                 AutomationProperties.Name="Find entity in dependency graph"
+                                 ToolTip="Type an entity name and press Enter"
+                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}">
+                            <TextBox.InputBindings>
+                                <KeyBinding Key="Enter" Command="{Binding FindCommand}" />
+                            </TextBox.InputBindings>
+                        </TextBox>
+                        <Button Margin="0,0,16,6"
+                                Command="{Binding FindCommand}"
+                                Content="Find"
+                                Style="{StaticResource SecondaryButtonStyle}" />
+                        <CheckBox Margin="0,0,16,6" VerticalAlignment="Center"
+                                  Content="Focus on selection"
+                                  AutomationProperties.HelpText="Hide everything except the selected entity and its dependencies."
+                                  IsChecked="{Binding IsFocusMode}" />
+                        <CheckBox Margin="0,0,16,6" VerticalAlignment="Center"
+                                  Content="Hide unconnected"
+                                  AutomationProperties.HelpText="Hide entities without dependencies or dependents."
+                                  IsChecked="{Binding HideUnconnected}" />
+                        <Button Margin="0,0,0,6"
+                                Command="{Binding ClearSelectionCommand}"
+                                Content="Clear selection"
+                                Style="{StaticResource SecondaryButtonStyle}" />
+                    </WrapPanel>
+
+                    <DockPanel Grid.Row="2" Margin="0,0,0,8" LastChildFill="True">
+                        <ItemsControl DockPanel.Dock="Right" Focusable="False"
+                                      AutomationProperties.Name="Dependency graph legend"
+                                      ItemsSource="{x:Static viewModels:DependencyGraphViewModel.Legend}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type viewModels:DependencyGraphLegendItem}">
+                                    <StackPanel Margin="12,0,0,0" Orientation="Horizontal">
+                                        <controls:DependencyGraphLegendSwatch Width="10" Height="10" VerticalAlignment="Center"
+                                                                              BrushKey="{Binding BrushKey}"
+                                                                              IsPlaceholder="{Binding IsPlaceholder}" />
+                                        <TextBlock Margin="5,0,0,0" FontSize="12"
+                                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                   Text="{Binding Label}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock VerticalAlignment="Center"
+                                   AutomationProperties.LiveSetting="Polite"
+                                   Text="{Binding SelectionDescription}"
+                                   TextWrapping="Wrap" />
+                    </DockPanel>
+
+                    <Border Grid.Row="3"
+                            BorderBrush="{DynamicResource Brush.Border.Default}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            ClipToBounds="True">
+                        <Grid>
+                            <controls:DependencyGraphCanvas x:Name="DependencyGraphCanvas"
+                                                            AutomationProperties.Name="Dependency graph"
+                                                            AutomationProperties.HelpText="Click an entity to highlight its dependencies. Double-click to open details. Escape clears the selection."
+                                                            Graph="{Binding}"
+                                                            Background="{DynamicResource Brush.Surface.Card}"
+                                                            LabelBrush="{DynamicResource Brush.Text.Primary}"
+                                                            EdgeBrush="{DynamicResource Brush.Border.Strong}"
+                                                            HighlightBrush="{DynamicResource Brush.Text.Primary}"
+                                                            PlaceholderBrush="{DynamicResource Brush.Text.Secondary}" />
+                            <TextBlock x:Name="DependencyGraphEmptyState"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Brush.Text.Secondary}"
+                                       Text="This Tracker has no active entities yet.">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasNodes}" Value="False">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <Border Margin="12" Padding="10,6" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                    Style="{StaticResource ErrorMessageStyle}"
+                                    Visibility="{Binding HasSearchMessage, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <TextBlock AutomationProperties.LiveSetting="Assertive" Text="{Binding SearchMessage}" />
+                            </Border>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
             <TabItem Header="Archived" Focusable="False" IsTabStop="False" Tag="{x:Static viewModels:MainWindowTab.Archived}">
                 <Grid Margin="12">
                     <Grid.RowDefinitions>

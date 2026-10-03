@@ -6,6 +6,7 @@ public enum ShellDestination
     ProjectDashboard,
     Developers,
     Overview,
+    DependencyGraph,
     Archived,
     Reports,
     SchemaSynchronization,

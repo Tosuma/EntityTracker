@@ -275,6 +275,24 @@ implemented direct dependencies.
 
 ![EntityTracker overview showing dependency warning icons, missing dependencies, and details for an upstream-unresolved entity](images/light/overview-missing-entities-as-dependencies.png)
 
+### Explore the dependency graph
+
+**Dependency graph** shows the selected Tracker's active entities as a solar system. Entities
+that nothing else depends on sit in the centre, with the entity that has the most dependencies
+in the exact middle, and every dependency orbits one ring further out than the entities that use
+it. Each entity gets its own slice of the circle, so a dependency chain runs outward instead of
+across the map. Only direct links are drawn, never ones a longer chain already implies. Links stay
+faint until you hover over an entity. Click an entity to highlight everything it depends on,
+all the way out; **Focus on selection** hides the rest, and **Hide unconnected** removes entities
+without links. Find an entity by name, double-click it to open its details, drag it to a new spot,
+or export the current view as a PNG.
+
+![EntityTracker dependency graph showing every active entity colored by status](images/light/dependency-graph.png)
+
+![Dependency graph with one entity selected and its dependency chain highlighted](images/light/dependency-graph-selected.png)
+
+![Entity details pane opened from the dependency graph](images/light/dependency-graph-details.png)
+
 ### Import review details
 
 Changed entities show dependency additions and removals directly, with any required progress choice

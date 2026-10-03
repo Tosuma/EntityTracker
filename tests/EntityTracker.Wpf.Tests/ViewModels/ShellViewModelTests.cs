@@ -132,6 +132,7 @@ public sealed class ShellViewModelTests
             new RecordingDiscardConfirmation(true));
         await shell.InitializeAsync();
         Assert.Equal(SettingsCategory.General, shell.SelectedSettingsCategory);
+        Assert.False(shell.NavigateCommand.CanExecute(ShellDestination.DependencyGraph));
         Assert.Equal(Enum.GetValues<SettingsCategory>(), shell.SettingsCategories);
 
         Assert.True(await shell.NavigateAsync(ShellDestination.Settings));
@@ -170,6 +171,10 @@ public sealed class ShellViewModelTests
 
         Assert.True(await shell.NavigateAsync(ShellDestination.Reports));
         Assert.Equal(MainWindowTab.Reports, shell.CurrentWorkspace?.SelectedTab);
+        Assert.True(await shell.NavigateAsync(ShellDestination.DependencyGraph));
+        Assert.Equal(MainWindowTab.DependencyGraph, shell.CurrentWorkspace?.SelectedTab);
+        Assert.True(shell.IsDependencyGraph);
+        Assert.True(shell.IsTrackerWorkspace);
         Assert.True(await shell.NavigateAsync(ShellDestination.Settings));
         Assert.False(shell.IsTrackerWorkspace);
         Assert.Equal(harness.DefaultTracker.Id, shell.SelectedTracker?.Id);

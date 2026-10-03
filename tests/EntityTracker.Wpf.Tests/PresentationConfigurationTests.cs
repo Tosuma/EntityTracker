@@ -38,6 +38,25 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void DependencyGraphIsATrackerPageWithAccessibleMap()
+    {
+        XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        Assert.Contains(workspace.Descendants(), element =>
+            element.Name.LocalName == "TabItem" &&
+            (string?)element.Attribute("Tag") == "{x:Static viewModels:MainWindowTab.DependencyGraph}");
+        Assert.Contains(workspace.Descendants(), element =>
+            element.Name.LocalName == "DependencyGraphCanvas" &&
+            (string?)element.Attribute("Graph") == "{Binding}" &&
+            (string?)element.Attribute("AutomationProperties.Name") == "Dependency graph");
+
+        XDocument window = LoadWpfXaml("MainWindow.xaml");
+        Assert.Contains(window.Descendants(), element =>
+            element.Name.LocalName == "ToggleButton" &&
+            (string?)element.Attribute("CommandParameter") == "{x:Static viewModels:ShellDestination.DependencyGraph}" &&
+            (string?)element.Attribute("IsChecked") == "{Binding IsDependencyGraph, Mode=OneWay}");
+    }
+
+    [Fact]
     public void AutomaticSyncSettingsAndProjectStatusAreAccessible()
     {
         XDocument settings = LoadWpfXaml("Views", "SettingsView.xaml");

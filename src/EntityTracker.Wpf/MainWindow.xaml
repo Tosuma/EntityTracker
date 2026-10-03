@@ -99,6 +99,12 @@
                                 ToolTip="Select a Tracker to open Overview."
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
                         <ToggleButton Command="{Binding NavigateCommand}"
+                                CommandParameter="{x:Static viewModels:ShellDestination.DependencyGraph}"
+                                IsChecked="{Binding IsDependencyGraph, Mode=OneWay}"
+                                Content="Dependency graph"
+                                ToolTip="Select a Tracker to view its dependency graph."
+                                Style="{StaticResource ShellNavigationButtonStyle}" />
+                        <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.Archived}"
                                 IsChecked="{Binding IsArchived, Mode=OneWay}"
                                 Content="Archived"

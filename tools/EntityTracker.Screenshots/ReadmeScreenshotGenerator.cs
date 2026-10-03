@@ -18,6 +18,7 @@ using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Wpf;
 using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels;
+using EntityTracker.Wpf.ViewModels.DependencyGraph;
 
 using Microsoft.Extensions.DependencyInjection;
 
@@ -274,6 +275,7 @@ internal sealed class ReadmeScreenshotGenerator
                 "The tracker workspace did not finish loading.",
                 cancellationToken);
             await CaptureOverviewAsync(viewModel, window, renderer, cancellationToken);
+            await CaptureDependencyGraphAsync(shell, viewModel, renderer, cancellationToken);
 
             viewModel.Review.Clear();
             await shell.NavigateAsync(ShellDestination.SchemaSynchronization, cancellationToken);
@@ -514,6 +516,41 @@ internal sealed class ReadmeScreenshotGenerator
         await renderer.CaptureGraphIssueAsync(
             "overview-missing-entities-as-dependencies.png");
         viewModel.ActiveTable.ClearAllFiltersAndSort();
+    }
+
+    private static async Task CaptureDependencyGraphAsync(
+        ShellViewModel shell,
+        MainWindowViewModel viewModel,
+        WpfScreenshotRenderer renderer,
+        CancellationToken cancellationToken)
+    {
+        await shell.NavigateAsync(ShellDestination.DependencyGraph, cancellationToken);
+        DependencyGraphViewModel graph = viewModel.DependencyGraph;
+        for (int attempt = 0; attempt < 25 && !graph.Layout.IsSettled; attempt++)
+            graph.Layout.Settle();
+        if (!graph.Layout.IsSettled)
+            throw new InvalidDataException("The deterministic dependency graph did not settle.");
+        graph.FitToViewCommand.Execute(null);
+        await renderer.CaptureAsync("dependency-graph.png", settleMilliseconds: 500);
+
+        // Feature a readable, mid-sized dependency chain; ties resolve by name.
+        DependencyGraphNode featured = graph.Model.Nodes
+            .Where(static node => !node.IsPlaceholder)
+            .Select(node => { graph.SelectedNode = node; return (node, graph.HighlightedNodes.Count); })
+            .OrderBy(static pair => Math.Abs(pair.Count - 10))
+            .ThenBy(static pair => pair.node.Label, StringComparer.Ordinal)
+            .First().node;
+        graph.SelectedNode = featured;
+        await renderer.CaptureAsync("dependency-graph-selected.png", settleMilliseconds: 500);
+
+        if (!graph.OpenDetails(featured))
+            throw new InvalidOperationException("The featured graph entity has no details.");
+        await WaitUntilAsync(() => viewModel.SelectedEntityDetails is not null && !viewModel.IsBusy,
+            "Entity details did not open from the dependency graph.", cancellationToken);
+        await renderer.CaptureAsync("dependency-graph-details.png", settleMilliseconds: 500);
+        viewModel.CloseEntityDetails();
+        graph.SelectedNode = null;
+        viewModel.SelectedTab = MainWindowTab.Overview;
     }
 
     private static async Task CaptureMissingReviewAsync(
