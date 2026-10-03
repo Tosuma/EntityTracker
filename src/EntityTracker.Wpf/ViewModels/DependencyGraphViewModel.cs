@@ -15,6 +15,9 @@ namespace EntityTracker.Wpf.ViewModels;
 
 public sealed record DependencyGraphLegendItem(string Label, string BrushKey, bool IsPlaceholder);
 
+/// <summary>What the hover card shows for an entity or missing dependency.</summary>
+public sealed record DependencyGraphNodeInfo(string Title, IReadOnlyList<string> Lines);
+
 /// <summary>State for the Tracker's dependency map: selection, highlight, filters and export.</summary>
 public sealed class DependencyGraphViewModel : INotifyPropertyChanged
 {
@@ -29,6 +32,7 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
     private DependencyGraphNode? _selectedNode;
     private HashSet<DependencyGraphNode> _highlightedNodes = new(ReferenceEqualityComparer.Instance);
     private HashSet<DependencyGraphEdge> _highlightedEdges = new(ReferenceEqualityComparer.Instance);
+    private HashSet<DependencyGraphNode> _landmarks = new(ReferenceEqualityComparer.Instance);
     private bool _isFocusMode;
     private bool _hideUnconnected;
     private string _searchText = string.Empty;
@@ -128,6 +132,9 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
 
     public bool HasSelection => SelectedNode is not null;
 
+    /// <summary>Gets the entities whose names stay visible at every zoom level.</summary>
+    public IReadOnlySet<DependencyGraphNode> Landmarks => _landmarks;
+
     public IReadOnlySet<DependencyGraphNode> HighlightedNodes => _highlightedNodes;
     public IReadOnlySet<DependencyGraphEdge> HighlightedEdges => _highlightedEdges;
 
@@ -184,6 +191,7 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
         Layout = new RadialDependencyLayout(model);
         Layout.Settle();
         _selectedNode = null;
+        _landmarks = FindLandmarks(model);
         Model = model;
         SelectedNode = selectedKey is null ? null : model.Find(selectedKey);
         UpdateHighlight();
@@ -206,6 +214,66 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
     {
         ArgumentNullException.ThrowIfNull(node);
         return node.EntityId is { } entityId && _openDetails(entityId);
+    }
+
+    /// <summary>Explains an entity's place on the map for the hover card.</summary>
+    public DependencyGraphNodeInfo Describe(DependencyGraphNode node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        if (node.IsPlaceholder)
+        {
+            string[] neededBy = Model.Edges.Where(edge => ReferenceEquals(edge.From, node))
+                .Select(static edge => edge.To.Label).Order(StringComparer.OrdinalIgnoreCase).ToArray();
+            return new DependencyGraphNodeInfo(node.Label,
+            [
+                "Missing dependency",
+                neededBy.Length <= 3
+                    ? $"Needed by: {string.Join(", ", neededBy)}"
+                    : $"Needed by: {neededBy.Length} entities"
+            ]);
+        }
+
+        List<string> lines =
+        [
+            $"Status: {StatusLabel(node.Status)}",
+            $"Rank: {(node.Rank is { } rank ? rank.ToString(System.Globalization.CultureInfo.CurrentCulture) : "Unranked")}",
+            node.Level switch
+            {
+                0 => "Ring: Foundation",
+                DependencyGraphNode.UnconnectedLevel => "Ring: Unconnected",
+                _ => $"Ring: Level {node.Level}"
+            },
+            $"Depends on: {Count(node.DependencyCount)}",
+            $"Used by: {Count(node.DependentCount)} · unblocks {node.TransitiveDependentCount}"
+        ];
+        string[] missing = Model.Edges
+            .Where(edge => ReferenceEquals(edge.To, node) && edge.From.IsPlaceholder)
+            .Select(static edge => edge.From.Label).Order(StringComparer.OrdinalIgnoreCase).ToArray();
+        if (missing.Length > 0) lines.Add($"Missing: {string.Join(", ", missing)}");
+        return new DependencyGraphNodeInfo(node.Label, lines);
+
+        static string Count(int count) => $"{count} {(count == 1 ? "entity" : "entities")}";
+    }
+
+    private static string StatusLabel(DevelopmentStatus? status) =>
+        Legend.FirstOrDefault(item => item.BrushKey == $"Brush.Status.{status}")?.Label ?? "Unknown";
+
+    /// <summary>
+    /// Picks the landmarks: the most used foundations plus the entities most others refer to,
+    /// so the zoomed-out map always has a few readable names.
+    /// </summary>
+    private static HashSet<DependencyGraphNode> FindLandmarks(DependencyGraphModel model)
+    {
+        IEnumerable<DependencyGraphNode> ByImportance(IEnumerable<DependencyGraphNode> nodes) => nodes
+            .OrderByDescending(static node => node.DependentCount)
+            .ThenBy(static node => node.Rank ?? int.MaxValue)
+            .ThenBy(static node => node.Label, StringComparer.Ordinal);
+        DependencyGraphNode[] candidates = model.Nodes
+            .Where(static node => !node.IsPlaceholder && node.Level >= 0).ToArray();
+        HashSet<DependencyGraphNode> landmarks = new(ReferenceEqualityComparer.Instance);
+        landmarks.UnionWith(ByImportance(candidates.Where(static node => node.Level == 0)).Take(8));
+        landmarks.UnionWith(ByImportance(candidates.Where(static node => node.DependentCount >= 2)).Take(10));
+        return landmarks;
     }
 
     private void Find()

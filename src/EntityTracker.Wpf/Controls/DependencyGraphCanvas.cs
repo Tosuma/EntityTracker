@@ -27,6 +27,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     public static readonly DependencyProperty EdgeBrushProperty = RegisterBrush(nameof(EdgeBrush));
     public static readonly DependencyProperty HighlightBrushProperty = RegisterBrush(nameof(HighlightBrush));
     public static readonly DependencyProperty PlaceholderBrushProperty = RegisterBrush(nameof(PlaceholderBrush));
+    public static readonly DependencyProperty CardBackgroundProperty = RegisterBrush(nameof(CardBackground));
 
     private const double MinScale = 0.15;
     private const double MaxScale = 4;
@@ -36,7 +37,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     private const double OrbitOpacity = 0.3;
     private const double DragThreshold = 3;
 
-    private readonly Dictionary<string, FormattedText> _labelCache = new(StringComparer.Ordinal);
+    private readonly Dictionary<(string Text, bool Bold), FormattedText> _labelCache = [];
     private double _scale = 1;
     private Vector _offset;
     private bool _needsFit = true;
@@ -94,6 +95,13 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         set => SetValue(PlaceholderBrushProperty, value);
     }
 
+    /// <summary>Gets or sets the opaque background of the hover card, so the map never shows through it.</summary>
+    public Brush? CardBackground
+    {
+        get => (Brush?)GetValue(CardBackgroundProperty);
+        set => SetValue(CardBackgroundProperty, value);
+    }
+
     /// <summary>Gets the current zoom factor; exposed for tests and screenshots.</summary>
     public double Scale => _scale;
 
@@ -148,10 +156,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         int height = Math.Max(1, (int)Math.Ceiling(ActualHeight * dpi.DpiScaleY));
         DrawingVisual visual = new();
         using (DrawingContext context = visual.RenderOpen())
-        {
-            context.DrawRectangle(new VisualBrush(this) { Stretch = Stretch.None, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top },
-                null, new Rect(0, 0, ActualWidth, ActualHeight));
-        }
+            Draw(context, includeHoverCard: false);
 
         RenderTargetBitmap bitmap = new(width, height, dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
         bitmap.Render(visual);
@@ -161,7 +166,16 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         encoder.Save(stream);
     }
 
-    protected override void OnRender(DrawingContext context)
+    /// <summary>Shows the hover card for an entity, as if the pointer rested on it; used for screenshots.</summary>
+    internal void ShowHover(DependencyGraphNode? node)
+    {
+        _hoverNode = node;
+        InvalidateVisual();
+    }
+
+    protected override void OnRender(DrawingContext context) => Draw(context, includeHoverCard: true);
+
+    private void Draw(DrawingContext context, bool includeHoverCard)
     {
         Rect bounds = new(0, 0, ActualWidth, ActualHeight);
         context.DrawRectangle(Background ?? Brushes.Transparent, null, bounds);
@@ -221,16 +235,86 @@ public sealed class DependencyGraphCanvas : FrameworkElement
                 context.DrawEllipse(null, selectedPen, center, radius + 4, radius + 4);
             else if (highlighted)
                 context.DrawEllipse(null, chainPen, center, radius + 2.5, radius + 2.5);
-
-            bool showLabel = _scale >= LabelScale || hoverNeighbours.Contains(node) ||
-                ReferenceEquals(node, _hoverNode) || (hasSelection && highlighted);
-            if (showLabel)
-            {
-                FormattedText label = Label(node.Label);
-                context.DrawText(label, new Point(center.X - label.Width / 2, center.Y + radius + 3));
-            }
-
             if (dimmed) context.Pop();
+        }
+
+        DrawLabels(context, graph, hoverNeighbours);
+        if (includeHoverCard && _hoverNode is not null && !IsMouseCaptured && graph.IsVisible(_hoverNode))
+            DrawHoverCard(context, graph, _hoverNode);
+    }
+
+    /// <summary>
+    /// Draws names on top of the map. Landmarks keep the zoomed-out map readable; names that
+    /// would overlap a more important one are skipped.
+    /// </summary>
+    private void DrawLabels(DrawingContext context, DependencyGraphViewModel graph,
+        HashSet<DependencyGraphNode> hoverNeighbours)
+    {
+        bool hasSelection = graph.HasSelection;
+        List<DependencyGraphLabelCandidate<(FormattedText Text, bool Dimmed)>> candidates = [];
+        foreach (DependencyGraphNode node in graph.Model.Nodes)
+        {
+            if (!graph.IsVisible(node)) continue;
+            bool highlighted = graph.HighlightedNodes.Contains(node);
+            bool landmark = graph.Landmarks.Contains(node);
+            int tier = ReferenceEquals(node, _hoverNode) ? 0
+                : ReferenceEquals(node, graph.SelectedNode) ? 1
+                : hoverNeighbours.Contains(node) ? 2
+                : hasSelection && highlighted ? 3
+                : landmark ? 4
+                : _scale >= LabelScale ? 5
+                : -1;
+            if (tier < 0) continue;
+            FormattedText text = Label(node.Label, landmark);
+            Point center = ToScreen(node);
+            double radius = Math.Max(node.Radius * _scale, 2.5);
+            Rect bounds = new(center.X - text.Width / 2, center.Y + radius + 3, text.Width, text.Height);
+            bool dimmed = hasSelection && !highlighted && !hoverNeighbours.Contains(node);
+            candidates.Add(new((text, dimmed), bounds, tier * 100_000 - node.DependentCount, tier <= 1));
+        }
+
+        foreach (DependencyGraphLabelCandidate<(FormattedText Text, bool Dimmed)> label in
+                 DependencyGraphLabelPlacer.Place(candidates))
+        {
+            if (label.Item.Dimmed) context.PushOpacity(DimOpacity);
+            context.DrawText(label.Item.Text, label.Bounds.TopLeft);
+            if (label.Item.Dimmed) context.Pop();
+        }
+    }
+
+    /// <summary>Draws a small card explaining the hovered entity's place on the map.</summary>
+    private void DrawHoverCard(DrawingContext context, DependencyGraphViewModel graph, DependencyGraphNode node)
+    {
+        DependencyGraphNodeInfo info = graph.Describe(node);
+        double pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        Typeface regular = new(TextElementFontFamily(), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+        Typeface bold = new(TextElementFontFamily(), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+        FormattedText title = new(info.Title, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+            bold, 13, LabelBrush ?? Brushes.Black, pixelsPerDip);
+        FormattedText[] lines = info.Lines.Select(line => new FormattedText(line, CultureInfo.CurrentUICulture,
+            FlowDirection.LeftToRight, regular, 12, PlaceholderBrush ?? Brushes.Gray, pixelsPerDip)).ToArray();
+
+        const double padding = 10;
+        const double gap = 3;
+        double width = Math.Max(title.Width, lines.Select(static line => line.Width).DefaultIfEmpty(0).Max()) + padding * 2;
+        double height = title.Height + lines.Sum(static line => line.Height + gap) + padding * 2;
+        Point center = ToScreen(node);
+        double radius = Math.Max(node.Radius * _scale, 2.5);
+        double x = center.X + radius + 12;
+        if (x + width > ActualWidth - 8) x = center.X - radius - 12 - width;
+        x = Math.Clamp(x, 8, Math.Max(8, ActualWidth - width - 8));
+        double y = Math.Clamp(center.Y - height / 2, 8, Math.Max(8, ActualHeight - height - 8));
+
+        Pen border = Freeze(new Pen(EdgeBrush ?? Brushes.Gray, 1));
+        context.DrawRoundedRectangle(CardBackground ?? Background ?? Brushes.White, border,
+            new Rect(x, y, width, height), 6, 6);
+        double cursor = y + padding;
+        context.DrawText(title, new Point(x + padding, cursor));
+        cursor += title.Height + gap;
+        foreach (FormattedText line in lines)
+        {
+            context.DrawText(line, new Point(x + padding, cursor));
+            cursor += line.Height + gap;
         }
     }
 
@@ -290,7 +374,6 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         {
             _hoverNode = hover;
             Cursor = hover is null ? null : Cursors.Hand;
-            ToolTip = hover is null ? null : hover.IsPlaceholder ? $"{hover.Label} (missing dependency)" : hover.Label;
             InvalidateVisual();
         }
     }
@@ -485,13 +568,15 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     private Brush StatusBrush(DevelopmentStatus? status) =>
         TryFindResource($"Brush.Status.{status}") as Brush ?? Brushes.Gray;
 
-    private FormattedText Label(string text)
+    /// <summary>Gets a cached name label; landmark names are drawn semibold.</summary>
+    private FormattedText Label(string text, bool bold = false)
     {
-        if (_labelCache.TryGetValue(text, out FormattedText? cached)) return cached;
+        if (_labelCache.TryGetValue((text, bold), out FormattedText? cached)) return cached;
         FormattedText label = new(text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-            new Typeface(TextElementFontFamily(), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal),
+            new Typeface(TextElementFontFamily(), FontStyles.Normal,
+                bold ? FontWeights.SemiBold : FontWeights.Normal, FontStretches.Normal),
             12, LabelBrush ?? Brushes.Black, VisualTreeHelper.GetDpi(this).PixelsPerDip);
-        _labelCache[text] = label;
+        _labelCache[(text, bold)] = label;
         return label;
     }
 

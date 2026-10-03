@@ -284,8 +284,10 @@ reads from the centre outward in build order; within a ring, entities earlier in
 dependency-safe rank sit closer to the centre. A lone foundation is the centre itself, and
 missing dependencies orbit on the outermost ring, straight out from the entities that need them. A larger dot means more entities refer to it
 directly. Entities are placed straight out from what they link to, so chains run outward instead of
-across the map, and only direct links are drawn, never ones a longer chain already implies. Links stay
-faint until you hover over an entity. Click an entity to highlight everything it depends on, back
+across the map, and only direct links are drawn, never ones a longer chain already implies. The most used entities and the foundations keep their names visible at every zoom level, and
+names never pile on top of each other. Links stay faint until you hover over an entity; hovering
+also shows a card with its status, rank, ring, what it depends on, how many entities it unblocks,
+and any missing dependencies. Click an entity to highlight everything it depends on, back
 towards the centre; **Focus on selection** hides the rest, and **Hide unconnected** removes
 entities without links. Find an entity by name, double-click it to open its details, drag it to a
 new spot, or export the current view as a PNG.
@@ -293,6 +295,8 @@ new spot, or export the current view as a PNG.
 ![EntityTracker dependency graph showing every active entity colored by status](images/light/dependency-graph.png)
 
 ![Dependency graph with one entity selected and its dependency chain highlighted](images/light/dependency-graph-selected.png)
+
+![Dependency graph hover card explaining an entity's status, rank, ring and usage](images/light/dependency-graph-hover.png)
 
 ![Entity details pane opened from the dependency graph](images/light/dependency-graph-details.png)
 

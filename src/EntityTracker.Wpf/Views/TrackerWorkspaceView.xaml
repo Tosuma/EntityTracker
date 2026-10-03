@@ -1186,7 +1186,8 @@
                                                             LabelBrush="{DynamicResource Brush.Text.Primary}"
                                                             EdgeBrush="{DynamicResource Brush.Border.Strong}"
                                                             HighlightBrush="{DynamicResource Brush.Text.Primary}"
-                                                            PlaceholderBrush="{DynamicResource Brush.Text.Secondary}" />
+                                                            PlaceholderBrush="{DynamicResource Brush.Text.Secondary}"
+                                                            CardBackground="{DynamicResource Brush.Surface.Page}" />
                             <TextBlock x:Name="DependencyGraphEmptyState"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Foreground="{DynamicResource Brush.Text.Secondary}"

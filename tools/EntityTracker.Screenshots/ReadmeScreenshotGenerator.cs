@@ -16,6 +16,7 @@ using EntityTracker.Wpf.Views;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Wpf;
+using EntityTracker.Wpf.Controls;
 using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels;
 using EntityTracker.Wpf.ViewModels.DependencyGraph;
@@ -275,7 +276,7 @@ internal sealed class ReadmeScreenshotGenerator
                 "The tracker workspace did not finish loading.",
                 cancellationToken);
             await CaptureOverviewAsync(viewModel, window, renderer, cancellationToken);
-            await CaptureDependencyGraphAsync(shell, viewModel, renderer, cancellationToken);
+            await CaptureDependencyGraphAsync(shell, viewModel, window, renderer, cancellationToken);
 
             viewModel.Review.Clear();
             await shell.NavigateAsync(ShellDestination.SchemaSynchronization, cancellationToken);
@@ -521,6 +522,7 @@ internal sealed class ReadmeScreenshotGenerator
     private static async Task CaptureDependencyGraphAsync(
         ShellViewModel shell,
         MainWindowViewModel viewModel,
+        MainWindow window,
         WpfScreenshotRenderer renderer,
         CancellationToken cancellationToken)
     {
@@ -542,6 +544,19 @@ internal sealed class ReadmeScreenshotGenerator
             .First().node;
         graph.SelectedNode = featured;
         await renderer.CaptureAsync("dependency-graph-selected.png", settleMilliseconds: 500);
+
+        // Hover the most referenced landmark to show its info card.
+        graph.SelectedNode = null;
+        DependencyGraphCanvas canvas = (DependencyGraphCanvas)(window.FindWorkspaceElement("DependencyGraphCanvas")
+            ?? throw new InvalidOperationException("The dependency graph was not rendered."));
+        DependencyGraphNode hovered = graph.Landmarks
+            .OrderByDescending(static node => node.DependentCount)
+            .ThenBy(static node => node.Label, StringComparer.Ordinal)
+            .First();
+        canvas.ShowHover(hovered);
+        await renderer.CaptureAsync("dependency-graph-hover.png", settleMilliseconds: 500);
+        canvas.ShowHover(null);
+        graph.SelectedNode = featured;
 
         if (!graph.OpenDetails(featured))
             throw new InvalidOperationException("The featured graph entity has no details.");

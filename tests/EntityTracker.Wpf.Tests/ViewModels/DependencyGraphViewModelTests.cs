@@ -291,6 +291,57 @@ public sealed class DependencyGraphViewModelTests
     }
 
     [Fact]
+    public void Landmarks_AreFoundationsAndTheMostUsedEntities()
+    {
+        EntityOverviewRow[] rows =
+        [
+            .. Rows,
+            Row(7, "shared", DevelopmentStatus.InProgress, "customer"),
+            Row(8, "report", DevelopmentStatus.NotStarted, "shared"),
+            Row(9, "audit", DevelopmentStatus.NotStarted, "shared")
+        ];
+        DependencyGraphViewModel graph = new(_ => true);
+        graph.Rebuild(rows);
+        string[] landmarks = graph.Landmarks.Select(static node => node.Label).Order().ToArray();
+
+        Assert.Contains("address", landmarks); // foundation
+        Assert.Contains("product", landmarks); // foundation
+        Assert.Contains("shared", landmarks); // referred to by two entities
+        Assert.Contains("customer", landmarks); // referred to by order and shared
+        Assert.DoesNotContain("lonely", landmarks);
+        Assert.DoesNotContain("tax", landmarks);
+        Assert.DoesNotContain("invoice", landmarks);
+    }
+
+    [Fact]
+    public void Describe_ExplainsWhereAnEntitySitsAndWhatItNeeds()
+    {
+        DependencyGraphViewModel graph = CreateGraph();
+
+        DependencyGraphNodeInfo invoice = graph.Describe(graph.Model.Find(Rows[2].EntityId)!);
+        Assert.Equal("invoice", invoice.Title);
+        Assert.Equal(
+        [
+            "Status: Not started",
+            "Rank: Unranked",
+            "Ring: Level 3",
+            "Depends on: 2 entities",
+            "Used by: 0 entities · unblocks 0",
+            "Missing: tax"
+        ], invoice.Lines);
+
+        DependencyGraphNodeInfo address = graph.Describe(graph.Model.Find(Rows[3].EntityId)!);
+        Assert.Contains("Ring: Foundation", address.Lines);
+        Assert.Contains("Used by: 1 entity · unblocks 3", address.Lines);
+
+        DependencyGraphNodeInfo lonely = graph.Describe(graph.Model.Nodes.Single(node => node.Label == "lonely"));
+        Assert.Contains("Ring: Unconnected", lonely.Lines);
+
+        DependencyGraphNodeInfo tax = graph.Describe(graph.Model.Nodes.Single(node => node.IsPlaceholder));
+        Assert.Equal(["Missing dependency", "Needed by: invoice"], tax.Lines);
+    }
+
+    [Fact]
     public void Selection_HighlightsTransitiveDependenciesButNotDependents()
     {
         DependencyGraphViewModel graph = CreateGraph();
