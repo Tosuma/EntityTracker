@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using EntityTracker.Application.Snapshots;
 using EntityTracker.Domain;
 
 namespace EntityTracker.Application.GitSync;
@@ -215,7 +216,8 @@ public sealed class ProjectAutoSyncService : IDisposable
         ProjectSyncAuthenticationException => ProjectSyncStateKind.AuthenticationRequired,
         ProjectSyncUpdateRequiredException or ProjectSyncVersionCheckUnavailableException =>
             ProjectSyncStateKind.UpdatePaused,
-        ProjectSyncConfigurationException or InvalidDataException or ArgumentException =>
+        ProjectSyncConfigurationException or ProjectSnapshotFormatVersionException or
+            InvalidDataException or ArgumentException =>
             ProjectSyncStateKind.ConfigurationInvalid,
         _ => ProjectSyncStateKind.Failed
     };
@@ -227,6 +229,7 @@ public sealed class ProjectAutoSyncService : IDisposable
         ProjectNameCollisionException => "Choose a unique local Project name with Sync now.",
         ProjectSyncUpdateRequiredException or ProjectSyncVersionCheckUnavailableException =>
             error.Message,
+        ProjectSnapshotFormatVersionException => error.Message,
         InvalidDataException => "The repository snapshot is invalid. Open the Project for details.",
         _ => "Automatic sync failed. Open the Project and use Sync now for details."
     };
