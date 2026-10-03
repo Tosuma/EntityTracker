@@ -1,9 +1,19 @@
 [CmdletBinding()]
+# The app passes -UpdaterVersion and -UpdaterSource to the copy of this script from the release
+# it installs, so future versions of this script must keep accepting both parameters.
 param(
     [Parameter(Mandatory)][string]$SourcePath,
     [Parameter(Mandatory)][string]$Tag,
-    [Parameter(Mandatory)][int]$WaitForProcess
+    [Parameter(Mandatory)][int]$WaitForProcess,
+    [string]$UpdaterVersion = '',
+    [ValidateSet('', 'Release', 'Installed')][string]$UpdaterSource = ''
 )
+
+# Which version of the updater scripts is running, shown in the window and the install log.
+$scriptVersion = if (-not $UpdaterVersion) { 'unknown version' }
+    elseif ($UpdaterSource -eq 'Release') { "$UpdaterVersion (from the release being installed)" }
+    elseif ($UpdaterSource -eq 'Installed') { "$UpdaterVersion (installed with the current app)" }
+    else { $UpdaterVersion }
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -60,6 +70,16 @@ $exit.Size = New-Object System.Drawing.Size(94, 30)
 $exit.Add_Click({ $form.Close() })
 $form.Controls.Add($exit)
 
+function New-UpdaterVersionLabel {
+    $label = New-Object System.Windows.Forms.Label
+    $label.Text = "Updater $scriptVersion"
+    $label.ForeColor = [System.Drawing.SystemColors]::GrayText
+    $label.Location = New-Object System.Drawing.Point(20, 321)
+    $label.Size = New-Object System.Drawing.Size(370, 20)
+    return $label
+}
+$form.Controls.Add((New-UpdaterVersionLabel))
+
 $successPage = New-Object System.Windows.Forms.Panel
 $successPage.Location = New-Object System.Drawing.Point(0, 0)
 $successPage.Size = $form.ClientSize
@@ -86,6 +106,27 @@ $finish.Location = New-Object System.Drawing.Point(510, 314)
 $finish.Size = New-Object System.Drawing.Size(94, 30)
 $finish.Add_Click({ $form.Close() })
 $successPage.Controls.Add($finish)
+$successPage.Controls.Add((New-UpdaterVersionLabel))
+
+# Starts the hidden install. Kept free of window code so Test-UpdaterExitCode.ps1 can run it.
+function Start-InstallWorker {
+    param(
+        [string]$InstallScript,
+        [string[]]$InstallArguments,
+        [string]$WorkingDirectory,
+        [string]$StdoutPath,
+        [string]$StderrPath
+    )
+    $worker = Start-Process -FilePath 'powershell.exe' -PassThru -WindowStyle Hidden `
+        -WorkingDirectory $WorkingDirectory `
+        -ArgumentList (@('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
+            ('"' + $InstallScript + '"')) + $InstallArguments) `
+        -RedirectStandardOutput $StdoutPath -RedirectStandardError $StderrPath
+    # Windows PowerShell only reports ExitCode for a process whose handle was opened while it ran.
+    # Without this a finished install reads as $null, so a successful update showed "Update failed".
+    $null = $worker.Handle
+    return $worker
+}
 
 $script:worker = $null
 $script:stdoutPath = $null
@@ -101,13 +142,10 @@ function Start-UpdateAttempt {
     $script:stdoutPath = Join-Path $PSScriptRoot "update-$($script:attempt).out.log"
     $script:stderrPath = Join-Path $PSScriptRoot "update-$($script:attempt).err.log"
     try {
-        $script:worker = Start-Process -FilePath 'powershell.exe' -PassThru -WindowStyle Hidden `
-            -WorkingDirectory $PSScriptRoot `
-            -ArgumentList @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
-                ('"' + (Join-Path $PSScriptRoot 'Install-EntityTracker.ps1') + '"'),
-                '-SourcePath', ('"' + $SourcePath + '"'), '-Tag', $Tag,
-                '-WaitForProcess', $WaitForProcess) `
-            -RedirectStandardOutput $script:stdoutPath -RedirectStandardError $script:stderrPath
+        $script:worker = Start-InstallWorker -InstallScript (Join-Path $PSScriptRoot 'Install-EntityTracker.ps1') `
+            -InstallArguments @('-SourcePath', ('"' + $SourcePath + '"'), '-Tag', $Tag,
+                '-WaitForProcess', $WaitForProcess, '-UpdaterVersion', ('"' + $scriptVersion + '"')) `
+            -WorkingDirectory $PSScriptRoot -StdoutPath $script:stdoutPath -StderrPath $script:stderrPath
     }
     catch {
         $progress.Style = 'Blocks'

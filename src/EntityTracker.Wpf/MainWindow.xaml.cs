@@ -139,21 +139,23 @@ public partial class MainWindow : Window
 
     private void OnUpdateClick(object sender, RoutedEventArgs e) => _ = RunUpdateAsync();
 
-    private Task RunUpdateAsync()
+    private async Task RunUpdateAsync()
     {
         if (_updates?.IsRequired != true || HasInProgressWork())
-            return Task.CompletedTask;
+            return;
+        // Reading the updater from the new release can take a few seconds.
+        UpdateActionButton.IsEnabled = false;
         try
         {
-            _updates.LaunchUpdater(Environment.ProcessId);
+            await _updates.LaunchUpdaterAsync(Environment.ProcessId);
             System.Windows.Application.Current.Shutdown();
         }
         catch (Exception error)
         {
+            UpdateActionButton.IsEnabled = true;
             MessageBox.Show(this, error.Message, "Update could not start",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
-        return Task.CompletedTask;
     }
 
     private bool HasInProgressWork() => _viewModel.IsBusy ||

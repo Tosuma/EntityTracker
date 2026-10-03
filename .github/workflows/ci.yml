@@ -39,6 +39,14 @@ jobs:
         shell: pwsh
         run: .\scripts\Test-InstallSwap.ps1
 
+      - name: Test updater exit code
+        shell: pwsh
+        run: .\scripts\Test-UpdaterExitCode.ps1
+
+      - name: Test installer version
+        shell: pwsh
+        run: .\scripts\Test-InstallerVersion.ps1
+
       - name: Set up .NET from global.json
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
 

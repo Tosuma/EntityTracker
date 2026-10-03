@@ -10,6 +10,9 @@ public enum AppUpdateState { Development, Checking, Current, Offline, Required }
 
 public sealed record AppInstallManifest(string SourcePath, string Version);
 
+/// <summary>Where the updater scripts for an update were staged, and whether they came from the release.</summary>
+public sealed record UpdaterStaging(string Directory, bool FromRelease);
+
 public readonly record struct AppReleaseVersion(int Major, int Minor, int Patch)
     : IComparable<AppReleaseVersion>
 {
@@ -43,6 +46,11 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
     private readonly CancellationTokenSource _lifetime = new();
     private readonly TimeProvider _clock;
     private readonly Func<CancellationToken, Task<string>>? _queryOverride;
+    private readonly string _installedUpdaterDirectory;
+
+    /// <summary>The scripts that perform an update; they live in <c>scripts/</c> of every release.</summary>
+    internal static readonly IReadOnlyList<string> UpdaterScripts =
+        ["Update-EntityTracker.ps1", "Install-EntityTracker.ps1", "Install-Common.ps1"];
     private Task? _loop;
     private AppReleaseVersion _installedVersion;
     private string? _requiredTag;
@@ -52,6 +60,7 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
     {
         _clock = clock ?? TimeProvider.System;
         _requiredPath = Path.Combine(dataPaths.RootDirectory, "required-app-update.txt");
+        _installedUpdaterDirectory = Path.Combine(AppContext.BaseDirectory, "Updater");
         string manifestPath = Path.Combine(AppContext.BaseDirectory, "app-install.json");
         if (!File.Exists(manifestPath))
         {
@@ -80,12 +89,13 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
     }
 
     internal AppUpdateService(ApplicationDataPaths dataPaths, AppInstallManifest install,
-        Func<CancellationToken, Task<string>> query)
+        Func<CancellationToken, Task<string>>? query, string? installedUpdaterDirectory = null)
     {
         _clock = TimeProvider.System;
         _requiredPath = Path.Combine(dataPaths.RootDirectory, "required-app-update.txt");
         _install = install;
         _queryOverride = query;
+        _installedUpdaterDirectory = installedUpdaterDirectory ?? Path.Combine(AppContext.BaseDirectory, "Updater");
         if (!AppReleaseVersion.TryParse(install.Version, out _installedVersion))
             throw new InvalidDataException("Invalid test app release version.");
         _state = AppUpdateState.Checking;
@@ -148,37 +158,10 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
                 }
                 else
                 {
-                    ProcessStartInfo start = new("git")
-                    {
-                        WorkingDirectory = _install.SourcePath,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    };
-                    start.ArgumentList.Add("ls-remote");
-                    start.ArgumentList.Add("--refs");
-                    start.ArgumentList.Add("--tags");
-                    start.ArgumentList.Add("origin");
-                    start.ArgumentList.Add("app-v*");
-                    start.Environment["GIT_TERMINAL_PROMPT"] = "0";
-                    start.Environment["GCM_INTERACTIVE"] = "never";
-                    using Process process = Process.Start(start)
-                        ?? throw new InvalidOperationException("Git could not start.");
-                    try
-                    {
-                        Task<string> outputTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
-                        Task<string> errorTask = process.StandardError.ReadToEndAsync(timeout.Token);
-                        await process.WaitForExitAsync(timeout.Token);
-                        output = await outputTask;
-                        _ = await errorTask;
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        if (!process.HasExited) process.Kill(entireProcessTree: true);
-                        throw;
-                    }
-                    if (process.ExitCode != 0) throw new IOException("Release check failed.");
+                    (int exitCode, byte[] result) = await RunGitAsync(
+                        ["ls-remote", "--refs", "--tags", "origin", "app-v*"], timeout.Token);
+                    if (exitCode != 0) throw new IOException("Release check failed.");
+                    output = System.Text.Encoding.UTF8.GetString(result);
                 }
                 AppReleaseVersion? newest = FindLatest(output);
                 if (newest is null) throw new InvalidDataException("No approved app release was found.");
@@ -216,34 +199,132 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
         return latest;
     }
 
-    public void LaunchUpdater(int appProcessId)
+    /// <summary>
+    /// Starts the updater for the required release. The updater scripts are taken from that release
+    /// itself, so fixes to the updater take effect on the very update that ships them; if the
+    /// release cannot be read, the scripts installed with this version are used instead.
+    /// </summary>
+    public async Task LaunchUpdaterAsync(int appProcessId, CancellationToken cancellationToken = default)
     {
-        if (_install is null || RequiredTag is null)
+        if (_install is null || RequiredTag is not { } tag)
             throw new InvalidOperationException("No update is required.");
-        string source = Path.Combine(AppContext.BaseDirectory, "Updater");
-        string staging = Path.Combine(Path.GetTempPath(), "EntityTracker-Updater-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(staging);
-        foreach (string name in new[] { "Update-EntityTracker.ps1", "Install-EntityTracker.ps1", "Install-Common.ps1" })
-            File.Copy(Path.Combine(source, name), Path.Combine(staging, name));
+        UpdaterStaging staging = await PrepareUpdaterAsync(tag, cancellationToken);
         ProcessStartInfo start = new("powershell.exe")
         {
             UseShellExecute = true,
-            WorkingDirectory = staging,
+            WorkingDirectory = staging.Directory,
             WindowStyle = ProcessWindowStyle.Normal
         };
-        start.ArgumentList.Add("-NoProfile");
-        start.ArgumentList.Add("-STA");
-        start.ArgumentList.Add("-ExecutionPolicy");
-        start.ArgumentList.Add("Bypass");
-        start.ArgumentList.Add("-File");
-        start.ArgumentList.Add(Path.Combine(staging, "Update-EntityTracker.ps1"));
-        start.ArgumentList.Add("-SourcePath");
-        start.ArgumentList.Add(_install.SourcePath);
-        start.ArgumentList.Add("-Tag");
-        start.ArgumentList.Add(RequiredTag);
-        start.ArgumentList.Add("-WaitForProcess");
-        start.ArgumentList.Add(appProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        foreach (string argument in UpdaterArguments(staging, tag, appProcessId))
+            start.ArgumentList.Add(argument);
         _ = Process.Start(start) ?? throw new InvalidOperationException("The updater could not start.");
+    }
+
+    /// <summary>
+    /// Builds the updater command line. It names the updater's own version, which is the release
+    /// being installed or, after a fallback, the version installed now, so the updater window and
+    /// install log show which updater ran.
+    /// </summary>
+    internal IReadOnlyList<string> UpdaterArguments(UpdaterStaging staging, string tag, int appProcessId)
+    {
+        if (_install is null) throw new InvalidOperationException("This is not a managed install.");
+        return
+        [
+            "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass",
+            "-File", Path.Combine(staging.Directory, "Update-EntityTracker.ps1"),
+            "-SourcePath", _install.SourcePath,
+            "-Tag", tag,
+            "-WaitForProcess", appProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "-UpdaterVersion", staging.FromRelease ? tag : _install.Version,
+            "-UpdaterSource", staging.FromRelease ? "Release" : "Installed"
+        ];
+    }
+
+    /// <summary>Copies the updater scripts for <paramref name="tag"/> into a fresh temporary folder.</summary>
+    internal async Task<UpdaterStaging> PrepareUpdaterAsync(string tag, CancellationToken cancellationToken)
+    {
+        if (_install is null) throw new InvalidOperationException("This is not a managed install.");
+        string staging = Path.Combine(Path.GetTempPath(), "EntityTracker-Updater-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(staging);
+        if (await TryStageReleaseScriptsAsync(tag, staging, cancellationToken))
+            return new UpdaterStaging(staging, FromRelease: true);
+
+        foreach (string name in UpdaterScripts)
+            File.Copy(Path.Combine(_installedUpdaterDirectory, name), Path.Combine(staging, name), overwrite: true);
+        return new UpdaterStaging(staging, FromRelease: false);
+    }
+
+    /// <summary>
+    /// Reads the updater scripts from the release tag. The tag is verified the same way the installer
+    /// verifies it before building: it must exist on origin, and the local tag must match origin's.
+    /// </summary>
+    private async Task<bool> TryStageReleaseScriptsAsync(string tag, string staging, CancellationToken cancellationToken)
+    {
+        if (!AppReleaseVersion.TryParse(tag, out _)) return false;
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(60));
+        try
+        {
+            (int lsExit, byte[] lsOutput) = await RunGitAsync(
+                ["ls-remote", "--refs", "--tags", "origin", $"refs/tags/{tag}"], timeout.Token);
+            string[] remote = System.Text.Encoding.UTF8.GetString(lsOutput)
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (lsExit != 0 || remote.Length != 1) return false;
+            string remoteHash = remote[0].Split('\t')[0];
+
+            (int fetchExit, _) = await RunGitAsync(
+                ["fetch", "--no-tags", "origin", $"refs/tags/{tag}:refs/tags/{tag}"], timeout.Token);
+            (int revExit, byte[] revOutput) = await RunGitAsync(["rev-parse", $"refs/tags/{tag}"], timeout.Token);
+            if (fetchExit != 0 || revExit != 0 ||
+                !string.Equals(System.Text.Encoding.UTF8.GetString(revOutput).Trim(), remoteHash, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            foreach (string name in UpdaterScripts)
+            {
+                (int showExit, byte[] script) = await RunGitAsync(["show", $"{tag}:scripts/{name}"], timeout.Token);
+                if (showExit != 0 || script.Length == 0) return false;
+                await File.WriteAllBytesAsync(Path.Combine(staging, name), script, timeout.Token);
+            }
+
+            return true;
+        }
+        catch (Exception error) when (error is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Runs git in the source checkout without prompting, and returns its exit code and raw output.</summary>
+    private async Task<(int ExitCode, byte[] Output)> RunGitAsync(IReadOnlyList<string> arguments,
+        CancellationToken cancellationToken)
+    {
+        ProcessStartInfo start = new("git")
+        {
+            WorkingDirectory = _install!.SourcePath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (string argument in arguments) start.ArgumentList.Add(argument);
+        start.Environment["GIT_TERMINAL_PROMPT"] = "0";
+        start.Environment["GCM_INTERACTIVE"] = "never";
+        using Process process = Process.Start(start) ?? throw new InvalidOperationException("Git could not start.");
+        try
+        {
+            using MemoryStream output = new();
+            Task copy = process.StandardOutput.BaseStream.CopyToAsync(output, cancellationToken);
+            Task<string> errors = process.StandardError.ReadToEndAsync(cancellationToken);
+            await process.WaitForExitAsync(cancellationToken);
+            await copy;
+            _ = await errors;
+            return (process.ExitCode, output.ToArray());
+        }
+        catch (OperationCanceledException)
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            throw;
+        }
     }
 
     private void ChangeState(AppUpdateState state)
