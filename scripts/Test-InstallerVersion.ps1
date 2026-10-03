@@ -41,6 +41,9 @@ try {
     }
 
     Write-Host 'Installer version tests passed.'
+    # The installer runs above exit non-zero on purpose; without this the leftover $LASTEXITCODE
+    # fails a CI step that otherwise passed.
+    exit 0
 }
 finally {
     Remove-Item -LiteralPath $testRoot -Recurse -Force -ErrorAction SilentlyContinue
