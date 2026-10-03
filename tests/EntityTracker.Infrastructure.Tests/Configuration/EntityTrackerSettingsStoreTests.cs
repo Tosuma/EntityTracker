@@ -229,6 +229,24 @@ public sealed class EntityTrackerSettingsStoreTests
     }
 
     [Fact]
+    public async Task ShowDependencyGraphRings_DefaultsOffRoundTripsAndSurvivesOtherWrites()
+    {
+        using TemporarySettingsDirectory directory = new();
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+        Assert.False((await store.LoadAsync()).Settings.ShowDependencyGraphRings);
+
+        await store.SaveShowDependencyGraphRingsAsync(true);
+        await store.SaveAnimateDependencyGraphAsync(false);
+        await store.SaveAppearanceAsync(ApplicationAppearance.Dark);
+        await store.SaveSearchResponsibleNamesAsync(false);
+
+        EntityTrackerSettings saved = (await new EntityTrackerSettingsStore(directory.SettingsPath)
+            .LoadAsync()).Settings;
+        Assert.True(saved.ShowDependencyGraphRings);
+        Assert.False(saved.AnimateDependencyGraph);
+    }
+
+    [Fact]
     public async Task AnimateDependencyGraph_DefaultsToEnabledWhenMissingFromAnOlderFile()
     {
         using TemporarySettingsDirectory directory = new();

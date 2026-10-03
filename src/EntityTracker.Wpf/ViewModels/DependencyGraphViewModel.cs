@@ -36,6 +36,7 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
     private bool _isFocusMode;
     private bool _hideUnconnected;
     private bool _isAnimationEnabled = true;
+    private bool _showRings;
     private string _searchText = string.Empty;
     private string? _searchMessage;
 
@@ -150,6 +151,13 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
     {
         get => _isAnimationEnabled;
         set { if (SetField(ref _isAnimationEnabled, value)) OnVisualStateChanged(); }
+    }
+
+    /// <summary>Gets or sets whether the orbit rings are drawn behind the map.</summary>
+    public bool ShowRings
+    {
+        get => _showRings;
+        set { if (SetField(ref _showRings, value)) OnVisualStateChanged(); }
     }
 
     public bool HideUnconnected

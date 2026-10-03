@@ -74,7 +74,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         ResponsibilitySearchSettingsViewModel? responsibilitySearch = null,
         LocalProjectIdentitySettingsViewModel? localIdentitySettings = null,
         OverviewExportSettingsViewModel? overviewExport = null,
-        DependencyGraphAnimationSettingsViewModel? graphAnimation = null)
+        DependencyGraphSettingsViewModel? graphSettings = null)
     {
         _projectRepository = projectRepository;
         _trackerRepository = trackerRepository;
@@ -99,9 +99,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         OverviewExport = overviewExport;
         if (ResponsibilitySearch is not null)
             ResponsibilitySearch.Changed += OnResponsibilitySearchChanged;
-        GraphAnimation = graphAnimation;
-        if (GraphAnimation is not null)
-            GraphAnimation.Changed += OnGraphAnimationChanged;
+        GraphSettings = graphSettings;
+        if (GraphSettings is not null)
+            GraphSettings.Changed += OnGraphSettingsChanged;
         Help = new SqlQueryHelpViewModel(
             clipboard,
             () => _ = NavigateAsync(ShellDestination.SchemaSynchronization));
@@ -148,7 +148,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public AppearanceViewModel Appearance { get; }
     public AutoSyncSettingsViewModel? AutoSync { get; }
     public ResponsibilitySearchSettingsViewModel? ResponsibilitySearch { get; }
-    public DependencyGraphAnimationSettingsViewModel? GraphAnimation { get; }
+    public DependencyGraphSettingsViewModel? GraphSettings { get; }
     public OverviewExportSettingsViewModel? OverviewExport { get; }
     public LocalProjectIdentitySettingsViewModel? LocalIdentity => _localIdentitySettings;
     public IReadOnlyList<SettingsCategory> SettingsCategories { get; } = Enum.GetValues<SettingsCategory>();
@@ -664,7 +664,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                     workspace = _workspaceFactory.Create(selectedTracker.Id);
                     workspace.SetSearchResponsibleNames(
                         ResponsibilitySearch?.IsEnabled ?? true);
-                    workspace.DependencyGraph.IsAnimationEnabled = GraphAnimation?.IsEnabled ?? true;
+                    ApplyGraphSettings(workspace);
                     workspace.PersistedStateChanged += OnWorkspacePersistedStateChanged;
                     workspace.IdentitySettingsRequested += OpenIdentitySettingsAsync;
                     workspace.PropertyChanged += OnWorkspacePropertyChanged;
@@ -818,10 +818,16 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    private void OnGraphAnimationChanged(object? sender, bool enabled)
+    private void OnGraphSettingsChanged(object? sender, EventArgs e)
     {
         foreach (MainWindowViewModel workspace in _workspaces.Values)
-            workspace.DependencyGraph.IsAnimationEnabled = enabled;
+            ApplyGraphSettings(workspace);
+    }
+
+    private void ApplyGraphSettings(MainWindowViewModel workspace)
+    {
+        workspace.DependencyGraph.IsAnimationEnabled = GraphSettings?.IsAnimationEnabled ?? true;
+        workspace.DependencyGraph.ShowRings = GraphSettings?.ShowRings ?? false;
     }
 
     private void OnResponsibilitySearchChanged(object? sender, bool enabled)
@@ -936,8 +942,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         if (_autoSync is not null) _autoSync.StateChanged -= OnAutoSyncStateChanged;
         if (ResponsibilitySearch is not null)
             ResponsibilitySearch.Changed -= OnResponsibilitySearchChanged;
-        if (GraphAnimation is not null)
-            GraphAnimation.Changed -= OnGraphAnimationChanged;
+        if (GraphSettings is not null)
+            GraphSettings.Changed -= OnGraphSettingsChanged;
         foreach (ProjectDashboardViewModel dashboard in _projectDashboards.Values)
             dashboard.RepositoryCard?.Dispose();
         Catalog.Changed -= OnCatalogChanged;

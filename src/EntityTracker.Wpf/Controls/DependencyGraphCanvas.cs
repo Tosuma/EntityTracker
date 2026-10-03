@@ -286,8 +286,11 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         // Orbit guides: foundations in the centre, each ring one more layer of dependencies.
         Pen orbitPen = CachedPen(Faded(edgeBrush, OrbitOpacity), 1);
         Point origin = new(_offset.X, _offset.Y);
-        foreach (double ring in graph.Layout.RingRadii)
-            context.DrawEllipse(null, orbitPen, origin, ring * _scale, ring * _scale);
+        if (graph.ShowRings)
+        {
+            foreach (double ring in graph.Layout.RingRadii)
+                context.DrawEllipse(null, orbitPen, origin, ring * _scale, ring * _scale);
+        }
 
         HashSet<DependencyGraphNode> hoverNeighbours = new(ReferenceEqualityComparer.Instance);
         StreamGeometry faint = new();

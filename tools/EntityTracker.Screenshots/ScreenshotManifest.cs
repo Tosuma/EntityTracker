@@ -53,7 +53,7 @@ internal static class ScreenshotManifest
         "sql-query.png",
         "settings.png",
         "settings-project.png",
-        "settings-overview.png",
+        "settings-tracker.png",
         "settings-sync.png",
         "settings-about.png",
         "app-update-required.png"

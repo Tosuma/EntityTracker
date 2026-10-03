@@ -34,7 +34,7 @@ public sealed class ScreenshotCommandLineTests
         Assert.Contains("dependency-graph-selected.png", ScreenshotManifest.FileNames);
         Assert.Contains("dependency-graph-details.png", ScreenshotManifest.FileNames);
         Assert.Contains("settings-project.png", ScreenshotManifest.FileNames);
-        Assert.Contains("settings-overview.png", ScreenshotManifest.FileNames);
+        Assert.Contains("settings-tracker.png", ScreenshotManifest.FileNames);
         Assert.Contains("settings-sync.png", ScreenshotManifest.FileNames);
         Assert.Contains("settings-about.png", ScreenshotManifest.FileNames);
         Assert.Contains("responsibility-history.png", ScreenshotManifest.FileNames);

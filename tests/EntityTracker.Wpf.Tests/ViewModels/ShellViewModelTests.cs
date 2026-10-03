@@ -124,23 +124,28 @@ public sealed class ShellViewModelTests
     }
 
     [Fact]
-    public async Task GraphAnimationSetting_ReachesTrackerWorkspacesAndFollowsChanges()
+    public async Task GraphSettings_ReachTrackerWorkspacesAndFollowChanges()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
         await harness.SettingsStore.SaveAnimateDependencyGraphAsync(false);
-        DependencyGraphAnimationSettingsViewModel animation = new(harness.SettingsStore,
+        DependencyGraphSettingsViewModel graphSettings = new(harness.SettingsStore,
             (await harness.SettingsStore.LoadAsync()).Settings);
         using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
             lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
-            new RecordingDiscardConfirmation(true), animation);
+            new RecordingDiscardConfirmation(true), graphSettings);
         await shell.InitializeAsync();
         MainWindowViewModel workspace = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
-        Assert.Same(animation, shell.GraphAnimation);
+        Assert.Same(graphSettings, shell.GraphSettings);
         Assert.False(workspace.DependencyGraph.IsAnimationEnabled);
+        Assert.False(workspace.DependencyGraph.ShowRings);
 
-        animation.ToggleCommand.Execute(null);
-        await WaitUntilAsync(() => Task.FromResult(workspace.DependencyGraph.IsAnimationEnabled));
-        Assert.True((await harness.SettingsStore.LoadAsync()).Settings.AnimateDependencyGraph);
+        graphSettings.ToggleAnimationCommand.Execute(null);
+        await WaitUntilAsync(() => Task.FromResult(workspace.DependencyGraph.IsAnimationEnabled && !graphSettings.IsBusy));
+        graphSettings.ToggleRingsCommand.Execute(null);
+        await WaitUntilAsync(() => Task.FromResult(workspace.DependencyGraph.ShowRings));
+        EntityTrackerSettings saved = (await harness.SettingsStore.LoadAsync()).Settings;
+        Assert.True(saved.AnimateDependencyGraph);
+        Assert.True(saved.ShowDependencyGraphRings);
     }
 
     [Fact]
@@ -769,7 +774,7 @@ public sealed class ShellViewModelTests
         public ShellViewModel CreateShell(
             EntityTrackerSettings initialSettings,
             IContextDiscardConfirmation confirmation,
-            DependencyGraphAnimationSettingsViewModel? graphAnimation = null) => new(
+            DependencyGraphSettingsViewModel? graphSettings = null) => new(
                 _projects,
                 _trackers,
                 _dashboardFactory,
@@ -783,7 +788,7 @@ public sealed class ShellViewModelTests
                 initialSettings,
                 developerService: _developers,
                 localIdentitySettings: new LocalProjectIdentitySettingsViewModel(Identity),
-                graphAnimation: graphAnimation);
+                graphSettings: graphSettings);
 
         public Task<ProjectDeveloper> CreateDeveloperAsync(string initials) =>
             _developers.CreateAsync(DefaultProject.Id, initials);

@@ -100,7 +100,7 @@ internal static class ScreenshotServiceProviderFactory
             provider.GetRequiredService<EntityTrackerSettings>()));
         services.AddSingleton(provider => new OverviewExportSettingsViewModel(
             settingsStore, provider.GetRequiredService<EntityTrackerSettings>()));
-        services.AddSingleton(provider => new DependencyGraphAnimationSettingsViewModel(
+        services.AddSingleton(provider => new DependencyGraphSettingsViewModel(
             settingsStore, provider.GetRequiredService<EntityTrackerSettings>()));
         services.AddSingleton<NotificationCenter>();
         services.AddSingleton<OverviewExportService>();

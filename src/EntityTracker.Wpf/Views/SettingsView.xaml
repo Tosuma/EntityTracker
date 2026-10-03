@@ -4,6 +4,11 @@
              xmlns:configuration="clr-namespace:EntityTracker.Infrastructure.Configuration;assembly=EntityTracker.Infrastructure"
              xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels">
     <UserControl.Resources>
+        <!-- Separates groups of cards on a settings page, such as Overview and Dependency graph. -->
+        <Style x:Key="SettingsGroupHeadingStyle" TargetType="TextBlock" BasedOn="{StaticResource SectionHeadingTextStyle}">
+            <Setter Property="FontSize" Value="18" />
+            <Setter Property="Padding" Value="0,0,0,6" />
+        </Style>
         <Style x:Key="SettingsPageStyle" TargetType="StackPanel">
             <Setter Property="MaxWidth" Value="720" />
             <Setter Property="HorizontalAlignment" Value="Left" />
@@ -67,21 +72,6 @@
                             </Border>
                         </StackPanel>
                     </Border>
-                    <Border Margin="0,16,0,0" Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
-                        <StackPanel>
-                            <TextBlock Margin="0,0,0,4" Style="{StaticResource SectionHeadingTextStyle}" Text="Dependency graph" />
-                            <TextBlock Margin="0,0,0,12" Style="{StaticResource PageDescriptionTextStyle}"
-                                       Text="Pauses while you hover, drag, pan, zoom or have an entity selected."
-                                       TextWrapping="Wrap" />
-                            <CheckBox Content="Slowly rotate the dependency graph"
-                                      AutomationProperties.Name="Slowly rotate the dependency graph"
-                                      Command="{Binding GraphAnimation.ToggleCommand}"
-                                      IsChecked="{Binding GraphAnimation.IsEnabled, Mode=OneWay}" />
-                            <TextBlock Margin="0,8,0,0" AutomationProperties.LiveSetting="Assertive"
-                                       Text="{Binding GraphAnimation.ErrorMessage}" TextWrapping="Wrap"
-                                       Visibility="{Binding GraphAnimation.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                        </StackPanel>
-                    </Border>
                 </StackPanel>
 
                 <StackPanel x:Name="ProjectSettingsPage">
@@ -128,16 +118,17 @@
                     </Border>
                 </StackPanel>
 
-                <StackPanel x:Name="OverviewSettingsPage">
+                <StackPanel x:Name="TrackerSettingsPage">
                     <StackPanel.Style>
                         <Style TargetType="StackPanel" BasedOn="{StaticResource SettingsPageStyle}">
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding SelectedSettingsCategory}" Value="{x:Static viewModels:SettingsCategory.Overview}">
+                                <DataTrigger Binding="{Binding SelectedSettingsCategory}" Value="{x:Static viewModels:SettingsCategory.Tracker}">
                                     <Setter Property="Visibility" Value="Visible" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </StackPanel.Style>
+                    <TextBlock Style="{StaticResource SettingsGroupHeadingStyle}" Margin="0,0,0,10" Text="Overview" />
                     <Border Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
                         <StackPanel>
                             <TextBlock Margin="0,0,0,4" Style="{StaticResource SectionHeadingTextStyle}"
@@ -184,6 +175,27 @@
                             <TextBlock Margin="0,8,0,0" AutomationProperties.LiveSetting="Assertive"
                                        Text="{Binding OverviewExport.ErrorMessage}" TextWrapping="Wrap"
                                        Visibility="{Binding OverviewExport.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        </StackPanel>
+                    </Border>
+                    <TextBlock Style="{StaticResource SettingsGroupHeadingStyle}" Margin="0,28,0,10" Text="Dependency graph" />
+                    <Border x:Name="DependencyGraphSettingsCard" Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
+                        <StackPanel>
+                            <TextBlock Margin="0,0,0,4" Style="{StaticResource SectionHeadingTextStyle}" Text="Display" />
+                            <TextBlock Margin="0,0,0,12" Style="{StaticResource PageDescriptionTextStyle}"
+                                       Text="The rotation pauses while you hover, drag, pan, zoom or have an entity selected."
+                                       TextWrapping="Wrap" />
+                            <CheckBox Content="Slowly rotate the dependency graph"
+                                      AutomationProperties.Name="Slowly rotate the dependency graph"
+                                      Command="{Binding GraphSettings.ToggleAnimationCommand}"
+                                      IsChecked="{Binding GraphSettings.IsAnimationEnabled, Mode=OneWay}" />
+                            <CheckBox Margin="0,8,0,0" Content="Show orbit rings"
+                                      AutomationProperties.Name="Show orbit rings in the dependency graph"
+                                      AutomationProperties.HelpText="Draw a faint circle for each dependency level."
+                                      Command="{Binding GraphSettings.ToggleRingsCommand}"
+                                      IsChecked="{Binding GraphSettings.ShowRings, Mode=OneWay}" />
+                            <TextBlock Margin="0,8,0,0" AutomationProperties.LiveSetting="Assertive"
+                                       Text="{Binding GraphSettings.ErrorMessage}" TextWrapping="Wrap"
+                                       Visibility="{Binding GraphSettings.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         </StackPanel>
                     </Border>
                 </StackPanel>

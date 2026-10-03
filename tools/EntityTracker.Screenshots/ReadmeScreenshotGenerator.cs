@@ -332,8 +332,8 @@ internal sealed class ReadmeScreenshotGenerator
             await renderer.CaptureAsync("settings.png");
             shell.SelectedSettingsCategory = SettingsCategory.Project;
             await renderer.CaptureAsync("settings-project.png");
-            shell.SelectedSettingsCategory = SettingsCategory.Overview;
-            await renderer.CaptureAsync("settings-overview.png");
+            shell.SelectedSettingsCategory = SettingsCategory.Tracker;
+            await renderer.CaptureAsync("settings-tracker.png");
             shell.SelectedSettingsCategory = SettingsCategory.Sync;
             await renderer.CaptureAsync("settings-sync.png");
             shell.SelectedSettingsCategory = SettingsCategory.About;
