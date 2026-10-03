@@ -234,16 +234,12 @@
                         </Style>
                     </StackPanel.Style>
                     <Border Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock FontWeight="SemiBold" Text="App version" />
-                            <TextBlock Grid.Column="1"
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontWeight="SemiBold" Text="App version:" />
+                            <TextBlock Margin="6,0,0,0"
                                        AutomationProperties.Name="{Binding AppVersion, StringFormat=App version {0}}"
                                        Text="{Binding AppVersion}" />
-                        </Grid>
+                        </StackPanel>
                     </Border>
                 </StackPanel>
             </Grid>
