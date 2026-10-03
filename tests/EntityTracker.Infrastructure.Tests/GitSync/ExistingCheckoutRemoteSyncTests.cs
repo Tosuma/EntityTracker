@@ -300,7 +300,7 @@ public sealed class ExistingCheckoutRemoteSyncTests
         workspace.Git(publisher, "push", "origin", "main");
         string head = workspace.Git(receiver, "rev-parse", "HEAD");
         int backupsBefore = Directory.GetFiles(catalog.BackupDirectory,
-            "entity-tracker-pre-sync-*.db").Length;
+            "entity-tracker-pre-sync-*.db", SearchOption.AllDirectories).Length;
 
         await Assert.ThrowsAsync<ProjectSyncReviewRequiredException>(() =>
             catalog.Sync(receiver).SyncNowAsync(projectId, mode: ProjectSyncMode.Automatic));
@@ -308,7 +308,7 @@ public sealed class ExistingCheckoutRemoteSyncTests
         Assert.Equal(head, workspace.Git(receiver, "rev-parse", "HEAD"));
         Assert.Equal("Local edit", (await catalog.Snapshots.ReadAsync(projectId)).Snapshot!.Project.Name);
         Assert.Equal(backupsBefore, Directory.GetFiles(catalog.BackupDirectory,
-            "entity-tracker-pre-sync-*.db").Length);
+            "entity-tracker-pre-sync-*.db", SearchOption.AllDirectories).Length);
     }
 
     [Fact]
@@ -600,7 +600,7 @@ public sealed class ExistingCheckoutRemoteSyncTests
         Assert.Throws<InvalidDataException>(() => codec.TryDecodeTombstone(invalid, out _));
         Assert.Throws<InvalidDataException>(() => codec.EncodeTombstone(tombstone with
         {
-            FormatVersion = 4
+            FormatVersion = 5
         }));
     }
 
@@ -768,7 +768,8 @@ public sealed class ExistingCheckoutRemoteSyncTests
         ProjectSyncLink received = await secondSync.SyncNowAsync(projectId);
         Assert.Equal("Current", received.SyncStatus);
         Assert.Equal("Renamed project", (await secondCatalog.Snapshots.ReadAsync(projectId)).Snapshot!.Project.Name);
-        Assert.NotEmpty(Directory.GetFiles(secondCatalog.BackupDirectory, "entity-tracker-pre-sync-*.db"));
+        Assert.NotEmpty(Directory.GetFiles(secondCatalog.BackupDirectory,
+            "entity-tracker-pre-sync-*.db", SearchOption.AllDirectories));
         Assert.Equal(workspace.Git(first, "rev-parse", "HEAD"), workspace.Git(second, "rev-parse", "HEAD"));
     }
 
@@ -856,8 +857,8 @@ public sealed class ExistingCheckoutRemoteSyncTests
         ProjectGitSyncService sync = catalog.Sync(checkout);
         string manifestPath = Path.Combine(checkout, ".entitytracker", "manifest.json");
         string manifest = File.ReadAllText(manifestPath);
-        Assert.Contains("\"formatVersion\":3", manifest);
-        File.WriteAllText(manifestPath, manifest.Replace("\"formatVersion\":3", "\"formatVersion\":99"));
+        Assert.Contains("\"formatVersion\":4", manifest);
+        File.WriteAllText(manifestPath, manifest.Replace("\"formatVersion\":4", "\"formatVersion\":99"));
         workspace.Git(checkout, "add", ".entitytracker");
         workspace.Git(checkout, "commit", "-m", "Unsupported version");
         await Assert.ThrowsAsync<InvalidDataException>(() => sync.ImportAsync(checkout));
@@ -919,7 +920,8 @@ public sealed class ExistingCheckoutRemoteSyncTests
             catalog.Backup(), catalog.Snapshots, Snapshot(Guid.NewGuid(), "Project")));
         await Assert.ThrowsAsync<SqliteException>(() => sync.ImportAsync(checkout));
         Assert.Null((await catalog.Snapshots.ReadAsync(new ProjectId(id))).Snapshot);
-        Assert.Single(Directory.GetFiles(catalog.BackupDirectory, "entity-tracker-pre-sync-*.db"));
+        Assert.Single(Directory.GetFiles(catalog.BackupDirectory,
+            "entity-tracker-pre-sync-*.db", SearchOption.AllDirectories));
     }
 
     [Fact]
@@ -1034,7 +1036,7 @@ public sealed class ExistingCheckoutRemoteSyncTests
         ProjectGitSyncService sync = catalog.Sync(first);
         await sync.ImportAsync(first);
         int backupsBeforeSync = Directory.GetFiles(catalog.BackupDirectory,
-            "entity-tracker-pre-sync-*.db").Length;
+            "entity-tracker-pre-sync-*.db", SearchOption.AllDirectories).Length;
         ProjectId projectId = new(id);
         ProjectSnapshotRead read = await catalog.Snapshots.ReadAsync(projectId);
         await catalog.Snapshots.ApplyAsync(read.Snapshot! with
@@ -1050,7 +1052,7 @@ public sealed class ExistingCheckoutRemoteSyncTests
             File.ReadAllText(Path.Combine(first, "README.md")).Replace("\r\n", "\n"));
         Assert.Equal("Local edit", (await catalog.Snapshots.ReadAsync(projectId)).Snapshot!.Project.Name);
         Assert.Equal(backupsBeforeSync, Directory.GetFiles(catalog.BackupDirectory,
-            "entity-tracker-pre-sync-*.db").Length);
+            "entity-tracker-pre-sync-*.db", SearchOption.AllDirectories).Length);
     }
 
     [Fact]

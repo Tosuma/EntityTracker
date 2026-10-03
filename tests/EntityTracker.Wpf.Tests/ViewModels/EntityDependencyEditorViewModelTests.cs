@@ -16,6 +16,22 @@ namespace EntityTracker.Wpf.Tests.ViewModels;
 public sealed class EntityDependencyEditorViewModelTests
 {
     [Fact]
+    public async Task FilterActive_IsEditableAndCancelDiscardsTheDraft()
+    {
+        TrackedEntity owner = Entity(1, "Owner");
+        owner.ChangeFilterActive("Original instructions");
+        EntityDependencyEditorViewModel viewModel = ViewModel([owner]);
+
+        await viewModel.BeginStandaloneAsync(owner.Id);
+        Assert.Equal("Original instructions", viewModel.EditedFilterActive);
+        viewModel.EditedFilterActive = "Active only\nBy region";
+        Assert.True(viewModel.IsDirty);
+
+        viewModel.CancelCommand.Execute(null);
+        Assert.Equal("Original instructions", owner.FilterActive);
+    }
+
+    [Fact]
     public async Task SelectingExistingSuggestion_AddsDependencyAndClearsSearch()
     {
         TrackedEntity owner = Entity(1, "Owner");

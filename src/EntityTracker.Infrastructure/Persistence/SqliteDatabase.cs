@@ -5,7 +5,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    internal const int CurrentSchemaVersion = 18;
+    internal const int CurrentSchemaVersion = 19;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -945,6 +945,13 @@ public sealed class SqliteDatabase
                     """, cancellationToken);
                 await MigrateResponsibilityAsync(connection, transaction, cancellationToken);
             }
+
+            if (schemaVersion < 19 &&
+                !await ColumnExistsAsync(connection, transaction, "tracked_entities",
+                    "filter_active", cancellationToken))
+                await ExecuteAsync(connection, transaction,
+                    "ALTER TABLE tracked_entities ADD COLUMN filter_active TEXT NOT NULL DEFAULT '';",
+                    cancellationToken);
 
             await ExecuteAsync(
                 connection,

@@ -14,7 +14,7 @@ public sealed class OverviewExportService
         "Priority", "Rank", "Entity", "Work status", "Development status",
         "Responsible dev", "Group", "Blockers", "Entity ID", "Requested priority",
         "Provenance", "Current Developer names", "Dependency count", "Dependencies",
-        "Notes", "Created UTC", "Schema updated UTC", "Progress updated UTC"
+        "Notes", "Filter active", "Created UTC", "Schema updated UTC", "Progress updated UTC"
     ];
 
     public async Task ExportAsync(string path, OverviewExportFormat format,
@@ -96,7 +96,7 @@ public sealed class OverviewExportService
         row.RequestedPriorityValue?.ToString(CultureInfo.InvariantCulture) ?? "",
         row.Provenance, string.Join(", ", row.DeveloperItems.Select(dev =>
             string.IsNullOrWhiteSpace(dev.DisplayName) ? dev.Initials : dev.DisplayName)),
-        row.DependencyCount, string.Join(" | ", row.DependencyNames), row.Notes,
+        row.DependencyCount, string.Join(" | ", row.DependencyNames), row.Notes, row.FilterActive,
         Utc(row.CreatedAtUtc), Utc(row.SchemaUpdatedAtUtc), Utc(row.ProgressUpdatedAtUtc)
     ];
 

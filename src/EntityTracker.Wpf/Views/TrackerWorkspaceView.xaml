@@ -2540,6 +2540,12 @@
                                    Text="{Binding Notes}"
                                    TextWrapping="Wrap" />
 
+                        <TextBlock FontWeight="SemiBold" Text="Filter active" />
+                        <TextBlock Margin="0,4,0,18"
+                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Text="{Binding FilterActive}"
+                                   TextWrapping="Wrap" />
+
                         <Border Margin="0,0,0,16"
                                 Padding="10"
                                 Background="{DynamicResource Brush.Surface.Alert}"
@@ -2775,6 +2781,15 @@
                                                  AcceptsReturn="True"
                                                  IsEnabled="{Binding Editor.CanEditProgress}"
                                                  Text="{Binding Editor.EditedNotes, UpdateSourceTrigger=PropertyChanged}"
+                                                 TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,12,0,0" FontWeight="SemiBold" Text="Filter active" />
+                                        <TextBox MinHeight="64"
+                                                 AutomationProperties.Name="Filter active"
+                                                 Margin="0,5,0,0"
+                                                 Padding="8"
+                                                 AcceptsReturn="True"
+                                                 IsEnabled="{Binding Editor.CanEditProgress}"
+                                                 Text="{Binding Editor.EditedFilterActive, UpdateSourceTrigger=PropertyChanged}"
                                                  TextWrapping="Wrap" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="2" IsEnabled="{Binding Editor.CanEditProgress}">

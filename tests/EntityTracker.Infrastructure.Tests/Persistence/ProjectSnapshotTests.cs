@@ -14,6 +14,59 @@ public sealed class ProjectSnapshotTests
     private static readonly DateTimeOffset T2 = T0.AddDays(2);
 
     [Fact]
+    public async Task FilterActive_RoundTripsThroughSqliteAndVersionedSnapshots()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        ProjectSnapshot seed = CompleteSnapshot();
+        SnapshotTracker tracker = seed.Trackers[0];
+        SnapshotEntity entity = tracker.Entities[0] with
+        {
+            FilterActive = "  Active only\nBy region  "
+        };
+        seed = seed with { Trackers = [tracker with
+        {
+            Entities = tracker.Entities.Select(item => item.Id == entity.Id ? entity : item).ToArray()
+        }, .. seed.Trackers.Skip(1)] };
+
+        SqliteProjectSnapshotStore store = new(database);
+        await store.ApplyAsync(seed, 0);
+        ProjectSnapshot persisted = Assert.IsType<ProjectSnapshot>(
+            (await store.ReadAsync(new ProjectId(seed.Project.Id))).Snapshot);
+        SnapshotEntity loaded = persisted.Trackers.SelectMany(t => t.Entities)
+            .Single(item => item.Id == entity.Id);
+        Assert.Equal(entity.FilterActive, loaded.FilterActive);
+
+        ProjectSnapshotJsonCodec codec = new();
+        ProjectSnapshot decoded = codec.Decode(codec.Encode(persisted).Files);
+        Assert.Equal(entity.FilterActive, decoded.Trackers.SelectMany(t => t.Entities)
+            .Single(item => item.Id == entity.Id).FilterActive);
+
+        ProjectSnapshot old = persisted with { FormatVersion = 3 };
+        ProjectSnapshot olderDecoded = codec.Decode(codec.Encode(old).Files);
+        Assert.Equal(string.Empty, olderDecoded.Trackers.SelectMany(t => t.Entities)
+            .Single(item => item.Id == entity.Id).FilterActive);
+
+        ProjectSnapshot versionTwo = persisted with
+        {
+            FormatVersion = 2,
+            Trackers = persisted.Trackers.Select(item => item with
+            {
+                Entities = item.Entities.Select(value => value with
+                {
+                    ResponsibilityPeriods = null
+                }).ToArray()
+            }).ToArray()
+        };
+        ProjectSnapshotPackage legacyPackage = codec.Encode(versionTwo);
+        Assert.DoesNotContain("filterActive", Encoding.UTF8.GetString(legacyPackage.Files
+            .Single(pair => pair.Key.EndsWith($"entities/{entity.Id:D}.json", StringComparison.Ordinal)).Value));
+        Assert.Equal(string.Empty, codec.Decode(legacyPackage.Files).Trackers
+            .SelectMany(item => item.Entities).Single(item => item.Id == entity.Id).FilterActive);
+    }
+
+    [Fact]
     public async Task CompleteProject_RoundTripsAcrossCatalogsWithCanonicalBytes()
     {
         await using TemporarySqliteFile sourceFile = new();
@@ -180,7 +233,7 @@ public sealed class ProjectSnapshotTests
         long revision = (await store.ReadAsync(new ProjectId(snapshot.Project.Id))).Revision;
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => store.ApplyAsync(snapshot, revision - 1));
-        Assert.Throws<InvalidDataException>(() => ProjectSnapshotValidator.Validate(snapshot with { FormatVersion = 4 }));
+        Assert.Throws<InvalidDataException>(() => ProjectSnapshotValidator.Validate(snapshot with { FormatVersion = 5 }));
         Assert.Throws<InvalidDataException>(() => ProjectSnapshotValidator.Validate(snapshot with
         {
             Trackers = [snapshot.Trackers[0], snapshot.Trackers[0]]
@@ -204,7 +257,7 @@ public sealed class ProjectSnapshotTests
         Assert.Throws<InvalidDataException>(() => codec.Decode(malformed));
         malformed[".entitytracker/project.json"] = package.Files[".entitytracker/project.json"];
         malformed[".entitytracker/manifest.json"] = Encoding.UTF8.GetBytes(
-            "{\"formatVersion\":4,\"projectId\":\"" + snapshot.Project.Id + "\"}");
+            "{\"formatVersion\":5,\"projectId\":\"" + snapshot.Project.Id + "\"}");
         Assert.Throws<InvalidDataException>(() => codec.Decode(malformed));
 
         ProjectSnapshotRead after = await store.ReadAsync(new ProjectId(snapshot.Project.Id));

@@ -16,6 +16,7 @@ public sealed class TrackedEntityTests
         Assert.Equal(" sales.Customer ", entity.SourceName);
         Assert.Equal(DevelopmentStatus.NotStarted, entity.Status);
         Assert.Equal(string.Empty, entity.Notes);
+        Assert.Equal(string.Empty, entity.FilterActive);
         Assert.Equal(EntityLifecycleState.Active, entity.LifecycleState);
         Assert.Equal(EntityProvenance.Imported, entity.Provenance);
         Assert.Null(entity.RequestedPriority);
@@ -63,6 +64,18 @@ public sealed class TrackedEntityTests
         entity.ChangeNotes("  Review with team.  ");
 
         Assert.Equal("  Review with team.  ", entity.Notes);
+    }
+
+    [Fact]
+    public void FilterActive_PreservesMultilineTextAndRejectsNull()
+    {
+        TrackedEntity entity = new(EntityId.New(), TestTrackerId, "sales.Customer",
+            filterActive: "  Include active rows.\nExclude staging.  ");
+        Assert.Equal("  Include active rows.\nExclude staging.  ", entity.FilterActive);
+
+        entity.ChangeFilterActive("Filter by source key\nThen by status");
+        Assert.Equal("Filter by source key\nThen by status", entity.FilterActive);
+        Assert.Throws<ArgumentNullException>(() => entity.ChangeFilterActive(null!));
     }
 
     [Fact]

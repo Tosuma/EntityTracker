@@ -44,7 +44,10 @@ public sealed class SqliteBackupServiceTests
         Assert.Empty(sameDay.CreatedBackupPaths);
         Assert.Single(nextDay.CreatedBackupPaths);
         Assert.Empty(first.Warnings);
-        Assert.Equal(2, Directory.GetFiles(backupDirectory, "*.db").Length);
+        Assert.Equal(2, Directory.GetFiles(backupDirectory, "*.db", SearchOption.AllDirectories).Length);
+        Assert.All([.. first.CreatedBackupPaths, .. nextDay.CreatedBackupPaths], path =>
+            Assert.Equal($"v{SqliteDatabase.CurrentSchemaVersion}",
+                Path.GetFileName(Path.GetDirectoryName(path))));
         Assert.Equal(
             SqliteDatabase.CurrentSchemaVersion,
             await ReadSchemaVersionAsync(first.CreatedBackupPaths[0]));
@@ -86,8 +89,10 @@ public sealed class SqliteBackupServiceTests
         PersistenceInitializationResult result = await initializer.InitializeAsync();
 
         Assert.Empty(result.Warnings);
-        string[] backupPaths = Directory.GetFiles(backupDirectory, "*.db");
+        string[] backupPaths = Directory.GetFiles(backupDirectory, "*.db", SearchOption.AllDirectories);
         Assert.Equal(2, backupPaths.Length);
+        Assert.All(backupPaths, path => Assert.Equal("v7",
+            Path.GetFileName(Path.GetDirectoryName(path))));
         string migrationBackup = Assert.Single(
             backupPaths,
             static path => path.Contains("pre-migration", StringComparison.Ordinal));
@@ -99,7 +104,7 @@ public sealed class SqliteBackupServiceTests
     }
 
     [Fact]
-    public async Task CreateStartupBackupsAsync_PrunesToNewestFourteenBackups()
+    public async Task CreateStartupBackupsAsync_PrunesRotatingBackupsButKeepsMigrationBackup()
     {
         await using TemporarySqliteFile file = new();
         SqliteDatabase database = new(file.DatabasePath);
@@ -108,12 +113,20 @@ public sealed class SqliteBackupServiceTests
             Path.GetDirectoryName(file.DatabasePath)!,
             "backups");
         Directory.CreateDirectory(backupDirectory);
+        string versionDirectory = Path.Combine(backupDirectory,
+            $"v{SqliteDatabase.CurrentSchemaVersion}");
+        Directory.CreateDirectory(versionDirectory);
         for (int index = 0; index < 16; index++)
         {
-            string path = Path.Combine(backupDirectory, $"entity-tracker-old-{index:00}.db");
+            string path = Path.Combine(versionDirectory, $"entity-tracker-old-{index:00}.db");
             await File.WriteAllTextAsync(path, "old");
             File.SetLastWriteTimeUtc(path, new DateTime(2026, 8, 1).AddDays(index));
         }
+        string migrationDirectory = Path.Combine(backupDirectory, "v7");
+        Directory.CreateDirectory(migrationDirectory);
+        string migrationPath = Path.Combine(migrationDirectory,
+            "entity-tracker-pre-migration-20260801T000000000Z-v7.db");
+        await File.WriteAllTextAsync(migrationPath, "preserved");
 
         SqliteBackupService service = new(
             database,
@@ -124,8 +137,88 @@ public sealed class SqliteBackupServiceTests
 
         Assert.Empty(result.Warnings);
         Assert.Equal(
-            SqliteBackupService.RetainedBackupCount,
-            Directory.GetFiles(backupDirectory, "entity-tracker-*.db").Length);
+            SqliteBackupService.RetainedBackupCount + 1,
+            Directory.GetFiles(backupDirectory, "entity-tracker-*.db",
+                SearchOption.AllDirectories).Length);
+        Assert.True(File.Exists(migrationPath));
+    }
+
+    [Fact]
+    public async Task Startup_OrganizesLegacyBackupsByDatabaseSchemaRatherThanFilename()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        string backupDirectory = Path.Combine(Path.GetDirectoryName(file.DatabasePath)!, "backups");
+        Directory.CreateDirectory(backupDirectory);
+        string dailyPath = Path.Combine(backupDirectory, "entity-tracker-daily-20260820.db");
+        string migrationPath = Path.Combine(backupDirectory,
+            "entity-tracker-pre-migration-20260820T100000000Z-v99.db");
+        File.Copy(file.DatabasePath, dailyPath);
+        File.Copy(file.DatabasePath, migrationPath);
+        await SetSchemaVersionAsync(dailyPath, 7);
+        await SetSchemaVersionAsync(migrationPath, 8);
+
+        SqliteBackupService service = new(database, backupDirectory,
+            new MutableTimeProvider(new DateTimeOffset(2026, 8, 24, 10, 0, 0, TimeSpan.Zero)));
+        SqliteBackupResult result = await service.CreateStartupBackupsAsync();
+
+        Assert.True(result.Warnings.Count == 0, string.Join(Environment.NewLine, result.Warnings));
+        Assert.False(File.Exists(dailyPath));
+        Assert.False(File.Exists(migrationPath));
+        Assert.Equal(7, await ReadSchemaVersionAsync(Path.Combine(backupDirectory,
+            "v7", Path.GetFileName(dailyPath))));
+        Assert.Equal(8, await ReadSchemaVersionAsync(Path.Combine(backupDirectory,
+            "v8", Path.GetFileName(migrationPath))));
+        Assert.Single(result.CreatedBackupPaths);
+        Assert.Equal($"v{SqliteDatabase.CurrentSchemaVersion}",
+            Path.GetFileName(Path.GetDirectoryName(result.CreatedBackupPaths[0])));
+    }
+
+    [Fact]
+    public async Task PreSyncBackup_UsesCurrentSchemaVersionFolder()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        string backupDirectory = Path.Combine(Path.GetDirectoryName(file.DatabasePath)!, "backups");
+        string path = await new SqliteBackupService(database, backupDirectory)
+            .CreatePreApplyBackupAsync();
+
+        Assert.Equal($"v{SqliteDatabase.CurrentSchemaVersion}",
+            Path.GetFileName(Path.GetDirectoryName(path)));
+        Assert.Equal(SqliteDatabase.CurrentSchemaVersion, await ReadSchemaVersionAsync(path));
+    }
+
+    [Fact]
+    public async Task Startup_LeavesUnreadableLegacyBackupUntouchedAndWarns()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        string backupDirectory = Path.Combine(Path.GetDirectoryName(file.DatabasePath)!, "backups");
+        Directory.CreateDirectory(backupDirectory);
+        string unreadablePath = Path.Combine(backupDirectory,
+            "entity-tracker-daily-20260820.db");
+        await File.WriteAllTextAsync(unreadablePath, "not a SQLite database");
+
+        SqliteBackupResult result = await new SqliteBackupService(database, backupDirectory)
+            .CreateStartupBackupsAsync();
+
+        Assert.True(File.Exists(unreadablePath));
+        Assert.Single(result.Warnings);
+        Assert.Single(result.CreatedBackupPaths);
+        Assert.Equal($"v{SqliteDatabase.CurrentSchemaVersion}",
+            Path.GetFileName(Path.GetDirectoryName(result.CreatedBackupPaths[0])));
+    }
+
+    private static async Task SetSchemaVersionAsync(string databasePath, int version)
+    {
+        await using SqliteConnection connection = new($"Data Source={databasePath};Pooling=False");
+        await connection.OpenAsync();
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA user_version = {version};";
+        await command.ExecuteNonQueryAsync();
     }
 
     [Fact]

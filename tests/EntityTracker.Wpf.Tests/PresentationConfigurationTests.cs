@@ -692,6 +692,22 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void FilterActive_AppearsOnceInDetailsAndOnceInEditor()
+    {
+        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        Assert.Single(document.Descendants(), element =>
+            element.Name.LocalName == "TextBlock" &&
+            (string?)element.Attribute("Text") == "{Binding FilterActive}");
+        Assert.Single(document.Descendants(), element =>
+            element.Name.LocalName == "TextBox" &&
+            (string?)element.Attribute("Text") ==
+            "{Binding Editor.EditedFilterActive, UpdateSourceTrigger=PropertyChanged}");
+        Assert.Equal(2, document.Descendants().Count(element =>
+            element.Name.LocalName == "TextBlock" &&
+            (string?)element.Attribute("Text") == "Filter active"));
+    }
+
+    [Fact]
     public void ProjectComparison_DisabledFilterCardsRetainSurfaceWithMildFade()
     {
         XDocument document = LoadWpfXaml("Views", "ProjectDashboardView.xaml");

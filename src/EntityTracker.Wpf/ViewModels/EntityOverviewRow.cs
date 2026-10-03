@@ -33,7 +33,8 @@ public sealed record EntityOverviewRow(
     DateTimeOffset? CreatedAtUtc = null,
     DateTimeOffset? SchemaUpdatedAtUtc = null,
     DateTimeOffset? ProgressUpdatedAtUtc = null,
-    IReadOnlyList<EntityOverviewDeveloper>? CurrentDevelopers = null)
+    IReadOnlyList<EntityOverviewDeveloper>? CurrentDevelopers = null,
+    string FilterActive = "")
 {
     public IReadOnlyList<EntityOverviewDeveloper> DeveloperItems => CurrentDevelopers ?? [];
 
