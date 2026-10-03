@@ -13,6 +13,24 @@ public sealed class ProjectSnapshotTests
     private static readonly DateTimeOffset T1 = T0.AddDays(1);
     private static readonly DateTimeOffset T2 = T0.AddDays(2);
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(5)]
+    public void UnsupportedManifestFormat_ReportsApplicationAndProjectVersions(int projectVersion)
+    {
+        ProjectSnapshot snapshot = CompleteSnapshot();
+        ProjectSnapshotPackage package = new ProjectSnapshotJsonCodec().Encode(snapshot);
+        Dictionary<string, byte[]> files = package.Files.ToDictionary(pair => pair.Key, pair => pair.Value);
+        files[".entitytracker/manifest.json"] = Encoding.UTF8.GetBytes(
+            $"{{\"formatVersion\":{projectVersion},\"projectId\":\"{snapshot.Project.Id:D}\"}}");
+
+        ProjectSnapshotFormatVersionException error =
+            Assert.Throws<ProjectSnapshotFormatVersionException>(() =>
+                new ProjectSnapshotJsonCodec().Decode(files));
+        Assert.Equal(ProjectSnapshot.CurrentFormatVersion, error.ApplicationFormatVersion);
+        Assert.Equal(projectVersion, error.ProjectFormatVersion);
+    }
+
     [Fact]
     public async Task FilterActive_RoundTripsThroughSqliteAndVersionedSnapshots()
     {
@@ -233,7 +251,8 @@ public sealed class ProjectSnapshotTests
         long revision = (await store.ReadAsync(new ProjectId(snapshot.Project.Id))).Revision;
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => store.ApplyAsync(snapshot, revision - 1));
-        Assert.Throws<InvalidDataException>(() => ProjectSnapshotValidator.Validate(snapshot with { FormatVersion = 5 }));
+        Assert.Throws<ProjectSnapshotFormatVersionException>(() =>
+            ProjectSnapshotValidator.Validate(snapshot with { FormatVersion = 5 }));
         Assert.Throws<InvalidDataException>(() => ProjectSnapshotValidator.Validate(snapshot with
         {
             Trackers = [snapshot.Trackers[0], snapshot.Trackers[0]]
@@ -258,7 +277,7 @@ public sealed class ProjectSnapshotTests
         malformed[".entitytracker/project.json"] = package.Files[".entitytracker/project.json"];
         malformed[".entitytracker/manifest.json"] = Encoding.UTF8.GetBytes(
             "{\"formatVersion\":5,\"projectId\":\"" + snapshot.Project.Id + "\"}");
-        Assert.Throws<InvalidDataException>(() => codec.Decode(malformed));
+        Assert.Throws<ProjectSnapshotFormatVersionException>(() => codec.Decode(malformed));
 
         ProjectSnapshotRead after = await store.ReadAsync(new ProjectId(snapshot.Project.Id));
         Assert.Equal(revision, after.Revision);

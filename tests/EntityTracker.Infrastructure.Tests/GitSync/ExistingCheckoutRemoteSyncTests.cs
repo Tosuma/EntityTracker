@@ -598,10 +598,18 @@ public sealed class ExistingCheckoutRemoteSyncTests
         Dictionary<string, byte[]> invalid = encoded.Files.ToDictionary(pair => pair.Key, pair => pair.Value);
         invalid[".entitytracker/project.json"] = [];
         Assert.Throws<InvalidDataException>(() => codec.TryDecodeTombstone(invalid, out _));
-        Assert.Throws<InvalidDataException>(() => codec.EncodeTombstone(tombstone with
+        Assert.Throws<ProjectSnapshotFormatVersionException>(() => codec.EncodeTombstone(tombstone with
         {
             FormatVersion = 5
         }));
+        Dictionary<string, byte[]> newerManifest = encoded.Files.ToDictionary(pair => pair.Key, pair => pair.Value);
+        newerManifest[".entitytracker/manifest.json"] = System.Text.Encoding.UTF8.GetBytes(
+            $"{{\"formatVersion\":5,\"projectId\":\"{tombstone.ProjectId:D}\"}}");
+        ProjectSnapshotFormatVersionException versionError =
+            Assert.Throws<ProjectSnapshotFormatVersionException>(() =>
+                codec.TryDecodeTombstone(newerManifest, out _));
+        Assert.Equal(ProjectSnapshot.CurrentFormatVersion, versionError.ApplicationFormatVersion);
+        Assert.Equal(5, versionError.ProjectFormatVersion);
     }
 
     [Theory]
@@ -861,7 +869,10 @@ public sealed class ExistingCheckoutRemoteSyncTests
         File.WriteAllText(manifestPath, manifest.Replace("\"formatVersion\":4", "\"formatVersion\":99"));
         workspace.Git(checkout, "add", ".entitytracker");
         workspace.Git(checkout, "commit", "-m", "Unsupported version");
-        await Assert.ThrowsAsync<InvalidDataException>(() => sync.ImportAsync(checkout));
+        ProjectSnapshotFormatVersionException versionError =
+            await Assert.ThrowsAsync<ProjectSnapshotFormatVersionException>(() => sync.ImportAsync(checkout));
+        Assert.Equal(ProjectSnapshot.CurrentFormatVersion, versionError.ApplicationFormatVersion);
+        Assert.Equal(99, versionError.ProjectFormatVersion);
         File.WriteAllText(manifestPath, manifest);
         File.WriteAllText(Path.Combine(checkout, ".entitytracker", "deleted-project.json"), "{}");
         workspace.Git(checkout, "add", ".entitytracker");
