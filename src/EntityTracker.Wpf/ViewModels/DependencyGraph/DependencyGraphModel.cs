@@ -27,9 +27,16 @@ public sealed class DependencyGraphNode
     public int DependentCount { get; internal set; }
     public bool IsConnected => DependencyCount + DependentCount > 0;
 
+    /// <summary>Level of entities without any links; they orbit on their own belt.</summary>
+    public const int UnconnectedLevel = -1;
+
+    /// <summary>Level of missing dependencies; they orbit outside everything else.</summary>
+    public const int MissingLevel = -2;
+
     /// <summary>
-    /// Gets the orbit: 0 for foundation entities without dependencies, increasing by one for each
-    /// layer of dependencies beneath an entity; -1 for entities without any links.
+    /// Gets the orbit: 0 for foundation entities without (resolved) dependencies, increasing by one
+    /// for each layer of dependencies beneath an entity; <see cref="UnconnectedLevel"/> for
+    /// entities without any links and <see cref="MissingLevel"/> for missing dependencies.
     /// </summary>
     public int Level { get; internal set; }
 

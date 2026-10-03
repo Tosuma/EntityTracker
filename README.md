@@ -281,9 +281,10 @@ implemented direct dependencies.
 entities without dependencies sit in the centre, with a clearly dominant one, the entity most
 others need, in the exact middle. Each ring outward adds one more layer of dependencies, so the map
 reads from the centre outward in build order; within a ring, entities earlier in the
-dependency-safe rank sit closer to the centre. A larger dot means more entities refer to it
-directly. Each entity gets its own slice of the circle, so a chain runs outward instead of across
-the map, and only direct links are drawn, never ones a longer chain already implies. Links stay
+dependency-safe rank sit closer to the centre. A lone foundation is the centre itself, and
+missing dependencies orbit on the outermost ring, straight out from the entities that need them. A larger dot means more entities refer to it
+directly. Entities are placed straight out from what they link to, so chains run outward instead of
+across the map, and only direct links are drawn, never ones a longer chain already implies. Links stay
 faint until you hover over an entity. Click an entity to highlight everything it depends on, back
 towards the centre; **Focus on selection** hides the rest, and **Hide unconnected** removes
 entities without links. Find an entity by name, double-click it to open its details, drag it to a

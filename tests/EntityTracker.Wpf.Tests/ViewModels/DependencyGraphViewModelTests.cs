@@ -107,7 +107,7 @@ public sealed class DependencyGraphViewModelTests
 
         Assert.Equal(0, model.Find(Rows[3].EntityId)!.Level); // address: no dependencies
         Assert.Equal(0, model.Find(Rows[4].EntityId)!.Level); // product
-        Assert.Equal(0, model.Nodes.Single(node => node.Label == "tax").Level); // missing placeholder
+        Assert.Equal(DependencyGraphNode.MissingLevel, model.Nodes.Single(node => node.Label == "tax").Level);
         Assert.Equal(1, model.Find(Rows[0].EntityId)!.Level); // customer
         Assert.Equal(2, model.Find(Rows[1].EntityId)!.Level); // order: customer is its deepest dependency
         Assert.Equal(3, model.Find(Rows[2].EntityId)!.Level); // invoice
@@ -168,8 +168,10 @@ public sealed class DependencyGraphViewModelTests
         DependencyGraphNode hub = model.Nodes.MaxBy(node => node.TransitiveDependentCount)!; // address
         Assert.Equal(hub, model.Nodes.MinBy(Radius));
         double lastRing = model.Nodes.Where(node => node.Level >= 0).Max(Radius);
-        Assert.True(Radius(model.Nodes.Single(node => node.Level < 0)) > lastRing);
-        Assert.Equal(model.MaxLevel + 2, layout.RingRadii.Count); // orbits 0..max plus the orphan belt
+        Assert.True(Radius(model.Nodes.Single(node => node.Level == DependencyGraphNode.UnconnectedLevel)) > lastRing);
+        // Orbits 0..max, then the unconnected belt and the missing-dependency ring.
+        Assert.Equal(model.MaxLevel + 3, layout.RingRadii.Count);
+        Assert.True(layout.RingRadii[0] < RadialDependencyLayout.RingGap, "Two foundations need only a small inner ring.");
     }
 
     [Fact]
@@ -190,11 +192,6 @@ public sealed class DependencyGraphViewModelTests
         layout.Settle(2000);
 
         DependencyGraphNode Node(string label) => model.Nodes.Single(node => node.Label == label);
-        double AngleBetween(DependencyGraphNode a, DependencyGraphNode b)
-        {
-            double difference = Math.Abs(Math.Atan2(a.Y, a.X) - Math.Atan2(b.Y, b.X));
-            return Math.Min(difference, 2 * Math.PI - difference);
-        }
 
         Assert.True(AngleBetween(Node("right_a"), Node("right_hub")) <
                     AngleBetween(Node("right_a"), Node("left_hub")));
@@ -209,6 +206,88 @@ public sealed class DependencyGraphViewModelTests
         layout.Settle(2000);
         Assert.InRange(dropped.X, 495, 505);
         Assert.InRange(dropped.Y, -505, -495);
+    }
+
+    [Fact]
+    public void MissingDependencies_OrbitOutsideEverythingNextToTheirDependents()
+    {
+        DependencyGraphModel model = DependencyGraphBuilder.Build(Rows);
+        RadialDependencyLayout layout = new(model);
+        layout.Settle(2000);
+
+        DependencyGraphNode tax = model.Nodes.Single(node => node.Label == "tax");
+        DependencyGraphNode invoice = model.Find(Rows[2].EntityId)!;
+        Assert.All(model.Nodes.Where(node => !node.IsPlaceholder), node => Assert.True(Radius(tax) > Radius(node)));
+        Assert.True(AngleBetween(tax, invoice) < Math.PI / 6, "A missing dependency should sit straight out from its dependent.");
+    }
+
+    [Fact]
+    public void MissingDependencies_DoNotCountForLevels()
+    {
+        DependencyGraphModel model = DependencyGraphBuilder.Build(
+            [Row(1, "waiting", DevelopmentStatus.Blocked, "ghost")]);
+
+        Assert.Equal(0, model.Nodes.Single(node => node.Label == "waiting").Level);
+        Assert.Equal(0, model.MaxLevel);
+    }
+
+    [Fact]
+    public void LoneFoundation_IsTheCentreWithoutARing()
+    {
+        DependencyGraphModel model = DependencyGraphBuilder.Build(
+        [
+            Row(1, "base", DevelopmentStatus.NotStarted),
+            Row(2, "first", DevelopmentStatus.NotStarted, "base"),
+            Row(3, "second", DevelopmentStatus.NotStarted, "base")
+        ]);
+        RadialDependencyLayout layout = new(model);
+        layout.Settle(2000);
+
+        DependencyGraphNode centre = model.Nodes.Single(node => node.Label == "base");
+        Assert.True(Radius(centre) < 1);
+        double ring = Assert.Single(layout.RingRadii);
+        Assert.True(ring > RadialDependencyLayout.RingGap / 2, "The first ring belongs to level 1.");
+    }
+
+    [Fact]
+    public void SharedDependent_SitsBetweenItsDependencies()
+    {
+        DependencyGraphModel model = DependencyGraphBuilder.Build(
+        [
+            Row(1, "north", DevelopmentStatus.NotStarted),
+            Row(2, "east", DevelopmentStatus.NotStarted),
+            Row(3, "south", DevelopmentStatus.NotStarted),
+            Row(4, "west", DevelopmentStatus.NotStarted),
+            Row(5, "north_user", DevelopmentStatus.NotStarted, "north"),
+            Row(6, "east_user", DevelopmentStatus.NotStarted, "east"),
+            Row(7, "south_user", DevelopmentStatus.NotStarted, "south"),
+            Row(8, "joint", DevelopmentStatus.NotStarted, "north", "east")
+        ]);
+        new RadialDependencyLayout(model).Settle(2000);
+
+        DependencyGraphNode Node(string label) => model.Nodes.Single(node => node.Label == label);
+        double direct = AngleBetween(Node("north"), Node("east"));
+        double viaJoint = AngleBetween(Node("joint"), Node("north")) + AngleBetween(Node("joint"), Node("east"));
+        Assert.True(viaJoint <= direct + 0.05, $"joint should lie between its dependencies ({viaJoint:0.00} vs {direct:0.00}).");
+    }
+
+    [Fact]
+    public void Refinement_ShortensLinksAcrossTheMap()
+    {
+        Random random = new(7);
+        List<EntityOverviewRow> rows = [];
+        for (int id = 1; id <= 60; id++)
+        {
+            int layer = (id - 1) / 12;
+            string[] dependencies = layer == 0 ? [] : Enumerable.Range(0, random.Next(1, 4))
+                .Select(_ => $"e{random.Next(1, layer * 12 + 1)}").Distinct().ToArray();
+            rows.Add(Row(id, $"e{id}", DevelopmentStatus.NotStarted, dependencies));
+        }
+
+        RadialDependencyLayout layout = new(DependencyGraphBuilder.Build(rows));
+
+        Assert.True(layout.MeanLinkAngle() < layout.StartMeanLinkAngle,
+            $"Refined {layout.MeanLinkAngle():0.000} should beat the slice start {layout.StartMeanLinkAngle:0.000}.");
     }
 
     [Fact]
@@ -308,6 +387,12 @@ public sealed class DependencyGraphViewModelTests
         DependencyGraphViewModel graph = new(_ => true);
         graph.Rebuild(Rows);
         return graph;
+    }
+
+    private static double AngleBetween(DependencyGraphNode a, DependencyGraphNode b)
+    {
+        double difference = Math.Abs(Math.Atan2(a.Y, a.X) - Math.Atan2(b.Y, b.X));
+        return Math.Min(difference, 2 * Math.PI - difference);
     }
 
     private static double Radius(DependencyGraphNode node) => Math.Sqrt(node.X * node.X + node.Y * node.Y);

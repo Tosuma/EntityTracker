@@ -6,8 +6,10 @@ namespace EntityTracker.Wpf.ViewModels.DependencyGraph;
 /// further out than its deepest dependency, so the map reads outward in build order. Within an
 /// orbit, entities earlier in the dependency-safe rank sit on the inner edge. Each entity owns a
 /// slice of the circle sized by how many entities fan out behind it, so chains run outward side by
-/// side instead of crossing the whole map.
-/// Unconnected entities form an outer belt. A light simulation settles nodes towards these
+/// side instead of crossing the whole map; angles are then refined so each entity sits straight out
+/// from the entities it links to. A lone foundation is the centre itself, unconnected entities form
+/// an outer belt and missing dependencies orbit outside everything.
+/// A light simulation settles nodes towards these
 /// anchors and only nudges overlapping neighbours apart, so entities stay on their orbit.
 /// </summary>
 public sealed class RadialDependencyLayout
@@ -24,6 +26,8 @@ public sealed class RadialDependencyLayout
 
     private readonly DependencyGraphModel _model;
     private readonly Dictionary<DependencyGraphNode, (double X, double Y)> _anchors = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<DependencyGraphNode, double> _angles = new(ReferenceEqualityComparer.Instance);
+    private DependencyGraphNode? _centre;
 
     public RadialDependencyLayout(DependencyGraphModel model, int seed = 42)
     {
@@ -44,7 +48,10 @@ public sealed class RadialDependencyLayout
     public double Energy { get; private set; } = double.MaxValue;
     public bool IsSettled => Energy <= SettledEnergy;
 
-    /// <summary>Gets the orbit radius for each level from 1 outward, followed by the orphan belt when present.</summary>
+    /// <summary>
+    /// Gets the orbit radii from the inside out: one per level (none for a lone foundation, which is
+    /// the centre itself), then the unconnected belt and the missing-dependency ring when present.
+    /// </summary>
     public IReadOnlyList<double> RingRadii { get; private set; }
 
     public (double X, double Y) Anchor(DependencyGraphNode node) => _anchors.GetValueOrDefault(node);
@@ -140,11 +147,19 @@ public sealed class RadialDependencyLayout
     /// <summary>Wakes the simulation, for example after a node was dragged.</summary>
     public void Reheat() => Energy = double.MaxValue;
 
+    /// <summary>Gets the average angle between the two ends of each drawn link, in radians.</summary>
+    internal double MeanLinkAngle() => MeanLinkAngle(_angles);
+
+    /// <summary>Gets <see cref="MeanLinkAngle()"/> for the slice-midpoint angles before refinement.</summary>
+    internal double StartMeanLinkAngle { get; private set; }
+
     private List<double> ComputeAnchors()
     {
         IReadOnlyList<DependencyGraphNode> nodes = _model.Nodes;
         DependencyGraphNode[] connected = nodes.Where(static node => node.Level >= 0).ToArray();
-        DependencyGraphNode[] orphans = nodes.Where(static node => node.Level < 0)
+        DependencyGraphNode[] orphans = nodes.Where(static node => node.Level == DependencyGraphNode.UnconnectedLevel)
+            .OrderBy(static node => node.Label, StringComparer.Ordinal).ToArray();
+        DependencyGraphNode[] missing = nodes.Where(static node => node.Level == DependencyGraphNode.MissingLevel)
             .OrderBy(static node => node.Label, StringComparer.Ordinal).ToArray();
 
         // Each entity hangs off its most important dependency on the next orbit inward.
@@ -188,9 +203,6 @@ public sealed class RadialDependencyLayout
             list.Sort(static (a, b) => string.CompareOrdinal(a.Label, b.Label));
         Dictionary<DependencyGraphNode, (double Start, double Sweep)> sectors = new(ReferenceEqualityComparer.Instance);
         AssignSectors(roots, children, width, sectors);
-
-        // Reduce crossings: order every slice by where each entity's other links point,
-        // alternating inward (towards dependencies) and outward (towards dependents).
         for (int pass = 0; pass < 6; pass++)
         {
             ILookup<DependencyGraphNode, DependencyGraphNode> towards = pass % 2 == 0 ? dependencies : dependents;
@@ -200,29 +212,37 @@ public sealed class RadialDependencyLayout
             AssignSectors(roots, children, width, sectors);
         }
 
-        // Size each orbit so the entities on it fit around its circumference.
+        // Size each orbit so its entities fit around it. A lone foundation is the centre itself.
         int maxLevel = _model.MaxLevel;
-        double[] radius = new double[Math.Max(maxLevel + 1, 1)];
-        int heaviestRoot = roots.Count == 0 ? 0 : roots.Max(static node => node.TransitiveDependentCount);
-        int[] perLevel = new int[radius.Length];
-        foreach (DependencyGraphNode node in connected) perLevel[node.Level]++;
-        radius[0] = Math.Max(RingGap * 1.5, perLevel[0] * NodeSpacing / (2 * Math.PI) + BandDepth);
-        for (int level = 1; level <= maxLevel; level++)
-            radius[level] = Math.Max(radius[level - 1] + RingGap, perLevel[level] * NodeSpacing / (2 * Math.PI));
+        DependencyGraphNode[][] byLevel = Enumerable.Range(0, Math.Max(maxLevel + 1, 0))
+            .Select(level => connected.Where(node => node.Level == level).ToArray()).ToArray();
+        double[] radius = new double[byLevel.Length];
+        for (int level = 0; level < byLevel.Length; level++)
+        {
+            double fit = byLevel[level].Length * NodeSpacing / (2 * Math.PI);
+            radius[level] = level == 0
+                ? byLevel[0].Length <= 1 ? 0 : Math.Max(NodeSpacing * 0.75, fit)
+                : Math.Max(radius[level - 1] + RingGap, fit);
+        }
 
-        List<double> rings = [];
-        for (int level = 0; level <= maxLevel; level++) rings.Add(radius[level] - BandDepth / 2);
         // A clearly dominant foundation sits in the exact centre; the others share the inner orbit.
         DependencyGraphNode? strongest = roots.MaxBy(static node => node.TransitiveDependentCount);
         int runnerUp = roots.Where(node => !ReferenceEquals(node, strongest))
             .Select(static node => node.TransitiveDependentCount).DefaultIfEmpty(0).Max();
-        DependencyGraphNode? centre = roots.Count == 1 || (roots.Count > 1 && heaviestRoot >= runnerUp * 1.5)
+        DependencyGraphNode? centre = roots.Count == 1 ||
+            (strongest is not null && roots.Count > 1 && strongest.TransitiveDependentCount >= runnerUp * 1.5)
             ? strongest
             : null;
 
+        _centre = centre;
+        foreach (DependencyGraphNode node in connected)
+            _angles[node] = sectors[node].Start + sectors[node].Sweep / 2;
+        StartMeanLinkAngle = MeanLinkAngle(_angles);
+        RefineAngles(byLevel, radius, centre, dependencies, dependents);
+
         // Within an orbit, entities earlier in the dependency-safe rank sit on the inner edge.
         Dictionary<DependencyGraphNode, double> rankShare = new(ReferenceEqualityComparer.Instance);
-        foreach (IGrouping<int, DependencyGraphNode> orbit in connected.GroupBy(static node => node.Level))
+        foreach (DependencyGraphNode[] orbit in byLevel)
         {
             DependencyGraphNode[] ordered = orbit.OrderBy(static node => node.Rank ?? int.MaxValue)
                 .ThenByDescending(static node => node.TransitiveDependentCount)
@@ -231,29 +251,242 @@ public sealed class RadialDependencyLayout
                 rankShare[ordered[position]] = ordered.Length == 1 ? 0 : (double)position / (ordered.Length - 1);
         }
 
-        foreach (DependencyGraphNode node in connected)
+        List<double> rings = [];
+        for (int level = 0; level < radius.Length; level++)
         {
-            (double start, double sweep) = sectors[node];
-            double distance = ReferenceEquals(node, centre)
-                ? 0
-                : radius[node.Level] - BandDepth * (1 - rankShare[node]);
-            double theta = start + sweep / 2;
-            _anchors[node] = (distance * Math.Cos(theta), distance * Math.Sin(theta));
+            if (radius[level] <= 0) continue;
+            rings.Add(radius[level] - Band(radius[level]) / 2);
         }
 
+        foreach (DependencyGraphNode node in connected)
+        {
+            double band = Band(radius[node.Level]);
+            double distance = ReferenceEquals(node, centre) ? 0 : radius[node.Level] - band * (1 - rankShare[node]);
+            Place(node, distance, _angles[node]);
+        }
+
+        double outer = radius.Length == 0 ? 0 : radius[^1];
         if (orphans.Length > 0)
         {
-            double outer = maxLevel >= 0 ? radius[Math.Max(maxLevel, 0)] : 0;
             double belt = Math.Max(outer + RingGap, orphans.Length * NodeSpacing / (2 * Math.PI));
             rings.Add(belt);
             for (int index = 0; index < orphans.Length; index++)
+                Place(orphans[index], belt, -Math.PI / 2 + 2 * Math.PI * index / orphans.Length);
+            outer = belt;
+        }
+
+        // Missing dependencies orbit outside everything, straight out from the entities needing them.
+        if (missing.Length > 0)
+        {
+            double ring = Math.Max(outer + RingGap, missing.Length * NodeSpacing / (2 * Math.PI));
+            rings.Add(ring);
+            Dictionary<DependencyGraphNode, double> desired = new(ReferenceEqualityComparer.Instance);
+            for (int index = 0; index < missing.Length; index++)
             {
-                double theta = -Math.PI / 2 + 2 * Math.PI * index / orphans.Length;
-                _anchors[orphans[index]] = (belt * Math.Cos(theta), belt * Math.Sin(theta));
+                desired[missing[index]] = CircularMean(dependents[missing[index]]
+                        .Where(item => _angles.ContainsKey(item) && !ReferenceEquals(item, centre))
+                        .Select(item => _angles[item]))
+                    ?? -Math.PI / 2 + 2 * Math.PI * index / missing.Length;
             }
+
+            Spread(missing, desired, NodeSpacing / ring);
+            foreach (DependencyGraphNode node in missing) Place(node, ring, desired[node]);
         }
 
         return rings;
+    }
+
+    /// <summary>
+    /// Moves every entity towards the angles of the entities it links to, so links run outward
+    /// rather than across the map, while keeping each orbit evenly spaced.
+    /// </summary>
+    private void RefineAngles(
+        DependencyGraphNode[][] byLevel,
+        double[] radius,
+        DependencyGraphNode? centre,
+        ILookup<DependencyGraphNode, DependencyGraphNode> dependencies,
+        ILookup<DependencyGraphNode, DependencyGraphNode> dependents)
+    {
+        DependencyGraphNode[][] orbits = byLevel
+            .Select(level => level.Where(node => !ReferenceEquals(node, centre)).ToArray()).ToArray();
+
+        // The slice layout spreads every orbit over the whole circle; refinement only reorders
+        // entities across these spots, so the map keeps using the full circle.
+        double[][] slots = orbits
+            .Select(orbit => orbit.Select(node => Normalize(_angles[node])).Order().ToArray()).ToArray();
+        double? Mean(DependencyGraphNode node, ILookup<DependencyGraphNode, DependencyGraphNode> neighbours) =>
+            CircularMean(neighbours[node]
+                .Where(item => _angles.ContainsKey(item) && !ReferenceEquals(item, centre))
+                .Select(item => _angles[item]));
+
+        for (int pass = 0; pass < 8; pass++)
+        {
+            bool outward = pass % 2 == 0;
+            IEnumerable<int> levels = outward
+                ? Enumerable.Range(1, Math.Max(orbits.Length - 1, 0))
+                : Enumerable.Range(0, Math.Max(orbits.Length - 1, 0)).Reverse();
+            foreach (int level in levels)
+            {
+                DependencyGraphNode[] orbit = orbits[level];
+                if (orbit.Length == 0 || radius[level] <= 0) continue;
+                Dictionary<DependencyGraphNode, double> desired = orbit.ToDictionary(
+                    node => node,
+                    node => Mean(node, outward ? dependencies : dependents) ?? _angles[node]);
+                AssignSlots(orbit, desired, slots[level]);
+                Spread(orbit, desired, NodeSpacing / radius[level]);
+
+                // Keep the new order only when it shortens the links overall.
+                double before = MeanLinkAngle(_angles);
+                Dictionary<DependencyGraphNode, double> previous = orbit.ToDictionary(node => node, node => _angles[node]);
+                foreach (DependencyGraphNode node in orbit) _angles[node] = desired[node];
+                if (MeanLinkAngle(_angles) > before + 1e-9)
+                    foreach (DependencyGraphNode node in orbit) _angles[node] = previous[node];
+            }
+        }
+
+        // Finish with adjacent swaps that shorten the links on each orbit.
+        for (int level = 0; level < orbits.Length; level++)
+        {
+            for (int pass = 0; pass < 4; pass++)
+            {
+                DependencyGraphNode[] orbit = orbits[level].OrderBy(node => Normalize(_angles[node])).ToArray();
+                bool improved = false;
+                for (int index = 0; index + 1 < orbit.Length; index++)
+                {
+                    DependencyGraphNode a = orbit[index];
+                    DependencyGraphNode b = orbit[index + 1];
+                    double before = Span(a, dependencies, dependents, centre) + Span(b, dependencies, dependents, centre);
+                    (_angles[a], _angles[b]) = (_angles[b], _angles[a]);
+                    double after = Span(a, dependencies, dependents, centre) + Span(b, dependencies, dependents, centre);
+                    if (after + 1e-9 < before)
+                    {
+                        (orbit[index], orbit[index + 1]) = (b, a);
+                        improved = true;
+                    }
+                    else
+                    {
+                        (_angles[a], _angles[b]) = (_angles[b], _angles[a]);
+                    }
+                }
+
+                if (!improved) break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Orders the orbit by desired angle and hands out its spots in that order, rotated to the
+    /// offset that keeps every entity closest to where its links want it.
+    /// </summary>
+    private static void AssignSlots(IReadOnlyList<DependencyGraphNode> orbit,
+        Dictionary<DependencyGraphNode, double> desired, double[] slots)
+    {
+        int count = orbit.Count;
+        if (count == 0) return;
+        DependencyGraphNode[] order = orbit
+            .OrderBy(node => Normalize(desired[node]))
+            .ThenBy(static node => node.Label, StringComparer.Ordinal).ToArray();
+        int bestShift = 0;
+        double bestCost = double.MaxValue;
+        for (int shift = 0; shift < count; shift++)
+        {
+            double cost = 0;
+            for (int index = 0; index < count && cost < bestCost; index++)
+                cost += AngleBetween(desired[order[index]], slots[(index + shift) % count]);
+            if (cost < bestCost)
+            {
+                bestCost = cost;
+                bestShift = shift;
+            }
+        }
+
+        for (int index = 0; index < count; index++)
+            desired[order[index]] = slots[(index + bestShift) % count];
+    }
+
+    private double Span(DependencyGraphNode node,
+        ILookup<DependencyGraphNode, DependencyGraphNode> dependencies,
+        ILookup<DependencyGraphNode, DependencyGraphNode> dependents,
+        DependencyGraphNode? centre) =>
+        dependencies[node].Concat(dependents[node])
+            .Where(item => _angles.ContainsKey(item) && !ReferenceEquals(item, centre))
+            .Sum(item => AngleBetween(_angles[node], _angles[item]));
+
+    private double MeanLinkAngle(Dictionary<DependencyGraphNode, double> angles)
+    {
+        // Links to the centre have no meaningful angle, so they are left out.
+        double[] spans = _model.EssentialEdges
+            .Where(edge => angles.ContainsKey(edge.From) && angles.ContainsKey(edge.To) &&
+                           !ReferenceEquals(edge.From, _centre) && !ReferenceEquals(edge.To, _centre))
+            .Select(edge => AngleBetween(angles[edge.From], angles[edge.To]))
+            .ToArray();
+        return spans.Length == 0 ? 0 : spans.Average();
+    }
+
+    private void Place(DependencyGraphNode node, double distance, double angle) =>
+        _anchors[node] = (distance * Math.Cos(angle), distance * Math.Sin(angle));
+
+    private static double Band(double radius) => Math.Min(BandDepth, radius * 0.3);
+
+    /// <summary>
+    /// Keeps the order given by the desired angles but pushes neighbours apart until every gap is
+    /// at least <paramref name="minimumGap"/> radians, wrapping around the circle.
+    /// </summary>
+    private static void Spread(IReadOnlyList<DependencyGraphNode> orbit,
+        Dictionary<DependencyGraphNode, double> desired, double minimumGap)
+    {
+        int count = orbit.Count;
+        if (count < 2) return;
+        double gap = Math.Min(minimumGap, 2 * Math.PI / count);
+        DependencyGraphNode[] order = orbit
+            .OrderBy(node => Normalize(desired[node]))
+            .ThenBy(static node => node.Label, StringComparer.Ordinal).ToArray();
+        double[] angle = order.Select(node => Normalize(desired[node])).ToArray();
+        for (int iteration = 0; iteration < 100; iteration++)
+        {
+            bool moved = false;
+            for (int index = 0; index < count; index++)
+            {
+                int next = (index + 1) % count;
+                double distance = angle[next] - angle[index] + (next == 0 ? 2 * Math.PI : 0);
+                if (distance >= gap - 1e-9) continue;
+                double push = (gap - distance) / 2;
+                angle[index] -= push;
+                angle[next] += push;
+                moved = true;
+            }
+
+            if (!moved) break;
+        }
+
+        for (int index = 0; index < count; index++) desired[order[index]] = angle[index];
+    }
+
+    private static double? CircularMean(IEnumerable<double> angles)
+    {
+        double x = 0, y = 0;
+        int count = 0;
+        foreach (double angle in angles)
+        {
+            x += Math.Cos(angle);
+            y += Math.Sin(angle);
+            count++;
+        }
+
+        // Neighbours spread evenly around the circle have no meaningful direction.
+        return count == 0 || Math.Sqrt(x * x + y * y) < 0.1 * count ? null : Math.Atan2(y, x);
+    }
+
+    private static double AngleBetween(double a, double b)
+    {
+        double difference = Math.Abs(Normalize(a) - Normalize(b));
+        return Math.Min(difference, 2 * Math.PI - difference);
+    }
+
+    private static double Normalize(double angle)
+    {
+        double result = angle % (2 * Math.PI);
+        return result < 0 ? result + 2 * Math.PI : result;
     }
 
     private static void AssignSectors(

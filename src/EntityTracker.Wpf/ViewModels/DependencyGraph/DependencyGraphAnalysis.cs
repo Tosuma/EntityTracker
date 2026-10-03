@@ -74,19 +74,24 @@ internal static class DependencyGraphAnalysis
         }
 
         // Longest dependency chain beneath an entity: foundations sit at level 0 in the centre and
-        // every entity orbits one level further out than its deepest dependency.
+        // every entity orbits one level further out than its deepest dependency. Missing
+        // dependencies do not count, since they orbit outside everything else.
         int[] level = new int[count];
         foreach (int node in order)
         {
             foreach (DependencyGraphEdge edge in incoming[node])
             {
-                if (cycleEdges.Contains(edge)) continue;
+                if (cycleEdges.Contains(edge) || edge.From.IsPlaceholder) continue;
                 level[node] = Math.Max(level[node], level[index[edge.From]] + 1);
             }
         }
 
         for (int i = 0; i < count; i++)
-            nodes[i].Level = nodes[i].IsConnected ? level[i] : -1;
+        {
+            nodes[i].Level = nodes[i].IsPlaceholder ? DependencyGraphNode.MissingLevel
+                : nodes[i].IsConnected ? level[i]
+                : DependencyGraphNode.UnconnectedLevel;
+        }
     }
 
     private static List<int> TopologicalOrder(int count, Dictionary<DependencyGraphNode, int> index,
