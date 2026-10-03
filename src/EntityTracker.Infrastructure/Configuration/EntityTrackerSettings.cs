@@ -16,7 +16,8 @@ public sealed class EntityTrackerSettings
         bool searchResponsibleNames = true,
         IReadOnlyDictionary<ProjectId, DeveloperId>? projectDeveloperChoices = null,
         OverviewExportRows overviewExportRows = OverviewExportRows.ShownEntities,
-        OverviewCsvSeparator overviewCsvSeparator = OverviewCsvSeparator.Semicolon)
+        OverviewCsvSeparator overviewCsvSeparator = OverviewCsvSeparator.Semicolon,
+        bool animateDependencyGraph = true)
     {
         if (!Enum.IsDefined(appearance))
         {
@@ -39,6 +40,7 @@ public sealed class EntityTrackerSettings
             new Dictionary<ProjectId, DeveloperId>());
         OverviewExportRows = overviewExportRows;
         OverviewCsvSeparator = overviewCsvSeparator;
+        AnimateDependencyGraph = animateDependencyGraph;
     }
 
     public ApplicationAppearance Appearance { get; }
@@ -52,6 +54,9 @@ public sealed class EntityTrackerSettings
     public IReadOnlyDictionary<ProjectId, DeveloperId> ProjectDeveloperChoices { get; }
     public OverviewExportRows OverviewExportRows { get; }
     public OverviewCsvSeparator OverviewCsvSeparator { get; }
+
+    /// <summary>Gets whether the dependency graph slowly rotates around its centre.</summary>
+    public bool AnimateDependencyGraph { get; }
 
     public static EntityTrackerSettings Default { get; } = new();
 }

@@ -73,7 +73,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         ProjectDeveloperService? developerService = null,
         ResponsibilitySearchSettingsViewModel? responsibilitySearch = null,
         LocalProjectIdentitySettingsViewModel? localIdentitySettings = null,
-        OverviewExportSettingsViewModel? overviewExport = null)
+        OverviewExportSettingsViewModel? overviewExport = null,
+        DependencyGraphAnimationSettingsViewModel? graphAnimation = null)
     {
         _projectRepository = projectRepository;
         _trackerRepository = trackerRepository;
@@ -98,6 +99,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         OverviewExport = overviewExport;
         if (ResponsibilitySearch is not null)
             ResponsibilitySearch.Changed += OnResponsibilitySearchChanged;
+        GraphAnimation = graphAnimation;
+        if (GraphAnimation is not null)
+            GraphAnimation.Changed += OnGraphAnimationChanged;
         Help = new SqlQueryHelpViewModel(
             clipboard,
             () => _ = NavigateAsync(ShellDestination.SchemaSynchronization));
@@ -144,6 +148,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public AppearanceViewModel Appearance { get; }
     public AutoSyncSettingsViewModel? AutoSync { get; }
     public ResponsibilitySearchSettingsViewModel? ResponsibilitySearch { get; }
+    public DependencyGraphAnimationSettingsViewModel? GraphAnimation { get; }
     public OverviewExportSettingsViewModel? OverviewExport { get; }
     public LocalProjectIdentitySettingsViewModel? LocalIdentity => _localIdentitySettings;
     public IReadOnlyList<SettingsCategory> SettingsCategories { get; } = Enum.GetValues<SettingsCategory>();
@@ -659,6 +664,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                     workspace = _workspaceFactory.Create(selectedTracker.Id);
                     workspace.SetSearchResponsibleNames(
                         ResponsibilitySearch?.IsEnabled ?? true);
+                    workspace.DependencyGraph.IsAnimationEnabled = GraphAnimation?.IsEnabled ?? true;
                     workspace.PersistedStateChanged += OnWorkspacePersistedStateChanged;
                     workspace.IdentitySettingsRequested += OpenIdentitySettingsAsync;
                     workspace.PropertyChanged += OnWorkspacePropertyChanged;
@@ -812,6 +818,12 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    private void OnGraphAnimationChanged(object? sender, bool enabled)
+    {
+        foreach (MainWindowViewModel workspace in _workspaces.Values)
+            workspace.DependencyGraph.IsAnimationEnabled = enabled;
+    }
+
     private void OnResponsibilitySearchChanged(object? sender, bool enabled)
     {
         foreach (MainWindowViewModel workspace in _workspaces.Values)
@@ -924,6 +936,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         if (_autoSync is not null) _autoSync.StateChanged -= OnAutoSyncStateChanged;
         if (ResponsibilitySearch is not null)
             ResponsibilitySearch.Changed -= OnResponsibilitySearchChanged;
+        if (GraphAnimation is not null)
+            GraphAnimation.Changed -= OnGraphAnimationChanged;
         foreach (ProjectDashboardViewModel dashboard in _projectDashboards.Values)
             dashboard.RepositoryCard?.Dispose();
         Catalog.Changed -= OnCatalogChanged;

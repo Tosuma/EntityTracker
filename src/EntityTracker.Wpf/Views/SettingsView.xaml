@@ -67,6 +67,21 @@
                             </Border>
                         </StackPanel>
                     </Border>
+                    <Border Margin="0,16,0,0" Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
+                        <StackPanel>
+                            <TextBlock Margin="0,0,0,4" Style="{StaticResource SectionHeadingTextStyle}" Text="Dependency graph" />
+                            <TextBlock Margin="0,0,0,12" Style="{StaticResource PageDescriptionTextStyle}"
+                                       Text="Pauses while you hover, drag, pan, zoom or have an entity selected."
+                                       TextWrapping="Wrap" />
+                            <CheckBox Content="Slowly rotate the dependency graph"
+                                      AutomationProperties.Name="Slowly rotate the dependency graph"
+                                      Command="{Binding GraphAnimation.ToggleCommand}"
+                                      IsChecked="{Binding GraphAnimation.IsEnabled, Mode=OneWay}" />
+                            <TextBlock Margin="0,8,0,0" AutomationProperties.LiveSetting="Assertive"
+                                       Text="{Binding GraphAnimation.ErrorMessage}" TextWrapping="Wrap"
+                                       Visibility="{Binding GraphAnimation.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <StackPanel x:Name="ProjectSettingsPage">

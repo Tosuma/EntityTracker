@@ -124,6 +124,26 @@ public sealed class ShellViewModelTests
     }
 
     [Fact]
+    public async Task GraphAnimationSetting_ReachesTrackerWorkspacesAndFollowsChanges()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.SettingsStore.SaveAnimateDependencyGraphAsync(false);
+        DependencyGraphAnimationSettingsViewModel animation = new(harness.SettingsStore,
+            (await harness.SettingsStore.LoadAsync()).Settings);
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true), animation);
+        await shell.InitializeAsync();
+        MainWindowViewModel workspace = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
+        Assert.Same(animation, shell.GraphAnimation);
+        Assert.False(workspace.DependencyGraph.IsAnimationEnabled);
+
+        animation.ToggleCommand.Execute(null);
+        await WaitUntilAsync(() => Task.FromResult(workspace.DependencyGraph.IsAnimationEnabled));
+        Assert.True((await harness.SettingsStore.LoadAsync()).Settings.AnimateDependencyGraph);
+    }
+
+    [Fact]
     public async Task SettingsProject_EditsLocalIdentityWithoutChangingContext()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
@@ -748,7 +768,8 @@ public sealed class ShellViewModelTests
 
         public ShellViewModel CreateShell(
             EntityTrackerSettings initialSettings,
-            IContextDiscardConfirmation confirmation) => new(
+            IContextDiscardConfirmation confirmation,
+            DependencyGraphAnimationSettingsViewModel? graphAnimation = null) => new(
                 _projects,
                 _trackers,
                 _dashboardFactory,
@@ -761,7 +782,8 @@ public sealed class ShellViewModelTests
                 _clipboard,
                 initialSettings,
                 developerService: _developers,
-                localIdentitySettings: new LocalProjectIdentitySettingsViewModel(Identity));
+                localIdentitySettings: new LocalProjectIdentitySettingsViewModel(Identity),
+                graphAnimation: graphAnimation);
 
         public Task<ProjectDeveloper> CreateDeveloperAsync(string initials) =>
             _developers.CreateAsync(DefaultProject.Id, initials);

@@ -35,6 +35,7 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
     private HashSet<DependencyGraphNode> _landmarks = new(ReferenceEqualityComparer.Instance);
     private bool _isFocusMode;
     private bool _hideUnconnected;
+    private bool _isAnimationEnabled = true;
     private string _searchText = string.Empty;
     private string? _searchMessage;
 
@@ -142,6 +143,13 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
     {
         get => _isFocusMode;
         set { if (SetField(ref _isFocusMode, value)) OnVisualStateChanged(); }
+    }
+
+    /// <summary>Gets or sets whether the map slowly rotates around its centre while nobody interacts with it.</summary>
+    public bool IsAnimationEnabled
+    {
+        get => _isAnimationEnabled;
+        set { if (SetField(ref _isAnimationEnabled, value)) OnVisualStateChanged(); }
     }
 
     public bool HideUnconnected

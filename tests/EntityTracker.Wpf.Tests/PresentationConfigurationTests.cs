@@ -38,6 +38,18 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void GeneralSettingsOfferTheDependencyGraphRotation()
+    {
+        XDocument settings = LoadWpfXaml("Views", "SettingsView.xaml");
+        XElement page = settings.Descendants().Single(element =>
+            (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "GeneralSettingsPage");
+        Assert.Contains(page.Descendants(), element =>
+            element.Name.LocalName == "CheckBox" &&
+            (string?)element.Attribute("Command") == "{Binding GraphAnimation.ToggleCommand}" &&
+            (string?)element.Attribute("IsChecked") == "{Binding GraphAnimation.IsEnabled, Mode=OneWay}");
+    }
+
+    [Fact]
     public void DependencyGraphIsATrackerPageWithAccessibleMap()
     {
         XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");

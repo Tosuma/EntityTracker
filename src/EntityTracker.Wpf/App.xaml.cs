@@ -165,6 +165,7 @@ public partial class App : System.Windows.Application
             services.AddSingleton(new ResponsibilitySearchSettingsViewModel(
                 settingsStore, settings.Settings));
             services.AddSingleton(new OverviewExportSettingsViewModel(settingsStore, settings.Settings));
+            services.AddSingleton(new DependencyGraphAnimationSettingsViewModel(settingsStore, settings.Settings));
             services.AddSingleton<NotificationCenter>();
             services.AddSingleton<ProjectRepositoryCardViewModelFactory>();
             services.AddSingleton<CatalogManagementViewModel>();

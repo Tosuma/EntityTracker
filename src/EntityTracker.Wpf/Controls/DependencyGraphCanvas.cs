@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -41,6 +42,9 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     private const double OrbitOpacity = 0.3;
     private const double DragThreshold = 3;
     private static readonly TimeSpan SettleDelay = TimeSpan.FromMilliseconds(120);
+    private static readonly TimeSpan ResumeDelay = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan FullTurn = TimeSpan.FromMinutes(4);
+    private const double RedrawAfterRotation = 1.5 * Math.PI / 180;
 
     private readonly Dictionary<(string Text, bool Bold, bool Dimmed), FormattedText> _labelCache = [];
     private readonly Dictionary<DevelopmentStatus, Brush> _statusBrushes = [];
@@ -48,6 +52,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     private readonly Dictionary<(Brush Brush, double Thickness, bool Dashed), Pen> _pens = [];
     private double _scale = 1;
     private Vector _offset;
+    private double _angle;
     private bool _needsFit = true;
     private bool _isAnimating;
     private DependencyGraphNode? _hoverNode;
@@ -60,8 +65,11 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     private readonly DrawingVisual _overlay = new();
     private readonly MatrixTransform _contentTransform = new();
     private readonly DispatcherTimer _settleTimer;
-    private double _renderedScale = 1;
-    private Vector _renderedOffset;
+    private DependencyGraphView _renderedView = new(1, default, 0);
+    private readonly Stopwatch _clock = Stopwatch.StartNew();
+    private readonly DispatcherTimer _resumeTimer;
+    private TimeSpan _lastFrame;
+    private TimeSpan _lastInteraction = -ResumeDelay;
 
     public DependencyGraphCanvas()
     {
@@ -73,10 +81,12 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         AddVisualChild(_overlay);
         _settleTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = SettleDelay };
         _settleTimer.Tick += (_, _) => Redraw();
-        Loaded += (_, _) => StartAnimationIfNeeded();
-        Unloaded += (_, _) => { StopAnimation(); _settleTimer.Stop(); };
+        _resumeTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = ResumeDelay };
+        _resumeTimer.Tick += (_, _) => OnResumeTimerTick();
+        Loaded += (_, _) => UpdateAnimation();
+        Unloaded += (_, _) => { StopAnimation(); _settleTimer.Stop(); _resumeTimer.Stop(); };
         SizeChanged += (_, _) => { if (_needsFit) FitToView(); else Redraw(); };
-        IsVisibleChanged += (_, _) => { if (IsVisible) { if (_needsFit) FitToView(); else Redraw(); StartAnimationIfNeeded(); } };
+        IsVisibleChanged += (_, _) => { if (IsVisible) { if (_needsFit) FitToView(); else Redraw(); UpdateAnimation(); } };
     }
 
     protected override int VisualChildrenCount => 2;
@@ -151,18 +161,32 @@ public sealed class DependencyGraphCanvas : FrameworkElement
             return;
         }
 
-        double left = nodes.Min(static node => node.X - node.Radius);
-        double right = nodes.Max(static node => node.X + node.Radius);
-        double top = nodes.Min(static node => node.Y - node.Radius);
-        double bottom = nodes.Max(static node => node.Y + node.Radius + 18);
         const double padding = 40;
-        double scale = Math.Min(
-            (ActualWidth - padding * 2) / Math.Max(right - left, 1),
-            (ActualHeight - padding * 2) / Math.Max(bottom - top, 1));
-        _scale = Math.Clamp(scale, MinScale, 2);
-        _offset = new Vector(
-            ActualWidth / 2 - (left + right) / 2 * _scale,
-            ActualHeight / 2 - (top + bottom) / 2 * _scale);
+        if (graph.IsAnimationEnabled)
+        {
+            // While the map turns, fit the whole circle so rotation never carries entities out of view.
+            double reach = nodes.Max(static node => Math.Sqrt(node.X * node.X + node.Y * node.Y) + node.Radius) + 18;
+            double size = Math.Min(ActualWidth, ActualHeight) - padding * 2;
+            _scale = Math.Clamp(size / Math.Max(reach * 2, 1), MinScale, 2);
+            _offset = new Vector(ActualWidth / 2, ActualHeight / 2);
+        }
+        else
+        {
+            DependencyGraphView turned = new(1, default, _angle);
+            Point[] points = nodes.Select(node => turned.ToScreen(node.X, node.Y)).ToArray();
+            double left = points.Zip(nodes, static (point, node) => point.X - node.Radius).Min();
+            double right = points.Zip(nodes, static (point, node) => point.X + node.Radius).Max();
+            double top = points.Zip(nodes, static (point, node) => point.Y - node.Radius).Min();
+            double bottom = points.Zip(nodes, static (point, node) => point.Y + node.Radius + 18).Max();
+            double scale = Math.Min(
+                (ActualWidth - padding * 2) / Math.Max(right - left, 1),
+                (ActualHeight - padding * 2) / Math.Max(bottom - top, 1));
+            _scale = Math.Clamp(scale, MinScale, 2);
+            _offset = new Vector(
+                ActualWidth / 2 - (left + right) / 2 * _scale,
+                ActualHeight / 2 - (top + bottom) / 2 * _scale);
+        }
+
         _needsFit = false;
         Redraw();
     }
@@ -171,7 +195,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     {
         ArgumentNullException.ThrowIfNull(node);
         _scale = Math.Max(_scale, 1);
-        _offset = new Vector(ActualWidth / 2 - node.X * _scale, ActualHeight / 2 - node.Y * _scale);
+        _offset = View.OffsetKeeping(new Point(node.X, node.Y), new Point(ActualWidth / 2, ActualHeight / 2));
         _needsFit = false;
         Redraw();
     }
@@ -229,8 +253,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
             }
         }
 
-        _renderedScale = _scale;
-        _renderedOffset = _offset;
+        _renderedView = View;
         _contentTransform.Matrix = Matrix.Identity;
         using DrawingContext overlay = _overlay.RenderOpen();
         if (graph is not null && _hoverNode is not null && !IsMouseCaptured && graph.IsVisible(_hoverNode))
@@ -243,9 +266,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     /// </summary>
     private void ViewChanged()
     {
-        double factor = _scale / _renderedScale;
-        _contentTransform.Matrix = new Matrix(factor, 0, 0, factor,
-            _offset.X - _renderedOffset.X * factor, _offset.Y - _renderedOffset.Y * factor);
+        _contentTransform.Matrix = View.LayerMatrix(_renderedView);
         _overlay.RenderOpen().Close();
         _settleTimer.Stop();
         _settleTimer.Start();
@@ -430,6 +451,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
             return;
         }
 
+        MarkInteraction();
         _pressPoint = _lastPoint = point;
         _hasMoved = false;
         _dragNode = node;
@@ -447,13 +469,14 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         {
             if (!_hasMoved && (point - _pressPoint).Length < DragThreshold) return;
             _hasMoved = true;
+            MarkInteraction();
             if (_dragNode is not null)
             {
                 Point world = ToWorld(point);
                 _dragNode.X = world.X;
                 _dragNode.Y = world.Y;
                 Graph?.Layout.Reheat();
-                StartAnimationIfNeeded();
+                UpdateAnimation();
                 Redraw();
             }
             else
@@ -471,6 +494,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         {
             _hoverNode = hover;
             Cursor = hover is null ? null : Cursors.Hand;
+            MarkInteraction();
             Redraw();
         }
     }
@@ -492,13 +516,14 @@ public sealed class DependencyGraphCanvas : FrameworkElement
             {
                 graph?.Layout.MoveAnchor(_dragNode);
                 graph?.Layout.Reheat();
-                StartAnimationIfNeeded();
+                UpdateAnimation();
             }
         }
 
         _dragNode = null;
         _isPanning = false;
         ReleaseMouseCapture();
+        MarkInteraction();
         e.Handled = true;
     }
 
@@ -507,12 +532,14 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         base.OnMouseLeave(e);
         if (_hoverNode is null) return;
         _hoverNode = null;
+        MarkInteraction();
         Redraw();
     }
 
     protected override void OnMouseWheel(MouseWheelEventArgs e)
     {
         base.OnMouseWheel(e);
+        MarkInteraction();
         ZoomAt(e.GetPosition(this), Math.Pow(1.0015, e.Delta));
         e.Handled = true;
     }
@@ -582,7 +609,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
 
         canvas._hoverNode = null;
         canvas.FitToView();
-        canvas.StartAnimationIfNeeded();
+        canvas.UpdateAnimation();
     }
 
     private void OnGraphPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -591,21 +618,78 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         _hoverNode = null;
         _dragNode = null;
         if (_needsFit) FitToView();
-        StartAnimationIfNeeded();
+        UpdateAnimation();
         Redraw();
     }
 
-    private void OnGraphVisualStateChanged(object? sender, EventArgs e) => Redraw();
+    private void OnGraphVisualStateChanged(object? sender, EventArgs e)
+    {
+        Redraw();
+        UpdateAnimation();
+    }
 
     private void OnCenterOnRequested(object? sender, DependencyGraphNode node) => CenterOn(node);
 
     private void OnFitRequested(object? sender, EventArgs e) => FitToView();
 
-    private void StartAnimationIfNeeded()
+    /// <summary>
+    /// Starts the frame loop while the layout is still settling or the map may rotate, and stops
+    /// it otherwise, so an idle map costs nothing.
+    /// </summary>
+    private void UpdateAnimation()
     {
-        if (_isAnimating || !IsLoaded || !IsVisible || Graph?.Layout.IsSettled != false) return;
+        bool needed = IsLoaded && IsVisible && (IsSettling || ShouldRotate);
+        if (needed == _isAnimating) return;
+        if (!needed)
+        {
+            StopAnimation();
+            return;
+        }
+
         _isAnimating = true;
+        _lastFrame = _clock.Elapsed;
         CompositionTarget.Rendering += OnRendering;
+    }
+
+    private bool IsSettling => Graph?.Layout.IsSettled == false;
+
+    /// <summary>
+    /// Gets whether the map may turn: the setting is on and nobody is hovering, dragging,
+    /// panning, zooming or looking at a selection. The app setting alone decides; Windows'
+    /// animation-effects switch is off on many machines and would silently stop the rotation.
+    /// </summary>
+    private bool ShouldRotate =>
+        Graph is { IsAnimationEnabled: true, HasSelection: false, HasNodes: true } &&
+        _hoverNode is null && !IsMouseCaptured &&
+        _clock.Elapsed - _lastInteraction >= ResumeDelay;
+
+    /// <summary>
+    /// Resumes the rotation once the pause is over. Timers can fire a few milliseconds early, so
+    /// the remaining time is checked and the timer re-armed instead of giving up.
+    /// </summary>
+    private void OnResumeTimerTick()
+    {
+        _resumeTimer.Stop();
+        TimeSpan remaining = ResumeDelay - (_clock.Elapsed - _lastInteraction);
+        if (remaining > TimeSpan.Zero)
+        {
+            _resumeTimer.Interval = remaining + TimeSpan.FromMilliseconds(20);
+            _resumeTimer.Start();
+            return;
+        }
+
+        _resumeTimer.Interval = ResumeDelay;
+        UpdateAnimation();
+    }
+
+    /// <summary>Pauses the rotation; it resumes once the map has been left alone for a moment.</summary>
+    private void MarkInteraction()
+    {
+        _lastInteraction = _clock.Elapsed;
+        _resumeTimer.Stop();
+        _resumeTimer.Interval = ResumeDelay;
+        _resumeTimer.Start();
+        if (!IsSettling) StopAnimation();
     }
 
     private void StopAnimation()
@@ -618,15 +702,34 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     private void OnRendering(object? sender, EventArgs e)
     {
         DependencyGraphViewModel? graph = Graph;
+        TimeSpan now = _clock.Elapsed;
+        double elapsed = Math.Min((now - _lastFrame).TotalSeconds, 0.1);
+        _lastFrame = now;
         if (graph is null || !IsVisible)
         {
             StopAnimation();
             return;
         }
 
-        graph.Layout.Step();
-        Redraw();
-        if (graph.Layout.IsSettled && _dragNode is null) StopAnimation();
+        bool redraw = false;
+        if (IsSettling)
+        {
+            graph.Layout.Step();
+            redraw = true;
+        }
+
+        if (ShouldRotate)
+        {
+            _angle = (_angle + elapsed * 2 * Math.PI / FullTurn.TotalSeconds) % (2 * Math.PI);
+            // The GPU turns the cached map; names are redrawn upright every few degrees.
+            if (Math.Abs(Math.IEEERemainder(_angle - _renderedView.Angle, 2 * Math.PI)) > RedrawAfterRotation)
+                redraw = true;
+            else if (!redraw)
+                _contentTransform.Matrix = View.LayerMatrix(_renderedView);
+        }
+
+        if (redraw) Redraw();
+        if (!IsSettling && !ShouldRotate && _dragNode is null) StopAnimation();
     }
 
     private void ZoomAt(Point anchor, double factor)
@@ -634,7 +737,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         double scale = Math.Clamp(_scale * factor, MinScale, MaxScale);
         Point world = ToWorld(anchor);
         _scale = scale;
-        _offset = new Vector(anchor.X - world.X * scale, anchor.Y - world.Y * scale);
+        _offset = View.OffsetKeeping(world, anchor);
         _needsFit = false;
         ViewChanged();
     }
@@ -716,11 +819,11 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     private FontFamily TextElementFontFamily() =>
         (FontFamily)GetValue(System.Windows.Documents.TextElement.FontFamilyProperty);
 
-    private Point ToScreen(DependencyGraphNode node) =>
-        new(node.X * _scale + _offset.X, node.Y * _scale + _offset.Y);
+    private DependencyGraphView View => new(_scale, _offset, _angle);
 
-    private Point ToWorld(Point point) =>
-        new((point.X - _offset.X) / _scale, (point.Y - _offset.Y) / _scale);
+    private Point ToScreen(DependencyGraphNode node) => View.ToScreen(node.X, node.Y);
+
+    private Point ToWorld(Point point) => View.ToWorld(point);
 
     private static Pen Freeze(Pen pen)
     {

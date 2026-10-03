@@ -67,7 +67,8 @@ public sealed class EntityTrackerSettingsStore
                     current.AutoSyncEnabled,
                     current.AutoSyncIntervalMinutes,
                     current.SearchResponsibleNames, current.ProjectDeveloperChoices,
-                    current.OverviewExportRows, current.OverviewCsvSeparator),
+                    current.OverviewExportRows, current.OverviewCsvSeparator,
+                    current.AnimateDependencyGraph),
                 cancellationToken);
         }
         finally
@@ -98,7 +99,8 @@ public sealed class EntityTrackerSettingsStore
                     current.AutoSyncEnabled,
                     current.AutoSyncIntervalMinutes,
                     current.SearchResponsibleNames, current.ProjectDeveloperChoices,
-                    current.OverviewExportRows, current.OverviewCsvSeparator),
+                    current.OverviewExportRows, current.OverviewCsvSeparator,
+                    current.AnimateDependencyGraph),
                 cancellationToken);
         }
         finally
@@ -119,7 +121,8 @@ public sealed class EntityTrackerSettingsStore
             await WriteAsync(new EntityTrackerSettings(current.Appearance,
                 current.LastProjectId, current.LastTrackerId, enabled, intervalMinutes,
                 current.SearchResponsibleNames, current.ProjectDeveloperChoices,
-                current.OverviewExportRows, current.OverviewCsvSeparator),
+                current.OverviewExportRows, current.OverviewCsvSeparator,
+                current.AnimateDependencyGraph),
                 cancellationToken);
         }
         finally { _gate.Release(); }
@@ -135,7 +138,8 @@ public sealed class EntityTrackerSettingsStore
             await WriteAsync(new EntityTrackerSettings(current.Appearance,
                 current.LastProjectId, current.LastTrackerId, current.AutoSyncEnabled,
                 current.AutoSyncIntervalMinutes, enabled, current.ProjectDeveloperChoices,
-                current.OverviewExportRows, current.OverviewCsvSeparator), cancellationToken);
+                current.OverviewExportRows, current.OverviewCsvSeparator,
+                current.AnimateDependencyGraph), cancellationToken);
         }
         finally { _gate.Release(); }
     }
@@ -153,7 +157,8 @@ public sealed class EntityTrackerSettingsStore
             await WriteAsync(new EntityTrackerSettings(current.Appearance, current.LastProjectId,
                 current.LastTrackerId, current.AutoSyncEnabled, current.AutoSyncIntervalMinutes,
                 current.SearchResponsibleNames, choices,
-                current.OverviewExportRows, current.OverviewCsvSeparator), cancellationToken);
+                current.OverviewExportRows, current.OverviewCsvSeparator,
+                current.AnimateDependencyGraph), cancellationToken);
         }
         finally { _gate.Release(); }
     }
@@ -167,8 +172,24 @@ public sealed class EntityTrackerSettingsStore
             EntityTrackerSettings current = await LoadSettingsForUpdateAsync(cancellationToken);
             await WriteAsync(new EntityTrackerSettings(current.Appearance, current.LastProjectId,
                 current.LastTrackerId, current.AutoSyncEnabled, current.AutoSyncIntervalMinutes,
-                current.SearchResponsibleNames, current.ProjectDeveloperChoices, rows, separator),
+                current.SearchResponsibleNames, current.ProjectDeveloperChoices, rows, separator,
+                current.AnimateDependencyGraph),
                 cancellationToken);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task SaveAnimateDependencyGraphAsync(bool enabled,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            EntityTrackerSettings current = await LoadSettingsForUpdateAsync(cancellationToken);
+            await WriteAsync(new EntityTrackerSettings(current.Appearance, current.LastProjectId,
+                current.LastTrackerId, current.AutoSyncEnabled, current.AutoSyncIntervalMinutes,
+                current.SearchResponsibleNames, current.ProjectDeveloperChoices,
+                current.OverviewExportRows, current.OverviewCsvSeparator, enabled), cancellationToken);
         }
         finally { _gate.Release(); }
     }
@@ -269,6 +290,7 @@ public sealed class EntityTrackerSettingsStore
             SearchResponsibleNames = settings.SearchResponsibleNames,
             OverviewExportRows = settings.OverviewExportRows,
             OverviewCsvSeparator = settings.OverviewCsvSeparator,
+            AnimateDependencyGraph = settings.AnimateDependencyGraph,
             ProjectDeveloperChoices = settings.ProjectDeveloperChoices.ToDictionary(
                 pair => pair.Key.Value.ToString("D"), pair => pair.Value.Value.ToString("D"))
         };
@@ -322,7 +344,8 @@ public sealed class EntityTrackerSettingsStore
             document.Version < ResponsibilitySearchVersion
                 ? true : document.SearchResponsibleNames ?? true,
             ParseProjectDeveloperChoices(document, warnings),
-            ParseExportRows(document, warnings), ParseCsvSeparator(document, warnings));
+            ParseExportRows(document, warnings), ParseCsvSeparator(document, warnings),
+            document.AnimateDependencyGraph ?? true);
     }
 
     private static OverviewExportRows ParseExportRows(SettingsDocument document, ICollection<string> warnings)
@@ -469,6 +492,8 @@ public sealed class EntityTrackerSettingsStore
         public OverviewExportRows? OverviewExportRows { get; init; }
 
         public OverviewCsvSeparator? OverviewCsvSeparator { get; init; }
+
+        public bool? AnimateDependencyGraph { get; init; }
 
         public Dictionary<string, string>? ProjectDeveloperChoices { get; init; }
 

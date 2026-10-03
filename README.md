@@ -290,7 +290,9 @@ also shows a card with its status, rank, ring, what it depends on, how many enti
 and any missing dependencies. Click an entity to highlight everything it depends on, back
 towards the centre; **Focus on selection** hides the rest, and **Hide unconnected** removes
 entities without links. Find an entity by name, double-click it to open its details, drag it to a
-new spot, or export the current view as a PNG.
+new spot, or export the current view as a PNG. The solar system slowly turns around its centre and holds
+still while you hover, drag, pan, zoom or have an entity selected; turn this off under
+**Settings → General**.
 
 ![EntityTracker dependency graph showing every active entity colored by status](images/light/dependency-graph.png)
 

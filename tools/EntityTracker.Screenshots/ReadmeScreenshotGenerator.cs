@@ -526,6 +526,8 @@ internal sealed class ReadmeScreenshotGenerator
         WpfScreenshotRenderer renderer,
         CancellationToken cancellationToken)
     {
+        // A still map keeps the captures deterministic.
+        viewModel.DependencyGraph.IsAnimationEnabled = false;
         await shell.NavigateAsync(ShellDestination.DependencyGraph, cancellationToken);
         DependencyGraphViewModel graph = viewModel.DependencyGraph;
         for (int attempt = 0; attempt < 25 && !graph.Layout.IsSettled; attempt++)

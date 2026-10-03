@@ -205,6 +205,45 @@ public sealed class EntityTrackerSettingsStoreTests
         Assert.True((await restarted.LoadAsync()).Settings.SearchResponsibleNames);
     }
 
+    [Fact]
+    public async Task AnimateDependencyGraph_RoundTripsAndSurvivesEveryOtherSettingsWrite()
+    {
+        using TemporarySettingsDirectory directory = new();
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+        Assert.True((await store.LoadAsync()).Settings.AnimateDependencyGraph);
+
+        await store.SaveAnimateDependencyGraphAsync(false);
+        ProjectId project = ProjectId.New();
+        await store.SaveAppearanceAsync(ApplicationAppearance.Dark);
+        await store.SaveActiveContextAsync(project, null);
+        await store.SaveAutoSyncAsync(false, 15);
+        await store.SaveSearchResponsibleNamesAsync(false);
+        await store.SaveProjectDeveloperChoiceAsync(project, DeveloperId.New());
+        await store.SaveOverviewExportPreferencesAsync(OverviewExportRows.AllActiveEntities,
+            OverviewCsvSeparator.Comma);
+
+        EntityTrackerSettingsStore restarted = new(directory.SettingsPath);
+        Assert.False((await restarted.LoadAsync()).Settings.AnimateDependencyGraph);
+        await restarted.SaveAnimateDependencyGraphAsync(true);
+        Assert.True((await restarted.LoadAsync()).Settings.AnimateDependencyGraph);
+    }
+
+    [Fact]
+    public async Task AnimateDependencyGraph_DefaultsToEnabledWhenMissingFromAnOlderFile()
+    {
+        using TemporarySettingsDirectory directory = new();
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+        await store.SaveSearchResponsibleNamesAsync(false);
+        string json = await File.ReadAllTextAsync(directory.SettingsPath);
+        Assert.Contains("animateDependencyGraph", json, StringComparison.OrdinalIgnoreCase);
+        string withoutSetting = string.Join(Environment.NewLine, json.Split(Environment.NewLine)
+            .Where(line => !line.Contains("animateDependencyGraph", StringComparison.OrdinalIgnoreCase)));
+        await File.WriteAllTextAsync(directory.SettingsPath, withoutSetting);
+
+        Assert.True((await new EntityTrackerSettingsStore(directory.SettingsPath).LoadAsync())
+            .Settings.AnimateDependencyGraph);
+    }
+
     [Theory]
     [InlineData(1)]
     [InlineData(2)]
