@@ -209,7 +209,12 @@ public sealed partial class ProjectGitSyncService
         {
             string path = "Project/Deletion";
             ProjectMergeConflict conflict = new(path, ProjectConflictKind.Deletion,
-                tombstone.BaseSnapshotHash, localHash, "Project deleted from the shared repository");
+                tombstone.BaseSnapshotHash, localHash, "Project deleted from the shared repository")
+            {
+                Display = new ProjectMergeConflictDisplay("Project: " + read.Snapshot.Project.Name +
+                    " / Deletion", "Shared Project before deletion",
+                    "Keep local Project and its changes", "Delete the shared Project")
+            };
             progress?.Report(ProjectSyncPhase.Reviewing);
             if (mode == ProjectSyncMode.Automatic)
                 throw new ProjectSyncReviewRequiredException(

@@ -25,7 +25,8 @@
                         AutomationProperties.Name="Choose remote for all conflicts" />
             </StackPanel>
         </StackPanel>
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      CanContentScroll="False">
             <ItemsControl ItemsSource="{Binding Rows}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
@@ -33,27 +34,31 @@
                                 BorderBrush="{DynamicResource Brush.Border.Default}"
                                 Background="{DynamicResource Brush.Surface.Card}">
                             <StackPanel>
-                                <TextBlock FontWeight="SemiBold" Text="{Binding Path}" TextWrapping="Wrap" />
+                                <TextBlock FontWeight="SemiBold" Text="{Binding Title}" TextWrapping="Wrap"
+                                           AutomationProperties.HeadingLevel="Level2" />
                                 <TextBlock Margin="0,2,0,8" Text="{Binding Kind}" />
                                 <TextBlock FontWeight="SemiBold" Text="Base" />
                                 <TextBox Text="{Binding BaseValue, Mode=OneWay}" IsReadOnly="True"
-                                         TextWrapping="Wrap" MaxHeight="75" VerticalScrollBarVisibility="Auto"
-                                         AutomationProperties.Name="Base value" />
+                                         TextWrapping="Wrap" MaxHeight="140" VerticalScrollBarVisibility="Auto"
+                                         ScrollViewer.CanContentScroll="False"
+                                         AutomationProperties.Name="{Binding BaseAutomationName}" />
                                 <TextBlock Margin="0,7,0,0" FontWeight="SemiBold" Text="Local" />
                                 <TextBox Text="{Binding LocalValue, Mode=OneWay}" IsReadOnly="True"
-                                         TextWrapping="Wrap" MaxHeight="75" VerticalScrollBarVisibility="Auto"
-                                         AutomationProperties.Name="Local value" />
+                                         TextWrapping="Wrap" MaxHeight="140" VerticalScrollBarVisibility="Auto"
+                                         ScrollViewer.CanContentScroll="False"
+                                         AutomationProperties.Name="{Binding LocalAutomationName}" />
                                 <TextBlock Margin="0,7,0,0" FontWeight="SemiBold" Text="Remote" />
                                 <TextBox Text="{Binding RemoteValue, Mode=OneWay}" IsReadOnly="True"
-                                         TextWrapping="Wrap" MaxHeight="75" VerticalScrollBarVisibility="Auto"
-                                         AutomationProperties.Name="Remote value" />
+                                         TextWrapping="Wrap" MaxHeight="140" VerticalScrollBarVisibility="Auto"
+                                         ScrollViewer.CanContentScroll="False"
+                                         AutomationProperties.Name="{Binding RemoteAutomationName}" />
                                 <StackPanel Margin="0,10,0,0" Orientation="Horizontal">
                                     <RadioButton Content="Keep local" GroupName="{Binding Path}"
                                                  IsChecked="{Binding IsLocal, Mode=TwoWay}"
-                                                 AutomationProperties.Name="Keep local value for this conflict" />
+                                                 AutomationProperties.Name="{Binding KeepLocalAutomationName}" />
                                     <RadioButton Margin="16,0,0,0" Content="Keep remote"
                                                  GroupName="{Binding Path}" IsChecked="{Binding IsRemote, Mode=TwoWay}"
-                                                 AutomationProperties.Name="Keep remote value for this conflict" />
+                                                 AutomationProperties.Name="{Binding KeepRemoteAutomationName}" />
                                 </StackPanel>
                             </StackPanel>
                         </Border>

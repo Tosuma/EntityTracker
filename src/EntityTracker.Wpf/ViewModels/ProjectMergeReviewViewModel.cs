@@ -38,10 +38,16 @@ public sealed class ProjectMergeChoiceRow(ProjectMergeConflict conflict) : INoti
     public event PropertyChangedEventHandler? PropertyChanged;
     public ProjectMergeConflict Conflict { get; } = conflict;
     public string Path => Conflict.Path;
+    public string Title => Conflict.Display?.Title ?? Conflict.Path;
     public string Kind => Conflict.Kind.ToString();
-    public string BaseValue => Conflict.BaseValue ?? "(absent)";
-    public string LocalValue => Conflict.LocalValue ?? "(absent)";
-    public string RemoteValue => Conflict.RemoteValue ?? "(absent)";
+    public string BaseValue => Conflict.Display?.BaseValue ?? Conflict.BaseValue ?? "Not present";
+    public string LocalValue => Conflict.Display?.LocalValue ?? Conflict.LocalValue ?? "Not present";
+    public string RemoteValue => Conflict.Display?.RemoteValue ?? Conflict.RemoteValue ?? "Not present";
+    public string BaseAutomationName => "Base value for " + Title;
+    public string LocalAutomationName => "Local value for " + Title;
+    public string RemoteAutomationName => "Remote value for " + Title;
+    public string KeepLocalAutomationName => "Keep local value for " + Title;
+    public string KeepRemoteAutomationName => "Keep remote value for " + Title;
     public MergeSide? Choice
     {
         get => _choice;

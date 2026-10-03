@@ -256,11 +256,13 @@ public sealed class PresentationConfigurationTests
         Assert.Contains(review.Descendants(), e =>
             (string?)e.Attribute("AutomationProperties.HeadingLevel") == "Level1");
         Assert.Contains(review.Descendants(), e =>
-            (string?)e.Attribute("AutomationProperties.Name") == "Base value");
+            (string?)e.Attribute("AutomationProperties.HeadingLevel") == "Level2");
         Assert.Contains(review.Descendants(), e =>
-            (string?)e.Attribute("AutomationProperties.Name") == "Local value");
+            (string?)e.Attribute("AutomationProperties.Name") == "{Binding BaseAutomationName}");
         Assert.Contains(review.Descendants(), e =>
-            (string?)e.Attribute("AutomationProperties.Name") == "Remote value");
+            (string?)e.Attribute("AutomationProperties.Name") == "{Binding LocalAutomationName}");
+        Assert.Contains(review.Descendants(), e =>
+            (string?)e.Attribute("AutomationProperties.Name") == "{Binding RemoteAutomationName}");
         Assert.Contains(review.Descendants(), e =>
             (string?)e.Attribute("IsCancel") == "True");
     }

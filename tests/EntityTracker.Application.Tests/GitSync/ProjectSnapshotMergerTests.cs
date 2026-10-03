@@ -9,6 +9,81 @@ public sealed class ProjectSnapshotMergerTests
     private static readonly DateTimeOffset Time = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public void WholeTrackerConflict_ShowsOnlyChangedReadableDetails()
+    {
+        ProjectSnapshot local = Snapshot();
+        SnapshotTracker tracker = local.Trackers[0];
+        ProjectSnapshot remote = local with
+        {
+            Trackers = [tracker with
+            {
+                Entities = [tracker.Entities[0] with { Notes = "Check the order mapping" }]
+            }]
+        };
+
+        ProjectMergeConflict conflict = Assert.Single(new ProjectSnapshotMerger()
+            .Merge(null, local, remote).Conflicts);
+        ProjectMergeConflictDisplay display = Assert.IsType<ProjectMergeConflictDisplay>(conflict.Display);
+
+        Assert.Equal($"Tracker/{tracker.Id:D}", conflict.Path);
+        Assert.Equal("Tracker: Tracker", display.Title);
+        Assert.Equal("Not present", display.BaseValue);
+        Assert.Contains("Entity: Original / Notes", display.LocalValue);
+        Assert.Contains("Entity: Original / Notes: Check the order mapping", display.RemoteValue);
+        Assert.DoesNotContain("Created", display.LocalValue);
+        Assert.DoesNotContain(tracker.Id.ToString("D"), display.Title + display.LocalValue + display.RemoteValue);
+        Assert.DoesNotContain('{', display.RemoteValue);
+    }
+
+    [Fact]
+    public void JsonLookingNoteRemainsPlainTextInFieldConflict()
+    {
+        ProjectSnapshot basis = Snapshot();
+        ProjectSnapshot local = EditEntity(basis,
+            entity => entity with { Notes = "{This is a note, not JSON}" });
+        ProjectSnapshot remote = EditEntity(basis,
+            entity => entity with { Notes = "Other note" });
+
+        ProjectMergeConflict conflict = Assert.Single(new ProjectSnapshotMerger()
+            .Merge(basis, local, remote).Conflicts);
+
+        Assert.Equal("{This is a note, not JSON}", conflict.Display!.LocalValue);
+        Assert.Equal("Other note", conflict.Display.RemoteValue);
+    }
+
+    [Fact]
+    public void TrackerRenameAndNestedFieldConflict_ShowNamesButKeepPathKeys()
+    {
+        ProjectSnapshot basis = Snapshot();
+        SnapshotTracker tracker = basis.Trackers[0];
+        ProjectSnapshot local = basis with { Trackers = [tracker with
+        {
+            Name = "Local tracker",
+            Entities = [tracker.Entities[0] with { Notes = "Local note" }]
+        }] };
+        ProjectSnapshot remote = basis with { Trackers = [tracker with
+        {
+            Name = "Remote tracker",
+            Entities = [tracker.Entities[0] with { Notes = "Remote note" }]
+        }] };
+
+        ProjectMergeResult proposal = new ProjectSnapshotMerger().Merge(basis, local, remote);
+        ProjectMergeConflict notes = Assert.Single(proposal.Conflicts,
+            conflict => conflict.Path.EndsWith("/Notes", StringComparison.Ordinal));
+        Assert.Contains("Local tracker (local) / Remote tracker (remote)", notes.Display!.Title);
+        Assert.Contains("Entity: Original / Notes", notes.Display.Title);
+        Assert.Equal("Local note", notes.Display.LocalValue);
+        Assert.Equal("Remote note", notes.Display.RemoteValue);
+        Assert.DoesNotContain(tracker.Id.ToString("D"), notes.Display.Title);
+
+        ProjectSnapshot resolved = new ProjectSnapshotMerger(
+            proposal.Conflicts.ToDictionary(conflict => conflict.Path, _ => MergeSide.Remote))
+            .Merge(basis, local, remote).Snapshot;
+        Assert.Equal("Remote tracker", resolved.Trackers[0].Name);
+        Assert.Equal("Remote note", resolved.Trackers[0].Entities[0].Notes);
+    }
+
+    [Fact]
     public void FilterActive_MergesIndependentlyAndConflictingEditsRequireReview()
     {
         ProjectSnapshot basis = Snapshot();
@@ -180,6 +255,9 @@ public sealed class ProjectSnapshotMergerTests
         ProjectMergeResult proposal = new ProjectSnapshotMerger().Merge(basis, deleted, modified);
         ProjectMergeConflict conflict = Assert.Single(proposal.Conflicts);
         Assert.Equal(ProjectConflictKind.Deletion, conflict.Kind);
+        Assert.Equal("Not present", conflict.Display!.LocalValue);
+        Assert.Contains("New note", conflict.Display.RemoteValue);
+        Assert.DoesNotContain('{', conflict.Display.RemoteValue);
         ProjectSnapshot restored = new ProjectSnapshotMerger(new Dictionary<string, MergeSide>
         {
             [conflict.Path] = MergeSide.Remote
@@ -214,6 +292,11 @@ public sealed class ProjectSnapshotMergerTests
         ProjectMergeConflict conflict = Assert.Single(new ProjectSnapshotMerger()
             .Merge(basis, local, remote).Conflicts);
         Assert.Equal(ProjectConflictKind.StatusBranch, conflict.Kind);
+        Assert.Equal("No corresponding change", conflict.Display!.BaseValue);
+        Assert.Contains("In Progress", conflict.Display!.LocalValue);
+        Assert.Contains("Rework Needed", conflict.Display.RemoteValue);
+        Assert.DoesNotContain(localEvent.EventId.ToString("D"), conflict.Display.LocalValue);
+        Assert.DoesNotContain('{', conflict.Display.LocalValue);
         ProjectSnapshot merged = new ProjectSnapshotMerger(new Dictionary<string, MergeSide>
         {
             [conflict.Path] = MergeSide.Remote
@@ -259,7 +342,10 @@ public sealed class ProjectSnapshotMergerTests
             UnresolvedDependencies = [dependency with { Kind = "Mandatory" }]
         });
         ProjectMergeResult proposal = new ProjectSnapshotMerger().Merge(basis, local, remote);
-        Assert.Contains(proposal.Conflicts, c => c.Kind == ProjectConflictKind.Relationship);
+        ProjectMergeConflict relationship = Assert.Single(proposal.Conflicts,
+            c => c.Kind == ProjectConflictKind.Relationship);
+        Assert.Contains("Dependency: External", relationship.Display!.Title);
+        Assert.DoesNotContain('{', relationship.Display.RemoteValue);
         Assert.Equal("Archived", proposal.Snapshot.Trackers[0].Entities[0].LifecycleState);
     }
 
@@ -362,6 +448,8 @@ public sealed class ProjectSnapshotMergerTests
         ProjectMergeConflict conflict = Assert.Single(new ProjectSnapshotMerger()
             .Merge(basis, local, remote).Conflicts);
         Assert.EndsWith("/DisplayName", conflict.Path, StringComparison.Ordinal);
+        Assert.Contains("Alice B (AB) (local) / Alice C (AB) (remote)", conflict.Display!.Title);
+        Assert.DoesNotContain(developer.Id.ToString("D"), conflict.Display.Title);
         ProjectMergeResult result = new ProjectSnapshotMerger(new Dictionary<string, MergeSide>
         {
             [conflict.Path] = MergeSide.Remote
