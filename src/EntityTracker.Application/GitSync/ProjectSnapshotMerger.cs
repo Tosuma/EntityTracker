@@ -10,7 +10,13 @@ public enum ProjectConflictKind
 }
 
 public sealed record ProjectMergeConflict(string Path, ProjectConflictKind Kind,
-    string? BaseValue, string? LocalValue, string? RemoteValue);
+    string? BaseValue, string? LocalValue, string? RemoteValue)
+{
+    public ProjectMergeConflictDisplay? Display { get; init; }
+}
+
+public sealed record ProjectMergeConflictDisplay(string Title,
+    string BaseValue, string LocalValue, string RemoteValue);
 
 public sealed record ProjectMergeResult(ProjectSnapshot Snapshot,
     IReadOnlyList<ProjectMergeConflict> Conflicts);
@@ -49,7 +55,8 @@ public sealed class ProjectSnapshotMerger
                 t => t.Id, MergeTracker), developers);
         merged = ResolveRetiredAssignments(merged, basis, local, remote);
         if (_conflicts.Count == 0) ProjectSnapshotValidator.Validate(merged);
-        return new ProjectMergeResult(merged, _conflicts.ToArray());
+        ProjectMergeConflictPresenter presenter = new(basis, local, remote);
+        return new ProjectMergeResult(merged, _conflicts.Select(presenter.Present).ToArray());
     }
 
     private ProjectSnapshot ResolveRetiredAssignments(ProjectSnapshot merged,

@@ -168,10 +168,14 @@ internal sealed class ReadmeScreenshotGenerator
             await linkStore.SaveAsync(repositoryFixture, cancellationToken);
             await shell.ProjectReporting.RepositoryCard.RefreshAsync(cancellationToken);
             ProjectMergeReviewDialog mergeDialog = new(new ProjectMergeReviewViewModel([
-                new ProjectMergeConflict("Tracker Delivery / Entity Orders / Notes",
-                    ProjectConflictKind.Field, "Review the order mapping",
-                    "Add invoice validation before release",
-                    "Coordinate rollout with the fulfillment team")
+                new ProjectMergeConflict("Tracker/00000000-0000-0000-0000-000000000001",
+                    ProjectConflictKind.Addition, null, "Local Tracker snapshot", "Remote Tracker snapshot")
+                {
+                    Display = new ProjectMergeConflictDisplay("Tracker: Delivery",
+                        "Not present",
+                        "Entity: Orders / Notes: Add invoice validation before release",
+                        "Entity: Orders / Notes: Coordinate rollout with the fulfillment team")
+                }
             ]))
             {
                 Owner = window,

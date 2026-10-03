@@ -26,4 +26,28 @@ public sealed class ProjectMergeReviewViewModelTests
         review.ChooseAll(MergeSide.Local);
         Assert.All(review.Decisions().Values, side => Assert.Equal(MergeSide.Local, side));
     }
+
+    [Fact]
+    public void DisplayTextDoesNotReplaceConflictDecisionPath()
+    {
+        const string path = "Tracker/00000000-0000-0000-0000-000000000001";
+        ProjectMergeReviewViewModel review = new([
+            new ProjectMergeConflict(path, ProjectConflictKind.Addition,
+                null, "{\"Name\":\"Local\"}", "{\"Name\":\"Remote\"}")
+            {
+                Display = new ProjectMergeConflictDisplay("Tracker: Local / Remote",
+                    "Not present", "Name: Local", "Name: Remote")
+            }
+        ]);
+
+        ProjectMergeChoiceRow row = Assert.Single(review.Rows);
+        Assert.Equal("Tracker: Local / Remote", row.Title);
+        Assert.Equal("Not present", row.BaseValue);
+        Assert.Equal("Name: Local", row.LocalValue);
+        Assert.Equal("Name: Remote", row.RemoteValue);
+        Assert.Equal("Local value for Tracker: Local / Remote", row.LocalAutomationName);
+        Assert.Equal("Keep remote value for Tracker: Local / Remote", row.KeepRemoteAutomationName);
+        row.IsRemote = true;
+        Assert.Equal(MergeSide.Remote, review.Decisions()[path]);
+    }
 }
