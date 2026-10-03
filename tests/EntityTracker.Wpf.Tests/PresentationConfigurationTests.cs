@@ -60,6 +60,28 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void DependencyGraphToolbarCannotResizeAndMoveTheMap()
+    {
+        // Regression: a selection description above the map wrapped onto a second line when an
+        // entity was clicked, pushing the map down so a double-click missed the entity.
+        XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XElement page = workspace.Descendants().Single(element =>
+            (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "DependencyGraphPage");
+        XElement[] aboveMap = page.Elements()
+            .Where(element => (string?)element.Attribute("Grid.Row") is null or "0" or "1" or "2")
+            .SelectMany(element => element.DescendantsAndSelf())
+            .ToArray();
+
+        Assert.DoesNotContain(aboveMap, element =>
+            element.Name.LocalName == "TextBlock" &&
+            ((string?)element.Attribute("Text"))?.StartsWith("{Binding", StringComparison.Ordinal) == true &&
+            (string?)element.Attribute("TextWrapping") == "Wrap");
+        Assert.DoesNotContain(aboveMap, element => element.Attributes().Any(attribute =>
+            attribute.Value.Contains("Selected", StringComparison.Ordinal) ||
+            attribute.Value.Contains("SelectionDescription", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public void DependencyGraphIsATrackerPageWithAccessibleMap()
     {
         XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");

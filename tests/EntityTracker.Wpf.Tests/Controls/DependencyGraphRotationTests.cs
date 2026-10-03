@@ -1,56 +1,67 @@
 using System.Reflection;
-using System.Runtime.ExceptionServices;
-using System.Windows;
-using System.Windows.Threading;
 
-using EntityTracker.Application.Ranking;
-using EntityTracker.Application.Workflow;
-using EntityTracker.Domain;
 using EntityTracker.Wpf.Controls;
-using EntityTracker.Wpf.ViewModels;
+using EntityTracker.Wpf.ViewModels.DependencyGraph;
+
+using static EntityTracker.Wpf.Tests.Controls.GraphCanvasHost;
 
 namespace EntityTracker.Wpf.Tests.Controls;
 
 /// <summary>Runs the real canvas in an off-screen window, since the rotation lives in its frame loop.</summary>
+[Collection(WpfWindowCollection.Name)]
 public sealed class DependencyGraphRotationTests
 {
     [Fact]
     public void Rotation_TurnsPausesAfterAnInteractionAndResumes()
     {
-        RunOnStaThread(() =>
+        Run(host =>
         {
-            DependencyGraphViewModel graph = new(_ => true);
-            graph.Rebuild(Rows());
-            DependencyGraphCanvas canvas = new() { Graph = graph };
-            Window window = new()
-            {
-                Width = 800, Height = 600, Left = -10000, Top = -10000,
-                ShowInTaskbar = false, WindowStyle = WindowStyle.None, Content = canvas
-            };
-            window.Show();
-            try
-            {
-                Pump(1.5);
-                Assert.True(Angle(canvas) > 0.5, $"The map should turn on its own ({Angle(canvas):0.0}°).");
+            DependencyGraphCanvas canvas = host.Canvas;
+            Pump(1.5);
+            Assert.True(Angle(canvas) > 0.5, $"The map should turn on its own ({Angle(canvas):0.0}°).");
 
-                Invoke(canvas, "MarkInteraction");
-                double paused = Angle(canvas);
-                Pump(2);
-                Assert.Equal(paused, Angle(canvas), 3);
+            Invoke(canvas, "MarkInteraction");
+            double paused = Angle(canvas);
+            Pump(2);
+            Assert.Equal(paused, Angle(canvas), 3);
 
-                Pump(3);
-                Assert.True(Angle(canvas) - paused > 0.5, "The map should resume turning after the pause.");
+            Pump(3);
+            Assert.True(Angle(canvas) - paused > 0.5, "The map should resume turning after the pause.");
 
-                graph.IsAnimationEnabled = false;
-                double stopped = Angle(canvas);
-                Pump(1);
-                Assert.Equal(stopped, Angle(canvas), 3);
-            }
-            finally
-            {
-                window.Close();
-            }
-        });
+            host.Graph.IsAnimationEnabled = false;
+            double stopped = Angle(canvas);
+            Pump(1);
+            Assert.Equal(stopped, Angle(canvas), 3);
+        }, animate: true);
+    }
+
+    [Fact]
+    public void Rotation_HoldsStillWhileHoveringAnEntity()
+    {
+        Run(host =>
+        {
+            Pump(0.5);
+            DependencyGraphNode node = host.Graph.Model.Nodes[^1];
+            host.Canvas.PointerMoved(host.Canvas.ScreenPositionOf(node));
+            Assert.Same(node, host.Canvas.HoveredNode);
+            double hovered = Angle(host.Canvas);
+            Pump(1.5);
+            Assert.Equal(hovered, Angle(host.Canvas), 3);
+        }, animate: true);
+    }
+
+    [Fact]
+    public void Rotation_HoldsStillWhileSomethingIsSelected()
+    {
+        Run(host =>
+        {
+            Pump(0.5);
+            host.Graph.SelectedNode = host.Graph.Model.Nodes[^1];
+            double selected = Angle(host.Canvas);
+            Pump(1.5);
+            Assert.Equal(selected, Angle(host.Canvas), 3);
+            Assert.False(host.Canvas.IsAnimating);
+        }, animate: true);
     }
 
     private static double Angle(DependencyGraphCanvas canvas) =>
@@ -60,34 +71,4 @@ public sealed class DependencyGraphRotationTests
     private static void Invoke(DependencyGraphCanvas canvas, string method) =>
         typeof(DependencyGraphCanvas).GetMethod(method, BindingFlags.NonPublic | BindingFlags.Instance)!
             .Invoke(canvas, null);
-
-    private static void Pump(double seconds)
-    {
-        DispatcherFrame frame = new();
-        DispatcherTimer stop = new(TimeSpan.FromSeconds(seconds), DispatcherPriority.Normal,
-            (_, _) => frame.Continue = false, Dispatcher.CurrentDispatcher);
-        stop.Start();
-        Dispatcher.PushFrame(frame);
-        stop.Stop();
-    }
-
-    private static void RunOnStaThread(Action test)
-    {
-        Exception? failure = null;
-        Thread thread = new(() =>
-        {
-            try { test(); }
-            catch (Exception exception) { failure = exception; }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        thread.Join();
-        if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
-    }
-
-    private static EntityOverviewRow[] Rows() => Enumerable.Range(1, 30).Select(id => new EntityOverviewRow(
-        new EntityId(new Guid(id, 0, 0, new byte[8])), EntityLifecycleState.Active,
-        DevelopmentStatus.NotStarted, EntityWorkflowState.Ready, DependencyResolutionState.Resolved,
-        "—", "—", $"e{id}", "", "", "CSV", "", "", "", id == 1 ? [] : [$"e{(id - 1) / 2 + 1}"], [],
-        "", "", "", "—", "", "")).ToArray();
 }

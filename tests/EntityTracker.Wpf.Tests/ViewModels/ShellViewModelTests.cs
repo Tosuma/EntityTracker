@@ -21,6 +21,7 @@ using EntityTracker.Infrastructure.Persistence;
 using EntityTracker.Reporting;
 using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels;
+using EntityTracker.Wpf.ViewModels.DependencyGraph;
 
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -121,6 +122,31 @@ public sealed class ShellViewModelTests
         workspace.OpenIdentitySettingsCommand.Execute(null);
         await WaitUntilAsync(() => Task.FromResult(shell.SelectedDestination == ShellDestination.Settings));
         Assert.Equal(SettingsCategory.Project, shell.SelectedSettingsCategory);
+    }
+
+    [Fact]
+    public async Task DependencyGraph_FollowsTheOverviewAndOpensTheRealDetailsPane()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "customer");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        Assert.True(await shell.NavigateAsync(ShellDestination.DependencyGraph));
+        MainWindowViewModel workspace = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
+        Assert.Contains(workspace.DependencyGraph.Model.Nodes, node => node.Label == "customer");
+
+        EntityId added = await harness.AddEntityAndReturnIdAsync(harness.DefaultTracker.Id, "invoice");
+        await workspace.RefreshAsync();
+        DependencyGraphNode invoice = Assert.Single(workspace.DependencyGraph.Model.Nodes,
+            node => node.Label == "invoice");
+        Assert.Equal(added, invoice.EntityId);
+        Assert.Equal(workspace.OverviewItems.Count, workspace.DependencyGraph.Model.Nodes.Count);
+
+        Assert.True(workspace.DependencyGraph.OpenDetails(invoice));
+        Assert.Equal("invoice", workspace.SelectedEntityDetails?.SourceName);
+        Assert.Equal(MainWindowTab.DependencyGraph, workspace.SelectedTab);
     }
 
     [Fact]

@@ -291,6 +291,31 @@ public sealed class DependencyGraphViewModelTests
     }
 
     [Fact]
+    public void Rebuild_StaysFastForALargeTracker()
+    {
+        // A loose guard against big slowdowns: rebuilding 500 entities takes about 0.15 s today and
+        // runs on the UI thread whenever Overview reloads.
+        Random random = new(11);
+        EntityOverviewRow[] rows = Enumerable.Range(1, 500).Select(id =>
+        {
+            int layer = (id - 1) / 50;
+            string[] dependencies = layer == 0 ? [] : Enumerable.Range(0, random.Next(1, 4))
+                .Select(_ => $"e{random.Next(1, layer * 50 + 1)}").Distinct().ToArray();
+            return Row(id, $"e{id}", DevelopmentStatus.NotStarted, dependencies);
+        }).ToArray();
+        DependencyGraphViewModel graph = new(_ => true);
+        graph.Rebuild(rows[..20]);
+
+        System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        graph.Rebuild(rows);
+        stopwatch.Stop();
+
+        Assert.Equal(500, graph.Model.Nodes.Count);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1.5),
+            $"Rebuilding 500 entities took {stopwatch.ElapsedMilliseconds} ms.");
+    }
+
+    [Fact]
     public void Landmarks_AreFoundationsAndTheMostUsedEntities()
     {
         EntityOverviewRow[] rows =

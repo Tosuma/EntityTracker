@@ -61,6 +61,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     private Point _lastPoint;
     private bool _isPanning;
     private bool _hasMoved;
+    private bool _isPointerDown;
     private readonly DrawingVisual _content = new();
     private readonly DrawingVisual _overlay = new();
     private readonly MatrixTransform _contentTransform = new();
@@ -256,7 +257,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         _renderedView = View;
         _contentTransform.Matrix = Matrix.Identity;
         using DrawingContext overlay = _overlay.RenderOpen();
-        if (graph is not null && _hoverNode is not null && !IsMouseCaptured && graph.IsVisible(_hoverNode))
+        if (graph is not null && _hoverNode is not null && !_isPointerDown && graph.IsVisible(_hoverNode))
             DrawHoverCard(overlay, graph, _hoverNode);
     }
 
@@ -442,33 +443,74 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     {
         base.OnMouseLeftButtonDown(e);
         Focus();
-        DependencyGraphViewModel? graph = Graph;
-        if (graph is null) return;
-        Point point = e.GetPosition(this);
-        DependencyGraphNode? node = HitTestNode(point);
-        if (node is not null && e.ClickCount == 2)
-        {
-            graph.SelectedNode = node;
-            graph.OpenDetails(node);
-            e.Handled = true;
-            return;
-        }
-
-        MarkInteraction();
-        _pressPoint = _lastPoint = point;
-        _hasMoved = false;
-        _dragNode = node;
-        _isPanning = node is null;
-        if (node is not null) node.IsPinned = true;
-        CaptureMouse();
+        if (Graph is null) return;
+        if (PointerPressed(e.GetPosition(this), e.ClickCount)) CaptureMouse();
         e.Handled = true;
     }
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
-        Point point = e.GetPosition(this);
-        if (IsMouseCaptured && (_dragNode is not null || _isPanning))
+        PointerMoved(e.GetPosition(this));
+    }
+
+    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
+    {
+        base.OnMouseLeftButtonUp(e);
+        if (!PointerReleased()) return;
+        ReleaseMouseCapture();
+        e.Handled = true;
+    }
+
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        base.OnMouseLeave(e);
+        PointerLeft();
+    }
+
+    /// <summary>Ends a drag or pan when the capture is lost, for example after Alt+Tab mid-drag.</summary>
+    protected override void OnLostMouseCapture(MouseEventArgs e)
+    {
+        base.OnLostMouseCapture(e);
+        PointerReleased();
+    }
+
+    protected override void OnMouseWheel(MouseWheelEventArgs e)
+    {
+        base.OnMouseWheel(e);
+        PointerWheel(e.GetPosition(this), e.Delta);
+        e.Handled = true;
+    }
+
+    // The pointer methods below hold the interaction logic; the WPF handlers above only translate
+    // mouse events into them, so tests can drive clicks, drags and zooms on a real canvas.
+
+    /// <summary>Handles a press; returns whether a drag or pan started that needs the pointer captured.</summary>
+    internal bool PointerPressed(Point point, int clickCount)
+    {
+        DependencyGraphViewModel? graph = Graph;
+        if (graph is null) return false;
+        DependencyGraphNode? node = HitTestNode(point);
+        if (node is not null && clickCount == 2)
+        {
+            graph.SelectedNode = node;
+            graph.OpenDetails(node);
+            return false;
+        }
+
+        MarkInteraction();
+        _isPointerDown = true;
+        _pressPoint = _lastPoint = point;
+        _hasMoved = false;
+        _dragNode = node;
+        _isPanning = node is null;
+        if (node is not null) node.IsPinned = true;
+        return true;
+    }
+
+    internal void PointerMoved(Point point)
+    {
+        if (_isPointerDown && (_dragNode is not null || _isPanning))
         {
             if (!_hasMoved && (point - _pressPoint).Length < DragThreshold) return;
             _hasMoved = true;
@@ -502,10 +544,11 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         }
     }
 
-    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
+    /// <summary>Handles a release; returns whether a press was in progress.</summary>
+    internal bool PointerReleased()
     {
-        base.OnMouseLeftButtonUp(e);
-        if (!IsMouseCaptured) return;
+        if (!_isPointerDown) return false;
+        _isPointerDown = false;
         DependencyGraphViewModel? graph = Graph;
         if (graph is not null && !_hasMoved)
             graph.SelectedNode = _dragNode;
@@ -525,27 +568,36 @@ public sealed class DependencyGraphCanvas : FrameworkElement
 
         _dragNode = null;
         _isPanning = false;
-        ReleaseMouseCapture();
         MarkInteraction();
-        e.Handled = true;
+        return true;
     }
 
-    protected override void OnMouseLeave(MouseEventArgs e)
+    internal void PointerLeft()
     {
-        base.OnMouseLeave(e);
         if (_hoverNode is null) return;
         _hoverNode = null;
         MarkInteraction();
         Redraw();
     }
 
-    protected override void OnMouseWheel(MouseWheelEventArgs e)
+    internal void PointerWheel(Point point, int delta)
     {
-        base.OnMouseWheel(e);
         MarkInteraction();
-        ZoomAt(e.GetPosition(this), Math.Pow(1.0015, e.Delta));
-        e.Handled = true;
+        ZoomAt(point, Math.Pow(1.0015, delta));
     }
+
+    /// <summary>Gets where an entity is drawn right now; used by tests and screenshots.</summary>
+    internal Point ScreenPositionOf(DependencyGraphNode node) => ToScreen(node);
+
+    internal DependencyGraphNode? HoveredNode => _hoverNode;
+
+    internal bool IsAnimating => _isAnimating;
+
+    /// <summary>Gets the content drawn into the cached map layer, so tests can inspect what is shown.</summary>
+    internal DrawingGroup? MapDrawing => VisualTreeHelper.GetDrawing(_content);
+
+    /// <summary>Gets the hover card layer's content; empty while no card is shown.</summary>
+    internal DrawingGroup? HoverCardDrawing => VisualTreeHelper.GetDrawing(_overlay);
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
@@ -663,7 +715,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     /// </summary>
     private bool ShouldRotate =>
         Graph is { IsAnimationEnabled: true, HasSelection: false, HasNodes: true } &&
-        _hoverNode is null && !IsMouseCaptured &&
+        _hoverNode is null && !_isPointerDown &&
         _clock.Elapsed - _lastInteraction >= ResumeDelay;
 
     /// <summary>
