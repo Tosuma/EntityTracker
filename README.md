@@ -288,7 +288,8 @@ across the map, and only direct links are drawn, never ones a longer chain alrea
 names never pile on top of each other. Links stay faint until you hover over an entity; hovering
 also shows a card with its status, rank, ring, what it depends on, how many entities it unblocks,
 and any missing dependencies. Click an entity to highlight everything it depends on, back
-towards the centre; **Focus on selection** hides the rest, and **Hide unconnected** removes
+towards the centre, and click it again to clear the selection. While an entity is selected,
+hovering over others shows their card without changing the highlight; **Focus on selection** hides the rest, and **Hide unconnected** removes
 entities without links. Find an entity by name, double-click it to open its details, drag it to a
 new spot, or export the current view as a PNG. The solar system slowly turns around its centre and holds
 still while you hover, drag, pan, zoom or have an entity selected; turn this off, or switch on
@@ -301,6 +302,19 @@ faint orbit rings for each level, under **Settings → Tracker**.
 ![Dependency graph hover card explaining an entity's status, rank, ring and usage](images/light/dependency-graph-hover.png)
 
 ![Entity details pane opened from the dependency graph](images/light/dependency-graph-details.png)
+
+Use the view dropdown next to **Fit to view** to switch to a classical **Tree**, which reads from
+top to bottom: an entity sits below everything it depends on. Each entity is a rounded box with its
+name on top (wrapped at word boundaries for snake_case, PascalCase, camelCase and spaced names, up to
+three lines) and a band in its status colour below. Missing dependencies form the top row, and
+entities without links sit in their own section at the bottom. Links curve between the boxes and
+are arranged to cross as little as possible. Clicking an entity highlights its direct links up and
+down, just like hovering over it. Find, the hover card, the filters and the PNG export work just as
+in the solar system. The chosen view is remembered.
+
+![Dependency graph as a top-to-bottom tree with status-coloured boxes](images/light/dependency-graph-tree.png)
+
+![Dependency tree zoomed in on a selected entity with its direct links highlighted](images/light/dependency-graph-tree-selected.png)
 
 ### Import review details
 

@@ -97,8 +97,8 @@ internal static class DependencySearch
         if (sourceName.Equals(query, StringComparison.OrdinalIgnoreCase)) return 0;
         if (sourceName.StartsWith(query, StringComparison.OrdinalIgnoreCase)) return 1;
 
-        string[] nameWords = Words(sourceName);
-        string[] queryWords = Words(query);
+        string[] nameWords = EntityNameWords.Words(sourceName);
+        string[] queryWords = EntityNameWords.Words(query);
         if (queryWords.Length == 0) return int.MaxValue;
         for (int start = 0; start <= nameWords.Length - queryWords.Length; start++)
         {
@@ -113,40 +113,5 @@ internal static class DependencySearch
             if (matches) return start == 0 ? 2 : 3;
         }
         return int.MaxValue;
-    }
-
-    private static string[] Words(string value)
-    {
-        List<string> words = [];
-        int start = -1;
-        for (int index = 0; index < value.Length; index++)
-        {
-            char current = value[index];
-            if (!char.IsLetterOrDigit(current))
-            {
-                if (start >= 0) words.Add(value[start..index]);
-                start = -1;
-                continue;
-            }
-
-            if (start < 0)
-            {
-                start = index;
-                continue;
-            }
-
-            char previous = value[index - 1];
-            bool newWord = char.IsUpper(current) &&
-                           (char.IsLower(previous) || char.IsDigit(previous) ||
-                            char.IsUpper(previous) && index + 1 < value.Length &&
-                            char.IsLower(value[index + 1])) ||
-                           char.IsDigit(current) && char.IsLetter(previous) ||
-                           char.IsLetter(current) && char.IsDigit(previous);
-            if (!newWord) continue;
-            words.Add(value[start..index]);
-            start = index;
-        }
-        if (start >= 0) words.Add(value[start..]);
-        return words.ToArray();
     }
 }

@@ -1104,6 +1104,14 @@
                                        Foreground="{DynamicResource Brush.Text.Secondary}"
                                        ToolTip="{Binding HiddenLinksDescription}"
                                        Text="{Binding Summary}" />
+                            <ComboBox x:Name="DependencyGraphViewSelector" Margin="0,0,8,0" MinWidth="130"
+                                      VerticalAlignment="Center"
+                                      AutomationProperties.Name="Dependency graph view"
+                                      ToolTip="Switch between the solar system and the top-to-bottom tree"
+                                      ItemsSource="{x:Static viewModels:DependencyGraphViewModel.ViewOptions}"
+                                      DisplayMemberPath="Label"
+                                      SelectedValuePath="View"
+                                      SelectedValue="{Binding View, Mode=TwoWay}" />
                             <Button Margin="0,0,8,0"
                                     Command="{Binding FitToViewCommand}"
                                     Content="Fit to view"
@@ -1148,10 +1156,20 @@
                     <DockPanel Grid.Row="2" Margin="0,0,0,8" LastChildFill="False">
                         <TextBlock DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
                                    FontSize="12" Foreground="{DynamicResource Brush.Text.Secondary}"
-                                   Text="Dot size: entities referring to it" />
+                                   Text="Dot size: entities referring to it">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsTreeView}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                         <ItemsControl DockPanel.Dock="Right" Focusable="False"
                                       AutomationProperties.Name="Dependency graph legend"
-                                      ItemsSource="{x:Static viewModels:DependencyGraphViewModel.Legend}">
+                                      ItemsSource="{Binding Legend}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <WrapPanel />

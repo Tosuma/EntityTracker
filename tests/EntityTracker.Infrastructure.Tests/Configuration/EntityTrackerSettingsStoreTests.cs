@@ -247,6 +247,49 @@ public sealed class EntityTrackerSettingsStoreTests
     }
 
     [Fact]
+    public async Task DependencyGraphView_RoundTripsAndSurvivesEveryOtherSettingsWrite()
+    {
+        using TemporarySettingsDirectory directory = new();
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+        Assert.Equal(DependencyGraphView.SolarSystem, (await store.LoadAsync()).Settings.DependencyGraphView);
+
+        await store.SaveDependencyGraphViewAsync(DependencyGraphView.Tree);
+        ProjectId project = ProjectId.New();
+        await store.SaveAppearanceAsync(ApplicationAppearance.Dark);
+        await store.SaveActiveContextAsync(project, null);
+        await store.SaveAutoSyncAsync(false, 15);
+        await store.SaveSearchResponsibleNamesAsync(false);
+        await store.SaveProjectDeveloperChoiceAsync(project, DeveloperId.New());
+        await store.SaveOverviewExportPreferencesAsync(OverviewExportRows.AllActiveEntities,
+            OverviewCsvSeparator.Comma);
+        await store.SaveAnimateDependencyGraphAsync(false);
+        await store.SaveShowDependencyGraphRingsAsync(true);
+
+        EntityTrackerSettings saved = (await new EntityTrackerSettingsStore(directory.SettingsPath)
+            .LoadAsync()).Settings;
+        Assert.Equal(DependencyGraphView.Tree, saved.DependencyGraphView);
+        Assert.False(saved.AnimateDependencyGraph);
+        Assert.True(saved.ShowDependencyGraphRings);
+    }
+
+    [Fact]
+    public async Task DependencyGraphView_UnknownValueFallsBackToTheSolarSystemWithoutLosingTheFile()
+    {
+        using TemporarySettingsDirectory directory = new();
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+        await store.SaveDependencyGraphViewAsync(DependencyGraphView.Tree);
+        await store.SaveAppearanceAsync(ApplicationAppearance.Dark);
+        string json = await File.ReadAllTextAsync(directory.SettingsPath);
+        await File.WriteAllTextAsync(directory.SettingsPath, json.Replace("\"Tree\"", "\"Galaxy\""));
+
+        SettingsLoadResult result = await new EntityTrackerSettingsStore(directory.SettingsPath).LoadAsync();
+
+        Assert.Equal(DependencyGraphView.SolarSystem, result.Settings.DependencyGraphView);
+        Assert.Equal(ApplicationAppearance.Dark, result.Settings.Appearance);
+        Assert.Contains(result.Warnings, warning => warning.Contains("dependency graph view", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task AnimateDependencyGraph_DefaultsToEnabledWhenMissingFromAnOlderFile()
     {
         using TemporarySettingsDirectory directory = new();

@@ -558,6 +558,17 @@ internal sealed class ReadmeScreenshotGenerator
         canvas.ShowHover(hovered);
         await renderer.CaptureAsync("dependency-graph-hover.png", settleMilliseconds: 500);
         canvas.ShowHover(null);
+
+        // The same Tracker as a top-to-bottom tree, whole and with the featured chain highlighted.
+        graph.View = DependencyGraphView.Tree;
+        graph.FitToViewCommand.Execute(null);
+        await renderer.CaptureAsync("dependency-graph-tree.png", settleMilliseconds: 500);
+        // Zoom in on the featured chain so the wrapped names and status bands are readable.
+        graph.SearchText = featured.Label;
+        graph.FindCommand.Execute(null);
+        await renderer.CaptureAsync("dependency-graph-tree-selected.png", settleMilliseconds: 500);
+        graph.SearchText = string.Empty;
+        graph.View = DependencyGraphView.SolarSystem;
         graph.SelectedNode = featured;
 
         if (!graph.OpenDetails(featured))

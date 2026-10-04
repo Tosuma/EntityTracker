@@ -82,6 +82,20 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void DependencyGraphViewDropdownSitsLeftOfFitToView()
+    {
+        XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XElement selector = workspace.Descendants().Single(element =>
+            (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "DependencyGraphViewSelector");
+
+        Assert.Equal("ComboBox", selector.Name.LocalName);
+        Assert.Equal("Dependency graph view", (string?)selector.Attribute("AutomationProperties.Name"));
+        Assert.Equal("{Binding View, Mode=TwoWay}", (string?)selector.Attribute("SelectedValue"));
+        XElement? next = selector.ElementsAfterSelf().FirstOrDefault();
+        Assert.Equal("{Binding FitToViewCommand}", (string?)next?.Attribute("Command"));
+    }
+
+    [Fact]
     public void DependencyGraphIsATrackerPageWithAccessibleMap()
     {
         XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");

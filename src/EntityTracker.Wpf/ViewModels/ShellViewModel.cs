@@ -665,6 +665,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                     workspace.SetSearchResponsibleNames(
                         ResponsibilitySearch?.IsEnabled ?? true);
                     ApplyGraphSettings(workspace);
+                    workspace.DependencyGraph.PropertyChanged += OnDependencyGraphPropertyChanged;
                     workspace.PersistedStateChanged += OnWorkspacePersistedStateChanged;
                     workspace.IdentitySettingsRequested += OpenIdentitySettingsAsync;
                     workspace.PropertyChanged += OnWorkspacePropertyChanged;
@@ -676,6 +677,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                     catch
                     {
                         workspace.PersistedStateChanged -= OnWorkspacePersistedStateChanged;
+                        workspace.DependencyGraph.PropertyChanged -= OnDependencyGraphPropertyChanged;
                         workspace.IdentitySettingsRequested -= OpenIdentitySettingsAsync;
                         workspace.PropertyChanged -= OnWorkspacePropertyChanged;
                         workspace.Dispose();
@@ -828,6 +830,17 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     {
         workspace.DependencyGraph.IsAnimationEnabled = GraphSettings?.IsAnimationEnabled ?? true;
         workspace.DependencyGraph.ShowRings = GraphSettings?.ShowRings ?? false;
+        if (GraphSettings is not null) workspace.DependencyGraph.View = GraphSettings.View;
+    }
+
+    /// <summary>Remembers a view picked in one Tracker's graph and shows it in the others too.</summary>
+    private void OnDependencyGraphPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(DependencyGraphViewModel.View) ||
+            sender is not DependencyGraphViewModel graph || GraphSettings is null) return;
+        foreach (MainWindowViewModel workspace in _workspaces.Values)
+            workspace.DependencyGraph.View = graph.View;
+        _ = GraphSettings.SetViewAsync(graph.View);
     }
 
     private void OnResponsibilitySearchChanged(object? sender, bool enabled)
@@ -951,6 +964,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         foreach (MainWindowViewModel workspace in _workspaces.Values)
         {
             workspace.PersistedStateChanged -= OnWorkspacePersistedStateChanged;
+            workspace.DependencyGraph.PropertyChanged -= OnDependencyGraphPropertyChanged;
             workspace.IdentitySettingsRequested -= OpenIdentitySettingsAsync;
             workspace.PropertyChanged -= OnWorkspacePropertyChanged;
             workspace.Dispose();

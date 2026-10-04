@@ -28,7 +28,9 @@ public sealed class ScreenshotCommandLineTests
     [Fact]
     public void Manifest_HasUniquePngNames()
     {
-        Assert.Equal(45, ScreenshotManifest.FileNames.Count);
+        Assert.Equal(47, ScreenshotManifest.FileNames.Count);
+        Assert.Contains("dependency-graph-tree.png", ScreenshotManifest.FileNames);
+        Assert.Contains("dependency-graph-tree-selected.png", ScreenshotManifest.FileNames);
         Assert.Contains("dependency-graph-hover.png", ScreenshotManifest.FileNames);
         Assert.Contains("dependency-graph.png", ScreenshotManifest.FileNames);
         Assert.Contains("dependency-graph-selected.png", ScreenshotManifest.FileNames);

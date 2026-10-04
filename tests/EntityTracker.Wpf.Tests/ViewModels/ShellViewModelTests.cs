@@ -150,6 +150,26 @@ public sealed class ShellViewModelTests
     }
 
     [Fact]
+    public async Task GraphView_OpensAsSavedAndRemembersAChangeMadeInTheGraph()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.SettingsStore.SaveDependencyGraphViewAsync(DependencyGraphView.Tree);
+        DependencyGraphSettingsViewModel graphSettings = new(harness.SettingsStore,
+            (await harness.SettingsStore.LoadAsync()).Settings);
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true), graphSettings);
+        await shell.InitializeAsync();
+        MainWindowViewModel workspace = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
+        Assert.Equal(DependencyGraphView.Tree, workspace.DependencyGraph.View);
+
+        workspace.DependencyGraph.View = DependencyGraphView.SolarSystem;
+        await WaitUntilAsync(async () =>
+            (await harness.SettingsStore.LoadAsync()).Settings.DependencyGraphView == DependencyGraphView.SolarSystem);
+        Assert.Equal(DependencyGraphView.SolarSystem, graphSettings.View);
+    }
+
+    [Fact]
     public async Task GraphSettings_ReachTrackerWorkspacesAndFollowChanges()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();

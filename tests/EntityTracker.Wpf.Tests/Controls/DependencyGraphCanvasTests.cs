@@ -30,6 +30,20 @@ public sealed class DependencyGraphCanvasTests
     }
 
     [Fact]
+    public void Click_OnTheSelectedEntityClearsTheSelection()
+    {
+        Run(host =>
+        {
+            DependencyGraphNode node = host.Graph.Model.Nodes[5];
+            host.Click(host.Canvas.ScreenPositionOf(node));
+            Assert.Same(node, host.Graph.SelectedNode);
+
+            host.Click(host.Canvas.ScreenPositionOf(node));
+            Assert.Null(host.Graph.SelectedNode);
+        });
+    }
+
+    [Fact]
     public void Click_LeavesTheMapStillSoADoubleClickLandsOnTheSameEntity()
     {
         // Regression: a plain click used to restart the layout and make the entities drift.
