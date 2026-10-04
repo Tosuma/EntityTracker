@@ -7,6 +7,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Threading;
 
 using EntityTracker.Domain;
+using EntityTracker.Wpf.Controls;
 using EntityTracker.Wpf.ViewModels;
 using EntityTracker.Wpf.Services;
 
@@ -263,7 +264,8 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnNotificationLoaded(object sender, RoutedEventArgs e)
     {
-        if (sender is not Border { Child: Border card, DataContext: NotificationItem item } container) return;
+        if (sender is not Border { Child: SmoothHeightDecorator { Child: Border card }, DataContext: NotificationItem item } container)
+            return;
         PropertyChangedEventHandler onChanged = (_, args) =>
         {
             if (args.PropertyName == nameof(NotificationItem.IsClosing) && item.IsClosing)

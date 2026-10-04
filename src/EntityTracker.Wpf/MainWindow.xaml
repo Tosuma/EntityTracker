@@ -5,6 +5,7 @@
         xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels"
         xmlns:views="clr-namespace:EntityTracker.Wpf.Views"
         xmlns:services="clr-namespace:EntityTracker.Wpf.Services"
+        xmlns:controls="clr-namespace:EntityTracker.Wpf.Controls"
         Title="EntityTracker"
         Icon="Assets/v2/EntityTracker.ico"
         Width="1240"
@@ -173,6 +174,8 @@
                                         <Border.LayoutTransform>
                                             <ScaleTransform ScaleY="1" />
                                         </Border.LayoutTransform>
+                                    <!-- Lets the card glide to a new height, e.g. when a sync finishes. -->
+                                    <controls:SmoothHeightDecorator x:Name="NotificationResizer">
                                     <Border x:Name="NotificationCard" Padding="10"
                                             CornerRadius="6" BorderThickness="1"
                                             BorderBrush="{DynamicResource Brush.Brand.Green60}"
@@ -235,6 +238,7 @@
                                                     Visibility="{Binding CanDismiss, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                         </Grid>
                                     </Border>
+                                    </controls:SmoothHeightDecorator>
                                     </Border>
                                     <DataTemplate.Triggers>
                                         <DataTrigger Binding="{Binding IsClosing}" Value="True">

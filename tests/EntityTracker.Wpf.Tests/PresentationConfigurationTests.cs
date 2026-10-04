@@ -96,6 +96,10 @@ public sealed class PresentationConfigurationTests
         Assert.Contains(closing.Elements(), element => element.Name.LocalName == "Setter" &&
             (string?)element.Attribute("Property") == "IsHitTestVisible" && (string?)element.Attribute("Value") == "False");
         Assert.Contains(template.Descendants(), element => element.Name.LocalName == "ScaleTransform");
+        // Changes of size (e.g. a sync finishing) glide instead of jumping.
+        XElement resizer = template.Descendants().Single(element => element.Name.LocalName == "SmoothHeightDecorator");
+        Assert.Contains(resizer.Elements(), element =>
+            (string?)element.Attribute("{http://schemas.microsoft.com/winfx/2006/xaml}Name") == "NotificationCard");
         string code = File.ReadAllText(Path.Combine(wpfRoot, "MainWindow.xaml.cs"));
         Assert.Contains("AnimateNotificationExit", code, StringComparison.Ordinal);
         Assert.DoesNotContain("ClientAreaAnimation", code, StringComparison.Ordinal);
