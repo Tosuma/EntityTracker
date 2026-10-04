@@ -91,31 +91,34 @@ public sealed class PresentationConfigurationTests
         XElement closing = template.Descendants().Single(element => element.Name.LocalName == "DataTrigger" &&
             (string?)element.Attribute("Binding") == "{Binding IsClosing}");
 
+        // The exit is measured and played from code: slide out of the window, then close the space.
+        Assert.DoesNotContain(closing.Descendants(), element => element.Name.LocalName == "Storyboard");
+        Assert.Contains(closing.Elements(), element => element.Name.LocalName == "Setter" &&
+            (string?)element.Attribute("Property") == "IsHitTestVisible" && (string?)element.Attribute("Value") == "False");
         Assert.Contains(template.Descendants(), element => element.Name.LocalName == "ScaleTransform");
-        string[] animated = closing.Descendants().Where(element => element.Name.LocalName == "DoubleAnimation")
-            .Select(element => (string)element.Attribute("Storyboard.TargetProperty")!).ToArray();
-        Assert.Contains("Opacity", animated);
-        Assert.Contains("(FrameworkElement.LayoutTransform).(ScaleTransform.ScaleY)", animated);
-        // Leaving cards slide out to the left.
-        Assert.Contains(closing.Descendants(), element => element.Name.LocalName == "DoubleAnimation" &&
-            (string?)element.Attribute("Storyboard.TargetProperty") == "(UIElement.RenderTransform).(TranslateTransform.X)" &&
-            double.Parse((string)element.Attribute("To")!, System.Globalization.CultureInfo.InvariantCulture) < 0);
+        string code = File.ReadAllText(Path.Combine(wpfRoot, "MainWindow.xaml.cs"));
+        Assert.Contains("AnimateNotificationExit", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ClientAreaAnimation", code, StringComparison.Ordinal);
+        Assert.Contains("MainWindow.NotificationExitDuration",
+            File.ReadAllText(Path.Combine(wpfRoot, "App.xaml.cs")), StringComparison.Ordinal);
+        Assert.True(MainWindow.NotificationExitDuration >= MainWindow.NotificationSlideOut + MainWindow.NotificationCollapse);
+
         // The panel has no padding that would vanish at once when the last card leaves.
         XElement panel = window.Descendants().Single(element => element.Name.LocalName == "Border" &&
             element.Descendants().Any(child => (string?)child.Attribute("{http://schemas.microsoft.com/winfx/2006/xaml}Name") == "NotificationScrollViewer"));
         Assert.Null(panel.Attribute("Padding"));
-        string code = File.ReadAllText(Path.Combine(wpfRoot, "MainWindow.xaml.cs"));
-        Assert.Contains("OnNotificationLoaded", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("ClientAreaAnimation", code, StringComparison.Ordinal);
-        // The notice must stay in the list until the slowest part of its exit animation has finished.
-        double animationEnd = closing.Descendants().Where(element => element.Name.LocalName == "DoubleAnimation")
-            .Max(element => (TimeSpan.TryParse((string?)element.Attribute("BeginTime"), System.Globalization.CultureInfo.InvariantCulture, out TimeSpan begin) ? begin : TimeSpan.Zero)
-                .Add(TimeSpan.Parse((string)element.Attribute("Duration")!, System.Globalization.CultureInfo.InvariantCulture)).TotalMilliseconds);
-        System.Text.RegularExpressions.Match exit = System.Text.RegularExpressions.Regex.Match(
-            File.ReadAllText(Path.Combine(wpfRoot, "App.xaml.cs")), @"exitDuration: TimeSpan\.FromMilliseconds\((\d+)\)");
-        Assert.True(exit.Success);
-        Assert.True(double.Parse(exit.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) >= animationEnd,
-            $"The notice is removed before its {animationEnd} ms exit animation ends.");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(226)]
+    [InlineData(400)]
+    public void LeavingNotificationsTravelPastTheWindowsLeftEdge(double rightEdge)
+    {
+        double distance = MainWindow.SlideOutDistance(rightEdge);
+
+        Assert.True(distance < 0);
+        Assert.True(rightEdge + distance < 0, "The card's right edge must end left of the window.");
     }
 
     [Fact]

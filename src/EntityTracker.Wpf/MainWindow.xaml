@@ -239,29 +239,6 @@
                                     <DataTemplate.Triggers>
                                         <DataTrigger Binding="{Binding IsClosing}" Value="True">
                                             <Setter TargetName="NotificationContainer" Property="IsHitTestVisible" Value="False" />
-                                            <DataTrigger.EnterActions>
-                                                <BeginStoryboard>
-                                                    <Storyboard>
-                                                        <DoubleAnimation Storyboard.TargetName="NotificationCard"
-                                                                         Storyboard.TargetProperty="Opacity"
-                                                                         To="0" Duration="0:0:0.14" />
-                                                        <DoubleAnimation Storyboard.TargetName="NotificationCard"
-                                                                         Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
-                                                                         To="-24" Duration="0:0:0.14">
-                                                            <DoubleAnimation.EasingFunction>
-                                                                <CubicEase EasingMode="EaseIn" />
-                                                            </DoubleAnimation.EasingFunction>
-                                                        </DoubleAnimation>
-                                                        <DoubleAnimation Storyboard.TargetName="NotificationContainer"
-                                                                         Storyboard.TargetProperty="(FrameworkElement.LayoutTransform).(ScaleTransform.ScaleY)"
-                                                                         BeginTime="0:0:0.12" To="0" Duration="0:0:0.35">
-                                                            <DoubleAnimation.EasingFunction>
-                                                                <CubicEase EasingMode="EaseInOut" />
-                                                            </DoubleAnimation.EasingFunction>
-                                                        </DoubleAnimation>
-                                                    </Storyboard>
-                                                </BeginStoryboard>
-                                            </DataTrigger.EnterActions>
                                         </DataTrigger>
                                     </DataTemplate.Triggers>
                                 </DataTemplate>
