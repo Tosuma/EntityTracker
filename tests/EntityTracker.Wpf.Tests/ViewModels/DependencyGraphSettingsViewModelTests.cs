@@ -37,6 +37,32 @@ public sealed class DependencyGraphSettingsViewModelTests
         }
     }
 
+    [Fact]
+    public async Task SetView_RemembersTheChosenView()
+    {
+        string directory = Path.Combine(Path.GetTempPath(),
+            "EntityTracker.GraphViewTests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            EntityTrackerSettingsStore store = new(Path.Combine(directory, "settings.json"));
+            DependencyGraphSettingsViewModel viewModel = new(store, (await store.LoadAsync()).Settings);
+            int changes = 0;
+            viewModel.Changed += (_, _) => changes++;
+            Assert.Equal(DependencyGraphView.SolarSystem, viewModel.View);
+
+            await viewModel.SetViewAsync(DependencyGraphView.Tree);
+            await viewModel.SetViewAsync(DependencyGraphView.Tree);
+
+            Assert.Equal(DependencyGraphView.Tree, viewModel.View);
+            Assert.Equal(1, changes);
+            Assert.Equal(DependencyGraphView.Tree, (await store.LoadAsync()).Settings.DependencyGraphView);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
         using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));

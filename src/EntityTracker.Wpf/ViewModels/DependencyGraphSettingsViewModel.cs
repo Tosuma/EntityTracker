@@ -14,6 +14,7 @@ public sealed class DependencyGraphSettingsViewModel : INotifyPropertyChanged
     private readonly AsyncCommand _toggleRings;
     private bool _isAnimationEnabled;
     private bool _showRings;
+    private DependencyGraphView _view;
     private bool _isBusy;
     private string? _errorMessage;
 
@@ -22,6 +23,7 @@ public sealed class DependencyGraphSettingsViewModel : INotifyPropertyChanged
         _store = store;
         _isAnimationEnabled = initial.AnimateDependencyGraph;
         _showRings = initial.ShowDependencyGraphRings;
+        _view = initial.DependencyGraphView;
         _toggleAnimation = new AsyncCommand(ToggleAnimationAsync, () => !IsBusy);
         _toggleRings = new AsyncCommand(ToggleRingsAsync, () => !IsBusy);
     }
@@ -33,6 +35,9 @@ public sealed class DependencyGraphSettingsViewModel : INotifyPropertyChanged
 
     public bool IsAnimationEnabled => _isAnimationEnabled;
     public bool ShowRings => _showRings;
+
+    /// <summary>Gets the view the graph opens in: the one chosen last.</summary>
+    public DependencyGraphView View => _view;
     public bool IsBusy => _isBusy;
     public string? ErrorMessage => _errorMessage;
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
@@ -51,6 +56,13 @@ public sealed class DependencyGraphSettingsViewModel : INotifyPropertyChanged
         bool next = !_showRings;
         await _store.SaveShowDependencyGraphRingsAsync(next);
         _showRings = next;
+    });
+
+    /// <summary>Remembers the view chosen in the graph's dropdown.</summary>
+    public Task SetViewAsync(DependencyGraphView view) => view == _view ? Task.CompletedTask : SaveAsync(async () =>
+    {
+        await _store.SaveDependencyGraphViewAsync(view);
+        _view = view;
     });
 
     private async Task SaveAsync(Func<Task> save)
@@ -78,6 +90,7 @@ public sealed class DependencyGraphSettingsViewModel : INotifyPropertyChanged
     {
         OnPropertyChanged(nameof(IsAnimationEnabled));
         OnPropertyChanged(nameof(ShowRings));
+        OnPropertyChanged(nameof(View));
         OnPropertyChanged(nameof(IsBusy));
         OnPropertyChanged(nameof(ErrorMessage));
         OnPropertyChanged(nameof(HasError));

@@ -18,7 +18,8 @@ public sealed class EntityTrackerSettings
         OverviewExportRows overviewExportRows = OverviewExportRows.ShownEntities,
         OverviewCsvSeparator overviewCsvSeparator = OverviewCsvSeparator.Semicolon,
         bool animateDependencyGraph = true,
-        bool showDependencyGraphRings = false)
+        bool showDependencyGraphRings = false,
+        DependencyGraphView dependencyGraphView = DependencyGraphView.SolarSystem)
     {
         if (!Enum.IsDefined(appearance))
         {
@@ -30,6 +31,8 @@ public sealed class EntityTrackerSettings
             throw new ArgumentOutOfRangeException(nameof(overviewExportRows));
         if (!Enum.IsDefined(overviewCsvSeparator))
             throw new ArgumentOutOfRangeException(nameof(overviewCsvSeparator));
+        if (!Enum.IsDefined(dependencyGraphView))
+            throw new ArgumentOutOfRangeException(nameof(dependencyGraphView));
 
         Appearance = appearance;
         LastProjectId = lastProjectId;
@@ -43,6 +46,7 @@ public sealed class EntityTrackerSettings
         OverviewCsvSeparator = overviewCsvSeparator;
         AnimateDependencyGraph = animateDependencyGraph;
         ShowDependencyGraphRings = showDependencyGraphRings;
+        DependencyGraphView = dependencyGraphView;
     }
 
     public ApplicationAppearance Appearance { get; }
@@ -62,6 +66,9 @@ public sealed class EntityTrackerSettings
 
     /// <summary>Gets whether the dependency graph draws its orbit rings.</summary>
     public bool ShowDependencyGraphRings { get; }
+
+    /// <summary>Gets the dependency graph view used last: the solar system or the tree.</summary>
+    public DependencyGraphView DependencyGraphView { get; }
 
     public static EntityTrackerSettings Default { get; } = new();
 }

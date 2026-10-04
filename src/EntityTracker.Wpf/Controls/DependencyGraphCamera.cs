@@ -7,7 +7,7 @@ namespace EntityTracker.Wpf.Controls;
 /// The camera on the dependency map: zoom, pan and the slow rotation around the centre.
 /// A world point is rotated by <see cref="Angle"/>, scaled, then shifted by <see cref="Offset"/>.
 /// </summary>
-internal readonly record struct DependencyGraphView(double Scale, Vector Offset, double Angle)
+internal readonly record struct DependencyGraphCamera(double Scale, Vector Offset, double Angle)
 {
     internal Point ToScreen(double x, double y)
     {
@@ -27,7 +27,7 @@ internal readonly record struct DependencyGraphView(double Scale, Vector Offset,
     /// Gets the transform that moves a drawing made with <paramref name="rendered"/> to where this
     /// view would draw it, so the cached map can follow pan, zoom and rotation without a redraw.
     /// </summary>
-    internal Matrix LayerMatrix(DependencyGraphView rendered)
+    internal Matrix LayerMatrix(DependencyGraphCamera rendered)
     {
         Matrix matrix = Matrix.Identity;
         matrix.Translate(-rendered.Offset.X, -rendered.Offset.Y);

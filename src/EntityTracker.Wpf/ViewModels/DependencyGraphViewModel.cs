@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Windows.Input;
 
 using EntityTracker.Domain;
+using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels.DependencyGraph;
@@ -14,6 +15,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace EntityTracker.Wpf.ViewModels;
 
 public sealed record DependencyGraphLegendItem(string Label, string BrushKey, bool IsPlaceholder);
+
+/// <summary>One entry in the dependency graph's view dropdown.</summary>
+public sealed record DependencyGraphViewOption(DependencyGraphView View, string Label);
 
 /// <summary>What the hover card shows for an entity or missing dependency.</summary>
 public sealed record DependencyGraphNodeInfo(string Title, IReadOnlyList<string> Lines);
@@ -37,6 +41,8 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
     private bool _hideUnconnected;
     private bool _isAnimationEnabled = true;
     private bool _showRings;
+    private DependencyGraphView _view = DependencyGraphView.SolarSystem;
+    private TreeDependencyLayout? _treeLayout;
     private string _searchText = string.Empty;
     private string? _searchMessage;
 
@@ -66,7 +72,10 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
     public event EventHandler<DependencyGraphNode>? CenterOnRequested;
     public event EventHandler? FitRequested;
 
-    public static IReadOnlyList<DependencyGraphLegendItem> Legend { get; } =
+    /// <summary>Gets the legend for the current view; only the solar system has an outer ring.</summary>
+    public IReadOnlyList<DependencyGraphLegendItem> Legend => IsTreeView ? TreeLegend : SolarLegend;
+
+    private static IReadOnlyList<DependencyGraphLegendItem> SolarLegend { get; } =
     [
         new("Not started", "Brush.Status.NotStarted", false),
         new("In progress", "Brush.Status.InProgress", false),
@@ -77,6 +86,10 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
         new("Reconciled", "Brush.Status.Reconciled", false),
         new("Missing dependency (outer ring)", "Brush.Text.Secondary", true)
     ];
+
+    // Declared after SolarLegend: static properties initialise in order, and this one copies it.
+    private static IReadOnlyList<DependencyGraphLegendItem> TreeLegend { get; } =
+        [.. SolarLegend.Where(static item => !item.IsPlaceholder), new("Missing dependency", "Brush.Text.Secondary", true)];
 
     public DependencyGraphModel Model
     {
@@ -153,6 +166,36 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
         set { if (SetField(ref _isAnimationEnabled, value)) OnVisualStateChanged(); }
     }
 
+    /// <summary>Gets the views the dropdown offers.</summary>
+    public static IReadOnlyList<DependencyGraphViewOption> ViewOptions { get; } =
+    [
+        new(DependencyGraphView.Tree, "Tree"),
+        new(DependencyGraphView.SolarSystem, "Solar system"),
+    ];
+
+    /// <summary>Gets or sets how the map is drawn: the solar system or the top-to-bottom tree.</summary>
+    public DependencyGraphView View
+    {
+        get => _view;
+        set
+        {
+            if (!Enum.IsDefined(value) || !SetField(ref _view, value)) return;
+            OnPropertyChanged(nameof(IsTreeView));
+            OnPropertyChanged(nameof(Legend));
+            UpdateHighlight();
+            OnVisualStateChanged();
+        }
+    }
+
+    public bool IsTreeView => View == DependencyGraphView.Tree;
+
+    /// <summary>Gets the tree arrangement, built the first time the tree is shown after a rebuild.</summary>
+    public TreeDependencyLayout TreeLayout => _treeLayout ??= new TreeDependencyLayout(Model);
+
+    /// <summary>Gets where an entity sits in the current view's world coordinates.</summary>
+    public System.Windows.Point PositionOf(DependencyGraphNode node) =>
+        IsTreeView ? TreeLayout.CenterOf(node) : new System.Windows.Point(node.X, node.Y);
+
     /// <summary>Gets or sets whether the orbit rings are drawn behind the map.</summary>
     public bool ShowRings
     {
@@ -206,6 +249,7 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
         DependencyGraphModel model = DependencyGraphBuilder.Build(rows, Model);
         Layout = new RadialDependencyLayout(model);
         Layout.Settle();
+        _treeLayout = null;
         _selectedNode = null;
         _landmarks = FindLandmarks(model);
         Model = model;
@@ -255,9 +299,9 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
             $"Rank: {(node.Rank is { } rank ? rank.ToString(System.Globalization.CultureInfo.CurrentCulture) : "Unranked")}",
             node.Level switch
             {
-                0 => "Ring: Foundation",
-                DependencyGraphNode.UnconnectedLevel => "Ring: Unconnected",
-                _ => $"Ring: Level {node.Level}"
+                0 => $"{PlaceWord}: Foundation",
+                DependencyGraphNode.UnconnectedLevel => $"{PlaceWord}: Unconnected",
+                _ => $"{PlaceWord}: Level {node.Level}"
             },
             $"Depends on: {Count(node.DependencyCount)}",
             $"Used by: {Count(node.DependentCount)} · unblocks {node.TransitiveDependentCount}"
@@ -271,8 +315,11 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
         static string Count(int count) => $"{count} {(count == 1 ? "entity" : "entities")}";
     }
 
-    private static string StatusLabel(DevelopmentStatus? status) =>
-        Legend.FirstOrDefault(item => item.BrushKey == $"Brush.Status.{status}")?.Label ?? "Unknown";
+    /// <summary>The solar system places entities on rings; the tree places them on levels.</summary>
+    private string PlaceWord => IsTreeView ? "Level" : "Ring";
+
+    internal static string StatusLabel(DevelopmentStatus? status) =>
+        SolarLegend.FirstOrDefault(item => item.BrushKey == $"Brush.Status.{status}")?.Label ?? "Unknown";
 
     /// <summary>
     /// Picks the landmarks: the most used foundations plus the entities most others refer to,
@@ -333,14 +380,27 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Highlights the selection and everything it depends on, following links upstream only.
-    /// Implied links still count for reachability but are not highlighted, since they are not drawn.
+    /// In the solar system, highlights the selection and everything it depends on, following links
+    /// upstream only; implied links still count for reachability but are not highlighted, since they
+    /// are not drawn. In the tree, highlights the selection's drawn links in both directions and the
+    /// entities at their other ends, just like hovering.
     /// </summary>
     private void UpdateHighlight()
     {
         HashSet<DependencyGraphNode> nodes = new(ReferenceEqualityComparer.Instance);
         HashSet<DependencyGraphEdge> edges = new(ReferenceEqualityComparer.Instance);
-        if (SelectedNode is not null)
+        if (SelectedNode is not null && IsTreeView)
+        {
+            nodes.Add(SelectedNode);
+            foreach (DependencyGraphEdge edge in Model.EssentialEdges)
+            {
+                if (!ReferenceEquals(edge.From, SelectedNode) && !ReferenceEquals(edge.To, SelectedNode)) continue;
+                edges.Add(edge);
+                nodes.Add(edge.From);
+                nodes.Add(edge.To);
+            }
+        }
+        else if (SelectedNode is not null)
         {
             ILookup<DependencyGraphNode, DependencyGraphEdge> incoming =
                 Model.Edges.ToLookup(static edge => edge.To);
