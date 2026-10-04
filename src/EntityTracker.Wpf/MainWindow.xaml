@@ -153,7 +153,9 @@
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
                     </StackPanel>
 
-                <Border Grid.Row="2" Padding="0,8,0,4"
+                <!-- No padding of its own: all spacing lives in each card's container, so the space
+                     collapses smoothly with the last card and the utilities glide down. -->
+                <Border Grid.Row="2"
                         MaxHeight="{Binding ElementName=SidebarRoot, Path=ActualHeight, Converter={StaticResource SidebarNotificationHeightConverter}}"
                         Background="{DynamicResource Brush.Brand.Green90}"
                         Visibility="{Binding Notifications.HasItems, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -166,7 +168,7 @@
                                 <DataTemplate DataType="{x:Type services:NotificationItem}">
                                     <!-- The container collapses its height (spacing included) so the cards below
                                          glide into place; the card inside fades and slides. -->
-                                    <Border x:Name="NotificationContainer" Padding="10,0,10,8"
+                                    <Border x:Name="NotificationContainer" Padding="10,6,10,6"
                                             Loaded="OnNotificationLoaded">
                                         <Border.LayoutTransform>
                                             <ScaleTransform ScaleY="1" />
@@ -245,14 +247,14 @@
                                                                          To="0" Duration="0:0:0.14" />
                                                         <DoubleAnimation Storyboard.TargetName="NotificationCard"
                                                                          Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
-                                                                         To="24" Duration="0:0:0.14">
+                                                                         To="-24" Duration="0:0:0.14">
                                                             <DoubleAnimation.EasingFunction>
                                                                 <CubicEase EasingMode="EaseIn" />
                                                             </DoubleAnimation.EasingFunction>
                                                         </DoubleAnimation>
                                                         <DoubleAnimation Storyboard.TargetName="NotificationContainer"
                                                                          Storyboard.TargetProperty="(FrameworkElement.LayoutTransform).(ScaleTransform.ScaleY)"
-                                                                         BeginTime="0:0:0.08" To="0" Duration="0:0:0.13">
+                                                                         BeginTime="0:0:0.12" To="0" Duration="0:0:0.35">
                                                             <DoubleAnimation.EasingFunction>
                                                                 <CubicEase EasingMode="EaseInOut" />
                                                             </DoubleAnimation.EasingFunction>

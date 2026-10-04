@@ -96,10 +96,26 @@ public sealed class PresentationConfigurationTests
             .Select(element => (string)element.Attribute("Storyboard.TargetProperty")!).ToArray();
         Assert.Contains("Opacity", animated);
         Assert.Contains("(FrameworkElement.LayoutTransform).(ScaleTransform.ScaleY)", animated);
+        // Leaving cards slide out to the left.
+        Assert.Contains(closing.Descendants(), element => element.Name.LocalName == "DoubleAnimation" &&
+            (string?)element.Attribute("Storyboard.TargetProperty") == "(UIElement.RenderTransform).(TranslateTransform.X)" &&
+            double.Parse((string)element.Attribute("To")!, System.Globalization.CultureInfo.InvariantCulture) < 0);
+        // The panel has no padding that would vanish at once when the last card leaves.
+        XElement panel = window.Descendants().Single(element => element.Name.LocalName == "Border" &&
+            element.Descendants().Any(child => (string?)child.Attribute("{http://schemas.microsoft.com/winfx/2006/xaml}Name") == "NotificationScrollViewer"));
+        Assert.Null(panel.Attribute("Padding"));
         string code = File.ReadAllText(Path.Combine(wpfRoot, "MainWindow.xaml.cs"));
         Assert.Contains("OnNotificationLoaded", code, StringComparison.Ordinal);
         Assert.DoesNotContain("ClientAreaAnimation", code, StringComparison.Ordinal);
-        Assert.Contains("exitDuration:", File.ReadAllText(Path.Combine(wpfRoot, "App.xaml.cs")), StringComparison.Ordinal);
+        // The notice must stay in the list until the slowest part of its exit animation has finished.
+        double animationEnd = closing.Descendants().Where(element => element.Name.LocalName == "DoubleAnimation")
+            .Max(element => (TimeSpan.TryParse((string?)element.Attribute("BeginTime"), System.Globalization.CultureInfo.InvariantCulture, out TimeSpan begin) ? begin : TimeSpan.Zero)
+                .Add(TimeSpan.Parse((string)element.Attribute("Duration")!, System.Globalization.CultureInfo.InvariantCulture)).TotalMilliseconds);
+        System.Text.RegularExpressions.Match exit = System.Text.RegularExpressions.Regex.Match(
+            File.ReadAllText(Path.Combine(wpfRoot, "App.xaml.cs")), @"exitDuration: TimeSpan\.FromMilliseconds\((\d+)\)");
+        Assert.True(exit.Success);
+        Assert.True(double.Parse(exit.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) >= animationEnd,
+            $"The notice is removed before its {animationEnd} ms exit animation ends.");
     }
 
     [Fact]
