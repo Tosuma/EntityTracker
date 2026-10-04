@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 
 using EntityTracker.Application.Projects;
 using EntityTracker.Reporting;
+using EntityTracker.Wpf.Services;
 
 namespace EntityTracker.Wpf.ViewModels;
 
@@ -10,14 +11,17 @@ public sealed class PortfolioDashboardViewModel : INotifyPropertyChanged
 {
     private readonly PortfolioQueryService _queryService;
     private PortfolioDashboard? _dashboard;
-    private string? _errorMessage;
+    private readonly NotificationCenter? _notifications;
+    private bool _hasError;
     private bool _isBusy;
 
     public PortfolioDashboardViewModel(
         PortfolioQueryService queryService,
         AggregateProgressReportingService reportingService,
-        ProgressChartPresentationBuilder presentationBuilder)
+        ProgressChartPresentationBuilder presentationBuilder,
+        NotificationCenter? notifications = null)
     {
+        _notifications = notifications;
         ArgumentNullException.ThrowIfNull(queryService);
         ArgumentNullException.ThrowIfNull(reportingService);
         _queryService = queryService;
@@ -25,7 +29,8 @@ public sealed class PortfolioDashboardViewModel : INotifyPropertyChanged
             async (range, cancellationToken) => await reportingService.GetPortfolioReportAsync(
                 range,
                 cancellationToken),
-            presentationBuilder);
+            presentationBuilder,
+            notifications);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -52,24 +57,17 @@ public sealed class PortfolioDashboardViewModel : INotifyPropertyChanged
         private set => SetField(ref _isBusy, value);
     }
 
-    public string? ErrorMessage
+    /// <summary>Gets whether the last load or save failed; the reason is in the notification center.</summary>
+    public bool HasError
     {
-        get => _errorMessage;
-        private set
-        {
-            if (SetField(ref _errorMessage, value))
-            {
-                OnPropertyChanged(nameof(HasError));
-            }
-        }
+        get => _hasError;
+        private set => SetField(ref _hasError, value);
     }
-
-    public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
         IsBusy = true;
-        ErrorMessage = null;
+        HasError = false;
         try
         {
             Dashboard = await _queryService.GetPortfolioAsync(cancellationToken);
@@ -77,16 +75,22 @@ public sealed class PortfolioDashboardViewModel : INotifyPropertyChanged
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            ErrorMessage = "Loading the portfolio was cancelled.";
+            ReportError("Loading the portfolio was cancelled.", NotificationKind.Information);
         }
         catch (Exception exception)
         {
-            ErrorMessage = $"The portfolio could not be loaded: {exception.Message}";
+            ReportError($"The portfolio could not be loaded: {exception.Message}");
         }
         finally
         {
             IsBusy = false;
         }
+    }
+
+    private void ReportError(string message, NotificationKind kind = NotificationKind.Failure)
+    {
+        HasError = true;
+        _notifications?.Show("Portfolio", message, kind);
     }
 
     private bool SetField<T>(ref T field, T value, [CallerMemberName] string? name = null)

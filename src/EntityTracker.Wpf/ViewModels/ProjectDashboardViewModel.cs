@@ -6,6 +6,7 @@ using EntityTracker.Application.Projects;
 using EntityTracker.Domain;
 using EntityTracker.Reporting;
 using EntityTracker.Wpf.Commands;
+using EntityTracker.Wpf.Services;
 
 namespace EntityTracker.Wpf.ViewModels;
 
@@ -21,7 +22,8 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
     private IReadOnlyList<ProjectComparisonDisplayRow> _comparisonRows = [];
     private bool _showAllEntities;
     private ProjectComparisonCategory _selectedCategory;
-    private string? _errorMessage;
+    private readonly NotificationCenter? _notifications;
+    private bool _hasError;
     private bool _isBusy;
 
     public ProjectDashboardViewModel(
@@ -30,8 +32,10 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
         ProjectEntityComparisonQueryService comparisonService,
         AggregateProgressReportingService reportingService,
         ProgressChartPresentationBuilder presentationBuilder,
-        ProjectRepositoryCardViewModel? repositoryCard = null)
+        ProjectRepositoryCardViewModel? repositoryCard = null,
+        NotificationCenter? notifications = null)
     {
+        _notifications = notifications;
         ArgumentNullException.ThrowIfNull(projectId);
         ArgumentNullException.ThrowIfNull(queryService);
         ArgumentNullException.ThrowIfNull(comparisonService);
@@ -50,7 +54,8 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
                 projectId,
                 range,
                 cancellationToken),
-            presentationBuilder);
+            presentationBuilder,
+            notifications);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -188,24 +193,17 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
         private set => SetField(ref _isBusy, value);
     }
 
-    public string? ErrorMessage
+    /// <summary>Gets whether the last load or save failed; the reason is in the notification center.</summary>
+    public bool HasError
     {
-        get => _errorMessage;
-        private set
-        {
-            if (SetField(ref _errorMessage, value))
-            {
-                OnPropertyChanged(nameof(HasError));
-            }
-        }
+        get => _hasError;
+        private set => SetField(ref _hasError, value);
     }
-
-    public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
         IsBusy = true;
-        ErrorMessage = null;
+        HasError = false;
         try
         {
             Task<ProjectDashboard?> dashboardTask =
@@ -218,11 +216,11 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            ErrorMessage = "Loading the project dashboard was cancelled.";
+            ReportError("Loading the project dashboard was cancelled.", NotificationKind.Information);
         }
         catch (Exception exception)
         {
-            ErrorMessage = $"The project dashboard could not be loaded: {exception.Message}";
+            ReportError($"The project dashboard could not be loaded: {exception.Message}");
         }
         finally
         {
@@ -330,12 +328,12 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
     {
         try
         {
-            ErrorMessage = null;
+            HasError = false;
             await LoadComparisonAsync();
         }
         catch (Exception exception)
         {
-            ErrorMessage = $"The project comparison could not be loaded: {exception.Message}";
+            ReportError($"The project comparison could not be loaded: {exception.Message}");
         }
     }
 
@@ -355,6 +353,12 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
                 comparison.Trackers[index].Name,
                 cell)).ToArray(),
             row.IsActionable)).ToArray();
+    }
+
+    private void ReportError(string message, NotificationKind kind = NotificationKind.Failure)
+    {
+        HasError = true;
+        _notifications?.Show("Project dashboard", message, kind);
     }
 
     private bool SetField<T>(ref T field, T value, [CallerMemberName] string? name = null)

@@ -82,6 +82,35 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void ActionOutcomesAreReportedInTheNotificationCenterNotOnThePage()
+    {
+        string wpfRoot = Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf");
+        // Results and errors of actions go to the notification center; only inline validation,
+        // search hints and errors inside modal dialogs stay next to their controls.
+        string[] removed =
+        [
+            "{Binding OperationMessage}", "OverviewErrorMessage", "Progress.ExportMessage", "Progress.ErrorMessage",
+            "ArchiveErrorMessage", "PurgeErrorMessage", "CopyMessage", "PortfolioReporting.ErrorMessage",
+            "ProjectReporting.ErrorMessage", "Developers.ErrorMessage", "Appearance.ErrorMessage",
+            "LocalIdentity.ErrorMessage", "ResponsibilitySearch.ErrorMessage", "OverviewExport.ErrorMessage",
+            "GraphSettings.ErrorMessage", "AutoSync.ErrorMessage", "{Binding HasMessage"
+        ];
+        string[] pages = ["MainWindow.xaml", Path.Combine("Views", "TrackerWorkspaceView.xaml"),
+            Path.Combine("Views", "PortfolioView.xaml"), Path.Combine("Views", "ProjectDashboardView.xaml"),
+            Path.Combine("Views", "AggregateProgressView.xaml"), Path.Combine("Views", "ProjectDevelopersView.xaml"),
+            Path.Combine("Views", "SettingsView.xaml"), Path.Combine("Views", "HelpSqlView.xaml")];
+
+        string[] offenders = pages
+            .SelectMany(page => removed
+                .Where(binding => File.ReadAllText(Path.Combine(wpfRoot, page)).Contains(binding, StringComparison.Ordinal))
+                .Select(binding => $"{page}: {binding}"))
+            .ToArray();
+        Assert.Empty(offenders);
+        Assert.DoesNotContain("{Binding ErrorMessage}",
+            File.ReadAllText(Path.Combine(wpfRoot, "Views", "AggregateProgressView.xaml")), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DependencyGraphViewDropdownSitsLeftOfFitToView()
     {
         XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");

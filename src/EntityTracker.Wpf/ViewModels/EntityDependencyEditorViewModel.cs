@@ -24,6 +24,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 {
     private readonly EntityDependencyEditorService _editorService;
     private readonly TrackerId _trackerId;
+    private readonly NotificationCenter? _notifications;
     private readonly EntityLifecycleService _lifecycleService;
     private readonly SchemaSynchronizationService _synchronizationService;
     private readonly Func<Task> _onPersisted;
@@ -62,7 +63,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private string? _selectedGroupSuggestion;
     private string? _searchMessage;
     private string? _groupSearchMessage;
-    private string? _archiveErrorMessage;
     private bool _canAddAsUnresolved;
     private bool _isDependencySuggestionsOpen;
     private bool _isGroupSuggestionsOpen;
@@ -72,7 +72,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private bool _isArchiveConfirmationOpen;
     private bool _isPurgeConfirmationOpen;
     private string _typedPurgeConfirmation = string.Empty;
-    private string? _purgeErrorMessage;
     private int _searchVersion;
     private int _groupSearchVersion;
     private int _previewVersion;
@@ -108,8 +107,10 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         IResponsibilityPeriodRepository? responsibilityPeriods = null,
         ProjectDeveloperService? developers = null,
         LocalProjectIdentityService? localIdentity = null,
-        Func<Task>? openSettings = null)
+        Func<Task>? openSettings = null,
+        NotificationCenter? notifications = null)
     {
+        _notifications = notifications;
         ArgumentNullException.ThrowIfNull(editorService);
         ArgumentNullException.ThrowIfNull(lifecycleService);
         ArgumentNullException.ThrowIfNull(synchronizationService);
@@ -391,18 +392,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
     }
 
-    public string? ArchiveErrorMessage
-    {
-        get => _archiveErrorMessage;
-        private set
-        {
-            if (SetField(ref _archiveErrorMessage, value))
-            {
-                OnPropertyChanged(nameof(HasArchiveError));
-            }
-        }
-    }
-
     public bool CanAddAsUnresolved
     {
         get => _canAddAsUnresolved;
@@ -526,18 +515,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             {
                 OnPropertyChanged(nameof(CanConfirmPurge));
                 _confirmPurgeCommand.NotifyCanExecuteChanged();
-            }
-        }
-    }
-
-    public string? PurgeErrorMessage
-    {
-        get => _purgeErrorMessage;
-        private set
-        {
-            if (SetField(ref _purgeErrorMessage, value))
-            {
-                OnPropertyChanged(nameof(HasPurgeError));
             }
         }
     }
@@ -750,9 +727,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
     public bool HasGroupSearchMessage => !string.IsNullOrWhiteSpace(GroupSearchMessage);
 
-    public bool HasArchiveError => !string.IsNullOrWhiteSpace(ArchiveErrorMessage);
 
-    public bool HasPurgeError => !string.IsNullOrWhiteSpace(PurgeErrorMessage);
 
     public bool HasPriorityPreview => PriorityPreviewRows.Count > 0;
 
@@ -1309,13 +1284,11 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
     private void RequestArchive()
     {
-        ArchiveErrorMessage = null;
         IsArchiveConfirmationOpen = true;
     }
 
     private void CancelArchive()
     {
-        ArchiveErrorMessage = null;
         IsArchiveConfirmationOpen = false;
     }
 
@@ -1338,14 +1311,12 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
     private void RequestPurge()
     {
-        PurgeErrorMessage = null;
         TypedPurgeConfirmation = string.Empty;
         IsPurgeConfirmationOpen = true;
     }
 
     private void CancelPurge()
     {
-        PurgeErrorMessage = null;
         TypedPurgeConfirmation = string.Empty;
         IsPurgeConfirmationOpen = false;
     }
@@ -1358,7 +1329,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
 
         IsBusy = true;
-        ArchiveErrorMessage = null;
         try
         {
             bool archived = await _lifecycleService.TryArchiveAsync(
@@ -1366,8 +1336,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 CurrentEditPlan.Entity.Id);
             if (!archived)
             {
-                ArchiveErrorMessage =
-                    "This entity no longer exists as an active entity. Close the editor and refresh before trying again.";
+                Notify("Archive entity",
+                    "This entity no longer exists as an active entity. Close the editor and refresh before trying again.");
                 return;
             }
 
@@ -1377,7 +1347,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         catch (Exception exception)
         {
             _logger.LogError(exception, "An entity could not be archived.");
-            ArchiveErrorMessage = $"The entity could not be archived: {exception.Message}";
+            Notify("Archive entity", $"The entity could not be archived: {exception.Message}");
         }
         finally
         {
@@ -1428,7 +1398,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
 
         IsBusy = true;
-        PurgeErrorMessage = null;
         try
         {
             bool purged = await _lifecycleService.PurgeArchivedAsync(
@@ -1436,8 +1405,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 ArchivedDetails.Entity.Id);
             if (!purged)
             {
-                PurgeErrorMessage =
-                    "This entity is no longer archived. Close the editor and refresh before trying again.";
+                Notify("Delete entity",
+                    "This entity is no longer archived. Close the editor and refresh before trying again.");
                 return;
             }
 
@@ -1447,7 +1416,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         catch (Exception exception)
         {
             _logger.LogError(exception, "An archived entity could not be permanently deleted.");
-            PurgeErrorMessage = $"The entity could not be permanently deleted: {exception.Message}";
+            Notify("Delete entity", $"The entity could not be permanently deleted: {exception.Message}");
         }
         finally
         {
@@ -1547,8 +1516,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         Dependencies = [];
         Warnings = [];
         Errors = [];
-        ArchiveErrorMessage = null;
-        PurgeErrorMessage = null;
         _typedPurgeConfirmation = string.Empty;
         OnPropertyChanged(nameof(TypedPurgeConfirmation));
         _reviewPlan = null;
@@ -1658,6 +1625,9 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         priority?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—";
 
     private TrackedEntity? SelectedEntity => CurrentEditPlan?.Entity ?? ArchivedDetails?.Entity;
+
+    private void Notify(string title, string message) =>
+        _notifications?.Show(title, message, NotificationKind.Failure);
 
     private bool SetField<T>(
         ref T field,

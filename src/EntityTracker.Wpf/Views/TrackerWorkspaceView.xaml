@@ -799,36 +799,6 @@
                         </DockPanel>
                     </Border>
 
-                    <StackPanel Grid.Row="4">
-                    <Border Margin="0,0,0,12"
-                            Padding="12"
-                            Background="{DynamicResource Brush.Surface.Subtle}"
-                            BorderBrush="{DynamicResource Brush.Border.Strong}"
-                            BorderThickness="1"
-                            CornerRadius="4"
-                            Visibility="{Binding HasOperationMessage, Converter={StaticResource BooleanToVisibilityConverter}}">
-                        <TextBlock Foreground="{DynamicResource Brush.Text.Primary}"
-                                   Text="{Binding OperationMessage}"
-                                   TextWrapping="Wrap" />
-                    </Border>
-
-                    <Border
-                            Margin="0,0,0,12"
-                            MaxHeight="120"
-                            Padding="12"
-                            Background="{DynamicResource Brush.Surface.Alert}"
-                            BorderBrush="{DynamicResource Brush.Accent}"
-                            BorderThickness="1"
-                            CornerRadius="4"
-                            Visibility="{Binding HasOverviewError, Converter={StaticResource BooleanToVisibilityConverter}}">
-                        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                                      VerticalScrollBarVisibility="Auto">
-                            <TextBlock Foreground="{DynamicResource Brush.Text.Primary}"
-                                       Text="{Binding OverviewErrorMessage}"
-                                       TextWrapping="Wrap" />
-                        </ScrollViewer>
-                    </Border>
-                    </StackPanel>
 
                     <Grid Grid.Row="5">
                         <DataGrid x:Name="OverviewDataGrid"
@@ -1302,21 +1272,6 @@
                                    HorizontalAlignment="Right"
                                    Foreground="{DynamicResource Brush.Text.Secondary}"
                                    Text="{Binding ArchivedSearchResultSummary}" />
-                        <Border Margin="0,0,0,12"
-                                MaxHeight="120"
-                                Padding="12"
-                                Background="{DynamicResource Brush.Surface.Alert}"
-                                BorderBrush="{DynamicResource Brush.Accent}"
-                                BorderThickness="1"
-                                CornerRadius="4"
-                                Visibility="{Binding HasOverviewError, Converter={StaticResource BooleanToVisibilityConverter}}">
-                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                                          VerticalScrollBarVisibility="Auto">
-                                <TextBlock Foreground="{DynamicResource Brush.Text.Primary}"
-                                           Text="{Binding OverviewErrorMessage}"
-                                           TextWrapping="Wrap" />
-                            </ScrollViewer>
-                        </Border>
                     </StackPanel>
 
                     <Grid Grid.Row="3">
@@ -2283,34 +2238,6 @@
                         </Border>
 
                         <Border Margin="0,0,0,12"
-                                MaxHeight="100"
-                                Padding="10"
-                                Background="{DynamicResource Brush.Surface.Alert}"
-                                BorderBrush="{DynamicResource Brush.Accent}"
-                                BorderThickness="1"
-                                Visibility="{Binding Progress.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <TextBlock Foreground="{DynamicResource Brush.Text.Primary}"
-                                           Text="{Binding Progress.ErrorMessage}"
-                                           TextWrapping="Wrap" />
-                            </ScrollViewer>
-                        </Border>
-
-                        <Border Margin="0,0,0,12"
-                                MaxHeight="100"
-                                Padding="10"
-                                Background="{DynamicResource Brush.Surface.Subtle}"
-                                BorderBrush="{DynamicResource Brush.Border.Strong}"
-                                BorderThickness="1"
-                                Visibility="{Binding Progress.HasExportMessage, Converter={StaticResource BooleanToVisibilityConverter}}">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <TextBlock Foreground="{DynamicResource Brush.Text.Primary}"
-                                           Text="{Binding Progress.ExportMessage}"
-                                           TextWrapping="Wrap" />
-                            </ScrollViewer>
-                        </Border>
-
-                        <Border Margin="0,0,0,12"
                                 Padding="14,12"
                                 Background="{DynamicResource Brush.Surface.Card}"
                                 BorderBrush="{DynamicResource Brush.Border.Default}"
@@ -3265,11 +3192,6 @@
                                            Foreground="{DynamicResource Brush.Text.Primary}"
                                            Text="{Binding Editor.ArchiveConfirmationMessage}"
                                            TextWrapping="Wrap" />
-                                <TextBlock Margin="0,10,0,0"
-                                           Foreground="{DynamicResource Brush.Text.Primary}"
-                                           Text="{Binding Editor.ArchiveErrorMessage}"
-                                           TextWrapping="Wrap"
-                                           Visibility="{Binding Editor.HasArchiveError, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                 <StackPanel Margin="0,20,0,0"
                                             HorizontalAlignment="Right"
                                             Orientation="Horizontal">
@@ -3321,11 +3243,6 @@
                                 <TextBox x:Name="PurgeConfirmationTextBox"
                                          AutomationProperties.Name="Exact entity name confirmation"
                                          Text="{Binding Editor.TypedPurgeConfirmation, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Margin="0,10,0,0"
-                                           Foreground="{DynamicResource Brush.Text.Danger}"
-                                           Text="{Binding Editor.PurgeErrorMessage}"
-                                           TextWrapping="Wrap"
-                                           Visibility="{Binding Editor.HasPurgeError, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                 <StackPanel Margin="0,20,0,0"
                                             HorizontalAlignment="Right"
                                             Orientation="Horizontal">

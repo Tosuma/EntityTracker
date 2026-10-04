@@ -1,6 +1,7 @@
 using EntityTracker.Application.Projects;
 using EntityTracker.Domain;
 using EntityTracker.Reporting;
+using EntityTracker.Wpf.Services;
 
 namespace EntityTracker.Wpf.ViewModels;
 
@@ -9,12 +10,14 @@ public sealed class DashboardViewModelFactory(
     ProjectEntityComparisonQueryService comparisonQueryService,
     AggregateProgressReportingService reportingService,
     ProgressChartPresentationBuilder presentationBuilder,
-    ProjectRepositoryCardViewModelFactory? repositoryCardFactory = null)
+    ProjectRepositoryCardViewModelFactory? repositoryCardFactory = null,
+    NotificationCenter? notifications = null)
 {
     public PortfolioDashboardViewModel CreatePortfolio() => new(
         portfolioQueryService,
         reportingService,
-        presentationBuilder);
+        presentationBuilder,
+        notifications);
 
     public ProjectDashboardViewModel CreateProject(ProjectId projectId) => new(
         projectId,
@@ -22,5 +25,6 @@ public sealed class DashboardViewModelFactory(
         comparisonQueryService,
         reportingService,
         presentationBuilder,
-        repositoryCardFactory?.Create(projectId));
+        repositoryCardFactory?.Create(projectId),
+        notifications);
 }

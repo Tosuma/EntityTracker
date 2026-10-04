@@ -57,7 +57,8 @@ public sealed class AppearanceViewModelTests
         EntityTrackerSettingsStore store = new(
             Path.Combine(file.ParentFilePath, "settings.json"));
         RecordingThemeService theme = new();
-        AppearanceViewModel viewModel = new(store, theme);
+        NotificationCenter notifications = new();
+        AppearanceViewModel viewModel = new(store, theme, notifications: notifications);
 
         viewModel.SelectAppearanceCommand.Execute(ApplicationAppearance.Dark);
         await WaitUntilIdleAsync(viewModel);
@@ -65,6 +66,9 @@ public sealed class AppearanceViewModelTests
         Assert.Equal(ApplicationAppearance.System, viewModel.SelectedAppearance);
         Assert.Equal(ApplicationAppearance.System, theme.CurrentAppearance);
         Assert.True(viewModel.HasError);
+        NotificationItem notice = Assert.Single(notifications.Items);
+        Assert.Equal(("Settings", NotificationKind.Failure), (notice.Title, notice.Kind));
+        Assert.StartsWith("The appearance could not be saved:", notice.Message);
     }
 
     private static async Task WaitUntilIdleAsync(AppearanceViewModel viewModel)

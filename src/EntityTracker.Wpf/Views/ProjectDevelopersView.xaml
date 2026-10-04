@@ -105,11 +105,6 @@
                                     Content="{Binding Developers.ResetLabel}"
                                     Style="{StaticResource SecondaryButtonStyle}" />
                         </WrapPanel>
-                        <Border Margin="0,16,0,0" Padding="12" Style="{StaticResource ErrorMessageStyle}"
-                                Visibility="{Binding Developers.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
-                            <TextBlock AutomationProperties.LiveSetting="Assertive"
-                                       Text="{Binding Developers.ErrorMessage}" TextWrapping="Wrap" />
-                        </Border>
                     </StackPanel>
                 </Border>
             </Grid>
@@ -131,11 +126,6 @@
                     <TextBox x:Name="RetirementConfirmationBox"
                              AutomationProperties.Name="Exact developer initials confirmation"
                              Text="{Binding Developers.RetirementConfirmation, UpdateSourceTrigger=PropertyChanged}" />
-                    <Border Margin="0,12,0,0" Padding="12" Style="{StaticResource ErrorMessageStyle}"
-                            Visibility="{Binding Developers.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
-                        <TextBlock AutomationProperties.LiveSetting="Assertive"
-                                   Text="{Binding Developers.ErrorMessage}" TextWrapping="Wrap" />
-                    </Border>
                     <StackPanel Margin="0,16,0,0" Orientation="Horizontal">
                         <Button Content="Confirm retirement" Command="{Binding Developers.ConfirmRetirementCommand}"
                                 Style="{StaticResource PrimaryButtonStyle}" />
@@ -190,11 +180,6 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                            <Border Margin="0,12,0,0" Padding="12" Style="{StaticResource ErrorMessageStyle}"
-                                    Visibility="{Binding Developers.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <TextBlock AutomationProperties.LiveSetting="Assertive"
-                                           Text="{Binding Developers.ErrorMessage}" TextWrapping="Wrap" />
-                            </Border>
                         </StackPanel>
                     </ScrollViewer>
                     <Button x:Name="CloseRetiredButton" Grid.Row="2" HorizontalAlignment="Right"

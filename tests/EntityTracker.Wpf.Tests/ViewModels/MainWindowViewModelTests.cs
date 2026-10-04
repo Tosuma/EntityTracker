@@ -899,26 +899,30 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task ConfirmArchive_StoreFailureKeepsConfirmationOpenWithError()
+    public async Task ConfirmArchive_StoreFailureKeepsConfirmationOpenAndPostsTheError()
     {
         TrackedEntity entity = Entity(1, "Customer");
+        NotificationCenter notifications = new();
         MainWindowViewModel viewModel = CreateViewModel(
             [entity],
             [],
             FailureResult(),
             new StubFilePicker(),
-            out StubSynchronizationStore store);
+            out StubSynchronizationStore store,
+            notifications: notifications);
         store.Exception = new InvalidOperationException("Database unavailable");
         await viewModel.InitializeAsync();
         viewModel.EditOverviewEntityCommand.Execute(Assert.Single(viewModel.OverviewItems));
         viewModel.Editor.RequestArchiveCommand.Execute(null);
 
         viewModel.Editor.ConfirmArchiveCommand.Execute(null);
-        await WaitUntilAsync(() => viewModel.Editor.HasArchiveError);
+        await WaitUntilAsync(() => notifications.HasItems);
 
         Assert.True(viewModel.Editor.IsOpen);
         Assert.True(viewModel.Editor.IsArchiveConfirmationOpen);
-        Assert.Contains("Database unavailable", viewModel.Editor.ArchiveErrorMessage);
+        NotificationItem notice = Assert.Single(notifications.Items);
+        Assert.Equal(("Archive entity", NotificationKind.Failure), (notice.Title, notice.Kind));
+        Assert.Contains("Database unavailable", notice.Message);
         Assert.Single(viewModel.OverviewItems);
     }
 
@@ -1225,12 +1229,14 @@ public sealed class MainWindowViewModelTests
     [Fact]
     public async Task ApplySynchronizationAsync_AppliesWholePlanAndReturnsToFreshOverview()
     {
+        NotificationCenter notifications = new();
         MainWindowViewModel viewModel = CreateViewModel(
             [],
             [],
             SchemaImportResult.Success(Candidate(["New"], [])),
             new StubFilePicker("new.csv"),
-            out StubSynchronizationStore store);
+            out StubSynchronizationStore store,
+            notifications: notifications);
         await viewModel.ImportCsvAsync();
 
         await viewModel.ApplySynchronizationAsync();
@@ -1242,7 +1248,9 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(SchemaImportMode.Complete, viewModel.Review.Mode);
         Assert.True(viewModel.HasLatestImport);
         Assert.Contains("new.csv", viewModel.LatestImportHeadline);
-        Assert.Contains("Applied new.csv", viewModel.OperationMessage);
+        NotificationItem notice = Assert.Single(notifications.Items);
+        Assert.Equal(("Schema synchronization", NotificationKind.Success), (notice.Title, notice.Kind));
+        Assert.Contains("Applied new.csv", notice.Message);
     }
 
     [Fact]
@@ -1346,6 +1354,31 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task ApplyBulkStatusAsync_StoreFailurePostsAFailureAndKeepsTheOverview()
+    {
+        NotificationCenter notifications = new();
+        MainWindowViewModel viewModel = CreateViewModel(
+            [Entity(1, "First")],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out StubSynchronizationStore store,
+            notifications: notifications);
+        await viewModel.InitializeAsync();
+        viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
+        viewModel.SelectedBulkStatus = DevelopmentStatus.DevelopmentCompleted;
+        store.Exception = new InvalidOperationException("Database unavailable");
+
+        await viewModel.ApplyBulkStatusAsync();
+
+        NotificationItem notice = Assert.Single(notifications.Items);
+        Assert.Equal(("Bulk status update", NotificationKind.Failure), (notice.Title, notice.Kind));
+        Assert.Equal("The status update was not applied: Database unavailable", notice.Message);
+        Assert.Single(viewModel.OverviewItems);
+        Assert.False(viewModel.HasOverviewError);
+    }
+
+    [Fact]
     public async Task ApplyBulkStatusAsync_UpdatesSelectedRowsAndRefreshesSummary()
     {
         TrackedEntity first = Entity(1, "First");
@@ -1353,12 +1386,14 @@ public sealed class MainWindowViewModelTests
             2,
             "Second",
             DevelopmentStatus.DevelopmentCompleted);
+        NotificationCenter notifications = new();
         MainWindowViewModel viewModel = CreateViewModel(
             [first, second],
             [],
             FailureResult(),
             new StubFilePicker(),
-            out StubSynchronizationStore store);
+            out StubSynchronizationStore store,
+            notifications: notifications);
         await viewModel.InitializeAsync();
         viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
         viewModel.SelectedBulkStatus = DevelopmentStatus.DevelopmentCompleted;
@@ -1376,9 +1411,9 @@ public sealed class MainWindowViewModelTests
         Assert.All(
             viewModel.OverviewItems,
             row => Assert.Equal(DevelopmentStatus.DevelopmentCompleted, row.DevelopmentStatus));
-        Assert.Equal(
-            "1 entity updated to Dev. completed; 1 already matched.",
-            viewModel.OperationMessage);
+        NotificationItem notice = Assert.Single(notifications.Items);
+        Assert.Equal(("Bulk status update", NotificationKind.Success), (notice.Title, notice.Kind));
+        Assert.Equal("1 entity updated to Dev. completed; 1 already matched.", notice.Message);
     }
 
     [Fact]

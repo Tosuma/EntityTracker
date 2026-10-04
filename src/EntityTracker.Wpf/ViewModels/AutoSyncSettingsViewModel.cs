@@ -4,6 +4,7 @@ using System.Windows.Input;
 using EntityTracker.Application.GitSync;
 using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Wpf.Commands;
+using EntityTracker.Wpf.Services;
 
 namespace EntityTracker.Wpf.ViewModels;
 
@@ -21,11 +22,14 @@ public sealed class AutoSyncSettingsViewModel : INotifyPropertyChanged
     private bool _enabled;
     private int _intervalMinutes;
     private bool _busy;
+    private readonly NotificationCenter? _notifications;
     private string? _errorMessage;
 
     public AutoSyncSettingsViewModel(EntityTrackerSettingsStore store,
-        ProjectAutoSyncService scheduler, EntityTrackerSettings initial)
+        ProjectAutoSyncService scheduler, EntityTrackerSettings initial,
+        NotificationCenter? notifications = null)
     {
+        _notifications = notifications;
         _store = store;
         _scheduler = scheduler;
         _enabled = initial.AutoSyncEnabled;
@@ -39,7 +43,6 @@ public sealed class AutoSyncSettingsViewModel : INotifyPropertyChanged
     public bool IsEnabled => _enabled;
     public int IntervalMinutes => _intervalMinutes;
     public bool IsBusy => _busy;
-    public string? ErrorMessage => _errorMessage;
     public bool HasError => !string.IsNullOrWhiteSpace(_errorMessage);
     public ICommand ToggleCommand => _toggle;
     public ICommand SelectIntervalCommand => _selectInterval;
@@ -64,7 +67,7 @@ public sealed class AutoSyncSettingsViewModel : INotifyPropertyChanged
         }
         catch (Exception)
         {
-            _errorMessage = "Automatic sync settings could not be saved. Check the settings file and retry.";
+            ReportError("Automatic sync settings could not be saved. Check the settings file and retry.");
         }
         finally
         {
@@ -76,11 +79,17 @@ public sealed class AutoSyncSettingsViewModel : INotifyPropertyChanged
     private void NotifyState()
     {
         foreach (string name in new[] { nameof(IsEnabled), nameof(IntervalMinutes),
-                     nameof(IsBusy), nameof(ErrorMessage), nameof(HasError),
+                     nameof(IsBusy), nameof(HasError),
                      nameof(IsOneMinute), nameof(IsFiveMinutes), nameof(IsFifteenMinutes),
                      nameof(IsThirtyMinutes), nameof(IsSixtyMinutes) })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         _toggle.NotifyCanExecuteChanged();
         _selectInterval.NotifyCanExecuteChanged();
+    }
+
+    private void ReportError(string message)
+    {
+        _errorMessage = message;
+        _notifications?.Show("Settings", message, NotificationKind.Failure);
     }
 }

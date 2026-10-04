@@ -37,6 +37,24 @@ public sealed class NotificationCenterTests
     }
 
     [Fact]
+    public async Task FailuresStayUntilDismissedAndAreNotRepeated()
+    {
+        NotificationCenter center = new(displayTime: TimeSpan.FromMilliseconds(30));
+        NotificationItem failure = center.Show("Portfolio", "Could not load.", NotificationKind.Failure);
+        NotificationItem progress = center.BeginProgress("Export", "Writing");
+        center.Complete(progress, "Export failed.", NotificationKind.Failure);
+        NotificationItem success = center.Show("Settings", "Saved.", NotificationKind.Success);
+
+        Assert.Same(failure, center.Show("Portfolio", "Could not load.", NotificationKind.Failure));
+        await WaitUntilAsync(() => !center.Items.Contains(success));
+        await Task.Delay(60);
+        Assert.Equal([failure, progress], center.Items);
+
+        center.Dismiss(failure);
+        Assert.NotSame(failure, center.Show("Portfolio", "Could not load.", NotificationKind.Failure));
+    }
+
+    [Fact]
     public async Task ProgressUpdatesOneNoticeAndOnlyTerminalResultExpires()
     {
         NotificationCenter center = new(displayTime: TimeSpan.FromMilliseconds(80));

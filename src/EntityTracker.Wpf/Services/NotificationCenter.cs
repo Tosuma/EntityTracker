@@ -117,6 +117,11 @@ public sealed class NotificationCenter : INotifyPropertyChanged
     {
         if (kind == NotificationKind.Progress || kind == NotificationKind.ActionNeeded)
             throw new ArgumentException("Use BeginProgress or RequireAction for persistent notices.", nameof(kind));
+        // A failure that is still showing is not repeated, e.g. when a page keeps failing to load.
+        if (kind == NotificationKind.Failure && _items.FirstOrDefault(existing =>
+                existing.Kind == NotificationKind.Failure && existing.Title == title && existing.Message == message)
+            is { } shown)
+            return shown;
         NotificationItem item = Add(title, message, kind);
         ScheduleExpiry(item);
         return item;
@@ -187,8 +192,10 @@ public sealed class NotificationCenter : INotifyPropertyChanged
         return item;
     }
 
+    /// <summary>Removes information and success notices after a while; failures stay until dismissed.</summary>
     private async void ScheduleExpiry(NotificationItem item)
     {
+        if (item.Kind == NotificationKind.Failure) return;
         int version = item.Version;
         try
         {

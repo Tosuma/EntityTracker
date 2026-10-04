@@ -63,13 +63,6 @@
                             <RadioButton Margin="0,4" Content="Dark" GroupName="Appearance" Command="{Binding Appearance.SelectAppearanceCommand}"
                                          AutomationProperties.HelpText="Always use the dark appearance."
                                          CommandParameter="{x:Static configuration:ApplicationAppearance.Dark}" IsChecked="{Binding Appearance.IsDark, Mode=OneWay}" />
-                            <Border Margin="0,12,0,0" MaxHeight="120" Style="{StaticResource ErrorMessageStyle}"
-                                    Visibility="{Binding Appearance.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                    <TextBlock AutomationProperties.LiveSetting="Assertive"
-                                               Text="{Binding Appearance.ErrorMessage}" TextWrapping="Wrap" />
-                                </ScrollViewer>
-                            </Border>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -111,9 +104,6 @@
                                     AutomationProperties.Name="Clear You in this Project choice"
                                     Command="{Binding LocalIdentity.ClearCommand}"
                                     Style="{StaticResource SecondaryButtonStyle}" />
-                            <TextBlock Margin="0,8,0,0" Text="{Binding LocalIdentity.ErrorMessage}"
-                                       AutomationProperties.LiveSetting="Assertive" TextWrapping="Wrap"
-                                       Visibility="{Binding LocalIdentity.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -140,9 +130,6 @@
                                       AutomationProperties.Name="Search responsible names in entity overviews"
                                       Command="{Binding ResponsibilitySearch.ToggleCommand}"
                                       IsChecked="{Binding ResponsibilitySearch.IsEnabled, Mode=OneWay}" />
-                            <TextBlock Margin="0,8,0,0" AutomationProperties.LiveSetting="Assertive"
-                                       Text="{Binding ResponsibilitySearch.ErrorMessage}" TextWrapping="Wrap"
-                                       Visibility="{Binding ResponsibilitySearch.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         </StackPanel>
                     </Border>
                     <Border x:Name="OverviewExportSettingsCard" Margin="0,16,0,0" Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
@@ -172,9 +159,6 @@
                                 <ComboBoxItem Content="Semicolon" Tag="{x:Static configuration:OverviewCsvSeparator.Semicolon}" />
                                 <ComboBoxItem Content="Comma" Tag="{x:Static configuration:OverviewCsvSeparator.Comma}" />
                             </ComboBox>
-                            <TextBlock Margin="0,8,0,0" AutomationProperties.LiveSetting="Assertive"
-                                       Text="{Binding OverviewExport.ErrorMessage}" TextWrapping="Wrap"
-                                       Visibility="{Binding OverviewExport.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         </StackPanel>
                     </Border>
                     <TextBlock Style="{StaticResource SettingsGroupHeadingStyle}" Margin="0,28,0,10" Text="Dependency graph" />
@@ -193,9 +177,6 @@
                                       AutomationProperties.HelpText="Draw a faint circle for each dependency level."
                                       Command="{Binding GraphSettings.ToggleRingsCommand}"
                                       IsChecked="{Binding GraphSettings.ShowRings, Mode=OneWay}" />
-                            <TextBlock Margin="0,8,0,0" AutomationProperties.LiveSetting="Assertive"
-                                       Text="{Binding GraphSettings.ErrorMessage}" TextWrapping="Wrap"
-                                       Visibility="{Binding GraphSettings.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -243,9 +224,6 @@
                                              CommandParameter="{x:Static viewModels:AutoSyncSettingsViewModel.SixtyMinutes}"
                                              IsChecked="{Binding AutoSync.IsSixtyMinutes, Mode=OneWay}" />
                             </WrapPanel>
-                            <TextBlock Margin="0,8,0,0" AutomationProperties.LiveSetting="Assertive"
-                                       Text="{Binding AutoSync.ErrorMessage}" TextWrapping="Wrap"
-                                       Visibility="{Binding AutoSync.HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         </StackPanel>
                     </Border>
                 </StackPanel>

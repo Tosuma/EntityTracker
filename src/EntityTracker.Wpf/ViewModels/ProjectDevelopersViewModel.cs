@@ -4,6 +4,7 @@ using System.Windows.Input;
 using EntityTracker.Application.Projects;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
+using EntityTracker.Wpf.Services;
 
 namespace EntityTracker.Wpf.ViewModels;
 
@@ -23,16 +24,18 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
     private string _baselineInitials = string.Empty;
     private string _baselineDisplayName = string.Empty;
     private string _searchQuery = string.Empty;
-    private string? _errorMessage;
+    private readonly NotificationCenter? _notifications;
+    private bool _hasError;
     private bool _isBusy;
     private bool _isRetiredDialogOpen;
     private ProjectDeveloper? _pendingRetirement;
     private string _retirementConfirmation = string.Empty;
 
     public ProjectDevelopersViewModel(ProjectId projectId, ProjectDeveloperService service,
-        Func<ProjectId, Task>? onPersisted = null)
+        Func<ProjectId, Task>? onPersisted = null, NotificationCenter? notifications = null)
     {
         _projectId = projectId;
+        _notifications = notifications;
         _service = service;
         _onPersisted = onPersisted;
         EditCommand = new RelayCommand<ProjectDeveloper>(Edit, _ => !IsBusy && !HasUnsavedForm);
@@ -69,8 +72,8 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
     public bool IsEditing => _editingId is not null;
     public bool HasUnsavedForm => Initials != _baselineInitials || DisplayName != _baselineDisplayName;
     public bool IsBusy { get => _isBusy; private set { if (Set(ref _isBusy, value)) NotifyCommands(); } }
-    public string? ErrorMessage { get => _errorMessage; private set => Set(ref _errorMessage, value); }
-    public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
+    /// <summary>Gets whether the last save failed; the reason is in the notification center.</summary>
+    public bool HasError { get => _hasError; private set => Set(ref _hasError, value); }
     public bool IsRetirementOpen => _pendingRetirement is not null;
     public string PendingRetirementInitials => _pendingRetirement?.Initials ?? string.Empty;
     public string RetirementConfirmation
@@ -123,7 +126,7 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
         _baselineDisplayName = string.Empty;
         Initials = string.Empty;
         DisplayName = string.Empty;
-        ErrorMessage = null;
+        HasError = false;
         FormModeChanged();
         NotifyCommands();
     }
@@ -138,7 +141,7 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
         _baselineDisplayName = developer.DisplayName;
         Initials = developer.Initials;
         DisplayName = developer.DisplayName;
-        ErrorMessage = null;
+        HasError = false;
         FormModeChanged();
         NotifyCommands();
     }
@@ -149,7 +152,7 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
     {
         if (IsBusy || string.IsNullOrWhiteSpace(Initials)) return;
         IsBusy = true;
-        ErrorMessage = null;
+        HasError = false;
         try
         {
             if (_editingId is null)
@@ -162,7 +165,7 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
-            ErrorMessage = exception.Message;
+            ReportError(exception.Message);
         }
         finally { IsBusy = false; NotifyCommands(); }
     }
@@ -171,14 +174,14 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
     {
         if (IsBusy) return;
         IsBusy = true;
-        ErrorMessage = null;
+        HasError = false;
         try
         {
             await _service.SetRetiredAsync(_projectId, developer.Id, retired);
             await RefreshAsync();
             if (_onPersisted is not null) await _onPersisted(_projectId);
         }
-        catch (InvalidOperationException exception) { ErrorMessage = exception.Message; }
+        catch (InvalidOperationException exception) { ReportError(exception.Message); }
         finally { IsBusy = false; NotifyCommands(); }
     }
 
@@ -263,12 +266,17 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(HasUnsavedForm));
     }
 
+    private void ReportError(string message)
+    {
+        HasError = true;
+        _notifications?.Show("Developers", message, NotificationKind.Failure);
+    }
+
     private bool Set<T>(ref T field, T value, [CallerMemberName] string? property = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value)) return false;
         field = value;
         OnPropertyChanged(property);
-        if (property == nameof(ErrorMessage)) OnPropertyChanged(nameof(HasError));
         return true;
     }
 

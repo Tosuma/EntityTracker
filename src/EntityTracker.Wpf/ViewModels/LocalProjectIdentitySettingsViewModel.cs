@@ -17,11 +17,14 @@ public sealed class LocalProjectIdentitySettingsViewModel : INotifyPropertyChang
     private DeveloperChoice? _selectedDeveloper;
     private bool _isBusy;
     private int _pendingOperations;
+    private readonly NotificationCenter? _notifications;
     private string? _errorMessage;
     private int _refreshVersion;
 
-    public LocalProjectIdentitySettingsViewModel(LocalProjectIdentityService identity)
+    public LocalProjectIdentitySettingsViewModel(LocalProjectIdentityService identity,
+        NotificationCenter? notifications = null)
     {
+        _notifications = notifications;
         _identity = identity;
         _clearCommand = new AsyncCommand(ClearAsync, () => HasProject && !_isBusy && SelectedDeveloper is not null);
     }
@@ -34,8 +37,7 @@ public sealed class LocalProjectIdentitySettingsViewModel : INotifyPropertyChang
     public string ProjectName { get; private set; } = "No Project selected";
     public string SelectionDescription => SelectedDeveloper?.Label ?? "No Developer selected";
     public bool IsBusy => _isBusy;
-    public string? ErrorMessage => _errorMessage;
-    public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
+    public bool HasError => !string.IsNullOrWhiteSpace(_errorMessage);
     public ICommand ClearCommand => _clearCommand;
     public DeveloperChoice? SelectedDeveloper
     {
@@ -88,7 +90,7 @@ public sealed class LocalProjectIdentitySettingsViewModel : INotifyPropertyChang
         }
         catch (Exception)
         {
-            _errorMessage = "The local Developer choice could not be loaded.";
+            ReportError("The local Developer choice could not be loaded.");
         }
         finally { if (entered) _operationGate.Release(); SetBusy(false); }
     }
@@ -101,7 +103,7 @@ public sealed class LocalProjectIdentitySettingsViewModel : INotifyPropertyChang
         bool entered = false;
         try { await _operationGate.WaitAsync(); entered = true;
             await _identity.SetAsync(projectId, developerId); _errorMessage = null; }
-        catch (Exception) { _errorMessage = "The local Developer choice could not be saved."; }
+        catch (Exception) { ReportError("The local Developer choice could not be saved."); }
         finally { if (entered) _operationGate.Release(); SetBusy(false); }
     }
 
@@ -117,7 +119,6 @@ public sealed class LocalProjectIdentitySettingsViewModel : INotifyPropertyChang
     {
         OnPropertyChanged(nameof(IsBusy));
         OnPropertyChanged(nameof(CanChoose));
-        OnPropertyChanged(nameof(ErrorMessage));
         OnPropertyChanged(nameof(HasError));
         _clearCommand.NotifyCanExecuteChanged();
     }
@@ -131,4 +132,10 @@ public sealed class LocalProjectIdentitySettingsViewModel : INotifyPropertyChang
 
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+    private void ReportError(string message)
+    {
+        _errorMessage = message;
+        _notifications?.Show("Settings", message, NotificationKind.Failure);
+    }
 }

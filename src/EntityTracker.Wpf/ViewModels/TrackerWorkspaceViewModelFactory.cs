@@ -48,7 +48,8 @@ public sealed class TrackerWorkspaceViewModelFactory(
             pngExporter,
             chartFilePicker,
             clipboard,
-            loggerFactory.CreateLogger<ProgressDashboardViewModel>());
+            loggerFactory.CreateLogger<ProgressDashboardViewModel>(),
+            notifications);
         return new MainWindowViewModel(
             trackerId,
             overviewService,
