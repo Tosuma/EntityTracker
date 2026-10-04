@@ -19,6 +19,7 @@ public sealed class NotificationItem : INotifyPropertyChanged
     private string? _actionLabel;
     private ICommand? _actionCommand;
     private bool _isActionEnabled = true;
+    private bool _isClosing;
     private int _version;
 
     internal NotificationItem(NotificationCenter owner, string title, string message,
@@ -52,6 +53,9 @@ public sealed class NotificationItem : INotifyPropertyChanged
     };
     public ICommand DismissCommand { get; }
     public bool CanDismiss { get; internal set; } = true;
+
+    /// <summary>Gets whether the notice is leaving; it stays in the list while its exit animation plays.</summary>
+    public bool IsClosing { get => _isClosing; internal set => Set(ref _isClosing, value); }
 
     internal int Version => _version;
     internal void Update(string message, NotificationKind kind, string? actionLabel = null,
@@ -96,12 +100,18 @@ public sealed class NotificationCenter : INotifyPropertyChanged
     };
     private readonly TimeProvider _timeProvider;
     private readonly TimeSpan _displayTime;
+    private readonly TimeSpan _exitDuration;
     private readonly ObservableCollection<NotificationItem> _items = [];
 
-    public NotificationCenter(TimeProvider? timeProvider = null, TimeSpan? displayTime = null)
+    /// <param name="exitDuration">
+    /// How long a leaving notice stays in the list so the view can animate it out; zero removes at once.
+    /// </param>
+    public NotificationCenter(TimeProvider? timeProvider = null, TimeSpan? displayTime = null,
+        TimeSpan? exitDuration = null)
     {
         _timeProvider = timeProvider ?? TimeProvider.System;
         _displayTime = displayTime ?? TimeSpan.FromSeconds(8);
+        _exitDuration = exitDuration ?? TimeSpan.Zero;
         _items.CollectionChanged += (_, _) =>
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasItems)));
     }
@@ -118,7 +128,7 @@ public sealed class NotificationCenter : INotifyPropertyChanged
         if (kind == NotificationKind.Progress || kind == NotificationKind.ActionNeeded)
             throw new ArgumentException("Use BeginProgress or RequireAction for persistent notices.", nameof(kind));
         // A failure that is still showing is not repeated, e.g. when a page keeps failing to load.
-        if (kind == NotificationKind.Failure && _items.FirstOrDefault(existing =>
+        if (kind == NotificationKind.Failure && _items.FirstOrDefault(existing => !existing.IsClosing &&
                 existing.Kind == NotificationKind.Failure && existing.Title == title && existing.Message == message)
             is { } shown)
             return shown;
@@ -132,14 +142,14 @@ public sealed class NotificationCenter : INotifyPropertyChanged
         Add(title, message, NotificationKind.Progress, projectId);
 
     public NotificationItem? FindActionForProject(ProjectId projectId) =>
-        _items.LastOrDefault(item => item.ProjectId == projectId &&
+        _items.LastOrDefault(item => !item.IsClosing && item.ProjectId == projectId &&
             item.Kind == NotificationKind.ActionNeeded);
 
     public void DismissProjectActions(ProjectId projectId, NotificationItem? except = null)
     {
         foreach (NotificationItem item in _items.Where(item => item.ProjectId == projectId &&
                      item.Kind == NotificationKind.ActionNeeded && item != except).ToArray())
-            _items.Remove(item);
+            Remove(item);
     }
 
     public NotificationItem RequireAction(string title, string message, string actionLabel,
@@ -153,14 +163,14 @@ public sealed class NotificationCenter : INotifyPropertyChanged
 
     public void Progress(NotificationItem item, string message)
     {
-        if (!_items.Contains(item) || item.Kind != NotificationKind.Progress) return;
+        if (!IsActive(item) || item.Kind != NotificationKind.Progress) return;
         item.Update(message, NotificationKind.Progress);
     }
 
     public void Complete(NotificationItem item, string message,
         NotificationKind kind = NotificationKind.Success)
     {
-        if (!_items.Contains(item)) return;
+        if (!IsActive(item)) return;
         if (kind is NotificationKind.Progress or NotificationKind.ActionNeeded)
             throw new ArgumentOutOfRangeException(nameof(kind));
         item.Update(message, kind);
@@ -170,18 +180,36 @@ public sealed class NotificationCenter : INotifyPropertyChanged
     public void NeedAction(NotificationItem item, string message, string actionLabel,
         Func<Task> action)
     {
-        if (!_items.Contains(item)) return;
+        if (!IsActive(item)) return;
         item.Update(message, NotificationKind.ActionNeeded, actionLabel, action);
     }
 
     public void Restart(NotificationItem item, string message)
     {
-        if (_items.Contains(item)) item.Update(message, NotificationKind.Progress);
+        if (IsActive(item)) item.Update(message, NotificationKind.Progress);
     }
 
     public void Dismiss(NotificationItem item)
     {
-        if (item.CanDismiss) _items.Remove(item);
+        if (item.CanDismiss) Remove(item);
+    }
+
+    private bool IsActive(NotificationItem item) => _items.Contains(item) && !item.IsClosing;
+
+    /// <summary>Marks the notice as closing, then removes it once the exit animation has had time to play.</summary>
+    private async void Remove(NotificationItem item)
+    {
+        if (!IsActive(item)) return;
+        if (_exitDuration <= TimeSpan.Zero)
+        {
+            _items.Remove(item);
+            return;
+        }
+
+        item.IsClosing = true;
+        try { await Task.Delay(_exitDuration, _timeProvider); }
+        catch (OperationCanceledException) { }
+        _items.Remove(item);
     }
 
     private NotificationItem Add(string title, string message, NotificationKind kind,
@@ -200,9 +228,9 @@ public sealed class NotificationCenter : INotifyPropertyChanged
         try
         {
             await Task.Delay(_displayTime, _timeProvider);
-            if (_items.Contains(item) && item.Version == version &&
+            if (IsActive(item) && item.Version == version &&
                 item.Kind is not (NotificationKind.Progress or NotificationKind.ActionNeeded))
-                _items.Remove(item);
+                Remove(item);
         }
         catch (OperationCanceledException) { }
     }

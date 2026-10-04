@@ -242,15 +242,25 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(() => NotificationScrollViewer.ScrollToEnd(),
             System.Windows.Threading.DispatcherPriority.Loaded);
 
+    /// <summary>
+    /// Opens the new notice's space, then fades and slides the card up into it. Runs regardless of
+    /// the Windows animation setting, like the dependency graph's motion. The transforms are fresh
+    /// so the closing storyboard in the template can animate them too.
+    /// </summary>
     private void OnNotificationLoaded(object sender, RoutedEventArgs e)
     {
-        if (sender is not Border card || !SystemParameters.ClientAreaAnimation) return;
-        card.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1,
-            TimeSpan.FromMilliseconds(220)));
-        var transform = new TranslateTransform();
-        card.RenderTransform = transform;
-        transform.BeginAnimation(TranslateTransform.YProperty,
-            new DoubleAnimation(16, 0, TimeSpan.FromMilliseconds(220)));
+        if (sender is not Border { Child: Border card } container) return;
+        Duration duration = TimeSpan.FromMilliseconds(220);
+        CubicEase easeOut = new() { EasingMode = EasingMode.EaseOut };
+        ScaleTransform scale = new(1, 0);
+        container.LayoutTransform = scale;
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty,
+            new DoubleAnimation(0, 1, duration) { EasingFunction = easeOut });
+        TranslateTransform slide = new(0, 12);
+        card.RenderTransform = slide;
+        slide.BeginAnimation(TranslateTransform.YProperty,
+            new DoubleAnimation(12, 0, duration) { EasingFunction = easeOut });
+        card.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration));
     }
 
     private void OnRenameDefaultName(object sender, RoutedEventArgs e)

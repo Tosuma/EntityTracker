@@ -82,6 +82,27 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void NotificationsAnimateInAndOutRegardlessOfTheWindowsAnimationSetting()
+    {
+        string wpfRoot = Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf");
+        XDocument window = XDocument.Load(Path.Combine(wpfRoot, "MainWindow.xaml"));
+        XElement template = window.Descendants().Single(element => element.Name.LocalName == "DataTemplate" &&
+            ((string?)element.Attribute("DataType"))?.Contains("NotificationItem", StringComparison.Ordinal) == true);
+        XElement closing = template.Descendants().Single(element => element.Name.LocalName == "DataTrigger" &&
+            (string?)element.Attribute("Binding") == "{Binding IsClosing}");
+
+        Assert.Contains(template.Descendants(), element => element.Name.LocalName == "ScaleTransform");
+        string[] animated = closing.Descendants().Where(element => element.Name.LocalName == "DoubleAnimation")
+            .Select(element => (string)element.Attribute("Storyboard.TargetProperty")!).ToArray();
+        Assert.Contains("Opacity", animated);
+        Assert.Contains("(FrameworkElement.LayoutTransform).(ScaleTransform.ScaleY)", animated);
+        string code = File.ReadAllText(Path.Combine(wpfRoot, "MainWindow.xaml.cs"));
+        Assert.Contains("OnNotificationLoaded", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ClientAreaAnimation", code, StringComparison.Ordinal);
+        Assert.Contains("exitDuration:", File.ReadAllText(Path.Combine(wpfRoot, "App.xaml.cs")), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ActionOutcomesAreReportedInTheNotificationCenterNotOnThePage()
     {
         string wpfRoot = Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf");

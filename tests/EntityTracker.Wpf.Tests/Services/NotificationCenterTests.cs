@@ -37,6 +37,57 @@ public sealed class NotificationCenterTests
     }
 
     [Fact]
+    public async Task DismissedNoticeClosesBeforeItIsRemoved()
+    {
+        NotificationCenter center = new(exitDuration: TimeSpan.FromMilliseconds(60));
+        NotificationItem item = center.Show("Settings", "Saved.", NotificationKind.Success);
+
+        center.Dismiss(item);
+        center.Dismiss(item);
+
+        Assert.True(item.IsClosing);
+        Assert.Single(center.Items);
+        Assert.True(center.HasItems);
+        await WaitUntilAsync(() => !center.Items.Contains(item));
+        Assert.False(center.HasItems);
+    }
+
+    [Fact]
+    public async Task ExpiredNoticeAlsoClosesBeforeItIsRemoved()
+    {
+        NotificationCenter center = new(displayTime: TimeSpan.FromMilliseconds(30),
+            exitDuration: TimeSpan.FromMilliseconds(400));
+        NotificationItem item = center.Show("Settings", "Saved.", NotificationKind.Success);
+
+        await WaitUntilAsync(() => item.IsClosing);
+        Assert.Contains(item, center.Items);
+        await WaitUntilAsync(() => !center.Items.Contains(item));
+    }
+
+    [Fact]
+    public void ClosingNoticeIgnoresUpdatesAndIsNotReusedOrRepeated()
+    {
+        NotificationCenter center = new(exitDuration: TimeSpan.FromSeconds(5));
+        ProjectId projectId = new(Guid.NewGuid());
+        NotificationItem action = center.RequireAction("Sync", "Push failed", "Retry",
+            () => Task.CompletedTask, projectId);
+        NotificationItem progress = center.BeginProgress("Export", "Writing");
+        NotificationItem failure = center.Show("Portfolio", "Could not load.", NotificationKind.Failure);
+
+        center.Dismiss(action);
+        center.Dismiss(progress);
+        center.Dismiss(failure);
+        center.Progress(progress, "Still writing");
+        center.Complete(progress, "Done");
+        center.Restart(action, "Again");
+
+        Assert.Equal(("Writing", NotificationKind.Progress), (progress.Message, progress.Kind));
+        Assert.Equal(NotificationKind.ActionNeeded, action.Kind);
+        Assert.Null(center.FindActionForProject(projectId));
+        Assert.NotSame(failure, center.Show("Portfolio", "Could not load.", NotificationKind.Failure));
+    }
+
+    [Fact]
     public async Task FailuresStayUntilDismissedAndAreNotRepeated()
     {
         NotificationCenter center = new(displayTime: TimeSpan.FromMilliseconds(30));

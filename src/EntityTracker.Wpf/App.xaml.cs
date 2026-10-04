@@ -169,7 +169,8 @@ public partial class App : System.Windows.Application
                 settingsStore, settings.Settings, provider.GetRequiredService<NotificationCenter>()));
             services.AddSingleton(provider => new DependencyGraphSettingsViewModel(
                 settingsStore, settings.Settings, provider.GetRequiredService<NotificationCenter>()));
-            services.AddSingleton<NotificationCenter>();
+            // Leaving notices stay briefly so the sidebar can animate them out.
+            services.AddSingleton(new NotificationCenter(exitDuration: TimeSpan.FromMilliseconds(220)));
             services.AddSingleton<ProjectRepositoryCardViewModelFactory>();
             services.AddSingleton<CatalogManagementViewModel>();
             services.AddSingleton<ShellViewModel>();
