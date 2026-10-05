@@ -88,9 +88,9 @@ internal sealed class GraphCanvasHost
         stop.Stop();
     }
 
-    public void Click(Point point, int clickCount = 1)
+    public void Click(Point point, int clickCount = 1, bool ctrl = false)
     {
-        Canvas.PointerPressed(point, clickCount);
+        Canvas.PointerPressed(point, clickCount, ctrl);
         Canvas.PointerReleased();
     }
 

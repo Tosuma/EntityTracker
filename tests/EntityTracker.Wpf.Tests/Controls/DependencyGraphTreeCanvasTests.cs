@@ -81,6 +81,38 @@ public sealed class DependencyGraphTreeCanvasTests
     }
 
     [Fact]
+    public void CtrlClickAddsAndRemovesEntitiesAndEachSelectedBoxIsOutlined()
+    {
+        Run(host =>
+        {
+            host.Graph.View = DependencyGraphView.Tree;
+            DependencyGraphNode first = host.Graph.Model.Nodes[4];
+            DependencyGraphNode second = host.Graph.Model.Nodes[9];
+            DependencyGraphNode third = host.Graph.Model.Nodes[14];
+
+            host.Click(host.Canvas.ScreenPositionOf(first));
+            host.Click(host.Canvas.ScreenPositionOf(second), ctrl: true);
+            host.Click(host.Canvas.ScreenPositionOf(third), ctrl: true);
+            Assert.Equal([first, second, third], host.Graph.SelectedNodes);
+            Assert.Equal(3, SelectionOutlines(host));
+
+            host.Click(host.Canvas.ScreenPositionOf(second), ctrl: true);
+            Assert.Equal([first, third], host.Graph.SelectedNodes);
+
+            host.Click(new Point(4, 4), ctrl: true);
+            Assert.Equal([first, third], host.Graph.SelectedNodes);
+
+            host.Click(host.Canvas.ScreenPositionOf(first));
+            Assert.Equal([first], host.Graph.SelectedNodes);
+            host.Click(host.Canvas.ScreenPositionOf(first));
+            Assert.False(host.Graph.HasSelection);
+        });
+
+        static int SelectionOutlines(GraphCanvasHost host) =>
+            host.MapPrimitives().Count(drawing => drawing.Pen is { Thickness: 2.5 });
+    }
+
+    [Fact]
     public void Tree_FitToViewShowsEveryBox()
     {
         Run(host =>

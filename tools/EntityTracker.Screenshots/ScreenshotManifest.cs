@@ -35,6 +35,7 @@ internal static class ScreenshotManifest
         "dependency-graph-hover.png",
         "dependency-graph-tree.png",
         "dependency-graph-tree-selected.png",
+        "dependency-graph-dependents.png",
         "dependency-graph-details.png",
         "responsibility-history.png",
         "overview-filter-flyout.png",

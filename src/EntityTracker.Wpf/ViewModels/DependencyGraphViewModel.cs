@@ -19,6 +19,8 @@ public sealed record DependencyGraphLegendItem(string Label, string BrushKey, bo
 /// <summary>One entry in the dependency graph's view dropdown.</summary>
 public sealed record DependencyGraphViewOption(DependencyGraphView View, string Label);
 
+public sealed record DependencyHighlightOption(DependencyHighlightMode Mode, string Label);
+
 /// <summary>What the hover card shows for an entity or missing dependency.</summary>
 public sealed record DependencyGraphNodeInfo(string Title, IReadOnlyList<string> Lines);
 
@@ -33,7 +35,9 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
     private readonly RelayCommand _clearSelectionCommand;
     private readonly RelayCommand _exportPngCommand;
     private DependencyGraphModel _model = DependencyGraphModel.Empty;
-    private DependencyGraphNode? _selectedNode;
+    private List<DependencyGraphNode> _selected = [];
+    private DependencyHighlightMode _solarHighlightMode = DependencyHighlightMode.Dependencies;
+    private DependencyHighlightMode _treeHighlightMode = DependencyHighlightMode.DirectLinks;
     private HashSet<DependencyGraphNode> _highlightedNodes = new(ReferenceEqualityComparer.Instance);
     private HashSet<DependencyGraphEdge> _highlightedEdges = new(ReferenceEqualityComparer.Instance);
     private HashSet<DependencyGraphNode> _landmarks = new(ReferenceEqualityComparer.Instance);
@@ -132,20 +136,86 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// Gets or sets the entity chosen last. Setting it replaces the whole selection with that one
+    /// entity; null clears the selection.
+    /// </summary>
     public DependencyGraphNode? SelectedNode
     {
-        get => _selectedNode;
+        get => _selected.Count == 0 ? null : _selected[^1];
+        set => SetSelection(value is null ? [] : [value]);
+    }
+
+    /// <summary>Gets every selected entity, oldest first; Ctrl+click adds and removes them.</summary>
+    public IReadOnlyList<DependencyGraphNode> SelectedNodes => _selected;
+
+    public bool HasSelection => _selected.Count > 0;
+
+    public bool IsSelected(DependencyGraphNode node) => _selected.Any(selected => ReferenceEquals(selected, node));
+
+    /// <summary>Adds an entity to the selection, or removes it if it is already selected.</summary>
+    public void ToggleSelection(DependencyGraphNode node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        SetSelection(IsSelected(node)
+            ? _selected.Where(selected => !ReferenceEquals(selected, node)).ToList()
+            : [.. _selected, node]);
+    }
+
+    private void SetSelection(List<DependencyGraphNode> selection)
+    {
+        if (selection.SequenceEqual(_selected, ReferenceEqualityComparer.Instance)) return;
+        _selected = selection;
+        OnPropertyChanged(nameof(SelectedNode));
+        OnPropertyChanged(nameof(SelectedNodes));
+        UpdateHighlight();
+        OnPropertyChanged(nameof(HasSelection));
+        NotifyCommands();
+        OnVisualStateChanged();
+    }
+
+    /// <summary>Gets the highlight choices the page offers.</summary>
+    public static IReadOnlyList<DependencyHighlightOption> HighlightOptions { get; } =
+    [
+        new(DependencyHighlightMode.Dependencies, "Dependencies"),
+        new(DependencyHighlightMode.Dependents, "Dependents"),
+        new(DependencyHighlightMode.DirectLinks, "Direct links"),
+    ];
+
+    /// <summary>Gets or sets what selecting highlights in the solar system.</summary>
+    public DependencyHighlightMode SolarHighlightMode
+    {
+        get => _solarHighlightMode;
+        set => SetHighlightMode(ref _solarHighlightMode, value, affectsCurrent: !IsTreeView);
+    }
+
+    /// <summary>Gets or sets what selecting highlights in the tree.</summary>
+    public DependencyHighlightMode TreeHighlightMode
+    {
+        get => _treeHighlightMode;
+        set => SetHighlightMode(ref _treeHighlightMode, value, affectsCurrent: IsTreeView);
+    }
+
+    /// <summary>Gets or sets what selecting highlights in the current view; each view remembers its own.</summary>
+    public DependencyHighlightMode HighlightMode
+    {
+        get => IsTreeView ? _treeHighlightMode : _solarHighlightMode;
         set
         {
-            if (!SetField(ref _selectedNode, value)) return;
-            UpdateHighlight();
-            OnPropertyChanged(nameof(HasSelection));
-            NotifyCommands();
-            OnVisualStateChanged();
+            if (IsTreeView) TreeHighlightMode = value;
+            else SolarHighlightMode = value;
         }
     }
 
-    public bool HasSelection => SelectedNode is not null;
+    private void SetHighlightMode(ref DependencyHighlightMode field, DependencyHighlightMode value, bool affectsCurrent,
+        [CallerMemberName] string? propertyName = null)
+    {
+        if (!Enum.IsDefined(value) || !SetField(ref field, value, propertyName)) return;
+        if (!affectsCurrent) return;
+        OnPropertyChanged(nameof(HighlightMode));
+        UpdateHighlight();
+        OnVisualStateChanged();
+    }
 
     /// <summary>Gets the entities whose names stay visible at every zoom level.</summary>
     public IReadOnlySet<DependencyGraphNode> Landmarks => _landmarks;
@@ -182,6 +252,7 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
             if (!Enum.IsDefined(value) || !SetField(ref _view, value)) return;
             OnPropertyChanged(nameof(IsTreeView));
             OnPropertyChanged(nameof(Legend));
+            OnPropertyChanged(nameof(HighlightMode));
             UpdateHighlight();
             OnVisualStateChanged();
         }
@@ -245,22 +316,22 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
 
     public void Rebuild(IReadOnlyList<EntityOverviewRow> rows)
     {
-        string? selectedKey = SelectedNode?.Key;
+        string[] selectedKeys = _selected.Select(static node => node.Key).ToArray();
         DependencyGraphModel model = DependencyGraphBuilder.Build(rows, Model);
         Layout = new RadialDependencyLayout(model);
         Layout.Settle();
         _treeLayout = null;
-        _selectedNode = null;
+        _selected = [];
         _landmarks = FindLandmarks(model);
         Model = model;
-        SelectedNode = selectedKey is null ? null : model.Find(selectedKey);
+        SetSelection(selectedKeys.Select(model.Find).OfType<DependencyGraphNode>().ToList());
         UpdateHighlight();
         OnVisualStateChanged();
     }
 
     public bool IsVisible(DependencyGraphNode node)
     {
-        if (ReferenceEquals(node, SelectedNode)) return true;
+        if (IsSelected(node)) return true;
         if (HideUnconnected && !node.IsConnected) return false;
         return !IsFocusMode || !HasSelection || _highlightedNodes.Contains(node);
     }
@@ -380,38 +451,43 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// In the solar system, highlights the selection and everything it depends on, following links
-    /// upstream only; implied links still count for reachability but are not highlighted, since they
-    /// are not drawn. In the tree, highlights the selection's drawn links in both directions and the
-    /// entities at their other ends, just like hovering.
+    /// Highlights what the selected entities lead to, as the union over all of them:
+    /// <list type="bullet">
+    /// <item><b>Dependencies</b>: everything they depend on, following links upward.</item>
+    /// <item><b>Dependents</b>: everything that depends on them, following links downward.</item>
+    /// <item><b>Direct links</b>: their own drawn links and the entities at the other ends.</item>
+    /// </list>
+    /// Implied links still count for reaching entities but are never highlighted, since they are not drawn.
     /// </summary>
     private void UpdateHighlight()
     {
         HashSet<DependencyGraphNode> nodes = new(ReferenceEqualityComparer.Instance);
         HashSet<DependencyGraphEdge> edges = new(ReferenceEqualityComparer.Instance);
-        if (SelectedNode is not null && IsTreeView)
+        foreach (DependencyGraphNode selected in _selected) nodes.Add(selected);
+        if (HighlightMode == DependencyHighlightMode.DirectLinks)
         {
-            nodes.Add(SelectedNode);
             foreach (DependencyGraphEdge edge in Model.EssentialEdges)
             {
-                if (!ReferenceEquals(edge.From, SelectedNode) && !ReferenceEquals(edge.To, SelectedNode)) continue;
+                if (!IsSelected(edge.From) && !IsSelected(edge.To)) continue;
                 edges.Add(edge);
                 nodes.Add(edge.From);
                 nodes.Add(edge.To);
             }
         }
-        else if (SelectedNode is not null)
+        else if (_selected.Count > 0)
         {
-            ILookup<DependencyGraphNode, DependencyGraphEdge> incoming =
-                Model.Edges.ToLookup(static edge => edge.To);
-            Queue<DependencyGraphNode> pending = new([SelectedNode]);
-            nodes.Add(SelectedNode);
+            bool upward = HighlightMode == DependencyHighlightMode.Dependencies;
+            ILookup<DependencyGraphNode, DependencyGraphEdge> links = upward
+                ? Model.Edges.ToLookup(static edge => edge.To)
+                : Model.Edges.ToLookup(static edge => edge.From);
+            Queue<DependencyGraphNode> pending = new(_selected);
             while (pending.TryDequeue(out DependencyGraphNode? node))
             {
-                foreach (DependencyGraphEdge edge in incoming[node])
+                foreach (DependencyGraphEdge edge in links[node])
                 {
                     if (edge.IsEssential) edges.Add(edge);
-                    if (nodes.Add(edge.From)) pending.Enqueue(edge.From);
+                    DependencyGraphNode next = upward ? edge.From : edge.To;
+                    if (nodes.Add(next)) pending.Enqueue(next);
                 }
             }
         }

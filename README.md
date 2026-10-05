@@ -294,7 +294,11 @@ across the map, and only direct links are drawn, never ones a longer chain alrea
 names never pile on top of each other. Links stay faint until you hover over an entity; hovering
 also shows a card with its status, rank, ring, what it depends on, how many entities it unblocks,
 and any missing dependencies. Click an entity to highlight everything it depends on, back
-towards the centre, and click it again to clear the selection. While an entity is selected,
+towards the centre, and click it again to clear the selection. Ctrl+click adds more entities to the
+selection (or removes one again), and the highlight covers all of them. The **Highlight** choice
+next to the filters decides what a selection shows: **Dependencies** (everything it depends on),
+**Dependents** (every entity that depends on it, directly or indirectly) or **Direct links** (one
+step both ways). Each view remembers its own choice. While an entity is selected,
 hovering over others shows their card without changing the highlight; **Focus on selection** hides the rest, and **Hide unconnected** removes
 entities without links. Find an entity by name, double-click it to open its details, drag it to a
 new spot, or export the current view as a PNG. The solar system slowly turns around its centre and holds
@@ -307,6 +311,8 @@ faint orbit rings for each level, under **Settings → Tracker**.
 
 ![Dependency graph hover card explaining an entity's status, rank, ring and usage](images/light/dependency-graph-hover.png)
 
+![Dependency graph with two entities Ctrl-selected and everything that depends on them highlighted](images/light/dependency-graph-dependents.png)
+
 ![Entity details pane opened from the dependency graph](images/light/dependency-graph-details.png)
 
 Use the view dropdown next to **Fit to view** to switch to a classical **Tree**, which reads from
@@ -314,9 +320,10 @@ top to bottom: an entity sits below everything it depends on. Each entity is a r
 name on top (wrapped at word boundaries for snake_case, PascalCase, camelCase and spaced names, up to
 three lines) and a band in its status colour below. Missing dependencies form the top row, and
 entities without links sit in their own section at the bottom. Links curve between the boxes and
-are arranged to cross as little as possible. Clicking an entity highlights its direct links up and
-down, just like hovering over it. Find, the hover card, the filters and the PNG export work just as
-in the solar system. The chosen view is remembered.
+are arranged to cross as little as possible. By default, clicking an entity in the tree highlights
+its direct links up and down, just like hovering over it; the Highlight choice switches this to
+dependencies or dependents, and Ctrl+click, Find, the hover card, the filters and the PNG export
+work just as in the solar system. The chosen view is remembered.
 
 ![Dependency graph as a top-to-bottom tree with status-coloured boxes](images/light/dependency-graph-tree.png)
 

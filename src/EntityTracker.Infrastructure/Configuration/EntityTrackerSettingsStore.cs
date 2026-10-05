@@ -68,7 +68,7 @@ public sealed class EntityTrackerSettingsStore
                     current.AutoSyncIntervalMinutes,
                     current.SearchResponsibleNames, current.ProjectDeveloperChoices,
                     current.OverviewExportRows, current.OverviewCsvSeparator,
-                    current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView),
+                    current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode),
                 cancellationToken);
         }
         finally
@@ -100,7 +100,7 @@ public sealed class EntityTrackerSettingsStore
                     current.AutoSyncIntervalMinutes,
                     current.SearchResponsibleNames, current.ProjectDeveloperChoices,
                     current.OverviewExportRows, current.OverviewCsvSeparator,
-                    current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView),
+                    current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode),
                 cancellationToken);
         }
         finally
@@ -122,7 +122,7 @@ public sealed class EntityTrackerSettingsStore
                 current.LastProjectId, current.LastTrackerId, enabled, intervalMinutes,
                 current.SearchResponsibleNames, current.ProjectDeveloperChoices,
                 current.OverviewExportRows, current.OverviewCsvSeparator,
-                current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView),
+                current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode),
                 cancellationToken);
         }
         finally { _gate.Release(); }
@@ -139,7 +139,7 @@ public sealed class EntityTrackerSettingsStore
                 current.LastProjectId, current.LastTrackerId, current.AutoSyncEnabled,
                 current.AutoSyncIntervalMinutes, enabled, current.ProjectDeveloperChoices,
                 current.OverviewExportRows, current.OverviewCsvSeparator,
-                current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView), cancellationToken);
+                current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode), cancellationToken);
         }
         finally { _gate.Release(); }
     }
@@ -158,7 +158,7 @@ public sealed class EntityTrackerSettingsStore
                 current.LastTrackerId, current.AutoSyncEnabled, current.AutoSyncIntervalMinutes,
                 current.SearchResponsibleNames, choices,
                 current.OverviewExportRows, current.OverviewCsvSeparator,
-                current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView), cancellationToken);
+                current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode), cancellationToken);
         }
         finally { _gate.Release(); }
     }
@@ -173,7 +173,7 @@ public sealed class EntityTrackerSettingsStore
             await WriteAsync(new EntityTrackerSettings(current.Appearance, current.LastProjectId,
                 current.LastTrackerId, current.AutoSyncEnabled, current.AutoSyncIntervalMinutes,
                 current.SearchResponsibleNames, current.ProjectDeveloperChoices, rows, separator,
-                current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView),
+                current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode),
                 cancellationToken);
         }
         finally { _gate.Release(); }
@@ -190,7 +190,7 @@ public sealed class EntityTrackerSettingsStore
                 current.LastTrackerId, current.AutoSyncEnabled, current.AutoSyncIntervalMinutes,
                 current.SearchResponsibleNames, current.ProjectDeveloperChoices,
                 current.OverviewExportRows, current.OverviewCsvSeparator, enabled,
-                current.ShowDependencyGraphRings, current.DependencyGraphView), cancellationToken);
+                current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode), cancellationToken);
         }
         finally { _gate.Release(); }
     }
@@ -206,7 +206,7 @@ public sealed class EntityTrackerSettingsStore
                 current.LastTrackerId, current.AutoSyncEnabled, current.AutoSyncIntervalMinutes,
                 current.SearchResponsibleNames, current.ProjectDeveloperChoices,
                 current.OverviewExportRows, current.OverviewCsvSeparator,
-                current.AnimateDependencyGraph, enabled, current.DependencyGraphView), cancellationToken);
+                current.AnimateDependencyGraph, enabled, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode), cancellationToken);
         }
         finally { _gate.Release(); }
     }
@@ -223,7 +223,28 @@ public sealed class EntityTrackerSettingsStore
                 current.LastTrackerId, current.AutoSyncEnabled, current.AutoSyncIntervalMinutes,
                 current.SearchResponsibleNames, current.ProjectDeveloperChoices,
                 current.OverviewExportRows, current.OverviewCsvSeparator,
-                current.AnimateDependencyGraph, current.ShowDependencyGraphRings, view), cancellationToken);
+                current.AnimateDependencyGraph, current.ShowDependencyGraphRings, view,
+                current.SolarHighlightMode, current.TreeHighlightMode), cancellationToken);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task SaveDependencyHighlightModeAsync(DependencyGraphView view, DependencyHighlightMode mode,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Enum.IsDefined(view)) throw new ArgumentOutOfRangeException(nameof(view));
+        if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            EntityTrackerSettings current = await LoadSettingsForUpdateAsync(cancellationToken);
+            await WriteAsync(new EntityTrackerSettings(current.Appearance, current.LastProjectId,
+                current.LastTrackerId, current.AutoSyncEnabled, current.AutoSyncIntervalMinutes,
+                current.SearchResponsibleNames, current.ProjectDeveloperChoices,
+                current.OverviewExportRows, current.OverviewCsvSeparator,
+                current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView,
+                view == DependencyGraphView.Tree ? current.SolarHighlightMode : mode,
+                view == DependencyGraphView.Tree ? mode : current.TreeHighlightMode), cancellationToken);
         }
         finally { _gate.Release(); }
     }
@@ -327,6 +348,8 @@ public sealed class EntityTrackerSettingsStore
             AnimateDependencyGraph = settings.AnimateDependencyGraph,
             ShowDependencyGraphRings = settings.ShowDependencyGraphRings,
             DependencyGraphView = settings.DependencyGraphView.ToString(),
+            SolarHighlightMode = settings.SolarHighlightMode.ToString(),
+            TreeHighlightMode = settings.TreeHighlightMode.ToString(),
             ProjectDeveloperChoices = settings.ProjectDeveloperChoices.ToDictionary(
                 pair => pair.Key.Value.ToString("D"), pair => pair.Value.Value.ToString("D"))
         };
@@ -383,7 +406,21 @@ public sealed class EntityTrackerSettingsStore
             ParseExportRows(document, warnings), ParseCsvSeparator(document, warnings),
             document.AnimateDependencyGraph ?? true,
             document.ShowDependencyGraphRings ?? false,
-            ParseDependencyGraphView(document, warnings));
+            ParseDependencyGraphView(document, warnings),
+            ParseHighlightMode(document.SolarHighlightMode, DependencyHighlightMode.Dependencies, "solar system", warnings),
+            ParseHighlightMode(document.TreeHighlightMode, DependencyHighlightMode.DirectLinks, "tree", warnings));
+    }
+
+    /// <summary>Reads a highlight mode by name; an unknown value falls back to that view's default.</summary>
+    private static DependencyHighlightMode ParseHighlightMode(string? value, DependencyHighlightMode fallback,
+        string viewName, ICollection<string> warnings)
+    {
+        if (value is null) return fallback;
+        if (Enum.TryParse(value, ignoreCase: false, out DependencyHighlightMode mode) &&
+            Enum.IsDefined(mode) && !int.TryParse(value, out _))
+            return mode;
+        warnings.Add($"The {viewName} highlight setting is not recognised; the default is used.");
+        return fallback;
     }
 
     /// <summary>
@@ -550,6 +587,10 @@ public sealed class EntityTrackerSettingsStore
         public bool? ShowDependencyGraphRings { get; init; }
 
         public string? DependencyGraphView { get; init; }
+
+        public string? SolarHighlightMode { get; init; }
+
+        public string? TreeHighlightMode { get; init; }
 
         public Dictionary<string, string>? ProjectDeveloperChoices { get; init; }
 

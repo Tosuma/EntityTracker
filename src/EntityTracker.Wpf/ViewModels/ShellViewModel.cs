@@ -831,17 +831,37 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     {
         workspace.DependencyGraph.IsAnimationEnabled = GraphSettings?.IsAnimationEnabled ?? true;
         workspace.DependencyGraph.ShowRings = GraphSettings?.ShowRings ?? false;
-        if (GraphSettings is not null) workspace.DependencyGraph.View = GraphSettings.View;
+        if (GraphSettings is null) return;
+        workspace.DependencyGraph.View = GraphSettings.View;
+        workspace.DependencyGraph.SolarHighlightMode = GraphSettings.SolarHighlightMode;
+        workspace.DependencyGraph.TreeHighlightMode = GraphSettings.TreeHighlightMode;
     }
 
-    /// <summary>Remembers a view picked in one Tracker's graph and shows it in the others too.</summary>
+    /// <summary>
+    /// Remembers a view or highlight picked in one Tracker's graph and uses it in the others too.
+    /// Each view keeps its own highlight.
+    /// </summary>
     private void OnDependencyGraphPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(DependencyGraphViewModel.View) ||
-            sender is not DependencyGraphViewModel graph || GraphSettings is null) return;
-        foreach (MainWindowViewModel workspace in _workspaces.Values)
-            workspace.DependencyGraph.View = graph.View;
-        _ = GraphSettings.SetViewAsync(graph.View);
+        if (sender is not DependencyGraphViewModel graph || GraphSettings is null) return;
+        switch (e.PropertyName)
+        {
+            case nameof(DependencyGraphViewModel.View):
+                foreach (MainWindowViewModel workspace in _workspaces.Values)
+                    workspace.DependencyGraph.View = graph.View;
+                _ = GraphSettings.SetViewAsync(graph.View);
+                break;
+            case nameof(DependencyGraphViewModel.SolarHighlightMode):
+                foreach (MainWindowViewModel workspace in _workspaces.Values)
+                    workspace.DependencyGraph.SolarHighlightMode = graph.SolarHighlightMode;
+                _ = GraphSettings.SetHighlightModeAsync(DependencyGraphView.SolarSystem, graph.SolarHighlightMode);
+                break;
+            case nameof(DependencyGraphViewModel.TreeHighlightMode):
+                foreach (MainWindowViewModel workspace in _workspaces.Values)
+                    workspace.DependencyGraph.TreeHighlightMode = graph.TreeHighlightMode;
+                _ = GraphSettings.SetHighlightModeAsync(DependencyGraphView.Tree, graph.TreeHighlightMode);
+                break;
+        }
     }
 
     private void OnResponsibilitySearchChanged(object? sender, bool enabled)
