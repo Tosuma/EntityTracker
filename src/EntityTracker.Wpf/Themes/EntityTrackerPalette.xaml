@@ -74,6 +74,8 @@
     <SolidColorBrush x:Key="Brush.Status.Reconciled" Color="{StaticResource Color.Brand.Green100}" />
     <SolidColorBrush x:Key="Brush.Status.Ready" Color="{StaticResource Color.Brand.Green80}" />
     <SolidColorBrush x:Key="Brush.Status.Blocked" Color="{StaticResource Color.Brand.Coral}" />
+    <!-- Selected entities in the dependency graph: an amber no status uses, readable on both themes. -->
+    <SolidColorBrush x:Key="Brush.Graph.Selection" Color="#C8821E" />
 
     <!-- Reports retain their established palette and a light plotting canvas. -->
     <SolidColorBrush x:Key="Brush.Report.Canvas" Color="{StaticResource Color.Brand.White}" />

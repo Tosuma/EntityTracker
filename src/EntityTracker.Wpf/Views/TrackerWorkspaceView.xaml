@@ -1193,6 +1193,7 @@
                                                             LabelBrush="{DynamicResource Brush.Text.Primary}"
                                                             EdgeBrush="{DynamicResource Brush.Border.Strong}"
                                                             HighlightBrush="{DynamicResource Brush.Text.Primary}"
+                                                            SelectionBrush="{DynamicResource Brush.Graph.Selection}"
                                                             PlaceholderBrush="{DynamicResource Brush.Text.Secondary}"
                                                             CardBackground="{DynamicResource Brush.Surface.Page}" />
                             <TextBlock x:Name="DependencyGraphEmptyState"

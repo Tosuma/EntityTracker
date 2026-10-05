@@ -4,6 +4,7 @@ using System.Windows.Media;
 
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Configuration;
+using EntityTracker.Wpf.Controls;
 using EntityTracker.Wpf.ViewModels.DependencyGraph;
 
 using static EntityTracker.Wpf.Tests.Controls.GraphCanvasHost;
@@ -109,7 +110,30 @@ public sealed class DependencyGraphTreeCanvasTests
         });
 
         static int SelectionOutlines(GraphCanvasHost host) =>
-            host.MapPrimitives().Count(drawing => drawing.Pen is { Thickness: 2.5 });
+            host.MapPrimitives().Count(drawing => drawing.Pen is { Thickness: 3 });
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void TheSelectionIsOutlinedInTheSelectionColourWithAHalo(bool tree)
+    {
+        Run(host =>
+        {
+            if (tree) host.Graph.View = DependencyGraphView.Tree;
+            host.Graph.SelectedNode = host.Graph.Model.Nodes[4];
+
+            Color amber = DependencyGraphCanvas.DefaultSelectionColor;
+            GeometryDrawing[] selection = host.MapPrimitives()
+                .Where(drawing => drawing.Pen?.Brush is SolidColorBrush { Color: var color } &&
+                                  color.R == amber.R && color.G == amber.G && color.B == amber.B)
+                .ToArray();
+
+            // One solid ring and one wider, faint halo, both in the selection colour.
+            Assert.Equal(2, selection.Length);
+            Assert.Contains(selection, drawing => drawing.Pen!.Thickness == 3 && drawing.Pen.Brush.Opacity == 1);
+            Assert.Contains(selection, drawing => drawing.Pen!.Thickness == 8 && drawing.Pen.Brush.Opacity < 0.5);
+        });
     }
 
     [Fact]
