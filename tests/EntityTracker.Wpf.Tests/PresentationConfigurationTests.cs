@@ -169,6 +169,8 @@ public sealed class PresentationConfigurationTests
         Assert.Equal("{Binding ChooseSuggestionCommand}", (string?)search.Attribute("ChooseCommand"));
         Assert.Equal("{Binding FindCommand}", (string?)search.Attribute("SubmitCommand"));
         Assert.Equal("Label", (string?)search.Attribute("DisplayMemberPath"));
+        // Ctrl+F focuses the box; its hint must not pop up just because it has the keyboard focus.
+        Assert.Equal("False", (string?)search.Attribute("ToolTipService.ShowsToolTipOnKeyboardFocus"));
 
         string code = File.ReadAllText(Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory),
             "src", "EntityTracker.Wpf", "Views", "TrackerWorkspaceView.xaml.cs"));
@@ -176,6 +178,9 @@ public sealed class PresentationConfigurationTests
         int graphBranch = code.IndexOf("MainWindowTab.DependencyGraph", open, StringComparison.Ordinal);
         Assert.True(open >= 0 && graphBranch > open && graphBranch < code.IndexOf("GetCurrentEntityTable();", open, StringComparison.Ordinal));
         Assert.Contains("DependencyGraphSearchBox.Focus()", code, StringComparison.Ordinal);
+        // Esc closes the suggestions, then leaves the search box for the map.
+        Assert.Contains("DependencyGraphSearchBox.IsKeyboardFocusWithin", code, StringComparison.Ordinal);
+        Assert.Contains("DependencyGraphCanvas.Focus()", code, StringComparison.Ordinal);
     }
 
     [Fact]

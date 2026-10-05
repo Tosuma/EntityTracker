@@ -1103,6 +1103,7 @@
                                                      AutomationProperties.Name="Find entity in dependency graph"
                                                      AutomationProperties.HelpText="Type part of a name; words in spaced, snake_case, PascalCase and camelCase names match. Use the arrow keys and Enter to choose."
                                                      ToolTip="Type an entity name (Ctrl+F); use the arrow keys and Enter to choose"
+                                                     ToolTipService.ShowsToolTipOnKeyboardFocus="False"
                                                      IsEditable="True"
                                                      IsTextSearchEnabled="False"
                                                      Style="{StaticResource DependencyComboBoxStyle}"

@@ -453,7 +453,18 @@ public partial class TrackerWorkspaceView : UserControl
             return;
         }
 
-        // An open suggestion list under the graph search closes before anything else.
+        // In the graph search, the first Esc closes the suggestion list and the next one leaves
+        // the search box for the map, before anything else on the page reacts.
+        if (_viewModel.SelectedTab == MainWindowTab.DependencyGraph && DependencyGraphSearchBox.IsKeyboardFocusWithin)
+        {
+            if (_viewModel.DependencyGraph.IsSuggestionsOpen)
+                _viewModel.DependencyGraph.IsSuggestionsOpen = false;
+            else
+                DependencyGraphCanvas.Focus();
+            e.Handled = true;
+            return;
+        }
+
         if (_viewModel.SelectedTab == MainWindowTab.DependencyGraph && _viewModel.DependencyGraph.IsSuggestionsOpen)
         {
             _viewModel.DependencyGraph.IsSuggestionsOpen = false;

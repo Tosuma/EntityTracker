@@ -35,6 +35,19 @@ public sealed class DependencyGraphSearchBoxTests
     });
 
     [Fact]
+    public void TypingKeepsGoingWhenTheSuggestionsOpen() => Run((box, input, graph) =>
+    {
+        // Opening the list mid-typing used to select all the text, so the next letter replaced it.
+        Type(input, "customer pref");
+
+        Assert.Equal("customer pref", box.Text);
+        Assert.Equal("customer pref", graph.SearchText);
+        Assert.Equal(0, input.SelectionLength);
+        Assert.Equal(input.Text.Length, input.CaretIndex);
+        Assert.True(graph.IsSuggestionsOpen);
+    });
+
+    [Fact]
     public void EnterWithoutAHighlightFindsTheBestMatch() => Run((box, input, graph) =>
     {
         box.Text = "order line";
@@ -98,6 +111,14 @@ public sealed class DependencyGraphSearchBoxTests
                     ShowInTaskbar = false, WindowStyle = WindowStyle.None, ShowActivated = false,
                     Content = new StackPanel { Children = { box } }
                 };
+#pragma warning disable WPF0001
+                window.ThemeMode = ThemeMode.Light;
+#pragma warning restore WPF0001
+                ResourceDictionary components = (ResourceDictionary)System.Windows.Application.LoadComponent(
+                    new Uri("/EntityTracker.Wpf;component/Themes/EntityTrackerComponents.xaml", UriKind.Relative));
+                window.Resources.MergedDictionaries.Add(components);
+                box.Style = (Style)components["DependencyComboBoxStyle"];
+                box.DisplayMemberPath = "Label";
                 window.Show();
                 try
                 {
@@ -120,6 +141,17 @@ public sealed class DependencyGraphSearchBoxTests
         thread.Start();
         thread.Join();
         if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
+    }
+
+    /// <summary>Types like the keyboard does: each character replaces the current selection.</summary>
+    private static void Type(TextBox input, string text)
+    {
+        foreach (char character in text)
+        {
+            TextCompositionManager.StartComposition(
+                new TextComposition(InputManager.Current, input, character.ToString()));
+            Pump(0.03);
+        }
     }
 
     /// <summary>Raises a key press on the input as WPF would, without needing keyboard focus.</summary>
