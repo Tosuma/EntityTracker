@@ -170,6 +170,30 @@ public sealed class ShellViewModelTests
     }
 
     [Fact]
+    public async Task HighlightModes_OpenAsSavedAndAChangeIsSavedPerView()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.SettingsStore.SaveDependencyHighlightModeAsync(DependencyGraphView.Tree, DependencyHighlightMode.Dependents);
+        DependencyGraphSettingsViewModel graphSettings = new(harness.SettingsStore,
+            (await harness.SettingsStore.LoadAsync()).Settings);
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true), graphSettings);
+        await shell.InitializeAsync();
+        MainWindowViewModel workspace = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
+        Assert.Equal(DependencyHighlightMode.Dependents, workspace.DependencyGraph.TreeHighlightMode);
+        Assert.Equal(DependencyHighlightMode.Dependencies, workspace.DependencyGraph.HighlightMode);
+
+        workspace.DependencyGraph.HighlightMode = DependencyHighlightMode.DirectLinks;
+        await WaitUntilAsync(async () =>
+            (await harness.SettingsStore.LoadAsync()).Settings.SolarHighlightMode == DependencyHighlightMode.DirectLinks);
+
+        EntityTrackerSettings saved = (await harness.SettingsStore.LoadAsync()).Settings;
+        Assert.Equal(DependencyHighlightMode.Dependents, saved.TreeHighlightMode);
+        Assert.Equal(DependencyHighlightMode.DirectLinks, graphSettings.SolarHighlightMode);
+    }
+
+    [Fact]
     public async Task GraphSettings_ReachTrackerWorkspacesAndFollowChanges()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();

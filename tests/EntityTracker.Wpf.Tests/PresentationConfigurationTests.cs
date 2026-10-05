@@ -155,6 +155,20 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void DependencyGraphHighlightDropdownSitsInTheFilterRow()
+    {
+        XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XElement selector = workspace.Descendants().Single(element =>
+            (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "DependencyHighlightSelector");
+
+        Assert.Equal("ComboBox", selector.Name.LocalName);
+        Assert.Equal("Dependency highlight", (string?)selector.Attribute("AutomationProperties.Name"));
+        Assert.Equal("{Binding HighlightMode, Mode=TwoWay}", (string?)selector.Attribute("SelectedValue"));
+        Assert.Contains("Ctrl+click", (string?)selector.Attribute("ToolTip"), StringComparison.Ordinal);
+        Assert.Contains(selector.ElementsBeforeSelf(), element => (string?)element.Attribute("Content") == "Hide unconnected");
+    }
+
+    [Fact]
     public void DependencyGraphViewDropdownSitsLeftOfFitToView()
     {
         XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");

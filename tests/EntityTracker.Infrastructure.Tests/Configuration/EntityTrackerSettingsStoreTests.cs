@@ -290,6 +290,56 @@ public sealed class EntityTrackerSettingsStoreTests
     }
 
     [Fact]
+    public async Task HighlightModes_ArePerViewRoundTripAndSurviveEveryOtherSettingsWrite()
+    {
+        using TemporarySettingsDirectory directory = new();
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+        EntityTrackerSettings defaults = (await store.LoadAsync()).Settings;
+        Assert.Equal(DependencyHighlightMode.Dependencies, defaults.SolarHighlightMode);
+        Assert.Equal(DependencyHighlightMode.DirectLinks, defaults.TreeHighlightMode);
+
+        await store.SaveDependencyHighlightModeAsync(DependencyGraphView.SolarSystem, DependencyHighlightMode.Dependents);
+        await store.SaveDependencyHighlightModeAsync(DependencyGraphView.Tree, DependencyHighlightMode.Dependencies);
+        ProjectId project = ProjectId.New();
+        await store.SaveAppearanceAsync(ApplicationAppearance.Dark);
+        await store.SaveActiveContextAsync(project, null);
+        await store.SaveAutoSyncAsync(false, 15);
+        await store.SaveSearchResponsibleNamesAsync(false);
+        await store.SaveProjectDeveloperChoiceAsync(project, DeveloperId.New());
+        await store.SaveOverviewExportPreferencesAsync(OverviewExportRows.AllActiveEntities,
+            OverviewCsvSeparator.Comma);
+        await store.SaveAnimateDependencyGraphAsync(false);
+        await store.SaveShowDependencyGraphRingsAsync(true);
+        await store.SaveDependencyGraphViewAsync(DependencyGraphView.Tree);
+
+        EntityTrackerSettings saved = (await new EntityTrackerSettingsStore(directory.SettingsPath)
+            .LoadAsync()).Settings;
+        Assert.Equal(DependencyHighlightMode.Dependents, saved.SolarHighlightMode);
+        Assert.Equal(DependencyHighlightMode.Dependencies, saved.TreeHighlightMode);
+        Assert.Equal(DependencyHighlightMode.Dependencies, saved.HighlightModeFor(DependencyGraphView.Tree));
+        Assert.Equal(DependencyGraphView.Tree, saved.DependencyGraphView);
+    }
+
+    [Fact]
+    public async Task HighlightModes_UnknownValueFallsBackToThatViewsDefault()
+    {
+        using TemporarySettingsDirectory directory = new();
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+        await store.SaveDependencyHighlightModeAsync(DependencyGraphView.SolarSystem, DependencyHighlightMode.Dependents);
+        await store.SaveDependencyHighlightModeAsync(DependencyGraphView.Tree, DependencyHighlightMode.Dependents);
+        await store.SaveAppearanceAsync(ApplicationAppearance.Dark);
+        string json = await File.ReadAllTextAsync(directory.SettingsPath);
+        await File.WriteAllTextAsync(directory.SettingsPath, json.Replace("\"Dependents\"", "\"Cousins\""));
+
+        SettingsLoadResult result = await new EntityTrackerSettingsStore(directory.SettingsPath).LoadAsync();
+
+        Assert.Equal(DependencyHighlightMode.Dependencies, result.Settings.SolarHighlightMode);
+        Assert.Equal(DependencyHighlightMode.DirectLinks, result.Settings.TreeHighlightMode);
+        Assert.Equal(ApplicationAppearance.Dark, result.Settings.Appearance);
+        Assert.Equal(2, result.Warnings.Count(warning => warning.Contains("highlight setting", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public async Task AnimateDependencyGraph_DefaultsToEnabledWhenMissingFromAnOlderFile()
     {
         using TemporarySettingsDirectory directory = new();

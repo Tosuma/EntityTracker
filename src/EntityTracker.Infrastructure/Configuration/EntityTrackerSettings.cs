@@ -19,7 +19,9 @@ public sealed class EntityTrackerSettings
         OverviewCsvSeparator overviewCsvSeparator = OverviewCsvSeparator.Semicolon,
         bool animateDependencyGraph = true,
         bool showDependencyGraphRings = false,
-        DependencyGraphView dependencyGraphView = DependencyGraphView.SolarSystem)
+        DependencyGraphView dependencyGraphView = DependencyGraphView.SolarSystem,
+        DependencyHighlightMode solarHighlightMode = DependencyHighlightMode.Dependencies,
+        DependencyHighlightMode treeHighlightMode = DependencyHighlightMode.DirectLinks)
     {
         if (!Enum.IsDefined(appearance))
         {
@@ -33,6 +35,10 @@ public sealed class EntityTrackerSettings
             throw new ArgumentOutOfRangeException(nameof(overviewCsvSeparator));
         if (!Enum.IsDefined(dependencyGraphView))
             throw new ArgumentOutOfRangeException(nameof(dependencyGraphView));
+        if (!Enum.IsDefined(solarHighlightMode))
+            throw new ArgumentOutOfRangeException(nameof(solarHighlightMode));
+        if (!Enum.IsDefined(treeHighlightMode))
+            throw new ArgumentOutOfRangeException(nameof(treeHighlightMode));
 
         Appearance = appearance;
         LastProjectId = lastProjectId;
@@ -47,6 +53,8 @@ public sealed class EntityTrackerSettings
         AnimateDependencyGraph = animateDependencyGraph;
         ShowDependencyGraphRings = showDependencyGraphRings;
         DependencyGraphView = dependencyGraphView;
+        SolarHighlightMode = solarHighlightMode;
+        TreeHighlightMode = treeHighlightMode;
     }
 
     public ApplicationAppearance Appearance { get; }
@@ -69,6 +77,16 @@ public sealed class EntityTrackerSettings
 
     /// <summary>Gets the dependency graph view used last: the solar system or the tree.</summary>
     public DependencyGraphView DependencyGraphView { get; }
+
+    /// <summary>Gets what selecting an entity highlights in the solar system.</summary>
+    public DependencyHighlightMode SolarHighlightMode { get; }
+
+    /// <summary>Gets what selecting an entity highlights in the tree.</summary>
+    public DependencyHighlightMode TreeHighlightMode { get; }
+
+    /// <summary>Gets what selecting an entity highlights in the given view.</summary>
+    public DependencyHighlightMode HighlightModeFor(DependencyGraphView view) =>
+        view == DependencyGraphView.Tree ? TreeHighlightMode : SolarHighlightMode;
 
     public static EntityTrackerSettings Default { get; } = new();
 }

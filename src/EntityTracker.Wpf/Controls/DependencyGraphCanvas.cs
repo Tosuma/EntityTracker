@@ -65,6 +65,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     private Point _pressPoint;
     private Point _lastPoint;
     private bool _isPanning;
+    private bool _isAdditive;
     private bool _hasMoved;
     private bool _isPointerDown;
     private readonly DrawingVisual _content = new();
@@ -384,7 +385,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
                 center, radius, radius);
         }
 
-        if (ReferenceEquals(node, graph.SelectedNode))
+        if (graph.IsSelected(node))
             context.DrawEllipse(null, CachedPen(highlightBrush, 2.5), center, radius + 4, radius + 4);
         else if (graph.HighlightedNodes.Contains(node))
             context.DrawEllipse(null, CachedPen(Faded(highlightBrush, opacity), 1.5), center, radius + 2.5, radius + 2.5);
@@ -405,7 +406,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
             bool highlighted = graph.HighlightedNodes.Contains(node);
             bool landmark = graph.Landmarks.Contains(node);
             int tier = ReferenceEquals(node, _hoverNode) ? 0
-                : ReferenceEquals(node, graph.SelectedNode) ? 1
+                : graph.IsSelected(node) ? 1
                 : hoverNeighbours.Contains(node) ? 2
                 : hasSelection && highlighted ? 3
                 : landmark ? 4
@@ -518,7 +519,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
             : CachedPen(Faded(edgeBrush, opacity), 1);
         context.DrawGeometry(null, border, outline);
 
-        if (ReferenceEquals(node, graph.SelectedNode))
+        if (graph.IsSelected(node))
         {
             Rect ring = box;
             ring.Inflate(4, 4);
@@ -635,7 +636,8 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         base.OnMouseLeftButtonDown(e);
         Focus();
         if (Graph is null) return;
-        if (PointerPressed(e.GetPosition(this), e.ClickCount)) CaptureMouse();
+        bool additive = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+        if (PointerPressed(e.GetPosition(this), e.ClickCount, additive)) CaptureMouse();
         e.Handled = true;
     }
 
@@ -677,7 +679,8 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     // mouse events into them, so tests can drive clicks, drags and zooms on a real canvas.
 
     /// <summary>Handles a press; returns whether a drag or pan started that needs the pointer captured.</summary>
-    internal bool PointerPressed(Point point, int clickCount)
+    /// <param name="additive">Whether Ctrl is held: the click then adds or removes one entity.</param>
+    internal bool PointerPressed(Point point, int clickCount, bool additive = false)
     {
         DependencyGraphViewModel? graph = Graph;
         if (graph is null) return false;
@@ -693,6 +696,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         _isPointerDown = true;
         _pressPoint = _lastPoint = point;
         _hasMoved = false;
+        _isAdditive = additive;
         _dragNode = node;
         _isPanning = node is null;
         if (node is not null) node.IsPinned = true;
@@ -750,8 +754,17 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         DependencyGraphViewModel? graph = Graph;
         if (graph is not null && !_hasMoved)
         {
-            // Clicking the selected entity again clears the selection.
-            graph.SelectedNode = _dragNode is not null && ReferenceEquals(_dragNode, graph.SelectedNode) ? null : _dragNode;
+            if (_isAdditive)
+            {
+                // Ctrl+click adds or removes one entity; on empty space it changes nothing.
+                if (_dragNode is not null) graph.ToggleSelection(_dragNode);
+            }
+            else
+            {
+                // A plain click selects just this entity; clicking the only selected one clears it.
+                bool onlySelected = _dragNode is not null && graph.SelectedNodes.Count == 1 && graph.IsSelected(_dragNode);
+                graph.SelectedNode = onlySelected ? null : _dragNode;
+            }
         }
         if (_dragNode is not null)
         {

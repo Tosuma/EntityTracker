@@ -1111,12 +1111,21 @@
                                 Style="{StaticResource SecondaryButtonStyle}" />
                         <CheckBox Margin="0,0,16,6" VerticalAlignment="Center"
                                   Content="Focus on selection"
-                                  AutomationProperties.HelpText="Hide everything except the selected entity and its dependencies."
+                                  AutomationProperties.HelpText="Hide everything except the selected entities and what they highlight."
                                   IsChecked="{Binding IsFocusMode}" />
                         <CheckBox Margin="0,0,16,6" VerticalAlignment="Center"
                                   Content="Hide unconnected"
                                   AutomationProperties.HelpText="Hide entities without dependencies or dependents."
                                   IsChecked="{Binding HideUnconnected}" />
+                        <TextBlock Margin="0,0,6,6" VerticalAlignment="Center" Text="Highlight" />
+                        <ComboBox x:Name="DependencyHighlightSelector" Margin="0,0,16,6" MinWidth="130"
+                                  VerticalAlignment="Center"
+                                  AutomationProperties.Name="Dependency highlight"
+                                  ToolTip="What a selected entity highlights. Ctrl+click to select more than one."
+                                  ItemsSource="{x:Static viewModels:DependencyGraphViewModel.HighlightOptions}"
+                                  DisplayMemberPath="Label"
+                                  SelectedValuePath="Mode"
+                                  SelectedValue="{Binding HighlightMode, Mode=TwoWay}" />
                         <Button Margin="0,0,0,6"
                                 Command="{Binding ClearSelectionCommand}"
                                 Content="Clear selection"

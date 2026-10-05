@@ -63,6 +63,34 @@ public sealed class DependencyGraphSettingsViewModelTests
         }
     }
 
+    [Fact]
+    public async Task SetHighlightMode_RemembersEachViewsChoice()
+    {
+        string directory = Path.Combine(Path.GetTempPath(),
+            "EntityTracker.GraphHighlightTests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            EntityTrackerSettingsStore store = new(Path.Combine(directory, "settings.json"));
+            DependencyGraphSettingsViewModel viewModel = new(store, (await store.LoadAsync()).Settings);
+            int changes = 0;
+            viewModel.Changed += (_, _) => changes++;
+
+            await viewModel.SetHighlightModeAsync(DependencyGraphView.SolarSystem, DependencyHighlightMode.Dependents);
+            await viewModel.SetHighlightModeAsync(DependencyGraphView.SolarSystem, DependencyHighlightMode.Dependents);
+            await viewModel.SetHighlightModeAsync(DependencyGraphView.Tree, DependencyHighlightMode.DirectLinks);
+
+            Assert.Equal(1, changes);
+            Assert.Equal(DependencyHighlightMode.Dependents, viewModel.SolarHighlightMode);
+            Assert.Equal(DependencyHighlightMode.DirectLinks, viewModel.TreeHighlightMode);
+            EntityTrackerSettings saved = (await store.LoadAsync()).Settings;
+            Assert.Equal(DependencyHighlightMode.Dependents, saved.SolarHighlightMode);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
         using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));

@@ -569,6 +569,24 @@ internal sealed class ReadmeScreenshotGenerator
         await renderer.CaptureAsync("dependency-graph-tree-selected.png", settleMilliseconds: 500);
         graph.SearchText = string.Empty;
         graph.View = DependencyGraphView.SolarSystem;
+
+        // Two entities Ctrl-selected with everything that depends on them highlighted.
+        DependencyGraphNode[] roots = graph.Model.Nodes
+            .Where(static node => node.EntityId is not null && node.TransitiveDependentCount is >= 4 and <= 20)
+            .OrderBy(static node => Math.Abs(node.TransitiveDependentCount - 10))
+            .ThenBy(static node => node.Label, StringComparer.Ordinal)
+            .Take(2).ToArray();
+        if (roots.Length < 2)
+            throw new InvalidOperationException("The sample graph has no entities with a moderate number of dependents.");
+        graph.HighlightMode = DependencyHighlightMode.Dependents;
+        graph.SelectedNode = roots[0];
+        graph.ToggleSelection(roots[1]);
+        // Zoom in around the highlighted entities so their names and links are readable.
+        Point[] highlighted = graph.HighlightedNodes.Select(canvas.ScreenPositionOf).ToArray();
+        canvas.PointerWheel(new Point(highlighted.Average(static point => point.X),
+            highlighted.Average(static point => point.Y)), 400);
+        await renderer.CaptureAsync("dependency-graph-dependents.png", settleMilliseconds: 500);
+        graph.HighlightMode = DependencyHighlightMode.Dependencies;
         graph.SelectedNode = featured;
 
         if (!graph.OpenDetails(featured))
