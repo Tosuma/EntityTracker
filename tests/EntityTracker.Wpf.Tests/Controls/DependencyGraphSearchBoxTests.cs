@@ -22,7 +22,7 @@ public sealed class DependencyGraphSearchBoxTests
     public void TypingSuggestsAndDownThenEnterSelectsTheHighlightedEntity() => Run((box, input, graph) =>
     {
         box.Text = "cust pref";
-        Pump(0.05);
+        Settle();
         Assert.True(graph.IsSuggestionsOpen);
         Assert.Equal(["CustomerPreferenceArchive", "customer_preference"], graph.Suggestions.Select(node => node.Label));
 
@@ -51,7 +51,7 @@ public sealed class DependencyGraphSearchBoxTests
     public void EnterWithoutAHighlightFindsTheBestMatch() => Run((box, input, graph) =>
     {
         box.Text = "order line";
-        Pump(0.05);
+        Settle();
 
         Press(input, Key.Enter);
 
@@ -63,11 +63,11 @@ public sealed class DependencyGraphSearchBoxTests
     public void EscapeClosesTheSuggestions() => Run((box, input, graph) =>
     {
         box.Text = "cust";
-        Pump(0.05);
+        Settle();
         Assert.True(box.IsDropDownOpen);
 
         Press(input, Key.Escape);
-        Pump(0.05);
+        Settle();
 
         Assert.False(box.IsDropDownOpen);
         Assert.False(graph.IsSuggestionsOpen);
@@ -143,6 +143,17 @@ public sealed class DependencyGraphSearchBoxTests
         if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
+    /// <summary>
+    /// Waits until WPF has done everything already queued, including work held back until a key
+    /// has been handled, so the tests do not depend on how busy the machine is.
+    /// </summary>
+    private static void Settle()
+    {
+        Pump(0.01);
+        System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { },
+            System.Windows.Threading.DispatcherPriority.ContextIdle);
+    }
+
     /// <summary>Types like the keyboard does: each character replaces the current selection.</summary>
     private static void Type(TextBox input, string text)
     {
@@ -150,7 +161,7 @@ public sealed class DependencyGraphSearchBoxTests
         {
             TextCompositionManager.StartComposition(
                 new TextComposition(InputManager.Current, input, character.ToString()));
-            Pump(0.03);
+            Settle();
         }
     }
 
@@ -162,7 +173,7 @@ public sealed class DependencyGraphSearchBoxTests
         target.RaiseEvent(preview);
         if (!preview.Handled)
             target.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, source, 0, key) { RoutedEvent = Keyboard.KeyDownEvent });
-        Pump(0.03);
+        Settle();
     }
 
     private static EntityOverviewRow Row(int id, string name, params string[] dependencies) => new(
