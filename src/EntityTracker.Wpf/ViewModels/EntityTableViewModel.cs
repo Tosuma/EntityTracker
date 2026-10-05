@@ -7,6 +7,9 @@ using EntityTracker.Wpf.Commands;
 
 namespace EntityTracker.Wpf.ViewModels;
 
+/// <summary>A table's search: whether it is open, what it searches for, and in which names.</summary>
+internal readonly record struct TableSearchState(bool IsOpen, string Query, bool DependenciesInstead);
+
 public sealed class EntityTableViewModel : INotifyPropertyChanged
 {
     private static readonly IReadOnlyDictionary<DevelopmentStatus, int> StatusOrder =
@@ -367,6 +370,36 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
 
             cancellation.Dispose();
         }
+    }
+
+    /// <summary>Gets what the search looks like now, so it can be carried to another Tracker.</summary>
+    internal TableSearchState CaptureSearch() => new(IsSearchOpen, _searchQuery, _searchDependenciesInstead);
+
+    /// <summary>
+    /// Takes over a search from another Tracker's table, applying it at once (no debounce) so the
+    /// table appears already filtered.
+    /// </summary>
+    internal void RestoreSearch(TableSearchState state)
+    {
+        if (!state.IsOpen)
+        {
+            CloseSearch();
+            return;
+        }
+
+        _searchDebounce?.Cancel();
+        _searchDebounce = null;
+        IsSearchOpen = true;
+        if (_searchDependencies && _searchDependenciesInstead != state.DependenciesInstead)
+        {
+            _searchDependenciesInstead = state.DependenciesInstead;
+            OnPropertyChanged(nameof(SearchDependenciesInstead));
+        }
+
+        _searchQuery = state.Query;
+        OnPropertyChanged(nameof(SearchQuery));
+        OnPropertyChanged(nameof(HasSearchQuery));
+        RebuildProjectionWithSelectionClear();
     }
 
     private void CloseSearch()
