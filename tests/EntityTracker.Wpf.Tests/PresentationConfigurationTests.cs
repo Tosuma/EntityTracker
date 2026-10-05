@@ -155,6 +155,35 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void DependencyGraphSearchSuggestsLikeTheDependencySearchAndOpensWithCtrlF()
+    {
+        XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XElement search = workspace.Descendants().Single(element =>
+            (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "DependencyGraphSearchBox");
+
+        Assert.Equal("DependencyComboBox", search.Name.LocalName);
+        Assert.Equal("Find entity in dependency graph", (string?)search.Attribute("AutomationProperties.Name"));
+        Assert.Equal("{Binding Suggestions}", (string?)search.Attribute("ItemsSource"));
+        Assert.Equal("{Binding SearchText, UpdateSourceTrigger=PropertyChanged}", (string?)search.Attribute("Text"));
+        Assert.Equal("{Binding IsSuggestionsOpen}", (string?)search.Attribute("IsDropDownOpen"));
+        Assert.Equal("{Binding ChooseSuggestionCommand}", (string?)search.Attribute("ChooseCommand"));
+        Assert.Equal("{Binding FindCommand}", (string?)search.Attribute("SubmitCommand"));
+        Assert.Equal("Label", (string?)search.Attribute("DisplayMemberPath"));
+        // Ctrl+F focuses the box; its hint must not pop up just because it has the keyboard focus.
+        Assert.Equal("False", (string?)search.Attribute("ToolTipService.ShowsToolTipOnKeyboardFocus"));
+
+        string code = File.ReadAllText(Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory),
+            "src", "EntityTracker.Wpf", "Views", "TrackerWorkspaceView.xaml.cs"));
+        int open = code.IndexOf("public bool TryOpenCurrentSearch()", StringComparison.Ordinal);
+        int graphBranch = code.IndexOf("MainWindowTab.DependencyGraph", open, StringComparison.Ordinal);
+        Assert.True(open >= 0 && graphBranch > open && graphBranch < code.IndexOf("GetCurrentEntityTable();", open, StringComparison.Ordinal));
+        Assert.Contains("DependencyGraphSearchBox.Focus()", code, StringComparison.Ordinal);
+        // Esc closes the suggestions, then leaves the search box for the map.
+        Assert.Contains("DependencyGraphSearchBox.IsKeyboardFocusWithin", code, StringComparison.Ordinal);
+        Assert.Contains("DependencyGraphCanvas.Focus()", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DependencyGraphHighlightDropdownSitsInTheFilterRow()
     {
         XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");

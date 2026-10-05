@@ -30,6 +30,23 @@ public sealed class EntityNameWordsTests
         Assert.Equal(expected, EntityNameWords.Segments(name));
 
     [Theory]
+    [InlineData("customer_preference", "CUSTOMER_PREFERENCE", 0)]
+    [InlineData("customer_preference", "custom", 1)]
+    [InlineData("customer_preference", "cust pref", 2)]
+    [InlineData("customer_preference", "CustPref", 2)]
+    [InlineData("customer_preference", "cust_pref", 2)]
+    [InlineData("CustomerPreference", "customer preference", 2)]
+    [InlineData("customerPreference", "cust-pref", 2)]
+    [InlineData("sales order line", "order line", 3)]
+    [InlineData("HTTPServerConfig", "server conf", 3)]
+    [InlineData("invoice2024Line", "2024", 3)]
+    [InlineData("customer_preference", "pref cust", int.MaxValue)]
+    [InlineData("customer_preference", "ustomer", int.MaxValue)]
+    [InlineData("customer_preference", "__", int.MaxValue)]
+    public void MatchPriority_RanksExactThenPrefixThenWordMatches(string name, string query, int expected) =>
+        Assert.Equal(expected, EntityNameWords.MatchPriority(name, query));
+
+    [Theory]
     [InlineData("customer_preference")]
     [InlineData("__leading_and_trailing__")]
     [InlineData("Mixed_snake-AndCamel case.withDots2024")]

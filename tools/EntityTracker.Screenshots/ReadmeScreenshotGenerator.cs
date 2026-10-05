@@ -559,6 +559,22 @@ internal sealed class ReadmeScreenshotGenerator
         await renderer.CaptureAsync("dependency-graph-hover.png", settleMilliseconds: 500);
         canvas.ShowHover(null);
 
+        // The search suggests entities word by word, like the dependency search: "cust a" finds
+        // customer_address, customer_account and the like.
+        ComboBox graphSearch = (ComboBox)(window.FindWorkspaceElement("DependencyGraphSearchBox")
+            ?? throw new InvalidOperationException("The dependency graph search box is missing."));
+        graph.SearchText = "cust a";
+        if (!graph.IsSuggestionsOpen)
+            throw new InvalidOperationException("The graph search did not suggest any entity for 'cust a'.");
+        graphSearch.ApplyTemplate();
+        Popup suggestions = (Popup)(graphSearch.Template.FindName("PART_Popup", graphSearch)
+            ?? throw new InvalidOperationException("The graph search has no suggestion popup."));
+        // The ComboBox template places its list relative to itself without naming a target.
+        suggestions.PlacementTarget ??= graphSearch;
+        await renderer.CapturePopupAsync(suggestions, "dependency-graph-search.png");
+        graph.IsSuggestionsOpen = false;
+        graph.SearchText = string.Empty;
+
         // The same Tracker as a top-to-bottom tree, whole and with the featured chain highlighted.
         graph.View = DependencyGraphView.Tree;
         graph.FitToViewCommand.Execute(null);

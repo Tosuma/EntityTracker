@@ -453,6 +453,25 @@ public partial class TrackerWorkspaceView : UserControl
             return;
         }
 
+        // In the graph search, the first Esc closes the suggestion list and the next one leaves
+        // the search box for the map, before anything else on the page reacts.
+        if (_viewModel.SelectedTab == MainWindowTab.DependencyGraph && DependencyGraphSearchBox.IsKeyboardFocusWithin)
+        {
+            if (_viewModel.DependencyGraph.IsSuggestionsOpen)
+                _viewModel.DependencyGraph.IsSuggestionsOpen = false;
+            else
+                DependencyGraphCanvas.Focus();
+            e.Handled = true;
+            return;
+        }
+
+        if (_viewModel.SelectedTab == MainWindowTab.DependencyGraph && _viewModel.DependencyGraph.IsSuggestionsOpen)
+        {
+            _viewModel.DependencyGraph.IsSuggestionsOpen = false;
+            e.Handled = true;
+            return;
+        }
+
         EntityTableViewModel? currentTable = GetCurrentEntityTable();
         if (currentTable?.CloseOpenFilter() == true)
         {
@@ -497,6 +516,22 @@ public partial class TrackerWorkspaceView : UserControl
             _viewModel.Editor.IsOpen)
         {
             return false;
+        }
+
+        if (_viewModel.SelectedTab == MainWindowTab.DependencyGraph)
+        {
+            // The graph's search box is always visible; Ctrl+F only moves the focus into it.
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                DependencyGraphSearchBox.Focus();
+                if (DependencyGraphSearchBox.Template?.FindName("PART_EditableTextBox", DependencyGraphSearchBox)
+                    is TextBox text)
+                {
+                    text.Focus();
+                    text.SelectAll();
+                }
+            }));
+            return true;
         }
 
         EntityTableViewModel? table = GetCurrentEntityTable();

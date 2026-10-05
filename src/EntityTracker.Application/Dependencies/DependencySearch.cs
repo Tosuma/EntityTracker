@@ -41,7 +41,7 @@ internal static class DependencySearch
             .Where(entity => proposedEntityKey is null ||
                              EntitySourceKey.From(entity.SourceName) != proposedEntityKey)
             .Where(entity => !excluded.Contains(EntitySourceKey.From(entity.SourceName)))
-            .Select(entity => (Entity: entity, Priority: MatchPriority(entity.SourceName, enteredName)))
+            .Select(entity => (Entity: entity, Priority: EntityNameWords.MatchPriority(entity.SourceName, enteredName)))
             .Where(static match => match.Priority < int.MaxValue)
             .OrderBy(static match => match.Priority)
             .ThenBy(static match => match.Entity.SourceName, StringComparer.OrdinalIgnoreCase)
@@ -90,28 +90,5 @@ internal static class DependencySearch
             suggestions,
             activeExactMatch is null,
             null);
-    }
-
-    private static int MatchPriority(string sourceName, string query)
-    {
-        if (sourceName.Equals(query, StringComparison.OrdinalIgnoreCase)) return 0;
-        if (sourceName.StartsWith(query, StringComparison.OrdinalIgnoreCase)) return 1;
-
-        string[] nameWords = EntityNameWords.Words(sourceName);
-        string[] queryWords = EntityNameWords.Words(query);
-        if (queryWords.Length == 0) return int.MaxValue;
-        for (int start = 0; start <= nameWords.Length - queryWords.Length; start++)
-        {
-            bool matches = true;
-            for (int index = 0; index < queryWords.Length; index++)
-            {
-                if (nameWords[start + index].StartsWith(queryWords[index], StringComparison.OrdinalIgnoreCase))
-                    continue;
-                matches = false;
-                break;
-            }
-            if (matches) return start == 0 ? 2 : 3;
-        }
-        return int.MaxValue;
     }
 }
