@@ -1096,15 +1096,24 @@
                     </DockPanel>
 
                     <WrapPanel Grid.Row="1" Margin="0,0,0,8">
-                        <TextBox x:Name="DependencyGraphSearchBox"
-                                 Width="240" Margin="0,0,8,6" VerticalAlignment="Center"
-                                 AutomationProperties.Name="Find entity in dependency graph"
-                                 ToolTip="Type an entity name and press Enter"
-                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}">
-                            <TextBox.InputBindings>
-                                <KeyBinding Key="Enter" Command="{Binding FindCommand}" />
-                            </TextBox.InputBindings>
-                        </TextBox>
+                        <!-- Searches like the dependency search: word-aware suggestions, arrow keys,
+                             Enter to choose (or find the best match), Esc to close the list. -->
+                        <controls:DependencyComboBox x:Name="DependencyGraphSearchBox"
+                                                     Width="240" Margin="0,0,8,6" VerticalAlignment="Center"
+                                                     AutomationProperties.Name="Find entity in dependency graph"
+                                                     AutomationProperties.HelpText="Type part of a name; words in spaced, snake_case, PascalCase and camelCase names match. Use the arrow keys and Enter to choose."
+                                                     ToolTip="Type an entity name (Ctrl+F); use the arrow keys and Enter to choose"
+                                                     IsEditable="True"
+                                                     IsTextSearchEnabled="False"
+                                                     Style="{StaticResource DependencyComboBoxStyle}"
+                                                     DisplayMemberPath="Label"
+                                                     TextSearch.TextPath="Label"
+                                                     ItemsSource="{Binding Suggestions}"
+                                                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                                     IsDropDownOpen="{Binding IsSuggestionsOpen}"
+                                                     ChooseCommand="{Binding ChooseSuggestionCommand}"
+                                                     SubmitCommand="{Binding FindCommand}"
+                                                     RefreshCommand="{Binding RefreshSuggestionsCommand}" />
                         <Button Margin="0,0,16,6"
                                 Command="{Binding FindCommand}"
                                 Content="Find"

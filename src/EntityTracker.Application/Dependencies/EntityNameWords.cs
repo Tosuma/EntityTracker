@@ -74,4 +74,33 @@ public static class EntityNameWords
                char.IsDigit(current) && char.IsLetter(previous) ||
                char.IsLetter(current) && char.IsDigit(previous);
     }
+
+    /// <summary>
+    /// Ranks how well a name matches a search: 0 exact, 1 prefix, 2 when the query's words start
+    /// the name's words from the first word, 3 when they match from a later word, and
+    /// <see cref="int.MaxValue"/> for no match. Words follow <see cref="Words"/>, so "cust pref",
+    /// "CustPref" and "cust_pref" all find "customer_preference".
+    /// </summary>
+    public static int MatchPriority(string sourceName, string query)
+    {
+        if (sourceName.Equals(query, StringComparison.OrdinalIgnoreCase)) return 0;
+        if (sourceName.StartsWith(query, StringComparison.OrdinalIgnoreCase)) return 1;
+
+        string[] nameWords = Words(sourceName);
+        string[] queryWords = Words(query);
+        if (queryWords.Length == 0) return int.MaxValue;
+        for (int start = 0; start <= nameWords.Length - queryWords.Length; start++)
+        {
+            bool matches = true;
+            for (int index = 0; index < queryWords.Length; index++)
+            {
+                if (nameWords[start + index].StartsWith(queryWords[index], StringComparison.OrdinalIgnoreCase))
+                    continue;
+                matches = false;
+                break;
+            }
+            if (matches) return start == 0 ? 2 : 3;
+        }
+        return int.MaxValue;
+    }
 }

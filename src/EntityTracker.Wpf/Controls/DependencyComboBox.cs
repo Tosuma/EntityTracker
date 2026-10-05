@@ -29,6 +29,9 @@ public class DependencyComboBox : ComboBox
     public static readonly DependencyProperty ChooseCommandProperty = DependencyProperty.Register(
         nameof(ChooseCommand), typeof(ICommand), typeof(DependencyComboBox));
 
+    public static readonly DependencyProperty SubmitCommandProperty = DependencyProperty.Register(
+        nameof(SubmitCommand), typeof(ICommand), typeof(DependencyComboBox));
+
     // Inherited so the item containers inside the dropdown can compare themselves against it.
     public static readonly DependencyProperty HighlightedItemProperty = DependencyProperty.RegisterAttached(
         nameof(HighlightedItem), typeof(object), typeof(DependencyComboBox),
@@ -49,6 +52,16 @@ public class DependencyComboBox : ComboBox
     {
         get => (ICommand?)GetValue(ChooseCommandProperty);
         set => SetValue(ChooseCommandProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets an optional command for Enter when no suggestion is highlighted, for example
+    /// "find the best match". Without it, Enter keeps the combo box's own behaviour.
+    /// </summary>
+    public ICommand? SubmitCommand
+    {
+        get => (ICommand?)GetValue(SubmitCommandProperty);
+        set => SetValue(SubmitCommandProperty, value);
     }
 
     public object? HighlightedItem
@@ -99,6 +112,13 @@ public class DependencyComboBox : ComboBox
 
     private bool HandleNavigationKey(Key key)
     {
+        if (key == Key.Enter && HighlightedItem is null && SubmitCommand is { } submit)
+        {
+            IsDropDownOpen = false;
+            if (submit.CanExecute(null)) submit.Execute(null);
+            return true;
+        }
+
         if (!IsDropDownOpen)
         {
             if (key is not (Key.Up or Key.Down)) return false;

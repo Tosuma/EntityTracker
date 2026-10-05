@@ -3,6 +3,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Wpf.Commands;
@@ -32,6 +33,11 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
     private readonly NotificationCenter? _notifications;
     private readonly ILogger _logger;
     private readonly RelayCommand _findCommand;
+    private readonly RelayCommand<DependencyGraphNode> _chooseSuggestionCommand;
+    private readonly RelayCommand _refreshSuggestionsCommand;
+    private IReadOnlyList<DependencyGraphNode> _suggestions = [];
+    private bool _isSuggestionsOpen;
+    private bool _isChoosing;
     private readonly RelayCommand _clearSelectionCommand;
     private readonly RelayCommand _exportPngCommand;
     private DependencyGraphModel _model = DependencyGraphModel.Empty;
@@ -63,6 +69,8 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
         _logger = logger ?? NullLogger.Instance;
         Layout = new RadialDependencyLayout(_model);
         _findCommand = new RelayCommand(Find, () => !string.IsNullOrWhiteSpace(SearchText) && HasNodes);
+        _chooseSuggestionCommand = new RelayCommand<DependencyGraphNode>(ChooseSuggestion, node => node is not null);
+        _refreshSuggestionsCommand = new RelayCommand(() => Suggestions = Matches(SearchText.Trim()));
         _clearSelectionCommand = new RelayCommand(() => SelectedNode = null, () => HasSelection);
         _exportPngCommand = new RelayCommand(ExportPng,
             () => HasNodes && _filePicker is not null && PngWriter is not null);
@@ -288,6 +296,10 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
             if (!SetField(ref _searchText, value ?? string.Empty)) return;
             SearchMessage = null;
             _findCommand.NotifyCanExecuteChanged();
+            if (_isChoosing) return;
+            string text = _searchText.Trim();
+            Suggestions = text.Length == 0 ? [] : Matches(text);
+            IsSuggestionsOpen = Suggestions.Count > 0;
         }
     }
 
@@ -310,6 +322,29 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
     }
 
     public ICommand FindCommand => _findCommand;
+
+    /// <summary>Gets the entities matching the search, best match first, as the dependency search ranks them.</summary>
+    public IReadOnlyList<DependencyGraphNode> Suggestions
+    {
+        get => _suggestions;
+        private set => SetField(ref _suggestions, value);
+    }
+
+    /// <summary>Gets or sets whether the suggestion list under the search box is open.</summary>
+    public bool IsSuggestionsOpen
+    {
+        get => _isSuggestionsOpen;
+        set => SetField(ref _isSuggestionsOpen, value);
+    }
+
+    /// <summary>Selects a suggested entity and centres the map on it.</summary>
+    public ICommand ChooseSuggestionCommand => _chooseSuggestionCommand;
+
+    /// <summary>Fills the list when it is opened with the arrow keys; an empty search lists every entity.</summary>
+    public ICommand RefreshSuggestionsCommand => _refreshSuggestionsCommand;
+
+    /// <summary>How many suggestions the list shows at most, as in the dependency search.</summary>
+    internal const int MaxSuggestions = 50;
     public ICommand ClearSelectionCommand => _clearSelectionCommand;
     public ICommand FitToViewCommand { get; }
     public ICommand ExportPngCommand => _exportPngCommand;
@@ -325,6 +360,8 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
         _landmarks = FindLandmarks(model);
         Model = model;
         SetSelection(selectedKeys.Select(model.Find).OfType<DependencyGraphNode>().ToList());
+        IsSuggestionsOpen = false;
+        Suggestions = [];
         UpdateHighlight();
         OnVisualStateChanged();
     }
@@ -410,24 +447,52 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
         return landmarks;
     }
 
+    /// <summary>
+    /// Ranks entities with the same word-aware rule as the dependency search, so "cust pref",
+    /// "CustPref" and "cust_pref" all find "customer_preference".
+    /// </summary>
+    private IReadOnlyList<DependencyGraphNode> Matches(string text) => Model.Nodes
+        .Select(node => (Node: node, Priority: EntityNameWords.MatchPriority(node.Label, text)))
+        .Where(static match => match.Priority < int.MaxValue)
+        .OrderBy(static match => match.Priority)
+        .ThenBy(static match => match.Node.Label, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(static match => match.Node.Label, StringComparer.Ordinal)
+        .Select(static match => match.Node)
+        .Take(MaxSuggestions)
+        .ToArray();
+
+    private void ChooseSuggestion(DependencyGraphNode? node)
+    {
+        if (node is null) return;
+        // A rebuild replaces every node; follow the suggestion to the current one.
+        node = Model.Find(node.Key) ?? node;
+        IsSuggestionsOpen = false;
+        _isChoosing = true;
+        try { SearchText = node.Label; }
+        finally { _isChoosing = false; }
+        Show(node);
+    }
+
     private void Find()
     {
         string text = SearchText.Trim();
-        DependencyGraphNode? match =
-            Model.Nodes.FirstOrDefault(node => string.Equals(node.Label, text, StringComparison.OrdinalIgnoreCase)) ??
-            Model.Nodes.Where(node => node.Label.Contains(text, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(static node => node.Label, StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault();
+        IsSuggestionsOpen = false;
+        DependencyGraphNode? match = Matches(text).FirstOrDefault();
         if (match is null)
         {
             SearchMessage = $"No entity matches “{text}”.";
             return;
         }
 
+        Show(match);
+    }
+
+    private void Show(DependencyGraphNode node)
+    {
         SearchMessage = null;
-        if (!IsVisible(match)) HideUnconnected = false;
-        SelectedNode = match;
-        CenterOnRequested?.Invoke(this, match);
+        if (!IsVisible(node)) HideUnconnected = false;
+        SelectedNode = node;
+        CenterOnRequested?.Invoke(this, node);
     }
 
     private void ExportPng()

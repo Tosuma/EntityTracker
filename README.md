@@ -300,7 +300,10 @@ next to the filters decides what a selection shows: **Dependencies** (everything
 **Dependents** (every entity that depends on it, directly or indirectly) or **Direct links** (one
 step both ways). Each view remembers its own choice. While an entity is selected,
 hovering over others shows their card without changing the highlight; **Focus on selection** hides the rest, and **Hide unconnected** removes
-entities without links. Find an entity by name, double-click it to open its details, drag it to a
+entities without links. Find an entity by name: the search box (Ctrl+F) suggests entities as you
+type, with the same word matching as the dependency search, so "cust a" finds `customer_address`
+and "CustPref" finds `customer_preference`; use the arrow keys and Enter to pick one, Enter alone to
+jump to the best match, and Esc to close the list. Double-click an entity to open its details, drag it to a
 new spot, or export the current view as a PNG. The solar system slowly turns around its centre and holds
 still while you hover, drag, pan, zoom or have an entity selected; turn this off, or switch on
 faint orbit rings for each level, under **Settings → Tracker**.
@@ -310,6 +313,8 @@ faint orbit rings for each level, under **Settings → Tracker**.
 ![Dependency graph with one entity selected and its dependency chain highlighted](images/light/dependency-graph-selected.png)
 
 ![Dependency graph hover card explaining an entity's status, rank, ring and usage](images/light/dependency-graph-hover.png)
+
+![Dependency graph search suggesting entities word by word](images/light/dependency-graph-search.png)
 
 ![Dependency graph with two entities Ctrl-selected and everything that depends on them highlighted](images/light/dependency-graph-dependents.png)
 
