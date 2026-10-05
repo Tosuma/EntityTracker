@@ -20,7 +20,10 @@ public sealed class ManualEntityCreationServiceTests
              Entity(7, "consumption_account")],
             [], [], out _);
 
-        Assert.Equal(["Unassigned"],
+        // Word matches come first; text inside a word ("un" in "account") still matches, last,
+        // as it does in the Overview search.
+        Assert.Equal(["Unassigned", "account status", "account-status", "AccountStatus",
+                "consumption_account", "consumption_account_status"],
             (await service.SearchDependenciesAsync("un")).Suggestions
                 .Select(suggestion => suggestion.SourceName));
         Assert.Equal(["account status", "account-status", "AccountStatus",
@@ -33,7 +36,10 @@ public sealed class ManualEntityCreationServiceTests
         Assert.Equal(["consumption_account", "consumption_account_status"],
             (await service.SearchDependenciesAsync("consumption_acc")).Suggestions
                 .Select(suggestion => suggestion.SourceName));
-        Assert.Empty((await service.SearchDependenciesAsync("sum")).Suggestions);
+        Assert.Equal(["consumption_account", "consumption_account_status"],
+            (await service.SearchDependenciesAsync("sum")).Suggestions
+                .Select(suggestion => suggestion.SourceName));
+        Assert.Empty((await service.SearchDependenciesAsync("zzz")).Suggestions);
     }
 
     [Fact]
@@ -180,6 +186,25 @@ public sealed class ManualEntityCreationServiceTests
         IReadOnlyList<string> suggestions = await service.SearchGroupNamesAsync(" DATA ");
 
         Assert.Equal(["Data", "database", "Legacy Data", "Metadata"], suggestions);
+    }
+
+    [Fact]
+    public async Task SearchGroupNamesAsync_MatchesWordsAndNamesWrittenWithoutSpaces()
+    {
+        ManualEntityCreationService service = Service(
+            [
+                Entity(1, "One", groupName: "Legal Entity"),
+                Entity(2, "Two", groupName: "customerMasterData"),
+                Entity(3, "Three", groupName: "Billing")
+            ],
+            [],
+            [],
+            out _);
+
+        Assert.Equal(["Legal Entity"], await service.SearchGroupNamesAsync("legalentity"));
+        Assert.Equal(["customerMasterData"], await service.SearchGroupNamesAsync("master data"));
+        Assert.Equal(["customerMasterData"], await service.SearchGroupNamesAsync("masterdata"));
+        Assert.Equal(["Billing"], await service.SearchGroupNamesAsync("illi"));
     }
 
     [Fact]

@@ -41,7 +41,6 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     private string _groupName = string.Empty;
     private int? _selectedRequestedPriority;
     private string _dependencyQuery = string.Empty;
-    private string? _selectedGroupSuggestion;
     private IReadOnlyList<ManualDependencySuggestion> _suggestions = [];
     private IReadOnlyList<string> _groupSuggestions = [];
     private IReadOnlyList<string> _errors = [];
@@ -183,23 +182,6 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
                 ClearFatalValidation();
                 ScheduleSearch();
             }
-        }
-    }
-
-    public string? SelectedGroupSuggestion
-    {
-        get => _selectedGroupSuggestion;
-        set
-        {
-            if (!SetField(ref _selectedGroupSuggestion, value) ||
-                string.IsNullOrWhiteSpace(value))
-            {
-                return;
-            }
-
-            UseGroupSuggestion(value);
-            _selectedGroupSuggestion = null;
-            OnPropertyChanged();
         }
     }
 
@@ -890,8 +872,6 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(HasNoSelectedDependencies));
         Suggestions = [];
         GroupSuggestions = [];
-        _selectedGroupSuggestion = null;
-        OnPropertyChanged(nameof(SelectedGroupSuggestion));
         IsDependencySuggestionsOpen = false;
         IsGroupSuggestionsOpen = false;
         Errors = [];

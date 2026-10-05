@@ -25,6 +25,38 @@ public sealed class EntityTableViewModelTests
     }
 
     [Fact]
+    public async Task Search_MatchesWordsNamesWithoutSpacesAndPlainSubstrings()
+    {
+        EntityTableViewModel table = EntityTableViewModel.CreateActive();
+        table.ReplaceSourceItems([
+            Row(1, "legal_entity", "", "A", DevelopmentStatus.NotStarted, EntityWorkflowState.Ready),
+            Row(2, "customerPreference", "", "A", DevelopmentStatus.NotStarted, EntityWorkflowState.Ready),
+            Row(3, "invoice", "", "A", DevelopmentStatus.NotStarted, EntityWorkflowState.Ready)
+                with { DependencyNames = ["LegalEntity"] }
+        ]);
+
+        await SearchAsync(table, "legalentity");
+        Assert.Equal(["legal_entity"], table.Items.Select(row => row.SourceName));
+
+        await SearchAsync(table, "cust pref");
+        Assert.Equal(["customerPreference"], table.Items.Select(row => row.SourceName));
+
+        await SearchAsync(table, "voic");
+        Assert.Equal(["invoice"], table.Items.Select(row => row.SourceName));
+
+        table.SearchDependenciesInstead = true;
+        await SearchAsync(table, "legal entity");
+        Assert.Equal(["invoice"], table.Items.Select(row => row.SourceName));
+    }
+
+    /// <summary>Types a search and waits out the table's short debounce.</summary>
+    private static async Task SearchAsync(EntityTableViewModel table, string query)
+    {
+        table.SearchQuery = query;
+        await Task.Delay(400);
+    }
+
+    [Fact]
     public void ResponsibleFilter_MatchesEachAssignedDeveloperAndBlankInBothTables()
     {
         EntityOverviewDeveloper alice = Developer(1, "AB", "Alex Brown");

@@ -154,6 +154,40 @@ public sealed class PresentationConfigurationTests
             File.ReadAllText(Path.Combine(wpfRoot, "Views", "AggregateProgressView.xaml")), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("DependencyGraphSearchBox", "Label", "{Binding ChooseSuggestionCommand}")]
+    [InlineData("ManualDependencyComboBox", "SourceName", "{Binding ManualCreation.AddExistingCommand}")]
+    [InlineData("EditorDependencyComboBox", "SourceName", "{Binding Editor.AddExistingCommand}")]
+    [InlineData("ManualGroupComboBox", null, "{Binding ManualCreation.UseGroupSuggestionCommand}")]
+    [InlineData("EditorGroupComboBox", null, "{Binding Editor.UseGroupSuggestionCommand}")]
+    public void EverySuggestingBoxUsesTheSharedSuggestionComboBox(string name, string? displayMember, string choose)
+    {
+        XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XElement box = workspace.Descendants().Single(element =>
+            (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == name);
+
+        Assert.Equal("SuggestionComboBox", box.Name.LocalName);
+        Assert.Equal("{StaticResource SuggestionComboBoxStyle}", (string?)box.Attribute("Style"));
+        Assert.Equal(displayMember, (string?)box.Attribute("DisplayMemberPath"));
+        Assert.Equal(choose, (string?)box.Attribute("ChooseCommand"));
+        Assert.Null(box.Attribute("SelectedItem"));
+    }
+
+    [Fact]
+    public void NoPlainComboBoxOpensItsOwnSuggestionList()
+    {
+        string[] offenders = Directory.EnumerateFiles(Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory),
+                "src", "EntityTracker.Wpf"), "*.xaml", SearchOption.AllDirectories)
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}") &&
+                           !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
+            .SelectMany(path => XDocument.Load(path).Descendants()
+                .Where(element => element.Name.LocalName == "ComboBox" && element.Attribute("IsDropDownOpen") is not null)
+                .Select(element => $"{Path.GetFileName(path)}: {(string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml"))}"))
+            .ToArray();
+
+        Assert.Empty(offenders);
+    }
+
     [Fact]
     public void DependencyGraphSearchSuggestsLikeTheDependencySearchAndOpensWithCtrlF()
     {
@@ -161,7 +195,7 @@ public sealed class PresentationConfigurationTests
         XElement search = workspace.Descendants().Single(element =>
             (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "DependencyGraphSearchBox");
 
-        Assert.Equal("DependencyComboBox", search.Name.LocalName);
+        Assert.Equal("SuggestionComboBox", search.Name.LocalName);
         Assert.Equal("Find entity in dependency graph", (string?)search.Attribute("AutomationProperties.Name"));
         Assert.Equal("{Binding Suggestions}", (string?)search.Attribute("ItemsSource"));
         Assert.Equal("{Binding SearchText, UpdateSourceTrigger=PropertyChanged}", (string?)search.Attribute("Text"));
@@ -722,16 +756,16 @@ public sealed class PresentationConfigurationTests
         {
             XElement comboBox = Assert.Single(document.Descendants(), element =>
                 (string?)element.Attribute(x + "Name") == name);
-            Assert.EndsWith("ComboBox", comboBox.Name.LocalName);
-            Assert.Equal("True", (string?)comboBox.Attribute("IsEditable"));
-            Assert.Equal("False", (string?)comboBox.Attribute("IsTextSearchEnabled"));
+            // Editable, without the built-in text search, through the one shared suggestion style.
+            Assert.Equal("SuggestionComboBox", comboBox.Name.LocalName);
+            Assert.Equal("{StaticResource SuggestionComboBoxStyle}", (string?)comboBox.Attribute("Style"));
         }
 
         foreach (string name in new[] { "ManualDependencyComboBox", "EditorDependencyComboBox" })
         {
             XElement comboBox = Assert.Single(document.Descendants(), element =>
                 (string?)element.Attribute(x + "Name") == name);
-            Assert.Equal("{StaticResource DependencyComboBoxStyle}", (string?)comboBox.Attribute("Style"));
+            Assert.Equal("{StaticResource SuggestionComboBoxStyle}", (string?)comboBox.Attribute("Style"));
             Assert.Contains("DependencyQuery", (string?)comboBox.Attribute("Text"));
             Assert.Contains("Suggestions", (string?)comboBox.Attribute("ItemsSource"));
             Assert.Null(comboBox.Attribute("SelectedItem"));
@@ -742,11 +776,15 @@ public sealed class PresentationConfigurationTests
 
         XDocument components = LoadWpfXaml("Themes", "EntityTrackerComponents.xaml");
         XElement dependencyStyle = Assert.Single(components.Descendants(), element =>
-            (string?)element.Attribute(x + "Key") == "DependencyComboBoxStyle");
+            (string?)element.Attribute(x + "Key") == "SuggestionComboBoxStyle");
         Dictionary<string, string?> setters = dependencyStyle.Elements()
             .Where(element => element.Name.LocalName == "Setter")
             .ToDictionary(element => (string)element.Attribute("Property")!,
                 element => (string?)element.Attribute("Value"));
+        Assert.Equal("True", setters["IsEditable"]);
+        Assert.Equal("False", setters["IsTextSearchEnabled"]);
+        Assert.Equal("True", setters["StaysOpenOnEdit"]);
+        Assert.False(setters.ContainsKey("DisplayMemberPath"), "Each box decides what its suggestions show.");
         Assert.Equal("240", setters["MaxDropDownHeight"]);
         Assert.Equal("True", setters["ScrollViewer.CanContentScroll"]);
         Assert.Equal("Pixel", setters["VirtualizingPanel.ScrollUnit"]);

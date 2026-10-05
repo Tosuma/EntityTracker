@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
@@ -451,15 +452,21 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
 
         if (!SearchDependenciesInstead)
         {
-            return row.SourceName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+            return MatchesName(row.SourceName, query) ||
                    SearchResponsibleNames && row.DeveloperItems.Any(developer =>
                        developer.Initials.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                        developer.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
         }
 
-        return row.DependencyNames.Any(name =>
-                name.Contains(query, StringComparison.OrdinalIgnoreCase));
+        return row.DependencyNames.Any(name => MatchesName(name, query));
     }
+
+    /// <summary>
+    /// Finds text anywhere in a name, and also word by word as the dependency search does, so
+    /// "cust pref" and "legalentity" find "customer_preference" and "legal_entity".
+    /// </summary>
+    private static bool MatchesName(string name, string query) =>
+        EntityNameWords.MatchPriority(name, query) < int.MaxValue;
 
     private static string FormatDevelopmentStatus(DevelopmentStatus status) => status switch
     {

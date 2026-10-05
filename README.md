@@ -237,6 +237,12 @@ and, by default, current Developer initials and
 display names. Turn off **Search responsible names** in Settings to search entity names only.
 **Search dependency names** remains a separate mode. Open search with <kbd>Ctrl</kbd>+<kbd>F</kbd>.
 
+Every entity search in the app (Overview and Archived search, the dependency and Group boxes when
+adding or editing an entity, and the dependency graph search) matches names the same way: part of
+the name, word by word across spaces, snake_case, kebab-case, PascalCase and camelCase ("cust pref"
+finds `customer_preference`), and written without spaces ("legalentity" finds `legal entity`,
+`legalEntity` and `legal_entity`). Typing is never interrupted when suggestions appear.
+
 Development status keeps the user-set detail: **Rework needed** means work is pending,
 **Reworking** means it is active, and **Blocked** manually pauses an entity. Work status shows
 Ready for Not started or Rework needed, In progress for development or Reworking, and

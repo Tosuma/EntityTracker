@@ -22,7 +22,7 @@ public sealed class DependencyGraphSearchBoxTests
     public void TypingSuggestsAndDownThenEnterSelectsTheHighlightedEntity() => Run((box, input, graph) =>
     {
         box.Text = "cust pref";
-        Pump(0.05);
+        Settle();
         Assert.True(graph.IsSuggestionsOpen);
         Assert.Equal(["CustomerPreferenceArchive", "customer_preference"], graph.Suggestions.Select(node => node.Label));
 
@@ -48,10 +48,43 @@ public sealed class DependencyGraphSearchBoxTests
     });
 
     [Fact]
+    public void AListOpenedAfterTypingLeavesTheTextAlone() => Run((box, input, graph) =>
+    {
+        // The Add and Edit entity boxes open their list after an asynchronous search, not while a
+        // key is being handled; that used to select all the text too.
+        Type(input, "cust");
+        graph.IsSuggestionsOpen = false;
+        Settle();
+
+        graph.IsSuggestionsOpen = true;
+        Settle();
+        Assert.True(box.IsDropDownOpen);
+        Assert.Equal(0, input.SelectionLength);
+        Type(input, "omer");
+
+        Assert.Equal("customer", box.Text);
+    });
+
+    [Fact]
+    public void AnOpenThatIsCancelledBeforeItHappensKeepsTheListClosed() => Run((box, input, graph) =>
+    {
+        graph.SearchText = "cust";
+        graph.IsSuggestionsOpen = false;
+        Settle();
+
+        graph.IsSuggestionsOpen = true;
+        graph.IsSuggestionsOpen = false;
+        Settle();
+
+        Assert.False(box.IsDropDownOpen);
+        Assert.False(graph.IsSuggestionsOpen);
+    });
+
+    [Fact]
     public void EnterWithoutAHighlightFindsTheBestMatch() => Run((box, input, graph) =>
     {
         box.Text = "order line";
-        Pump(0.05);
+        Settle();
 
         Press(input, Key.Enter);
 
@@ -63,18 +96,18 @@ public sealed class DependencyGraphSearchBoxTests
     public void EscapeClosesTheSuggestions() => Run((box, input, graph) =>
     {
         box.Text = "cust";
-        Pump(0.05);
+        Settle();
         Assert.True(box.IsDropDownOpen);
 
         Press(input, Key.Escape);
-        Pump(0.05);
+        Settle();
 
         Assert.False(box.IsDropDownOpen);
         Assert.False(graph.IsSuggestionsOpen);
         Assert.Null(graph.SelectedNode);
     });
 
-    private static void Run(Action<DependencyComboBox, TextBox, DependencyGraphViewModel> test)
+    private static void Run(Action<SuggestionComboBox, TextBox, DependencyGraphViewModel> test)
     {
         Exception? failure = null;
         Thread thread = new(() =>
@@ -89,7 +122,7 @@ public sealed class DependencyGraphSearchBoxTests
                     Row(3, "sales order line"),
                     Row(4, "invoice")
                 ]);
-                DependencyComboBox box = new()
+                SuggestionComboBox box = new()
                 {
                     IsEditable = true,
                     IsTextSearchEnabled = false,
@@ -102,9 +135,9 @@ public sealed class DependencyGraphSearchBoxTests
                 box.SetBinding(ComboBox.TextProperty, new Binding(nameof(graph.SearchText))
                     { UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged });
                 box.SetBinding(ComboBox.IsDropDownOpenProperty, new Binding(nameof(graph.IsSuggestionsOpen)));
-                box.SetBinding(DependencyComboBox.ChooseCommandProperty, new Binding(nameof(graph.ChooseSuggestionCommand)));
-                box.SetBinding(DependencyComboBox.SubmitCommandProperty, new Binding(nameof(graph.FindCommand)));
-                box.SetBinding(DependencyComboBox.RefreshCommandProperty, new Binding(nameof(graph.RefreshSuggestionsCommand)));
+                box.SetBinding(SuggestionComboBox.ChooseCommandProperty, new Binding(nameof(graph.ChooseSuggestionCommand)));
+                box.SetBinding(SuggestionComboBox.SubmitCommandProperty, new Binding(nameof(graph.FindCommand)));
+                box.SetBinding(SuggestionComboBox.RefreshCommandProperty, new Binding(nameof(graph.RefreshSuggestionsCommand)));
                 Window window = new()
                 {
                     Width = 400, Height = 300, Left = -10000, Top = -10000,
@@ -117,7 +150,7 @@ public sealed class DependencyGraphSearchBoxTests
                 ResourceDictionary components = (ResourceDictionary)System.Windows.Application.LoadComponent(
                     new Uri("/EntityTracker.Wpf;component/Themes/EntityTrackerComponents.xaml", UriKind.Relative));
                 window.Resources.MergedDictionaries.Add(components);
-                box.Style = (Style)components["DependencyComboBoxStyle"];
+                box.Style = (Style)components["SuggestionComboBoxStyle"];
                 box.DisplayMemberPath = "Label";
                 window.Show();
                 try
@@ -143,6 +176,17 @@ public sealed class DependencyGraphSearchBoxTests
         if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
+    /// <summary>
+    /// Waits until WPF has done everything already queued, including a list opening held back to
+    /// keep the caret, so the tests do not depend on how busy the machine is.
+    /// </summary>
+    private static void Settle()
+    {
+        Pump(0.01);
+        System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { },
+            System.Windows.Threading.DispatcherPriority.ContextIdle);
+    }
+
     /// <summary>Types like the keyboard does: each character replaces the current selection.</summary>
     private static void Type(TextBox input, string text)
     {
@@ -150,7 +194,7 @@ public sealed class DependencyGraphSearchBoxTests
         {
             TextCompositionManager.StartComposition(
                 new TextComposition(InputManager.Current, input, character.ToString()));
-            Pump(0.03);
+            Settle();
         }
     }
 
@@ -162,7 +206,7 @@ public sealed class DependencyGraphSearchBoxTests
         target.RaiseEvent(preview);
         if (!preview.Handled)
             target.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, source, 0, key) { RoutedEvent = Keyboard.KeyDownEvent });
-        Pump(0.03);
+        Settle();
     }
 
     private static EntityOverviewRow Row(int id, string name, params string[] dependencies) => new(

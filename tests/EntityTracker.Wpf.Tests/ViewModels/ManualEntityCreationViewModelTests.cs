@@ -161,7 +161,7 @@ public sealed class ManualEntityCreationViewModelTests
         await viewModel.SearchGroupNamesAsync();
         string suggestion = Assert.Single(viewModel.GroupSuggestions);
         Assert.True(viewModel.IsGroupSuggestionsOpen);
-        viewModel.SelectedGroupSuggestion = suggestion;
+        viewModel.UseGroupSuggestionCommand.Execute(suggestion);
 
         Assert.Equal("Core Data", viewModel.GroupName);
         Assert.Empty(viewModel.GroupSuggestions);

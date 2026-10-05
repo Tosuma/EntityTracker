@@ -1098,7 +1098,7 @@
                     <WrapPanel Grid.Row="1" Margin="0,0,0,8">
                         <!-- Searches like the dependency search: word-aware suggestions, arrow keys,
                              Enter to choose (or find the best match), Esc to close the list. -->
-                        <controls:DependencyComboBox x:Name="DependencyGraphSearchBox"
+                        <controls:SuggestionComboBox x:Name="DependencyGraphSearchBox"
                                                      Width="240" Margin="0,0,8,6" VerticalAlignment="Center"
                                                      AutomationProperties.Name="Find entity in dependency graph"
                                                      AutomationProperties.HelpText="Type part of a name; words in spaced, snake_case, PascalCase and camelCase names match. Use the arrow keys and Enter to choose."
@@ -1106,7 +1106,7 @@
                                                      ToolTipService.ShowsToolTipOnKeyboardFocus="False"
                                                      IsEditable="True"
                                                      IsTextSearchEnabled="False"
-                                                     Style="{StaticResource DependencyComboBoxStyle}"
+                                                     Style="{StaticResource SuggestionComboBoxStyle}"
                                                      DisplayMemberPath="Label"
                                                      TextSearch.TextPath="Label"
                                                      ItemsSource="{Binding Suggestions}"
@@ -2037,15 +2037,13 @@
                                         </Grid.ColumnDefinitions>
                                         <StackPanel>
                                             <Label Target="{Binding ElementName=ManualGroupComboBox}" Content="Group" />
-                                            <ComboBox x:Name="ManualGroupComboBox"
+                                            <controls:SuggestionComboBox x:Name="ManualGroupComboBox"
                                                       Margin="0,4,0,0"
                                                       AutomationProperties.HelpText="Type a new group or choose an existing group."
                                                       AutomationProperties.Name="Group"
-                                                      IsEditable="True"
-                                                      IsTextSearchEnabled="False"
+                                                      Style="{StaticResource SuggestionComboBoxStyle}"
                                                       ItemsSource="{Binding ManualCreation.GroupSuggestions}"
-                                                      SelectedItem="{Binding ManualCreation.SelectedGroupSuggestion}"
-                                                      StaysOpenOnEdit="True"
+                                                      ChooseCommand="{Binding ManualCreation.UseGroupSuggestionCommand}"
                                                       Text="{Binding ManualCreation.GroupName, UpdateSourceTrigger=PropertyChanged}"
                                                       IsDropDownOpen="{Binding ManualCreation.IsGroupSuggestionsOpen}" />
                                         </StackPanel>
@@ -2083,12 +2081,14 @@
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <controls:DependencyComboBox x:Name="ManualDependencyComboBox"
+                                        <controls:SuggestionComboBox x:Name="ManualDependencyComboBox"
                                                                      AutomationProperties.HelpText="Open the dropdown to browse active entities, or type to search. Choose an entity to add it."
                                                                      AutomationProperties.Name="Dependency"
                                                                      IsEditable="True"
                                                                      IsTextSearchEnabled="False"
-                                                                     Style="{StaticResource DependencyComboBoxStyle}"
+                                                                     DisplayMemberPath="SourceName"
+                                                                     TextSearch.TextPath="SourceName"
+                                                                     Style="{StaticResource SuggestionComboBoxStyle}"
                                                                      ItemsSource="{Binding ManualCreation.Suggestions}"
                                                                      ChooseCommand="{Binding ManualCreation.AddExistingCommand}"
                                                                      Text="{Binding ManualCreation.DependencyQuery, UpdateSourceTrigger=PropertyChanged}"
@@ -2943,16 +2943,14 @@
 
                                 <StackPanel Margin="0,0,0,12">
                                     <TextBlock FontWeight="SemiBold" Text="Group" />
-                                    <ComboBox x:Name="EditorGroupComboBox"
+                                    <controls:SuggestionComboBox x:Name="EditorGroupComboBox"
                                               Margin="0,5,0,0"
                                               AutomationProperties.HelpText="Type a new group or choose an existing group."
                                               AutomationProperties.Name="Group"
-                                              IsEditable="True"
+                                              Style="{StaticResource SuggestionComboBoxStyle}"
                                               IsEnabled="{Binding Editor.CanEditProgress}"
-                                              IsTextSearchEnabled="False"
                                               ItemsSource="{Binding Editor.GroupSuggestions}"
-                                              SelectedItem="{Binding Editor.SelectedGroupSuggestion}"
-                                              StaysOpenOnEdit="True"
+                                              ChooseCommand="{Binding Editor.UseGroupSuggestionCommand}"
                                               Text="{Binding Editor.EditedGroupName, UpdateSourceTrigger=PropertyChanged}"
                                               IsDropDownOpen="{Binding Editor.IsGroupSuggestionsOpen}" />
                                     <TextBlock Margin="0,7,0,0"
@@ -3058,12 +3056,14 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <controls:DependencyComboBox x:Name="EditorDependencyComboBox"
+                                    <controls:SuggestionComboBox x:Name="EditorDependencyComboBox"
                                                                  AutomationProperties.HelpText="Open the dropdown to browse active entities, or type to search. Choose an entity to add it."
                                                                  AutomationProperties.Name="Manual dependency"
                                                                  IsEditable="True"
                                                                  IsTextSearchEnabled="False"
-                                                                 Style="{StaticResource DependencyComboBoxStyle}"
+                                                                 DisplayMemberPath="SourceName"
+                                                                 TextSearch.TextPath="SourceName"
+                                                                 Style="{StaticResource SuggestionComboBoxStyle}"
                                                                  ItemsSource="{Binding Editor.Suggestions}"
                                                                  ChooseCommand="{Binding Editor.AddExistingCommand}"
                                                                  Text="{Binding Editor.DependencyQuery, UpdateSourceTrigger=PropertyChanged}"
