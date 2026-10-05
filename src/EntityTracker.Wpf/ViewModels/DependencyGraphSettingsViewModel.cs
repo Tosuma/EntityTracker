@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Wpf.Commands;
+using EntityTracker.Wpf.Services;
 
 namespace EntityTracker.Wpf.ViewModels;
 
@@ -16,10 +17,13 @@ public sealed class DependencyGraphSettingsViewModel : INotifyPropertyChanged
     private bool _showRings;
     private DependencyGraphView _view;
     private bool _isBusy;
+    private readonly NotificationCenter? _notifications;
     private string? _errorMessage;
 
-    public DependencyGraphSettingsViewModel(EntityTrackerSettingsStore store, EntityTrackerSettings initial)
+    public DependencyGraphSettingsViewModel(EntityTrackerSettingsStore store, EntityTrackerSettings initial,
+        NotificationCenter? notifications = null)
     {
+        _notifications = notifications;
         _store = store;
         _isAnimationEnabled = initial.AnimateDependencyGraph;
         _showRings = initial.ShowDependencyGraphRings;
@@ -39,8 +43,7 @@ public sealed class DependencyGraphSettingsViewModel : INotifyPropertyChanged
     /// <summary>Gets the view the graph opens in: the one chosen last.</summary>
     public DependencyGraphView View => _view;
     public bool IsBusy => _isBusy;
-    public string? ErrorMessage => _errorMessage;
-    public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
+    public bool HasError => !string.IsNullOrWhiteSpace(_errorMessage);
     public ICommand ToggleAnimationCommand => _toggleAnimation;
     public ICommand ToggleRingsCommand => _toggleRings;
 
@@ -77,7 +80,7 @@ public sealed class DependencyGraphSettingsViewModel : INotifyPropertyChanged
         }
         catch (Exception)
         {
-            _errorMessage = "The dependency graph setting could not be saved. Check the settings file and retry.";
+            ReportError("The dependency graph setting could not be saved. Check the settings file and retry.");
         }
         finally
         {
@@ -92,7 +95,6 @@ public sealed class DependencyGraphSettingsViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ShowRings));
         OnPropertyChanged(nameof(View));
         OnPropertyChanged(nameof(IsBusy));
-        OnPropertyChanged(nameof(ErrorMessage));
         OnPropertyChanged(nameof(HasError));
         _toggleAnimation.NotifyCanExecuteChanged();
         _toggleRings.NotifyCanExecuteChanged();
@@ -100,4 +102,10 @@ public sealed class DependencyGraphSettingsViewModel : INotifyPropertyChanged
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+
+    private void ReportError(string message)
+    {
+        _errorMessage = message;
+        _notifications?.Show("Settings", message, NotificationKind.Failure);
+    }
 }

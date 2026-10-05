@@ -1,6 +1,7 @@
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Projects;
 using EntityTracker.Domain;
+using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels;
 
 namespace EntityTracker.Wpf.Tests.ViewModels;
@@ -26,6 +27,26 @@ public sealed class ProjectDevelopersViewModelTests
 
         Assert.Equal(4, refreshed.Count);
         Assert.All(refreshed, id => Assert.Equal(projectId, id));
+    }
+
+    [Fact]
+    public async Task FailedChangesArePostedToTheNotificationCenter()
+    {
+        ProjectId projectId = ProjectId.New();
+        ProjectDevelopersViewModel source = new(projectId, new ProjectDeveloperService(new MemoryStore()));
+        source.Initials = "AB";
+        await source.SaveAsync();
+        ProjectDeveloper elsewhere = Assert.Single(source.Available);
+        NotificationCenter notifications = new();
+        ProjectDevelopersViewModel viewModel = new(projectId,
+            new ProjectDeveloperService(new MemoryStore()), notifications: notifications);
+
+        await viewModel.SetRetiredAsync(elsewhere, true);
+
+        Assert.True(viewModel.HasError);
+        NotificationItem notice = Assert.Single(notifications.Items);
+        Assert.Equal(("Developers", NotificationKind.Failure), (notice.Title, notice.Kind));
+        Assert.Equal("The developer no longer exists in this Project.", notice.Message);
     }
 
     [Fact]

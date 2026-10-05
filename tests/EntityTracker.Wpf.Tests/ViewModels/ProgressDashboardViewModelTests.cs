@@ -127,22 +127,25 @@ public sealed class ProgressDashboardViewModelTests
             new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero),
             new ProgressSnapshotState(2, 1, 1, 1, 2, 1));
         RecordingImageClipboard clipboard = new();
+        NotificationCenter notifications = new();
         ProgressDashboardViewModel viewModel = CreateViewModel(
             new ProgressReportingService(
                 new StubHistoryRepository([snapshot]),
                 TimeZoneInfo.Utc,
                 timeProvider: new FixedTimeProvider(
                     new DateTimeOffset(2026, 8, 20, 14, 0, 0, TimeSpan.Zero))),
-            clipboard: clipboard);
+            clipboard: clipboard,
+            notifications: notifications);
         await viewModel.LoadAsync();
 
         viewModel.CopyChartCommand.Execute(ProgressChartKind.CurrentStatus);
-        await WaitUntilAsync(() => viewModel.HasExportMessage || viewModel.HasError);
+        await WaitUntilAsync(() => notifications.HasItems);
 
-        Assert.False(viewModel.HasError, viewModel.ErrorMessage);
+        NotificationItem notice = Assert.Single(notifications.Items);
+        Assert.Equal(NotificationKind.Success, notice.Kind);
         Assert.NotNull(clipboard.Png);
         Assert.Equal([0x89, 0x50, 0x4E, 0x47], clipboard.Png[..4]);
-        Assert.Contains("Copied", viewModel.ExportMessage);
+        Assert.Contains("Copied", notice.Message);
     }
 
     [Fact]
@@ -152,17 +155,19 @@ public sealed class ProgressDashboardViewModelTests
             new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero),
             new ProgressSnapshotState(2, 1, 1, 1, 2, 1));
         StubFilePicker picker = new();
+        NotificationCenter notifications = new();
         ProgressDashboardViewModel viewModel = CreateViewModel(
             new ProgressReportingService(
                 new StubHistoryRepository([snapshot]),
                 TimeZoneInfo.Utc),
-            filePicker: picker);
+            filePicker: picker,
+            notifications: notifications);
         await viewModel.LoadAsync();
 
         viewModel.SaveChartCommand.Execute(ProgressChartKind.ImplementedOverTime);
 
         Assert.Equal("entitytracker-implemented-over-time-20260820.png", picker.SuggestedFileName);
-        Assert.False(viewModel.HasExportMessage);
+        Assert.False(notifications.HasItems);
         Assert.False(viewModel.HasError);
     }
 
@@ -176,24 +181,29 @@ public sealed class ProgressDashboardViewModelTests
             Path.GetTempPath(),
             $"missing-{Guid.NewGuid():N}",
             "chart.png");
+        NotificationCenter notifications = new();
         ProgressDashboardViewModel viewModel = CreateViewModel(
             new ProgressReportingService(
                 new StubHistoryRepository([snapshot]),
                 TimeZoneInfo.Utc),
-            filePicker: new StubFilePicker(unavailablePath));
+            filePicker: new StubFilePicker(unavailablePath),
+            notifications: notifications);
         await viewModel.LoadAsync();
 
         viewModel.SaveChartCommand.Execute(ProgressChartKind.CurrentStatus);
-        await WaitUntilAsync(() => viewModel.HasError);
+        await WaitUntilAsync(() => notifications.HasItems);
 
-        Assert.StartsWith("The chart could not be saved:", viewModel.ErrorMessage);
-        Assert.False(viewModel.HasExportMessage);
+        NotificationItem notice = Assert.Single(notifications.Items);
+        Assert.Equal(NotificationKind.Failure, notice.Kind);
+        Assert.Equal("Progress chart", notice.Title);
+        Assert.StartsWith("The chart could not be saved:", notice.Message);
     }
 
     private static ProgressDashboardViewModel CreateViewModel(
         ProgressReportingService reportingService,
         IProgressChartFilePicker? filePicker = null,
-        IClipboardService? clipboard = null)
+        IClipboardService? clipboard = null,
+        NotificationCenter? notifications = null)
     {
         ProgressChartPresentationBuilder presentationBuilder = new();
         return new ProgressDashboardViewModel(
@@ -202,7 +212,8 @@ public sealed class ProgressDashboardViewModelTests
             presentationBuilder,
             new ProgressChartPngExporter(presentationBuilder),
             filePicker ?? new StubFilePicker(),
-            clipboard ?? new StubImageClipboard());
+            clipboard ?? new StubImageClipboard(),
+            notifications: notifications);
     }
 
     private sealed class StubFilePicker(string? selectedPath = null) : IProgressChartFilePicker

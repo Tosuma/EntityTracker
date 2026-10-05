@@ -87,7 +87,8 @@ public partial class App : System.Windows.Application
                 settingsStore,
                 themeService,
                 settings.Settings.Appearance,
-                provider.GetRequiredService<ILogger<AppearanceViewModel>>()));
+                provider.GetRequiredService<ILogger<AppearanceViewModel>>(),
+                provider.GetRequiredService<NotificationCenter>()));
             ConfigurePersistence(services, dataPaths);
             services.AddSingleton<ISchemaImportParser, CsvSchemaImportParser>();
             services.AddSingleton<ISchemaImportFileParser, CsvSchemaImportFileParser>();
@@ -161,12 +162,15 @@ public partial class App : System.Windows.Application
                 provider.GetRequiredService<IProjectUnsavedEditsGate>()));
             services.AddSingleton(provider => new AutoSyncSettingsViewModel(
                 settingsStore, provider.GetRequiredService<ProjectAutoSyncService>(),
-                settings.Settings));
-            services.AddSingleton(new ResponsibilitySearchSettingsViewModel(
-                settingsStore, settings.Settings));
-            services.AddSingleton(new OverviewExportSettingsViewModel(settingsStore, settings.Settings));
-            services.AddSingleton(new DependencyGraphSettingsViewModel(settingsStore, settings.Settings));
-            services.AddSingleton<NotificationCenter>();
+                settings.Settings, provider.GetRequiredService<NotificationCenter>()));
+            services.AddSingleton(provider => new ResponsibilitySearchSettingsViewModel(
+                settingsStore, settings.Settings, provider.GetRequiredService<NotificationCenter>()));
+            services.AddSingleton(provider => new OverviewExportSettingsViewModel(
+                settingsStore, settings.Settings, provider.GetRequiredService<NotificationCenter>()));
+            services.AddSingleton(provider => new DependencyGraphSettingsViewModel(
+                settingsStore, settings.Settings, provider.GetRequiredService<NotificationCenter>()));
+            // Leaving notices stay until the window has slid them out and closed their space.
+            services.AddSingleton(new NotificationCenter(exitDuration: EntityTracker.Wpf.MainWindow.NotificationExitDuration));
             services.AddSingleton<ProjectRepositoryCardViewModelFactory>();
             services.AddSingleton<CatalogManagementViewModel>();
             services.AddSingleton<ShellViewModel>();

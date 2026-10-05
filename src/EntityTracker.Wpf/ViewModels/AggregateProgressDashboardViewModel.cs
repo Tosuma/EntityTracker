@@ -7,6 +7,7 @@ using EntityTracker.Wpf.Commands;
 
 using LiveChartsCore;
 using LiveChartsCore.SkiaSharpView;
+using EntityTracker.Wpf.Services;
 
 namespace EntityTracker.Wpf.ViewModels;
 
@@ -24,14 +25,17 @@ public sealed class AggregateProgressDashboardViewModel : INotifyPropertyChanged
     private ISeries[] _implementedSeries = [];
     private Axis[] _implementedXAxes = [];
     private Axis[] _countYAxes = [];
-    private string? _errorMessage;
+    private readonly NotificationCenter? _notifications;
+    private bool _hasError;
     private bool _isBusy;
     private bool _hasLoaded;
 
     public AggregateProgressDashboardViewModel(
         Func<ProgressDateRange, CancellationToken, Task<ProgressDashboardReport?>> loader,
-        ProgressChartPresentationBuilder presentationBuilder)
+        ProgressChartPresentationBuilder presentationBuilder,
+        NotificationCenter? notifications = null)
     {
+        _notifications = notifications;
         ArgumentNullException.ThrowIfNull(loader);
         ArgumentNullException.ThrowIfNull(presentationBuilder);
         _loader = loader;
@@ -152,20 +156,12 @@ public sealed class AggregateProgressDashboardViewModel : INotifyPropertyChanged
         private set => SetField(ref _countYAxes, value);
     }
 
-    public string? ErrorMessage
+    /// <summary>Gets whether the last load or save failed; the reason is in the notification center.</summary>
+    public bool HasError
     {
-        get => _errorMessage;
-        private set
-        {
-            if (SetField(ref _errorMessage, value))
-            {
-                OnPropertyChanged(nameof(HasError));
-                OnPropertyChanged(nameof(ShowNoHistoricalData));
-            }
-        }
+        get => _hasError;
+        private set => SetField(ref _hasError, value);
     }
-
-    public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
 
     public bool IsBusy
     {
@@ -191,7 +187,7 @@ public sealed class AggregateProgressDashboardViewModel : INotifyPropertyChanged
 
         await _loadGate.WaitAsync(cancellationToken);
         IsBusy = true;
-        ErrorMessage = null;
+        HasError = false;
         try
         {
             ProgressDashboardReport? report = await _loader(CreateRange(), cancellationToken);
@@ -214,11 +210,11 @@ public sealed class AggregateProgressDashboardViewModel : INotifyPropertyChanged
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            ErrorMessage = "Loading aggregate progress was cancelled.";
+            ReportError("Loading aggregate progress was cancelled.", NotificationKind.Information);
         }
         catch (Exception exception)
         {
-            ErrorMessage = $"Aggregate progress could not be loaded: {exception.Message}";
+            ReportError($"Aggregate progress could not be loaded: {exception.Message}");
         }
         finally
         {
@@ -251,6 +247,12 @@ public sealed class AggregateProgressDashboardViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(HasRangeValidationError));
         OnPropertyChanged(nameof(RangeValidationMessage));
         _applyRangeCommand.NotifyCanExecuteChanged();
+    }
+
+    private void ReportError(string message, NotificationKind kind = NotificationKind.Failure)
+    {
+        HasError = true;
+        _notifications?.Show("Aggregate progress", message, kind);
     }
 
     private bool SetField<T>(ref T field, T value, [CallerMemberName] string? name = null)

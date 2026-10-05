@@ -102,13 +102,6 @@
                                        FontFamily="Consolas"
                                        FontWeight="SemiBold"
                                        Text="SQL" />
-                            <TextBlock Grid.Column="1"
-                                       Margin="12,0"
-                                       VerticalAlignment="Center"
-                                       HorizontalAlignment="Right"
-                                       AutomationProperties.LiveSetting="Polite"
-                                       Foreground="{DynamicResource Brush.Text.Secondary}"
-                                       Text="{Binding Help.CopyMessage}" />
                             <Button x:Name="CopyQueryButton"
                                     Grid.Column="2"
                                     AutomationProperties.Name="Copy SQL query"

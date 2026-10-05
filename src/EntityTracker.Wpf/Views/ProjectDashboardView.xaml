@@ -203,12 +203,6 @@
                 </StackPanel>
             </DockPanel>
 
-            <Border Margin="0,0,0,12" MaxHeight="120" Style="{StaticResource ErrorMessageStyle}"
-                    Visibility="{Binding ProjectReporting.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <TextBlock AutomationProperties.LiveSetting="Assertive" Text="{Binding ProjectReporting.ErrorMessage}" TextWrapping="Wrap" />
-                </ScrollViewer>
-            </Border>
             <Border Margin="0,0,0,12" Style="{StaticResource InfoMessageStyle}"
                     Visibility="{Binding ProjectReporting.IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <TextBlock AutomationProperties.LiveSetting="Polite" Text="Loading Project dashboard…" />
@@ -233,10 +227,6 @@
                     <TextBlock Margin="0,4,0,0" Text="{Binding PendingAction}" TextWrapping="Wrap"
                                Foreground="{DynamicResource Brush.Text.Secondary}"
                                Visibility="{Binding HasPendingAction, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <TextBlock Margin="0,6,0,0" Text="{Binding Message}" TextWrapping="Wrap"
-                               Foreground="{DynamicResource Brush.Text.Primary}"
-                               Visibility="{Binding HasMessage, Converter={StaticResource BooleanToVisibilityConverter}}"
-                               AutomationProperties.LiveSetting="Assertive" />
                     <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
                         <Button Margin="0,0,8,0" Content="Link repository" Command="{Binding LinkCommand}"
                                 AutomationProperties.Name="Link existing Git repository" />

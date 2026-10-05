@@ -179,6 +179,12 @@ The sidebar notification center shows the current sync phase. A completed sync d
 a short display time. A sync that needs attention stays visible with a contextual action; the
 Project card also retains its detailed status. Notifications are kept for the current session.
 
+The notification center is also where every other action reports its outcome: applied imports,
+bulk status updates, chart and SQL copies, saved exports, and any failure to load a page, save a
+setting, archive or delete an entity, or change developers. Successes disappear after a short
+display time; failures stay until you dismiss them. Only input checks, such as an invalid date
+range or a search with no matches, and errors inside an open dialog appear next to the controls.
+
 ![Project sync progress in the sidebar notification center](images/light/project-sync-progress.png)
 
 ![Project sync action needed in the sidebar notification center](images/light/project-sync-action-needed.png)

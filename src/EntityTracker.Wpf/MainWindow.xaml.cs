@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -6,6 +7,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Threading;
 
 using EntityTracker.Domain;
+using EntityTracker.Wpf.Controls;
 using EntityTracker.Wpf.ViewModels;
 using EntityTracker.Wpf.Services;
 
@@ -242,15 +244,80 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(() => NotificationScrollViewer.ScrollToEnd(),
             System.Windows.Threading.DispatcherPriority.Loaded);
 
+    /// <summary>How long a leaving notice takes to slide out of the window to the left.</summary>
+    internal static readonly TimeSpan NotificationSlideOut = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>How long the space a notice used takes to close once the card is gone.</summary>
+    internal static readonly TimeSpan NotificationCollapse = TimeSpan.FromMilliseconds(350);
+
+    /// <summary>How long a leaving notice stays in the list: the slide, then the collapse, plus a little slack.</summary>
+    internal static TimeSpan NotificationExitDuration =>
+        NotificationSlideOut + NotificationCollapse + TimeSpan.FromMilliseconds(50);
+
+    /// <summary>Gets how far a card must move so that its right edge passes the window's left edge.</summary>
+    internal static double SlideOutDistance(double rightEdgeInWindow) => -(Math.Max(rightEdgeInWindow, 0) + 8);
+
+    /// <summary>
+    /// Opens the new notice's space, then fades and slides the card up into it, and arranges for it
+    /// to leave again when it starts closing. Runs regardless of the Windows animation setting, like
+    /// the dependency graph's motion.
+    /// </summary>
     private void OnNotificationLoaded(object sender, RoutedEventArgs e)
     {
-        if (sender is not Border card || !SystemParameters.ClientAreaAnimation) return;
-        card.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1,
-            TimeSpan.FromMilliseconds(220)));
-        var transform = new TranslateTransform();
-        card.RenderTransform = transform;
-        transform.BeginAnimation(TranslateTransform.YProperty,
-            new DoubleAnimation(16, 0, TimeSpan.FromMilliseconds(220)));
+        if (sender is not Border { Child: SmoothHeightDecorator { Child: Border card }, DataContext: NotificationItem item } container)
+            return;
+        PropertyChangedEventHandler onChanged = (_, args) =>
+        {
+            if (args.PropertyName == nameof(NotificationItem.IsClosing) && item.IsClosing)
+                AnimateNotificationExit(container, card);
+        };
+        item.PropertyChanged += onChanged;
+        RoutedEventHandler? onUnloaded = null;
+        onUnloaded = (_, _) =>
+        {
+            item.PropertyChanged -= onChanged;
+            container.Unloaded -= onUnloaded;
+        };
+        container.Unloaded += onUnloaded;
+
+        Duration duration = TimeSpan.FromMilliseconds(220);
+        CubicEase easeOut = new() { EasingMode = EasingMode.EaseOut };
+        ScaleTransform scale = new(1, 0);
+        container.LayoutTransform = scale;
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty,
+            new DoubleAnimation(0, 1, duration) { EasingFunction = easeOut });
+        TranslateTransform slide = new(0, 12);
+        card.RenderTransform = slide;
+        slide.BeginAnimation(TranslateTransform.YProperty,
+            new DoubleAnimation(12, 0, duration) { EasingFunction = easeOut });
+        card.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration));
+    }
+
+    /// <summary>
+    /// Slides the card left until it is completely out of the window, and only then closes the space
+    /// it used, so the cards below and the utilities glide down.
+    /// </summary>
+    private void AnimateNotificationExit(Border container, Border card)
+    {
+        if (card.RenderTransform is not TranslateTransform slide || slide.IsFrozen)
+            card.RenderTransform = slide = new TranslateTransform();
+        if (container.LayoutTransform is not ScaleTransform scale || scale.IsFrozen)
+            container.LayoutTransform = scale = new ScaleTransform(1, 1);
+
+        double rightEdge;
+        try { rightEdge = card.TransformToAncestor(this).Transform(new Point(card.ActualWidth, 0)).X; }
+        catch (InvalidOperationException) { rightEdge = card.ActualWidth + 20; }
+
+        DoubleAnimation slideOut = new(slide.X + SlideOutDistance(rightEdge), NotificationSlideOut)
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+        };
+        slideOut.Completed += (_, _) => scale.BeginAnimation(ScaleTransform.ScaleYProperty,
+            new DoubleAnimation(0, NotificationCollapse)
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
+            });
+        slide.BeginAnimation(TranslateTransform.XProperty, slideOut);
     }
 
     private void OnRenameDefaultName(object sender, RoutedEventArgs e)

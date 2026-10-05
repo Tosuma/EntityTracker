@@ -51,17 +51,6 @@
         </Border>
 
         <Border Margin="0,0,0,12"
-                Padding="10"
-                Background="{DynamicResource Brush.Surface.Alert}"
-                BorderBrush="{DynamicResource Brush.Status.ReworkNeeded}"
-                BorderThickness="1"
-                CornerRadius="5"
-                AutomationProperties.LiveSetting="Polite"
-                Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" />
-        </Border>
-
-        <Border Margin="0,0,0,12"
                 Padding="14"
                 Style="{StaticResource EntityTrackerCardStyle}"
                 Visibility="{Binding HasReport, Converter={StaticResource BooleanToVisibilityConverter}}">

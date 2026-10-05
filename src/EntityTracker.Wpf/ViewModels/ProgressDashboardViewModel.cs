@@ -26,6 +26,7 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
     private readonly IProgressChartFilePicker _filePicker;
     private readonly IClipboardService _clipboard;
     private readonly ILogger<ProgressDashboardViewModel> _logger;
+    private readonly NotificationCenter? _notifications;
     private readonly AsyncCommand _applyRangeCommand;
     private readonly AsyncCommand<ProgressChartKind> _saveChartCommand;
     private readonly AsyncCommand<ProgressChartKind> _copyChartCommand;
@@ -45,8 +46,7 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
     private ProgressDashboardReport? _currentReport;
     private ProgressManagerSummary _managerSummary = ProgressManagerSummary.Empty;
     private string _managerDateSummary = "No progress data is available yet.";
-    private string? _exportMessage;
-    private string? _errorMessage;
+    private bool _hasError;
     private bool _isBusy;
     private bool _hasHistoricalData;
 
@@ -57,7 +57,8 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
         ProgressChartPngExporter pngExporter,
         IProgressChartFilePicker filePicker,
         IClipboardService clipboard,
-        ILogger<ProgressDashboardViewModel>? logger = null)
+        ILogger<ProgressDashboardViewModel>? logger = null,
+        NotificationCenter? notifications = null)
     {
         ArgumentNullException.ThrowIfNull(reportingService);
         ArgumentNullException.ThrowIfNull(presentationBuilder);
@@ -71,6 +72,7 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
         _filePicker = filePicker;
         _clipboard = clipboard;
         _logger = logger ?? NullLogger<ProgressDashboardViewModel>.Instance;
+        _notifications = notifications;
         _applyRangeCommand = new AsyncCommand(
             () => LoadAsync(),
             () => !IsBusy && IsCustomRangeValid);
@@ -210,33 +212,12 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
         private set => SetField(ref _managerDateSummary, value);
     }
 
-    public string? ExportMessage
+    /// <summary>Gets whether the history could not be loaded; the reason is in the notification center.</summary>
+    public bool HasError
     {
-        get => _exportMessage;
-        private set
-        {
-            if (SetField(ref _exportMessage, value))
-            {
-                OnPropertyChanged(nameof(HasExportMessage));
-            }
-        }
+        get => _hasError;
+        private set => SetField(ref _hasError, value);
     }
-
-    public bool HasExportMessage => !string.IsNullOrWhiteSpace(ExportMessage);
-
-    public string? ErrorMessage
-    {
-        get => _errorMessage;
-        private set
-        {
-            if (SetField(ref _errorMessage, value))
-            {
-                OnPropertyChanged(nameof(HasError));
-            }
-        }
-    }
-
-    public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
 
     public bool IsBusy
     {
@@ -286,8 +267,7 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
 
         await _loadGate.WaitAsync(cancellationToken);
         IsBusy = true;
-        ErrorMessage = null;
-        ExportMessage = null;
+        HasError = false;
         try
         {
             ProgressDashboardReport report = await _reportingService.GetReportAsync(
@@ -298,12 +278,14 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            ErrorMessage = "Loading progress history was cancelled.";
+            HasError = true;
+            Notify("Progress history", "Loading progress history was cancelled.", NotificationKind.Information);
         }
         catch (Exception exception)
         {
             _logger.LogError(exception, "Progress history could not be loaded.");
-            ErrorMessage = $"Progress history could not be loaded: {exception.Message}";
+            HasError = true;
+            Notify("Progress history", $"Progress history could not be loaded: {exception.Message}", NotificationKind.Failure);
         }
         finally
         {
@@ -312,6 +294,9 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
             _loadGate.Release();
         }
     }
+
+    private void Notify(string title, string message, NotificationKind kind) =>
+        _notifications?.Show(title, message, kind);
 
     private ProgressDateRange CreateRange()
     {
@@ -365,17 +350,15 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
         }
 
         IsBusy = true;
-        ErrorMessage = null;
-        ExportMessage = null;
         try
         {
             await _pngExporter.SavePngAsync(_currentReport, kind, path);
-            ExportMessage = $"Saved {Path.GetFileName(path)}.";
+            Notify("Progress chart", $"Saved {Path.GetFileName(path)}.", NotificationKind.Success);
         }
         catch (Exception exception)
         {
             _logger.LogError(exception, "A progress chart could not be saved.");
-            ErrorMessage = $"The chart could not be saved: {exception.Message}";
+            Notify("Progress chart", $"The chart could not be saved: {exception.Message}", NotificationKind.Failure);
         }
         finally
         {
@@ -391,18 +374,16 @@ public sealed class ProgressDashboardViewModel : INotifyPropertyChanged
         }
 
         IsBusy = true;
-        ErrorMessage = null;
-        ExportMessage = null;
         try
         {
             byte[] png = await Task.Run(() => _pngExporter.RenderPng(_currentReport, kind));
             _clipboard.SetPng(png);
-            ExportMessage = $"Copied {ProgressChartPresentationBuilder.GetTitle(kind)}.";
+            Notify("Progress chart", $"Copied {ProgressChartPresentationBuilder.GetTitle(kind)}.", NotificationKind.Success);
         }
         catch (Exception exception)
         {
             _logger.LogError(exception, "A progress chart could not be copied.");
-            ErrorMessage = $"The chart could not be copied: {exception.Message}";
+            Notify("Progress chart", $"The chart could not be copied: {exception.Message}", NotificationKind.Failure);
         }
         finally
         {

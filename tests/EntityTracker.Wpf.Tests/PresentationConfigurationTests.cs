@@ -82,6 +82,79 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void NotificationsAnimateInAndOutRegardlessOfTheWindowsAnimationSetting()
+    {
+        string wpfRoot = Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf");
+        XDocument window = XDocument.Load(Path.Combine(wpfRoot, "MainWindow.xaml"));
+        XElement template = window.Descendants().Single(element => element.Name.LocalName == "DataTemplate" &&
+            ((string?)element.Attribute("DataType"))?.Contains("NotificationItem", StringComparison.Ordinal) == true);
+        XElement closing = template.Descendants().Single(element => element.Name.LocalName == "DataTrigger" &&
+            (string?)element.Attribute("Binding") == "{Binding IsClosing}");
+
+        // The exit is measured and played from code: slide out of the window, then close the space.
+        Assert.DoesNotContain(closing.Descendants(), element => element.Name.LocalName == "Storyboard");
+        Assert.Contains(closing.Elements(), element => element.Name.LocalName == "Setter" &&
+            (string?)element.Attribute("Property") == "IsHitTestVisible" && (string?)element.Attribute("Value") == "False");
+        Assert.Contains(template.Descendants(), element => element.Name.LocalName == "ScaleTransform");
+        // Changes of size (e.g. a sync finishing) glide instead of jumping.
+        XElement resizer = template.Descendants().Single(element => element.Name.LocalName == "SmoothHeightDecorator");
+        Assert.Contains(resizer.Elements(), element =>
+            (string?)element.Attribute("{http://schemas.microsoft.com/winfx/2006/xaml}Name") == "NotificationCard");
+        string code = File.ReadAllText(Path.Combine(wpfRoot, "MainWindow.xaml.cs"));
+        Assert.Contains("AnimateNotificationExit", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ClientAreaAnimation", code, StringComparison.Ordinal);
+        Assert.Contains("MainWindow.NotificationExitDuration",
+            File.ReadAllText(Path.Combine(wpfRoot, "App.xaml.cs")), StringComparison.Ordinal);
+        Assert.True(MainWindow.NotificationExitDuration >= MainWindow.NotificationSlideOut + MainWindow.NotificationCollapse);
+
+        // The panel has no padding that would vanish at once when the last card leaves.
+        XElement panel = window.Descendants().Single(element => element.Name.LocalName == "Border" &&
+            element.Descendants().Any(child => (string?)child.Attribute("{http://schemas.microsoft.com/winfx/2006/xaml}Name") == "NotificationScrollViewer"));
+        Assert.Null(panel.Attribute("Padding"));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(226)]
+    [InlineData(400)]
+    public void LeavingNotificationsTravelPastTheWindowsLeftEdge(double rightEdge)
+    {
+        double distance = MainWindow.SlideOutDistance(rightEdge);
+
+        Assert.True(distance < 0);
+        Assert.True(rightEdge + distance < 0, "The card's right edge must end left of the window.");
+    }
+
+    [Fact]
+    public void ActionOutcomesAreReportedInTheNotificationCenterNotOnThePage()
+    {
+        string wpfRoot = Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf");
+        // Results and errors of actions go to the notification center; only inline validation,
+        // search hints and errors inside modal dialogs stay next to their controls.
+        string[] removed =
+        [
+            "{Binding OperationMessage}", "OverviewErrorMessage", "Progress.ExportMessage", "Progress.ErrorMessage",
+            "ArchiveErrorMessage", "PurgeErrorMessage", "CopyMessage", "PortfolioReporting.ErrorMessage",
+            "ProjectReporting.ErrorMessage", "Developers.ErrorMessage", "Appearance.ErrorMessage",
+            "LocalIdentity.ErrorMessage", "ResponsibilitySearch.ErrorMessage", "OverviewExport.ErrorMessage",
+            "GraphSettings.ErrorMessage", "AutoSync.ErrorMessage", "{Binding HasMessage"
+        ];
+        string[] pages = ["MainWindow.xaml", Path.Combine("Views", "TrackerWorkspaceView.xaml"),
+            Path.Combine("Views", "PortfolioView.xaml"), Path.Combine("Views", "ProjectDashboardView.xaml"),
+            Path.Combine("Views", "AggregateProgressView.xaml"), Path.Combine("Views", "ProjectDevelopersView.xaml"),
+            Path.Combine("Views", "SettingsView.xaml"), Path.Combine("Views", "HelpSqlView.xaml")];
+
+        string[] offenders = pages
+            .SelectMany(page => removed
+                .Where(binding => File.ReadAllText(Path.Combine(wpfRoot, page)).Contains(binding, StringComparison.Ordinal))
+                .Select(binding => $"{page}: {binding}"))
+            .ToArray();
+        Assert.Empty(offenders);
+        Assert.DoesNotContain("{Binding ErrorMessage}",
+            File.ReadAllText(Path.Combine(wpfRoot, "Views", "AggregateProgressView.xaml")), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DependencyGraphViewDropdownSitsLeftOfFitToView()
     {
         XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");

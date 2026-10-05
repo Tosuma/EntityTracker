@@ -5,6 +5,7 @@
         xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels"
         xmlns:views="clr-namespace:EntityTracker.Wpf.Views"
         xmlns:services="clr-namespace:EntityTracker.Wpf.Services"
+        xmlns:controls="clr-namespace:EntityTracker.Wpf.Controls"
         Title="EntityTracker"
         Icon="Assets/v2/EntityTracker.ico"
         Width="1240"
@@ -153,7 +154,9 @@
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
                     </StackPanel>
 
-                <Border Grid.Row="2" Padding="0,8,0,4"
+                <!-- No padding of its own: all spacing lives in each card's container, so the space
+                     collapses smoothly with the last card and the utilities glide down. -->
+                <Border Grid.Row="2"
                         MaxHeight="{Binding ElementName=SidebarRoot, Path=ActualHeight, Converter={StaticResource SidebarNotificationHeightConverter}}"
                         Background="{DynamicResource Brush.Brand.Green90}"
                         Visibility="{Binding Notifications.HasItems, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -164,12 +167,23 @@
                         <ItemsControl ItemsSource="{Binding Notifications.Items}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type services:NotificationItem}">
-                                    <Border Margin="10,0,10,8" Padding="10"
+                                    <!-- The container collapses its height (spacing included) so the cards below
+                                         glide into place; the card inside fades and slides. -->
+                                    <Border x:Name="NotificationContainer" Padding="10,6,10,6"
+                                            Loaded="OnNotificationLoaded">
+                                        <Border.LayoutTransform>
+                                            <ScaleTransform ScaleY="1" />
+                                        </Border.LayoutTransform>
+                                    <!-- Lets the card glide to a new height, e.g. when a sync finishes. -->
+                                    <controls:SmoothHeightDecorator x:Name="NotificationResizer">
+                                    <Border x:Name="NotificationCard" Padding="10"
                                             CornerRadius="6" BorderThickness="1"
                                             BorderBrush="{DynamicResource Brush.Brand.Green60}"
                                             Background="{DynamicResource Brush.Brand.Green100}"
-                                            AutomationProperties.LiveSetting="Polite"
-                                            Loaded="OnNotificationLoaded">
+                                            AutomationProperties.LiveSetting="Polite">
+                                        <Border.RenderTransform>
+                                            <TranslateTransform />
+                                        </Border.RenderTransform>
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="22" />
@@ -224,6 +238,13 @@
                                                     Visibility="{Binding CanDismiss, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                         </Grid>
                                     </Border>
+                                    </controls:SmoothHeightDecorator>
+                                    </Border>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding IsClosing}" Value="True">
+                                            <Setter TargetName="NotificationContainer" Property="IsHitTestVisible" Value="False" />
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>

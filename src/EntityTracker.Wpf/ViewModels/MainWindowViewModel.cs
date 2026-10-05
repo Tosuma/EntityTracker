@@ -61,9 +61,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private readonly RelayCommand<SynchronizationProgressImpactRow> _keepSynchronizationStatusCommand;
     private readonly RelayCommand<SynchronizationProgressImpactRow> _markSynchronizationReworkCommand;
     private IReadOnlyList<EntityId> _selectedOverviewEntityIds = [];
-    private string? _overviewErrorMessage;
+    private bool _hasOverviewError;
     private string _busyMessage = string.Empty;
-    private string? _operationMessage;
     private SchemaImportSummary? _latestImportSummary;
     private bool _isBusy;
     private MainWindowTab _selectedTab = MainWindowTab.Overview;
@@ -162,7 +161,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             effectiveLoggerFactory.CreateLogger<EntityDependencyEditorViewModel>(),
             developers is null ? null : new DeveloperPickerViewModel(trackerId, developers),
             responsibilityPeriods,
-            developers, localIdentity, () => OpenIdentitySettingsAsync());
+            developers, localIdentity, () => OpenIdentitySettingsAsync(), notifications);
         Editor.PropertyChanged += OnEditorPropertyChanged;
         _refreshCommand = new AsyncCommand(
             () => RefreshAsync(),
@@ -386,14 +385,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         set => ActiveTable.SearchDependenciesInstead = value;
     }
 
-    public string? OverviewErrorMessage
+    /// <summary>
+    /// Gets whether the entities could not be loaded; the reason is in the notification center,
+    /// and the empty-state hints stay hidden so an unloaded list does not look empty.
+    /// </summary>
+    public bool HasOverviewError
     {
-        get => _overviewErrorMessage;
+        get => _hasOverviewError;
         private set
         {
-            if (SetField(ref _overviewErrorMessage, value))
+            if (SetField(ref _hasOverviewError, value))
             {
-                OnPropertyChanged(nameof(HasOverviewError));
                 OnPropertyChanged(nameof(ShowOverviewEmptyState));
                 OnPropertyChanged(nameof(ShowOverviewSearchEmptyState));
                 OnPropertyChanged(nameof(ShowArchivedEmptyState));
@@ -407,20 +409,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         get => _busyMessage;
         private set => SetField(ref _busyMessage, value);
     }
-
-    public string? OperationMessage
-    {
-        get => _operationMessage;
-        private set
-        {
-            if (SetField(ref _operationMessage, value))
-            {
-                OnPropertyChanged(nameof(HasOperationMessage));
-            }
-        }
-    }
-
-    public bool HasOperationMessage => !string.IsNullOrWhiteSpace(OperationMessage);
 
     public SchemaImportSummary? LatestImportSummary
     {
@@ -610,7 +598,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public string ArchivedSearchResultSummary => ArchivedTable.ResultSummary;
 
-    public bool HasOverviewError => !string.IsNullOrWhiteSpace(OverviewErrorMessage);
 
     public bool ShowOverviewEmptyState => !IsBusy && !HasOverviewItems && !HasOverviewError;
 
@@ -722,7 +709,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            SetOverviewFailure("Loading persisted entities was cancelled.");
+            SetOverviewFailure("Loading persisted entities was cancelled.", NotificationKind.Information);
         }
         catch (Exception exception)
         {
@@ -764,8 +751,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         DevelopmentStatus targetStatus = SelectedBulkStatus;
         IsBusy = true;
         BusyMessage = $"Applying {FormatStatus(targetStatus).ToLowerInvariant()} status…";
-        OperationMessage = null;
-        OverviewErrorMessage = null;
         bool operationCompleted = false;
         try
         {
@@ -775,7 +760,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
                 targetStatus,
                 cancellationToken);
             operationCompleted = true;
-            OperationMessage = FormatBulkStatusResult(result, targetStatus);
+            Notify("Bulk status update", FormatBulkStatusResult(result, targetStatus), NotificationKind.Success);
             BusyMessage = "Recomputing workflow readiness and progress…";
             await LoadOverviewAndProgressAsync(cancellationToken);
             PersistedStateChanged?.Invoke(this, EventArgs.Empty);
@@ -783,19 +768,21 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             ClearOverviewSelection();
-            OverviewErrorMessage = operationCompleted
+            Notify("Bulk status update", operationCompleted
                 ? "The statuses were updated, but refreshing the overview was cancelled. " +
                   "Refresh to load the latest state."
-                : "The status update was cancelled; no partial changes were saved.";
+                : "The status update was cancelled; no partial changes were saved.",
+                NotificationKind.Information);
         }
         catch (Exception exception)
         {
             _logger.LogError(exception, "The selected entity statuses could not be updated.");
             ClearOverviewSelection();
-            OverviewErrorMessage = operationCompleted
+            Notify("Bulk status update", operationCompleted
                 ? "The statuses were updated, but the latest overview could not be loaded: " +
                   exception.Message
-                : $"The status update was not applied: {exception.Message}";
+                : $"The status update was not applied: {exception.Message}",
+                NotificationKind.Failure);
         }
         finally
         {
@@ -883,10 +870,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
                 Review.SelectedFileName,
                 cancellationToken);
             LatestImportSummary = summary;
-            OperationMessage =
+            Notify("Schema synchronization",
                 $"Applied {summary.SourceFileName}: {summary.NewEntityCount} new, " +
                 $"{summary.ChangedEntityCount} changed, {summary.ArchivedEntityCount} archived, " +
-                $"{summary.UnresolvedEntityCount} unresolved.";
+                $"{summary.UnresolvedEntityCount} unresolved.",
+                NotificationKind.Success);
             Review.Clear();
             SelectedTab = MainWindowTab.Overview;
             BusyMessage = "Recomputing dependency ranking…";
@@ -931,7 +919,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        OverviewErrorMessage = null;
+        HasOverviewError = false;
         EntityOverviewRow[] rows = result.Items.Select(CreateOverviewRow).ToArray();
         EntityOverviewRow[] archivedRows = result.ArchivedItems
             .Select(CreateOverviewRow)
@@ -949,12 +937,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             cancellationToken);
     }
 
-    private void SetOverviewFailure(string message)
+    private void SetOverviewFailure(string message, NotificationKind kind = NotificationKind.Failure)
     {
         ReplaceOverviewItems([], []);
-        OverviewErrorMessage = message;
+        HasOverviewError = true;
+        Notify("Overview", message, kind);
         UpdateProgressCounts([]);
     }
+
+    private void Notify(string title, string message, NotificationKind kind) =>
+        _notifications?.Show(title, message, kind);
 
     private void ReplaceOverviewItems(
         IReadOnlyList<EntityOverviewRow> items,

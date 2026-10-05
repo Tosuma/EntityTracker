@@ -21,7 +21,6 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
     private readonly Action<ProjectSyncTiming?>? _saveTiming;
     private CancellationTokenSource? _syncCancellation;
     private ProjectSyncLink? _link;
-    private string? _message;
     private bool _busy;
     private ProjectSyncTiming? _lastTiming;
     private readonly AsyncCommand _linkCommand;
@@ -132,9 +131,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
             };
         }
     }
-    public string? Message => _message;
     public bool HasPendingAction => !string.IsNullOrEmpty(PendingAction);
-    public bool HasMessage => !string.IsNullOrWhiteSpace(Message);
 
     public async Task RefreshAsync(CancellationToken token = default)
     {
@@ -144,7 +141,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {
-            _message = "Repository link status could not be loaded: " + error.Message;
+            ShowFailure("Repository link status could not be loaded: " + error.Message);
         }
         Notify();
     }
@@ -160,7 +157,6 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
     {
         if (_busy) return;
         _busy = true;
-        _message = null;
         _autoSync?.BeginManual(_projectId);
         _autoSync?.ReportManual(_projectId, new(ProjectSyncStateKind.Syncing,
             "Manual sync is running…", DateTimeOffset.UtcNow));
@@ -230,7 +226,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
         }
         catch (Exception error)
         {
-            _message = error.Message;
+            // The sync notice below carries the error.
             _autoSync?.ReportManual(_projectId,
                 ProjectAutoSyncService.FromError(error, DateTimeOffset.UtcNow));
             try { _link = await _service.GetLinkAsync(_projectId); }
@@ -287,19 +283,21 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
     private async Task ExecuteAsync(Func<Task> action)
     {
         _busy = true;
-        _message = null;
         Notify();
         try { await action(); }
-        catch (Exception error) { _message = error.Message; }
+        catch (Exception error) { ShowFailure(error.Message); }
         finally { _busy = false; Notify(); }
     }
+
+    private void ShowFailure(string message) =>
+        _notifications?.Show("Project repository", message, NotificationKind.Failure);
 
     private void Notify()
     {
         foreach (string name in new[] { nameof(IsLinked), nameof(IsBusy), nameof(RepositoryPath),
                      nameof(Branch), nameof(Upstream), nameof(LastResult), nameof(LastSyncTiming),
-                     nameof(HasLastSyncTiming), nameof(PendingAction), nameof(Message),
-                     nameof(HasPendingAction), nameof(HasMessage), nameof(CanCancelSync),
+                     nameof(HasLastSyncTiming), nameof(PendingAction),
+                     nameof(HasPendingAction), nameof(CanCancelSync),
                      nameof(SyncStateLabel) })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         _linkCommand.NotifyCanExecuteChanged();

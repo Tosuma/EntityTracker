@@ -18,6 +18,7 @@ public sealed class AppearanceViewModel : INotifyPropertyChanged
     private readonly ILogger<AppearanceViewModel> _logger;
     private readonly AsyncCommand<ApplicationAppearance> _selectAppearanceCommand;
     private ApplicationAppearance _selectedAppearance;
+    private readonly NotificationCenter? _notifications;
     private string? _errorMessage;
     private bool _isBusy;
 
@@ -25,8 +26,10 @@ public sealed class AppearanceViewModel : INotifyPropertyChanged
         EntityTrackerSettingsStore settingsStore,
         IApplicationThemeService themeService,
         ApplicationAppearance initialAppearance = ApplicationAppearance.System,
-        ILogger<AppearanceViewModel>? logger = null)
+        ILogger<AppearanceViewModel>? logger = null,
+        NotificationCenter? notifications = null)
     {
+        _notifications = notifications;
         ArgumentNullException.ThrowIfNull(settingsStore);
         ArgumentNullException.ThrowIfNull(themeService);
         if (!Enum.IsDefined(initialAppearance))
@@ -86,10 +89,10 @@ public sealed class AppearanceViewModel : INotifyPropertyChanged
         }
     }
 
-    public string? ErrorMessage
+    private string? ErrorMessage
     {
         get => _errorMessage;
-        private set
+        set
         {
             if (_errorMessage == value)
             {
@@ -127,7 +130,7 @@ public sealed class AppearanceViewModel : INotifyPropertyChanged
         {
             _themeService.Apply(previous);
             SelectedAppearance = previous;
-            ErrorMessage = $"The appearance could not be saved: {exception.Message}";
+            ReportError($"The appearance could not be saved: {exception.Message}");
             _logger.LogError(exception, "Application appearance could not be saved.");
         }
         finally
@@ -138,4 +141,10 @@ public sealed class AppearanceViewModel : INotifyPropertyChanged
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+
+    private void ReportError(string message)
+    {
+        ErrorMessage = message;
+        _notifications?.Show("Settings", message, NotificationKind.Failure);
+    }
 }

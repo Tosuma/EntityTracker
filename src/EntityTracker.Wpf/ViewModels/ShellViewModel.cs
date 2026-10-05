@@ -104,7 +104,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             GraphSettings.Changed += OnGraphSettingsChanged;
         Help = new SqlQueryHelpViewModel(
             clipboard,
-            () => _ = NavigateAsync(ShellDestination.SchemaSynchronization));
+            () => _ = NavigateAsync(ShellDestination.SchemaSynchronization),
+            notifications: Notifications);
         _startupProjectId = initialSettings.LastProjectId;
         _startupTrackerId = initialSettings.LastTrackerId;
         _logger = logger ?? NullLogger<ShellViewModel>.Instance;
@@ -647,7 +648,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             await SetSettingsProjectAsync(project, cancellationToken);
             Developers = project is null || _developerService is null ? null :
                 new ProjectDevelopersViewModel(project.Id, _developerService,
-                    OnProjectDevelopersChangedAsync);
+                    OnProjectDevelopersChangedAsync, Notifications);
             if (Developers is not null) await Developers.RefreshAsync(cancellationToken);
             Replace(Trackers, availableTrackers);
             SelectedTracker = selectedTracker;
