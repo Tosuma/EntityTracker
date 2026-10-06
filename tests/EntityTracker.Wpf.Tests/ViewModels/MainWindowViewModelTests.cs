@@ -1618,43 +1618,12 @@ public sealed class MainWindowViewModelTests
                 resolver,
                 ranker),
             picker,
-            CreateProgressDashboardViewModel(),
             confirmationService ?? new AlwaysConfirmService(),
             discardConfirmation ?? new AlwaysDiscardConfirmation(),
             overviewExportService: overviewExportService,
             overviewExportFilePicker: overviewExportFilePicker,
             overviewExportSettings: overviewExportSettings,
             notifications: notifications);
-    }
-
-    private static ProgressDashboardViewModel CreateProgressDashboardViewModel()
-    {
-        ProgressChartPresentationBuilder presentationBuilder = new();
-        return new ProgressDashboardViewModel(
-            TestTrackerId,
-            new ProgressReportingService(
-                new EmptyProgressHistoryRepository(),
-                TimeZoneInfo.Utc),
-            presentationBuilder,
-            new ProgressChartPngExporter(presentationBuilder),
-            new CancelledProgressChartFilePicker(),
-            new NoOpImageClipboard());
-    }
-
-    private sealed class CancelledProgressChartFilePicker : IProgressChartFilePicker
-    {
-        public string? SelectPngPath(string suggestedFileName) => null;
-    }
-
-    private sealed class NoOpImageClipboard : IClipboardService
-    {
-        public void SetPng(byte[] png)
-        {
-        }
-
-        public void SetText(string text)
-        {
-        }
     }
 
     private sealed class AlwaysConfirmService : ISchemaSynchronizationConfirmation
@@ -1814,24 +1783,6 @@ public sealed class MainWindowViewModelTests
             _entities.Single(item => item.Id == updated.Id)
                 .ChangeGroupName(updated.GroupName);
 
-    }
-
-    private sealed class EmptyProgressHistoryRepository : IProgressHistoryRepository
-    {
-        public Task<IReadOnlyList<EntityStatusHistoryEntry>> GetStatusHistoryAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<EntityStatusHistoryEntry>>([]);
-
-        public Task<IReadOnlyList<ProgressSnapshot>> GetProgressSnapshotsAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<ProgressSnapshot>>([]);
-
-        public Task<ProgressSnapshot?> GetLatestProgressSnapshotAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<ProgressSnapshot?>(null);
     }
 
     private sealed class AlwaysDiscardConfirmation : IContextDiscardConfirmation

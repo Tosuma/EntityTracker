@@ -185,4 +185,10 @@ internal sealed class ScreenshotReportFiles : IProjectReportFiles
     public void OpenPreview(string html, string fileName)
     {
     }
+
+    public string? SelectChartPath(string suggestedFileName) => null;
+
+    public void CopyChart(byte[] png)
+    {
+    }
 }

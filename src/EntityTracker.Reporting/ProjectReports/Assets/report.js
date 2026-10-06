@@ -74,7 +74,10 @@
       "Generated " + formatDate(data.generatedAt)
     ];
     if (data.dataTo) meta.push("Progress data " + (data.dataFrom ? formatDate(data.dataFrom) + " – " : "to ") + formatDate(data.dataTo));
+    var print = el("button", { type: "button", className: "print-button no-print", text: "Print / Save as PDF" });
+    print.addEventListener("click", function () { window.print(); });
     return el("header", { className: "report-header" }, [
+      print,
       el("h1", {}, [
         document.createTextNode(data.projectName),
         el("span", { className: "audience" + (internal ? " internal" : ""), text: internal ? "Internal report" : "Client report" })
@@ -471,6 +474,8 @@
       "aria-label": "Search the report" });
     var count = el("span", { className: "result-count", role: "status" });
     var tools = el("div", { className: "table-tools no-print" }, [search]);
+    // On paper the rows are the ones on screen; this line says which search and filters chose them.
+    var printNote = el("p", { className: "print-only print-note" });
     columns.filter(function (c) { return c.filter; }).forEach(function (column) {
       var choices = Charts.filterOptions(column.options, section.rows, column.key);
       var select = el("select", { "aria-label": "Filter by " + column.header, "data-column": column.key },
@@ -552,6 +557,12 @@
         })));
       });
       count.textContent = "Showing " + shown.length + " of " + rows.length;
+      var applied = [];
+      if (query) applied.push("search “" + query + "”");
+      columns.forEach(function (column) { if (filters[column.key]) applied.push(column.header + ": " + filters[column.key]); });
+      printNote.textContent = applied.length
+        ? "Showing " + shown.length + " of " + rows.length + " entities, limited by " + applied.join(", ") + "."
+        : "All " + rows.length + " entities.";
     }
 
     search.addEventListener("input", function () {
@@ -576,7 +587,7 @@
     });
     render();
     return el("section", { className: "report-section", id: section.key }, [
-      el("h2", { text: section.title }), tools, el("div", { className: "table-wrap" }, [table])
+      el("h2", { text: section.title }), tools, printNote, el("div", { className: "table-wrap" }, [table])
     ]);
   }
 
@@ -661,7 +672,15 @@
       canvas.style.setProperty("--label-size", (11 / camera.scale).toFixed(2) + "px");
     }
 
+    // The drawing's coordinates follow the graph's size on screen, so paper of another shape still
+    // shows the whole view, only scaled.
+    function syncViewBox() {
+      var area = size();
+      canvas.setAttribute("viewBox", "0 0 " + area.width + " " + area.height);
+    }
+
     function fitView() {
+      syncViewBox();
       var area = size();
       camera = Graph.fit(bounds, area.width, area.height, 24, state.view === "tree" ? 1.2 : 2.5);
       applyCamera();
@@ -931,18 +950,63 @@
     ]);
     // Drawn once the page is laid out, so the first view fits the space it has.
     requestAnimationFrame(function () { if (!graph) draw(true); });
-    window.addEventListener("resize", function () { if (graph && fitted) fitView(); });
+    window.addEventListener("resize", function () {
+      if (!graph || printing) return;
+      if (fitted) fitView(); else syncViewBox();
+    });
+    // On paper the whole graph is fitted to an A4 page, then the view on screen comes back.
+    var printing = null;
+    window.addEventListener("beforeprint", function () {
+      if (!graph) return;
+      printing = { camera: camera, viewBox: canvas.getAttribute("viewBox"), fitted: fitted };
+      state.hover = -1;
+      hideTip();
+      paint();
+      canvas.setAttribute("viewBox", "0 0 " + PRINT_WIDTH + " " + PRINT_HEIGHT);
+      camera = Graph.fit(bounds, PRINT_WIDTH, PRINT_HEIGHT, 16, state.view === "tree" ? 1.2 : 2.5);
+      applyCamera();
+    });
+    window.addEventListener("afterprint", function () {
+      if (!printing) return;
+      canvas.setAttribute("viewBox", printing.viewBox);
+      camera = printing.camera;
+      applyCamera();
+      fitted = printing.fitted;
+      printing = null;
+    });
     return sectionNode;
   }
 
   var TREE_WIDTH = 150, TREE_HEIGHT = 81, TREE_NAME = 54;
+  // The graph's printed area: the width and height of an A4 page inside its margins, in the same ratio.
+  var PRINT_WIDTH = 1000, PRINT_HEIGHT = 1236;
 
   // ---- Page ----
 
+  /** Links to every section; on paper it is the report's table of contents. */
+  function contents() {
+    var list = el("ol", {}, data.sections.map(function (section) {
+      return el("li", {}, [el("a", { href: "#" + section.key, text: section.title })]);
+    }));
+    return el("nav", { className: "contents", "aria-label": "Contents" }, [el("h2", { text: "Contents" }), list]);
+  }
+
+  /** Puts the report's name and page numbers in the printed page margins. */
+  function pageMargins() {
+    var title = (data.projectName + " – " + (data.audience === "internal" ? "Internal report" : "Client report"))
+      .replace(/\s+/g, " ");
+    var style = document.createElement("style");
+    // A JSON string is also a valid CSS string: quotes and backslashes arrive escaped.
+    style.textContent = "@page { @top-left { content: " + JSON.stringify(title) + "; } }";
+    document.head.appendChild(style);
+  }
+
   var hasGraph = data.sections.some(function (section) { return section.kind === "graph"; });
   root.appendChild(header());
+  root.appendChild(contents());
   var toolbar = scopeToolbar();
   if (toolbar) root.appendChild(toolbar);
+  pageMargins();
   var chartGrid = null;
   data.sections.forEach(function (section) {
     if (section.kind === "chart") {

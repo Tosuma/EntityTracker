@@ -111,12 +111,6 @@
                                 Content="Archived"
                                 ToolTip="Select a Tracker to view archived entities."
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
-                        <ToggleButton Command="{Binding NavigateCommand}"
-                                CommandParameter="{x:Static viewModels:ShellDestination.Reports}"
-                                IsChecked="{Binding IsReports, Mode=OneWay}"
-                                Content="Reports"
-                                ToolTip="Select a Tracker to open Reports."
-                                Style="{StaticResource ShellNavigationButtonStyle}" />
 
                         <TextBlock Margin="8,18,0,4"
                                    Foreground="{DynamicResource Brush.Text.OnDarkMuted}"

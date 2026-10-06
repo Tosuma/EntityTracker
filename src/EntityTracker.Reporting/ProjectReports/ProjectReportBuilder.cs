@@ -106,13 +106,7 @@ public sealed class ProjectReportBuilder
         ArgumentNullException.ThrowIfNull(request);
         Project project = await _projects.GetAsync(request.ProjectId, cancellationToken)
             ?? throw new InvalidOperationException("The Project no longer exists.");
-        HashSet<TrackerId> selected = request.TrackerIds.ToHashSet();
-        Tracker[] trackers = (await _trackers.GetByProjectAsync(request.ProjectId, cancellationToken))
-            .Where(tracker => tracker.LifecycleState == CatalogLifecycleState.Active && selected.Contains(tracker.Id))
-            .OrderBy(static tracker => tracker.Name, StringComparer.CurrentCultureIgnoreCase)
-            .ToArray();
-        if (trackers.Length == 0)
-            throw new InvalidOperationException("Choose at least one active Tracker for the report.");
+        Tracker[] trackers = await SelectedTrackersAsync(request, cancellationToken);
 
         Dictionary<TrackerId, ProgressDashboardReport> perTracker = [];
         Dictionary<TrackerId, IReadOnlyList<EntityOverviewItem>> entities = [];
@@ -135,6 +129,32 @@ public sealed class ProjectReportBuilder
             .ToArray();
         return new ProjectReport(project.Name, request.Audience, _timeProvider.GetUtcNow(),
             combined.EffectiveFrom, combined.EffectiveTo, context.Scopes, sections);
+    }
+
+    /// <summary>
+    /// Gets the progress of the chosen Trackers together, as the report's charts show it for "all
+    /// selected Trackers"; used to save or copy those charts as images.
+    /// </summary>
+    public async Task<ProgressDashboardReport> BuildProgressAsync(ProjectReportRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Tracker[] trackers = await SelectedTrackersAsync(request, cancellationToken);
+        return trackers.Length == 1
+            ? await _progress.GetReportAsync(trackers[0].Id, request.Range, cancellationToken)
+            : await _aggregate.GetTrackersReportAsync(trackers, request.Range, cancellationToken);
+    }
+
+    private async Task<Tracker[]> SelectedTrackersAsync(ProjectReportRequest request, CancellationToken cancellationToken)
+    {
+        HashSet<TrackerId> selected = request.TrackerIds.ToHashSet();
+        Tracker[] trackers = (await _trackers.GetByProjectAsync(request.ProjectId, cancellationToken))
+            .Where(tracker => tracker.LifecycleState == CatalogLifecycleState.Active && selected.Contains(tracker.Id))
+            .OrderBy(static tracker => tracker.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+        return trackers.Length > 0
+            ? trackers
+            : throw new InvalidOperationException("Choose at least one active Tracker for the report.");
     }
 
     /// <summary>

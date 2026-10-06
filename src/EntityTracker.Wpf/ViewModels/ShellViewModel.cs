@@ -125,7 +125,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             new(ShellDestination.Overview, "Tracker", "Overview", true, true),
             new(ShellDestination.DependencyGraph, "Tracker", "Dependency graph", true, true),
             new(ShellDestination.Archived, "Tracker", "Archived", true, true),
-            new(ShellDestination.Reports, "Tracker", "Reports", true, true),
             new(ShellDestination.SchemaSynchronization, "Manage", "Schema synchronization", true, true),
             new(ShellDestination.AddEntity, "Manage", "Add entity", true, true),
             new(ShellDestination.HelpSql, "Utilities", "Help & SQL", false, false),
@@ -282,7 +281,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(IsOverview));
                 OnPropertyChanged(nameof(IsDependencyGraph));
                 OnPropertyChanged(nameof(IsArchived));
-                OnPropertyChanged(nameof(IsReports));
                 OnPropertyChanged(nameof(IsSchemaSynchronization));
                 OnPropertyChanged(nameof(IsAddEntity));
                 OnPropertyChanged(nameof(IsHelpSql));
@@ -357,7 +355,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public bool IsOverview => SelectedDestination == ShellDestination.Overview;
     public bool IsDependencyGraph => SelectedDestination == ShellDestination.DependencyGraph;
     public bool IsArchived => SelectedDestination == ShellDestination.Archived;
-    public bool IsReports => SelectedDestination == ShellDestination.Reports;
     public bool IsSchemaSynchronization => SelectedDestination == ShellDestination.SchemaSynchronization;
     public bool IsAddEntity => SelectedDestination == ShellDestination.AddEntity;
     public bool IsHelpSql => SelectedDestination == ShellDestination.HelpSql;
@@ -772,7 +769,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 ShellDestination.Overview => MainWindowTab.Overview,
                 ShellDestination.DependencyGraph => MainWindowTab.DependencyGraph,
                 ShellDestination.Archived => MainWindowTab.Archived,
-                ShellDestination.Reports => MainWindowTab.Reports,
                 ShellDestination.SchemaSynchronization => MainWindowTab.SchemaSynchronization,
                 ShellDestination.AddEntity => MainWindowTab.AddEntity,
                 _ => CurrentWorkspace.SelectedTab
@@ -840,7 +836,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             MainWindowTab.Overview => ShellDestination.Overview,
             MainWindowTab.DependencyGraph => ShellDestination.DependencyGraph,
             MainWindowTab.Archived => ShellDestination.Archived,
-            MainWindowTab.Reports => ShellDestination.Reports,
             MainWindowTab.SchemaSynchronization => ShellDestination.SchemaSynchronization,
             MainWindowTab.AddEntity => ShellDestination.AddEntity,
             _ => SelectedDestination
@@ -974,7 +969,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         ShellDestination.Overview or
         ShellDestination.DependencyGraph or
         ShellDestination.Archived or
-        ShellDestination.Reports or
         ShellDestination.SchemaSynchronization or
         ShellDestination.AddEntity;
 

@@ -13,9 +13,16 @@ public interface IProjectReportFiles
 
     /// <summary>Writes the report to a temporary file and opens it in the default browser.</summary>
     void OpenPreview(string html, string fileName);
+
+    /// <summary>Asks where to save a chart image; null when the user cancels.</summary>
+    string? SelectChartPath(string suggestedFileName);
+
+    /// <summary>Puts a chart image on the clipboard.</summary>
+    void CopyChart(byte[] png);
 }
 
-public sealed class ProjectReportFiles : IProjectReportFiles
+public sealed class ProjectReportFiles(IProgressChartFilePicker chartPicker, IClipboardService clipboard)
+    : IProjectReportFiles
 {
     public string? SelectExportPath(string suggestedFileName)
     {
@@ -39,4 +46,8 @@ public sealed class ProjectReportFiles : IProjectReportFiles
         File.WriteAllText(path, html);
         Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })?.Dispose();
     }
+
+    public string? SelectChartPath(string suggestedFileName) => chartPicker.SelectPngPath(suggestedFileName);
+
+    public void CopyChart(byte[] png) => clipboard.SetPng(png);
 }

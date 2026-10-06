@@ -7,7 +7,6 @@ using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
-using EntityTracker.Reporting;
 using EntityTracker.Wpf.Services;
 
 using Microsoft.Extensions.Logging;
@@ -22,11 +21,7 @@ public sealed class TrackerWorkspaceViewModelFactory(
     EntityDependencyEditorService entityDependencyEditorService,
     EntityLifecycleService entityLifecycleService,
     ICsvFilePicker csvFilePicker,
-    ProgressReportingService reportingService,
-    ProgressChartPresentationBuilder presentationBuilder,
-    ProgressChartPngExporter pngExporter,
     IProgressChartFilePicker chartFilePicker,
-    IClipboardService clipboard,
     ISchemaSynchronizationConfirmation synchronizationConfirmation,
     IContextDiscardConfirmation discardConfirmation,
     ILoggerFactory loggerFactory,
@@ -41,15 +36,6 @@ public sealed class TrackerWorkspaceViewModelFactory(
 {
     public MainWindowViewModel Create(TrackerId trackerId)
     {
-        ProgressDashboardViewModel progress = new(
-            trackerId,
-            reportingService,
-            presentationBuilder,
-            pngExporter,
-            chartFilePicker,
-            clipboard,
-            loggerFactory.CreateLogger<ProgressDashboardViewModel>(),
-            notifications);
         return new MainWindowViewModel(
             trackerId,
             overviewService,
@@ -59,7 +45,6 @@ public sealed class TrackerWorkspaceViewModelFactory(
             entityDependencyEditorService,
             entityLifecycleService,
             csvFilePicker,
-            progress,
             synchronizationConfirmation,
             discardConfirmation,
             loggerFactory,

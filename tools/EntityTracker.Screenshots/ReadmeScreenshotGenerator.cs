@@ -287,8 +287,7 @@ internal sealed class ReadmeScreenshotGenerator
                 ?? throw new InvalidOperationException("The tracker workspace was not created.");
             await WaitUntilAsync(
                 () => !viewModel.IsBusy &&
-                      viewModel.TotalEntityCount == 125 &&
-                      viewModel.Progress.HasReport,
+                      viewModel.TotalEntityCount == 125,
                 "The tracker workspace did not finish loading.",
                 cancellationToken);
             await CaptureOverviewAsync(viewModel, window, renderer, cancellationToken);
@@ -326,9 +325,6 @@ internal sealed class ReadmeScreenshotGenerator
 
             viewModel.ManualCreation.CancelCommand.Execute(null);
             await CaptureEditorAsync(shell, viewModel, window, renderer, cancellationToken);
-
-            await shell.NavigateAsync(ShellDestination.Reports, cancellationToken);
-            await renderer.CaptureAsync("progress.png", settleMilliseconds: 900);
 
             await CaptureArchivedEntityAsync(
                 provider,

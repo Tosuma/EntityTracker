@@ -38,8 +38,9 @@ EntityTracker keeps those concerns separate:
 - **Workflow visibility** — combine Excel-style filters on Responsible dev, Group, Status, and
   Work status; sort workflow statuses in their defined order; and search by entity or dependency
   name.
-- **Progress reporting** — inspect current status, implementation history, ready-versus-blocked
-  trends, and weekly change; copy or export charts as PNG files.
+- **Progress reporting** — share a Project report with the client or the team: current status,
+  implementation history, ready-versus-blocked trends, weekly change, the dependency graph and every
+  entity in one offline web page; copy or save charts as PNG files.
 - **Project portfolio** — compare entity-weighted Project/Tracker progress, persisted trends, and
   normalized entity differences without opening another window or database.
 - **Safe catalog management** — create blank, CSV-backed, or copied Trackers and rename, recycle,
@@ -57,7 +58,7 @@ EntityTracker keeps those concerns separate:
 2. Choose Complete or Partial synchronization and review every actionable difference.
 3. Apply the reviewed schema while EntityTracker preserves stable progress, notes, and history.
 4. Use dependency-safe rank, readiness, blockers, filters, and search to choose the next work item.
-5. Update development status and use Reports to communicate delivery trends.
+5. Update development status and share a Project report to communicate delivery trends.
 
 ## Screenshots
 
@@ -101,9 +102,9 @@ archived entities, without deleting their history.
       <img src="images/light/schema-synchronization.png" alt="Schema Synchronization page with Complete and Partial import choices" />
     </td>
     <td width="50%">
-      <strong>Report progress over time</strong><br />
-      See manager summaries, status distribution, implementation history, and blockers.<br /><br />
-      <img src="images/light/progress.png" alt="Reports page with status pie chart and implementation history charts" />
+      <strong>Report progress to the client</strong><br />
+      Export summaries, charts, the dependency graph, and entities as one offline web page.<br /><br />
+      <img src="images/light/project-report.png" alt="Project report page with Tracker selection, audience, progress period and chart images" />
     </td>
   </tr>
   <tr>
@@ -360,8 +361,16 @@ The report also holds each Tracker's **dependency graph**, in the same tree and 
 as the app. Point at an entity for its status and links, click it to highlight its dependencies,
 dependents or direct links (Ctrl+click adds more), drag to move around and scroll to zoom. The
 search marks matching entities in the graph, and clicking an entity's name in the table shows it in
-the graph. Print the report from the browser to get a PDF.
-**Preview in browser** opens the same page without saving it.
+the graph. **Preview in browser** opens the same page without saving it.
+
+To get a PDF, use **Print / Save as PDF** in the report. The printed report starts with its title,
+the chosen Trackers, a contents list and the summary; charts sit two per row and are never split;
+the dependency graph gets a page of its own; and the entity table prints the rows you have searched
+or filtered for, says which ones, and repeats its header on every page. Each page carries the
+report's name and a page number.
+
+Under **Chart images** on the same page, save or copy any of the report's charts as a PNG image for
+the chosen Trackers and period, for slides or e-mails.
 
 A **Client report** shows progress, statuses, Filter active, shared notes and dependencies, and leaves out
 internal notes, developer names and technical details such as origin and missing references; they
@@ -393,7 +402,7 @@ until matching entities become available.
 ### Extract a PostgreSQL schema
 
 Help & SQL explains Portfolio, Project, and Tracker context; statuses and blockers; import modes;
-Reports; and lifecycle actions. It also provides the versioned PostgreSQL query used to produce a
+the Project report; and lifecycle actions. It also provides the versioned PostgreSQL query used to produce a
 compatible schema CSV without requiring a live database connection inside EntityTracker.
 
 ![EntityTracker Help and SQL guidance](images/light/help-and-sql.png)

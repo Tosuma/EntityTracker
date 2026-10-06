@@ -467,7 +467,6 @@ public sealed class PresentationConfigurationTests
             "ProjectDashboard",
             "Overview",
             "Archived",
-            "Reports",
             "SchemaSynchronization",
             "AddEntity",
             "HelpSql",
@@ -478,6 +477,8 @@ public sealed class PresentationConfigurationTests
             $"ShellDestination.{destination}",
             text,
             StringComparison.Ordinal));
+        // Progress reporting lives in the Project report, opened from the Project dashboard.
+        Assert.DoesNotContain("ShellDestination.Reports", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Connections", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Git", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(document.Descendants(), element =>

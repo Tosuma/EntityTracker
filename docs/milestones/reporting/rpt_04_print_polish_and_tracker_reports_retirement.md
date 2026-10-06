@@ -1,6 +1,6 @@
 # RPT-04 — Print Polish and Tracker Reports Retirement
 
-**Status: planned.** Do after RPT-01.1, RPT-02 and RPT-03.
+**Status: completed.**
 
 ## Goal and user-facing outcome
 
@@ -42,6 +42,31 @@ its view), with chart PNG save/copy.
 - Wpf: navigation no longer offers Reports; anything relying on `ShellDestination.Reports` is
   updated; markup tests updated.
 - Build and run all test projects; regenerate and publish screenshots; update the README.
+
+## Completion evidence
+
+- **Print:** a **Print / Save as PDF** button in the report header; a contents list linking every
+  section (a numbered table of contents on paper); A4 pages with the report's name at the top and
+  "Page N of M" at the bottom; header, contents, summary and the four charts on page 1, charts two
+  per row and never split; the dependency graph on its own page, fitted to it before printing; the
+  entity table on its own pages with the header repeated, smaller type, and a line saying which
+  search and filters chose the printed rows. Toolbars, hints and hover cards do not print.
+- **Retired:** `ShellDestination.Reports`, `MainWindowTab.Reports`, the sidebar entry, the Reports
+  tab markup, `ProgressDashboardViewModel` and its tests, and the workspace's dependency on it. Help,
+  README and Getting started now point to the Project report.
+- **Moved:** chart PNG save and copy are on the Project report page (**Chart images**), using
+  `ProjectReportBuilder.BuildProgressAsync` for the chosen Trackers and period and the existing
+  `ProgressChartPngExporter`; `IProjectReportFiles` gained `SelectChartPath` and `CopyChart`.
+- **Tests:** the HTML carries the print button, contents, page counters, header repetition and
+  page-break rules; the shell no longer has a Reports destination or tab, and the navigation test
+  checks it; chart images save a real PNG named after the Project, chart and data date, and copy one.
+- Checked by printing the demo client report to PDF in headless Edge (11 A4 pages): page 1 holds the
+  header, contents, summary and charts; page 2 the graph; pages 3–11 the table, each starting with
+  its header row.
+- `dotnet build -c Release` succeeded. `dotnet test -c Release` passed Domain 62, Application 250,
+  DemoData 8, Reporting 87, Screenshots 12 and Wpf 372; Infrastructure had one timing-sensitive
+  backup test fail under load, then passed 252 of 252 on a full rerun (see QUESTIONS.md). 1,043 tests in all.
+- Screenshots regenerated and published (49 per appearance; `progress.png` removed).
 
 ## Agent planning prompt
 

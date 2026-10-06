@@ -75,6 +75,26 @@
                 </StackPanel>
                 <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding IncludedSummary}" />
             </DockPanel>
+
+            <Border Padding="16" Margin="0,24,0,14" Style="{StaticResource EntityTrackerCardStyle}">
+                <StackPanel>
+                    <Label Padding="0" FontSize="18" FontWeight="SemiBold" Content="Chart images"
+                           Target="{Binding ElementName=ReportChartSelector}" />
+                    <TextBlock Margin="0,4,0,8" Style="{StaticResource PageDescriptionTextStyle}" TextWrapping="Wrap"
+                               Text="Save or copy one of the report's charts as a PNG image, for the chosen Trackers together and the chosen progress period. Useful for slides and e-mails." />
+                    <StackPanel Orientation="Horizontal">
+                        <ComboBox x:Name="ReportChartSelector" MinWidth="320" Margin="0,0,8,0"
+                                  AutomationProperties.Name="Chart"
+                                  ItemsSource="{x:Static viewModels:ProjectReportViewModel.ChartOptions}"
+                                  DisplayMemberPath="Label" SelectedValuePath="Kind"
+                                  SelectedValue="{Binding Chart, Mode=TwoWay}" />
+                        <Button Margin="0,0,8,0" Content="Save image…" Command="{Binding SaveChartCommand}"
+                                AutomationProperties.Name="Save the chart as a PNG image" />
+                        <Button Content="Copy image" Command="{Binding CopyChartCommand}"
+                                AutomationProperties.Name="Copy the chart image to the clipboard" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

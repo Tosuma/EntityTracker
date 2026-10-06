@@ -72,6 +72,22 @@ public sealed class ProjectReportTests
     }
 
     [Fact]
+    public void ThePrintedReportHasContentsPageNumbersAndRepeatsTheTableHeader()
+    {
+        string html = ProjectReportHtmlWriter.Write(Report());
+
+        Assert.Contains("Print / Save as PDF", html, StringComparison.Ordinal);
+        Assert.Contains("window.print()", html, StringComparison.Ordinal);
+        Assert.Contains("className: \"contents\"", html, StringComparison.Ordinal);
+        Assert.Contains("@page", html, StringComparison.Ordinal);
+        Assert.Contains("counter(page) \" of \" counter(pages)", html, StringComparison.Ordinal);
+        Assert.Contains("thead { display: table-header-group; }", html, StringComparison.Ordinal);
+        Assert.Contains(".charts section.report-section { break-inside: avoid; }", html, StringComparison.Ordinal);
+        Assert.Contains("#dependency-graph { break-before: page; }", html, StringComparison.Ordinal);
+        Assert.Contains("print-note", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheEmbeddedDataCannotCloseItsScriptElement()
     {
         ProjectReport report = Report() with { ProjectName = "</script><script>alert(1)</script>" };

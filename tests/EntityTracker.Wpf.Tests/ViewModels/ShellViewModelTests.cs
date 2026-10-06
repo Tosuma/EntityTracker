@@ -262,10 +262,10 @@ public sealed class ShellViewModelTests
         Assert.Equal(harness.DefaultTracker.Id, shell.SelectedTracker?.Id);
         Assert.Equal(ShellDestination.Overview, shell.SelectedDestination);
         Assert.True(shell.IsTrackerWorkspace);
-        Assert.True(shell.NavigateCommand.CanExecute(ShellDestination.Reports));
+        Assert.True(shell.NavigateCommand.CanExecute(ShellDestination.Archived));
 
-        Assert.True(await shell.NavigateAsync(ShellDestination.Reports));
-        Assert.Equal(MainWindowTab.Reports, shell.CurrentWorkspace?.SelectedTab);
+        Assert.True(await shell.NavigateAsync(ShellDestination.Archived));
+        Assert.Equal(MainWindowTab.Archived, shell.CurrentWorkspace?.SelectedTab);
         Assert.True(await shell.NavigateAsync(ShellDestination.DependencyGraph));
         Assert.Equal(MainWindowTab.DependencyGraph, shell.CurrentWorkspace?.SelectedTab);
         Assert.True(shell.IsDependencyGraph);
@@ -490,6 +490,49 @@ public sealed class ShellViewModelTests
         {
             File.Delete(exportPath);
         }
+    }
+
+    [Fact]
+    public async Task ProjectReport_SavesAndCopiesChartImagesForTheChosenTrackers()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "customer_account");
+        string chartPath = Path.Combine(Path.GetTempPath(), $"chart-{Guid.NewGuid():N}.png");
+        harness.ReportFiles.ChartPath = chartPath;
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        try
+        {
+            Assert.True(await shell.NavigateAsync(ShellDestination.ProjectReport));
+            ProjectReportViewModel report = shell.ProjectReport!;
+            Assert.Equal(4, ProjectReportViewModel.ChartOptions.Count);
+            report.Chart = EntityTracker.Reporting.ProgressChartKind.ImplementedOverTime;
+
+            report.SaveChartCommand.Execute(null);
+            await WaitUntilAsync(() => Task.FromResult(shell.Notifications.Items.Any(item => item.Title == "Chart image")));
+
+            Assert.Contains(shell.Notifications.Items, item => item.Title == "Chart image" && item.Kind == NotificationKind.Success);
+            // Named after the Project, the chart and the date of its data.
+            Assert.Matches(@"-implemented-over-time-[0-9]{8}\.png$", harness.ReportFiles.SuggestedChartName);
+            Assert.Equal([0x89, 0x50, 0x4E, 0x47], (await File.ReadAllBytesAsync(chartPath)).Take(4).ToArray());
+
+            report.CopyChartCommand.Execute(null);
+            await WaitUntilAsync(() => Task.FromResult(harness.ReportFiles.CopiedChart is not null));
+            Assert.Equal(0x89, harness.ReportFiles.CopiedChart![0]);
+        }
+        finally
+        {
+            File.Delete(chartPath);
+        }
+    }
+
+    [Fact]
+    public void TheShellNoLongerOffersTheTrackerReportsPage()
+    {
+        Assert.DoesNotContain(Enum.GetNames<ShellDestination>(), name => name == "Reports");
+        Assert.DoesNotContain(Enum.GetNames<MainWindowTab>(), name => name == "Reports");
     }
 
     [Fact]
@@ -760,6 +803,18 @@ public sealed class ShellViewModelTests
         }
 
         public void OpenPreview(string html, string fileName) => PreviewHtml = html;
+
+        public string? ChartPath { get; set; }
+        public string? SuggestedChartName { get; private set; }
+        public byte[]? CopiedChart { get; private set; }
+
+        public string? SelectChartPath(string suggestedFileName)
+        {
+            SuggestedChartName = suggestedFileName;
+            return ChartPath;
+        }
+
+        public void CopyChart(byte[] png) => CopiedChart = png;
     }
 
     private sealed class ShellHarness : IAsyncDisposable
@@ -945,10 +1000,6 @@ public sealed class ShellViewModelTests
                     stateStore,
                     resolver,
                     ranker),
-                adapters,
-                new ProgressReportingService(history, TimeZoneInfo.Utc),
-                chartPresentation,
-                new ProgressChartPngExporter(chartPresentation),
                 adapters,
                 adapters,
                 adapters,

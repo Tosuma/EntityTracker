@@ -266,14 +266,79 @@ svg.graph:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px;
 
 footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 24px; }
 
+.print-only { display: none; }
+
+header.report-header { position: relative; }
+.print-button {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 6px;
+  background: transparent;
+  color: #FFFFFF;
+  cursor: pointer;
+}
+.print-button:hover { background: rgba(255, 255, 255, 0.12); }
+.print-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+nav.contents {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  margin: -6px 0 18px;
+  font-size: 13px;
+}
+nav.contents h2 { font-size: 13px; margin: 0; color: var(--muted); font-weight: 600; }
+nav.contents ol { display: contents; list-style: none; }
+nav.contents li { display: inline; }
+nav.contents a { color: var(--green-80); text-decoration: none; }
+nav.contents a:hover { text-decoration: underline; }
+
+@page {
+  size: A4;
+  margin: 16mm 12mm 18mm;
+  @top-left { font: 9px "Segoe UI", sans-serif; color: #55615F; }
+  @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 9px "Segoe UI", sans-serif; color: #55615F; }
+}
+
 @media print {
   body { background: #FFFFFF; font-size: 11px; }
   main { max-width: none; padding: 0; }
-  .toolbar, .table-tools, .no-print, .chart-tip { display: none !important; }
+  .toolbar, .table-tools, .no-print, .chart-tip, .section-hint { display: none !important; }
+  .print-only { display: block; }
   header.report-header { border-radius: 0; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-  section.report-section { border: none; padding: 8px 0; }
-  .charts { grid-template-columns: 1fr 1fr; }
-  th { position: static; }
+
+  /* The first page: header, contents and summary. */
+  nav.contents { display: block; margin: 0 0 12px; font-size: 11px; }
+  nav.contents h2 { font-size: 13px; color: var(--ink); margin-bottom: 4px; }
+  nav.contents ol { display: block; list-style: decimal; margin: 0; padding-left: 18px; columns: 2; }
+  nav.contents li { display: list-item; }
+  nav.contents a { color: var(--ink); }
+
+  section.report-section { border: none; padding: 8px 0; break-inside: avoid; }
+  .charts { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .charts section.report-section { break-inside: avoid; }
+  .chart svg { max-height: 220px; }
   .card, .status, .legend span::before, svg { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+
+  /* The graph prints as a whole on its own page. */
+  #dependency-graph { break-before: page; }
+  .graph-host { border: none; }
+  svg.graph { height: 230mm; }
+
+  /* The entity table: the rows on screen, with the header repeated on every page. */
+  section.report-section:has(table) { break-inside: auto; break-before: page; }
+  .print-note { margin: 0 0 6px; color: var(--muted); }
+  .table-wrap { overflow: visible; }
+  table { font-size: 9.5px; }
+  th, td { padding: 4px 6px; }
+  thead { display: table-header-group; }
+  th { position: static; }
   tr { break-inside: avoid; }
+  .entity-link { text-decoration: none; }
 }

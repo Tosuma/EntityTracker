@@ -9,7 +9,6 @@ public enum ShellDestination
     Overview,
     DependencyGraph,
     Archived,
-    Reports,
     SchemaSynchronization,
     AddEntity,
     HelpSql,

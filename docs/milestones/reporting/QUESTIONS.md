@@ -87,3 +87,35 @@ one records the choice made and how to change it. Send corrections and they will
 4. **Demo data.**
    The demo Project has no notes, so the sample reports show an empty Shared notes column. The
    tests cover Shared notes reaching the client report.
+
+## RPT-04 — Print Polish and Tracker Reports Retirement
+
+1. **What happened to the Tracker Reports tab's features.**
+   - **Moved:** chart PNG save and copy now live under **Chart images** on the Project report page.
+     They use the chosen Trackers together and the chosen progress period (one Tracker gives exactly
+     what the old tab gave).
+   - **Dropped:** the in-app charts themselves (they are in the report, and the Project dashboard
+     still shows the Project's progress) and the **custom date range**; the Project report offers
+     All history and the last 30, 60 or 90 days.
+   - **To change:** say if a custom date range is wanted on the Project report page.
+
+2. **Where the Project report is opened.**
+   The sidebar had "Reports" under Tracker; it is gone. The Project report stays on the Project
+   dashboard's **Project report** button, as agreed when RPT-01 was planned.
+   - **To change:** a "Project report" sidebar entry can be added next to Project dashboard.
+
+3. **The dependency graph on paper.**
+   - **Choice:** the graph gets its own page and is fitted to it when printing starts, then the view
+     on screen comes back. In large Projects the names in a printed tree are too small to read; the
+     entity table that follows lists every entity with its dependencies.
+   - **Seen in testing:** headless Edge does not send the "before print" signal, so its PDFs show the
+     view as it was on screen, scaled to the page. Browsers printing for a person do send it.
+
+4. **Which rows the table prints.**
+   - **Choice:** the rows currently shown, so a reader can search or filter before printing; a line
+     above the table says which search and filters chose them, or "All N entities".
+
+5. **A timing-sensitive backup test.**
+   `SqliteBackupServiceTests.Startup_OrganizesLegacyBackupsByDatabaseSchemaRatherThanFilename`
+   failed once during a full parallel test run and passed in three separate runs and a full rerun of
+   the Infrastructure project. It is unrelated to the report work; worth a look if it fails again.
