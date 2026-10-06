@@ -189,6 +189,8 @@
             <DockPanel Margin="0,0,0,18">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                     <Button Margin="0,0,8,0" Click="OnRenameProject" Content="Rename project" />
+                    <Button Margin="0,0,8,0" Click="OnOpenProjectReport" Content="Project report"
+                            AutomationProperties.Name="Create a report of this project" />
                     <Button Margin="0,0,8,0" Click="OnOpenDevelopers" Content="Developers"
                             AutomationProperties.Name="Manage project developers" />
                     <Button Margin="0,0,8,0" Click="OnOpenRecycleBin" Content="Tracker recycle bin" />

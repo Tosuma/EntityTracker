@@ -67,6 +67,16 @@ public sealed class AggregateProgressReportingService
         return await BuildAsync(trackers, range, cancellationToken);
     }
 
+    /// <summary>Combines the progress of exactly the given Trackers, as a Project report does for its selection.</summary>
+    public Task<ProgressDashboardReport> GetTrackersReportAsync(
+        IReadOnlyList<Tracker> trackers,
+        ProgressDateRange range,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(trackers);
+        return BuildAsync(trackers, range, cancellationToken);
+    }
+
     private async Task<ProgressDashboardReport> BuildAsync(
         IReadOnlyList<Tracker> trackers,
         ProgressDateRange range,

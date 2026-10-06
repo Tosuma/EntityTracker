@@ -332,6 +332,7 @@
                     <views:PortfolioView Visibility="{Binding IsPortfolio, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <views:ProjectDashboardView Visibility="{Binding IsProjectDashboard, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <views:ProjectDevelopersView Visibility="{Binding IsDevelopers, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <views:ProjectReportView Visibility="{Binding IsProjectReport, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <views:TrackerWorkspaceView x:Name="WorkspaceView"
                                                 DataContext="{Binding CurrentWorkspace}"
                                                 Visibility="{Binding DataContext.IsTrackerWorkspace, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}" />

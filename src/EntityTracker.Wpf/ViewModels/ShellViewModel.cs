@@ -74,8 +74,12 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         ResponsibilitySearchSettingsViewModel? responsibilitySearch = null,
         LocalProjectIdentitySettingsViewModel? localIdentitySettings = null,
         OverviewExportSettingsViewModel? overviewExport = null,
-        DependencyGraphSettingsViewModel? graphSettings = null)
+        DependencyGraphSettingsViewModel? graphSettings = null,
+        EntityTracker.Reporting.ProjectReports.ProjectReportBuilder? reportBuilder = null,
+        IProjectReportFiles? reportFiles = null)
     {
+        _reportBuilder = reportBuilder;
+        _reportFiles = reportFiles;
         _projectRepository = projectRepository;
         _trackerRepository = trackerRepository;
         _developerService = developerService;
@@ -117,6 +121,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             new(ShellDestination.Portfolio, string.Empty, "Portfolio", false, false),
             new(ShellDestination.ProjectDashboard, string.Empty, "Project dashboard", true, false),
             new(ShellDestination.Developers, string.Empty, "Developers", true, false),
+            new(ShellDestination.ProjectReport, string.Empty, "Project report", true, false),
             new(ShellDestination.Overview, "Tracker", "Overview", true, true),
             new(ShellDestination.DependencyGraph, "Tracker", "Dependency graph", true, true),
             new(ShellDestination.Archived, "Tracker", "Archived", true, true),
@@ -183,6 +188,10 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         get => _projectReporting;
         private set => SetField(ref _projectReporting, value);
     }
+
+    private readonly EntityTracker.Reporting.ProjectReports.ProjectReportBuilder? _reportBuilder;
+    private readonly IProjectReportFiles? _reportFiles;
+    private ProjectReportViewModel? _projectReport;
 
     public ProjectDevelopersViewModel? Developers
     {
@@ -269,6 +278,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(IsPortfolio));
                 OnPropertyChanged(nameof(IsProjectDashboard));
                 OnPropertyChanged(nameof(IsDevelopers));
+                OnPropertyChanged(nameof(IsProjectReport));
                 OnPropertyChanged(nameof(IsOverview));
                 OnPropertyChanged(nameof(IsDependencyGraph));
                 OnPropertyChanged(nameof(IsArchived));
@@ -332,6 +342,18 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public bool IsPortfolio => SelectedDestination == ShellDestination.Portfolio;
     public bool IsProjectDashboard => SelectedDestination == ShellDestination.ProjectDashboard;
     public bool IsDevelopers => SelectedDestination == ShellDestination.Developers;
+
+    public bool IsProjectReport => SelectedDestination == ShellDestination.ProjectReport;
+
+    /// <summary>Gets whether this app can make Project reports.</summary>
+    public bool CanCreateProjectReports => _reportBuilder is not null && _reportFiles is not null;
+
+    /// <summary>Gets the Project Report page, made fresh each time it opens so it lists the current Trackers.</summary>
+    public ProjectReportViewModel? ProjectReport
+    {
+        get => _projectReport;
+        private set => SetField(ref _projectReport, value);
+    }
     public bool IsOverview => SelectedDestination == ShellDestination.Overview;
     public bool IsDependencyGraph => SelectedDestination == ShellDestination.DependencyGraph;
     public bool IsArchived => SelectedDestination == ShellDestination.Archived;
@@ -737,6 +759,11 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     private void SetDestination(ShellDestination destination)
     {
+        if (destination == ShellDestination.ProjectReport)
+            ProjectReport = SelectedProject is null || _reportBuilder is null || _reportFiles is null
+                ? null
+                : new ProjectReportViewModel(SelectedProject.Id, SelectedProject.Name, Trackers,
+                    _reportBuilder, _reportFiles, Notifications);
         SelectedDestination = destination;
         if (CurrentWorkspace is not null)
         {

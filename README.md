@@ -341,6 +341,24 @@ work just as in the solar system. The chosen view is remembered.
 
 ![Dependency tree zoomed in on a selected entity with its direct links highlighted](images/light/dependency-graph-tree-selected.png)
 
+### Share a Project report
+
+Open **Project report** from the Project dashboard to create a report for the client, who never
+needs EntityTracker. Tick the Trackers to include (one, a few or all), choose who it is for, and
+pick the progress period. **Export HTML…** saves a single web page that works completely offline:
+it holds the summary, every progress chart (for all selected Trackers together or one at a time),
+and a table of the entities with search and filters. The search matches names the same way as the
+app, so "cust pref" and "legalentity" work there too. Print it from the browser to get a PDF.
+**Preview in browser** opens the same page without saving it.
+
+A **Client report** shows progress, statuses, Filter active and dependencies, and leaves out
+internal notes, developer names and technical details such as origin and missing references; they
+are left out of the file itself, not just hidden. An **Internal report** includes everything.
+SharePoint usually downloads `.html` files instead of showing them; the downloaded file opens in
+any browser.
+
+![Project report page with Tracker selection, audience and progress period](images/light/project-report.png)
+
 ### Import review details
 
 Changed entities show dependency additions and removals directly, with any required progress choice

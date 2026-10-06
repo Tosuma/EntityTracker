@@ -439,6 +439,75 @@ public sealed class ShellViewModelTests
     }
 
     [Fact]
+    public async Task ProjectReport_ExportsTheChosenTrackersForTheClientWithoutInternalNotes()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        Tracker second = await harness.TrackerManagement.CreateBlankAsync(harness.DefaultProject.Id, "Second tracker");
+        Tracker third = await harness.TrackerManagement.CreateBlankAsync(harness.DefaultProject.Id, "Third tracker");
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "customer_account",
+            notes: "Internal: vendor contract expires", filterActive: "Only active customers");
+        await harness.AddEntityAsync(second.Id, "invoice_line");
+        await harness.AddEntityAsync(third.Id, "not_in_the_report");
+        string exportPath = Path.Combine(Path.GetTempPath(), $"report-{Guid.NewGuid():N}.html");
+        harness.ReportFiles.ExportPath = exportPath;
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        try
+        {
+            Assert.True(await shell.NavigateAsync(ShellDestination.ProjectReport));
+            ProjectReportViewModel report = Assert.IsType<ProjectReportViewModel>(shell.ProjectReport);
+            Assert.True(shell.IsProjectReport);
+            Assert.Equal(3, report.Trackers.Count);
+            report.Trackers.Single(choice => choice.Tracker.Id == third.Id).IsSelected = false;
+
+            report.ExportCommand.Execute(null);
+            // The success notice is posted once the file has been written completely.
+            await WaitUntilAsync(() => Task.FromResult(shell.Notifications.Items.Any(item => item.Title == "Project report")));
+
+            string html = await File.ReadAllTextAsync(exportPath);
+            Assert.Contains("customer_account", html, StringComparison.Ordinal);
+            Assert.Contains("invoice_line", html, StringComparison.Ordinal);
+            Assert.Contains("Only active customers", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("not_in_the_report", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("vendor contract", html, StringComparison.Ordinal);
+            Assert.Contains("Client report", harness.ReportFiles.SuggestedName, StringComparison.Ordinal);
+            Assert.Contains(shell.Notifications.Items, item => item.Title == "Project report" && item.Kind == NotificationKind.Success);
+
+            report.Audience = EntityTracker.Reporting.ProjectReports.ReportAudience.Internal;
+            report.PreviewCommand.Execute(null);
+            await WaitUntilAsync(() => Task.FromResult(harness.ReportFiles.PreviewHtml is not null));
+            Assert.Contains("vendor contract", harness.ReportFiles.PreviewHtml, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(exportPath);
+        }
+    }
+
+    [Fact]
+    public async Task ProjectReport_NeedsAtLeastOneTracker()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        Assert.True(await shell.NavigateAsync(ShellDestination.ProjectReport));
+        ProjectReportViewModel report = shell.ProjectReport!;
+
+        report.SelectNoneCommand.Execute(null);
+
+        Assert.False(report.HasSelection);
+        Assert.False(report.ExportCommand.CanExecute(null));
+        Assert.False(report.PreviewCommand.CanExecute(null));
+        Assert.Equal("No Tracker selected · Client report", report.IncludedSummary);
+        report.SelectAllCommand.Execute(null);
+        Assert.True(report.ExportCommand.CanExecute(null));
+    }
+
+    [Fact]
     public async Task TrackerSwitch_PreservesPerTrackerTableStateClearsSelectionAndGuardsDirtyWork()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
@@ -671,6 +740,22 @@ public sealed class ShellViewModelTests
         while (!await condition()) await Task.Delay(10, timeout.Token);
     }
 
+    /// <summary>Saves exported and previewed reports in memory instead of on disk or in a browser.</summary>
+    private sealed class RecordingReportFiles : IProjectReportFiles
+    {
+        public string? ExportPath { get; set; }
+        public string? SuggestedName { get; private set; }
+        public string? PreviewHtml { get; private set; }
+
+        public string? SelectExportPath(string suggestedFileName)
+        {
+            SuggestedName = suggestedFileName;
+            return ExportPath;
+        }
+
+        public void OpenPreview(string html, string fileName) => PreviewHtml = html;
+    }
+
     private sealed class ShellHarness : IAsyncDisposable
     {
         private readonly string _directory;
@@ -885,7 +970,7 @@ public sealed class ShellViewModelTests
             Tracker defaultTracker = Assert.Single(await trackers.GetAllAsync());
             Project defaultProject = Assert.IsType<Project>(
                 await projects.GetAsync(defaultTracker.ProjectId));
-            return new ShellHarness(
+            ShellHarness harness = new(
                 directory,
                 stateStore,
                 projects,
@@ -900,7 +985,15 @@ public sealed class ShellViewModelTests
                 settings,
                 appearance,
                 adapters, developers, identity, periods);
+            harness.ReportBuilder = new EntityTracker.Reporting.ProjectReports.ProjectReportBuilder(
+                projects, trackers, new ProgressReportingService(history, TimeZoneInfo.Utc),
+                aggregateReporting, overview);
+            return harness;
         }
+
+        public EntityTracker.Reporting.ProjectReports.ProjectReportBuilder? ReportBuilder { get; private set; }
+
+        public RecordingReportFiles ReportFiles { get; } = new();
 
         public ShellViewModel CreateShell(
             EntityTrackerSettings initialSettings,
@@ -919,7 +1012,9 @@ public sealed class ShellViewModelTests
                 initialSettings,
                 developerService: _developers,
                 localIdentitySettings: new LocalProjectIdentitySettingsViewModel(Identity),
-                graphSettings: graphSettings);
+                graphSettings: graphSettings,
+                reportBuilder: ReportBuilder,
+                reportFiles: ReportFiles);
 
         public Task<ProjectDeveloper> CreateDeveloperAsync(string initials) =>
             _developers.CreateAsync(DefaultProject.Id, initials);
@@ -933,11 +1028,11 @@ public sealed class ShellViewModelTests
             return id;
         }
 
-        public Task AddEntityAsync(TrackerId trackerId, string name) =>
+        public Task AddEntityAsync(TrackerId trackerId, string name, string notes = "", string filterActive = "") =>
             _stateStore.ApplyAsync(
                 trackerId,
                 new TrackedStateChangeSet(
-                    [new TrackedEntity(EntityId.New(), trackerId, name)],
+                    [new TrackedEntity(EntityId.New(), trackerId, name, notes: notes, filterActive: filterActive)],
                     [], [], [], [], [],
                     progressSnapshotAfterChanges:
                         new ProgressSnapshotState(1, 0, 0, 0, 0, 0)));

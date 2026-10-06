@@ -108,6 +108,22 @@ internal sealed class ReadmeScreenshotGenerator
             shell.Developers.OpenRetired();
             await renderer.CaptureAsync("project-developers-retired.png", settleMilliseconds: 500);
             shell.Developers.CloseRetired();
+
+            // The Project report page, plus a client and an internal export kept for review.
+            await shell.NavigateAsync(ShellDestination.ProjectReport, cancellationToken);
+            await renderer.CaptureAsync("project-report.png", settleMilliseconds: 500);
+            string samples = Directory.CreateDirectory(Path.Combine(repositoryRoot, "artifacts", "report-samples")).FullName;
+            foreach (EntityTracker.Reporting.ProjectReports.ReportAudience audience in
+                     Enum.GetValues<EntityTracker.Reporting.ProjectReports.ReportAudience>())
+            {
+                shell.ProjectReport!.Audience = audience;
+                EntityTracker.Reporting.ProjectReports.ProjectReport sample =
+                    await shell.ProjectReport.BuildAsync(cancellationToken);
+                await File.WriteAllTextAsync(Path.Combine(samples, $"{appearance}-{audience}.html".ToLowerInvariant()),
+                    EntityTracker.Reporting.ProjectReports.ProjectReportHtmlWriter.Write(sample), cancellationToken);
+            }
+
+            shell.ProjectReport!.Audience = EntityTracker.Reporting.ProjectReports.ReportAudience.Client;
             await shell.NavigateAsync(ShellDestination.ProjectDashboard, cancellationToken);
             // Presentation fixture only. The real folder stays in the disposable workspace.
             string repositoryFixturePath = Directory.CreateDirectory(

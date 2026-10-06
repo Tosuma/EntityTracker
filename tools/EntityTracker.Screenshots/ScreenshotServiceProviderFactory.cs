@@ -132,6 +132,15 @@ internal static class ScreenshotServiceProviderFactory
             provider.GetRequiredService<AggregateProgressDashboardBuilder>(),
             timeProvider));
         services.AddSingleton<ProgressChartPresentationBuilder>();
+        services.AddSingleton(provider => new EntityTracker.Reporting.ProjectReports.ProjectReportBuilder(
+            provider.GetRequiredService<IProjectRepository>(),
+            provider.GetRequiredService<ITrackerRepository>(),
+            provider.GetRequiredService<ProgressReportingService>(),
+            provider.GetRequiredService<AggregateProgressReportingService>(),
+            provider.GetRequiredService<EntityOverviewService>(),
+            EntityTracker.Reporting.ProjectReports.ProjectReportBuilder.DefaultProviders,
+            timeProvider));
+        services.AddSingleton<IProjectReportFiles, ScreenshotReportFiles>();
         services.AddSingleton<ProgressChartPngExporter>();
         services.AddSingleton<IProgressChartFilePicker, ScreenshotChartFilePicker>();
         services.AddSingleton<IClipboardService, ScreenshotClipboard>();
@@ -165,5 +174,15 @@ internal static class ScreenshotServiceProviderFactory
             ValidateOnBuild = true,
             ValidateScopes = true
         });
+    }
+}
+
+/// <summary>Never opens dialogs or a browser while screenshots are taken.</summary>
+internal sealed class ScreenshotReportFiles : IProjectReportFiles
+{
+    public string? SelectExportPath(string suggestedFileName) => null;
+
+    public void OpenPreview(string html, string fileName)
+    {
     }
 }

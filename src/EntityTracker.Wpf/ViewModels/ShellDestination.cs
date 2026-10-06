@@ -5,6 +5,7 @@ public enum ShellDestination
     Portfolio,
     ProjectDashboard,
     Developers,
+    ProjectReport,
     Overview,
     DependencyGraph,
     Archived,
