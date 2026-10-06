@@ -1,6 +1,6 @@
 # RPT-02 — Interactive Dependency Graph in the Report
 
-**Status: planned.**
+**Status: completed.**
 
 ## Goal and user-facing outcome
 
@@ -39,6 +39,31 @@ self-contained (no libraries, no network) and keep the audience filtering.
   compared with the app's `DependencyGraphViewModel` results.
 - Render the demo report in headless Edge; check zoom, pan, hover, highlight and search by hand.
 - Build and run all test projects; regenerate screenshots and sample reports; update the README.
+
+## Completion evidence
+
+- `GraphSection`, `ReportGraph`, `ReportGraphNode` and `ReportGraphLink` hold one graph per Tracker
+  (the "all" scope when the report has one Tracker). `ReportContext.TrackerScopeKey` and
+  `ProjectReportBuilder.DefaultProvidersWith` let the app add the section before the entity table.
+- `DependencyGraphReportSectionProvider` (WPF) builds it with the app's own `DependencyGraphBuilder`,
+  `TreeDependencyLayout`, `RadialDependencyLayout` (settled), landmarks and name wrapping. Nodes
+  carry only name, status, work status, waiting-on names, missing flag and positions. Registered
+  through `AppSections` in the app, the screenshot tool and the Wpf test harness.
+- The report draws an SVG graph with Tree and Solar system views, "Show orbits", Highlight
+  (Dependencies, Dependents, Direct links), Ctrl+click multi-select, hover cards, drag to pan,
+  wheel/buttons/keys to zoom, Fit to view, Esc to clear, a status legend, and its own Tracker picker
+  that also follows "Show progress for". The table search marks matching entities in the graph,
+  and entity names in the table open the entity in the graph. The pure highlight and camera rules
+  are in the new embedded `report-graph.js`.
+- Tests: highlight parity with the app's `DependencyGraphViewModel` for 6 selections across all
+  three modes (Jint); graph contents, implied links, missing placeholders, name wrapping, per-Tracker
+  scopes, no internal fields; section order; JSON shape; camera fit/zoom/centre; the end-to-end
+  export holds a graph for each chosen Tracker and none for the unchosen one.
+- Checked in headless Edge on the demo report: tree, solar system, hover, selection, search marks
+  and "Show in graph" in both views. The client sample grew from 116 KB to 248 KB.
+- `dotnet build -c Release` succeeded. `dotnet test -c Release` passed all 1,043 tests: Domain 61,
+  Application 249, DemoData 8, Reporting 86, Screenshots 12, Wpf 376, Infrastructure 251.
+- No app page changed, so the README screenshots were not republished; the README describes the graph.
 
 ## Agent planning prompt
 

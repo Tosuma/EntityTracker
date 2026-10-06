@@ -1,6 +1,6 @@
 # RPT roadmap — Client and internal Project reports
 
-**Status: RPT-01 and RPT-01.1 completed; RPT-02–RPT-04 planned.**
+**Status: RPT-01, RPT-01.1 and RPT-02 completed; RPT-03 and RPT-04 planned.**
 
 The RPT series lets us hand the client, for whom we perform the migration, a report of a Project's
 progress. The client never has EntityTracker, so a report is exported as **one self-contained HTML
@@ -15,7 +15,7 @@ audiences: a **Client report** or an **Internal report**.
 
 1. [RPT-01 — Project Report and HTML Export](rpt_01_project_report_html_export.md) — completed.
 2. [RPT-01.1 — Report Filters and Chart Hover](rpt_01_1_report_filters_and_chart_hover.md) — completed.
-3. [RPT-02 — Interactive Dependency Graph in the Report](rpt_02_interactive_dependency_graph.md) — planned.
+3. [RPT-02 — Interactive Dependency Graph in the Report](rpt_02_interactive_dependency_graph.md) — completed.
 4. [RPT-03 — Internal Notes and Shared Notes](rpt_03_internal_and_shared_notes.md) — planned.
 5. [RPT-04 — Print Polish and Tracker Reports Retirement](rpt_04_print_polish_and_tracker_reports_retirement.md) — planned.
 

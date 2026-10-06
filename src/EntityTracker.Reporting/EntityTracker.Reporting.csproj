@@ -9,6 +9,7 @@
     <EmbeddedResource Include="ProjectReports/Assets/report.css" LogicalName="EntityTracker.Reporting.ProjectReports.Assets.report.css" />
     <EmbeddedResource Include="ProjectReports/Assets/report-search.js" LogicalName="EntityTracker.Reporting.ProjectReports.Assets.report-search.js" />
     <EmbeddedResource Include="ProjectReports/Assets/report-charts.js" LogicalName="EntityTracker.Reporting.ProjectReports.Assets.report-charts.js" />
+    <EmbeddedResource Include="ProjectReports/Assets/report-graph.js" LogicalName="EntityTracker.Reporting.ProjectReports.Assets.report-graph.js" />
     <EmbeddedResource Include="ProjectReports/Assets/report.js" LogicalName="EntityTracker.Reporting.ProjectReports.Assets.report.js" />
   </ItemGroup>
 

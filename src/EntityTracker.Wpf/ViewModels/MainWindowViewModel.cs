@@ -1409,7 +1409,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(IsReconciledSummarySelected));
     }
 
-    private static EntityOverviewRow CreateOverviewRow(EntityOverviewItem item)
+    internal static EntityOverviewRow CreateOverviewRow(EntityOverviewItem item)
     {
         bool isArchived = item.LifecycleState == EntityLifecycleState.Archived;
         return new EntityOverviewRow(

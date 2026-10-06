@@ -350,7 +350,13 @@ it holds the summary, every progress chart (for all selected Trackers together o
 and a table of the entities with search and filters. The search matches names the same way as the
 app, so "cust pref" and "legalentity" work there too. The status filters always list every status
 with its count, so the reader can pick "Reworking" even when nothing is being reworked. Point at a
-chart, or focus it and use the arrow keys, to read its values. Print it from the browser to get a PDF.
+chart, or focus it and use the arrow keys, to read its values.
+
+The report also holds each Tracker's **dependency graph**, in the same tree and solar-system views
+as the app. Point at an entity for its status and links, click it to highlight its dependencies,
+dependents or direct links (Ctrl+click adds more), drag to move around and scroll to zoom. The
+search marks matching entities in the graph, and clicking an entity's name in the table shows it in
+the graph. Print the report from the browser to get a PDF.
 **Preview in browser** opens the same page without saving it.
 
 A **Client report** shows progress, statuses, Filter active and dependencies, and leaves out

@@ -24,6 +24,8 @@
   var matchPriority = EntityTrackerSearch.matchPriority;
   // Chart and filter arithmetic lives in report-charts.js, also tested on its own.
   var Charts = EntityTrackerCharts;
+  // Graph highlighting and camera arithmetic lives in report-graph.js, tested against the app.
+  var Graph = EntityTrackerGraph;
 
   // ---- Small DOM helpers ----
 
@@ -531,7 +533,14 @@
         body.appendChild(el("tr", {}, columns.map(function (column) {
           var value = item.row[column.key] || "";
           var cell = el("td", { className: column.key === "entity" ? "entity" : column.scope ? "scope" : "" });
-          if ((column.key === "status" || column.key === "work") && value) {
+          if (column.key === "entity" && hasGraph && value) {
+            var link = el("button", { type: "button", className: "entity-link", text: value, title: "Show in the dependency graph" });
+            link.addEventListener("click", function () {
+              var tracker = item.row.tracker || (scopes.length === 1 ? scopes[0].name : "");
+              graphListeners.show.forEach(function (listener) { listener(tracker, value); });
+            });
+            cell.appendChild(link);
+          } else if ((column.key === "status" || column.key === "work") && value) {
             var chip = el("span", { className: "status", text: value });
             var colors = STATUS_COLORS[value];
             if (colors) { chip.style.setProperty("--swatch", colors[0]); chip.style.setProperty("--swatch-ink", colors[1]); }
@@ -545,7 +554,11 @@
       count.textContent = "Showing " + shown.length + " of " + rows.length;
     }
 
-    search.addEventListener("input", render);
+    search.addEventListener("input", function () {
+      render();
+      var query = search.value.trim();
+      graphListeners.search.forEach(function (listener) { listener(query); });
+    });
     document.addEventListener("keydown", function (event) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f" && document.activeElement !== search) {
         event.preventDefault();
@@ -567,8 +580,366 @@
     ]);
   }
 
+  // ---- Dependency graph ----
+
+  var graphListeners = { search: [], show: [] };
+
+  /**
+   * The dependency graph, one Tracker at a time, in the app's two views. Point at an entity for
+   * its card; click to highlight what it leads to, Ctrl+click to add more; drag to move around and
+   * use the wheel or the buttons to zoom.
+   */
+  function graphSection(section) {
+    var available = scopes.filter(function (scope) { return section.byScope[scope.key]; });
+    if (!available.length) return null;
+    var state = {
+      key: available[0].key,
+      view: "tree",
+      modes: { tree: "direct", solar: "dependencies" },
+      selected: [],
+      hover: -1,
+      query: "",
+      rings: false
+    };
+
+    var trackerSelect = el("select", { "aria-label": "Tracker shown in the graph" }, available.map(function (scope) {
+      return el("option", { value: scope.key, text: scope.name });
+    }));
+    var viewButtons = [["tree", "Tree"], ["solar", "Solar system"]].map(function (choice) {
+      var button = el("button", { type: "button", "data-view": choice[0], text: choice[1] });
+      button.addEventListener("click", function () { state.view = choice[0]; state.selected = []; draw(true); });
+      return button;
+    });
+    var modeSelect = el("select", { "aria-label": "Highlight" }, [
+      el("option", { value: "dependencies", text: "Highlight: Dependencies" }),
+      el("option", { value: "dependents", text: "Highlight: Dependents" }),
+      el("option", { value: "direct", text: "Highlight: Direct links" })
+    ]);
+    var zoomIn = el("button", { type: "button", "aria-label": "Zoom in", title: "Zoom in", text: "+" });
+    var zoomOut = el("button", { type: "button", "aria-label": "Zoom out", title: "Zoom out", text: "−" });
+    var fitButton = el("button", { type: "button", text: "Fit to view" });
+    var ringBox = el("input", { type: "checkbox" });
+    var ringToggle = el("label", { className: "inline" }, [ringBox, document.createTextNode("Show orbits")]);
+    ringBox.addEventListener("change", function () { state.rings = ringBox.checked; draw(false); });
+    var clearButton = el("button", { type: "button", text: "Clear selection" });
+    var note = el("span", { className: "graph-note", role: "status" });
+    var tools = el("div", { className: "graph-tools no-print" }, [
+      available.length > 1 ? el("label", { className: "inline" }, [document.createTextNode("Tracker "), trackerSelect]) : null,
+      el("div", { className: "segmented", role: "group", "aria-label": "Graph view" }, viewButtons),
+      modeSelect, ringToggle, zoomOut, zoomIn, fitButton, clearButton, note
+    ]);
+
+    var host = el("div", { className: "graph-host" });
+    var canvas = svg("svg", { "class": "graph", role: "img", tabindex: "0",
+      "aria-label": "Dependency graph. Drag to move, use the wheel or plus and minus to zoom, click an entity to highlight its links." });
+    var viewport = svg("g");
+    canvas.appendChild(viewport);
+    host.appendChild(canvas);
+    var legendNode = el("div", { className: "legend graph-legend" }, [
+      "Not started", "Blocked", "In progress", "Rework needed", "Reworking", "Dev. completed", "Reconciled", "Missing"
+    ].map(function (label) {
+      var span = el("span", { text: label });
+      span.style.setProperty("--swatch", label === "Missing" ? "#FFFFFF" : STATUS_COLORS[label][0]);
+      if (label === "Missing") span.className = "missing";
+      return span;
+    }));
+
+    var graph, camera = { scale: 1, x: 0, y: 0 }, bounds, nodeShapes = [], highlightPath, hoverPath, linkPath, matches = {};
+    // Whether the view still shows the whole graph; only then does a new window size refit it.
+    var fitted = false;
+
+    function size() {
+      var rect = canvas.getBoundingClientRect();
+      return { width: rect.width || 900, height: rect.height || 560 };
+    }
+
+    function applyCamera(userMoved) {
+      if (userMoved) fitted = false;
+      viewport.setAttribute("transform", "matrix(" + camera.scale + " 0 0 " + camera.scale + " " + camera.x + " " + camera.y + ")");
+      canvas.classList.toggle("near", camera.scale >= (state.view === "tree" ? 0.45 : 1.1));
+      // Solar-system names keep the same size on screen at any zoom, as in the app.
+      canvas.style.setProperty("--label-size", (11 / camera.scale).toFixed(2) + "px");
+    }
+
+    function fitView() {
+      var area = size();
+      camera = Graph.fit(bounds, area.width, area.height, 24, state.view === "tree" ? 1.2 : 2.5);
+      applyCamera();
+      fitted = true;
+    }
+
+    function position(node) {
+      return state.view === "tree"
+        ? [node.treeX + TREE_WIDTH / 2, node.treeY + TREE_HEIGHT / 2]
+        : [node.x, node.y];
+    }
+
+    function linkD(link) {
+      if (state.view === "tree") {
+        var route = link.route || [];
+        var d = "M" + route[0] + " " + route[1];
+        for (var i = 2; i < route.length; i += 2) {
+          var middle = (route[i - 1] + route[i + 1]) / 2;
+          d += "C" + route[i - 2] + " " + middle + " " + route[i] + " " + middle + " " + route[i] + " " + route[i + 1];
+        }
+        return d;
+      }
+      var from = position(graph.nodes[link.from]), to = position(graph.nodes[link.to]);
+      return "M" + from[0] + " " + from[1] + "L" + to[0] + " " + to[1];
+    }
+
+    function draw(refit) {
+      graph = section.byScope[state.key];
+      viewport.replaceChildren();
+      nodeShapes = [];
+      viewButtons.forEach(function (button) { button.setAttribute("aria-pressed", String(button.getAttribute("data-view") === state.view)); });
+      modeSelect.value = state.modes[state.view];
+      canvas.classList.toggle("tree", state.view === "tree");
+
+      ringToggle.hidden = state.view !== "solar";
+      if (state.view === "solar" && state.rings) {
+        graph.rings.forEach(function (radius) {
+          viewport.appendChild(svg("circle", { cx: 0, cy: 0, r: radius, "class": "ring" }));
+        });
+      }
+      linkPath = svg("path", { "class": "links" });
+      linkPath.setAttribute("d", graph.links.filter(function (link) { return link.essential; }).map(linkD).join(""));
+      viewport.appendChild(linkPath);
+      hoverPath = svg("path", { "class": "links hover" });
+      highlightPath = svg("path", { "class": "links strong" });
+      viewport.appendChild(hoverPath);
+      viewport.appendChild(highlightPath);
+
+      graph.nodes.forEach(function (node, index) {
+        var group = svg("g", { "class": "node" + (node.missing ? " missing" : "") + (node.landmark ? " landmark" : ""), "data-index": index });
+        var colors = node.missing ? ["#FFFFFF", "#141E1E"] : STATUS_COLORS[node.status] || ["#A0AFAF", "#141E1E"];
+        if (state.view === "tree") {
+          group.setAttribute("transform", "translate(" + node.treeX + " " + node.treeY + ")");
+          group.appendChild(svg("rect", { "class": "halo", x: -5, y: -5, width: TREE_WIDTH + 10, height: TREE_HEIGHT + 10, rx: 13 }));
+          group.appendChild(svg("rect", { "class": "card", width: TREE_WIDTH, height: TREE_HEIGHT, rx: 8 }));
+          var band = svg("path", { "class": "band", fill: colors[0],
+            d: "M0 " + TREE_NAME + "H" + TREE_WIDTH + "V" + (TREE_HEIGHT - 8) + "Q" + TREE_WIDTH + " " + TREE_HEIGHT + " " + (TREE_WIDTH - 8) + " " + TREE_HEIGHT +
+               "H8Q0 " + TREE_HEIGHT + " 0 " + (TREE_HEIGHT - 8) + "Z" });
+          group.appendChild(band);
+          group.appendChild(svg("rect", { "class": "outline", width: TREE_WIDTH, height: TREE_HEIGHT, rx: 8 }));
+          var lineHeight = 16, top = (TREE_NAME - lineHeight * node.lines.length) / 2 + 12;
+          node.lines.forEach(function (line, i) {
+            var text = svg("text", { x: TREE_WIDTH / 2, y: top + i * lineHeight, "class": "name", "text-anchor": "middle" });
+            text.textContent = line;
+            group.appendChild(text);
+          });
+          var status = svg("text", { x: TREE_WIDTH / 2, y: TREE_NAME + (TREE_HEIGHT - TREE_NAME) / 2 + 4, "class": "status-label", "text-anchor": "middle", fill: colors[1] });
+          status.textContent = node.missing ? "Missing" : node.status;
+          group.appendChild(status);
+        } else {
+          group.setAttribute("transform", "translate(" + node.x + " " + node.y + ")");
+          group.appendChild(svg("circle", { "class": "halo", r: node.radius + 6 }));
+          group.appendChild(svg("circle", { "class": "dot", r: node.radius, fill: colors[0] }));
+          var label = svg("text", { y: node.radius + 2, dy: "1em", "class": "label", "text-anchor": "middle" });
+          label.textContent = node.name;
+          group.appendChild(label);
+        }
+        viewport.appendChild(group);
+        nodeShapes.push(group);
+      });
+
+      var points = graph.nodes.map(function (node) { return position(node); });
+      var half = state.view === "tree" ? [TREE_WIDTH / 2, TREE_HEIGHT / 2] : [30, 30];
+      var xs = points.map(function (p) { return p[0]; }), ys = points.map(function (p) { return p[1]; });
+      var minX = Math.min.apply(null, xs) - half[0], maxX = Math.max.apply(null, xs) + half[0];
+      var minY = Math.min.apply(null, ys) - half[1], maxY = Math.max.apply(null, ys) + half[1];
+      bounds = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+      if (refit) fitView(); else applyCamera();
+      paint();
+    }
+
+    function neighbours(index) {
+      var found = [];
+      graph.links.forEach(function (link) {
+        if (link.from === index) found.push(link.to);
+        if (link.to === index) found.push(link.from);
+      });
+      return found;
+    }
+
+    function paint() {
+      if (!graph) return;
+      var lit = Graph.highlight(graph.links, state.selected, state.modes[state.view]);
+      var litNodes = {};
+      lit.nodes.forEach(function (index) { litNodes[index] = true; });
+      var hasSelection = state.selected.length > 0;
+      highlightPath.setAttribute("d", lit.links.map(function (index) { return linkD(graph.links[index]); }).join(""));
+      var hoverLinks = !hasSelection && state.hover >= 0
+        ? graph.links.filter(function (link) { return link.essential && (link.from === state.hover || link.to === state.hover); })
+        : [];
+      hoverPath.setAttribute("d", hoverLinks.map(linkD).join(""));
+      var near = {};
+      hoverLinks.forEach(function (link) { near[link.from] = true; near[link.to] = true; });
+      linkPath.classList.toggle("dim", hasSelection);
+      nodeShapes.forEach(function (shape, index) {
+        shape.classList.toggle("selected", state.selected.indexOf(index) >= 0);
+        shape.classList.toggle("lit", hasSelection && !!litNodes[index] && state.selected.indexOf(index) < 0);
+        shape.classList.toggle("dim", hasSelection && !litNodes[index]);
+        shape.classList.toggle("near", !!near[index] || index === state.hover);
+        shape.classList.toggle("match", !!matches[index]);
+      });
+      var count = Object.keys(matches).length;
+      note.textContent = state.query
+        ? (count === 1 ? "1 entity matches the search" : count + " entities match the search")
+        : hasSelection ? state.selected.length + " selected · Esc clears" : "";
+      clearButton.disabled = !hasSelection;
+    }
+
+    function card(index) {
+      var node = graph.nodes[index];
+      var dependsOn = graph.links.filter(function (link) { return link.to === index; }).length;
+      var usedBy = graph.links.filter(function (link) { return link.from === index; }).length;
+      if (node.missing) return [node.name, "Missing: no entity has this name", usedBy + (usedBy === 1 ? " entity depends" : " entities depend") + " on it"];
+      var lines = [node.name, node.status + " · " + node.work,
+        "Depends on " + dependsOn + " · " + usedBy + (usedBy === 1 ? " depends" : " depend") + " on it"];
+      if (node.waitingOn) lines.push("Waiting on " + node.waitingOn);
+      return lines;
+    }
+
+    function nodeAt(target) {
+      var group = target.closest ? target.closest("g.node") : null;
+      return group ? Number(group.getAttribute("data-index")) : -1;
+    }
+
+    function select(index, add) {
+      if (index < 0) state.selected = [];
+      else if (add) {
+        var at = state.selected.indexOf(index);
+        if (at >= 0) state.selected.splice(at, 1); else state.selected.push(index);
+      } else state.selected = state.selected.length === 1 && state.selected[0] === index ? [] : [index];
+      paint();
+    }
+
+    // Dragging the background moves the view; a click without movement selects or clears.
+    var drag = null;
+    canvas.addEventListener("pointerdown", function (event) {
+      if (event.button !== 0) return;
+      drag = { x: event.clientX, y: event.clientY, cameraX: camera.x, cameraY: camera.y, moved: false, node: nodeAt(event.target) };
+      canvas.setPointerCapture(event.pointerId);
+    });
+    canvas.addEventListener("pointermove", function (event) {
+      if (drag) {
+        var dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+        if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+        drag.moved = true;
+        canvas.classList.add("dragging");
+        hideTip();
+        camera = { scale: camera.scale, x: drag.cameraX + dx, y: drag.cameraY + dy };
+        applyCamera(true);
+        return;
+      }
+      var index = nodeAt(event.target);
+      if (index !== state.hover) { state.hover = index; paint(); }
+      if (index >= 0) showTip(card(index), event.clientX, event.clientY); else hideTip();
+    });
+    canvas.addEventListener("pointerup", function (event) {
+      if (!drag) return;
+      var finished = drag;
+      drag = null;
+      canvas.classList.remove("dragging");
+      if (!finished.moved) select(finished.node, event.ctrlKey || event.metaKey);
+    });
+    canvas.addEventListener("pointerleave", function () {
+      if (drag) return;
+      state.hover = -1;
+      hideTip();
+      paint();
+    });
+    canvas.addEventListener("wheel", function (event) {
+      event.preventDefault();
+      var rect = canvas.getBoundingClientRect();
+      camera = Graph.zoomAt(camera, Math.pow(1.0015, -event.deltaY), event.clientX - rect.left, event.clientY - rect.top, 0.05, 4);
+      applyCamera(true);
+    }, { passive: false });
+    canvas.addEventListener("keydown", function (event) {
+      var area = size(), step = 60;
+      var handled = true;
+      if (event.key === "+" || event.key === "=") camera = Graph.zoomAt(camera, 1.25, area.width / 2, area.height / 2, 0.05, 4);
+      else if (event.key === "-" || event.key === "_") camera = Graph.zoomAt(camera, 0.8, area.width / 2, area.height / 2, 0.05, 4);
+      else if (event.key === "ArrowLeft") camera.x += step;
+      else if (event.key === "ArrowRight") camera.x -= step;
+      else if (event.key === "ArrowUp") camera.y += step;
+      else if (event.key === "ArrowDown") camera.y -= step;
+      else if (event.key === "0") { fitView(); return event.preventDefault(); }
+      else if (event.key === "Escape") { select(-1); return event.preventDefault(); }
+      else handled = false;
+      if (!handled) return;
+      event.preventDefault();
+      applyCamera(true);
+    });
+
+    function zoomBy(factor) {
+      var area = size();
+      camera = Graph.zoomAt(camera, factor, area.width / 2, area.height / 2, 0.05, 4);
+      applyCamera(true);
+    }
+    zoomIn.addEventListener("click", function () { zoomBy(1.25); });
+    zoomOut.addEventListener("click", function () { zoomBy(0.8); });
+    fitButton.addEventListener("click", fitView);
+    clearButton.addEventListener("click", function () { select(-1); });
+    modeSelect.addEventListener("change", function () { state.modes[state.view] = modeSelect.value; paint(); });
+    trackerSelect.addEventListener("change", function () { state.key = trackerSelect.value; state.selected = []; refreshMatches(); draw(true); });
+
+    function refreshMatches() {
+      matches = {};
+      if (!state.query) return;
+      section.byScope[state.key].nodes.forEach(function (node, index) {
+        if (matchPriority(node.name, state.query) < NO_MATCH) matches[index] = true;
+      });
+    }
+
+    // The report's search marks matching entities in the graph too.
+    graphListeners.search.push(function (query) {
+      state.query = query;
+      refreshMatches();
+      paint();
+    });
+    // "Show in graph" from the entity table: switch to its Tracker, select it and bring it into view.
+    graphListeners.show.push(function (trackerName, entityName) {
+      var scope = available.filter(function (s) { return s.name === trackerName; })[0] || available[0];
+      if (scope.key !== state.key || !graph) { state.key = scope.key; trackerSelect.value = scope.key; refreshMatches(); draw(true); }
+      var index = -1;
+      graph.nodes.forEach(function (node, i) { if (!node.missing && node.name === entityName) index = i; });
+      if (index < 0) return;
+      state.selected = [index];
+      paint();
+      host.scrollIntoView({ behavior: calm ? "auto" : "smooth", block: "center" });
+      var area = size(), point = position(graph.nodes[index]);
+      camera = Graph.centreOn(point[0], point[1], area.width, area.height, Math.max(camera.scale, state.view === "tree" ? 0.8 : 1.4));
+      applyCamera(true);
+      canvas.focus({ preventScroll: true });
+    });
+    // Follow "Show progress for" when it names a Tracker the graph has.
+    scopeListeners.push(function (scope) {
+      if (scope === state.key || !section.byScope[scope]) return;
+      state.key = scope;
+      trackerSelect.value = scope;
+      state.selected = [];
+      refreshMatches();
+      draw(true);
+    });
+
+    var sectionNode = el("section", { className: "report-section", id: section.key }, [
+      el("h2", { text: section.title }),
+      el("p", { className: "section-hint no-print", text: "Click an entity to highlight its links; Ctrl+click adds more. Drag to move around and scroll to zoom." }),
+      tools, host, legendNode
+    ]);
+    // Drawn once the page is laid out, so the first view fits the space it has.
+    requestAnimationFrame(function () { if (!graph) draw(true); });
+    window.addEventListener("resize", function () { if (graph && fitted) fitView(); });
+    return sectionNode;
+  }
+
+  var TREE_WIDTH = 150, TREE_HEIGHT = 81, TREE_NAME = 54;
+
   // ---- Page ----
 
+  var hasGraph = data.sections.some(function (section) { return section.kind === "graph"; });
   root.appendChild(header());
   var toolbar = scopeToolbar();
   if (toolbar) root.appendChild(toolbar);
@@ -582,6 +953,7 @@
     chartGrid = null;
     if (section.kind === "summary") root.appendChild(summarySection(section));
     else if (section.kind === "table") root.appendChild(tableSection(section));
+    else if (section.kind === "graph") { var graphNode = graphSection(section); if (graphNode) root.appendChild(graphNode); }
   });
   root.appendChild(el("footer", { text: "Generated by EntityTracker. This file works offline and can be printed to PDF." }));
 })();

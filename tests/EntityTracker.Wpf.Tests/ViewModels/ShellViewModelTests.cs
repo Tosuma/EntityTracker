@@ -472,6 +472,10 @@ public sealed class ShellViewModelTests
             Assert.Contains("Only active customers", html, StringComparison.Ordinal);
             Assert.DoesNotContain("not_in_the_report", html, StringComparison.Ordinal);
             Assert.DoesNotContain("vendor contract", html, StringComparison.Ordinal);
+            // Each chosen Tracker gets its own dependency graph, and the unchosen one none.
+            Assert.Contains("\"kind\":\"graph\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"" + EntityTracker.Reporting.ProjectReports.ReportContext.ScopeKey(second.Id) + "\":{\"nodes\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain(EntityTracker.Reporting.ProjectReports.ReportContext.ScopeKey(third.Id), html, StringComparison.Ordinal);
             Assert.Contains("Client report", harness.ReportFiles.SuggestedName, StringComparison.Ordinal);
             Assert.Contains(shell.Notifications.Items, item => item.Title == "Project report" && item.Kind == NotificationKind.Success);
 
@@ -987,7 +991,7 @@ public sealed class ShellViewModelTests
                 adapters, developers, identity, periods);
             harness.ReportBuilder = new EntityTracker.Reporting.ProjectReports.ProjectReportBuilder(
                 projects, trackers, new ProgressReportingService(history, TimeZoneInfo.Utc),
-                aggregateReporting, overview);
+                aggregateReporting, overview, DependencyGraphReportSectionProvider.AppSections);
             return harness;
         }
 

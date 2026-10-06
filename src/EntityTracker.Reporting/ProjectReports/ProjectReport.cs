@@ -52,6 +52,7 @@ public sealed record ProjectReport(
 [JsonDerivedType(typeof(SummarySection), "summary")]
 [JsonDerivedType(typeof(ChartSection), "chart")]
 [JsonDerivedType(typeof(TableSection), "table")]
+[JsonDerivedType(typeof(GraphSection), "graph")]
 public abstract record ReportSection(string Key, string Title, ReportVisibility Visibility);
 
 /// <summary>Headline numbers, per scope.</summary>
@@ -117,3 +118,46 @@ public sealed record ReportColumn(
     bool Filter = false,
     bool Scope = false,
     IReadOnlyList<string>? Options = null);
+
+/// <summary>
+/// The dependency graph, one per Tracker, keyed by the Tracker's scope. Positions come from the
+/// app's own layouts, so the report draws the same tree and solar system.
+/// </summary>
+public sealed record GraphSection(
+    string Key,
+    string Title,
+    ReportVisibility Visibility,
+    IReadOnlyDictionary<string, ReportGraph> ByScope)
+    : ReportSection(Key, Title, Visibility);
+
+/// <summary>A Tracker's entities, their links, and the solar system's orbit radii.</summary>
+public sealed record ReportGraph(
+    IReadOnlyList<ReportGraphNode> Nodes,
+    IReadOnlyList<ReportGraphLink> Links,
+    IReadOnlyList<double> Rings);
+
+/// <summary>
+/// An entity, or a dependency no entity has (<see cref="Missing"/>). <see cref="X"/> and
+/// <see cref="Y"/> place it in the solar system; <see cref="TreeX"/> and <see cref="TreeY"/> are its
+/// tree box's top left corner, and <see cref="Lines"/> its name broken over the box's lines.
+/// </summary>
+public sealed record ReportGraphNode(
+    string Name,
+    string Status,
+    string Work,
+    string WaitingOn,
+    bool Missing,
+    bool Landmark,
+    double Radius,
+    double X,
+    double Y,
+    double TreeX,
+    double TreeY,
+    IReadOnlyList<string> Lines);
+
+/// <summary>
+/// A link from a dependency to the entity using it, by node index. Only essential links are drawn;
+/// <see cref="Route"/> holds the tree's x, y points for them. Implied links still count when
+/// highlighting what an entity leads to.
+/// </summary>
+public sealed record ReportGraphLink(int From, int To, bool Essential, IReadOnlyList<double>? Route = null);

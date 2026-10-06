@@ -4,7 +4,7 @@ using EntityTracker.Domain;
 namespace EntityTracker.Reporting.ProjectReports;
 
 /// <summary>The words and colours a report uses, matching the app.</summary>
-internal static class ReportLabels
+public static class ReportLabels
 {
     internal const string Green100 = "#123836";
     internal const string Green80 = "#41605E";
@@ -56,7 +56,7 @@ internal static class ReportLabels
         _ => Coral
     };
 
-    internal static string Status(DevelopmentStatus status) => status switch
+    public static string Status(DevelopmentStatus status) => status switch
     {
         DevelopmentStatus.NotStarted => "Not started",
         DevelopmentStatus.InProgress => "In progress",
@@ -69,7 +69,7 @@ internal static class ReportLabels
     };
 
     /// <summary>The work status as the Overview shows it.</summary>
-    internal static string WorkStatus(EntityWorkflowState state) => state switch
+    public static string WorkStatus(EntityWorkflowState state) => state switch
     {
         EntityWorkflowState.Ready or EntityWorkflowState.ReworkNeeded => "Ready",
         EntityWorkflowState.Blocked => "Waiting on dependencies",

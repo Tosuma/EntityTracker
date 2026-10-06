@@ -22,6 +22,16 @@ public sealed record ReportContext(
 
     public static string ScopeKey(TrackerId trackerId) => trackerId.Value.ToString("N");
 
+    /// <summary>
+    /// Gets the scope that is exactly this Tracker: its own scope, or "all" when it is the only
+    /// Tracker in the report.
+    /// </summary>
+    public string TrackerScopeKey(Tracker tracker)
+    {
+        ArgumentNullException.ThrowIfNull(tracker);
+        return Trackers.Count == 1 ? ReportScope.AllKey : ScopeKey(tracker.Id);
+    }
+
     /// <summary>Gets the progress report for a scope.</summary>
     public ProgressDashboardReport ReportFor(ReportScope scope) => scope.Key == ReportScope.AllKey
         ? Combined
@@ -78,6 +88,17 @@ public sealed class ProjectReportBuilder
         new ProgressChartSectionProvider(ProgressChartKind.ReadyAndBlockedOverTime),
         new ProgressChartSectionProvider(ProgressChartKind.WeeklyNetImplementedChange),
         new EntityTableSectionProvider()
+    ];
+
+    /// <summary>
+    /// Gets the default sections with more added after the charts and before the entity table, for
+    /// sections built outside this library, such as the app's dependency graph.
+    /// </summary>
+    public static IReadOnlyList<IReportSectionProvider> DefaultProvidersWith(params IReportSectionProvider[] extra) =>
+    [
+        .. DefaultProviders.Where(static provider => provider is not EntityTableSectionProvider),
+        .. extra,
+        .. DefaultProviders.OfType<EntityTableSectionProvider>()
     ];
 
     public async Task<ProjectReport> BuildAsync(ProjectReportRequest request, CancellationToken cancellationToken = default)

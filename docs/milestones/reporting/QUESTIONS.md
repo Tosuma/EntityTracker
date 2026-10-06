@@ -26,3 +26,39 @@ one records the choice made and how to change it. Send corrections and they will
      changes what the client sees.
    - **Suggested:** rename the card "Waiting on dependencies" in `SummarySectionProvider`
      (`ReportSectionProviders.cs`). Say the word and it will be done.
+
+## RPT-02 — Interactive Dependency Graph in the Report
+
+1. **Where the graph data is built.**
+   The app's graph builder, layouts and highlight rules live in the WPF project, which the Reporting
+   library cannot use.
+   - **Choice:** a `DependencyGraphReportSectionProvider` in the WPF project builds the section with
+     the app's own code, and is added to every report through `DependencyGraphReportSectionProvider.AppSections`.
+     Nothing was moved or duplicated, so the report always draws what the app draws.
+   - **To change:** move the graph model and layouts out of WPF into a shared library first.
+
+2. **One graph per Tracker, not one combined graph.**
+   Entity names are only unique within a Tracker, and dependencies are resolved per Tracker, so a
+   merged graph would link entities that are not related.
+   - **Choice:** when several Trackers are selected, the graph has its own Tracker picker, and it also
+     follows "Show progress for" when that names a Tracker.
+   - **To change:** say if a combined view is wanted, for example side by side.
+
+3. **Which view the graph opens in.**
+   - **Choice:** the tree, because it reads top to bottom without explanation; the solar system is one
+     click away. Highlight defaults match the app: Direct links in the tree, Dependencies in the
+     solar system.
+   - **To change:** `view: "tree"` in `graphSection` in `report.js`.
+
+4. **Orbit rings in the solar system.**
+   - **Choice:** hidden by default with a "Show orbits" checkbox, as in the app, where rings are off
+     unless turned on in Settings. The report does not carry your Settings choice.
+
+5. **Overlapping names in the solar system.**
+   The app moves names that would overlap; the report shows the landmark names (and, when zoomed in,
+   all names) without that step, so a few can overlap until you zoom.
+   - **Choice:** left as it is; porting the label placer can be done later if it bothers readers.
+
+6. **"Depends on" counts in the hover card.**
+   - **Choice:** they count every link, including links implied by a longer chain that are not drawn,
+     the same as the app's dot size and Overview dependency count.

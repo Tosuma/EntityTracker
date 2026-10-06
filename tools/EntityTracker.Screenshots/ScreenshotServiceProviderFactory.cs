@@ -138,7 +138,7 @@ internal static class ScreenshotServiceProviderFactory
             provider.GetRequiredService<ProgressReportingService>(),
             provider.GetRequiredService<AggregateProgressReportingService>(),
             provider.GetRequiredService<EntityOverviewService>(),
-            EntityTracker.Reporting.ProjectReports.ProjectReportBuilder.DefaultProviders,
+            EntityTracker.Wpf.ViewModels.DependencyGraph.DependencyGraphReportSectionProvider.AppSections,
             timeProvider));
         services.AddSingleton<IProjectReportFiles, ScreenshotReportFiles>();
         services.AddSingleton<ProgressChartPngExporter>();
