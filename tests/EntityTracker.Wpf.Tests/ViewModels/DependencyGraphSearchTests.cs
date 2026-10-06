@@ -60,6 +60,16 @@ public sealed class DependencyGraphSearchTests
     }
 
     [Fact]
+    public void TextInsideAWordMatchesAfterTheWordMatches()
+    {
+        DependencyGraphViewModel graph = Graph();
+
+        graph.SearchText = "ddress";
+
+        Assert.Equal("CustomerAddress", Assert.Single(graph.Suggestions).Label);
+    }
+
+    [Fact]
     public void FindReportsWhenNothingMatches()
     {
         DependencyGraphViewModel graph = Graph();

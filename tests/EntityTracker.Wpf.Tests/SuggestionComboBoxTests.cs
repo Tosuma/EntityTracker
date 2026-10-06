@@ -11,14 +11,14 @@ using EntityTracker.Wpf.Controls;
 namespace EntityTracker.Wpf.Tests;
 
 [Collection(WpfWindowCollection.Name)]
-public sealed class DependencyComboBoxTests
+public sealed class SuggestionComboBoxTests
 {
     [Fact]
     public void OpeningTheDropDownBrowsesAllEntitiesWithoutChangingQuery()
     {
         RunOnSta(() =>
         {
-            DependencyComboBox comboBox = CreateDependencyComboBox();
+            SuggestionComboBox comboBox = CreateDependencyComboBox();
             Window window = CreateWindow(comboBox);
             try
             {
@@ -49,7 +49,7 @@ public sealed class DependencyComboBoxTests
     {
         RunOnSta(() =>
         {
-            DependencyComboBox comboBox = CreateDependencyComboBox();
+            SuggestionComboBox comboBox = CreateDependencyComboBox();
             Window window = CreateWindow(comboBox);
             try
             {
@@ -77,7 +77,7 @@ public sealed class DependencyComboBoxTests
     {
         RunOnSta(() =>
         {
-            DependencyComboBox comboBox = CreateDependencyComboBox();
+            SuggestionComboBox comboBox = CreateDependencyComboBox();
             Window window = CreateWindow(comboBox);
             try
             {
@@ -99,7 +99,7 @@ public sealed class DependencyComboBoxTests
                 Assert.Same(suggestions[14], comboBox.HighlightedItem);
                 ComboBoxItem container = Assert.IsType<ComboBoxItem>(
                     comboBox.ItemContainerGenerator.ContainerFromIndex(14));
-                Assert.Same(suggestions[14], DependencyComboBox.GetHighlightedItem(container));
+                Assert.Same(suggestions[14], SuggestionComboBox.GetHighlightedItem(container));
                 Assert.Null(comboBox.SelectedItem);
                 Assert.Equal("Ent", input.Text);
                 Assert.Empty(chosen);
@@ -123,7 +123,7 @@ public sealed class DependencyComboBoxTests
     {
         RunOnSta(() =>
         {
-            DependencyComboBox comboBox = CreateDependencyComboBox();
+            SuggestionComboBox comboBox = CreateDependencyComboBox();
             Window window = CreateWindow(comboBox);
             try
             {
@@ -149,7 +149,7 @@ public sealed class DependencyComboBoxTests
     {
         RunOnSta(() =>
         {
-            DependencyComboBox comboBox = CreateDependencyComboBox();
+            SuggestionComboBox comboBox = CreateDependencyComboBox();
             Window window = CreateWindow(comboBox);
             try
             {
@@ -184,7 +184,7 @@ public sealed class DependencyComboBoxTests
     {
         RunOnSta(() =>
         {
-            DependencyComboBox comboBox = CreateDependencyComboBox();
+            SuggestionComboBox comboBox = CreateDependencyComboBox();
             Window window = CreateWindow(comboBox);
             try
             {
@@ -207,10 +207,10 @@ public sealed class DependencyComboBoxTests
         });
     }
 
-    // Mirrors DependencyComboBoxStyle in Themes/EntityTrackerComponents.xaml.
-    private static DependencyComboBox CreateDependencyComboBox()
+    // Mirrors SuggestionComboBoxStyle in Themes/EntityTrackerComponents.xaml.
+    private static SuggestionComboBox CreateDependencyComboBox()
     {
-        DependencyComboBox comboBox = new()
+        SuggestionComboBox comboBox = new()
         {
             IsEditable = true,
             IsTextSearchEnabled = false,

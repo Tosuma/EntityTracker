@@ -77,9 +77,10 @@ public static class EntityNameWords
 
     /// <summary>
     /// Ranks how well a name matches a search: 0 exact, 1 prefix, 2 when the query's words start
-    /// the name's words from the first word, 3 when they match from a later word, and
-    /// <see cref="int.MaxValue"/> for no match. Words follow <see cref="Words"/>, so "cust pref",
-    /// "CustPref" and "cust_pref" all find "customer_preference".
+    /// the name's words from the first word, 3 when they match from a later word, 4 for text
+    /// anywhere else in the name (mid-word), and <see cref="int.MaxValue"/> for no match. Words follow <see cref="Words"/>, so
+    /// "cust pref", "CustPref" and "cust_pref" all find "customer_preference"; a query written
+    /// without spaces counts too, so "legalentity" finds "legal entity" and "legalEntity".
     /// </summary>
     public static int MatchPriority(string sourceName, string query)
     {
@@ -88,7 +89,8 @@ public static class EntityNameWords
 
         string[] nameWords = Words(sourceName);
         string[] queryWords = Words(query);
-        if (queryWords.Length == 0) return int.MaxValue;
+        if (queryWords.Length == 0)
+            return sourceName.Contains(query, StringComparison.OrdinalIgnoreCase) ? 4 : int.MaxValue;
         for (int start = 0; start <= nameWords.Length - queryWords.Length; start++)
         {
             bool matches = true;
@@ -101,6 +103,19 @@ public static class EntityNameWords
             }
             if (matches) return start == 0 ? 2 : 3;
         }
-        return int.MaxValue;
+
+        // Written without spaces: "legalentity" finds "legal entity", "legalEntity" and
+        // "legal_entity" when it runs on from the start of one of the name's words.
+        string compactQuery = string.Concat(queryWords);
+        int offset = 0;
+        string compactName = string.Concat(nameWords);
+        for (int word = 0; word < nameWords.Length; word++)
+        {
+            if (compactName.AsSpan(offset).StartsWith(compactQuery, StringComparison.OrdinalIgnoreCase))
+                return word == 0 ? 2 : 3;
+            offset += nameWords[word].Length;
+        }
+
+        return sourceName.Contains(query, StringComparison.OrdinalIgnoreCase) ? 4 : int.MaxValue;
     }
 }

@@ -60,7 +60,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private IReadOnlyList<string> _warnings = [];
     private IReadOnlyList<string> _errors = [];
     private string _dependencyQuery = string.Empty;
-    private string? _selectedGroupSuggestion;
     private string? _searchMessage;
     private string? _groupSearchMessage;
     private bool _canAddAsUnresolved;
@@ -308,23 +307,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             {
                 _ = SearchAsync(++_searchVersion);
             }
-        }
-    }
-
-    public string? SelectedGroupSuggestion
-    {
-        get => _selectedGroupSuggestion;
-        set
-        {
-            if (!SetField(ref _selectedGroupSuggestion, value) ||
-                string.IsNullOrWhiteSpace(value))
-            {
-                return;
-            }
-
-            UseGroupSuggestion(value);
-            _selectedGroupSuggestion = null;
-            OnPropertyChanged();
         }
     }
 
@@ -1556,8 +1538,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private void ClearGroupSearch()
     {
         _groupSearchVersion++;
-        _selectedGroupSuggestion = null;
-        OnPropertyChanged(nameof(SelectedGroupSuggestion));
         GroupSuggestions = [];
         IsGroupSuggestionsOpen = false;
         GroupSearchMessage = null;

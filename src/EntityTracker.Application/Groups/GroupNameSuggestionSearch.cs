@@ -1,3 +1,4 @@
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Domain;
 
 namespace EntityTracker.Application.Groups;
@@ -22,24 +23,14 @@ internal static class GroupNameSuggestionSearch
         return entities
             .Select(static entity => entity.GroupName.Trim())
             .Where(static groupName => groupName.Length > 0)
-            .Where(groupName => groupName.Contains(
-                enteredName,
-                StringComparison.OrdinalIgnoreCase))
-            .OrderBy(groupName => MatchPriority(groupName, enteredName))
-            .ThenBy(static groupName => groupName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static groupName => groupName, StringComparer.Ordinal)
+            .Select(groupName => (Name: groupName, Priority: EntityNameWords.MatchPriority(groupName, enteredName)))
+            .Where(static match => match.Priority < int.MaxValue)
+            .OrderBy(static match => match.Priority)
+            .ThenBy(static match => match.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static match => match.Name, StringComparer.Ordinal)
+            .Select(static match => match.Name)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(MaximumSuggestions)
             .ToArray();
-    }
-
-    private static int MatchPriority(string groupName, string query)
-    {
-        if (groupName.Equals(query, StringComparison.OrdinalIgnoreCase))
-        {
-            return 0;
-        }
-
-        return groupName.StartsWith(query, StringComparison.OrdinalIgnoreCase) ? 1 : 2;
     }
 }

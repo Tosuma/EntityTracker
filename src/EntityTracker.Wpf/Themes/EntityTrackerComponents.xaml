@@ -159,14 +159,12 @@
         <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
         <Setter Property="Padding" Value="7,4" />
     </Style>
-    <Style x:Key="DependencyComboBoxStyle"
+    <Style x:Key="SuggestionComboBoxStyle"
            TargetType="{x:Type ComboBox}"
            BasedOn="{StaticResource {x:Type ComboBox}}">
         <Setter Property="IsEditable" Value="True" />
         <Setter Property="IsTextSearchEnabled" Value="False" />
         <Setter Property="StaysOpenOnEdit" Value="True" />
-        <Setter Property="DisplayMemberPath" Value="SourceName" />
-        <Setter Property="TextSearch.TextPath" Value="SourceName" />
         <Setter Property="MaxDropDownHeight" Value="240" />
         <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
         <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
@@ -186,9 +184,9 @@
                     <Style.Triggers>
                         <DataTrigger Value="True">
                             <DataTrigger.Binding>
-                                <MultiBinding Converter="{x:Static controls:DependencyComboBox.IsHighlightedConverter}">
+                                <MultiBinding Converter="{x:Static controls:SuggestionComboBox.IsHighlightedConverter}">
                                     <Binding />
-                                    <Binding Path="(controls:DependencyComboBox.HighlightedItem)"
+                                    <Binding Path="(controls:SuggestionComboBox.HighlightedItem)"
                                              RelativeSource="{RelativeSource Self}" />
                                 </MultiBinding>
                             </DataTrigger.Binding>

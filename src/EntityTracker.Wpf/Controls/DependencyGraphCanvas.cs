@@ -33,6 +33,10 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     public static readonly DependencyProperty HighlightBrushProperty = RegisterBrush(nameof(HighlightBrush));
     public static readonly DependencyProperty PlaceholderBrushProperty = RegisterBrush(nameof(PlaceholderBrush));
     public static readonly DependencyProperty CardBackgroundProperty = RegisterBrush(nameof(CardBackground));
+    public static readonly DependencyProperty SelectionBrushProperty = RegisterBrush(nameof(SelectionBrush));
+
+    /// <summary>The amber used when no selection colour is set; no development status uses it.</summary>
+    internal static readonly Color DefaultSelectionColor = Color.FromRgb(0xC8, 0x82, 0x1E);
 
     private const double MinScale = 0.15;
     private const double MaxScale = 4;
@@ -133,6 +137,13 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     {
         get => (Brush?)GetValue(HighlightBrushProperty);
         set => SetValue(HighlightBrushProperty, value);
+    }
+
+    /// <summary>Gets or sets the colour of the outline and halo around selected entities.</summary>
+    public Brush? SelectionBrush
+    {
+        get => (Brush?)GetValue(SelectionBrushProperty);
+        set => SetValue(SelectionBrushProperty, value);
     }
 
     public Brush? PlaceholderBrush
@@ -386,7 +397,13 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         }
 
         if (graph.IsSelected(node))
-            context.DrawEllipse(null, CachedPen(highlightBrush, 2.5), center, radius + 4, radius + 4);
+        {
+            // A soft halo and a solid ring in the selection colour, so a selection stands out from
+            // the highlighted chain around it.
+            Brush selection = SelectedBrush;
+            context.DrawEllipse(null, CachedPen(Faded(selection, 0.3), 8), center, radius + 7, radius + 7);
+            context.DrawEllipse(null, CachedPen(selection, 3), center, radius + 4, radius + 4);
+        }
         else if (graph.HighlightedNodes.Contains(node))
             context.DrawEllipse(null, CachedPen(Faded(highlightBrush, opacity), 1.5), center, radius + 2.5, radius + 2.5);
     }
@@ -521,9 +538,13 @@ public sealed class DependencyGraphCanvas : FrameworkElement
 
         if (graph.IsSelected(node))
         {
+            Brush selection = SelectedBrush;
+            Rect halo = box;
+            halo.Inflate(7, 7);
+            context.DrawRoundedRectangle(null, CachedPen(Faded(selection, 0.3), 8), halo, corner + 7, corner + 7);
             Rect ring = box;
             ring.Inflate(4, 4);
-            context.DrawRoundedRectangle(null, CachedPen(highlightBrush, 2.5), ring, corner + 4, corner + 4);
+            context.DrawRoundedRectangle(null, CachedPen(selection, 3), ring, corner + 4, corner + 4);
         }
         else if (graph.HighlightedNodes.Contains(node))
         {
@@ -1109,6 +1130,17 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     private DependencyGraphCamera View => new(_scale, _offset, IsTree ? 0 : _angle);
 
     private bool IsTree => Graph?.IsTreeView == true;
+
+    private Brush SelectedBrush => SelectionBrush ?? _defaultSelectionBrush;
+
+    private static readonly Brush _defaultSelectionBrush = CreateFrozen(DefaultSelectionColor);
+
+    private static Brush CreateFrozen(Color color)
+    {
+        SolidColorBrush brush = new(color);
+        brush.Freeze();
+        return brush;
+    }
 
     private Point PositionOf(DependencyGraphNode node) => Graph?.PositionOf(node) ?? new Point(node.X, node.Y);
 

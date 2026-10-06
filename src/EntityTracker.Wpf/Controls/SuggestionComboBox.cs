@@ -11,7 +11,8 @@ using System.Windows.Threading;
 namespace EntityTracker.Wpf.Controls;
 
 /// <summary>
-/// An editable ComboBox for searching and adding dependencies.
+/// The one editable ComboBox the app uses wherever typing suggests something: the dependency
+/// boxes, the group boxes and the dependency graph search.
 /// </summary>
 /// <remarks>
 /// A plain editable ComboBox commits its selection, and overwrites the typed text, on every arrow
@@ -20,61 +21,77 @@ namespace EntityTracker.Wpf.Controls;
 /// click. Opening the dropdown runs <see cref="RefreshCommand"/>, so an empty query browses every
 /// eligible entity.
 /// </remarks>
-public class DependencyComboBox : ComboBox
+public class SuggestionComboBox : ComboBox
 {
     private const int PageSize = 8;
-    private bool _isHandlingInput;
+    private bool _isOpenPending;
+    private bool _isOpening;
 
     public static readonly DependencyProperty RefreshCommandProperty = DependencyProperty.Register(
-        nameof(RefreshCommand), typeof(ICommand), typeof(DependencyComboBox));
+        nameof(RefreshCommand), typeof(ICommand), typeof(SuggestionComboBox));
 
     public static readonly DependencyProperty ChooseCommandProperty = DependencyProperty.Register(
-        nameof(ChooseCommand), typeof(ICommand), typeof(DependencyComboBox));
+        nameof(ChooseCommand), typeof(ICommand), typeof(SuggestionComboBox));
 
     public static readonly DependencyProperty SubmitCommandProperty = DependencyProperty.Register(
-        nameof(SubmitCommand), typeof(ICommand), typeof(DependencyComboBox));
+        nameof(SubmitCommand), typeof(ICommand), typeof(SuggestionComboBox));
 
     // Inherited so the item containers inside the dropdown can compare themselves against it.
     public static readonly DependencyProperty HighlightedItemProperty = DependencyProperty.RegisterAttached(
-        nameof(HighlightedItem), typeof(object), typeof(DependencyComboBox),
+        nameof(HighlightedItem), typeof(object), typeof(SuggestionComboBox),
         new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.Inherits));
 
-    static DependencyComboBox() =>
-        IsDropDownOpenProperty.OverrideMetadata(typeof(DependencyComboBox), new FrameworkPropertyMetadata(
+    static SuggestionComboBox() =>
+        IsDropDownOpenProperty.OverrideMetadata(typeof(SuggestionComboBox), new FrameworkPropertyMetadata(
             false, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, null, CoerceIsDropDownOpen));
 
-    public DependencyComboBox() =>
+    public SuggestionComboBox() =>
         ((INotifyCollectionChanged)Items).CollectionChanged += (_, _) => HighlightedItem = null;
 
     /// <summary>
-    /// Holds back opening the list while a key or typed character is being handled. An editable
-    /// ComboBox that opens in the middle of typing selects all of its text, so the next key would
-    /// replace what was just typed; the list opens as soon as the input has been handled instead.
+    /// Holds back every request to open the list of an editable box by one dispatcher turn. An
+    /// editable ComboBox selects all of its text when its list opens, so the next key would replace
+    /// what was just typed. Opening a moment later, outside any keystroke, lets the box put the
+    /// caret back; it applies however the list opens: while typing, after an asynchronous search,
+    /// or from the arrow keys.
     /// </summary>
-    private static object CoerceIsDropDownOpen(DependencyObject element, object value) =>
-        value is true && element is DependencyComboBox { _isHandlingInput: true, IsDropDownOpen: false } ? false : value;
-
-    protected override void OnPreviewTextInput(TextCompositionEventArgs e)
+    private static object CoerceIsDropDownOpen(DependencyObject element, object value)
     {
-        BeginHandlingInput();
-        base.OnPreviewTextInput(e);
+        if (value is not true || element is not SuggestionComboBox { IsEditable: true, IsDropDownOpen: false } box ||
+            box._isOpening)
+            return value;
+        if (!box._isOpenPending)
+        {
+            box._isOpenPending = true;
+            box.Dispatcher.BeginInvoke(DispatcherPriority.Input, box.OpenKeepingTheCaret);
+        }
+
+        return false;
     }
 
-    private void BeginHandlingInput()
+    /// <summary>Opens the list if it is still wanted, and keeps the caret where the user left it.</summary>
+    private void OpenKeepingTheCaret()
     {
-        if (_isHandlingInput) return;
-        _isHandlingInput = true;
-        Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+        _isOpenPending = false;
+        TextBox? input = GetTemplateChild("PART_EditableTextBox") as TextBox;
+        (string Text, int Start, int Length)? before = input is null
+            ? null
+            : (input.Text, input.SelectionStart, input.SelectionLength);
+        _isOpening = true;
+        try { CoerceValue(IsDropDownOpenProperty); }
+        finally { _isOpening = false; }
+        if (input is null || before is not { } kept) return;
+
+        RestoreSelection();
+        // Some themes select the text a moment after the list has opened; check once more.
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, RestoreSelection);
+
+        void RestoreSelection()
         {
-            _isHandlingInput = false;
-            // Opening selects all of the text even now; keep the caret where the typing left it.
-            TextBox? input = GetTemplateChild("PART_EditableTextBox") as TextBox;
-            (int Start, int Length)? before = input is null ? null : (input.SelectionStart, input.SelectionLength);
-            CoerceValue(IsDropDownOpenProperty);
-            if (input is not null && before is { } selection && input.Text.Length > 0 &&
-                input.SelectionLength == input.Text.Length && selection.Length != input.Text.Length)
-                input.Select(selection.Start, selection.Length);
-        });
+            if (input.Text == kept.Text && input.Text.Length > 0 &&
+                input.SelectionLength == input.Text.Length && kept.Length != input.Text.Length)
+                input.Select(kept.Start, kept.Length);
+        }
     }
 
     public static IMultiValueConverter IsHighlightedConverter { get; } = new ReferenceEqualsConverter();
@@ -117,7 +134,6 @@ public class DependencyComboBox : ComboBox
             RefreshCommand.Execute(null);
     }
 
-
     protected override void OnDropDownClosed(EventArgs e)
     {
         HighlightedItem = null;
@@ -126,9 +142,6 @@ public class DependencyComboBox : ComboBox
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
-        // Backspace, Delete and paste change the text too; the arrow keys below still open the
-        // list, a moment later.
-        BeginHandlingInput();
         if (Keyboard.Modifiers == ModifierKeys.None && HandleNavigationKey(e.Key))
         {
             e.Handled = true;
