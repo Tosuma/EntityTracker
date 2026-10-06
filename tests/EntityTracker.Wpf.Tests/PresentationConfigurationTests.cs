@@ -82,6 +82,20 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void ClosingTheWindowWaitsForARunningProjectSync()
+    {
+        string code = File.ReadAllText(Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory),
+            "src", "EntityTracker.Wpf", "MainWindow.xaml.cs"));
+        int handler = code.IndexOf("private void OnClosing(", StringComparison.Ordinal);
+        string body = code[handler..code.IndexOf("private void OnClosed(", StringComparison.Ordinal)];
+
+        Assert.Contains("Closing += OnClosing;", code, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.HasActiveProjectSync", body, StringComparison.Ordinal);
+        Assert.Contains("e.Cancel = true;", body, StringComparison.Ordinal);
+        Assert.Contains("Close();", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void NotificationsAnimateInAndOutRegardlessOfTheWindowsAnimationSetting()
     {
         string wpfRoot = Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf");

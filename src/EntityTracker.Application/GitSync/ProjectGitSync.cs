@@ -40,6 +40,10 @@ public sealed record GitWorkingTreeState(
     string RootPath, string Branch, string? UpstreamIdentity, string? Head,
     IReadOnlyDictionary<string, byte[]> SnapshotFiles);
 
+/// <summary>One commit as listed between two commits: its ID, parents, subject and changed paths.</summary>
+public sealed record GitCommitSummary(string Id, IReadOnlyList<string> Parents, string Subject,
+    IReadOnlyList<string> ChangedPaths);
+
 public interface IProjectSyncLinkStore
 {
     Task<IReadOnlyList<ProjectSyncLink>> ReadAllAsync(CancellationToken cancellationToken = default);
@@ -82,6 +86,14 @@ public interface ILocalGitTransport
         IReadOnlyDictionary<string, byte[]> oldFiles, ProjectSnapshotPackage package,
         CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("Canonical merge commits are unavailable.");
+
+    /// <summary>
+    /// Lists the commits reachable from <paramref name="to"/> but not from <paramref name="from"/>,
+    /// oldest first, with the paths each one changed (merges against their first parent).
+    /// </summary>
+    Task<IReadOnlyList<GitCommitSummary>> ListCommitsAsync(string path, string from, string to,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Git history listing is unavailable.");
 }
 
 public interface IOutboundDeletionApproval
@@ -484,6 +496,9 @@ public sealed partial class ProjectGitSyncService(
                     read, localName, token, progress, mode: mode);
             }
         }
+        if (state.Head != link.LastCommonCommit &&
+            await AdoptUnrecordedSnapshotCommitsAsync(projectId, link, state, remote, token) is { } adopted)
+            link = adopted;
         if (state.Head != link.LastCommonCommit)
             throw new InvalidOperationException("Repository HEAD changed since the last sync. Review it outside EntityTracker before relinking.");
         progress?.Report(ProjectSyncPhase.Validating);
@@ -526,6 +541,19 @@ public sealed partial class ProjectGitSyncService(
                 throw new InvalidOperationException("The repository changed while preparing sync. Retry.");
             progress?.Report(ProjectSyncPhase.Committing);
             head = await git.CommitSnapshotAsync(link.RepositoryPath, state.SnapshotFiles, local, token);
+            // Record the commit before anything else can fail. If the checks below stop this
+            // sync (for example because the Project was edited meanwhile), the next sync still
+            // knows this commit as its base, commits the newer edits on top and pushes both,
+            // instead of finding an unknown HEAD and refusing to continue.
+            link = link with
+            {
+                LastCommonCommit = head,
+                LastRevision = read.Revision,
+                LastSnapshotHash = local.Sha256,
+                LastResult = "Local snapshot committed",
+                SyncStatus = remote is null ? "Current" : "PendingPush"
+            };
+            await links.SaveAsync(link, token);
         }
         progress?.Report(ProjectSyncPhase.Validating);
         ProjectSnapshotRead finalRead = await snapshots.ReadAsync(projectId, token);
@@ -639,6 +667,47 @@ public sealed partial class ProjectGitSyncService(
         string.Equals(Path.GetFullPath(a).TrimEnd(Path.DirectorySeparatorChar),
             Path.GetFullPath(b).TrimEnd(Path.DirectorySeparatorChar),
             OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    /// <summary>
+    /// Recovers a checkout whose HEAD moved past the recorded base only through EntityTracker's own
+    /// snapshot commits, for example when an earlier sync committed and then stopped before it
+    /// could record the commit. Those commits were made from this Project's own data, which has
+    /// only moved forward since, so HEAD can safely become the base; the current Project is then
+    /// committed on top as usual. Anything else, such as a hand-made commit or one touching other
+    /// files, is left for the user to review.
+    /// </summary>
+    private async Task<ProjectSyncLink?> AdoptUnrecordedSnapshotCommitsAsync(ProjectId projectId,
+        ProjectSyncLink link, GitWorkingTreeState state, GitRemoteState? remote, CancellationToken token)
+    {
+        if (state.Head is null || link.LastCommonCommit is null || state.SnapshotFiles.Count == 0 ||
+            !await git.IsAncestorAsync(link.RepositoryPath, link.LastCommonCommit, state.Head, token) ||
+            (remote is not null && remote.Head != state.Head &&
+             !await git.IsAncestorAsync(link.RepositoryPath, remote.Head, state.Head, token)))
+            return null;
+
+        IReadOnlyList<GitCommitSummary> commits;
+        try { commits = await git.ListCommitsAsync(link.RepositoryPath, link.LastCommonCommit, state.Head, token); }
+        catch (NotSupportedException) { return null; }
+        bool onlySnapshotCommits = commits.Count > 0 && commits.All(commit =>
+            commit.Subject is SnapshotCommitSubject or MergeCommitSubject &&
+            commit.ChangedPaths.All(path => path.StartsWith(".entitytracker/", StringComparison.Ordinal)));
+        if (!onlySnapshotCommits) return null;
+
+        ProjectSnapshot committed = codec.Decode(state.SnapshotFiles);
+        if (committed.Project.Id != projectId.Value) return null;
+        ProjectSyncLink adopted = link with
+        {
+            LastCommonCommit = state.Head,
+            LastSnapshotHash = codec.Encode(committed).Sha256,
+            SyncStatus = remote is not null && remote.Head != state.Head ? "PendingPush" : link.SyncStatus,
+            LastResult = "Recovered an unrecorded EntityTracker snapshot commit"
+        };
+        await links.SaveAsync(adopted, token);
+        return adopted;
+    }
+
+    private const string SnapshotCommitSubject = "Update EntityTracker project snapshot";
+    private const string MergeCommitSubject = "Merge EntityTracker project snapshots";
 
     private static bool PackagesEqual(IReadOnlyDictionary<string, byte[]> a, IReadOnlyDictionary<string, byte[]> b) =>
         a.Count == b.Count && a.All(pair => b.TryGetValue(pair.Key, out byte[]? bytes) && pair.Value.AsSpan().SequenceEqual(bytes));
