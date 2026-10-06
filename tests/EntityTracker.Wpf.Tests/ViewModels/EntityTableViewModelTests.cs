@@ -49,6 +49,33 @@ public sealed class EntityTableViewModelTests
         Assert.Equal(["invoice"], table.Items.Select(row => row.SourceName));
     }
 
+    [Fact]
+    public void ASearchCarriedToAnotherTableAppliesAtOnceIncludingTheDependencyMode()
+    {
+        EntityTableViewModel from = EntityTableViewModel.CreateActive();
+        from.OpenSearchCommand.Execute(null);
+        from.SearchDependenciesInstead = true;
+        from.SearchQuery = "legalentity";
+        EntityTableViewModel to = EntityTableViewModel.CreateActive();
+        to.ReplaceSourceItems([
+            Row(1, "legal_entity", "", "A", DevelopmentStatus.NotStarted, EntityWorkflowState.Ready),
+            Row(2, "invoice", "", "A", DevelopmentStatus.NotStarted, EntityWorkflowState.Ready)
+                with { DependencyNames = ["LegalEntity"] }
+        ]);
+
+        to.RestoreSearch(from.CaptureSearch());
+
+        Assert.True(to.IsSearchOpen);
+        Assert.True(to.SearchDependenciesInstead);
+        Assert.Equal("legalentity", to.SearchQuery);
+        Assert.Equal(["invoice"], to.Items.Select(row => row.SourceName));
+
+        to.RestoreSearch(new TableSearchState(false, "ignored", false));
+        Assert.False(to.IsSearchOpen);
+        Assert.Equal(string.Empty, to.SearchQuery);
+        Assert.Equal(2, to.Items.Count);
+    }
+
     /// <summary>Types a search and waits out the table's short debounce.</summary>
     private static async Task SearchAsync(EntityTableViewModel table, string query)
     {

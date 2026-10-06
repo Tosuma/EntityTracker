@@ -378,6 +378,67 @@ public sealed class ShellViewModelTests
     }
 
     [Fact]
+    public async Task TrackerSwitch_CarriesAnOpenSearchToTheNextTracker()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        Tracker second = await harness.TrackerManagement.CreateBlankAsync(harness.DefaultProject.Id, "Second tracker");
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "legal_entity");
+        await harness.AddEntityAsync(second.Id, "legalEntityType");
+        await harness.AddEntityAsync(second.Id, "invoice");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        MainWindowViewModel first = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
+        first.ActiveTable.OpenSearchCommand.Execute(null);
+        first.ActiveTable.SearchQuery = "legalentity";
+        first.DependencyGraph.SearchText = "legal";
+
+        Assert.True(await shell.SelectTrackerAsync(shell.Trackers.Single(item => item.Id == second.Id)));
+
+        MainWindowViewModel next = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
+        Assert.NotSame(first, next);
+        Assert.True(next.ActiveTable.IsSearchOpen);
+        Assert.Equal("legalentity", next.ActiveTable.SearchQuery);
+        // Filtered straight away, without waiting for the search's short typing delay.
+        Assert.Equal(["legalEntityType"], next.ActiveTable.Items.Select(row => row.SourceName));
+        Assert.Equal("legal", next.DependencyGraph.SearchText);
+        Assert.False(next.DependencyGraph.IsSuggestionsOpen);
+
+        next.ActiveTable.SearchQuery = "invoice";
+        await Task.Delay(400);
+        Assert.True(await shell.SelectTrackerAsync(shell.Trackers.Single(item => item.Id == harness.DefaultTracker.Id)));
+        Assert.Same(first, shell.CurrentWorkspace);
+        Assert.Equal("invoice", first.ActiveTable.SearchQuery);
+        Assert.Empty(first.ActiveTable.Items);
+    }
+
+    [Fact]
+    public async Task TrackerSwitch_WithoutASearchLeavesTheNextTrackersSearchAlone()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        Tracker second = await harness.TrackerManagement.CreateBlankAsync(harness.DefaultProject.Id, "Second tracker");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        MainWindowViewModel first = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
+        Tracker secondSelection = shell.Trackers.Single(item => item.Id == second.Id);
+        Tracker firstSelection = shell.Trackers.Single(item => item.Id == harness.DefaultTracker.Id);
+        Assert.True(await shell.SelectTrackerAsync(secondSelection));
+        MainWindowViewModel next = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
+        next.ArchivedTable.OpenSearchCommand.Execute(null);
+        next.ArchivedTable.SearchQuery = "kept";
+        Assert.True(await shell.SelectTrackerAsync(firstSelection));
+        first.ArchivedTable.CloseSearchCommand.Execute(null);
+
+        Assert.True(await shell.SelectTrackerAsync(secondSelection));
+
+        Assert.True(next.ArchivedTable.IsSearchOpen);
+        Assert.Equal("kept", next.ArchivedTable.SearchQuery);
+    }
+
+    [Fact]
     public async Task TrackerSwitch_PreservesPerTrackerTableStateClearsSelectionAndGuardsDirtyWork()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
