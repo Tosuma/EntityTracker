@@ -8,7 +8,7 @@
 | [Engineering](engineering/00_README.md) | CI-01 | — | — |
 | [UI/UX](ux/00_README.md) | UX-01–UX-08 | — | — |
 | [Git sync](git-sync/00_README.md) | GS-01–GS-05 | — | — |
-| [Reporting](reporting/00_README.md) | RPT-01, RPT-01.1, RPT-02 | RPT-03, RPT-04 | — |
+| [Reporting](reporting/00_README.md) | RPT-01, RPT-01.1, RPT-02, RPT-03 | RPT-04 | — |
 
 GS-01 implements portable Project snapshots. GS-02 adds existing local repository linking and manual local snapshot commits. GS-03 adds existing-checkout import and manual fetch and push. GS-04 adds collaborative three-way merge review and Project tombstones. GS-05 adds automatic synchronization, settings v5, status, recovery guidance, defensive limits, and single-instance protection.
 

@@ -17,6 +17,7 @@ public sealed class TrackedEntityTests
         Assert.Equal(DevelopmentStatus.NotStarted, entity.Status);
         Assert.Equal(string.Empty, entity.Notes);
         Assert.Equal(string.Empty, entity.FilterActive);
+        Assert.Equal(string.Empty, entity.SharedNotes);
         Assert.Equal(EntityLifecycleState.Active, entity.LifecycleState);
         Assert.Equal(EntityProvenance.Imported, entity.Provenance);
         Assert.Null(entity.RequestedPriority);
@@ -76,6 +77,19 @@ public sealed class TrackedEntityTests
         entity.ChangeFilterActive("Filter by source key\nThen by status");
         Assert.Equal("Filter by source key\nThen by status", entity.FilterActive);
         Assert.Throws<ArgumentNullException>(() => entity.ChangeFilterActive(null!));
+    }
+
+    [Fact]
+    public void SharedNotes_AreSeparateFromInternalNotesAndRejectNull()
+    {
+        TrackedEntity entity = new(EntityId.New(), TestTrackerId, "sales.Customer",
+            notes: "Internal only", sharedNotes: "  Agreed with the client.\nMigrate in June.  ");
+        Assert.Equal("  Agreed with the client.\nMigrate in June.  ", entity.SharedNotes);
+
+        entity.ChangeSharedNotes("Waiting for the client's test data");
+        Assert.Equal("Waiting for the client's test data", entity.SharedNotes);
+        Assert.Equal("Internal only", entity.Notes);
+        Assert.Throws<ArgumentNullException>(() => entity.ChangeSharedNotes(null!));
     }
 
     [Fact]

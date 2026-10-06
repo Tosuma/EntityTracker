@@ -88,7 +88,8 @@ public sealed class EntityLifecycleService
             entity.RequestedPriority,
             entity.ResponsibleDeveloper,
             entity.GroupName,
-            entity.FilterActive);
+            entity.FilterActive,
+            entity.SharedNotes);
         TrackedEntity[] candidateEntities = entities
             .Select(item => item.Id == entityId ? archived : item)
             .ToArray();
@@ -155,7 +156,8 @@ public sealed class EntityLifecycleService
             archived.RequestedPriority,
             archived.ResponsibleDeveloper,
             archived.GroupName,
-            archived.FilterActive);
+            archived.FilterActive,
+            archived.SharedNotes);
         TrackedEntity[] candidateEntities = currentEntities
             .Select(entity => entity.Id == entityId ? restored : entity)
             .ToArray();

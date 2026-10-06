@@ -62,3 +62,28 @@ one records the choice made and how to change it. Send corrections and they will
 6. **"Depends on" counts in the hover card.**
    - **Choice:** they count every link, including links implied by a longer chain that are not drawn,
      the same as the app's dot size and Overview dependency count.
+
+## RPT-03 — Internal Notes and Shared Notes
+
+1. **Keeping the sync change small.**
+   The snapshot format moves from 4 to 5, as planned, because an older app would otherwise drop
+   Shared notes without noticing and erase them on its next sync.
+   - **Choice:** empty Shared notes are left out of the entity files, so upgrading does not rewrite
+     every entity file in the Project repository; only entities with Shared notes change. Colleagues
+     on an older app are asked to update once the Project is synced in format 5.
+
+2. **Conflict titles use the same field names as the conflict details.**
+   Merge-conflict titles said "Notes" while their details already used the friendly labels. Both now
+   say "Internal notes" and "Shared notes". As a side effect, titles also use "Name" and "State"
+   for the source name and lifecycle state, as the details already did.
+   - **To change:** `Title` in `ProjectMergeConflictPresenter`.
+
+3. **Where Shared notes appear.**
+   - **Choice:** the editor, the details pane, the Overview export (CSV and Excel), merge review, and
+     both Project reports (searchable). As the milestone said, the Overview table itself has no new
+     column, and an archived entity's read-only summary still shows only its internal notes.
+   - **To change:** say if the Overview should get a Shared notes column or search.
+
+4. **Demo data.**
+   The demo Project has no notes, so the sample reports show an empty Shared notes column. The
+   tests cover Shared notes reaching the client report.

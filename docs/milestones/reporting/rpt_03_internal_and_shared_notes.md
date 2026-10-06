@@ -1,6 +1,6 @@
 # RPT-03 — Internal Notes and Shared Notes
 
-**Status: planned.**
+**Status: completed.**
 
 ## Goal and user-facing outcome
 
@@ -49,6 +49,29 @@ Application services and WPF). The Overview table itself is not changed.
 - Markup: the editor shows both labelled fields.
 - Build and run all test projects (Infrastructure for migration and snapshot); regenerate and publish
   screenshots (Edit entity changes); README explains Internal notes vs Shared notes.
+
+## Completion evidence
+
+- `TrackedEntity.SharedNotes` / `ChangeSharedNotes`; SQLite schema 20 adds `shared_notes`; the entity
+  repository, tracked-state store (insert, progress update, fingerprint), Tracker copy and snapshot
+  store read and write it.
+- Snapshot format 5: `SnapshotEntity.SharedNotes`; the codec writes it from version 5 only when it
+  is not empty, and reads versions 1–4 as empty. The validator accepts 1–5. The merger merges it field
+  by field; merge review labels it "Shared notes" and Notes "Internal notes", in titles and details.
+- Every service that rebuilds an entity carries it: editor service, bulk status, lifecycle,
+  schema synchronization planner, priority planning, Git sync merge, Overview items and rows.
+- Editor: "Internal notes" (only for us; never in a client report) and "Shared notes" (shared with
+  the client in Project reports), with help text for screen readers; unsaved-change tracking covers
+  both. Details pane shows both. Overview export: "Internal notes" and "Shared notes" columns.
+- Report: a searchable "Shared notes" column for everyone; internal notes stay internal-only.
+- Tests: domain; SQLite and codec round trip, version 4 read as empty, empty Shared notes left out
+  of entity files; migration leaves existing entities empty; merger merge and conflict; editor saves
+  both separately; details; CSV and Excel headers; markup labels; end-to-end client report contains
+  Shared notes but not internal notes. Version-pinned tests moved to format 5/6 and schema 20/21.
+- `dotnet build -c Release` succeeded. `dotnet test -c Release` passed all 1,049 tests: Domain 62,
+  Application 250, DemoData 8, Reporting 86, Screenshots 12, Wpf 379, Infrastructure 252.
+- README screenshots regenerated and published (the editor and details changed); README explains
+  Internal notes vs Shared notes.
 
 ## Agent planning prompt
 

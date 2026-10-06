@@ -1442,7 +1442,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             item.AuditTimestamps.SchemaUpdatedAtUtc,
             item.AuditTimestamps.ProgressUpdatedAtUtc,
             item.CurrentDevelopers,
-            item.FilterActive);
+            item.FilterActive,
+            item.SharedNotes);
     }
 
     private static string FormatStatus(DevelopmentStatus status) => status switch

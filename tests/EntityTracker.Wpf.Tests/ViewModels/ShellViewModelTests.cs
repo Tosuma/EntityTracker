@@ -445,7 +445,8 @@ public sealed class ShellViewModelTests
         Tracker second = await harness.TrackerManagement.CreateBlankAsync(harness.DefaultProject.Id, "Second tracker");
         Tracker third = await harness.TrackerManagement.CreateBlankAsync(harness.DefaultProject.Id, "Third tracker");
         await harness.AddEntityAsync(harness.DefaultTracker.Id, "customer_account",
-            notes: "Internal: vendor contract expires", filterActive: "Only active customers");
+            notes: "Internal: vendor contract expires", filterActive: "Only active customers",
+            sharedNotes: "Agreed: migrate in June");
         await harness.AddEntityAsync(second.Id, "invoice_line");
         await harness.AddEntityAsync(third.Id, "not_in_the_report");
         string exportPath = Path.Combine(Path.GetTempPath(), $"report-{Guid.NewGuid():N}.html");
@@ -470,6 +471,7 @@ public sealed class ShellViewModelTests
             Assert.Contains("customer_account", html, StringComparison.Ordinal);
             Assert.Contains("invoice_line", html, StringComparison.Ordinal);
             Assert.Contains("Only active customers", html, StringComparison.Ordinal);
+            Assert.Contains("Agreed: migrate in June", html, StringComparison.Ordinal);
             Assert.DoesNotContain("not_in_the_report", html, StringComparison.Ordinal);
             Assert.DoesNotContain("vendor contract", html, StringComparison.Ordinal);
             // Each chosen Tracker gets its own dependency graph, and the unchosen one none.
@@ -1032,11 +1034,13 @@ public sealed class ShellViewModelTests
             return id;
         }
 
-        public Task AddEntityAsync(TrackerId trackerId, string name, string notes = "", string filterActive = "") =>
+        public Task AddEntityAsync(TrackerId trackerId, string name, string notes = "", string filterActive = "",
+            string sharedNotes = "") =>
             _stateStore.ApplyAsync(
                 trackerId,
                 new TrackedStateChangeSet(
-                    [new TrackedEntity(EntityId.New(), trackerId, name, notes: notes, filterActive: filterActive)],
+                    [new TrackedEntity(EntityId.New(), trackerId, name, notes: notes, filterActive: filterActive,
+                        sharedNotes: sharedNotes)],
                     [], [], [], [], [],
                     progressSnapshotAfterChanges:
                         new ProgressSnapshotState(1, 0, 0, 0, 0, 0)));

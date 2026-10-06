@@ -119,7 +119,8 @@ public sealed class BulkStatusUpdateService
                 entity.RequestedPriority,
                 entity.ResponsibleDeveloper,
                 entity.GroupName,
-                entity.FilterActive))
+                entity.FilterActive,
+                entity.SharedNotes))
             .ToArray();
         int unchangedCount = selectedIds.Length - progressUpdates.Length;
         if (progressUpdates.Length == 0)

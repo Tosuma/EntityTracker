@@ -6,7 +6,7 @@ public sealed record ProjectSnapshot(
     IReadOnlyList<SnapshotTracker> Trackers,
     IReadOnlyList<SnapshotDeveloper>? Developers = null)
 {
-    public const int CurrentFormatVersion = 4;
+    public const int CurrentFormatVersion = 5;
 }
 
 public sealed record SnapshotDeveloper(
@@ -37,7 +37,8 @@ public sealed record SnapshotEntity(
     IReadOnlyList<SnapshotUnresolvedDependency> UnresolvedDependencies,
     IReadOnlyList<SnapshotOverride> ManualOverrides,
     IReadOnlyList<SnapshotResponsibilityPeriod>? ResponsibilityPeriods = null,
-    string FilterActive = "");
+    string FilterActive = "",
+    string SharedNotes = "");
 
 public sealed record SnapshotResponsibilityPeriod(Guid Id, Guid EntityId, Guid DeveloperId,
     DateTimeOffset StartedAtUtc, DateTimeOffset? EndedAtUtc);

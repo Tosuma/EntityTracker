@@ -303,11 +303,11 @@ public sealed class SqliteProjectTrackerStore(
     {
         using SqliteCommand command = CreateCommand(connection, transaction, """
             INSERT INTO tracked_entities
-            (id, tracker_id, source_key, source_name, development_status, notes, filter_active,
+            (id, tracker_id, source_key, source_name, development_status, notes, filter_active, shared_notes,
              lifecycle_state, provenance, requested_priority, group_name,
              created_at_utc, schema_updated_at_utc, progress_updated_at_utc)
             VALUES
-            ($id, $trackerId, $sourceKey, $sourceName, $status, $notes, $filterActive,
+            ($id, $trackerId, $sourceKey, $sourceName, $status, $notes, $filterActive, $sharedNotes,
              $lifecycle, $provenance, $priority, $group,
              $timestamp, $timestamp, $timestamp);
 
@@ -323,6 +323,7 @@ public sealed class SqliteProjectTrackerStore(
         command.Parameters.AddWithValue("$status", entity.Status.ToString());
         command.Parameters.AddWithValue("$notes", entity.Notes);
         command.Parameters.AddWithValue("$filterActive", entity.FilterActive);
+        command.Parameters.AddWithValue("$sharedNotes", entity.SharedNotes);
         command.Parameters.AddWithValue("$lifecycle", entity.LifecycleState.ToString());
         command.Parameters.AddWithValue("$provenance", entity.Provenance.ToString());
         command.Parameters.AddWithValue("$priority", entity.RequestedPriority is null ? DBNull.Value : entity.RequestedPriority.Value);

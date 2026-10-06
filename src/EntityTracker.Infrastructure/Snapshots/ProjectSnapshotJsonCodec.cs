@@ -59,7 +59,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                 if (snapshot.FormatVersion >= 3 && ordered.ResponsibleDeveloper.Length > 0)
                     throw new InvalidDataException("Current snapshots cannot contain responsible text.");
                 files[prefix + $"entities/{entity.Id:D}.json"] = snapshot.FormatVersion >= 3
-                    ? JsonSerializer.SerializeToUtf8Bytes(SnapshotEntityV3.From(ordered, snapshot.FormatVersion >= 4), JsonOptions)
+                    ? JsonSerializer.SerializeToUtf8Bytes(SnapshotEntityV3.From(ordered, snapshot.FormatVersion >= 4, snapshot.FormatVersion >= 5), JsonOptions)
                     : JsonSerializer.SerializeToUtf8Bytes(SnapshotEntityLegacy.From(ordered), JsonOptions);
             }
             foreach (SnapshotStatusEvent entry in tracker.StatusHistory.OrderBy(e => e.EventId))
@@ -79,7 +79,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
     {
         ArgumentNullException.ThrowIfNull(files);
         Manifest manifest = Read<Manifest>(files, Root + "manifest.json");
-        if (manifest.FormatVersion is not (1 or 2 or 3 or ProjectSnapshot.CurrentFormatVersion))
+        if (manifest.FormatVersion is not (1 or 2 or 3 or 4 or ProjectSnapshot.CurrentFormatVersion))
             throw new ProjectSnapshotFormatVersionException(manifest.FormatVersion);
         SnapshotProject project = Read<SnapshotProject>(files, Root + "project.json");
         if (project.Id != manifest.ProjectId)
@@ -95,7 +95,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                 throw new InvalidDataException("A Tracker document path does not match its ID.");
             SnapshotEntity[] entities = files.Keys.Where(p => p.StartsWith(prefix + "entities/", StringComparison.Ordinal))
                 .Order(StringComparer.Ordinal).Select(p => manifest.FormatVersion >= 3
-                    ? Read<SnapshotEntityV3>(files, p).ToSnapshotEntity(manifest.FormatVersion >= 4)
+                    ? Read<SnapshotEntityV3>(files, p).ToSnapshotEntity(manifest.FormatVersion >= 4, manifest.FormatVersion >= 5)
                     : Read<SnapshotEntityLegacy>(files, p).ToSnapshotEntity()).ToArray();
             SnapshotStatusEvent[] events = files.Keys.Where(p => p.StartsWith(prefix + "status-history/", StringComparison.Ordinal))
                 .Order(StringComparer.Ordinal).Select(p => Read<SnapshotStatusEvent>(files, p)).ToArray();
@@ -148,7 +148,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
             (Root + "manifest.json" or Root + "deleted-project.json")))
             throw new InvalidDataException("A Project tombstone contains unexpected documents.");
         Manifest manifest = Read<Manifest>(files, Root + "manifest.json");
-        if (manifest.FormatVersion is not (1 or 2 or 3 or ProjectSnapshot.CurrentFormatVersion))
+        if (manifest.FormatVersion is not (1 or 2 or 3 or 4 or ProjectSnapshot.CurrentFormatVersion))
             throw new ProjectSnapshotFormatVersionException(manifest.FormatVersion);
         ProjectTombstone candidate = Read<ProjectTombstone>(files, Root + "deleted-project.json");
         ValidateTombstone(candidate);
@@ -161,7 +161,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
 
     private static void ValidateTombstone(ProjectTombstone tombstone)
     {
-        if (tombstone.FormatVersion is not (1 or 2 or 3 or ProjectSnapshot.CurrentFormatVersion))
+        if (tombstone.FormatVersion is not (1 or 2 or 3 or 4 or ProjectSnapshot.CurrentFormatVersion))
             throw new ProjectSnapshotFormatVersionException(tombstone.FormatVersion);
         if (tombstone.ProjectId == Guid.Empty || tombstone.DeletedAtUtc.Offset != TimeSpan.Zero ||
             tombstone.BaseSnapshotHash.Length != 64 ||
@@ -259,21 +259,26 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
         IReadOnlyList<SnapshotOverride> ManualOverrides,
         IReadOnlyList<SnapshotResponsibilityPeriod> ResponsibilityPeriods,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        string? FilterActive = null)
+        string? FilterActive = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? SharedNotes = null)
     {
-        public static SnapshotEntityV3 From(SnapshotEntity entity, bool includeFilterActive) => new(
+        // Empty Shared notes are left out, so adding the field does not rewrite every entity file.
+        public static SnapshotEntityV3 From(SnapshotEntity entity, bool includeFilterActive, bool includeSharedNotes) => new(
             entity.Id, entity.TrackerId, entity.SourceName, entity.DevelopmentStatus,
             entity.Notes, entity.LifecycleState, entity.Provenance,
             entity.RequestedPriority, entity.GroupName,
             entity.CreatedAtUtc, entity.SchemaUpdatedAtUtc, entity.ProgressUpdatedAtUtc,
             entity.Dependencies, entity.UnresolvedDependencies, entity.ManualOverrides,
-            entity.ResponsibilityPeriods ?? [], includeFilterActive ? entity.FilterActive : null);
+            entity.ResponsibilityPeriods ?? [], includeFilterActive ? entity.FilterActive : null,
+            includeSharedNotes && entity.SharedNotes.Length > 0 ? entity.SharedNotes : null);
 
-        public SnapshotEntity ToSnapshotEntity(bool includeFilterActive) => new(Id, TrackerId, SourceName,
+        public SnapshotEntity ToSnapshotEntity(bool includeFilterActive, bool includeSharedNotes) => new(Id, TrackerId, SourceName,
             DevelopmentStatus, Notes, LifecycleState, Provenance, RequestedPriority,
             string.Empty, GroupName, CreatedAtUtc, SchemaUpdatedAtUtc,
             ProgressUpdatedAtUtc, Dependencies, UnresolvedDependencies,
-            ManualOverrides, ResponsibilityPeriods, includeFilterActive ? FilterActive ?? "" : "");
+            ManualOverrides, ResponsibilityPeriods, includeFilterActive ? FilterActive ?? "" : "",
+            includeSharedNotes ? SharedNotes ?? "" : "");
     }
     private sealed record TrackerDocument(
         Guid Id, Guid ProjectId, string Name, string LifecycleState,

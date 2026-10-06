@@ -114,7 +114,7 @@ archived entities, without deleting their history.
     </td>
     <td width="50%">
       <strong>Edit without losing imported facts</strong><br />
-      Update development status, notes, lifecycle, and manual dependency corrections.<br /><br />
+      Update development status, internal and shared notes, lifecycle, and manual dependency corrections.<br /><br />
       <img src="images/light/edit-entity.png" alt="Edit Entity modal with status, notes, dependencies, and archive controls" />
     </td>
   </tr>
@@ -263,6 +263,10 @@ rank, provenance, assignment, full notes, effective dependencies, blockers, and 
 Use **Edit** in the details header to open the entity editor. Opening or closing the pane does not
 disturb bulk row selection.
 
+Every entity has two kinds of notes. **Internal notes** are only for the team and never appear in
+a client report. **Shared notes** are meant for the client and appear in both client and internal
+Project reports. Both are synchronized with the Project's Git repository.
+
 The Add Entity and edit workflows use searchable Fluent suggestion controls. Unknown dependency
 names are added only through the explicit **Add as unresolved** action, while archive remains a
 separate reversible action with confirmation.
@@ -359,7 +363,7 @@ search marks matching entities in the graph, and clicking an entity's name in th
 the graph. Print the report from the browser to get a PDF.
 **Preview in browser** opens the same page without saving it.
 
-A **Client report** shows progress, statuses, Filter active and dependencies, and leaves out
+A **Client report** shows progress, statuses, Filter active, shared notes and dependencies, and leaves out
 internal notes, developer names and technical details such as origin and missing references; they
 are left out of the file itself, not just hidden. An **Internal report** includes everything.
 SharePoint usually downloads `.html` files instead of showing them; the downloaded file opens in

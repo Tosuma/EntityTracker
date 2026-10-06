@@ -199,7 +199,8 @@ public sealed class SchemaSynchronizationPlanner
                     existingEntity.RequestedPriority,
                     existingEntity.ResponsibleDeveloper,
                     existingEntity.GroupName,
-                    existingEntity.FilterActive)
+                    existingEntity.FilterActive,
+                    existingEntity.SharedNotes)
                 : new TrackedEntity(
                     plannedNewEntityIds is not null &&
                     plannedNewEntityIds.TryGetValue(
@@ -459,7 +460,8 @@ public sealed class SchemaSynchronizationPlanner
                     entity.RequestedPriority,
                     entity.ResponsibleDeveloper,
                     entity.GroupName,
-                    entity.FilterActive)
+                    entity.FilterActive,
+                    entity.SharedNotes)
                 : entity)
             .ToArray();
         TrackedEntity[] progressUpdates = finalCandidateEntities

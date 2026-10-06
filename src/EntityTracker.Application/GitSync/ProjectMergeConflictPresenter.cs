@@ -49,7 +49,7 @@ internal sealed class ProjectMergeConflictPresenter(
             }
             else if (part == "DeveloperInitials" && index + 1 < parts.Length)
                 labels.Add("Developer initials: " + parts[++index]);
-            else labels.Add(Humanize(part));
+            else labels.Add(Label(part));
         }
         return string.Join(" / ", labels);
     }
@@ -312,6 +312,8 @@ internal sealed class ProjectMergeConflictPresenter(
         "SyncBaselineJson" => "Schema synchronization baseline",
         "ResponsibleDeveloper" => "Responsible Developer",
         "FilterActive" => "Filter active",
+        "Notes" => "Internal notes",
+        "SharedNotes" => "Shared notes",
         "ImportSummary" => "Import summary",
         _ => Humanize(value.Replace("Utc", "", StringComparison.Ordinal))
     };

@@ -2629,10 +2629,16 @@
                                 Style="{StaticResource SecondaryButtonStyle}"
                                 Visibility="{Binding HasHiddenResponsibilityHistory, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
-                        <TextBlock FontWeight="SemiBold" Text="Notes" />
+                        <TextBlock FontWeight="SemiBold" Text="Internal notes" />
                         <TextBlock Margin="0,4,0,18"
                                    Foreground="{DynamicResource Brush.Text.Secondary}"
                                    Text="{Binding Notes}"
+                                   TextWrapping="Wrap" />
+
+                        <TextBlock FontWeight="SemiBold" Text="Shared notes" />
+                        <TextBlock Margin="0,4,0,18"
+                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Text="{Binding SharedNotes}"
                                    TextWrapping="Wrap" />
 
                         <TextBlock FontWeight="SemiBold" Text="Filter active" />
@@ -2868,14 +2874,33 @@
                                                   ItemsSource="{Binding Editor.StatusOptions}"
                                                   SelectedValue="{Binding Editor.SelectedStatus}"
                                                   SelectedValuePath="Value" />
-                                        <TextBlock Margin="0,12,0,0" FontWeight="SemiBold" Text="Notes" />
+                                        <TextBlock Margin="0,12,0,0" FontWeight="SemiBold" Text="Internal notes" />
+                                        <TextBlock Margin="0,2,0,0"
+                                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                   Text="Only for us. Never shown in a client report."
+                                                   TextWrapping="Wrap" />
                                         <TextBox MinHeight="64"
-                                                 AutomationProperties.Name="Notes"
+                                                 AutomationProperties.Name="Internal notes"
+                                                 AutomationProperties.HelpText="Only for us. Never shown in a client report."
                                                  Margin="0,5,0,0"
                                                  Padding="8"
                                                  AcceptsReturn="True"
                                                  IsEnabled="{Binding Editor.CanEditProgress}"
                                                  Text="{Binding Editor.EditedNotes, UpdateSourceTrigger=PropertyChanged}"
+                                                 TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,12,0,0" FontWeight="SemiBold" Text="Shared notes" />
+                                        <TextBlock Margin="0,2,0,0"
+                                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                   Text="Shared with the client in Project reports."
+                                                   TextWrapping="Wrap" />
+                                        <TextBox MinHeight="64"
+                                                 AutomationProperties.Name="Shared notes"
+                                                 AutomationProperties.HelpText="Shared with the client in Project reports."
+                                                 Margin="0,5,0,0"
+                                                 Padding="8"
+                                                 AcceptsReturn="True"
+                                                 IsEnabled="{Binding Editor.CanEditProgress}"
+                                                 Text="{Binding Editor.EditedSharedNotes, UpdateSourceTrigger=PropertyChanged}"
                                                  TextWrapping="Wrap" />
                                         <TextBlock Margin="0,12,0,0" FontWeight="SemiBold" Text="Filter active" />
                                         <TextBox MinHeight="64"

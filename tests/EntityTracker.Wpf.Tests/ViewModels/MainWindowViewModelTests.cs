@@ -657,6 +657,34 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task StandaloneEditor_SavesInternalAndSharedNotesSeparately()
+    {
+        TrackedEntity entity = Entity(1, "Customer");
+        MainWindowViewModel viewModel = CreateViewModel(
+            [entity],
+            [],
+            FailureResult(),
+            new StubFilePicker(),
+            out StubSynchronizationStore store);
+        await viewModel.InitializeAsync();
+        viewModel.EditOverviewEntityCommand.Execute(Assert.Single(viewModel.OverviewItems));
+        await WaitUntilAsync(() => viewModel.Editor.IsOpen && !viewModel.Editor.IsBusy);
+
+        viewModel.Editor.EditedNotes = "Internal: vendor contract";
+        viewModel.Editor.EditedSharedNotes = "Migrates in June";
+        Assert.True(viewModel.Editor.IsDirty);
+        viewModel.Editor.SaveCommand.Execute(null);
+        await WaitUntilAsync(() => !viewModel.Editor.IsOpen);
+
+        TrackedEntity progress = Assert.Single(store.AppliedChangeSet!.EntitiesWithProgressToUpdate);
+        Assert.Equal("Internal: vendor contract", progress.Notes);
+        Assert.Equal("Migrates in June", progress.SharedNotes);
+        EntityOverviewRow row = Assert.Single(viewModel.OverviewItems);
+        Assert.Equal("Migrates in June", row.SharedNotes);
+        Assert.Equal("Internal: vendor contract", row.Notes);
+    }
+
+    [Fact]
     public async Task TryCloseEditor_ProtectsDirtyWorkButClosesUnchangedEditorImmediately()
     {
         TrackedEntity entity = Entity(1, "Customer");
@@ -1770,6 +1798,8 @@ public sealed class MainWindowViewModelTests
             TrackedEntity entity = _entities.Single(item => item.Id == updated.Id);
             entity.ChangeStatus(updated.Status);
             entity.ChangeNotes(updated.Notes);
+            entity.ChangeFilterActive(updated.FilterActive);
+            entity.ChangeSharedNotes(updated.SharedNotes);
         }
 
         public void UpdateRequestedPriority(TrackedEntity updated) =>

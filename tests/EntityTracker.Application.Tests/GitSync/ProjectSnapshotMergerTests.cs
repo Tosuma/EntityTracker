@@ -28,8 +28,8 @@ public sealed class ProjectSnapshotMergerTests
         Assert.Equal($"Tracker/{tracker.Id:D}", conflict.Path);
         Assert.Equal("Tracker: Tracker", display.Title);
         Assert.Equal("Not present", display.BaseValue);
-        Assert.Contains("Entity: Original / Notes", display.LocalValue);
-        Assert.Contains("Entity: Original / Notes: Check the order mapping", display.RemoteValue);
+        Assert.Contains("Entity: Original / Internal notes", display.LocalValue);
+        Assert.Contains("Entity: Original / Internal notes: Check the order mapping", display.RemoteValue);
         Assert.DoesNotContain("Created", display.LocalValue);
         Assert.DoesNotContain(tracker.Id.ToString("D"), display.Title + display.LocalValue + display.RemoteValue);
         Assert.DoesNotContain('{', display.RemoteValue);
@@ -71,7 +71,7 @@ public sealed class ProjectSnapshotMergerTests
         ProjectMergeConflict notes = Assert.Single(proposal.Conflicts,
             conflict => conflict.Path.EndsWith("/Notes", StringComparison.Ordinal));
         Assert.Contains("Local tracker (local) / Remote tracker (remote)", notes.Display!.Title);
-        Assert.Contains("Entity: Original / Notes", notes.Display.Title);
+        Assert.Contains("Entity: Original / Internal notes", notes.Display.Title);
         Assert.Equal("Local note", notes.Display.LocalValue);
         Assert.Equal("Remote note", notes.Display.RemoteValue);
         Assert.DoesNotContain(tracker.Id.ToString("D"), notes.Display.Title);
@@ -101,6 +101,26 @@ public sealed class ProjectSnapshotMergerTests
             entity => entity with { FilterActive = "Region A only" });
         ProjectMergeResult conflict = new ProjectSnapshotMerger().Merge(basis, local, other);
         Assert.Contains(conflict.Conflicts, item => item.Path.EndsWith("/FilterActive", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void SharedNotes_MergeIndependentlyOfInternalNotesAndConflictingEditsRequireReview()
+    {
+        ProjectSnapshot basis = Snapshot();
+        ProjectSnapshot local = EditEntity(basis,
+            entity => entity with { SharedNotes = "Migrates in June" });
+        ProjectSnapshot remote = EditEntity(basis,
+            entity => entity with { Notes = "Internal: vendor contract" });
+
+        ProjectMergeResult independent = new ProjectSnapshotMerger().Merge(basis, local, remote);
+        Assert.Empty(independent.Conflicts);
+        Assert.Equal("Migrates in June", independent.Snapshot.Trackers[0].Entities[0].SharedNotes);
+        Assert.Equal("Internal: vendor contract", independent.Snapshot.Trackers[0].Entities[0].Notes);
+
+        ProjectSnapshot other = EditEntity(basis,
+            entity => entity with { SharedNotes = "Migrates in July" });
+        ProjectMergeResult conflict = new ProjectSnapshotMerger().Merge(basis, local, other);
+        Assert.Contains(conflict.Conflicts, item => item.Path.EndsWith("/SharedNotes", StringComparison.Ordinal));
     }
 
     [Fact]

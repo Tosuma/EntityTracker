@@ -980,6 +980,27 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void Notes_AreLabelledInternalAndSharedInDetailsAndEditor()
+    {
+        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        Assert.DoesNotContain(document.Descendants(), element => (string?)element.Attribute("Text") == "Notes");
+        Assert.Equal(2, document.Descendants().Count(element =>
+            element.Name.LocalName == "TextBlock" && (string?)element.Attribute("Text") == "Internal notes"));
+        Assert.Equal(2, document.Descendants().Count(element =>
+            element.Name.LocalName == "TextBlock" && (string?)element.Attribute("Text") == "Shared notes"));
+        Assert.Single(document.Descendants(), element =>
+            element.Name.LocalName == "TextBlock" && (string?)element.Attribute("Text") == "{Binding SharedNotes}");
+        XElement shared = Assert.Single(document.Descendants(), element =>
+            element.Name.LocalName == "TextBox" &&
+            (string?)element.Attribute("Text") == "{Binding Editor.EditedSharedNotes, UpdateSourceTrigger=PropertyChanged}");
+        Assert.Equal("Shared notes", (string?)shared.Attribute("AutomationProperties.Name"));
+        XElement internalNotes = Assert.Single(document.Descendants(), element =>
+            element.Name.LocalName == "TextBox" &&
+            (string?)element.Attribute("Text") == "{Binding Editor.EditedNotes, UpdateSourceTrigger=PropertyChanged}");
+        Assert.Contains("Never shown in a client report", (string?)internalNotes.Attribute("AutomationProperties.HelpText"));
+    }
+
+    [Fact]
     public void ProjectComparison_DisabledFilterCardsRetainSurfaceWithMildFade()
     {
         XDocument document = LoadWpfXaml("Views", "ProjectDashboardView.xaml");

@@ -27,7 +27,8 @@ public sealed class EntityOverviewItem
         IEnumerable<DependencyBlocker> blockers,
         EntityAuditTimestamps auditTimestamps,
         IEnumerable<EntityOverviewDeveloper>? currentDevelopers = null,
-        string filterActive = "")
+        string filterActive = "",
+        string sharedNotes = "")
     {
         EntityId = entityId;
         Rank = rank;
@@ -38,6 +39,7 @@ public sealed class EntityOverviewItem
         Status = status;
         Notes = notes;
         FilterActive = filterActive;
+        SharedNotes = sharedNotes;
         ResponsibleDeveloper = responsibleDeveloper;
         CurrentDevelopers = Array.AsReadOnly((currentDevelopers ?? []).ToArray());
         GroupName = groupName;
@@ -69,6 +71,9 @@ public sealed class EntityOverviewItem
     public string Notes { get; }
 
     public string FilterActive { get; }
+
+    /// <summary>Gets the notes shared with the client; <see cref="Notes"/> are internal.</summary>
+    public string SharedNotes { get; }
 
     public string ResponsibleDeveloper { get; }
 

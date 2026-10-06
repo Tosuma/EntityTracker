@@ -191,8 +191,8 @@ internal sealed class ReadmeScreenshotGenerator
                 {
                     Display = new ProjectMergeConflictDisplay("Tracker: Delivery",
                         "Not present",
-                        "Entity: Orders / Notes: Add invoice validation before release",
-                        "Entity: Orders / Notes: Coordinate rollout with the fulfillment team")
+                        "Entity: Orders / Internal notes: Add invoice validation before release",
+                        "Entity: Orders / Internal notes: Coordinate rollout with the fulfillment team")
                 }
             ]))
             {
