@@ -22,6 +22,7 @@ Build a Windows C#/.NET WPF application that imports database relationships from
 | Engineering | [CI-01](engineering/00_README.md) | Completed | Repository engineering independent of the product sequence. |
 | UI/UX | [UX-01–UX-08](ux/00_README.md) | Completed | Projects/Trackers and Fluent presentation, building on the product foundation. |
 | Git sync | [GS-01–GS-05](git-sync/00_README.md) | Completed | Portable snapshots, existing-checkout collaboration, automatic sync, and hardening are implemented. |
+| Reporting | [RPT-01–RPT-04](reporting/00_README.md) | RPT-01 completed; RPT-01.1–RPT-04 planned | Client and internal Project reports exported as one offline HTML file. |
 
 See the [cross-category milestone status](milestone_status.md) for the recorded state of each series. A planned milestone document describes future work; it does not make the feature available in the current application.
 
