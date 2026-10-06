@@ -22,6 +22,14 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace EntityTracker.Wpf.ViewModels;
 
+/// <summary>The searches on a Tracker's pages: Overview, Archived and the dependency graph.</summary>
+internal readonly record struct WorkspaceSearchState(
+    TableSearchState Active, TableSearchState Archived, string GraphSearch)
+{
+    /// <summary>Gets whether anything is being searched for.</summary>
+    public bool IsSearching => Active.IsOpen || Archived.IsOpen || !string.IsNullOrWhiteSpace(GraphSearch);
+}
+
 public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly EntityOverviewService _overviewService;
@@ -320,6 +328,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     }
 
     public event Action<EntityId>? EntityRevealRequested;
+
+    /// <summary>Gets every search on this Tracker's pages, so it can be carried to another Tracker.</summary>
+    internal WorkspaceSearchState CaptureSearch() =>
+        new(ActiveTable.CaptureSearch(), ArchivedTable.CaptureSearch(), DependencyGraph.SearchText);
+
+    /// <summary>Takes over the searches from another Tracker, so switching Tracker keeps searching.</summary>
+    internal void RestoreSearch(WorkspaceSearchState state)
+    {
+        ActiveTable.RestoreSearch(state.Active);
+        ArchivedTable.RestoreSearch(state.Archived);
+        DependencyGraph.SearchText = state.GraphSearch;
+        DependencyGraph.IsSuggestionsOpen = false;
+    }
 
     public TrackerId TrackerId => _trackerId;
 

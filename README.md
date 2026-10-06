@@ -241,7 +241,8 @@ Every entity search in the app (Overview and Archived search, the dependency and
 adding or editing an entity, and the dependency graph search) matches names the same way: part of
 the name, word by word across spaces, snake_case, kebab-case, PascalCase and camelCase ("cust pref"
 finds `customer_preference`), and written without spaces ("legalentity" finds `legal entity`,
-`legalEntity` and `legal_entity`). Typing is never interrupted when suggestions appear.
+`legalEntity` and `legal_entity`). Typing is never interrupted when suggestions appear. Switching
+Tracker while searching keeps the search: the next Tracker opens with the same search already applied.
 
 Development status keeps the user-set detail: **Rework needed** means work is pending,
 **Reworking** means it is active, and **Blocked** manually pauses an entity. Work status shows

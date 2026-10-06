@@ -623,6 +623,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         Project? previousProject = SelectedProject;
         Tracker? previousTracker = SelectedTracker;
         MainWindowViewModel? previousWorkspace = CurrentWorkspace;
+        // A search in progress follows the user to the next Tracker instead of being lost.
+        WorkspaceSearchState? carriedSearch = previousWorkspace?.CaptureSearch();
         ProjectDevelopersViewModel? previousDevelopers = Developers;
         ShellDestination previousDestination = SelectedDestination;
         Tracker[] previousTrackers = Trackers.ToArray();
@@ -692,6 +694,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                     await workspace.RefreshAsync(cancellationToken);
                 }
 
+                if (carriedSearch is { IsSearching: true } search && !ReferenceEquals(workspace, previousWorkspace))
+                    workspace.RestoreSearch(search);
                 CurrentWorkspace = workspace;
             }
 
