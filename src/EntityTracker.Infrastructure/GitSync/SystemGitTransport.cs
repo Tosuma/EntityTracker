@@ -160,6 +160,29 @@ public sealed class SystemGitTransport : ILocalGitTransport
         return value.Length == 0 ? null : value;
     }
 
+    public async Task<IReadOnlyList<GitCommitSummary>> ListCommitsAsync(string path, string from, string to,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (string commit in new[] { from, to })
+            if (commit.Length is not (40 or 64) || !commit.All(Uri.IsHexDigit))
+                throw new ArgumentException("A full Git commit ID is required.", nameof(from));
+        // Each record starts with \x1e and holds "id parents\x1fsubject", then one changed path per line.
+        string output = await RunAsync(path, ["log", "--reverse", "--format=%x1e%H %P%x1f%s",
+            "--name-only", "--diff-merges=first-parent", from + ".." + to], cancellationToken);
+        List<GitCommitSummary> commits = [];
+        foreach (string record in output.Split('\x1e', StringSplitOptions.RemoveEmptyEntries))
+        {
+            string[] lines = record.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (lines.Length == 0) continue;
+            string[] header = lines[0].Split('\x1f', 2);
+            string[] ids = header[0].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            commits.Add(new GitCommitSummary(ids[0], ids[1..], header.Length > 1 ? header[1] : string.Empty,
+                lines[1..]));
+        }
+
+        return commits;
+    }
+
     public async Task<IReadOnlyDictionary<string, byte[]>> ReadSnapshotAtCommitAsync(
         string path, string commit, CancellationToken cancellationToken = default)
     {
@@ -524,7 +547,7 @@ public sealed class SystemGitTransport : ILocalGitTransport
     {
         "--version", "rev-parse", "symbolic-ref", "config", "status", "ls-files",
         "for-each-ref", "add", "diff", "commit", "fetch", "merge-base", "merge", "push", "ls-tree", "show",
-        "write-tree", "commit-tree", "update-ref", "cat-file"
+        "write-tree", "commit-tree", "update-ref", "cat-file", "log"
     };
 
     private static bool LooksLikeAuthenticationFailure(byte[] stderr)
@@ -548,6 +571,10 @@ public sealed class SystemGitTransport : ILocalGitTransport
             (args[0] == "write-tree" && args.Count != 1) ||
             (args[0] == "commit-tree" && (args.Count != 8 || args[2] != "-p" ||
                 args[4] != "-p" || args[6] != "-m")) ||
+            (args[0] == "log" && (args.Count != 6 || args[1] != "--reverse" ||
+                args[2] != "--format=%x1e%H %P%x1f%s" || args[3] != "--name-only" ||
+                args[4] != "--diff-merges=first-parent" || !args[5].Contains("..", StringComparison.Ordinal) ||
+                args[5].StartsWith('-'))) ||
             (args[0] == "update-ref" && (args.Count != 4 ||
                 !args[1].StartsWith("refs/heads/", StringComparison.Ordinal))))
             throw new InvalidOperationException("This Git command is outside the Project sync transport boundary.");

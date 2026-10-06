@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _editTimer = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private NotificationItem? _updateNotice;
     private NotificationItem? _offlineNotice;
+    private DispatcherTimer? _closeAfterSync;
     private bool _lastOverlayVisible;
     private bool _lastActionEnabled;
 
@@ -32,6 +33,7 @@ public partial class MainWindow : Window
         _updates = updates;
         DataContext = viewModel;
         Loaded += OnLoaded;
+        Closing += OnClosing;
         Closed += OnClosed;
         PreviewMouseWheel += OnPreviewMouseWheel;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
@@ -70,8 +72,30 @@ public partial class MainWindow : Window
         RefreshUpdateBlock();
     }
 
+    /// <summary>
+    /// Keeps the window open while a Project sync is running, so closing never cuts a sync between
+    /// its commit and the moment it is recorded, and closes as soon as the sync has finished.
+    /// </summary>
+    private void OnClosing(object? sender, CancelEventArgs e)
+    {
+        if (!_viewModel.HasActiveProjectSync) return;
+        e.Cancel = true;
+        if (_closeAfterSync is not null) return;
+        _viewModel.Notifications.BeginProgress("Closing EntityTracker",
+            "Finishing the Project sync. EntityTracker closes when it is done.");
+        _closeAfterSync = new DispatcherTimer(TimeSpan.FromMilliseconds(250), DispatcherPriority.Background,
+            (_, _) =>
+            {
+                if (_viewModel.HasActiveProjectSync) return;
+                _closeAfterSync?.Stop();
+                Close();
+            }, Dispatcher);
+        _closeAfterSync.Start();
+    }
+
     private void OnClosed(object? sender, EventArgs e)
     {
+        _closeAfterSync?.Stop();
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         _editTimer.Stop();
         if (_updates is not null) _updates.StateChanged -= OnUpdateStateChanged;
