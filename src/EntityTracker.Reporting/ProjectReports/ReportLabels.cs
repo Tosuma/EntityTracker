@@ -12,6 +12,29 @@ internal static class ReportLabels
     internal const string Green40 = "#A0AFAF";
     internal const string Coral = "#FF6359";
 
+    /// <summary>Every development status, in the order the app lists them.</summary>
+    internal static IReadOnlyList<string> StatusOrder { get; } =
+    [
+        Status(DevelopmentStatus.NotStarted),
+        Status(DevelopmentStatus.Blocked),
+        Status(DevelopmentStatus.InProgress),
+        Status(DevelopmentStatus.ReworkNeeded),
+        Status(DevelopmentStatus.Reworking),
+        Status(DevelopmentStatus.DevelopmentCompleted),
+        Status(DevelopmentStatus.Reconciled)
+    ];
+
+    /// <summary>Every work status of an active entity, in the order the app lists them.</summary>
+    internal static IReadOnlyList<string> WorkStatusOrder { get; } =
+    [
+        WorkStatus(EntityWorkflowState.Ready),
+        WorkStatus(EntityWorkflowState.Blocked),
+        WorkStatus(EntityWorkflowState.ManuallyBlocked),
+        WorkStatus(EntityWorkflowState.InProgress),
+        WorkStatus(EntityWorkflowState.DevelopmentCompleted),
+        WorkStatus(EntityWorkflowState.Reconciled)
+    ];
+
     internal static string Status(ProgressStatusCategory status) => status switch
     {
         ProgressStatusCategory.NotStarted => "Not started",

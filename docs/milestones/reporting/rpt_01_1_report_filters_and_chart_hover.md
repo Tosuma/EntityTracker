@@ -1,6 +1,6 @@
 # RPT-01.1 — Report Filters and Chart Hover
 
-**Status: planned.**
+**Status: completed.**
 
 ## Goal and user-facing outcome
 
@@ -44,6 +44,26 @@ the shared RPT contract: no external libraries, no network access, audience filt
 - Jint: nearest-index lookup, tooltip text, donut share percentages.
 - Render the samples in headless Edge and check hover and keyboard by hand; filter on Reworking.
 - Build and run all test projects; regenerate the sample reports.
+
+## Completion evidence
+
+- `ReportColumn.Options` fixes a filter's choices. Development status and work status list every
+  status in the app's order (Not started, Blocked, In progress, Rework needed, Reworking,
+  Dev. completed, Reconciled; Ready, Waiting on dependencies, Blocked, In progress, Completed,
+  Reconciled), each with its count, including "Reworking (0)". Every other filter shows counts too.
+- The new embedded `report-charts.js` holds the pure helpers: nearest date, bar under the pointer,
+  arrow-key stepping, shares, card text and filter choices. `report.js` uses them for the hover
+  card, guide line, highlighted points, bars and slices, legend cross-highlighting, keyboard reading
+  (arrows, Home, End, Esc), and entry motion. The motion is skipped under reduced motion and in print.
+- Reporting tests: 25 new cases for the chart helpers and filter options run in Jint, plus checks
+  that the entity table carries every status in app order and that the file keeps the options when
+  no entity has a status.
+- Checked in headless Edge on the demo sample: donut, line and bar hover cards, keyboard reading,
+  and filtering on Reworking (1 of 249 rows).
+- `dotnet build -c Release` succeeded. `dotnet test -c Release` passed all 1,026 tests: Domain 61,
+  Reporting 81, Application 249, DemoData 8, Screenshots 12, Wpf 364, Infrastructure 251.
+- Sample reports regenerated in `artifacts/report-samples/`. No app page changed, so the README
+  screenshots were not republished; the README's report section describes the new behaviour.
 
 ## Agent planning prompt
 

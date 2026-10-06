@@ -46,6 +46,7 @@ public static class ProjectReportHtmlWriter
             .Append(JsonSerializer.Serialize(report, JsonOptions))
             .AppendLine("</script>");
         html.Append("<script>").Append(Asset("report-search.js")).AppendLine("</script>");
+        html.Append("<script>").Append(Asset("report-charts.js")).AppendLine("</script>");
         html.Append("<script>").Append(Asset("report.js")).AppendLine("</script>");
         html.AppendLine("</body>");
         html.AppendLine("</html>");

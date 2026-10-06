@@ -105,7 +105,9 @@ public sealed record TableSection(
 /// <summary>
 /// A table column. <see cref="Filter"/> columns get a dropdown filter; <see cref="Searchable"/>
 /// columns take part in the search box; <see cref="Scope"/> marks the column that says which
-/// Tracker a row belongs to.
+/// Tracker a row belongs to. <see cref="Options"/> fixes a filter's choices and their order, so
+/// a value is offered even when no row has it today; without it, the filter offers the values
+/// that occur.
 /// </summary>
 public sealed record ReportColumn(
     string Key,
@@ -113,4 +115,5 @@ public sealed record ReportColumn(
     ReportVisibility Visibility = ReportVisibility.Everyone,
     bool Searchable = false,
     bool Filter = false,
-    bool Scope = false);
+    bool Scope = false,
+    IReadOnlyList<string>? Options = null);

@@ -22,6 +22,8 @@
 
   // Name matching lives in report-search.js, shared with the report's own tests.
   var matchPriority = EntityTrackerSearch.matchPriority;
+  // Chart and filter arithmetic lives in report-charts.js, also tested on its own.
+  var Charts = EntityTrackerCharts;
 
   // ---- Small DOM helpers ----
 
@@ -39,13 +41,6 @@
   function svg(tag, attributes) {
     var node = document.createElementNS(SVG, tag);
     for (var name in attributes || {}) node.setAttribute(name, attributes[name]);
-    return node;
-  }
-
-  function titled(node, text) {
-    var title = svg("title");
-    title.textContent = text;
-    node.appendChild(title);
     return node;
   }
 
@@ -122,30 +117,131 @@
       var chart = section.byScope[scope];
       var hasData = chart && chart.series.some(function (s) { return s.values.some(function (v) { return v !== 0; }); });
       if (!hasData) { body.appendChild(el("div", { className: "empty", text: "No progress history for this selection yet." })); return; }
-      body.appendChild(section.chartType === "donut" ? donut(chart) : section.chartType === "bars" ? bars(chart) : lines(chart));
-      body.appendChild(legend(chart, section.chartType));
+      var key = legend(chart, section.chartType);
+      var drawn = section.chartType === "donut" ? donut(chart, key) : section.chartType === "bars" ? bars(chart, key) : lines(chart, key);
+      drawn.setAttribute("aria-label", section.title + ". Use the left and right arrow keys to read the values.");
+      body.appendChild(drawn);
+      body.appendChild(key.node);
     }
     render(currentScope);
     scopeListeners.push(render);
     return el("section", { className: "report-section", id: section.key }, [el("h2", { text: section.title }), body]);
   }
 
+  /** The legend; its entries and the chart's parts highlight each other. */
   function legend(chart, type) {
     var items = type === "donut"
       ? chart.labels.map(function (label, i) { return { name: label + " (" + chart.series[0].values[i] + ")", color: chart.series[0].pointColors[i] }; })
       : chart.series.map(function (s) { return { name: s.name, color: s.color }; });
-    return el("div", { className: "legend" }, items.map(function (item) {
+    var spans = items.map(function (item) {
       var span = el("span", { text: item.name });
       span.style.setProperty("--swatch", item.color);
       return span;
-    }));
+    });
+    return {
+      node: el("div", { className: "legend" }, spans),
+      /** Emphasises one entry, or none for -1. */
+      emphasise: function (index) {
+        spans.forEach(function (span, i) { span.classList.toggle("active", i === index); });
+      },
+      /** Calls enter(index) and leave() as the pointer moves over the entries. */
+      onHover: function (enter, leave) {
+        spans.forEach(function (span, i) {
+          span.addEventListener("mouseenter", function () { enter(i); });
+          span.addEventListener("mouseleave", leave);
+        });
+      }
+    };
   }
 
-  function donut(chart) {
+  // ---- The hover card, shared by every chart ----
+
+  var tip = el("div", { className: "chart-tip", role: "status", "aria-live": "polite" });
+  document.body.appendChild(tip);
+
+  /** Shows the card, its first line as a heading, next to the window point (x, y). */
+  function showTip(lines, x, y) {
+    tip.replaceChildren();
+    lines.forEach(function (line, i) { tip.appendChild(el("div", { className: i === 0 ? "heading" : "", text: line })); });
+    tip.classList.add("visible");
+    var width = tip.offsetWidth, height = tip.offsetHeight;
+    var left = x + 14, top = y - height - 12;
+    if (left + width > document.documentElement.clientWidth - 8) left = x - width - 14;
+    if (top < 8) top = y + 16;
+    tip.style.left = Math.max(8, left) + window.scrollX + "px";
+    tip.style.top = top + window.scrollY + "px";
+  }
+
+  function hideTip() { tip.classList.remove("visible"); }
+
+  /**
+   * Makes a chart answer the pointer and the keyboard. pick(x, y) gives the index under a point
+   * in the chart's own coordinates, or -1; show(index) highlights it and returns the card's lines
+   * and where to put the card; clear() removes the highlight.
+   */
+  function interactive(node, width, height, count, pick, show, clear) {
+    var current = -1;
+    node.setAttribute("tabindex", "0");
+
+    function local(event) {
+      var rect = node.getBoundingClientRect();
+      return [(event.clientX - rect.left) / rect.width * width, (event.clientY - rect.top) / rect.height * height];
+    }
+
+    function client(point) {
+      var rect = node.getBoundingClientRect();
+      return [rect.left + point[0] / width * rect.width, rect.top + point[1] / height * rect.height];
+    }
+
+    function select(index, at) {
+      if (index !== current) { clear(); current = index; }
+      if (index < 0) { hideTip(); return; }
+      var shown = show(index);
+      var place = at || client(shown.anchor);
+      showTip(shown.lines, place[0], place[1]);
+    }
+
+    node.addEventListener("mousemove", function (event) {
+      var point = local(event);
+      select(pick(point[0], point[1]), [event.clientX, event.clientY]);
+    });
+    node.addEventListener("mouseleave", function () { select(-1); });
+    node.addEventListener("blur", function () { select(-1); });
+    node.addEventListener("keydown", function (event) {
+      var next = event.key === "ArrowRight" || event.key === "ArrowDown" ? Charts.stepIndex(current, 1, count)
+        : event.key === "ArrowLeft" || event.key === "ArrowUp" ? Charts.stepIndex(current, -1, count)
+        : event.key === "Home" ? 0
+        : event.key === "End" ? count - 1
+        : event.key === "Escape" ? -1
+        : null;
+      if (next === null) return;
+      event.preventDefault();
+      select(next);
+    });
+    return { select: select };
+  }
+
+  // ---- Entry motion: brief, and never when the reader asks for less motion ----
+
+  var calm = !window.matchMedia || window.matchMedia("(prefers-reduced-motion: reduce)").matches || window.matchMedia("print").matches;
+
+  function animate(node, frames, delay) {
+    if (calm || !node.animate) return null;
+    return node.animate(frames, { duration: 600, delay: delay || 0, easing: "cubic-bezier(0.2, 0.7, 0.3, 1)", fill: "backwards" });
+  }
+
+  // ---- Charts ----
+
+  var uniqueId = 0;
+
+  function donut(chart, key) {
     var series = chart.series[0];
     var total = series.values.reduce(function (a, b) { return a + b; }, 0);
-    var root = svg("svg", { viewBox: "0 0 320 220", role: "img", "aria-label": "Entities by status" });
+    var root = svg("svg", { viewBox: "0 0 320 220", role: "img", "class": "donut" });
     var cx = 160, cy = 110, r = 90, inner = 55, angle = -Math.PI / 2;
+    var slices = [];
+    var group = svg("g");
+    root.appendChild(group);
     series.values.forEach(function (value, i) {
       if (value <= 0) return;
       var sweep = value / total * Math.PI * 2;
@@ -155,13 +251,62 @@
                "A", r, r, 0, large, 1, cx + r * Math.cos(end), cy + r * Math.sin(end),
                "L", cx + inner * Math.cos(end), cy + inner * Math.sin(end),
                "A", inner, inner, 0, large, 0, cx + inner * Math.cos(angle), cy + inner * Math.sin(angle), "Z"].join(" ");
-      root.appendChild(titled(svg("path", { d: d, fill: series.pointColors[i], stroke: "#FFFFFF", "stroke-width": 1 }),
-        chart.labels[i] + ": " + value));
+      var path = svg("path", { d: d, fill: series.pointColors[i], stroke: "#FFFFFF", "stroke-width": 1, "class": "slice" });
+      slices.push({ index: i, path: path, middle: (angle + end) / 2, start: angle, end: end });
+      group.appendChild(path);
       angle = end;
     });
     var label = svg("text", { x: cx, y: cy + 6, "text-anchor": "middle", "font-size": 22, "font-weight": 600 });
     label.textContent = String(total);
     root.appendChild(label);
+
+    // The slices sweep in clockwise behind a growing mask, which goes once it has finished.
+    if (!calm && group.animate) {
+      var id = "sweep-" + (++uniqueId);
+      var reach = r + 12, maskRadius = reach / 2, circumference = 2 * Math.PI * maskRadius;
+      var circle = svg("circle", { cx: cx, cy: cy, r: maskRadius, fill: "none", stroke: "#FFFFFF", "stroke-width": reach,
+        "stroke-dasharray": circumference, transform: "rotate(-90 " + cx + " " + cy + ")" });
+      var mask = svg("mask", { id: id, maskUnits: "userSpaceOnUse", x: 0, y: 0, width: 320, height: 220 });
+      mask.appendChild(circle);
+      var defs = svg("defs");
+      defs.appendChild(mask);
+      root.insertBefore(defs, group);
+      group.setAttribute("mask", "url(#" + id + ")");
+      circle.animate([{ strokeDashoffset: circumference }, { strokeDashoffset: 0 }],
+        { duration: 600, easing: "cubic-bezier(0.2, 0.7, 0.3, 1)", fill: "forwards" })
+        .onfinish = function () { group.removeAttribute("mask"); };
+    }
+
+    function sliceAt(x, y) {
+      var dx = x - cx, dy = y - cy, distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance < inner - 4 || distance > r + 10) return -1;
+      var a = Math.atan2(dy, dx);
+      if (a < -Math.PI / 2) a += Math.PI * 2;
+      for (var i = 0; i < slices.length; i++) if (a >= slices[i].start && a < slices[i].end) return i;
+      return -1;
+    }
+
+    function show(position) {
+      var slice = slices[position];
+      slice.path.setAttribute("transform", "translate(" + 6 * Math.cos(slice.middle) + " " + 6 * Math.sin(slice.middle) + ")");
+      slice.path.classList.add("active");
+      key.emphasise(slice.index);
+      return {
+        lines: [Charts.sliceText(chart.labels[slice.index], series.values[slice.index], total)],
+        anchor: [cx + (r + 8) * Math.cos(slice.middle), cy + (r + 8) * Math.sin(slice.middle)]
+      };
+    }
+
+    function clear() {
+      slices.forEach(function (slice) { slice.path.removeAttribute("transform"); slice.path.classList.remove("active"); });
+      key.emphasise(-1);
+    }
+
+    var hover = interactive(root, 320, 220, slices.length, sliceAt, show, clear);
+    key.onHover(function (index) {
+      var position = slices.map(function (s) { return s.index; }).indexOf(index);
+      if (position >= 0) hover.select(position);
+    }, function () { hover.select(-1); });
     return root;
   }
 
@@ -205,42 +350,111 @@
     return [Math.min(0, min), max === min ? max + 1 : max];
   }
 
-  function lines(chart) {
+  function lines(chart, key) {
     var e = extent(chart, true);
     var box = axes(chart, e[0], e[1]);
     var count = chart.labels.length;
-    chart.series.forEach(function (series) {
-      var points = series.values.map(function (v, i) {
-        var x = box.left + (count === 1 ? box.plotWidth / 2 : i / (count - 1) * box.plotWidth);
-        return [x, box.y(v)];
-      });
-      box.node.appendChild(svg("polyline", {
+    var x = function (i) { return box.left + (count === 1 ? box.plotWidth / 2 : i / (count - 1) * box.plotWidth); };
+    var guide = svg("line", { y1: box.top, y2: box.top + box.plotHeight, "class": "guide" });
+    box.node.appendChild(guide);
+    var radius = count > 60 ? 1.5 : 3;
+    var drawn = chart.series.map(function (series) {
+      var points = series.values.map(function (v, i) { return [x(i), box.y(v)]; });
+      var line = svg("polyline", {
         points: points.map(function (p) { return p.join(","); }).join(" "),
-        fill: "none", stroke: series.color, "stroke-width": 2.5, "stroke-linejoin": "round"
-      }));
-      points.forEach(function (p, i) {
-        box.node.appendChild(titled(svg("circle", { cx: p[0], cy: p[1], r: count > 60 ? 1.5 : 3, fill: series.color }),
-          series.name + " · " + formatDate(chart.labels[i]) + ": " + series.values[i]));
+        fill: "none", stroke: series.color, "stroke-width": 2.5, "stroke-linejoin": "round", "class": "series"
       });
+      box.node.appendChild(line);
+      var dots = svg("g", { "class": "series" });
+      var circles = points.map(function (p) {
+        var circle = svg("circle", { cx: p[0], cy: p[1], r: radius, fill: series.color });
+        dots.appendChild(circle);
+        return circle;
+      });
+      box.node.appendChild(dots);
+      // The line draws itself from left to right; its points fade in behind it.
+      var length = points.reduce(function (sum, p, i) {
+        return i === 0 ? 0 : sum + Math.sqrt(Math.pow(p[0] - points[i - 1][0], 2) + Math.pow(p[1] - points[i - 1][1], 2));
+      }, 0);
+      line.setAttribute("stroke-dasharray", length + " " + length);
+      var drawing = animate(line, [{ strokeDashoffset: length }, { strokeDashoffset: 0 }]);
+      if (drawing) drawing.onfinish = function () { line.removeAttribute("stroke-dasharray"); };
+      else line.removeAttribute("stroke-dasharray");
+      animate(dots, [{ opacity: 0 }, { opacity: 1 }], 300);
+      return { line: line, dots: dots, circles: circles };
+    });
+
+    function show(index) {
+      guide.setAttribute("x1", x(index));
+      guide.setAttribute("x2", x(index));
+      guide.classList.add("visible");
+      var top = box.top + box.plotHeight;
+      drawn.forEach(function (d, s) {
+        d.circles[index].setAttribute("r", 5);
+        d.circles[index].classList.add("active");
+        top = Math.min(top, box.y(chart.series[s].values[index]));
+      });
+      return { lines: Charts.pointLines(formatDate(chart.labels[index]), chart.series, index), anchor: [x(index), top] };
+    }
+
+    function clear() {
+      guide.classList.remove("visible");
+      drawn.forEach(function (d) { d.circles.forEach(function (c) { c.setAttribute("r", radius); c.classList.remove("active"); }); });
+    }
+
+    interactive(box.node, box.width, box.height, count, function (px) {
+      return px < box.left - 8 || px > box.width - box.right + 8 ? -1 : Charts.nearestIndex(count, box.left, box.plotWidth, px);
+    }, show, clear);
+    // Pointing at a legend entry brings its series forward and fades the others.
+    key.onHover(function (index) {
+      drawn.forEach(function (d, s) { d.line.classList.toggle("faded", s !== index); d.dots.classList.toggle("faded", s !== index); });
+      key.emphasise(index);
+    }, function () {
+      drawn.forEach(function (d) { d.line.classList.remove("faded"); d.dots.classList.remove("faded"); });
+      key.emphasise(-1);
     });
     return box.node;
   }
 
-  function bars(chart) {
+  function bars(chart, key) {
     var e = extent(chart, true);
     var box = axes(chart, e[0], e[1]);
     var series = chart.series[0];
     var count = chart.labels.length;
     var slot = box.plotWidth / Math.max(count, 1);
     var zero = box.y(0);
-    series.values.forEach(function (v, i) {
-      var x = box.left + i * slot + slot * 0.15;
-      var y = Math.min(zero, box.y(v));
-      box.node.appendChild(titled(svg("rect", {
-        x: x, y: y, width: Math.max(slot * 0.7, 1), height: Math.max(Math.abs(box.y(v) - zero), 1),
-        fill: v < 0 ? "#FF6359" : series.color, rx: 2
-      }), "Week of " + formatDate(chart.labels[i]) + ": " + v));
+    var rects = series.values.map(function (v, i) {
+      var rect = svg("rect", {
+        x: box.left + i * slot + slot * 0.15, y: Math.min(zero, box.y(v)),
+        width: Math.max(slot * 0.7, 1), height: Math.max(Math.abs(box.y(v) - zero), 1),
+        fill: v < 0 ? "#FF6359" : series.color, rx: 2, "class": "bar"
+      });
+      box.node.appendChild(rect);
+      // Each bar grows out of the zero line, a moment after the one before it.
+      rect.style.transformBox = "fill-box";
+      rect.style.transformOrigin = v < 0 ? "top" : "bottom";
+      animate(rect, [{ transform: "scaleY(0)" }, { transform: "scaleY(1)" }], Math.min(i * 12, 300));
+      return rect;
     });
+
+    function show(index) {
+      rects[index].classList.add("active");
+      key.emphasise(0);
+      var v = series.values[index];
+      return {
+        lines: ["Week of " + formatDate(chart.labels[index]), series.name + " " + Charts.formatNumber(v)],
+        anchor: [box.left + (index + 0.5) * slot, Math.min(zero, box.y(v))]
+      };
+    }
+
+    function clear() {
+      rects.forEach(function (rect) { rect.classList.remove("active"); });
+      key.emphasise(-1);
+    }
+
+    interactive(box.node, box.width, box.height, count, function (px) {
+      return px < box.left || px > box.left + box.plotWidth ? -1 : Charts.barIndex(count, box.left, box.plotWidth, px);
+    }, show, clear);
     return box.node;
   }
 
@@ -256,13 +470,10 @@
     var count = el("span", { className: "result-count", role: "status" });
     var tools = el("div", { className: "table-tools no-print" }, [search]);
     columns.filter(function (c) { return c.filter; }).forEach(function (column) {
-      var values = {};
-      section.rows.forEach(function (row) {
-        String(row[column.key] || "").split(", ").forEach(function (v) { if (v) values[v] = true; });
-      });
+      var choices = Charts.filterOptions(column.options, section.rows, column.key);
       var select = el("select", { "aria-label": "Filter by " + column.header, "data-column": column.key },
-        [el("option", { value: "", text: column.header + ": all" })].concat(Object.keys(values).sort().map(function (v) {
-          return el("option", { value: v, text: v });
+        [el("option", { value: "", text: column.header + ": all" })].concat(choices.map(function (choice) {
+          return el("option", { value: choice.value, text: choice.value + " (" + choice.count + ")" });
         })));
       select.addEventListener("change", function () { filters[column.key] = select.value; render(); });
       if (column.scope) select.id = "scope-filter";

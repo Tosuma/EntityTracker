@@ -113,7 +113,42 @@ section.report-section h2 { margin: 0 0 12px; font-size: 18px; font-weight: 600;
 .chart text { fill: var(--ink); font-size: 11px; }
 .chart .axis line, .chart .grid line { stroke: var(--green-20); }
 
+.chart svg:focus { outline: none; }
+.chart svg:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; border-radius: 4px; }
+.chart .guide { stroke: var(--green-60); stroke-dasharray: 3 3; opacity: 0; pointer-events: none; }
+.chart .guide.visible { opacity: 1; }
+.chart circle.active { stroke: #FFFFFF; stroke-width: 2; }
+.chart .series { transition: opacity 150ms ease; }
+.chart .series.faded { opacity: 0.2; }
+.chart .slice { transition: transform 150ms ease, filter 150ms ease; }
+.chart .slice.active, .chart .bar.active { filter: brightness(1.12) drop-shadow(0 2px 4px rgba(18, 56, 54, 0.3)); }
+
+.chart-tip {
+  position: absolute;
+  z-index: 10;
+  min-width: 120px;
+  padding: 8px 12px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(18, 56, 54, 0.16);
+  font-size: 13px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+.chart-tip.visible { opacity: 1; transform: none; }
+.chart-tip .heading { font-weight: 600; margin-bottom: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .chart .series, .chart .slice, .chart-tip { transition: none; }
+}
+
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; font-size: 13px; }
+.legend span { cursor: default; border-radius: 4px; padding: 0 4px; transition: background 120ms ease; }
+.legend span.active { background: var(--green-10); font-weight: 600; }
 .legend span::before {
   content: "";
   display: inline-block;
@@ -163,7 +198,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 2
 @media print {
   body { background: #FFFFFF; font-size: 11px; }
   main { max-width: none; padding: 0; }
-  .toolbar, .table-tools, .no-print { display: none !important; }
+  .toolbar, .table-tools, .no-print, .chart-tip { display: none !important; }
   header.report-header { border-radius: 0; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   section.report-section { border: none; padding: 8px 0; }
   .charts { grid-template-columns: 1fr 1fr; }

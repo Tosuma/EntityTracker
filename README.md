@@ -348,7 +348,9 @@ needs EntityTracker. Tick the Trackers to include (one, a few or all), choose wh
 pick the progress period. **Export HTML…** saves a single web page that works completely offline:
 it holds the summary, every progress chart (for all selected Trackers together or one at a time),
 and a table of the entities with search and filters. The search matches names the same way as the
-app, so "cust pref" and "legalentity" work there too. Print it from the browser to get a PDF.
+app, so "cust pref" and "legalentity" work there too. The status filters always list every status
+with its count, so the reader can pick "Reworking" even when nothing is being reworked. Point at a
+chart, or focus it and use the arrow keys, to read its values. Print it from the browser to get a PDF.
 **Preview in browser** opens the same page without saving it.
 
 A **Client report** shows progress, statuses, Filter active and dependencies, and leaves out
