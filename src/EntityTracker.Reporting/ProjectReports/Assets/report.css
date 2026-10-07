@@ -197,7 +197,6 @@ mark { background: #F6D9A8; color: inherit; padding: 0; }
 
 .graph-tools { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin-bottom: 10px; }
 .graph-tools label.inline { display: inline-flex; gap: 6px; align-items: center; }
-.graph-tools [hidden] { display: none !important; }
 .graph-tools button {
   font: inherit;
   padding: 5px 12px;
@@ -210,38 +209,21 @@ mark { background: #F6D9A8; color: inherit; padding: 0; }
 .graph-tools button:hover:not(:disabled) { background: var(--green-10); }
 .graph-tools button:disabled { color: var(--muted); cursor: default; opacity: 0.6; }
 .graph-tools button:focus-visible, .entity-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.segmented { display: inline-flex; }
-.segmented button { border-radius: 0; margin-left: -1px; }
-.segmented button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
-.segmented button:last-child { border-radius: 0 6px 6px 0; }
-.segmented button[aria-pressed="true"] { background: var(--green-100); border-color: var(--green-100); color: #FFFFFF; }
 .graph-note { color: var(--muted); margin-left: auto; }
 
 .graph-host { border: 1px solid var(--border); border-radius: 8px; background: #FBFCFC; overflow: hidden; }
-svg.graph { display: block; width: 100%; height: 600px; cursor: grab; touch-action: none; user-select: none; }
-svg.graph.dragging { cursor: grabbing; }
+/* The tree is fitted to the page width and does not move; its height follows from its shape. */
+svg.graph { display: block; width: 100%; height: auto; user-select: none; }
 svg.graph:focus { outline: none; }
 svg.graph:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
-.graph .ring { fill: none; stroke: var(--green-20); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .graph .links { fill: none; stroke: var(--green-60); stroke-opacity: 0.55; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .graph .links.dim { stroke-opacity: 0.15; }
 .graph .links.hover, .graph .links.strong { stroke: var(--green-100); stroke-opacity: 1; stroke-width: 2; }
 .graph .node { cursor: pointer; }
 .graph .node .halo { fill: none; stroke: none; }
-.graph .dot { stroke: var(--surface); stroke-width: 1; }
-.graph .node.missing .dot { fill: var(--surface); stroke: var(--coral); stroke-width: 1.5; stroke-dasharray: 3 2; }
-.graph .label { font-size: var(--label-size, 11px); fill: var(--ink); display: none; paint-order: stroke; stroke: #FBFCFC; stroke-width: 0.25em; }
-.graph.near .label, .graph .node.landmark .label, .graph .node.near .label, .graph .node.lit .label,
-.graph .node.selected .label, .graph .node.match .label { display: block; }
-.graph .node.landmark .label { font-weight: 600; }
-.graph .card { fill: var(--surface); }
-.graph .outline { fill: none; stroke: var(--green-40); stroke-width: 1; }
-.graph .node.missing .outline { stroke: var(--coral); stroke-dasharray: 5 3; stroke-width: 1.5; }
-.graph .node.missing .band { fill: #FFE4E1; }
-.graph .name { font: 600 12px "Segoe UI", system-ui, sans-serif; fill: var(--ink); }
-.graph .status-label { font-size: 11px; }
-.graph:not(.near) .name, .graph:not(.near) .status-label { display: none; }
+.graph .box { stroke: #FFFFFF; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.graph .node.missing .box { stroke: var(--coral); stroke-width: 1.5; stroke-dasharray: 5 3; }
 .graph .node.dim { opacity: 0.25; }
 .graph .node.lit .halo, .graph .node.near .halo { stroke: var(--green-100); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .graph .node.selected .halo { stroke: var(--focus); stroke-width: 3; vector-effect: non-scaling-stroke; }
@@ -329,7 +311,7 @@ nav.contents a:hover { text-decoration: underline; }
   /* The graph prints as a whole on its own page. */
   #dependency-graph { break-before: page; }
   .graph-host { border: none; }
-  svg.graph { height: 230mm; }
+  svg.graph { max-height: 240mm; }
 
   /* The entity table: the rows on screen, with the header repeated on every page. */
   section.report-section:has(table) { break-inside: auto; break-before: page; }

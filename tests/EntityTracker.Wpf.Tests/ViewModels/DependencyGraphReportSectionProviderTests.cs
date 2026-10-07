@@ -43,20 +43,10 @@ public sealed class DependencyGraphReportSectionProviderTests
         Assert.Equal(("country", "invoice"), (graph.Nodes[implied.From].Name, graph.Nodes[implied.To].Name));
         Assert.Null(implied.Route);
         Assert.All(graph.Links.Where(link => link.Essential), link => Assert.True(link.Route!.Count >= 4));
-        Assert.All(graph.Nodes, node => Assert.NotEmpty(node.Lines));
+        // Every box has its own place in the tree.
+        Assert.Equal(graph.Nodes.Count, graph.Nodes.Select(node => (node.TreeX, node.TreeY)).Distinct().Count());
         ReportGraphNode customer = graph.Nodes.Single(node => node.Name == "customer");
         Assert.Equal(("Not started", "Ready"), (customer.Status, customer.Work));
-    }
-
-    [Fact]
-    public void LongNamesWrapOverAtMostThreeLinesOfATreeBox()
-    {
-        ReportGraph graph = DependencyGraphReportSectionProvider.Graph(
-            [Row(1, "customer_preference_history_archive_snapshot_for_regional_reporting")]);
-
-        IReadOnlyList<string> lines = Assert.Single(graph.Nodes).Lines;
-        Assert.InRange(lines.Count, 2, 3);
-        Assert.StartsWith("customer_", lines[0], StringComparison.Ordinal);
     }
 
     [Fact]

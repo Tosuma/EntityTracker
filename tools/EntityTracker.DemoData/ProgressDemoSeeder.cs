@@ -19,7 +19,8 @@ public sealed record ProgressDemoOptions
         DateOnly endDate,
         TimeZoneInfo timeZone,
         string? projectName = null,
-        string? trackerName = null)
+        string? trackerName = null,
+        bool demoNotes = false)
     {
         if (days < 7)
         {
@@ -41,6 +42,7 @@ public sealed record ProgressDemoOptions
 
         ProjectName = string.IsNullOrWhiteSpace(projectName) ? null : projectName.Trim();
         TrackerName = string.IsNullOrWhiteSpace(trackerName) ? null : trackerName.Trim();
+        DemoNotes = demoNotes;
     }
 
     public int Days { get; }
@@ -54,6 +56,12 @@ public sealed record ProgressDemoOptions
     public string? ProjectName { get; }
 
     public string? TrackerName { get; }
+
+    /// <summary>
+    /// Gets whether some entities without any notes get example Internal and Shared notes, so the
+    /// difference shows in the app and in Project reports. Entities with notes keep them.
+    /// </summary>
+    public bool DemoNotes { get; }
 
     public DateOnly StartDate => EndDate.AddDays(-(Days - 1));
 }
@@ -206,6 +214,10 @@ public sealed class ProgressDemoSeeder
             tracker.Id,
             timeline.BaselineAtUtc,
             cancellationToken);
+        if (options.DemoNotes)
+        {
+            await AddDemoNotesAsync(workingPath, originalActive, cancellationToken);
+        }
 
         SqliteDependencyRepository dependencyRepository = new(database);
         SqliteManualDependencyOverrideRepository overrideRepository = new(database);
@@ -326,6 +338,67 @@ public sealed class ProgressDemoSeeder
                 : matches.Length == 0
                     ? $"No active Tracker named '{trackerName}' was found in {scope}."
                     : $"More than one active Tracker is named '{trackerName}' in {scope}. Select a unique Project/Tracker pair.");
+    }
+
+    private static readonly string[] DemoSharedNotes =
+    [
+        "Agreed with the client: migrate after the June data freeze.",
+        "Waiting for the client's test extract before reconciliation.",
+        "The client confirmed that only active records are migrated.",
+        "Reviewed with the client's data owner; no open questions.",
+        "The client signs off the mapping in the next steering meeting."
+    ];
+
+    private static readonly string[] DemoInternalNotes =
+    [
+        "Mapping relies on a temporary lookup table; replace it before go-live.",
+        "Vendor contract question is still open with procurement.",
+        "Rework came from a late change to the source keys.",
+        "Pair with the platform team for the bulk load.",
+        "Check the row counts against last month's extract."
+    ];
+
+    /// <summary>
+    /// Gives every fourth entity (by name) example notes: Shared notes for all of them and Internal
+    /// notes for every other one. Entities that already have notes are left as they are.
+    /// </summary>
+    private static async Task AddDemoNotesAsync(
+        string databasePath,
+        IReadOnlyList<TrackedEntity> activeEntities,
+        CancellationToken cancellationToken)
+    {
+        TrackedEntity[] candidates = activeEntities
+            .Where(static entity => entity.Notes.Length == 0 && entity.SharedNotes.Length == 0)
+            .OrderBy(static entity => entity.SourceName, StringComparer.Ordinal)
+            .Where(static (_, index) => index % 4 == 1)
+            .ToArray();
+        SqliteConnectionStringBuilder connectionString = new()
+        {
+            DataSource = databasePath,
+            Mode = SqliteOpenMode.ReadWrite,
+            ForeignKeys = true
+        };
+        await using SqliteConnection connection = new(connectionString.ToString());
+        await connection.OpenAsync(cancellationToken);
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        for (int index = 0; index < candidates.Length; index++)
+        {
+            using SqliteCommand command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = """
+                UPDATE tracked_entities
+                SET shared_notes = $sharedNotes, notes = $notes
+                WHERE id = $id;
+                """;
+            command.Parameters.AddWithValue("$id", candidates[index].Id.Value.ToString("D", CultureInfo.InvariantCulture));
+            command.Parameters.AddWithValue("$sharedNotes", DemoSharedNotes[index % DemoSharedNotes.Length]);
+            command.Parameters.AddWithValue("$notes",
+                index % 2 == 0 ? DemoInternalNotes[index / 2 % DemoInternalNotes.Length] : string.Empty);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
     }
 
     private static async Task ResetProgressAsync(

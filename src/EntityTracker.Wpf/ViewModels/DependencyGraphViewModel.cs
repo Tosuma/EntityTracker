@@ -433,7 +433,7 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
     /// Picks the landmarks: the most used foundations plus the entities most others refer to,
     /// so the zoomed-out map always has a few readable names.
     /// </summary>
-    internal static HashSet<DependencyGraphNode> FindLandmarks(DependencyGraphModel model)
+    private static HashSet<DependencyGraphNode> FindLandmarks(DependencyGraphModel model)
     {
         IEnumerable<DependencyGraphNode> ByImportance(IEnumerable<DependencyGraphNode> nodes) => nodes
             .OrderByDescending(static node => node.DependentCount)

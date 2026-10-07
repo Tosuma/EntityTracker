@@ -1,6 +1,6 @@
 /*
- * Pure helpers for the report's dependency graph: highlighting and the camera. No DOM, so the
- * report's tests run them as they are and compare the highlighting with the app's.
+ * The report's dependency-tree highlighting. No DOM, so the report's tests run it as it is and
+ * compare it with the app's.
  */
 var EntityTrackerGraph = (function () {
   "use strict";
@@ -50,28 +50,5 @@ var EntityTrackerGraph = (function () {
     return Object.keys(set).map(Number).sort(function (a, b) { return a - b; });
   }
 
-  /** The scale and offset that fit bounds { x, y, width, height } into a width × height view. */
-  function fit(bounds, width, height, padding, maxScale) {
-    var usableWidth = Math.max(width - padding * 2, 1), usableHeight = Math.max(height - padding * 2, 1);
-    var scale = Math.min(usableWidth / Math.max(bounds.width, 1), usableHeight / Math.max(bounds.height, 1), maxScale);
-    return {
-      scale: scale,
-      x: width / 2 - (bounds.x + bounds.width / 2) * scale,
-      y: height / 2 - (bounds.y + bounds.height / 2) * scale
-    };
-  }
-
-  /** Zooms by factor around the view point (px, py), keeping that point still; the scale stays in [min, max]. */
-  function zoomAt(view, factor, px, py, min, max) {
-    var scale = Math.max(min, Math.min(max, view.scale * factor));
-    var applied = scale / view.scale;
-    return { scale: scale, x: px - (px - view.x) * applied, y: py - (py - view.y) * applied };
-  }
-
-  /** The view that centres the graph point (gx, gy) in a width × height view at the given scale. */
-  function centreOn(gx, gy, width, height, scale) {
-    return { scale: scale, x: width / 2 - gx * scale, y: height / 2 - gy * scale };
-  }
-
-  return { highlight: highlight, fit: fit, zoomAt: zoomAt, centreOn: centreOn };
+  return { highlight: highlight };
 })();

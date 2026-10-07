@@ -105,7 +105,8 @@ internal static class ScreenshotDataSeeder
             days: 90,
             seed: 12345,
             endDate: DateOnly.FromDateTime(FixedNow.UtcDateTime),
-            timeZone: TimeZoneInfo.Utc);
+            timeZone: TimeZoneInfo.Utc,
+            demoNotes: true);
         await new ProgressDemoSeeder().SeedAsync(
             workspace.Paths.DatabasePath,
             options,

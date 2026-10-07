@@ -31,6 +31,9 @@ public sealed class ProgressDemoCommandLineTests
         Assert.Equal("custom.db", customized.DatabasePath);
         Assert.Null(defaults.ProjectName);
         Assert.Null(defaults.TrackerName);
+        Assert.False(defaults.DemoNotes);
+        Assert.True(ProgressDemoCommandLine.Parse(
+            ["--database", "custom.db", "--confirm-reset", "--demo-notes"]).DemoNotes);
     }
 
     [Fact]

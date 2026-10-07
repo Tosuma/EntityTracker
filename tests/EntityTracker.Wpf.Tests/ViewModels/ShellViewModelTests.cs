@@ -529,6 +529,37 @@ public sealed class ShellViewModelTests
     }
 
     [Fact]
+    public async Task ProjectReport_CustomRangeStartsAtTheLast30DaysAndMustBeValid()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "customer_account");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        Assert.True(await shell.NavigateAsync(ShellDestination.ProjectReport));
+        ProjectReportViewModel report = shell.ProjectReport!;
+
+        report.Range = ProgressRangePreset.Custom;
+
+        Assert.True(report.IsCustomRange);
+        Assert.Equal(DateTime.Today, report.CustomTo);
+        Assert.Equal(DateTime.Today.AddDays(-30), report.CustomFrom);
+        Assert.True(report.ExportCommand.CanExecute(null));
+
+        report.CustomFrom = DateTime.Today.AddDays(1);
+        Assert.True(report.HasRangeValidationError);
+        Assert.False(report.ExportCommand.CanExecute(null));
+        Assert.False(report.SaveChartCommand.CanExecute(null));
+
+        report.CustomFrom = DateTime.Today.AddDays(-7);
+        Assert.False(report.HasRangeValidationError);
+        Assert.True(report.PreviewCommand.CanExecute(null));
+        report.PreviewCommand.Execute(null);
+        await WaitUntilAsync(() => Task.FromResult(harness.ReportFiles.PreviewHtml is not null));
+    }
+
+    [Fact]
     public void TheShellNoLongerOffersTheTrackerReportsPage()
     {
         Assert.DoesNotContain(Enum.GetNames<ShellDestination>(), name => name == "Reports");

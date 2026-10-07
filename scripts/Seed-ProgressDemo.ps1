@@ -26,6 +26,10 @@ Active Tracker to seed, matched within ProjectName case-insensitively.
 .PARAMETER DatabasePath
 Database to modify. Defaults to the WPF project's Debug database.
 
+.PARAMETER DemoNotes
+Also give some entities without notes example Internal notes and Shared notes, so the difference
+shows in the app and in Project reports. Existing notes are never changed.
+
 .EXAMPLE
 .\scripts\Seed-ProgressDemo.ps1 -ConfirmReset
 
@@ -34,6 +38,9 @@ Database to modify. Defaults to the WPF project's Debug database.
 
 .EXAMPLE
 .\scripts\Seed-ProgressDemo.ps1 -ConfirmReset -ProjectName 'Production' -TrackerName 'Schema'
+
+.EXAMPLE
+.\scripts\Seed-ProgressDemo.ps1 -ConfirmReset -DemoNotes
 #>
 [CmdletBinding()]
 param(
@@ -43,7 +50,8 @@ param(
     [int]$Seed = 12345,
     [string]$ProjectName,
     [string]$TrackerName,
-    [string]$DatabasePath
+    [string]$DatabasePath,
+    [switch]$DemoNotes
 )
 
 $ErrorActionPreference = 'Stop'
@@ -82,6 +90,9 @@ $toolArguments = @(
 if (-not [string]::IsNullOrWhiteSpace($ProjectName)) {
     $toolArguments += @('--project-name', $ProjectName, '--tracker-name', $TrackerName)
 }
+if ($DemoNotes) {
+    $toolArguments += '--demo-notes'
+}
 
 & dotnet run --project $toolProject --no-restore -- @toolArguments
 
@@ -89,4 +100,4 @@ if ($LASTEXITCODE -ne 0) {
     throw "The demo-data utility exited with code $LASTEXITCODE."
 }
 
-Write-Host 'Synthetic progress is ready. Start EntityTracker and open Reports.'
+Write-Host 'Synthetic progress is ready. Start EntityTracker and open the Project report.'

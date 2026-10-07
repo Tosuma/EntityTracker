@@ -108,7 +108,7 @@ public sealed class SqliteBackupService : IProjectSyncBackup
                 string versionDirectory = GetVersionDirectory(version);
                 Directory.CreateDirectory(versionDirectory);
                 string destinationPath = Path.Combine(versionDirectory, Path.GetFileName(sourcePath));
-                File.Move(sourcePath, destinationPath);
+                await MoveAsync(sourcePath, destinationPath, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -121,6 +121,33 @@ public sealed class SqliteBackupService : IProjectSyncBackup
             }
         }
     }
+
+    /// <summary>
+    /// Moves a backup into its version folder. A file that was just written can stay locked for a
+    /// moment, for example while antivirus or search indexing reads it, so a sharing violation is
+    /// retried briefly before the move gives up.
+    /// </summary>
+    private static async Task MoveAsync(string sourcePath, string destinationPath, CancellationToken cancellationToken)
+    {
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                File.Move(sourcePath, destinationPath);
+                return;
+            }
+            catch (IOException exception) when (IsSharingViolation(exception) && attempt < MoveAttempts)
+            {
+                await Task.Delay(MoveRetryDelay * attempt, cancellationToken);
+            }
+        }
+    }
+
+    private const int MoveAttempts = 6;
+    private static readonly TimeSpan MoveRetryDelay = TimeSpan.FromMilliseconds(50);
+
+    // ERROR_SHARING_VIOLATION (32) and ERROR_LOCK_VIOLATION (33).
+    private static bool IsSharingViolation(IOException exception) => (exception.HResult & 0xFFFF) is 32 or 33;
 
     private static async Task<int> ReadBackupSchemaVersionAsync(
         string path, CancellationToken cancellationToken)

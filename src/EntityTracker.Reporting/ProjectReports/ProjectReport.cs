@@ -120,8 +120,8 @@ public sealed record ReportColumn(
     IReadOnlyList<string>? Options = null);
 
 /// <summary>
-/// The dependency graph, one per Tracker, keyed by the Tracker's scope. Positions come from the
-/// app's own layouts, so the report draws the same tree and solar system.
+/// The dependency tree, one per Tracker, keyed by the Tracker's scope. Positions come from the
+/// app's own tree layout, so the report draws the same tree.
 /// </summary>
 public sealed record GraphSection(
     string Key,
@@ -130,16 +130,14 @@ public sealed record GraphSection(
     IReadOnlyDictionary<string, ReportGraph> ByScope)
     : ReportSection(Key, Title, Visibility);
 
-/// <summary>A Tracker's entities, their links, and the solar system's orbit radii.</summary>
+/// <summary>A Tracker's entities and their links.</summary>
 public sealed record ReportGraph(
     IReadOnlyList<ReportGraphNode> Nodes,
-    IReadOnlyList<ReportGraphLink> Links,
-    IReadOnlyList<double> Rings);
+    IReadOnlyList<ReportGraphLink> Links);
 
 /// <summary>
-/// An entity, or a dependency no entity has (<see cref="Missing"/>). <see cref="X"/> and
-/// <see cref="Y"/> place it in the solar system; <see cref="TreeX"/> and <see cref="TreeY"/> are its
-/// tree box's top left corner, and <see cref="Lines"/> its name broken over the box's lines.
+/// An entity, or a dependency no entity has (<see cref="Missing"/>). <see cref="TreeX"/> and
+/// <see cref="TreeY"/> are its tree box's top left corner.
 /// </summary>
 public sealed record ReportGraphNode(
     string Name,
@@ -147,13 +145,8 @@ public sealed record ReportGraphNode(
     string Work,
     string WaitingOn,
     bool Missing,
-    bool Landmark,
-    double Radius,
-    double X,
-    double Y,
     double TreeX,
-    double TreeY,
-    IReadOnlyList<string> Lines);
+    double TreeY);
 
 /// <summary>
 /// A link from a dependency to the entity using it, by node index. Only essential links are drawn;

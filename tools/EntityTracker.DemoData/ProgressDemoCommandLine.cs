@@ -7,7 +7,8 @@ internal sealed record ProgressDemoCommandLine(
     int Days,
     int Seed,
     bool ConfirmReset,
-    bool ShowHelp)
+    bool ShowHelp,
+    bool DemoNotes = false)
 {
     public static ProgressDemoCommandLine Parse(IReadOnlyList<string> arguments)
     {
@@ -20,6 +21,7 @@ internal sealed record ProgressDemoCommandLine(
         int seed = 12345;
         bool confirmReset = false;
         bool showHelp = false;
+        bool demoNotes = false;
 
         for (int index = 0; index < arguments.Count; index++)
         {
@@ -43,6 +45,9 @@ internal sealed record ProgressDemoCommandLine(
                     break;
                 case "--confirm-reset":
                     confirmReset = true;
+                    break;
+                case "--demo-notes":
+                    demoNotes = true;
                     break;
                 case "--help":
                 case "-h":
@@ -87,7 +92,8 @@ internal sealed record ProgressDemoCommandLine(
             days,
             seed,
             confirmReset,
-            showHelp);
+            showHelp,
+            demoNotes);
     }
 
     private static string ReadValue(

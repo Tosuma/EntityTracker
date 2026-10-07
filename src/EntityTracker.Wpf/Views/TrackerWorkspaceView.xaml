@@ -2628,11 +2628,11 @@
                                         <TextBlock Margin="0,12,0,0" FontWeight="SemiBold" Text="Internal notes" />
                                         <TextBlock Margin="0,2,0,0"
                                                    Foreground="{DynamicResource Brush.Text.Secondary}"
-                                                   Text="Only for us. Never shown in a client report."
+                                                   Text="Never shown in client report"
                                                    TextWrapping="Wrap" />
                                         <TextBox MinHeight="64"
                                                  AutomationProperties.Name="Internal notes"
-                                                 AutomationProperties.HelpText="Only for us. Never shown in a client report."
+                                                 AutomationProperties.HelpText="Never shown in client report"
                                                  Margin="0,5,0,0"
                                                  Padding="8"
                                                  AcceptsReturn="True"

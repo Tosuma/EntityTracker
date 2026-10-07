@@ -350,22 +350,22 @@ work just as in the solar system. The chosen view is remembered.
 
 Open **Project report** from the Project dashboard to create a report for the client, who never
 needs EntityTracker. Tick the Trackers to include (one, a few or all), choose who it is for, and
-pick the progress period. **Export HTML…** saves a single web page that works completely offline:
+pick the progress period: all history, the last 30, 60 or 90 days, or a custom range. **Export HTML…** saves a single web page that works completely offline:
 it holds the summary, every progress chart (for all selected Trackers together or one at a time),
 and a table of the entities with search and filters. The search matches names the same way as the
 app, so "cust pref" and "legalentity" work there too. The status filters always list every status
 with its count, so the reader can pick "Reworking" even when nothing is being reworked. Point at a
 chart, or focus it and use the arrow keys, to read its values.
 
-The report also holds each Tracker's **dependency graph**, in the same tree and solar-system views
-as the app. Point at an entity for its status and links, click it to highlight its dependencies,
-dependents or direct links (Ctrl+click adds more), drag to move around and scroll to zoom. The
-search marks matching entities in the graph, and clicking an entity's name in the table shows it in
-the graph. **Preview in browser** opens the same page without saving it.
+The report also holds each Tracker's **dependency tree**, laid out as in the app and fitted to the
+width of the page. The boxes show each entity's status colour; point at one for its name, status and
+links, and click it to highlight its dependencies, dependents or direct links (Ctrl+click adds more).
+The tree does not pan or zoom, so it prints exactly as it looks. The search marks matching entities
+in the tree, and clicking an entity's name in the table shows it there. **Preview in browser** opens the same page without saving it.
 
 To get a PDF, use **Print / Save as PDF** in the report. The printed report starts with its title,
 the chosen Trackers, a contents list and the summary; charts sit two per row and are never split;
-the dependency graph gets a page of its own; and the entity table prints the rows you have searched
+the dependency tree gets a page of its own; and the entity table prints the rows you have searched
 or filtered for, says which ones, and repeats its header on every page. Each page carries the
 report's name and a page number.
 

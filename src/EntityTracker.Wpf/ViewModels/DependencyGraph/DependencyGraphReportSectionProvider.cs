@@ -1,25 +1,17 @@
-using System.Globalization;
 using System.Windows;
-using System.Windows.Media;
 
-using EntityTracker.Application.Overview;
 using EntityTracker.Domain;
 using EntityTracker.Reporting.ProjectReports;
-using EntityTracker.Wpf.Controls;
 
 namespace EntityTracker.Wpf.ViewModels.DependencyGraph;
 
 /// <summary>
-/// Adds the dependency graph to Project reports, one graph per Tracker, laid out by the app's own
-/// tree and solar-system layouts so the report looks like the app. It carries only what a client
-/// may see: names, statuses and links, never notes or developers.
+/// Adds the dependency tree to Project reports, one per Tracker, laid out by the app's own tree
+/// layout so the report looks like the app. It carries only what a client may see: names,
+/// statuses and links, never notes or developers.
 /// </summary>
 public sealed class DependencyGraphReportSectionProvider : IReportSectionProvider
 {
-    private const int SettleIterations = 1500;
-    private const double NamePadding = 8;
-    private static readonly Typeface NameTypeface = new(new FontFamily("Segoe UI"), FontStyles.Normal,
-        FontWeights.SemiBold, FontStretches.Normal);
 
     /// <summary>Gets every section the app's Project reports have: the built-in ones and this graph.</summary>
     public static IReadOnlyList<IReportSectionProvider> AppSections { get; } =
@@ -51,9 +43,6 @@ public sealed class DependencyGraphReportSectionProvider : IReportSectionProvide
     {
         DependencyGraphModel model = DependencyGraphBuilder.Build(rows);
         TreeDependencyLayout tree = new(model);
-        RadialDependencyLayout solar = new(model);
-        solar.Settle(SettleIterations);
-        IReadOnlySet<DependencyGraphNode> landmarks = DependencyGraphViewModel.FindLandmarks(model);
         Dictionary<EntityId, EntityOverviewRow> byId = new();
         foreach (EntityOverviewRow row in rows) byId.TryAdd(row.EntityId, row);
         Dictionary<DependencyGraphNode, int> index = new(ReferenceEqualityComparer.Instance);
@@ -69,13 +58,8 @@ public sealed class DependencyGraphReportSectionProvider : IReportSectionProvide
                 row is null ? string.Empty : ReportLabels.WorkStatus(row.WorkflowState),
                 row is null ? string.Empty : string.Join(", ", row.ReadinessBlockers.Select(static blocker => blocker.SourceName)),
                 node.IsPlaceholder,
-                landmarks.Contains(node),
-                Round(node.Radius),
-                Round(node.X),
-                Round(node.Y),
                 box.IsEmpty ? 0 : Round(box.X),
-                box.IsEmpty ? 0 : Round(box.Y),
-                NameLines(node.Label));
+                box.IsEmpty ? 0 : Round(box.Y));
         }).ToArray();
 
         ReportGraphLink[] links = model.Edges.Select(edge => new ReportGraphLink(
@@ -83,7 +67,7 @@ public sealed class DependencyGraphReportSectionProvider : IReportSectionProvide
             index[edge.To],
             edge.IsEssential,
             edge.IsEssential ? Route(tree, edge) : null)).ToArray();
-        return new ReportGraph(nodes, links, solar.RingRadii.Select(Round).ToArray());
+        return new ReportGraph(nodes, links);
     }
 
     /// <summary>The points a drawn link passes in the tree, as x, y pairs.</summary>
@@ -99,12 +83,6 @@ public sealed class DependencyGraphReportSectionProvider : IReportSectionProvide
 
     private static Point Top(Rect box) => new(box.X + box.Width / 2, box.Top);
 
-    /// <summary>Breaks a name over at most three lines of a tree box, as the app draws it.</summary>
-    private static IReadOnlyList<string> NameLines(string name) =>
-        DependencyGraphNameWrapper.Wrap(name, Measure, TreeDependencyLayout.BoxWidth - NamePadding * 2, maxLines: 3);
-
-    private static double Measure(string text) => new FormattedText(text, CultureInfo.InvariantCulture,
-        FlowDirection.LeftToRight, NameTypeface, 12, Brushes.Black, 1.0).WidthIncludingTrailingWhitespace;
 
     private static double Round(double value) => Math.Round(value, 1);
 }

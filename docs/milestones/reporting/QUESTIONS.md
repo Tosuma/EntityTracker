@@ -3,6 +3,31 @@
 Questions that came up while implementing the reporting milestones without stopping to ask. Each
 one records the choice made and how to change it. Send corrections and they will be applied.
 
+## Decisions, 7 October 2026
+
+All questions below were answered. What changed as a result:
+
+- **Summary card:** "Blocked" is now "Waiting on dependencies" (RPT-01.1, question 3).
+- **Dependency tree only:** the report no longer has a solar-system view, orbit rings or zoom and
+  pan. The tree is fitted to the width of the page at a fixed size, its boxes show only the status
+  colour (no names), and hovering names the entity. It prints exactly as shown (RPT-02, questions
+  3–5; RPT-04, question 3).
+- **Hover-card counts:** count only the links drawn in the tree (RPT-02, question 6).
+- **Internal notes helper text:** "Never shown in client report".
+- **Demo notes:** `Seed-ProgressDemo.ps1 -DemoNotes` gives some entities without notes example
+  Internal and Shared notes; the screenshot tool uses it, so samples and screenshots show both
+  (RPT-03, question 4).
+- **Custom date range:** the Project report page has a "Custom range" with From and To dates
+  (RPT-04, question 1).
+- **Flaky backup test:** a just-written backup can be locked for a moment (for example by a virus
+  scanner); moving it into its version folder now retries briefly, and a test holds a lock to prove
+  it (RPT-04, question 5).
+
+Kept as built: the app's status order, counts on every filter, one Tracker at a time in the tree,
+Shared notes only where they are now, sync format 5, friendly field names in merge review, the
+Project report on the dashboard only, printing the rows on screen, and the graph built in the WPF
+project.
+
 ## RPT-01.1 — Report Filters and Chart Hover
 
 1. **Order of the development statuses in the filter.**

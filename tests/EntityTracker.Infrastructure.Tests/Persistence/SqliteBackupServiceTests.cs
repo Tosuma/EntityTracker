@@ -176,6 +176,30 @@ public sealed class SqliteBackupServiceTests
     }
 
     [Fact]
+    public async Task Startup_WaitsBrieflyForABackupThatIsStillLocked()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        string backupDirectory = Path.Combine(Path.GetDirectoryName(file.DatabasePath)!, "backups");
+        Directory.CreateDirectory(backupDirectory);
+        string dailyPath = Path.Combine(backupDirectory, "entity-tracker-daily-20260820.db");
+        File.Copy(file.DatabasePath, dailyPath);
+        await SetSchemaVersionAsync(dailyPath, 7);
+        SqliteBackupService service = new(database, backupDirectory,
+            new MutableTimeProvider(new DateTimeOffset(2026, 8, 24, 10, 0, 0, TimeSpan.Zero)));
+
+        // Another process (such as a virus scanner) holds the file for a moment; reading is allowed.
+        FileStream scanner = new(dailyPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        Task release = Task.Delay(120).ContinueWith(_ => scanner.Dispose(), TaskScheduler.Default);
+        SqliteBackupResult result = await service.CreateStartupBackupsAsync();
+        await release;
+
+        Assert.True(result.Warnings.Count == 0, string.Join(Environment.NewLine, result.Warnings));
+        Assert.True(File.Exists(Path.Combine(backupDirectory, "v7", Path.GetFileName(dailyPath))));
+    }
+
+    [Fact]
     public async Task PreSyncBackup_UsesCurrentSchemaVersionFolder()
     {
         await using TemporarySqliteFile file = new();
@@ -245,7 +269,8 @@ public sealed class SqliteBackupServiceTests
 
     private static async Task<int> ReadSchemaVersionAsync(string databasePath)
     {
-        await using SqliteConnection connection = new($"Data Source={databasePath};Mode=ReadOnly");
+        // Without pooling, no connection keeps the file open after the read.
+        await using SqliteConnection connection = new($"Data Source={databasePath};Mode=ReadOnly;Pooling=False");
         await connection.OpenAsync();
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = "PRAGMA user_version;";

@@ -6,7 +6,7 @@ using EntityTracker.Domain;
 
 namespace EntityTracker.Reporting.ProjectReports;
 
-/// <summary>Headline numbers: active, implemented, reconciled, ready and blocked.</summary>
+/// <summary>Headline numbers: active, implemented, reconciled, ready and waiting on dependencies.</summary>
 public sealed class SummarySectionProvider : IReportSectionProvider
 {
     public ReportSection Build(ReportContext context) => new SummarySection("summary", "Summary",
@@ -19,7 +19,7 @@ public sealed class SummarySectionProvider : IReportSectionProvider
         new("Implemented", summary.ImplementedEntityCount),
         new("Reconciled", summary.ReconciledEntityCount),
         new("Ready to start", summary.ReadyEntityCount),
-        new("Blocked", summary.BlockedEntityCount, Attention: summary.BlockedEntityCount > 0)
+        new("Waiting on dependencies", summary.BlockedEntityCount, Attention: summary.BlockedEntityCount > 0)
     ];
 }
 

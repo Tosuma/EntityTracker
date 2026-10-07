@@ -998,7 +998,7 @@ public sealed class PresentationConfigurationTests
         XElement internalNotes = Assert.Single(document.Descendants(), element =>
             element.Name.LocalName == "TextBox" &&
             (string?)element.Attribute("Text") == "{Binding Editor.EditedNotes, UpdateSourceTrigger=PropertyChanged}");
-        Assert.Contains("Never shown in a client report", (string?)internalNotes.Attribute("AutomationProperties.HelpText"));
+        Assert.Equal("Never shown in client report", (string?)internalNotes.Attribute("AutomationProperties.HelpText"));
     }
 
     [Fact]

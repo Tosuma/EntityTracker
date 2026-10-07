@@ -59,6 +59,8 @@ public sealed class ProjectReportViewModel : INotifyPropertyChanged
     private ProgressChartKind _chart = ProgressChartKind.CurrentStatus;
     private ReportAudience _audience = ReportAudience.Client;
     private ProgressRangePreset _range = ProgressRangePreset.AllHistory;
+    private DateTime? _customFrom;
+    private DateTime? _customTo;
     private bool _isBusy;
 
     public ProjectReportViewModel(ProjectId projectId, string projectName, IEnumerable<Tracker> trackers,
@@ -101,7 +103,8 @@ public sealed class ProjectReportViewModel : INotifyPropertyChanged
         new(ProgressRangePreset.AllHistory, "All history"),
         new(ProgressRangePreset.Last30Days, "Last 30 days"),
         new(ProgressRangePreset.Last60Days, "Last 60 days"),
-        new(ProgressRangePreset.Last90Days, "Last 90 days")
+        new(ProgressRangePreset.Last90Days, "Last 90 days"),
+        new(ProgressRangePreset.Custom, "Custom range")
     ];
 
     /// <summary>Gets the charts that can be saved or copied as images, as the report shows them.</summary>
@@ -133,8 +136,55 @@ public sealed class ProjectReportViewModel : INotifyPropertyChanged
     public ProgressRangePreset Range
     {
         get => _range;
-        set => SetField(ref _range, value);
+        set
+        {
+            if (!SetField(ref _range, value)) return;
+            if (value == ProgressRangePreset.Custom && _customFrom is null && _customTo is null)
+            {
+                // Start from the last 30 days, so a custom range only needs adjusting.
+                _customTo = DateTime.Today;
+                _customFrom = DateTime.Today.AddDays(-30);
+                OnPropertyChanged(nameof(CustomFrom));
+                OnPropertyChanged(nameof(CustomTo));
+            }
+
+            OnPropertyChanged(nameof(IsCustomRange));
+            NotifyRangeValidationChanged();
+        }
     }
+
+    /// <summary>Gets or sets the first day of a custom progress period.</summary>
+    public DateTime? CustomFrom
+    {
+        get => _customFrom;
+        set
+        {
+            if (SetField(ref _customFrom, value)) NotifyRangeValidationChanged();
+        }
+    }
+
+    /// <summary>Gets or sets the last day of a custom progress period.</summary>
+    public DateTime? CustomTo
+    {
+        get => _customTo;
+        set
+        {
+            if (SetField(ref _customTo, value)) NotifyRangeValidationChanged();
+        }
+    }
+
+    public bool IsCustomRange => Range == ProgressRangePreset.Custom;
+
+    public bool IsCustomRangeValid => !IsCustomRange ||
+        CustomFrom is not null && CustomTo is not null &&
+        CustomFrom.Value.Date <= CustomTo.Value.Date &&
+        CustomTo.Value.Date <= DateTime.Today;
+
+    public bool HasRangeValidationError => !IsCustomRangeValid;
+
+    public string RangeValidationMessage => IsCustomRangeValid
+        ? string.Empty
+        : "Choose dates where From is not after To and To is not in the future.";
 
     public bool IsBusy
     {
@@ -273,11 +323,21 @@ public sealed class ProjectReportViewModel : INotifyPropertyChanged
             ProgressRangePreset.Last30Days => ProgressDateRange.LastDays(30, today),
             ProgressRangePreset.Last60Days => ProgressDateRange.LastDays(60, today),
             ProgressRangePreset.Last90Days => ProgressDateRange.LastDays(90, today),
+            ProgressRangePreset.Custom when IsCustomRangeValid => ProgressDateRange.Inclusive(
+                DateOnly.FromDateTime(CustomFrom!.Value), DateOnly.FromDateTime(CustomTo!.Value)),
             _ => ProgressDateRange.AllHistory
         };
     }
 
-    private bool CanRun() => !IsBusy && HasSelection;
+    private bool CanRun() => !IsBusy && HasSelection && IsCustomRangeValid;
+
+    private void NotifyRangeValidationChanged()
+    {
+        OnPropertyChanged(nameof(IsCustomRangeValid));
+        OnPropertyChanged(nameof(HasRangeValidationError));
+        OnPropertyChanged(nameof(RangeValidationMessage));
+        NotifyCommands();
+    }
 
     private void SetAll(bool selected)
     {
