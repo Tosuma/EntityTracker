@@ -406,7 +406,7 @@ public sealed class ShellViewModelTests
         Assert.False(next.DependencyGraph.IsSuggestionsOpen);
 
         next.ActiveTable.SearchQuery = "invoice";
-        await Task.Delay(400);
+        await WaitUntilAsync(() => !next.ActiveTable.IsSearchPending);
         Assert.True(await shell.SelectTrackerAsync(shell.Trackers.Single(item => item.Id == harness.DefaultTracker.Id)));
         Assert.Same(first, shell.CurrentWorkspace);
         Assert.Equal("invoice", first.ActiveTable.SearchQuery);

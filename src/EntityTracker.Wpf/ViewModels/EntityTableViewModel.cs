@@ -372,6 +372,9 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
         }
     }
 
+    /// <summary>Gets whether a typed search is still waiting for its short typing delay before it filters.</summary>
+    internal bool IsSearchPending => _searchDebounce is not null;
+
     /// <summary>Gets what the search looks like now, so it can be carried to another Tracker.</summary>
     internal TableSearchState CaptureSearch() => new(IsSearchOpen, _searchQuery, _searchDependenciesInstead);
 
