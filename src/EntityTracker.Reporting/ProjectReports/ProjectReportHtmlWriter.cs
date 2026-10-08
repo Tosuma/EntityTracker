@@ -21,6 +21,9 @@ public static class ProjectReportHtmlWriter
         // The default encoder escapes <, > and &, so the data can never close its script element.
     };
 
+    /// <summary>Gets the creator named in every report's footer; the app's medium name form.</summary>
+    public const string CreatorName = "Tobias S. Madsen";
+
     public static string Write(ProjectReport report)
     {
         ArgumentNullException.ThrowIfNull(report);
@@ -41,7 +44,7 @@ public static class ProjectReportHtmlWriter
         html.AppendLine("<body>");
         html.AppendLine("<noscript><p class=\"noscript\">This report needs JavaScript to show its charts and search. " +
                         "Open it in a current web browser.</p></noscript>");
-        html.AppendLine("<main id=\"report\"></main>");
+        html.Append("<main id=\"report\" data-creator=\"").Append(WebUtility.HtmlEncode(CreatorName)).AppendLine("\"></main>");
         html.Append("<script id=\"report-data\" type=\"application/json\">")
             .Append(JsonSerializer.Serialize(report, JsonOptions))
             .AppendLine("</script>");

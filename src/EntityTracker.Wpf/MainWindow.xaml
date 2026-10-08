@@ -6,6 +6,7 @@
         xmlns:views="clr-namespace:EntityTracker.Wpf.Views"
         xmlns:services="clr-namespace:EntityTracker.Wpf.Services"
         xmlns:controls="clr-namespace:EntityTracker.Wpf.Controls"
+        xmlns:app="clr-namespace:EntityTracker.Wpf"
         Title="EntityTracker"
         Icon="Assets/v2/EntityTracker.ico"
         Width="1240"
@@ -72,9 +73,13 @@
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource Brush.Text.OnDark}"
                                    Text="EntityTracker" />
-                        <TextBlock Margin="0,4,0,22"
+                        <!-- The credit stays quiet: smaller and dimmer than the sidebar's other text. -->
+                        <TextBlock x:Name="SidebarCreatorLine"
+                                   Margin="0,2,0,22"
+                                   FontSize="11"
+                                   Opacity="0.6"
                                    Foreground="{DynamicResource Brush.Text.OnDarkMuted}"
-                                   Text="Implementation portfolio"
+                                   Text="{x:Static app:AppCredits.ByLine}"
                                    TextWrapping="Wrap" />
 
                         <ToggleButton Command="{Binding NavigateCommand}"
