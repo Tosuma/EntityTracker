@@ -39,8 +39,6 @@ public sealed class ReportTrackerChoice(Tracker tracker, Action changed) : INoti
 
 public sealed record ReportAudienceOption(ReportAudience Audience, string Label, string Description);
 
-public sealed record ReportChartOption(ProgressChartKind Kind, string Label);
-
 /// <summary>
 /// The Project Report page: choose Trackers, who the report is for and the progress period, then
 /// preview it in the browser or export it as one HTML file to hand to the client.
@@ -53,10 +51,6 @@ public sealed class ProjectReportViewModel : INotifyPropertyChanged
     private readonly NotificationCenter? _notifications;
     private readonly AsyncCommand _exportCommand;
     private readonly AsyncCommand _previewCommand;
-    private readonly AsyncCommand _saveChartCommand;
-    private readonly AsyncCommand _copyChartCommand;
-    private readonly ProgressChartPngExporter _chartExporter = new(new ProgressChartPresentationBuilder());
-    private ProgressChartKind _chart = ProgressChartKind.CurrentStatus;
     private ReportAudience _audience = ReportAudience.Client;
     private ProgressRangePreset _range = ProgressRangePreset.AllHistory;
     private DateTime? _customFrom;
@@ -76,8 +70,11 @@ public sealed class ProjectReportViewModel : INotifyPropertyChanged
             .Select(tracker => new ReportTrackerChoice(tracker, OnSelectionChanged)));
         _exportCommand = new AsyncCommand(ExportAsync, CanRun);
         _previewCommand = new AsyncCommand(PreviewAsync, CanRun);
-        _saveChartCommand = new AsyncCommand(SaveChartAsync, CanRun);
-        _copyChartCommand = new AsyncCommand(CopyChartAsync, CanRun);
+        Charts = new ProjectProgressChartsViewModel(projectId, projectName, builder, files,
+            () => Trackers.Where(static choice => choice.IsSelected).Select(static choice => choice.Tracker).ToArray(),
+            () => IsCustomRangeValid ? CreateRange() : null,
+            notifications);
+        _ = Charts.ReloadAsync();
         SelectAllCommand = new RelayCommand(() => SetAll(true));
         SelectNoneCommand = new RelayCommand(() => SetAll(false));
     }
@@ -106,19 +103,6 @@ public sealed class ProjectReportViewModel : INotifyPropertyChanged
         new(ProgressRangePreset.Last90Days, "Last 90 days"),
         new(ProgressRangePreset.Custom, "Custom range")
     ];
-
-    /// <summary>Gets the charts that can be saved or copied as images, as the report shows them.</summary>
-    public static IReadOnlyList<ReportChartOption> ChartOptions { get; } =
-        Enum.GetValues<ProgressChartKind>()
-            .Select(kind => new ReportChartOption(kind, ProgressChartPresentationBuilder.GetTitle(kind)))
-            .ToArray();
-
-    /// <summary>Gets or sets the chart that Save image and Copy image use.</summary>
-    public ProgressChartKind Chart
-    {
-        get => _chart;
-        set => SetField(ref _chart, value);
-    }
 
     public ReportAudience Audience
     {
@@ -214,8 +198,9 @@ public sealed class ProjectReportViewModel : INotifyPropertyChanged
 
     public ICommand ExportCommand => _exportCommand;
     public ICommand PreviewCommand => _previewCommand;
-    public ICommand SaveChartCommand => _saveChartCommand;
-    public ICommand CopyChartCommand => _copyChartCommand;
+
+    /// <summary>Gets the live progress charts for the chosen Trackers and period.</summary>
+    public ProjectProgressChartsViewModel Charts { get; }
     public ICommand SelectAllCommand { get; }
     public ICommand SelectNoneCommand { get; }
 
@@ -243,58 +228,6 @@ public sealed class ProjectReportViewModel : INotifyPropertyChanged
         _files.OpenPreview(ProjectReportHtmlWriter.Write(report), ProjectReportHtmlWriter.SuggestFileName(report));
         return Task.CompletedTask;
     });
-
-    /// <summary>Saves the chosen chart for the chosen Trackers and period as a PNG image.</summary>
-    private async Task SaveChartAsync() => await RunChartAsync(async (report, title) =>
-    {
-        string date = (report.ManagerSummary.DataAsOfDate ?? DateOnly.FromDateTime(DateTime.Today))
-            .ToString("yyyyMMdd", CultureInfo.InvariantCulture);
-        string? path = _files.SelectChartPath(
-            $"{SafeFileName(ProjectName)}-{ProgressChartPresentationBuilder.GetFileNameSegment(Chart)}-{date}.png");
-        if (path is null) return;
-        await _chartExporter.SavePngAsync(report, Chart, path);
-        _notifications?.Show("Chart image", $"Saved {title} as {Path.GetFileName(path)}.", NotificationKind.Success);
-    });
-
-    /// <summary>Copies the chosen chart for the chosen Trackers and period to the clipboard.</summary>
-    private async Task CopyChartAsync() => await RunChartAsync(async (report, title) =>
-    {
-        byte[] png = await Task.Run(() => _chartExporter.RenderPng(report, Chart));
-        _files.CopyChart(png);
-        _notifications?.Show("Chart image", $"Copied {title}.", NotificationKind.Success);
-    });
-
-    private async Task RunChartAsync(Func<ProgressDashboardReport, string, Task> use)
-    {
-        if (!CanRun()) return;
-        IsBusy = true;
-        string title = ProgressChartPresentationBuilder.GetTitle(Chart);
-        try
-        {
-            ProgressDashboardReport report = await _builder.BuildProgressAsync(Request());
-            if (!report.HasHistoricalData)
-            {
-                _notifications?.Show("Chart image",
-                    "There is no progress history for these Trackers in this period yet.", NotificationKind.Failure);
-                return;
-            }
-
-            await use(report, title);
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or IOException or
-                                              UnauthorizedAccessException or System.Runtime.InteropServices.ExternalException)
-        {
-            _notifications?.Show("Chart image", $"The chart image could not be created: {exception.Message}",
-                NotificationKind.Failure);
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-
-    private static string SafeFileName(string name) => string.Concat(name.Select(static character =>
-        Path.GetInvalidFileNameChars().Contains(character) || character == ' ' ? '-' : character)).ToLowerInvariant();
 
     private async Task RunAsync(Func<ProjectReport, Task> use)
     {
@@ -333,6 +266,7 @@ public sealed class ProjectReportViewModel : INotifyPropertyChanged
 
     private void NotifyRangeValidationChanged()
     {
+        _ = Charts.ReloadAsync();
         OnPropertyChanged(nameof(IsCustomRangeValid));
         OnPropertyChanged(nameof(HasRangeValidationError));
         OnPropertyChanged(nameof(RangeValidationMessage));
@@ -346,6 +280,7 @@ public sealed class ProjectReportViewModel : INotifyPropertyChanged
 
     private void OnSelectionChanged()
     {
+        Charts.RefreshScopes();
         OnPropertyChanged(nameof(HasSelection));
         OnPropertyChanged(nameof(IncludedSummary));
         NotifyCommands();
@@ -355,8 +290,6 @@ public sealed class ProjectReportViewModel : INotifyPropertyChanged
     {
         _exportCommand.NotifyCanExecuteChanged();
         _previewCommand.NotifyCanExecuteChanged();
-        _saveChartCommand.NotifyCanExecuteChanged();
-        _copyChartCommand.NotifyCanExecuteChanged();
     }
 
     private bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)

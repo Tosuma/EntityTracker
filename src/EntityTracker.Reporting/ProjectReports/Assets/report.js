@@ -662,9 +662,17 @@
       graph.nodes.forEach(function (node, index) {
         var group = svg("g", { "class": "node" + (node.missing ? " missing" : ""), "data-index": index,
           transform: "translate(" + node.treeX + " " + node.treeY + ")" });
-        var color = node.missing ? "#FFFFFF" : (STATUS_COLORS[node.status] || ["#A0AFAF"])[0];
+        // As in the app: an empty name area above a band in the status colour, 2/3 and 1/3 of the box.
+        var color = node.missing ? null : (STATUS_COLORS[node.status] || ["#A0AFAF"])[0];
         group.appendChild(svg("rect", { "class": "halo", x: -6, y: -6, width: TREE_WIDTH + 12, height: TREE_HEIGHT + 12, rx: 14 }));
-        group.appendChild(svg("rect", { "class": "box", width: TREE_WIDTH, height: TREE_HEIGHT, rx: 10, fill: color }));
+        group.appendChild(svg("rect", { "class": "card", width: TREE_WIDTH, height: TREE_HEIGHT, rx: TREE_RADIUS }));
+        var band = svg("path", { "class": "band", d:
+          "M0 " + TREE_NAME + "H" + TREE_WIDTH + "V" + (TREE_HEIGHT - TREE_RADIUS) +
+          "Q" + TREE_WIDTH + " " + TREE_HEIGHT + " " + (TREE_WIDTH - TREE_RADIUS) + " " + TREE_HEIGHT +
+          "H" + TREE_RADIUS + "Q0 " + TREE_HEIGHT + " 0 " + (TREE_HEIGHT - TREE_RADIUS) + "Z" });
+        if (color) band.setAttribute("fill", color);
+        group.appendChild(band);
+        group.appendChild(svg("rect", { "class": "outline", width: TREE_WIDTH, height: TREE_HEIGHT, rx: TREE_RADIUS }));
         canvas.appendChild(group);
         nodeShapes.push(group);
         minX = Math.min(minX, node.treeX); minY = Math.min(minY, node.treeY);
@@ -800,7 +808,8 @@
     ]);
   }
 
-  var TREE_WIDTH = 150, TREE_HEIGHT = 81;
+  // The app's tree box: 150 × 81 with the name area taking the top 54 (2/3).
+  var TREE_WIDTH = 150, TREE_HEIGHT = 81, TREE_NAME = 54, TREE_RADIUS = 8;
 
   // ---- Page ----
 

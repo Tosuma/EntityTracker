@@ -88,6 +88,18 @@ public sealed class ProjectReportTests
     }
 
     [Fact]
+    public void TreeBoxesLookLikeTheAppsWithANameAreaAboveAStatusBand()
+    {
+        string html = ProjectReportHtmlWriter.Write(Report());
+
+        Assert.Contains("TREE_WIDTH = 150, TREE_HEIGHT = 81, TREE_NAME = 54", html, StringComparison.Ordinal);
+        Assert.Contains("\"class\": \"card\"", html, StringComparison.Ordinal);
+        Assert.Contains("\"class\": \"band\"", html, StringComparison.Ordinal);
+        Assert.Contains("\"class\": \"outline\"", html, StringComparison.Ordinal);
+        Assert.Contains(".graph .card { fill: var(--surface); }", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheEmbeddedDataCannotCloseItsScriptElement()
     {
         ProjectReport report = Report() with { ProjectName = "</script><script>alert(1)</script>" };

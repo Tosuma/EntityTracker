@@ -506,11 +506,12 @@ public sealed class ShellViewModelTests
         try
         {
             Assert.True(await shell.NavigateAsync(ShellDestination.ProjectReport));
-            ProjectReportViewModel report = shell.ProjectReport!;
-            Assert.Equal(4, ProjectReportViewModel.ChartOptions.Count);
-            report.Chart = EntityTracker.Reporting.ProgressChartKind.ImplementedOverTime;
+            ProjectProgressChartsViewModel charts = shell.ProjectReport!.Charts;
+            await WaitUntilAsync(() => Task.FromResult(charts.HasHistoricalData && !charts.IsBusy));
+            Assert.NotNull(charts.Presentation);
+            Assert.NotEmpty(charts.Presentation!.ImplementedSeries);
 
-            report.SaveChartCommand.Execute(null);
+            charts.SaveChartCommand.Execute(EntityTracker.Reporting.ProgressChartKind.ImplementedOverTime);
             await WaitUntilAsync(() => Task.FromResult(shell.Notifications.Items.Any(item => item.Title == "Chart image")));
 
             Assert.Contains(shell.Notifications.Items, item => item.Title == "Chart image" && item.Kind == NotificationKind.Success);
@@ -518,7 +519,7 @@ public sealed class ShellViewModelTests
             Assert.Matches(@"-implemented-over-time-[0-9]{8}\.png$", harness.ReportFiles.SuggestedChartName);
             Assert.Equal([0x89, 0x50, 0x4E, 0x47], (await File.ReadAllBytesAsync(chartPath)).Take(4).ToArray());
 
-            report.CopyChartCommand.Execute(null);
+            charts.CopyChartCommand.Execute(EntityTracker.Reporting.ProgressChartKind.CurrentStatus);
             await WaitUntilAsync(() => Task.FromResult(harness.ReportFiles.CopiedChart is not null));
             Assert.Equal(0x89, harness.ReportFiles.CopiedChart![0]);
         }
@@ -526,6 +527,38 @@ public sealed class ShellViewModelTests
         {
             File.Delete(chartPath);
         }
+    }
+
+    [Fact]
+    public async Task ProjectReport_ChartsShowAllChosenTrackersOrOneAndFollowTheTicks()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        Tracker second = await harness.TrackerManagement.CreateBlankAsync(harness.DefaultProject.Id, "Second tracker");
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "customer_account");
+        await harness.AddEntityAsync(second.Id, "invoice_line");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        Assert.True(await shell.NavigateAsync(ShellDestination.ProjectReport));
+        ProjectReportViewModel report = shell.ProjectReport!;
+        ProjectProgressChartsViewModel charts = report.Charts;
+        await WaitUntilAsync(() => Task.FromResult(charts.Presentation is not null && !charts.IsBusy));
+
+        Assert.Equal(["All chosen Trackers", "Second tracker"],
+            charts.ScopeOptions.Select(option => option.Name).Where(name => name != harness.DefaultTracker.Name));
+        Assert.Equal(3, charts.ScopeOptions.Count);
+        Assert.Null(charts.SelectedScope.Tracker);
+
+        charts.SelectedScope = charts.ScopeOptions.Single(option => option.Tracker?.Id == second.Id);
+        await WaitUntilAsync(() => Task.FromResult(!charts.IsBusy));
+        Assert.Equal(second.Id, charts.SelectedScope.Tracker?.Id);
+
+        // Unticking the shown Tracker goes back to all chosen Trackers; one Tracker left needs no choice.
+        report.Trackers.Single(choice => choice.Tracker.Id == second.Id).IsSelected = false;
+        Assert.Null(charts.SelectedScope.Tracker);
+        Assert.Single(charts.ScopeOptions);
+        await WaitUntilAsync(() => Task.FromResult(!charts.IsBusy && charts.Presentation is not null));
     }
 
     [Fact]
@@ -550,7 +583,7 @@ public sealed class ShellViewModelTests
         report.CustomFrom = DateTime.Today.AddDays(1);
         Assert.True(report.HasRangeValidationError);
         Assert.False(report.ExportCommand.CanExecute(null));
-        Assert.False(report.SaveChartCommand.CanExecute(null));
+        Assert.Null(report.Charts.Presentation);
 
         report.CustomFrom = DateTime.Today.AddDays(-7);
         Assert.False(report.HasRangeValidationError);

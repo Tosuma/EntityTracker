@@ -46,7 +46,7 @@
                     <StackPanel>
                         <TextBlock FontWeight="SemiBold" Text="Reports" />
                         <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}"
-                                   Text="The Project report shows progress, the dependency graph and every entity for the Trackers you choose, and exports it as one offline web page for the client or for the team. Chart images can be saved or copied there. Project and Portfolio dashboards compare multiple Trackers without changing their stored data." />
+                                   Text="The Project report shows progress, the dependency graph and every entity for the Trackers you choose, and exports it as one offline web page for the client or for the team. Its Progress charts show the charts live for all chosen Trackers or one of them, and each chart can be saved or copied as an image. Project and Portfolio dashboards compare multiple Trackers without changing their stored data." />
                     </StackPanel>
                 </Border>
                 <Border Margin="0,0,6,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">

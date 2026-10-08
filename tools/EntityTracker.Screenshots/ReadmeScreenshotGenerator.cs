@@ -111,7 +111,13 @@ internal sealed class ReadmeScreenshotGenerator
 
             // The Project report page, plus a client and an internal export kept for review.
             await shell.NavigateAsync(ShellDestination.ProjectReport, cancellationToken);
+            ProjectProgressChartsViewModel reportCharts = shell.ProjectReport!.Charts;
+            await WaitUntilAsync(
+                () => !reportCharts.IsBusy && reportCharts.Presentation is not null,
+                "The Project report charts did not load.",
+                cancellationToken);
             await renderer.CaptureAsync("project-report.png", settleMilliseconds: 500);
+            await renderer.BringNamedElementIntoViewAndCaptureAsync("ReportProgressCharts", "project-report-charts.png");
             string samples = Directory.CreateDirectory(Path.Combine(repositoryRoot, "artifacts", "report-samples")).FullName;
             foreach (EntityTracker.Reporting.ProjectReports.ReportAudience audience in
                      Enum.GetValues<EntityTracker.Reporting.ProjectReports.ReportAudience>())

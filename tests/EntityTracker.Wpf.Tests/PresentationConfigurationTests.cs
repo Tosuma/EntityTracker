@@ -1002,6 +1002,24 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void ProjectReport_ShowsFourLiveChartsEachWithSaveAndCopyImage()
+    {
+        XDocument document = LoadWpfXaml("Views", "ProjectReportView.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement charts = Assert.Single(document.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "ReportProgressCharts");
+
+        Assert.Single(charts.Descendants(), element => element.Name.LocalName == "PieChart");
+        Assert.Equal(3, charts.Descendants().Count(element => element.Name.LocalName == "CartesianChart"));
+        Assert.Equal(4, charts.Descendants().Count(element =>
+            (string?)element.Attribute("Command") == "{Binding Charts.SaveChartCommand}"));
+        Assert.Equal(4, charts.Descendants().Count(element =>
+            (string?)element.Attribute("Command") == "{Binding Charts.CopyChartCommand}"));
+        Assert.Contains(document.Descendants(), element =>
+            (string?)element.Attribute("ItemsSource") == "{Binding Charts.ScopeOptions}");
+    }
+
+    [Fact]
     public void ProjectComparison_DisabledFilterCardsRetainSurfaceWithMildFade()
     {
         XDocument document = LoadWpfXaml("Views", "ProjectDashboardView.xaml");

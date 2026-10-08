@@ -369,8 +369,11 @@ the dependency tree gets a page of its own; and the entity table prints the rows
 or filtered for, says which ones, and repeats its header on every page. Each page carries the
 report's name and a page number.
 
-Under **Chart images** on the same page, save or copy any of the report's charts as a PNG image for
-the chosen Trackers and period, for slides or e-mails.
+Under **Progress charts** on the same page, the report's four charts are shown live in the app for the
+chosen period: for all chosen Trackers together or for one of them. Point at a chart to read its values,
+and save or copy any chart as a PNG image for slides or e-mails.
+
+![Progress charts on the Project report page](images/light/project-report-charts.png)
 
 A **Client report** shows progress, statuses, Filter active, shared notes and dependencies, and leaves out
 internal notes, developer names and technical details such as origin and missing references; they

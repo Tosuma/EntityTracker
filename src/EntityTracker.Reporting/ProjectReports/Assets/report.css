@@ -222,8 +222,11 @@ svg.graph:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px;
 .graph .links.hover, .graph .links.strong { stroke: var(--green-100); stroke-opacity: 1; stroke-width: 2; }
 .graph .node { cursor: pointer; }
 .graph .node .halo { fill: none; stroke: none; }
-.graph .box { stroke: #FFFFFF; stroke-width: 1; vector-effect: non-scaling-stroke; }
-.graph .node.missing .box { stroke: var(--coral); stroke-width: 1.5; stroke-dasharray: 5 3; }
+.graph .card { fill: var(--surface); }
+.graph .outline { fill: none; stroke: var(--green-40); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.graph .node.missing .band { fill: #FFE4E1; }
+.graph .node.missing .outline { stroke: var(--coral); stroke-width: 1.5; stroke-dasharray: 5 3; }
+.graph .card, .graph .band { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 .graph .node.dim { opacity: 0.25; }
 .graph .node.lit .halo, .graph .node.near .halo { stroke: var(--green-100); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .graph .node.selected .halo { stroke: var(--focus); stroke-width: 3; vector-effect: non-scaling-stroke; }
