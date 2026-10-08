@@ -13,13 +13,15 @@ public sealed class TrackedEntity
         int? requestedPriority = null,
         string? responsibleDeveloper = null,
         string? groupName = null,
-        string filterActive = "")
+        string filterActive = "",
+        string sharedNotes = "")
     {
         ArgumentNullException.ThrowIfNull(id);
         ArgumentNullException.ThrowIfNull(trackerId);
         ValidateSourceName(sourceName);
         ArgumentNullException.ThrowIfNull(notes);
         ArgumentNullException.ThrowIfNull(filterActive);
+        ArgumentNullException.ThrowIfNull(sharedNotes);
 
         EnsureDefinedStatus(status);
         EnsureDefinedLifecycleState(lifecycleState);
@@ -32,6 +34,7 @@ public sealed class TrackedEntity
         Status = status;
         Notes = notes;
         FilterActive = filterActive;
+        SharedNotes = sharedNotes;
         LifecycleState = lifecycleState;
         Provenance = provenance;
         RequestedPriority = requestedPriority;
@@ -50,6 +53,9 @@ public sealed class TrackedEntity
     public string Notes { get; private set; }
 
     public string FilterActive { get; private set; }
+
+    /// <summary>Gets notes shared with the client: they appear in client reports. <see cref="Notes"/> stay internal.</summary>
+    public string SharedNotes { get; private set; }
 
     public EntityLifecycleState LifecycleState { get; private set; }
 
@@ -83,6 +89,12 @@ public sealed class TrackedEntity
     {
         ArgumentNullException.ThrowIfNull(filterActive);
         FilterActive = filterActive;
+    }
+
+    public void ChangeSharedNotes(string sharedNotes)
+    {
+        ArgumentNullException.ThrowIfNull(sharedNotes);
+        SharedNotes = sharedNotes;
     }
 
     public void ChangeLifecycleState(EntityLifecycleState lifecycleState)

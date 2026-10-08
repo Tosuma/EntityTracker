@@ -26,7 +26,8 @@ public sealed class EntityDetailsViewModel : INotifyPropertyChanged
         Lifecycle = row.LifecycleState == EntityLifecycleState.Archived ? "Archived" : "Active";
         IsArchived = row.LifecycleState == EntityLifecycleState.Archived;
         Provenance = row.Provenance;
-        Notes = string.IsNullOrWhiteSpace(row.Notes) ? "No notes" : row.Notes;
+        Notes = string.IsNullOrWhiteSpace(row.Notes) ? "No internal notes" : row.Notes;
+        SharedNotes = string.IsNullOrWhiteSpace(row.SharedNotes) ? "No shared notes" : row.SharedNotes;
         FilterActive = string.IsNullOrWhiteSpace(row.FilterActive) ? "No filter instructions" : row.FilterActive;
         RequestedPriority = FormatPriority(row.RequestedPriorityValue);
         EffectivePriority = IsArchived ? "Not applicable while archived" : row.Priority;
@@ -88,6 +89,8 @@ public sealed class EntityDetailsViewModel : INotifyPropertyChanged
     public string Notes { get; }
 
     public string FilterActive { get; }
+
+    public string SharedNotes { get; }
 
     public string RequestedPriority { get; }
 

@@ -76,8 +76,9 @@ installed app, so close one before opening the other.
    then choose **Choose CSV and Review** and apply.
 4. **Track progress** — Open the Tracker overview, select entities, and update their
    development status. Use filters and search to find work items.
-5. **Review reports** — Open **Reports** to see status distribution, implementation history,
-   and blocker trends.
+5. **Share a report** — On the Project dashboard, open **Project report**, choose the Trackers and
+   who it is for, and export one offline web page with status distribution, implementation
+   history, blocker trends, the dependency graph and every entity.
 
 ### Assign developers
 

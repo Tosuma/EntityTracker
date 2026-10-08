@@ -32,7 +32,8 @@ public sealed class OverviewExportServiceTests
             Assert.Contains($"Priority{delimiter}Rank{delimiter}Entity", csv);
             Assert.Contains("'=SUM(1,2)", csv);
             Assert.Contains("\"line 1\nline 2\"", csv);
-            Assert.Contains($"Notes{delimiter}Filter active", csv);
+            Assert.Contains($"Internal notes{delimiter}Shared notes{delimiter}Filter active", csv);
+            Assert.Contains("Agreed with the client", csv);
             Assert.Contains("\"Active only\nBy region\"", csv);
             Assert.DoesNotContain(Directory.GetFiles(directory), file => file.EndsWith(".tmp"));
         }
@@ -55,9 +56,12 @@ public sealed class OverviewExportServiceTests
             Assert.Equal(2, sheet.Cell(2, 1).GetDouble());
             Assert.Equal("AB, CD", sheet.Cell(2, 6).GetString());
             Assert.Equal("Alice Brown, Chris Doe", sheet.Cell(2, 12).GetString());
+            Assert.Equal("Internal notes", sheet.Cell(1, 15).GetString());
             Assert.Equal("Notes", sheet.Cell(2, 15).GetString());
-            Assert.Equal("Filter active", sheet.Cell(1, 16).GetString());
-            Assert.Equal("Active only\nBy region", sheet.Cell(2, 16).GetString());
+            Assert.Equal("Shared notes", sheet.Cell(1, 16).GetString());
+            Assert.Equal("Agreed with the client", sheet.Cell(2, 16).GetString());
+            Assert.Equal("Filter active", sheet.Cell(1, 17).GetString());
+            Assert.Equal("Active only\nBy region", sheet.Cell(2, 17).GetString());
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
@@ -67,6 +71,16 @@ public sealed class OverviewExportServiceTests
     {
         EntityDetailsViewModel details = new(Row("Example", "Notes"));
         Assert.Equal("Active only\nBy region", details.FilterActive);
+    }
+
+    [Fact]
+    public void DetailsShowInternalAndSharedNotesSeparately()
+    {
+        EntityDetailsViewModel details = new(Row("Example", "Vendor contract") with { SharedNotes = "" });
+        Assert.Equal("Vendor contract", details.Notes);
+        Assert.Equal("No shared notes", details.SharedNotes);
+        Assert.Equal("No internal notes", new EntityDetailsViewModel(Row("Example", "")).Notes);
+        Assert.Equal("Agreed with the client", new EntityDetailsViewModel(Row("Example", "")).SharedNotes);
     }
 
     private static EntityOverviewRow Row(string name, string notes) => new(
@@ -81,7 +95,8 @@ public sealed class OverviewExportServiceTests
             new EntityOverviewDeveloper(DeveloperId.New(), "AB", "Alice Brown"),
             new EntityOverviewDeveloper(DeveloperId.New(), "CD", "Chris Doe")
         ],
-        FilterActive: "Active only\nBy region");
+        FilterActive: "Active only\nBy region",
+        SharedNotes: "Agreed with the client");
 
     private static string TemporaryDirectory()
     {

@@ -227,6 +227,9 @@ EntityTracker and run:
 The Project/Tracker pair is matched case-insensitively, so same-named Trackers in different
 Projects remain unambiguous. The command replaces statuses and progress history for that Tracker
 only, without a backup; names, notes, dependencies, provenance, and archive state are preserved.
+Add `-DemoNotes` to also give some entities that have no notes example Internal notes and Shared
+notes, so the difference shows in the app and in Project reports; existing notes are never changed.
+The README screenshots and sample reports use demo notes.
 
 ## Import a PostgreSQL schema
 

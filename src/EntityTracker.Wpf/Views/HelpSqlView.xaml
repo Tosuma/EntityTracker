@@ -25,7 +25,7 @@
                     <StackPanel>
                         <TextBlock FontWeight="SemiBold" Text="Portfolio, Project, and Tracker" />
                         <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}"
-                                   Text="Portfolio lists Projects. A Project dashboard lists its Trackers and opens the Project Developers directory. Opening a Tracker makes it the active context for Overview, Archived, Schema synchronization, Add entity, and Reports. Developers can be added, edited, retired, and restored; entity responsibility still uses its existing text field." />
+                                   Text="Portfolio lists Projects. A Project dashboard lists its Trackers and opens the Project Developers directory. Opening a Tracker makes it the active context for Overview, Dependency graph, Archived, Schema synchronization, and Add entity. Developers can be added, edited, retired, and restored; entity responsibility still uses its existing text field." />
                     </StackPanel>
                 </Border>
                 <Border Margin="6,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
@@ -46,7 +46,7 @@
                     <StackPanel>
                         <TextBlock FontWeight="SemiBold" Text="Reports" />
                         <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}"
-                                   Text="Tracker Reports show progress history for a selected date range. Project and Portfolio reporting compare multiple Trackers without changing their stored data." />
+                                   Text="The Project report shows progress, the dependency graph and every entity for the Trackers you choose, and exports it as one offline web page for the client or for the team. Its Progress charts show the charts live for all chosen Trackers or one of them, and each chart can be saved or copied as an image. Project and Portfolio dashboards compare multiple Trackers without changing their stored data." />
                     </StackPanel>
                 </Border>
                 <Border Margin="0,0,6,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">

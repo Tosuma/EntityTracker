@@ -222,7 +222,8 @@ public sealed class EntityOverviewService
                     readiness.Blockers,
                     auditByEntityId[entity.Id],
                     currentDevelopers.GetValueOrDefault(entity.Id),
-                    entity.FilterActive);
+                    entity.FilterActive,
+                    entity.SharedNotes);
             });
 
         IEnumerable<EntityOverviewItem> unrankedItems = rankingResult.UnrankedEntities
@@ -250,7 +251,8 @@ public sealed class EntityOverviewService
                     readiness.Blockers,
                     auditByEntityId[entity.Id],
                     currentDevelopers.GetValueOrDefault(entity.Id),
-                    entity.FilterActive);
+                    entity.FilterActive,
+                    entity.SharedNotes);
             });
 
         IReadOnlyDictionary<EntityId, string[]> archivedDependencyNames =
@@ -284,7 +286,8 @@ public sealed class EntityOverviewService
                 [],
                 auditByEntityId[entity.Id],
                 currentDevelopers.GetValueOrDefault(entity.Id),
-                entity.FilterActive));
+                entity.FilterActive,
+                    entity.SharedNotes));
 
         return new EntityOverviewResult(
             rankedItems

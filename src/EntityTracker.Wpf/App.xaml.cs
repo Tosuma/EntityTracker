@@ -114,6 +114,16 @@ public partial class App : System.Windows.Application
                 TimeZoneInfo.Local,
                 serviceProvider.GetRequiredService<AggregateProgressDashboardBuilder>()));
             services.AddSingleton<ProgressChartPresentationBuilder>();
+            // Project reports use every built-in section plus the app's dependency graph; a new
+            // section provider is added to that list.
+            services.AddSingleton(serviceProvider => new EntityTracker.Reporting.ProjectReports.ProjectReportBuilder(
+                serviceProvider.GetRequiredService<IProjectRepository>(),
+                serviceProvider.GetRequiredService<ITrackerRepository>(),
+                serviceProvider.GetRequiredService<ProgressReportingService>(),
+                serviceProvider.GetRequiredService<AggregateProgressReportingService>(),
+                serviceProvider.GetRequiredService<EntityOverviewService>(),
+                ViewModels.DependencyGraph.DependencyGraphReportSectionProvider.AppSections));
+            services.AddSingleton<IProjectReportFiles, ProjectReportFiles>();
             services.AddSingleton<ProgressChartPngExporter>();
             services.AddSingleton<IProgressChartFilePicker, ProgressChartFilePicker>();
             services.AddSingleton<IOverviewExportFilePicker, OverviewExportFilePicker>();

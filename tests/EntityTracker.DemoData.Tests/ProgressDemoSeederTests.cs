@@ -11,6 +11,38 @@ namespace EntityTracker.DemoData.Tests;
 public sealed class ProgressDemoSeederTests
 {
     [Fact]
+    public async Task SeedAsync_WithDemoNotesFillsOnlyEntitiesWithoutNotes()
+    {
+        await using TemporaryDatabase file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        Tracker tracker = Assert.Single(await new SqliteTrackerRepository(database).GetAllAsync());
+        TrackedEntity[] active = Enumerable.Range(1, 12)
+            .Select(index => new TrackedEntity(
+                new EntityId(Guid.Parse($"30000000-0000-0000-0000-{index:D12}")),
+                tracker.Id,
+                $"Entity {index:D2}",
+                notes: index == 2 ? "Keep this internal note" : ""))
+            .ToArray();
+        await new SqliteTrackedStateStore(database).ApplyAsync(tracker.Id,
+            new TrackedStateChangeSet(active, [], [], [], [], []));
+
+        await new ProgressDemoSeeder().SeedAsync(file.DatabasePath, new ProgressDemoOptions(
+            days: 30, seed: 7, endDate: new DateOnly(2026, 3, 31), timeZone: TimeZoneInfo.Utc, demoNotes: true));
+
+        SqliteDatabase seeded = new(file.DatabasePath);
+        await seeded.InitializeAsync();
+        TrackedEntity[] entities = (await new SqliteEntityRepository(seeded).GetAllAsync(tracker.Id))
+            .OrderBy(static entity => entity.SourceName, StringComparer.Ordinal).ToArray();
+        Assert.Equal("Keep this internal note", entities[1].Notes);
+        Assert.Equal(string.Empty, entities[1].SharedNotes);
+        TrackedEntity[] withShared = entities.Where(static entity => entity.SharedNotes.Length > 0).ToArray();
+        Assert.InRange(withShared.Length, 2, 4);
+        Assert.Contains(withShared, static entity => entity.Notes.Length > 0);
+        Assert.Contains(entities, static entity => entity.Notes.Length == 0 && entity.SharedNotes.Length == 0);
+    }
+
+    [Fact]
     public async Task SeedAsync_ReplacesProgressButPreservesTrackedSchemaData()
     {
         await using TemporaryDatabase file = new();

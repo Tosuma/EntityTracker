@@ -7,7 +7,7 @@ public static class ProjectSnapshotValidator
     public static void Validate(ProjectSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        if (snapshot.FormatVersion is not (1 or 2 or 3 or ProjectSnapshot.CurrentFormatVersion))
+        if (snapshot.FormatVersion is not (1 or 2 or 3 or 4 or ProjectSnapshot.CurrentFormatVersion))
         {
             throw new ProjectSnapshotFormatVersionException(snapshot.FormatVersion);
         }
@@ -58,7 +58,7 @@ public static class ProjectSnapshotValidator
                 if (entity is null || entity.Id == Guid.Empty || entity.TrackerId != tracker.Id ||
                     !entityIds.Add(entity.Id) || !allEntityIds.Add(entity.Id) ||
                     string.IsNullOrWhiteSpace(entity.SourceName) || entity.Notes is null ||
-                    entity.FilterActive is null ||
+                    entity.FilterActive is null || entity.SharedNotes is null ||
                     entity.ResponsibleDeveloper is null || entity.GroupName is null ||
                     !names.Add(entity.SourceName.Trim()) ||
                     entity.Dependencies is null || entity.UnresolvedDependencies is null ||

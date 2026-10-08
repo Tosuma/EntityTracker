@@ -38,8 +38,9 @@ EntityTracker keeps those concerns separate:
 - **Workflow visibility** — combine Excel-style filters on Responsible dev, Group, Status, and
   Work status; sort workflow statuses in their defined order; and search by entity or dependency
   name.
-- **Progress reporting** — inspect current status, implementation history, ready-versus-blocked
-  trends, and weekly change; copy or export charts as PNG files.
+- **Progress reporting** — share a Project report with the client or the team: current status,
+  implementation history, ready-versus-blocked trends, weekly change, the dependency graph and every
+  entity in one offline web page; copy or save charts as PNG files.
 - **Project portfolio** — compare entity-weighted Project/Tracker progress, persisted trends, and
   normalized entity differences without opening another window or database.
 - **Safe catalog management** — create blank, CSV-backed, or copied Trackers and rename, recycle,
@@ -57,7 +58,7 @@ EntityTracker keeps those concerns separate:
 2. Choose Complete or Partial synchronization and review every actionable difference.
 3. Apply the reviewed schema while EntityTracker preserves stable progress, notes, and history.
 4. Use dependency-safe rank, readiness, blockers, filters, and search to choose the next work item.
-5. Update development status and use Reports to communicate delivery trends.
+5. Update development status and share a Project report to communicate delivery trends.
 
 ## Screenshots
 
@@ -101,9 +102,9 @@ archived entities, without deleting their history.
       <img src="images/light/schema-synchronization.png" alt="Schema Synchronization page with Complete and Partial import choices" />
     </td>
     <td width="50%">
-      <strong>Report progress over time</strong><br />
-      See manager summaries, status distribution, implementation history, and blockers.<br /><br />
-      <img src="images/light/progress.png" alt="Reports page with status pie chart and implementation history charts" />
+      <strong>Report progress to the client</strong><br />
+      Export summaries, charts, the dependency graph, and entities as one offline web page.<br /><br />
+      <img src="images/light/project-report.png" alt="Project report page with Tracker selection, audience, progress period and chart images" />
     </td>
   </tr>
   <tr>
@@ -114,7 +115,7 @@ archived entities, without deleting their history.
     </td>
     <td width="50%">
       <strong>Edit without losing imported facts</strong><br />
-      Update development status, notes, lifecycle, and manual dependency corrections.<br /><br />
+      Update development status, internal and shared notes, lifecycle, and manual dependency corrections.<br /><br />
       <img src="images/light/edit-entity.png" alt="Edit Entity modal with status, notes, dependencies, and archive controls" />
     </td>
   </tr>
@@ -263,6 +264,10 @@ rank, provenance, assignment, full notes, effective dependencies, blockers, and 
 Use **Edit** in the details header to open the entity editor. Opening or closing the pane does not
 disturb bulk row selection.
 
+Every entity has two kinds of notes. **Internal notes** are only for the team and never appear in
+a client report. **Shared notes** are meant for the client and appear in both client and internal
+Project reports. Both are synchronized with the Project's Git repository.
+
 The Add Entity and edit workflows use searchable Fluent suggestion controls. Unknown dependency
 names are added only through the explicit **Add as unresolved** action, while archive remains a
 separate reversible action with confirmation.
@@ -341,6 +346,43 @@ work just as in the solar system. The chosen view is remembered.
 
 ![Dependency tree zoomed in on a selected entity with its direct links highlighted](images/light/dependency-graph-tree-selected.png)
 
+### Share a Project report
+
+Open **Project report** from the Project dashboard to create a report for the client, who never
+needs EntityTracker. Tick the Trackers to include (one, a few or all), choose who it is for, and
+pick the progress period: all history, the last 30, 60 or 90 days, or a custom range. **Export HTML…** saves a single web page that works completely offline:
+it holds the summary, every progress chart (for all selected Trackers together or one at a time),
+and a table of the entities with search and filters. The search matches names the same way as the
+app, so "cust pref" and "legalentity" work there too. The status filters always list every status
+with its count, so the reader can pick "Reworking" even when nothing is being reworked. Point at a
+chart, or focus it and use the arrow keys, to read its values.
+
+The report also holds each Tracker's **dependency tree**, laid out as in the app and fitted to the
+width of the page. The boxes show each entity's status colour; point at one for its name, status and
+links, and click it to highlight its dependencies, dependents or direct links (Ctrl+click adds more).
+The tree does not pan or zoom, so it prints exactly as it looks. The search marks matching entities
+in the tree, and clicking an entity's name in the table shows it there. **Preview in browser** opens the same page without saving it.
+
+To get a PDF, use **Print / Save as PDF** in the report. The printed report starts with its title,
+the chosen Trackers, a contents list and the summary; charts sit two per row and are never split;
+the dependency tree gets a page of its own; and the entity table prints the rows you have searched
+or filtered for, says which ones, and repeats its header on every page. Each page carries the
+report's name and a page number.
+
+Under **Progress charts** on the same page, the report's four charts are shown live in the app for the
+chosen period: for all chosen Trackers together or for one of them. Point at a chart to read its values,
+and save or copy any chart as a PNG image for slides or e-mails.
+
+![Progress charts on the Project report page](images/light/project-report-charts.png)
+
+A **Client report** shows progress, statuses, Filter active, shared notes and dependencies, and leaves out
+internal notes, developer names and technical details such as origin and missing references; they
+are left out of the file itself, not just hidden. An **Internal report** includes everything.
+SharePoint usually downloads `.html` files instead of showing them; the downloaded file opens in
+any browser.
+
+![Project report page with Tracker selection, audience and progress period](images/light/project-report.png)
+
 ### Import review details
 
 Changed entities show dependency additions and removals directly, with any required progress choice
@@ -363,7 +405,7 @@ until matching entities become available.
 ### Extract a PostgreSQL schema
 
 Help & SQL explains Portfolio, Project, and Tracker context; statuses and blockers; import modes;
-Reports; and lifecycle actions. It also provides the versioned PostgreSQL query used to produce a
+the Project report; and lifecycle actions. It also provides the versioned PostgreSQL query used to produce a
 compatible schema CSV without requiring a live database connection inside EntityTracker.
 
 ![EntityTracker Help and SQL guidance](images/light/help-and-sql.png)

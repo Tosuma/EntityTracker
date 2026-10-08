@@ -262,10 +262,10 @@ public sealed class ShellViewModelTests
         Assert.Equal(harness.DefaultTracker.Id, shell.SelectedTracker?.Id);
         Assert.Equal(ShellDestination.Overview, shell.SelectedDestination);
         Assert.True(shell.IsTrackerWorkspace);
-        Assert.True(shell.NavigateCommand.CanExecute(ShellDestination.Reports));
+        Assert.True(shell.NavigateCommand.CanExecute(ShellDestination.Archived));
 
-        Assert.True(await shell.NavigateAsync(ShellDestination.Reports));
-        Assert.Equal(MainWindowTab.Reports, shell.CurrentWorkspace?.SelectedTab);
+        Assert.True(await shell.NavigateAsync(ShellDestination.Archived));
+        Assert.Equal(MainWindowTab.Archived, shell.CurrentWorkspace?.SelectedTab);
         Assert.True(await shell.NavigateAsync(ShellDestination.DependencyGraph));
         Assert.Equal(MainWindowTab.DependencyGraph, shell.CurrentWorkspace?.SelectedTab);
         Assert.True(shell.IsDependencyGraph);
@@ -406,7 +406,7 @@ public sealed class ShellViewModelTests
         Assert.False(next.DependencyGraph.IsSuggestionsOpen);
 
         next.ActiveTable.SearchQuery = "invoice";
-        await Task.Delay(400);
+        await WaitUntilAsync(() => !next.ActiveTable.IsSearchPending);
         Assert.True(await shell.SelectTrackerAsync(shell.Trackers.Single(item => item.Id == harness.DefaultTracker.Id)));
         Assert.Same(first, shell.CurrentWorkspace);
         Assert.Equal("invoice", first.ActiveTable.SearchQuery);
@@ -436,6 +436,188 @@ public sealed class ShellViewModelTests
 
         Assert.True(next.ArchivedTable.IsSearchOpen);
         Assert.Equal("kept", next.ArchivedTable.SearchQuery);
+    }
+
+    [Fact]
+    public async Task ProjectReport_ExportsTheChosenTrackersForTheClientWithoutInternalNotes()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        Tracker second = await harness.TrackerManagement.CreateBlankAsync(harness.DefaultProject.Id, "Second tracker");
+        Tracker third = await harness.TrackerManagement.CreateBlankAsync(harness.DefaultProject.Id, "Third tracker");
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "customer_account",
+            notes: "Internal: vendor contract expires", filterActive: "Only active customers",
+            sharedNotes: "Agreed: migrate in June");
+        await harness.AddEntityAsync(second.Id, "invoice_line");
+        await harness.AddEntityAsync(third.Id, "not_in_the_report");
+        string exportPath = Path.Combine(Path.GetTempPath(), $"report-{Guid.NewGuid():N}.html");
+        harness.ReportFiles.ExportPath = exportPath;
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        try
+        {
+            Assert.True(await shell.NavigateAsync(ShellDestination.ProjectReport));
+            ProjectReportViewModel report = Assert.IsType<ProjectReportViewModel>(shell.ProjectReport);
+            Assert.True(shell.IsProjectReport);
+            Assert.Equal(3, report.Trackers.Count);
+            report.Trackers.Single(choice => choice.Tracker.Id == third.Id).IsSelected = false;
+
+            report.ExportCommand.Execute(null);
+            // The success notice is posted once the file has been written completely.
+            await WaitUntilAsync(() => Task.FromResult(shell.Notifications.Items.Any(item => item.Title == "Project report")));
+
+            string html = await File.ReadAllTextAsync(exportPath);
+            Assert.Contains("customer_account", html, StringComparison.Ordinal);
+            Assert.Contains("invoice_line", html, StringComparison.Ordinal);
+            Assert.Contains("Only active customers", html, StringComparison.Ordinal);
+            Assert.Contains("Agreed: migrate in June", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("not_in_the_report", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("vendor contract", html, StringComparison.Ordinal);
+            // Each chosen Tracker gets its own dependency graph, and the unchosen one none.
+            Assert.Contains("\"kind\":\"graph\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"" + EntityTracker.Reporting.ProjectReports.ReportContext.ScopeKey(second.Id) + "\":{\"nodes\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain(EntityTracker.Reporting.ProjectReports.ReportContext.ScopeKey(third.Id), html, StringComparison.Ordinal);
+            Assert.Contains("Client report", harness.ReportFiles.SuggestedName, StringComparison.Ordinal);
+            Assert.Contains(shell.Notifications.Items, item => item.Title == "Project report" && item.Kind == NotificationKind.Success);
+
+            report.Audience = EntityTracker.Reporting.ProjectReports.ReportAudience.Internal;
+            report.PreviewCommand.Execute(null);
+            await WaitUntilAsync(() => Task.FromResult(harness.ReportFiles.PreviewHtml is not null));
+            Assert.Contains("vendor contract", harness.ReportFiles.PreviewHtml, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(exportPath);
+        }
+    }
+
+    [Fact]
+    public async Task ProjectReport_SavesAndCopiesChartImagesForTheChosenTrackers()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "customer_account");
+        string chartPath = Path.Combine(Path.GetTempPath(), $"chart-{Guid.NewGuid():N}.png");
+        harness.ReportFiles.ChartPath = chartPath;
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        try
+        {
+            Assert.True(await shell.NavigateAsync(ShellDestination.ProjectReport));
+            ProjectProgressChartsViewModel charts = shell.ProjectReport!.Charts;
+            await WaitUntilAsync(() => Task.FromResult(charts.HasHistoricalData && !charts.IsBusy));
+            Assert.NotNull(charts.Presentation);
+            Assert.NotEmpty(charts.Presentation!.ImplementedSeries);
+
+            charts.SaveChartCommand.Execute(EntityTracker.Reporting.ProgressChartKind.ImplementedOverTime);
+            await WaitUntilAsync(() => Task.FromResult(shell.Notifications.Items.Any(item => item.Title == "Chart image")));
+
+            Assert.Contains(shell.Notifications.Items, item => item.Title == "Chart image" && item.Kind == NotificationKind.Success);
+            // Named after the Project, the chart and the date of its data.
+            Assert.Matches(@"-implemented-over-time-[0-9]{8}\.png$", harness.ReportFiles.SuggestedChartName);
+            Assert.Equal([0x89, 0x50, 0x4E, 0x47], (await File.ReadAllBytesAsync(chartPath)).Take(4).ToArray());
+
+            charts.CopyChartCommand.Execute(EntityTracker.Reporting.ProgressChartKind.CurrentStatus);
+            await WaitUntilAsync(() => Task.FromResult(harness.ReportFiles.CopiedChart is not null));
+            Assert.Equal(0x89, harness.ReportFiles.CopiedChart![0]);
+        }
+        finally
+        {
+            File.Delete(chartPath);
+        }
+    }
+
+    [Fact]
+    public async Task ProjectReport_ChartsShowAllChosenTrackersOrOneAndFollowTheTicks()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        Tracker second = await harness.TrackerManagement.CreateBlankAsync(harness.DefaultProject.Id, "Second tracker");
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "customer_account");
+        await harness.AddEntityAsync(second.Id, "invoice_line");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        Assert.True(await shell.NavigateAsync(ShellDestination.ProjectReport));
+        ProjectReportViewModel report = shell.ProjectReport!;
+        ProjectProgressChartsViewModel charts = report.Charts;
+        await WaitUntilAsync(() => Task.FromResult(charts.Presentation is not null && !charts.IsBusy));
+
+        Assert.Equal(["All chosen Trackers", "Second tracker"],
+            charts.ScopeOptions.Select(option => option.Name).Where(name => name != harness.DefaultTracker.Name));
+        Assert.Equal(3, charts.ScopeOptions.Count);
+        Assert.Null(charts.SelectedScope.Tracker);
+
+        charts.SelectedScope = charts.ScopeOptions.Single(option => option.Tracker?.Id == second.Id);
+        await WaitUntilAsync(() => Task.FromResult(!charts.IsBusy));
+        Assert.Equal(second.Id, charts.SelectedScope.Tracker?.Id);
+
+        // Unticking the shown Tracker goes back to all chosen Trackers; one Tracker left needs no choice.
+        report.Trackers.Single(choice => choice.Tracker.Id == second.Id).IsSelected = false;
+        Assert.Null(charts.SelectedScope.Tracker);
+        Assert.Single(charts.ScopeOptions);
+        await WaitUntilAsync(() => Task.FromResult(!charts.IsBusy && charts.Presentation is not null));
+    }
+
+    [Fact]
+    public async Task ProjectReport_CustomRangeStartsAtTheLast30DaysAndMustBeValid()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "customer_account");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        Assert.True(await shell.NavigateAsync(ShellDestination.ProjectReport));
+        ProjectReportViewModel report = shell.ProjectReport!;
+
+        report.Range = ProgressRangePreset.Custom;
+
+        Assert.True(report.IsCustomRange);
+        Assert.Equal(DateTime.Today, report.CustomTo);
+        Assert.Equal(DateTime.Today.AddDays(-30), report.CustomFrom);
+        Assert.True(report.ExportCommand.CanExecute(null));
+
+        report.CustomFrom = DateTime.Today.AddDays(1);
+        Assert.True(report.HasRangeValidationError);
+        Assert.False(report.ExportCommand.CanExecute(null));
+        Assert.Null(report.Charts.Presentation);
+
+        report.CustomFrom = DateTime.Today.AddDays(-7);
+        Assert.False(report.HasRangeValidationError);
+        Assert.True(report.PreviewCommand.CanExecute(null));
+        report.PreviewCommand.Execute(null);
+        await WaitUntilAsync(() => Task.FromResult(harness.ReportFiles.PreviewHtml is not null));
+    }
+
+    [Fact]
+    public void TheShellNoLongerOffersTheTrackerReportsPage()
+    {
+        Assert.DoesNotContain(Enum.GetNames<ShellDestination>(), name => name == "Reports");
+        Assert.DoesNotContain(Enum.GetNames<MainWindowTab>(), name => name == "Reports");
+    }
+
+    [Fact]
+    public async Task ProjectReport_NeedsAtLeastOneTracker()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        Assert.True(await shell.NavigateAsync(ShellDestination.ProjectReport));
+        ProjectReportViewModel report = shell.ProjectReport!;
+
+        report.SelectNoneCommand.Execute(null);
+
+        Assert.False(report.HasSelection);
+        Assert.False(report.ExportCommand.CanExecute(null));
+        Assert.False(report.PreviewCommand.CanExecute(null));
+        Assert.Equal("No Tracker selected · Client report", report.IncludedSummary);
+        report.SelectAllCommand.Execute(null);
+        Assert.True(report.ExportCommand.CanExecute(null));
     }
 
     [Fact]
@@ -671,6 +853,34 @@ public sealed class ShellViewModelTests
         while (!await condition()) await Task.Delay(10, timeout.Token);
     }
 
+    /// <summary>Saves exported and previewed reports in memory instead of on disk or in a browser.</summary>
+    private sealed class RecordingReportFiles : IProjectReportFiles
+    {
+        public string? ExportPath { get; set; }
+        public string? SuggestedName { get; private set; }
+        public string? PreviewHtml { get; private set; }
+
+        public string? SelectExportPath(string suggestedFileName)
+        {
+            SuggestedName = suggestedFileName;
+            return ExportPath;
+        }
+
+        public void OpenPreview(string html, string fileName) => PreviewHtml = html;
+
+        public string? ChartPath { get; set; }
+        public string? SuggestedChartName { get; private set; }
+        public byte[]? CopiedChart { get; private set; }
+
+        public string? SelectChartPath(string suggestedFileName)
+        {
+            SuggestedChartName = suggestedFileName;
+            return ChartPath;
+        }
+
+        public void CopyChart(byte[] png) => CopiedChart = png;
+    }
+
     private sealed class ShellHarness : IAsyncDisposable
     {
         private readonly string _directory;
@@ -855,10 +1065,6 @@ public sealed class ShellViewModelTests
                     resolver,
                     ranker),
                 adapters,
-                new ProgressReportingService(history, TimeZoneInfo.Utc),
-                chartPresentation,
-                new ProgressChartPngExporter(chartPresentation),
-                adapters,
                 adapters,
                 adapters,
                 adapters,
@@ -885,7 +1091,7 @@ public sealed class ShellViewModelTests
             Tracker defaultTracker = Assert.Single(await trackers.GetAllAsync());
             Project defaultProject = Assert.IsType<Project>(
                 await projects.GetAsync(defaultTracker.ProjectId));
-            return new ShellHarness(
+            ShellHarness harness = new(
                 directory,
                 stateStore,
                 projects,
@@ -900,7 +1106,15 @@ public sealed class ShellViewModelTests
                 settings,
                 appearance,
                 adapters, developers, identity, periods);
+            harness.ReportBuilder = new EntityTracker.Reporting.ProjectReports.ProjectReportBuilder(
+                projects, trackers, new ProgressReportingService(history, TimeZoneInfo.Utc),
+                aggregateReporting, overview, DependencyGraphReportSectionProvider.AppSections);
+            return harness;
         }
+
+        public EntityTracker.Reporting.ProjectReports.ProjectReportBuilder? ReportBuilder { get; private set; }
+
+        public RecordingReportFiles ReportFiles { get; } = new();
 
         public ShellViewModel CreateShell(
             EntityTrackerSettings initialSettings,
@@ -919,7 +1133,9 @@ public sealed class ShellViewModelTests
                 initialSettings,
                 developerService: _developers,
                 localIdentitySettings: new LocalProjectIdentitySettingsViewModel(Identity),
-                graphSettings: graphSettings);
+                graphSettings: graphSettings,
+                reportBuilder: ReportBuilder,
+                reportFiles: ReportFiles);
 
         public Task<ProjectDeveloper> CreateDeveloperAsync(string initials) =>
             _developers.CreateAsync(DefaultProject.Id, initials);
@@ -933,11 +1149,13 @@ public sealed class ShellViewModelTests
             return id;
         }
 
-        public Task AddEntityAsync(TrackerId trackerId, string name) =>
+        public Task AddEntityAsync(TrackerId trackerId, string name, string notes = "", string filterActive = "",
+            string sharedNotes = "") =>
             _stateStore.ApplyAsync(
                 trackerId,
                 new TrackedStateChangeSet(
-                    [new TrackedEntity(EntityId.New(), trackerId, name)],
+                    [new TrackedEntity(EntityId.New(), trackerId, name, notes: notes, filterActive: filterActive,
+                        sharedNotes: sharedNotes)],
                     [], [], [], [], [],
                     progressSnapshotAfterChanges:
                         new ProgressSnapshotState(1, 0, 0, 0, 0, 0)));

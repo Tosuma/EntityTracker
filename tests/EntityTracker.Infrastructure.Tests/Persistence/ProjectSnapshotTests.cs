@@ -15,7 +15,7 @@ public sealed class ProjectSnapshotTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(5)]
+    [InlineData(6)]
     public void UnsupportedManifestFormat_ReportsApplicationAndProjectVersions(int projectVersion)
     {
         ProjectSnapshot snapshot = CompleteSnapshot();
@@ -82,6 +82,49 @@ public sealed class ProjectSnapshotTests
             .Single(pair => pair.Key.EndsWith($"entities/{entity.Id:D}.json", StringComparison.Ordinal)).Value));
         Assert.Equal(string.Empty, codec.Decode(legacyPackage.Files).Trackers
             .SelectMany(item => item.Entities).Single(item => item.Id == entity.Id).FilterActive);
+    }
+
+    [Fact]
+    public async Task SharedNotes_RoundTripThroughSqliteAndVersionedSnapshots()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        ProjectSnapshot seed = CompleteSnapshot();
+        SnapshotTracker tracker = seed.Trackers[0];
+        SnapshotEntity entity = tracker.Entities[0] with
+        {
+            Notes = "Internal: vendor contract",
+            SharedNotes = "  Agreed with the client\nto migrate in June  "
+        };
+        seed = seed with { Trackers = [tracker with
+        {
+            Entities = tracker.Entities.Select(item => item.Id == entity.Id ? entity : item).ToArray()
+        }, .. seed.Trackers.Skip(1)] };
+
+        SqliteProjectSnapshotStore store = new(database);
+        await store.ApplyAsync(seed, 0);
+        ProjectSnapshot persisted = Assert.IsType<ProjectSnapshot>(
+            (await store.ReadAsync(new ProjectId(seed.Project.Id))).Snapshot);
+        SnapshotEntity loaded = persisted.Trackers.SelectMany(t => t.Entities).Single(item => item.Id == entity.Id);
+        Assert.Equal(entity.SharedNotes, loaded.SharedNotes);
+        Assert.Equal(entity.Notes, loaded.Notes);
+
+        ProjectSnapshotJsonCodec codec = new();
+        ProjectSnapshotPackage package = codec.Encode(persisted);
+        Assert.Equal(entity.SharedNotes, codec.Decode(package.Files).Trackers.SelectMany(t => t.Entities)
+            .Single(item => item.Id == entity.Id).SharedNotes);
+        // Entities without Shared notes keep their files as they were, so the new field does not rewrite them.
+        SnapshotEntity other = persisted.Trackers.SelectMany(t => t.Entities).First(item => item.Id != entity.Id);
+        Assert.DoesNotContain("sharedNotes", Encoding.UTF8.GetString(package.Files
+            .Single(pair => pair.Key.EndsWith($"entities/{other.Id:D}.json", StringComparison.Ordinal)).Value));
+
+        ProjectSnapshot versionFour = persisted with { FormatVersion = 4 };
+        ProjectSnapshotPackage olderPackage = codec.Encode(versionFour);
+        Assert.DoesNotContain("sharedNotes", Encoding.UTF8.GetString(olderPackage.Files
+            .Single(pair => pair.Key.EndsWith($"entities/{entity.Id:D}.json", StringComparison.Ordinal)).Value));
+        Assert.Equal(string.Empty, codec.Decode(olderPackage.Files).Trackers.SelectMany(t => t.Entities)
+            .Single(item => item.Id == entity.Id).SharedNotes);
     }
 
     [Fact]
@@ -252,7 +295,7 @@ public sealed class ProjectSnapshotTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => store.ApplyAsync(snapshot, revision - 1));
         Assert.Throws<ProjectSnapshotFormatVersionException>(() =>
-            ProjectSnapshotValidator.Validate(snapshot with { FormatVersion = 5 }));
+            ProjectSnapshotValidator.Validate(snapshot with { FormatVersion = 6 }));
         Assert.Throws<InvalidDataException>(() => ProjectSnapshotValidator.Validate(snapshot with
         {
             Trackers = [snapshot.Trackers[0], snapshot.Trackers[0]]
@@ -276,7 +319,7 @@ public sealed class ProjectSnapshotTests
         Assert.Throws<InvalidDataException>(() => codec.Decode(malformed));
         malformed[".entitytracker/project.json"] = package.Files[".entitytracker/project.json"];
         malformed[".entitytracker/manifest.json"] = Encoding.UTF8.GetBytes(
-            "{\"formatVersion\":5,\"projectId\":\"" + snapshot.Project.Id + "\"}");
+            "{\"formatVersion\":6,\"projectId\":\"" + snapshot.Project.Id + "\"}");
         Assert.Throws<ProjectSnapshotFormatVersionException>(() => codec.Decode(malformed));
 
         ProjectSnapshotRead after = await store.ReadAsync(new ProjectId(snapshot.Project.Id));

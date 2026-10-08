@@ -94,7 +94,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         EntityDependencyEditorService entityDependencyEditorService,
         EntityLifecycleService entityLifecycleService,
         ICsvFilePicker filePicker,
-        ProgressDashboardViewModel progressDashboard,
         ISchemaSynchronizationConfirmation confirmationService,
         IContextDiscardConfirmation discardConfirmation,
         ILoggerFactory? loggerFactory = null,
@@ -115,7 +114,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         ArgumentNullException.ThrowIfNull(entityDependencyEditorService);
         ArgumentNullException.ThrowIfNull(entityLifecycleService);
         ArgumentNullException.ThrowIfNull(filePicker);
-        ArgumentNullException.ThrowIfNull(progressDashboard);
         ArgumentNullException.ThrowIfNull(confirmationService);
         ArgumentNullException.ThrowIfNull(discardConfirmation);
         _trackerId = trackerId;
@@ -141,7 +139,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         ArchivedTable.ProjectionChanging += OnArchivedTableProjectionChanging;
         ActiveTable.PropertyChanged += OnActiveTablePropertyChanged;
         ArchivedTable.PropertyChanged += OnArchivedTablePropertyChanged;
-        Progress = progressDashboard;
         DependencyGraph = new DependencyGraphViewModel(OpenEntityDetails, graphFilePicker, notifications,
             effectiveLoggerFactory.CreateLogger<DependencyGraphViewModel>());
         Review = new SchemaSynchronizationReviewViewModel();
@@ -353,7 +350,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public EntityDependencyEditorViewModel Editor { get; }
 
-    public ProgressDashboardViewModel Progress { get; }
 
     public DependencyGraphViewModel DependencyGraph { get; }
 
@@ -952,7 +948,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private async Task LoadOverviewAndProgressAsync(CancellationToken cancellationToken)
     {
         await LoadOverviewAsync(cancellationToken);
-        await Progress.LoadAsync(cancellationToken);
         LatestImportSummary = await _synchronizationService.GetLatestImportAsync(
             _trackerId,
             cancellationToken);
@@ -1409,7 +1404,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(IsReconciledSummarySelected));
     }
 
-    private static EntityOverviewRow CreateOverviewRow(EntityOverviewItem item)
+    internal static EntityOverviewRow CreateOverviewRow(EntityOverviewItem item)
     {
         bool isArchived = item.LifecycleState == EntityLifecycleState.Archived;
         return new EntityOverviewRow(
@@ -1442,7 +1437,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             item.AuditTimestamps.SchemaUpdatedAtUtc,
             item.AuditTimestamps.ProgressUpdatedAtUtc,
             item.CurrentDevelopers,
-            item.FilterActive);
+            item.FilterActive,
+            item.SharedNotes);
     }
 
     private static string FormatStatus(DevelopmentStatus status) => status switch

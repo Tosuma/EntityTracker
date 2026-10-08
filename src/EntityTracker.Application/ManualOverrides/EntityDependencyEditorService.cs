@@ -301,12 +301,14 @@ public sealed class EntityDependencyEditorService
         string? groupName,
         CancellationToken cancellationToken = default,
         IReadOnlyList<DeveloperId>? developerIds = null,
-        string? filterActive = null)
+        string? filterActive = null,
+        string? sharedNotes = null)
     {
         ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(notes);
         filterActive ??= plan.Entity.FilterActive;
+        sharedNotes ??= plan.Entity.SharedNotes;
         if (!plan.IsValid)
         {
             throw new InvalidOperationException(
@@ -328,10 +330,12 @@ public sealed class EntityDependencyEditorService
             requestedPriority,
             responsibleDeveloper,
             groupName,
-            filterActive);
+            filterActive,
+            sharedNotes);
         TrackedEntity[] progressUpdates =
             status != plan.Entity.Status || !string.Equals(notes, plan.Entity.Notes, StringComparison.Ordinal) ||
-            !string.Equals(filterActive, plan.Entity.FilterActive, StringComparison.Ordinal)
+            !string.Equals(filterActive, plan.Entity.FilterActive, StringComparison.Ordinal) ||
+            !string.Equals(sharedNotes, plan.Entity.SharedNotes, StringComparison.Ordinal)
                 ? [updatedEntity]
                 : [];
         TrackedEntity[] priorityUpdates = requestedPriority != plan.Entity.RequestedPriority

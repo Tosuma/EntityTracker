@@ -77,10 +77,12 @@ public sealed class EntityTableViewModelTests
     }
 
     /// <summary>Types a search and waits out the table's short debounce.</summary>
+    /// <summary>Types a search and waits until the table has applied it, however busy the machine is.</summary>
     private static async Task SearchAsync(EntityTableViewModel table, string query)
     {
         table.SearchQuery = query;
-        await Task.Delay(400);
+        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
+        while (table.IsSearchPending) await Task.Delay(10, timeout.Token);
     }
 
     [Fact]

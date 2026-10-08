@@ -31,7 +31,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT id, tracker_id, source_name, development_status, notes, lifecycle_state, provenance,
-                   requested_priority, group_name, filter_active
+                   requested_priority, group_name, filter_active, shared_notes
             FROM tracked_entities
             WHERE tracker_id = $trackerId AND id = $id;
             """;
@@ -54,7 +54,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT id, tracker_id, source_name, development_status, notes, lifecycle_state, provenance,
-                   requested_priority, group_name, filter_active
+                   requested_priority, group_name, filter_active, shared_notes
             FROM tracked_entities
             WHERE tracker_id = $trackerId
             ORDER BY source_name COLLATE NOCASE, id;
@@ -99,6 +99,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
                 development_status,
                 notes,
                 filter_active,
+                shared_notes,
                 lifecycle_state,
                 provenance,
                 requested_priority,
@@ -116,6 +117,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
                 $developmentStatus,
                 $notes,
                 $filterActive,
+                $sharedNotes,
                 $lifecycleState,
                 $provenance,
                 $requestedPriority,
@@ -189,6 +191,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
         command.Parameters.AddWithValue("$developmentStatus", entity.Status.ToString());
         command.Parameters.AddWithValue("$notes", entity.Notes);
         command.Parameters.AddWithValue("$filterActive", entity.FilterActive);
+        command.Parameters.AddWithValue("$sharedNotes", entity.SharedNotes);
         command.Parameters.AddWithValue("$lifecycleState", entity.LifecycleState.ToString());
         command.Parameters.AddWithValue("$provenance", entity.Provenance.ToString());
         command.Parameters.AddWithValue(
@@ -216,6 +219,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
         int? requestedPriority = reader.IsDBNull(7) ? null : reader.GetInt32(7);
         string groupName = reader.GetString(8);
         string filterActive = reader.GetString(9);
+        string sharedNotes = reader.GetString(10);
 
         return new TrackedEntity(
             id,
@@ -228,6 +232,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
             requestedPriority,
             null,
             groupName,
-            filterActive);
+            filterActive,
+            sharedNotes);
     }
 }
