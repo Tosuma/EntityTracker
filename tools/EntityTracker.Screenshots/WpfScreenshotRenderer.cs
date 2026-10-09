@@ -25,6 +25,8 @@ internal sealed class WpfScreenshotRenderer(Window window, string outputDirector
     internal async Task CaptureAsync(string fileName, int settleMilliseconds = 150)
     {
         await SettleAsync(settleMilliseconds);
+        // The main window is always 1920 × 1080; dialogs keep their own size.
+        if (_window is MainWindow) ScreenshotWindowSize.EnsureFullSize(Root);
         Save(RenderVisual(Root, includePageBackground: true), Path.Combine(_outputDirectory, fileName));
     }
 
