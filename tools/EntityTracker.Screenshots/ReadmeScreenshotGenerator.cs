@@ -356,6 +356,8 @@ internal sealed class ReadmeScreenshotGenerator
             await renderer.CaptureAsync("settings-sync.png");
             shell.SelectedSettingsCategory = SettingsCategory.About;
             await renderer.CaptureAsync("settings-about.png");
+            await CaptureTrackerSyncAsync(provider, shell, tracker, renderer, cancellationToken);
+
             window.ShowUpdatePreview("app-v1.0.0");
             await renderer.CaptureAsync("app-update-required.png");
         }
@@ -367,6 +369,51 @@ internal sealed class ReadmeScreenshotGenerator
                 System.Windows.Application.Current.MainWindow = null;
             }
         }
+    }
+
+    /// <summary>
+    /// Changes Core schema after Release readiness was copied from it, then shows the sync dialog.
+    /// It runs last because it changes Core schema.
+    /// </summary>
+    private static async Task CaptureTrackerSyncAsync(
+        IServiceProvider provider,
+        ShellViewModel shell,
+        Tracker source,
+        WpfScreenshotRenderer renderer,
+        CancellationToken cancellationToken)
+    {
+        TrackedEntity[] entities = (await provider.GetRequiredService<IEntityRepository>()
+            .GetAllAsync(source.Id, cancellationToken)).ToArray();
+        TrackedEntity customer = entities.Single(entity => entity.SourceName == "customer_account");
+        TrackedEntity currency = entities.Single(entity => entity.SourceName == "currency_code");
+        customer.ChangeRequestedPriority(2);
+        customer.ChangeGroupName("Billing");
+        TrackedEntity reminder = new(EntityId.New(), source.Id, "payment_reminder",
+            requestedPriority: 3, groupName: "Billing");
+        await provider.GetRequiredService<ITrackedStateStore>().ApplyAsync(source.Id,
+            new TrackedStateChangeSet([reminder], [], [], [reminder.Id],
+                [
+                    new PersistedDependency(new DependencyEdge(reminder.Id, customer.Id),
+                        EntityTracker.Application.Importing.ImportedDependencyKind.Mandatory),
+                    new PersistedDependency(new DependencyEdge(reminder.Id, currency.Id),
+                        EntityTracker.Application.Importing.ImportedDependencyKind.Mandatory)
+                ],
+                [],
+                entitiesWithRequestedPriorityToUpdate: [customer],
+                entitiesWithGroupNameToUpdate: [customer]),
+            cancellationToken);
+
+        await shell.NavigateAsync(ShellDestination.ProjectDashboard, cancellationToken);
+        Tracker copy = (await provider.GetRequiredService<ITrackerRepository>().GetAllAsync(cancellationToken))
+            .Single(tracker => tracker.Name == "Release readiness");
+        await shell.Catalog.OpenSyncTrackerAsync(copy);
+        await WaitUntilAsync(
+            () => !shell.Catalog.IsBusy &&
+                  shell.Catalog.SyncGroups.Any(group => group.EntityName == "payment_reminder"),
+            "The Tracker sync review did not finish loading.",
+            cancellationToken);
+        await renderer.CaptureAsync("tracker-sync.png", settleMilliseconds: 400);
+        shell.Catalog.CancelCommand.Execute(null);
     }
 
     private static async Task CaptureChangedReviewAsync(

@@ -48,6 +48,8 @@ public partial class CatalogModalView : UserControl
     {
         if (e.NewValue is true)
         {
+            // Every dialog opens at its top, not where the previous one was scrolled to.
+            DialogScroll.ScrollToTop();
             _focusBeforeOpen = Keyboard.FocusedElement;
             Dispatcher.BeginInvoke(FocusInitialElement, DispatcherPriority.Input);
             return;

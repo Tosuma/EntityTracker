@@ -1020,6 +1020,28 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void TrackerSync_OffersTwoNamedOutcomesPerDifferenceAndBulkChoices()
+    {
+        XDocument document = LoadWpfXaml("Views", "CatalogModalView.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement section = Assert.Single(document.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "TrackerSyncSection");
+
+        Assert.DoesNotContain(section.Descendants(), element => element.Name.LocalName == "ComboBox");
+        Assert.Equal(["{Binding UseSource, Mode=TwoWay}", "{Binding KeepCopy, Mode=TwoWay}"], section.Descendants()
+            .Where(element => element.Name.LocalName == "RadioButton")
+            .Select(element => (string?)element.Attribute("IsChecked")));
+        Assert.Contains(section.Descendants(), element => (string?)element.Attribute("Command") == "{Binding UseSourceForAllCommand}");
+        Assert.Contains(section.Descendants(), element => (string?)element.Attribute("Command") == "{Binding KeepCopyForAllCommand}");
+        Assert.Contains(document.Descendants(), element =>
+            (string?)element.Attribute("Command") == "{Binding ApplySyncCommand}" &&
+            (string?)element.Attribute("AutomationProperties.Name") == "{Binding ApplySyncLabel}");
+        // Entity names contain "_", so labels are plain text rather than access-key content.
+        Assert.All(section.Descendants().Where(element => element.Name.LocalName == "RadioButton"),
+            radio => Assert.Null(radio.Attribute("Content")));
+    }
+
+    [Fact]
     public void ProjectComparison_DisabledFilterCardsRetainSurfaceWithMildFade()
     {
         XDocument document = LoadWpfXaml("Views", "ProjectDashboardView.xaml");

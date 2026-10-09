@@ -838,6 +838,47 @@ public sealed class ShellViewModelTests
         Assert.Equal(ShellDestination.ProjectDashboard, shell.SelectedDestination);
     }
 
+    [Fact]
+    public async Task TrackerSync_NamesBothTrackersAndCanDecideEverythingAtOnce()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "Original");
+        Tracker copy = await harness.TrackerManagement.CopyAsync(
+            harness.DefaultTracker.Id, harness.DefaultProject.Id, "Copy for sync");
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "Added later");
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "Also added");
+        using ShellViewModel shell = harness.CreateShell(
+            new EntityTrackerSettings(lastProjectId: harness.DefaultProject.Id,
+                lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        string source = harness.DefaultTracker.Name;
+
+        await shell.Catalog.OpenSyncTrackerAsync(copy);
+
+        CatalogManagementViewModel sync = shell.Catalog;
+        Assert.Equal($"Sync Copy for sync from {source}", sync.DialogTitle);
+        Assert.StartsWith($"Copy for sync was created as a copy of {source}.", sync.SyncIntro, StringComparison.Ordinal);
+        Assert.Contains($"Only Copy for sync changes. {source} is not touched", sync.SyncSafety, StringComparison.Ordinal);
+        Assert.Equal("Only differences that appeared since the last sync are listed.", sync.SyncScope);
+        Assert.Equal(["Added later", "Also added"], sync.SyncGroups.Select(group => group.EntityName).Order());
+        Assert.Equal("0 of 2 decided", sync.SyncProgressText);
+        Assert.Equal("Decide 2 more differences to apply.", sync.SyncApplyHint);
+        Assert.Equal("Apply to Copy for sync", sync.ApplySyncLabel);
+        Assert.False(sync.ApplySyncCommand.CanExecute(null));
+
+        sync.UseSourceForAllCommand.Execute(null);
+        Assert.Equal("2 of 2 decided", sync.SyncProgressText);
+        Assert.Equal(string.Empty, sync.SyncApplyHint);
+        TrackerSyncChangeItem one = sync.SyncGroups[0].Changes[0];
+        one.KeepCopy = true;
+        Assert.Equal(TrackerSyncChoice.Destination, one.Change.Choice);
+        one.UseSource = true;
+        await WaitUntilAsync(() => sync.ApplySyncCommand.CanExecute(null));
+        Assert.StartsWith("After syncing, Copy for sync will have 3 active entities (+2)", sync.SyncPreviewMessage,
+            StringComparison.Ordinal);
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
         using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));

@@ -544,6 +544,7 @@
                 <Button x:Name="SyncTrackerAction" Margin="0,0,0,6"
                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                         Click="OnSyncTracker" Content="Sync from source"
+                        ToolTip="Bring later changes from the Tracker this one was copied from"
                         AutomationProperties.Name="{Binding Name, StringFormat=Sync tracker {0} from source}">
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">

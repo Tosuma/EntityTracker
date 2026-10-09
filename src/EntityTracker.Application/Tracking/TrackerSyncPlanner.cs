@@ -58,6 +58,7 @@ public static class TrackerSyncPlanner
         var b = Map(destination);
         var oldA = Map(baseline?.Source);
         var oldB = Map(baseline?.Destination);
+        bool hasBaseline = baseline is not null;
         List<TrackerSyncChange> changes = [];
         foreach (string key in a.Keys.Union(b.Keys).Union(oldA.Keys).Union(oldB.Keys)
                      .OrderBy(static key => key, StringComparer.Ordinal))
@@ -69,18 +70,21 @@ public static class TrackerSyncPlanner
             string name = ae?.Name ?? be?.Name ?? oldAe?.Name ?? oldBe!.Name;
             bool aActive = ae?.Active == true;
             bool bActive = be?.Active == true;
-            if (Different(aActive, bActive, oldAe?.Active == true, oldBe?.Active == true))
+            if (Different(hasBaseline, aActive, bActive, oldAe?.Active == true, oldBe?.Active == true))
                 changes.Add(new TrackerSyncChange(TrackerSyncChangeKind.Entity, name, null,
                     aActive ? "Active" : "Archived or absent",
                     bActive ? "Active" : "Archived or absent"));
 
-            if (!aActive && !bActive) continue;
-            if (Different(ae?.RequestedPriority, be?.RequestedPriority,
+            // An entity that is active on only one side is one decision: it comes whole, with its
+            // priority, group and dependencies, or not at all, so those are not asked about separately.
+            if (aActive != bActive) continue;
+            if (!aActive) continue;
+            if (Different(hasBaseline, ae?.RequestedPriority, be?.RequestedPriority,
                     oldAe?.RequestedPriority, oldBe?.RequestedPriority))
                 changes.Add(new TrackerSyncChange(TrackerSyncChangeKind.RequestedPriority, name, null,
                     ae?.RequestedPriority?.ToString() ?? "None",
                     be?.RequestedPriority?.ToString() ?? "None"));
-            if (Different(ae?.GroupName ?? "", be?.GroupName ?? "",
+            if (Different(hasBaseline, ae?.GroupName ?? "", be?.GroupName ?? "",
                     oldAe?.GroupName ?? "", oldBe?.GroupName ?? ""))
                 changes.Add(new TrackerSyncChange(TrackerSyncChangeKind.Group, name, null,
                     string.IsNullOrEmpty(ae?.GroupName) ? "None" : ae.GroupName,
@@ -97,11 +101,12 @@ public static class TrackerSyncPlanner
                 bd.TryGetValue(target, out TrackerSyncDependency? bv);
                 oldAd.TryGetValue(target, out TrackerSyncDependency? oldAv);
                 oldBd.TryGetValue(target, out TrackerSyncDependency? oldBv);
-                if (!Different(av?.Kind, bv?.Kind, oldAv?.Kind, oldBv?.Kind)) continue;
+                // Every dependency is mandatory now, so only whether it exists matters.
+                if (!Different(hasBaseline, av is not null, bv is not null, oldAv is not null, oldBv is not null))
+                    continue;
                 string targetName = av?.Name ?? bv?.Name ?? oldAv?.Name ?? oldBv!.Name;
                 changes.Add(new TrackerSyncChange(TrackerSyncChangeKind.Dependency,
-                    name, targetName, av?.Kind.ToString() ?? "Absent",
-                    bv?.Kind.ToString() ?? "Absent"));
+                    name, targetName, av is null ? Absent : Present, bv is null ? Absent : Present));
             }
         }
         return new TrackerSyncReview(sourceId, destinationId, source, destination,
@@ -123,7 +128,18 @@ public static class TrackerSyncPlanner
             a.TryGetValue(key, out TrackerSyncEntity? ae);
             b.TryGetValue(key, out TrackerSyncEntity? be);
             string name = be?.Name ?? ae!.Name;
-            bool active = Pick(TrackerSyncChangeKind.Entity, "", ae?.Active == true, be?.Active == true);
+            if ((ae?.Active == true) != (be?.Active == true))
+            {
+                // Active on one side only: the chosen side gives the whole entity. Taking the source's
+                // archived state archives the copy's entity but keeps its own details.
+                bool useSource = Pick(TrackerSyncChangeKind.Entity, "", true, false);
+                if (useSource && ae?.Active == true) result.Add(ae with { Dependencies = Mandatory(ae.Dependencies) });
+                else if (useSource) result.Add(be! with { Active = false });
+                else if (be is not null) result.Add(be);
+                continue;
+            }
+
+            bool active = be?.Active == true;
             int? priority = Pick(TrackerSyncChangeKind.RequestedPriority, "",
                 ae?.RequestedPriority, be?.RequestedPriority);
             string group = Pick(TrackerSyncChangeKind.Group, "", ae?.GroupName ?? "", be?.GroupName ?? "");
@@ -135,7 +151,10 @@ public static class TrackerSyncPlanner
                 ad.TryGetValue(target, out TrackerSyncDependency? av);
                 bd.TryGetValue(target, out TrackerSyncDependency? bv);
                 TrackerSyncDependency? selected = Pick(TrackerSyncChangeKind.Dependency, target, av, bv);
-                if (selected is not null) dependencies.Add(selected);
+                if (selected is not null)
+                    dependencies.Add(ReferenceEquals(selected, av) && !ReferenceEquals(av, bv)
+                        ? selected with { Kind = ImportedDependencyKind.Mandatory }
+                        : selected);
             }
             result.Add(new TrackerSyncEntity(name, active, priority, group, dependencies));
 
@@ -156,6 +175,15 @@ public static class TrackerSyncPlanner
 
     public static string Key(string name) => EntitySourceKey.From(name).Value;
 
+    /// <summary>The value of a dependency row on the side that has the dependency.</summary>
+    public const string Present = "Present";
+
+    /// <summary>The value of a dependency row on the side that does not have the dependency.</summary>
+    public const string Absent = "Absent";
+
+    private static IReadOnlyList<TrackerSyncDependency> Mandatory(IReadOnlyList<TrackerSyncDependency> dependencies) =>
+        dependencies.Select(static dependency => dependency with { Kind = ImportedDependencyKind.Mandatory }).ToArray();
+
     private static Dictionary<string, TrackerSyncEntity> Map(TrackerSyncStructure? structure) =>
         (structure?.Entities ?? []).ToDictionary(static entity => Key(entity.Name), StringComparer.Ordinal);
 
@@ -163,9 +191,13 @@ public static class TrackerSyncPlanner
         (entity?.Active == true ? entity.Dependencies : [])
         .ToDictionary(static dependency => Key(dependency.Name), StringComparer.Ordinal);
 
-    private static bool Different<T>(T a, T b, T oldA, T oldB) =>
+    /// <summary>
+    /// Whether the two sides differ in a way to ask about: always on a first sync, and afterwards only
+    /// when a side changed since the last sync.
+    /// </summary>
+    private static bool Different<T>(bool hasBaseline, T a, T b, T oldA, T oldB) =>
         !EqualityComparer<T>.Default.Equals(a, b) &&
-        (oldA is null && oldB is null ||
+        (!hasBaseline || oldA is null && oldB is null ||
          !EqualityComparer<T>.Default.Equals(a, oldA) ||
          !EqualityComparer<T>.Default.Equals(b, oldB));
 }

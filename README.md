@@ -205,6 +205,20 @@ Overview after the normal unsaved-work confirmation.
 
 ![Project entity comparison with labeled statuses and explicit missing entities](images/light/project-comparison.png)
 
+### Sync a copied Tracker
+
+A Tracker created as a copy of another keeps a link to it. **Sync from source** on the Project
+dashboard brings the source's later changes into the copy: which entities exist, their dependencies,
+requested priorities and groups. Each difference is a plain sentence naming both Trackers, with two
+outcomes to choose from, such as "Add the dependency on customer" or "Leave it out". An entity that
+exists on only one side is a single choice that brings it whole, with all its dependencies, or leaves
+it out. **Use … for all** and **Keep … for all** decide everything at once, and single rows can still be
+changed. Only the copy changes; the source is never touched, and progress (statuses, notes,
+developers and history) stays as it is in each Tracker. After the first sync, only differences that
+appeared since the last sync are listed.
+
+![Syncing a copied Tracker with its source, one plain choice per difference](images/light/tracker-sync.png)
+
 ### Manage Tracker lifecycle
 
 Recycling a Tracker is reversible and returns to its owning Project dashboard. The Project-scoped

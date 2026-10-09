@@ -29,6 +29,7 @@ internal static class ScreenshotManifest
         "tracker-permanent-delete-confirmation.png",
         "project-dashboard-tracker-restored.png",
         "create-tracker-copy.png",
+        "tracker-sync.png",
         "overview.png",
         "overview-export-menu.png",
         "overview-details.png",
