@@ -5,6 +5,7 @@ using System.Windows.Input;
 
 using EntityTracker.Application.Projects;
 using EntityTracker.Application.GitSync;
+using EntityTracker.Application.History;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
@@ -87,6 +88,8 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     private string _copyPreview = string.Empty;
     private TrackerSyncReview? _syncReview;
     private Tracker? _syncTracker;
+    private string _syncSourceName = "its source";
+    private IReadOnlyList<TrackerSyncEntityGroup> _syncGroups = [];
     private TrackerSyncPreview? _syncPreview;
     private string? _syncPreviewError;
     private int _syncChoiceRevision;
@@ -128,6 +131,8 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         _confirmPurgeCommand = new AsyncCommand(ConfirmPurgeAsync, CanConfirmPurge);
         ApplySyncCommand = new AsyncCommand(ApplySyncAsync,
             () => !IsBusy && SyncReview?.CanApply == true && _syncPreview is not null);
+        UseSourceForAllCommand = new RelayCommand(() => ChooseAll(TrackerSyncChoice.Source), HasSyncChanges);
+        KeepCopyForAllCommand = new RelayCommand(() => ChooseAll(TrackerSyncChoice.Destination), HasSyncChanges);
         CancelCommand = new RelayCommand(Close, () => !IsBusy);
     }
 
@@ -284,37 +289,132 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
             if (value is not null)
                 foreach (TrackerSyncChange change in value.Changes)
                     change.PropertyChanged += OnSyncChoiceChanged;
+            SyncGroups = value is null
+                ? []
+                : value.Changes
+                    .Select(change => new TrackerSyncChangeItem(change, value, SyncSourceName, SyncCopyName))
+                    .GroupBy(static item => item.Change.EntityName, StringComparer.OrdinalIgnoreCase)
+                    .Select(static group => new TrackerSyncEntityGroup(group.First().Change.EntityName, group.ToArray()))
+                    .ToArray();
             OnPropertyChanged();
-            OnPropertyChanged(nameof(SyncPendingCount));
-            OnPropertyChanged(nameof(SyncReviewSummary));
-            OnPropertyChanged(nameof(SyncPreviewMessage));
+            NotifySyncTexts();
             ApplySyncCommand.NotifyCanExecuteChanged();
+            UseSourceForAllCommand.NotifyCanExecuteChanged();
+            KeepCopyForAllCommand.NotifyCanExecuteChanged();
             if (value?.CanApply == true)
                 _ = UpdateSyncPreviewAsync(_syncChoiceRevision, value);
         }
     }
     public int SyncPendingCount => SyncReview?.Changes.Count(static change => change.Choice is null) ?? 0;
-    public string SyncReviewSummary => SyncReview is null ? "Loading changes…" :
-        SyncReview.Changes.Count == 0 ? "The trackers have no new differences to review." :
-        $"{SyncReview.Changes.Count} changes to review. Choose the result for each change. " +
-        "For each dependency, choose whether this tracker should keep or remove it. " +
-        "To keep separate dependencies from both trackers, choose Keep dependency on each row." +
-        (SyncReview.Baseline is null
-            ? " This copy has no earlier sync baseline, so older differences cannot be attributed to either tracker."
-            : string.Empty);
-    public string SyncPreviewMessage => _syncPreviewError ?? (_syncPreview is null
-        ? SyncReview?.CanApply == true ? "Checking dependency validity and progress…" : string.Empty
-        : $"After sync: {_syncPreview.ResultProgress.TotalActiveCount} active " +
-          $"({_syncPreview.ResultProgress.TotalActiveCount - _syncPreview.CurrentProgress.TotalActiveCount:+#;-#;0}), " +
-          $"{_syncPreview.ResultProgress.ReadyCount} ready to start " +
-          $"({_syncPreview.ResultProgress.ReadyCount - _syncPreview.CurrentProgress.ReadyCount:+#;-#;0}), " +
-          $"{_syncPreview.ResultProgress.BlockedCount} waiting on dependencies " +
-          $"({_syncPreview.ResultProgress.BlockedCount - _syncPreview.CurrentProgress.BlockedCount:+#;-#;0}), " +
-          $"{_syncPreview.ResultProgress.ManuallyBlockedCount} blocked " +
-          $"({_syncPreview.ResultProgress.ManuallyBlockedCount - _syncPreview.CurrentProgress.ManuallyBlockedCount:+#;-#;0}), " +
-          $"{_syncPreview.ResultProgress.ReworkingCount} reworking " +
-          $"({_syncPreview.ResultProgress.ReworkingCount - _syncPreview.CurrentProgress.ReworkingCount:+#;-#;0}), " +
-          $"{_syncPreview.UnresolvedDependencyCount} unresolved references.");
+
+    /// <summary>Gets the name of the Tracker the copy was made from.</summary>
+    public string SyncSourceName
+    {
+        get => _syncSourceName;
+        private set { _syncSourceName = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>Gets the name of the copy being synced.</summary>
+    public string SyncCopyName => _syncTracker?.Name ?? "this Tracker";
+
+    /// <summary>Gets the differences to decide, grouped by entity.</summary>
+    public IReadOnlyList<TrackerSyncEntityGroup> SyncGroups
+    {
+        get => _syncGroups;
+        private set { _syncGroups = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasSyncDifferences)); }
+    }
+
+    public bool HasSyncDifferences => SyncGroups.Count > 0;
+
+    /// <summary>Gets what syncing does, naming both Trackers.</summary>
+    public string SyncIntro =>
+        $"{SyncCopyName} was created as a copy of {SyncSourceName}. Syncing brings {SyncSourceName}'s later changes " +
+        $"into {SyncCopyName}: which entities exist, their dependencies, requested priorities and groups.";
+
+    public string SyncSafety =>
+        $"Only {SyncCopyName} changes. {SyncSourceName} is not touched, and progress (statuses, notes, " +
+        "developers and history) stays as it is in each Tracker.";
+
+    /// <summary>Gets which differences are listed, or that there is nothing to sync.</summary>
+    public string SyncScope => SyncReview is null
+        ? "Comparing the two Trackers…"
+        : SyncReview.Changes.Count == 0
+            ? $"{SyncCopyName} already matches {SyncSourceName}. There is nothing to sync."
+            : SyncReview.Baseline is null
+                ? "This is the first sync, so every difference between the two Trackers is listed, including " +
+                  $"changes you made on purpose in {SyncCopyName}."
+                : "Only differences that appeared since the last sync are listed.";
+
+    /// <summary>Gets a line such as "4 of 12 decided".</summary>
+    public string SyncProgressText => SyncReview is null || SyncReview.Changes.Count == 0
+        ? string.Empty
+        : $"{SyncReview.Changes.Count - SyncPendingCount} of {SyncReview.Changes.Count} decided";
+
+    /// <summary>Gets why Apply is not available yet, or nothing when it is.</summary>
+    public string SyncApplyHint => SyncPendingCount switch
+    {
+        0 => string.Empty,
+        1 => "Decide 1 more difference to apply.",
+        int count => $"Decide {count} more differences to apply."
+    };
+
+    public string ApplySyncLabel => $"Apply to {SyncCopyName}";
+
+    /// <summary>Gets the Apply button's text, with "_" doubled so a name is never read as an access key.</summary>
+    public string ApplySyncContent => ApplySyncLabel.Replace("_", "__", StringComparison.Ordinal);
+
+    public string UseSourceForAllLabel => $"Use {SyncSourceName} for all";
+
+    public string KeepCopyForAllLabel => $"Keep {SyncCopyName} for all";
+
+    public RelayCommand UseSourceForAllCommand { get; }
+
+    public RelayCommand KeepCopyForAllCommand { get; }
+
+    /// <summary>Gets what the copy will look like after syncing with the current choices.</summary>
+    public string SyncPreviewMessage
+    {
+        get
+        {
+            if (_syncPreviewError is not null) return _syncPreviewError;
+            if (_syncPreview is null)
+                return SyncReview?.CanApply == true && SyncReview.Changes.Count > 0 ? "Checking dependencies and progress…" : string.Empty;
+            ProgressSnapshotState after = _syncPreview.ResultProgress, before = _syncPreview.CurrentProgress;
+            return $"After syncing, {SyncCopyName} will have " +
+                   $"{Count(after.TotalActiveCount, before.TotalActiveCount, "active entity", "active entities")}, " +
+                   $"{Count(after.ReadyCount, before.ReadyCount, "ready to start", "ready to start")}, " +
+                   $"{Count(after.BlockedCount, before.BlockedCount, "waiting on dependencies", "waiting on dependencies")}, " +
+                   $"{Count(after.ManuallyBlockedCount, before.ManuallyBlockedCount, "blocked", "blocked")}, " +
+                   $"{Count(after.ReworkingCount, before.ReworkingCount, "reworking", "reworking")} and " +
+                   $"{_syncPreview.UnresolvedDependencyCount} unresolved " +
+                   $"{(_syncPreview.UnresolvedDependencyCount == 1 ? "reference" : "references")}.";
+
+            static string Count(int value, int was, string one, string many)
+            {
+                int change = value - was;
+                string difference = change == 0 ? string.Empty : change > 0 ? $" (+{change})" : $" (\u2212{-change})";
+                return $"{value} {(value == 1 ? one : many)}{difference}";
+            }
+        }
+    }
+
+    private bool HasSyncChanges() => !IsBusy && SyncReview is { Changes.Count: > 0 };
+
+    /// <summary>Gives every difference the same outcome; single rows can still be changed afterwards.</summary>
+    private void ChooseAll(TrackerSyncChoice choice)
+    {
+        if (SyncReview is null) return;
+        foreach (TrackerSyncChange change in SyncReview.Changes) change.Choice = choice;
+    }
+
+    private void NotifySyncTexts()
+    {
+        OnPropertyChanged(nameof(SyncPendingCount));
+        OnPropertyChanged(nameof(SyncScope));
+        OnPropertyChanged(nameof(SyncProgressText));
+        OnPropertyChanged(nameof(SyncApplyHint));
+        OnPropertyChanged(nameof(SyncPreviewMessage));
+    }
     public bool IsRecycleBin => DialogKind == CatalogDialogKind.RecycleBin;
     public bool IsRecycleConfirmation => DialogKind == CatalogDialogKind.RecycleConfirmation;
     public bool IsPurgeConfirmation => DialogKind == CatalogDialogKind.PurgeConfirmation;
@@ -342,7 +442,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         CatalogDialogKind.ProjectName => IsRename ? "Rename project" : "Create project",
         CatalogDialogKind.TrackerName => "Rename tracker",
         CatalogDialogKind.TrackerCreation => "Create tracker",
-        CatalogDialogKind.TrackerSync => _syncTracker is null ? "Sync tracker" : $"Sync {_syncTracker.Name} from its source",
+        CatalogDialogKind.TrackerSync => _syncTracker is null ? "Sync tracker" : $"Sync {_syncTracker.Name} from {SyncSourceName}",
         CatalogDialogKind.RecycleBin => "Recycle bins",
         CatalogDialogKind.RecycleConfirmation => _pendingProject is null ? "Recycle tracker?" : "Recycle project?",
         CatalogDialogKind.PurgeConfirmation => "Permanently delete?",
@@ -395,7 +495,13 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     {
         ResetDialog();
         _syncTracker = tracker;
+        SyncSourceName = tracker.CopiedFromTrackerId is { } sourceId
+            ? (await _trackerRepository.GetAsync(sourceId))?.Name ?? "its source"
+            : "its source";
         DialogKind = CatalogDialogKind.TrackerSync;
+        foreach (string name in new[] { nameof(SyncCopyName), nameof(SyncIntro), nameof(SyncSafety), nameof(ApplySyncLabel), nameof(ApplySyncContent),
+                     nameof(UseSourceForAllLabel), nameof(KeepCopyForAllLabel) })
+            OnPropertyChanged(name);
         NotifyDialogChanged();
         await RunAsync(async () => SyncReview = await _trackerSyncService.ReviewAsync(tracker.Id));
     }
@@ -405,8 +511,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         _syncPreview = null;
         _syncPreviewError = null;
         int revision = ++_syncChoiceRevision;
-        OnPropertyChanged(nameof(SyncPendingCount));
-        OnPropertyChanged(nameof(SyncPreviewMessage));
+        NotifySyncTexts();
         ApplySyncCommand.NotifyCanExecuteChanged();
         if (SyncReview?.CanApply == true)
             _ = UpdateSyncPreviewAsync(revision, SyncReview);
@@ -862,6 +967,8 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         _confirmRecycleCommand.NotifyCanExecuteChanged();
         _confirmPurgeCommand.NotifyCanExecuteChanged();
         ApplySyncCommand.NotifyCanExecuteChanged();
+        UseSourceForAllCommand.NotifyCanExecuteChanged();
+        KeepCopyForAllCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
     }
 

@@ -17,7 +17,7 @@
                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                 <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding DialogTitle}" />
 
-                <ScrollViewer Grid.Row="1" Margin="0,18" VerticalScrollBarVisibility="Auto">
+                <ScrollViewer x:Name="DialogScroll" Grid.Row="1" Margin="0,18" VerticalScrollBarVisibility="Auto">
                     <StackPanel>
                         <Grid>
                             <StackPanel Visibility="{Binding IsNameDialog, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -59,32 +59,64 @@
                             <TextBlock Margin="0,12,0,0" Text="{Binding OperationMessage}" TextWrapping="Wrap" />
                             </StackPanel>
 
-                            <StackPanel Visibility="{Binding IsTrackerSync, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <TextBlock Text="{Binding SyncReviewSummary}" TextWrapping="Wrap" />
-                                <TextBlock Margin="0,8,0,10"
-                                           Text="{Binding SyncPendingCount, StringFormat={}{0} choices remaining}"
-                                           FontWeight="SemiBold" />
-                                <TextBlock Margin="0,0,0,10" Text="{Binding SyncPreviewMessage}"
-                                           TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
-                                <ItemsControl ItemsSource="{Binding SyncReview.Changes}">
+                            <StackPanel x:Name="TrackerSyncSection"
+                                        Visibility="{Binding IsTrackerSync, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <Border Padding="12" Margin="0,0,0,12" Style="{StaticResource EntityTrackerCardStyle}">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding SyncIntro}" TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}"
+                                                   Text="{Binding SyncSafety}" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                                <TextBlock Margin="0,0,0,10" Text="{Binding SyncScope}" TextWrapping="Wrap"
+                                           AutomationProperties.LiveSetting="Polite" />
+                                <DockPanel Margin="0,0,0,10"
+                                           Visibility="{Binding HasSyncDifferences, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                        <!-- Labels hold names that may contain "_", so they are plain text, not access keys. -->
+                                        <Button Margin="0,0,8,0" Command="{Binding UseSourceForAllCommand}">
+                                            <TextBlock Text="{Binding UseSourceForAllLabel}" />
+                                        </Button>
+                                        <Button Command="{Binding KeepCopyForAllCommand}">
+                                            <TextBlock Text="{Binding KeepCopyForAllLabel}" />
+                                        </Button>
+                                    </StackPanel>
+                                    <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding SyncProgressText}" />
+                                </DockPanel>
+                                <ItemsControl x:Name="TrackerSyncGroups" ItemsSource="{Binding SyncGroups}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
                                             <Border Margin="0,0,0,8" Padding="12" Style="{StaticResource EntityTrackerCardStyle}">
                                                 <StackPanel>
-                                                    <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                                    <TextBlock Margin="0,5,0,0" Text="{Binding SourceValue, StringFormat=Source: {0}}" TextWrapping="Wrap" />
-                                                    <TextBlock Text="{Binding DestinationValue, StringFormat=This tracker: {0}}" TextWrapping="Wrap" />
-                                                    <ComboBox Margin="0,8,0,0" MinWidth="220" HorizontalAlignment="Left"
-                                                              AutomationProperties.Name="Choose sync result"
-                                                              ItemsSource="{Binding Choices}"
-                                                              DisplayMemberPath="Label"
-                                                              SelectedValuePath="Value"
-                                                              SelectedValue="{Binding Choice, Mode=TwoWay}" />
+                                                    <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding EntityName}" />
+                                                    <ItemsControl ItemsSource="{Binding Changes}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <StackPanel Margin="0,8,0,0">
+                                                                    <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
+                                                                    <StackPanel Margin="0,4,0,0" Orientation="Horizontal">
+                                                                        <RadioButton Margin="0,0,18,0" GroupName="{Binding ChoiceGroup}"
+                                                                                     AutomationProperties.Name="{Binding UseSourceLabel}"
+                                                                                     IsChecked="{Binding UseSource, Mode=TwoWay}">
+                                                                            <TextBlock Text="{Binding UseSourceLabel}" />
+                                                                        </RadioButton>
+                                                                        <RadioButton GroupName="{Binding ChoiceGroup}"
+                                                                                     AutomationProperties.Name="{Binding KeepCopyLabel}"
+                                                                                     IsChecked="{Binding KeepCopy, Mode=TwoWay}">
+                                                                            <TextBlock Text="{Binding KeepCopyLabel}" />
+                                                                        </RadioButton>
+                                                                    </StackPanel>
+                                                                </StackPanel>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
                                                 </StackPanel>
                                             </Border>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
+                                <TextBlock Margin="0,4,0,0" Text="{Binding SyncPreviewMessage}"
+                                           TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
                             </StackPanel>
 
                             <StackPanel Visibility="{Binding IsRecycleBin, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -143,6 +175,9 @@
                 </ScrollViewer>
 
                 <StackPanel Grid.Row="2" HorizontalAlignment="Right" Orientation="Horizontal">
+                    <TextBlock VerticalAlignment="Center" Margin="0,0,12,0" Style="{StaticResource PageDescriptionTextStyle}"
+                               Text="{Binding SyncApplyHint}"
+                               Visibility="{Binding IsTrackerSync, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <Button x:Name="CancelButton" Margin="0,0,8,0" Command="{Binding CancelCommand}" Content="Cancel" Style="{StaticResource SecondaryButtonStyle}" IsCancel="True" />
                     <Button Command="{Binding SubmitNameCommand}" Content="Save" Style="{StaticResource PrimaryButtonStyle}"
                             Visibility="{Binding IsNameDialog, Converter={StaticResource BooleanToVisibilityConverter}}" />
@@ -150,7 +185,8 @@
                             Visibility="{Binding IsTrackerCreation, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <Button Command="{Binding ApplyTrackerCommand}" Content="Apply and create" Style="{StaticResource PrimaryButtonStyle}"
                             Visibility="{Binding ShowApplyTracker, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <Button Command="{Binding ApplySyncCommand}" Content="Apply sync" Style="{StaticResource PrimaryButtonStyle}"
+                    <Button Command="{Binding ApplySyncCommand}" Content="{Binding ApplySyncContent}" Style="{StaticResource PrimaryButtonStyle}"
+                            AutomationProperties.Name="{Binding ApplySyncLabel}"
                             Visibility="{Binding IsTrackerSync, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <Button Command="{Binding ConfirmRecycleCommand}" Content="Recycle" Style="{StaticResource DangerButtonStyle}"
                             Visibility="{Binding IsRecycleConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}" />
