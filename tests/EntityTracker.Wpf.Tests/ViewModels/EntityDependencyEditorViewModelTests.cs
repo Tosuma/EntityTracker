@@ -104,6 +104,66 @@ public sealed class EntityDependencyEditorViewModelTests
         Assert.Equal(target.Id, viewModel.Suggestions[0].EntityId);
     }
 
+    [Fact]
+    public async Task Name_StartsAsTheEntityNameAndARenameMakesTheFormDirty()
+    {
+        TrackedEntity owner = Entity(1, "custmer", EntityProvenance.ManualOnly);
+        EntityDependencyEditorViewModel viewModel = ViewModel([owner]);
+        await viewModel.BeginStandaloneAsync(owner.Id);
+
+        Assert.Equal("custmer", viewModel.EditedName);
+        Assert.True(viewModel.CanEditName);
+        Assert.False(viewModel.IsDirty);
+
+        viewModel.EditedName = "customer";
+
+        Assert.True(viewModel.IsDirty);
+        Assert.False(viewModel.HasNameError);
+        Assert.False(viewModel.HasRenameNotice);
+        Assert.True(viewModel.SaveCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Name_ThatIsEmptyOrAlreadyUsedCannotBeSaved()
+    {
+        TrackedEntity owner = Entity(1, "Owner");
+        TrackedEntity other = Entity(2, "invoice");
+        EntityDependencyEditorViewModel viewModel = ViewModel([owner, other]);
+        await viewModel.BeginStandaloneAsync(owner.Id);
+
+        viewModel.EditedName = "   ";
+        Assert.Equal("An entity needs a name.", viewModel.NameError);
+        Assert.False(viewModel.SaveCommand.CanExecute(null));
+
+        viewModel.EditedName = "INVOICE";
+        await WaitUntilAsync(() => viewModel.HasNameError);
+        Assert.Equal("Another entity in this Tracker is already called invoice.", viewModel.NameError);
+        Assert.False(viewModel.SaveCommand.CanExecute(null));
+
+        viewModel.EditedName = "invoice_line";
+        Assert.False(viewModel.HasNameError);
+        Assert.True(viewModel.SaveCommand.CanExecute(null));
+    }
+
+    [Theory]
+    [InlineData(EntityProvenance.Imported, "CSV import")]
+    [InlineData(EntityProvenance.ManualAndImported, "CSV import")]
+    [InlineData(EntityProvenance.Copied, "copied from another Tracker")]
+    public async Task Name_WarnsWhenTheOldNameMayComeBack(EntityProvenance provenance, string reason)
+    {
+        TrackedEntity owner = Entity(1, "custmer", provenance);
+        EntityDependencyEditorViewModel viewModel = ViewModel([owner]);
+        await viewModel.BeginStandaloneAsync(owner.Id);
+
+        viewModel.EditedName = "Custmer";
+        Assert.False(viewModel.HasRenameNotice);
+
+        viewModel.EditedName = "customer";
+        Assert.True(viewModel.HasRenameNotice);
+        Assert.Contains(reason, viewModel.RenameNotice, StringComparison.Ordinal);
+        Assert.True(viewModel.SaveCommand.CanExecute(null));
+    }
+
     private static EntityDependencyEditorViewModel ViewModel(
         IReadOnlyList<TrackedEntity> entities)
     {
@@ -155,10 +215,14 @@ public sealed class EntityDependencyEditorViewModelTests
         }
     }
 
-    private static TrackedEntity Entity(int id, string name) => new(
+    private static TrackedEntity Entity(
+        int id,
+        string name,
+        EntityProvenance provenance = EntityProvenance.Imported) => new(
         new EntityId(new Guid(id, 0, 0, new byte[8])),
         TestTrackerId,
-        name);
+        name,
+        provenance: provenance);
 
     private sealed class StubEntityRepository(IReadOnlyList<TrackedEntity> entities) : IEntityRepository
     {

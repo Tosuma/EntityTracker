@@ -1042,6 +1042,22 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void EntityEditor_OffersALabelledNameFieldWithErrorAndWarning()
+    {
+        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement section = Assert.Single(document.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "EditorNameSection");
+
+        XElement name = Assert.Single(section.Descendants(), element => element.Name.LocalName == "TextBox");
+        Assert.Equal("{Binding Editor.EditedName, UpdateSourceTrigger=PropertyChanged}", (string?)name.Attribute("Text"));
+        Assert.Equal("{Binding Editor.CanEditName}", (string?)name.Attribute("IsEnabled"));
+        Assert.Equal("{Binding ElementName=EditorNameLabel}", (string?)name.Attribute("AutomationProperties.LabeledBy"));
+        Assert.Contains(section.Descendants(), element => (string?)element.Attribute("Text") == "{Binding Editor.NameError}");
+        Assert.Contains(section.Descendants(), element => (string?)element.Attribute("Text") == "{Binding Editor.RenameNotice}");
+    }
+
+    [Fact]
     public void ProjectComparison_DisabledFilterCardsRetainSurfaceWithMildFade()
     {
         XDocument document = LoadWpfXaml("Views", "ProjectDashboardView.xaml");

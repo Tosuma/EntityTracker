@@ -379,6 +379,94 @@ public sealed class EntityDependencyEditorServiceTests
         Assert.Empty(changeSet.EntitiesWithProgressToUpdate);
     }
 
+    [Fact]
+    public async Task SaveAsync_RenameUpdatesTheEntityAndKeepsItsProgress()
+    {
+        TrackedEntity owner = Entity(1, "custmer_account", groupName: "Billing");
+        EntityDependencyEditorService service = Service([owner], [], [], [], out StubStore store);
+        EntityDependencyEditPlan plan = service.CreatePlan(owner.Id, [owner], [], [], [], []);
+
+        await Save(service, plan, owner, "  customer_account ");
+
+        TrackedStateChangeSet changeSet = Assert.IsType<TrackedStateChangeSet>(store.LastChangeSet);
+        TrackedEntity renamed = Assert.Single(changeSet.EntitiesToUpdate);
+        Assert.Equal((owner.Id, "customer_account", "Billing", owner.Provenance),
+            (renamed.Id, renamed.SourceName, renamed.GroupName, renamed.Provenance));
+        Assert.Empty(changeSet.EntitiesWithProgressToUpdate);
+    }
+
+    [Fact]
+    public async Task SaveAsync_WithoutRenameDoesNotUpdateTheEntity()
+    {
+        TrackedEntity owner = Entity(1, "Owner");
+        EntityDependencyEditorService service = Service([owner], [], [], [], out StubStore store);
+        EntityDependencyEditPlan plan = service.CreatePlan(owner.Id, [owner], [], [], [], []);
+
+        await Save(service, plan, owner, "Owner");
+
+        Assert.Empty(Assert.IsType<TrackedStateChangeSet>(store.LastChangeSet).EntitiesToUpdate);
+    }
+
+    [Fact]
+    public async Task SaveAsync_RenameMovesOtherEntitiesHandAddedDependenciesToTheNewName()
+    {
+        TrackedEntity target = Entity(1, "custmer");
+        TrackedEntity other = Entity(2, "invoice");
+        ManualDependencyOverride byName = new(other.Id, "CUSTMER", ManualDependencyOverrideAction.Add);
+        ManualDependencyOverride unrelated = new(other.Id, "Future", ManualDependencyOverrideAction.Add);
+        EntityDependencyEditorService service = Service([target, other], [], [], [byName, unrelated], out StubStore store);
+        EntityDependencyEditPlan plan = service.CreatePlan(target.Id, [target, other], [], [], [byName, unrelated], []);
+
+        await Save(service, plan, target, "customer");
+
+        TrackedStateChangeSet changeSet = Assert.IsType<TrackedStateChangeSet>(store.LastChangeSet);
+        Assert.True(changeSet.ReconciledOverrideOwnerIds.ToHashSet().SetEquals([target.Id, other.Id]));
+        Assert.Equal(["customer", "Future"],
+            changeSet.ManualDependencyOverrides.Select(static item => item.DependencySourceName).Order());
+        Assert.All(changeSet.ManualDependencyOverrides, item => Assert.Equal(other.Id, item.DependentEntityId));
+    }
+
+    [Theory]
+    [InlineData("Invoice")]
+    [InlineData("  INVOICE  ")]
+    public async Task SaveAsync_RefusesANameAnotherEntityAlreadyUses(string name)
+    {
+        TrackedEntity owner = Entity(1, "Owner");
+        TrackedEntity other = Entity(2, "invoice");
+        EntityDependencyEditorService service = Service([owner, other], [], [], [], out StubStore store);
+        EntityDependencyEditPlan plan = service.CreatePlan(owner.Id, [owner, other], [], [], [], []);
+
+        Assert.Equal("invoice", await service.FindNameConflictAsync(TestTrackerId, owner.Id, name));
+        InvalidOperationException error =
+            await Assert.ThrowsAsync<InvalidOperationException>(() => Save(service, plan, owner, name));
+        Assert.Equal("Another entity in this Tracker is already called invoice.", error.Message);
+        Assert.Null(store.LastChangeSet);
+    }
+
+    [Fact]
+    public async Task FindNameConflictAsync_IgnoresTheEntityItselfAndCaseOnlyRenames()
+    {
+        TrackedEntity owner = Entity(1, "customer");
+        EntityDependencyEditorService service = Service([owner], [], [], [], out _);
+
+        Assert.Null(await service.FindNameConflictAsync(TestTrackerId, owner.Id, "Customer"));
+    }
+
+    private static Task Save(
+        EntityDependencyEditorService service,
+        EntityDependencyEditPlan plan,
+        TrackedEntity entity,
+        string name) =>
+        service.SaveAsync(
+            TestTrackerId,
+            plan,
+            entity.Status,
+            entity.Notes,
+            entity.RequestedPriority,
+            entity.ResponsibleDeveloper,
+            entity.GroupName,
+            sourceName: name);
+
     private static EntityDependencyEditorService Service(
         IReadOnlyList<TrackedEntity> entities,
         IReadOnlyList<PersistedDependency> resolved,
