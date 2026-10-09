@@ -807,8 +807,7 @@ internal sealed class ReadmeScreenshotGenerator
         window.ShowInTaskbar = false;
         window.Left = -32000;
         window.Top = -32000;
-        window.Width = 1920;
-        window.Height = 1080;
+        ScreenshotWindowSize.Apply(window);
     }
 
     private static async Task ExerciseLiveThemeSwitchAsync(
