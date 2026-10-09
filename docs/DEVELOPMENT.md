@@ -181,7 +181,9 @@ repeatable. From the repository root, generate a preview set with:
 
 The default preview is written to `artifacts\readme-screenshots`, with complete `dark` and `light`
 subdirectories, and is ignored by Git. Screenshots use the sample app version `1.0.0` by default;
-pass `-Version` to show another version. You can choose another preview directory without replacing
+pass `-Version` to show another version. Full-window screenshots are always 1920 × 1080, whatever
+screen or display scaling you run the tool on; the tool stops if one is not. Dialogs and page-section
+close-ups keep their own size. You can choose another preview directory without replacing
 unrelated files:
 
 ```powershell

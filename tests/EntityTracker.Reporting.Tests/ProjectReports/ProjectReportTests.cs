@@ -88,6 +88,15 @@ public sealed class ProjectReportTests
     }
 
     [Fact]
+    public void EveryReportNamesItsCreatorInTheFooter()
+    {
+        string html = ProjectReportHtmlWriter.Write(Report());
+
+        Assert.Contains("<main id=\"report\" data-creator=\"Tobias S. Madsen\">", html, StringComparison.Ordinal);
+        Assert.Contains("\", created by \" + creator", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TreeBoxesLookLikeTheAppsWithANameAreaAboveAStatusBand()
     {
         string html = ProjectReportHtmlWriter.Write(Report());

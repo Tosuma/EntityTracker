@@ -30,6 +30,11 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+    <!-- Shown in the app's file properties; keep in line with AppCredits and LICENSE. -->
+    <Product>EntityTracker</Product>
+    <Authors>Tobias Surland Madsen</Authors>
+    <Company>Tobias Surland Madsen</Company>
+    <Copyright>© 2026 Tobias Surland Madsen</Copyright>
     <ApplicationIcon>Assets\v2\EntityTracker.ico</ApplicationIcon>
     <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
