@@ -1055,6 +1055,19 @@ public sealed class PresentationConfigurationTests
         Assert.Equal("{Binding ElementName=EditorNameLabel}", (string?)name.Attribute("AutomationProperties.LabeledBy"));
         Assert.Contains(section.Descendants(), element => (string?)element.Attribute("Text") == "{Binding Editor.NameError}");
         Assert.Contains(section.Descendants(), element => (string?)element.Attribute("Text") == "{Binding Editor.RenameNotice}");
+        // No explanatory text under the Name heading.
+        Assert.DoesNotContain(section.Descendants(), element => element.Name.LocalName == "TextBlock" &&
+            element.Attribute("Text") is { } text && !text.Value.StartsWith('{'));
+    }
+
+    [Fact]
+    public void EntityTables_KeepDeveloperBoxesOnOneRow()
+    {
+        string xaml = File.ReadAllText(Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf", "Views",
+            "TrackerWorkspaceView.xaml"));
+
+        Assert.Equal(2, xaml.Split("<ItemsControl ItemsSource=\"{Binding DeveloperItems}\">").Length - 1);
+        Assert.Equal(2, xaml.Split("<ItemsPanelTemplate><controls:SingleRowPanel /></ItemsPanelTemplate>").Length - 1);
     }
 
     [Fact]

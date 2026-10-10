@@ -401,6 +401,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(CanEdit));
                 OnPropertyChanged(nameof(CanArchive));
                 OnPropertyChanged(nameof(CanEditProgress));
+                OnPropertyChanged(nameof(CanEditName));
                 OnPropertyChanged(nameof(CanEditPriority));
                 OnPropertyChanged(nameof(CanRestoreEntity));
                 OnPropertyChanged(nameof(CanPurgeEntity));
@@ -419,6 +420,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(CanEdit));
                 OnPropertyChanged(nameof(CanArchive));
                 OnPropertyChanged(nameof(CanEditProgress));
+                OnPropertyChanged(nameof(CanEditName));
                 OnPropertyChanged(nameof(CanEditPriority));
                 OnPropertyChanged(nameof(CanRestoreEntity));
                 OnPropertyChanged(nameof(CanPurgeEntity));
@@ -445,6 +447,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(CanArchive));
                 OnPropertyChanged(nameof(CanEdit));
                 OnPropertyChanged(nameof(CanEditProgress));
+                OnPropertyChanged(nameof(CanEditName));
                 OnPropertyChanged(nameof(CanEditPriority));
                 OnPropertyChanged(nameof(CanRestoreEntity));
                 OnPropertyChanged(nameof(ShowSave));
@@ -472,6 +475,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(CanEdit));
                 OnPropertyChanged(nameof(CanArchive));
                 OnPropertyChanged(nameof(CanEditProgress));
+                OnPropertyChanged(nameof(CanEditName));
                 OnPropertyChanged(nameof(CanEditPriority));
                 NotifyCommandsChanged();
             }
@@ -518,6 +522,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(ArchiveConfirmationMessage));
                 OnPropertyChanged(nameof(CanArchive));
                 OnPropertyChanged(nameof(CanEditProgress));
+                OnPropertyChanged(nameof(CanEditName));
                 OnPropertyChanged(nameof(CanEditPriority));
                 NotifyCommandsChanged();
             }
@@ -1063,6 +1068,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(CanEdit));
         OnPropertyChanged(nameof(CanArchive));
         OnPropertyChanged(nameof(CanEditProgress));
+        OnPropertyChanged(nameof(CanEditName));
         OnPropertyChanged(nameof(CanEditPriority));
         OnPropertyChanged(nameof(CanRestoreEntity));
         OnPropertyChanged(nameof(CanPurgeEntity));

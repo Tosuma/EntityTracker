@@ -934,7 +934,7 @@
                                             <StackPanel VerticalAlignment="Center">
                                                 <ItemsControl ItemsSource="{Binding DeveloperItems}">
                                                     <ItemsControl.ItemsPanel>
-                                                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                                        <ItemsPanelTemplate><controls:SingleRowPanel /></ItemsPanelTemplate>
                                                     </ItemsControl.ItemsPanel>
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
@@ -1337,7 +1337,7 @@
                                             <StackPanel VerticalAlignment="Center">
                                                 <ItemsControl ItemsSource="{Binding DeveloperItems}">
                                                     <ItemsControl.ItemsPanel>
-                                                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                                        <ItemsPanelTemplate><controls:SingleRowPanel /></ItemsPanelTemplate>
                                                     </ItemsControl.ItemsPanel>
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
@@ -2610,8 +2610,6 @@
                                     <StackPanel>
                                         <Label x:Name="EditorNameLabel" Padding="0" FontSize="16" FontWeight="SemiBold" Content="Name"
                                                Target="{Binding ElementName=EditorNameTextBox}" />
-                                        <TextBlock Margin="0,2,0,0" Foreground="{DynamicResource Brush.Text.Secondary}" TextWrapping="Wrap"
-                                                   Text="Correct a typo or rename the entity. Its progress, notes, history and dependencies stay with it." />
                                         <TextBox x:Name="EditorNameTextBox" Margin="0,6,0,0" Padding="8"
                                                  AutomationProperties.LabeledBy="{Binding ElementName=EditorNameLabel}"
                                                  IsEnabled="{Binding Editor.CanEditName}"

@@ -109,7 +109,12 @@ public sealed class EntityDependencyEditorViewModelTests
     {
         TrackedEntity owner = Entity(1, "custmer", EntityProvenance.ManualOnly);
         EntityDependencyEditorViewModel viewModel = ViewModel([owner]);
+        List<string?> changed = [];
+        viewModel.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
         await viewModel.BeginStandaloneAsync(owner.Id);
+
+        // The Name box's enabled state is bound, so it must hear when editing becomes possible.
+        Assert.Contains(nameof(viewModel.CanEditName), changed);
 
         Assert.Equal("custmer", viewModel.EditedName);
         Assert.True(viewModel.CanEditName);
