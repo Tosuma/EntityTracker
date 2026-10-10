@@ -83,6 +83,9 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private string _editedSharedNotes = string.Empty;
     private string _editedResponsibleDeveloper = string.Empty;
     private string _editedGroupName = string.Empty;
+    private string _editedName = string.Empty;
+    private string? _nameConflict;
+    private int _nameCheckVersion;
     private int? _selectedRequestedPriority;
     private string _effectivePriority = "—";
     private IReadOnlyList<PriorityPlanningRow> _priorityPreviewRows = [];
@@ -169,7 +172,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             () => CanEdit && CanAddAsUnresolved);
         _saveCommand = new AsyncCommand(
             SaveAsync,
-            () => CanEdit && CurrentEditPlan?.IsValid == true);
+            () => CanEdit && CurrentEditPlan?.IsValid == true && !HasNameError);
         _cancelCommand = new RelayCommand(
             CancelOrClose,
             () => IsOpen && !IsBusy && _canOperate());
@@ -398,6 +401,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(CanEdit));
                 OnPropertyChanged(nameof(CanArchive));
                 OnPropertyChanged(nameof(CanEditProgress));
+                OnPropertyChanged(nameof(CanEditName));
                 OnPropertyChanged(nameof(CanEditPriority));
                 OnPropertyChanged(nameof(CanRestoreEntity));
                 OnPropertyChanged(nameof(CanPurgeEntity));
@@ -416,6 +420,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(CanEdit));
                 OnPropertyChanged(nameof(CanArchive));
                 OnPropertyChanged(nameof(CanEditProgress));
+                OnPropertyChanged(nameof(CanEditName));
                 OnPropertyChanged(nameof(CanEditPriority));
                 OnPropertyChanged(nameof(CanRestoreEntity));
                 OnPropertyChanged(nameof(CanPurgeEntity));
@@ -442,6 +447,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(CanArchive));
                 OnPropertyChanged(nameof(CanEdit));
                 OnPropertyChanged(nameof(CanEditProgress));
+                OnPropertyChanged(nameof(CanEditName));
                 OnPropertyChanged(nameof(CanEditPriority));
                 OnPropertyChanged(nameof(CanRestoreEntity));
                 OnPropertyChanged(nameof(ShowSave));
@@ -469,6 +475,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(CanEdit));
                 OnPropertyChanged(nameof(CanArchive));
                 OnPropertyChanged(nameof(CanEditProgress));
+                OnPropertyChanged(nameof(CanEditName));
                 OnPropertyChanged(nameof(CanEditPriority));
                 NotifyCommandsChanged();
             }
@@ -515,6 +522,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(ArchiveConfirmationMessage));
                 OnPropertyChanged(nameof(CanArchive));
                 OnPropertyChanged(nameof(CanEditProgress));
+                OnPropertyChanged(nameof(CanEditName));
                 OnPropertyChanged(nameof(CanEditPriority));
                 NotifyCommandsChanged();
             }
@@ -599,6 +607,86 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 SetField(ref _editedResponsibleDeveloper, value ?? string.Empty);
             }
         }
+    }
+
+    /// <summary>Gets or sets the entity's name; a rename keeps its progress, notes and history.</summary>
+    public string EditedName
+    {
+        get => _editedName;
+        set
+        {
+            if (!CanEditName || !SetField(ref _editedName, value ?? string.Empty)) return;
+            _nameConflict = null;
+            NotifyNameState();
+            _ = CheckNameAsync(++_nameCheckVersion);
+        }
+    }
+
+    public bool CanEditName => CanEditProgress;
+
+    /// <summary>Gets why the name cannot be saved, or nothing when it can.</summary>
+    public string NameError => !IsOpen || IsArchivedMode || CurrentEditPlan is null
+        ? string.Empty
+        : string.IsNullOrWhiteSpace(EditedName)
+            ? "An entity needs a name."
+            : _nameConflict is not null
+                ? $"Another entity in this Tracker is already called {_nameConflict}."
+                : string.Empty;
+
+    public bool HasNameError => NameError.Length > 0;
+
+    /// <summary>
+    /// Gets a warning when the new name may not match where the entity came from: a CSV import or
+    /// the Tracker it was copied from.
+    /// </summary>
+    public string RenameNotice
+    {
+        get
+        {
+            if (CurrentEditPlan is not { } plan || HasNameError || !IsNameKeyChanged(plan.Entity.SourceName)) return string.Empty;
+            return plan.Entity.Provenance switch
+            {
+                EntityProvenance.ManualOnly => string.Empty,
+                EntityProvenance.Copied =>
+                    "This entity was copied from another Tracker. Syncing with that Tracker will show the old " +
+                    "and the new name as two different entities.",
+                _ =>
+                    "This name came from a CSV import. If the source database still uses the old name, the next " +
+                    "schema synchronization will see the old name as a new entity and propose archiving this one."
+            };
+        }
+    }
+
+    public bool HasRenameNotice => RenameNotice.Length > 0;
+
+    private bool IsNameKeyChanged(string original) =>
+        !string.IsNullOrWhiteSpace(EditedName) &&
+        !string.Equals(EditedName.Trim(), original.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private async Task CheckNameAsync(int version)
+    {
+        if (CurrentEditPlan is not { } plan || string.IsNullOrWhiteSpace(EditedName)) return;
+        string name = EditedName;
+        try
+        {
+            string? conflict = await _editorService.FindNameConflictAsync(_trackerId, plan.Entity.Id, name);
+            if (version != _nameCheckVersion) return;
+            _nameConflict = conflict;
+            NotifyNameState();
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "The entity name could not be checked.");
+        }
+    }
+
+    private void NotifyNameState()
+    {
+        OnPropertyChanged(nameof(NameError));
+        OnPropertyChanged(nameof(HasNameError));
+        OnPropertyChanged(nameof(RenameNotice));
+        OnPropertyChanged(nameof(HasRenameNotice));
+        _saveCommand.NotifyCanExecuteChanged();
     }
 
     public string EditedGroupName
@@ -738,7 +826,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             }
 
             TrackedEntity entity = CurrentEditPlan.Entity;
-            return SelectedStatus != entity.Status ||
+            return EditedName != entity.SourceName ||
+                   SelectedStatus != entity.Status ||
                    EditedNotes != entity.Notes ||
                    EditedFilterActive != entity.FilterActive ||
                    EditedSharedNotes != entity.SharedNotes ||
@@ -771,7 +860,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             "Changes are staged with this synchronization and are saved only when the review is applied.",
         EntityEditorMode.ArchivedDetails =>
             "Archived entities are read-only until explicitly restored.",
-        _ => "Update group, assignment, priority, progress, notes, and manual dependency corrections. Imported facts remain visible."
+        _ => "Update name, group, assignment, priority, progress, notes, and manual dependency corrections. Imported facts remain visible."
     };
 
     public string SaveLabel => IsReviewMode ? "Stage Changes" : "Save Changes";
@@ -979,6 +1068,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(CanEdit));
         OnPropertyChanged(nameof(CanArchive));
         OnPropertyChanged(nameof(CanEditProgress));
+        OnPropertyChanged(nameof(CanEditName));
         OnPropertyChanged(nameof(CanEditPriority));
         OnPropertyChanged(nameof(CanRestoreEntity));
         OnPropertyChanged(nameof(CanPurgeEntity));
@@ -1263,7 +1353,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                     EditedGroupName,
                     developerIds: DeveloperPicker?.SelectedIds,
                     filterActive: EditedFilterActive,
-                    sharedNotes: EditedSharedNotes);
+                    sharedNotes: EditedSharedNotes,
+                    sourceName: EditedName);
                 await _onPersisted();
             }
 
@@ -1432,6 +1523,10 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         CurrentEditPlan = plan;
         if (initializeProgress)
         {
+            _editedName = plan.Entity.SourceName;
+            _nameConflict = null;
+            OnPropertyChanged(nameof(EditedName));
+            NotifyNameState();
             _selectedStatus = plan.Entity.Status;
             OnPropertyChanged(nameof(SelectedStatus));
             OnPropertyChanged(nameof(SelectedStatusDisplay));
@@ -1534,6 +1629,10 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(EditedResponsibleDeveloper));
         _editedGroupName = string.Empty;
         OnPropertyChanged(nameof(EditedGroupName));
+        _editedName = string.Empty;
+        _nameConflict = null;
+        OnPropertyChanged(nameof(EditedName));
+        NotifyNameState();
         _selectedRequestedPriority = null;
         OnPropertyChanged(nameof(SelectedRequestedPriority));
         EffectivePriority = "—";

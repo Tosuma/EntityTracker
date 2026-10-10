@@ -934,7 +934,7 @@
                                             <StackPanel VerticalAlignment="Center">
                                                 <ItemsControl ItemsSource="{Binding DeveloperItems}">
                                                     <ItemsControl.ItemsPanel>
-                                                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                                        <ItemsPanelTemplate><controls:SingleRowPanel /></ItemsPanelTemplate>
                                                     </ItemsControl.ItemsPanel>
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
@@ -1337,7 +1337,7 @@
                                             <StackPanel VerticalAlignment="Center">
                                                 <ItemsControl ItemsSource="{Binding DeveloperItems}">
                                                     <ItemsControl.ItemsPanel>
-                                                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                                                        <ItemsPanelTemplate><controls:SingleRowPanel /></ItemsPanelTemplate>
                                                     </ItemsControl.ItemsPanel>
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
@@ -2606,6 +2606,26 @@
                                 </Border>
 
                                 <StackPanel Visibility="{Binding Editor.ShowStandaloneSections, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <Border x:Name="EditorNameSection" Margin="0,0,0,14" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                                    <StackPanel>
+                                        <Label x:Name="EditorNameLabel" Padding="0" FontSize="16" FontWeight="SemiBold" Content="Name"
+                                               Target="{Binding ElementName=EditorNameTextBox}" />
+                                        <TextBox x:Name="EditorNameTextBox" Margin="0,6,0,0" Padding="8"
+                                                 AutomationProperties.LabeledBy="{Binding ElementName=EditorNameLabel}"
+                                                 IsEnabled="{Binding Editor.CanEditName}"
+                                                 Text="{Binding Editor.EditedName, UpdateSourceTrigger=PropertyChanged}" />
+                                        <Border Margin="0,8,0,0" Style="{StaticResource ErrorMessageStyle}"
+                                                Visibility="{Binding Editor.HasNameError, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <TextBlock Text="{Binding Editor.NameError}" TextWrapping="Wrap"
+                                                       AutomationProperties.LiveSetting="Assertive" />
+                                        </Border>
+                                        <Border Margin="0,8,0,0" Style="{StaticResource WarningMessageStyle}"
+                                                Visibility="{Binding Editor.HasRenameNotice, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <TextBlock Text="{Binding Editor.RenameNotice}" TextWrapping="Wrap"
+                                                       AutomationProperties.LiveSetting="Polite" />
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
                                 <Border Margin="0,0,0,14" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
                                 <StackPanel>
                                 <TextBlock Margin="0,0,0,12" FontSize="16" FontWeight="SemiBold" Text="Progress and ownership" />

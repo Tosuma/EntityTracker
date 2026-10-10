@@ -302,7 +302,8 @@ public sealed class EntityDependencyEditorService
         CancellationToken cancellationToken = default,
         IReadOnlyList<DeveloperId>? developerIds = null,
         string? filterActive = null,
-        string? sharedNotes = null)
+        string? sharedNotes = null,
+        string? sourceName = null)
     {
         ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(plan);
@@ -319,10 +320,12 @@ public sealed class EntityDependencyEditorService
             throw new InvalidOperationException("The edit plan belongs to another tracker.");
         }
 
+        string name = sourceName?.Trim() ?? plan.Entity.SourceName;
+        bool renamed = !string.Equals(name, plan.Entity.SourceName, StringComparison.Ordinal);
         TrackedEntity updatedEntity = new(
             plan.Entity.Id,
             trackerId,
-            plan.Entity.SourceName,
+            name,
             status,
             notes,
             plan.Entity.LifecycleState,
@@ -356,22 +359,25 @@ public sealed class EntityDependencyEditorService
         TrackedEntity[] candidateEntities = plan.CandidateEntities
             .Select(entity => entity.Id == updatedEntity.Id ? updatedEntity : entity)
             .ToArray();
+        RenameEffects rename = renamed
+            ? await PlanRenameAsync(trackerId, plan, name, candidateEntities, cancellationToken)
+            : new RenameEffects([plan.Entity.Id], plan.DesiredOverrides, plan.EffectiveState);
 
         await _store.ApplyAsync(
             trackerId,
             new TrackedStateChangeSet(
                 [],
+                renamed ? [updatedEntity] : [],
                 [],
                 [],
                 [],
                 [],
-                [],
-                [plan.Entity.Id],
-                plan.DesiredOverrides,
+                rename.OverrideOwnerIds,
+                rename.Overrides,
                 progressUpdates,
                 progressSnapshotAfterChanges: _snapshotCalculator.Calculate(
                     candidateEntities,
-                    plan.EffectiveState),
+                    rename.EffectiveState),
                 entitiesWithRequestedPriorityToUpdate: priorityUpdates,
                 entitiesWithResponsibleDeveloperToUpdate: responsibleDeveloperUpdates,
                 entitiesWithGroupNameToUpdate: groupNameUpdates,
@@ -403,6 +409,76 @@ public sealed class EntityDependencyEditorService
             plan.CandidateEntities,
             plan.EffectiveState);
     }
+
+    /// <summary>
+    /// Gets the name of another entity in the Tracker that already uses this name (ignoring case and
+    /// surrounding spaces), or null when the name is free.
+    /// </summary>
+    public async Task<string?> FindNameConflictAsync(
+        TrackerId trackerId,
+        EntityId entityId,
+        string name,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        EntitySourceKey key = EntitySourceKey.From(name);
+        return (await _entityRepository.GetAllAsync(trackerId, cancellationToken))
+            .FirstOrDefault(entity => entity.Id != entityId && EntitySourceKey.From(entity.SourceName) == key)
+            ?.SourceName;
+    }
+
+    /// <summary>
+    /// Works out what else a rename changes. Dependencies other entities added by hand, or suppressed,
+    /// name this entity, so they follow it to the new name; the dependency graph is then worked out
+    /// again, since the new name may now match dependencies that named it before it existed.
+    /// </summary>
+    private async Task<RenameEffects> PlanRenameAsync(
+        TrackerId trackerId,
+        EntityDependencyEditPlan plan,
+        string newName,
+        IReadOnlyList<TrackedEntity> candidateEntities,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(newName))
+            throw new InvalidOperationException("An entity needs a name.");
+        string? conflict = await FindNameConflictAsync(trackerId, plan.Entity.Id, newName, cancellationToken);
+        if (conflict is not null)
+            throw new InvalidOperationException($"Another entity in this Tracker is already called {conflict}.");
+
+        Snapshot snapshot = await LoadSnapshotAsync(trackerId, cancellationToken);
+        EntitySourceKey oldKey = EntitySourceKey.From(plan.Entity.SourceName);
+        bool keyChanged = oldKey != EntitySourceKey.From(newName);
+        ManualDependencyOverride[] others = snapshot.Overrides
+            .Where(item => item.DependentEntityId != plan.Entity.Id)
+            .Select(item => keyChanged && EntitySourceKey.From(item.DependencySourceName) == oldKey
+                ? new ManualDependencyOverride(item.DependentEntityId, newName, item.Action)
+                : item)
+            .ToArray();
+        EntityId[] followingOwners = keyChanged
+            ? snapshot.Overrides
+                .Where(item => item.DependentEntityId != plan.Entity.Id &&
+                               EntitySourceKey.From(item.DependencySourceName) == oldKey)
+                .Select(static item => item.DependentEntityId)
+                .Distinct()
+                .ToArray()
+            : [];
+        ManualDependencyOverride[] allOverrides = [.. others, .. plan.DesiredOverrides];
+        EffectiveDependencyState state = _effectiveDependencyResolver.Resolve(
+            candidateEntities,
+            snapshot.ResolvedDependencies,
+            snapshot.UnresolvedDependencies,
+            allOverrides);
+        return new RenameEffects(
+            [plan.Entity.Id, .. followingOwners],
+            [.. plan.DesiredOverrides, .. others.Where(item => followingOwners.Contains(item.DependentEntityId))],
+            state);
+    }
+
+    private sealed record RenameEffects(
+        IReadOnlyList<EntityId> OverrideOwnerIds,
+        IReadOnlyList<ManualDependencyOverride> Overrides,
+        EffectiveDependencyState EffectiveState);
 
     private async Task<Snapshot> LoadSnapshotAsync(
         TrackerId trackerId,

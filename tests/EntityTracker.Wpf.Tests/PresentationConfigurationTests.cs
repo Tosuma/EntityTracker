@@ -1042,6 +1042,35 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void EntityEditor_OffersALabelledNameFieldWithErrorAndWarning()
+    {
+        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement section = Assert.Single(document.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "EditorNameSection");
+
+        XElement name = Assert.Single(section.Descendants(), element => element.Name.LocalName == "TextBox");
+        Assert.Equal("{Binding Editor.EditedName, UpdateSourceTrigger=PropertyChanged}", (string?)name.Attribute("Text"));
+        Assert.Equal("{Binding Editor.CanEditName}", (string?)name.Attribute("IsEnabled"));
+        Assert.Equal("{Binding ElementName=EditorNameLabel}", (string?)name.Attribute("AutomationProperties.LabeledBy"));
+        Assert.Contains(section.Descendants(), element => (string?)element.Attribute("Text") == "{Binding Editor.NameError}");
+        Assert.Contains(section.Descendants(), element => (string?)element.Attribute("Text") == "{Binding Editor.RenameNotice}");
+        // No explanatory text under the Name heading.
+        Assert.DoesNotContain(section.Descendants(), element => element.Name.LocalName == "TextBlock" &&
+            element.Attribute("Text") is { } text && !text.Value.StartsWith('{'));
+    }
+
+    [Fact]
+    public void EntityTables_KeepDeveloperBoxesOnOneRow()
+    {
+        string xaml = File.ReadAllText(Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf", "Views",
+            "TrackerWorkspaceView.xaml"));
+
+        Assert.Equal(2, xaml.Split("<ItemsControl ItemsSource=\"{Binding DeveloperItems}\">").Length - 1);
+        Assert.Equal(2, xaml.Split("<ItemsPanelTemplate><controls:SingleRowPanel /></ItemsPanelTemplate>").Length - 1);
+    }
+
+    [Fact]
     public void ProjectComparison_DisabledFilterCardsRetainSurfaceWithMildFade()
     {
         XDocument document = LoadWpfXaml("Views", "ProjectDashboardView.xaml");

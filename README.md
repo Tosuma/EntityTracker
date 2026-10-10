@@ -115,8 +115,8 @@ archived entities, without deleting their history.
     </td>
     <td width="50%">
       <strong>Edit without losing imported facts</strong><br />
-      Update development status, internal and shared notes, lifecycle, and manual dependency corrections.<br /><br />
-      <img src="images/light/edit-entity.png" alt="Edit Entity modal with status, notes, dependencies, and archive controls" />
+      Rename an entity to fix a typo, and update development status, internal and shared notes, lifecycle, and manual dependency corrections. A rename keeps the entity's progress, history and dependencies.<br /><br />
+      <img src="images/light/edit-entity.png" alt="Edit Entity modal with name, status, notes, dependencies, and archive controls" />
     </td>
   </tr>
 </table>

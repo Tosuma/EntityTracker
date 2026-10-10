@@ -879,6 +879,43 @@ public sealed class ShellViewModelTests
             StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Rename_KeepsProgressAndDependenciesThatNameTheEntity()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        TrackerId trackerId = harness.DefaultTracker.Id;
+        await harness.AddEntityAsync(trackerId, "custmer", notes: "Checked with finance");
+        EntityId invoice = await harness.AddEntityAndReturnIdAsync(trackerId, "invoice");
+        await harness.AddDependencyByNameAsync(trackerId, invoice, "custmer");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: trackerId),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        MainWindowViewModel workspace = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
+
+        workspace.EditOverviewEntityCommand.Execute(workspace.ActiveTable.SourceItems.Single(item =>
+            item.SourceName == "custmer"));
+        await WaitUntilAsync(() => workspace.Editor.IsOpen && !workspace.Editor.IsBusy);
+        workspace.Editor.EditedName = "invoice";
+        await WaitUntilAsync(() => workspace.Editor.HasNameError);
+        Assert.False(workspace.Editor.SaveCommand.CanExecute(null));
+        workspace.Editor.EditedName = "customer";
+        Assert.True(workspace.Editor.SaveCommand.CanExecute(null));
+        workspace.Editor.SaveCommand.Execute(null);
+        await WaitUntilAsync(() => !workspace.Editor.IsOpen && !workspace.IsBusy &&
+            workspace.ActiveTable.SourceItems.Any(item => item.SourceName == "customer"));
+
+        Assert.DoesNotContain(workspace.ActiveTable.SourceItems, item => item.SourceName == "custmer");
+        Assert.True(workspace.OpenEntityDetails(
+            workspace.ActiveTable.SourceItems.Single(item => item.SourceName == "customer").EntityId));
+        Assert.Equal("Checked with finance", workspace.SelectedEntityDetails?.Notes);
+        workspace.EditOverviewEntityCommand.Execute(workspace.ActiveTable.SourceItems.Single(item =>
+            item.EntityId == invoice));
+        await WaitUntilAsync(() => workspace.Editor.IsOpen && !workspace.Editor.IsBusy);
+        Assert.Equal("customer", Assert.Single(workspace.Editor.Dependencies).SourceName);
+        workspace.Editor.CancelCommand.Execute(null);
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
         using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));
@@ -1189,6 +1226,10 @@ public sealed class ShellViewModelTests
                 progressSnapshotAfterChanges: new ProgressSnapshotState(1, 0, 0, 0, 0, 0)));
             return id;
         }
+
+        public Task AddDependencyByNameAsync(TrackerId trackerId, EntityId owner, string dependencyName) =>
+            _stateStore.ApplyAsync(trackerId, new TrackedStateChangeSet([], [], [], [], [], [],
+                [owner], [new ManualDependencyOverride(owner, dependencyName, ManualDependencyOverrideAction.Add)]));
 
         public Task AddEntityAsync(TrackerId trackerId, string name, string notes = "", string filterActive = "",
             string sharedNotes = "") =>
