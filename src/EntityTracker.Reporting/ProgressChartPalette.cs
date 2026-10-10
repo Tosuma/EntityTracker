@@ -12,4 +12,11 @@ internal static class ProgressChartPalette
     internal static readonly SKColor Green20 = new(0xD0, 0xD7, 0xD7);
     internal static readonly SKColor White = new(0xFF, 0xFF, 0xFF);
     internal static readonly SKColor Coral = new(0xFF, 0x63, 0x59);
+
+    // The status extension, as in the app's palette.
+    internal static readonly SKColor InProgressBlue = new(0x3D, 0x6A, 0x8A);
+    internal static readonly SKColor ReworkingLavender = new(0xB5, 0x8B, 0xD0);
+    internal static readonly SKColor BlockedBrick = new(0x9E, 0x2B, 0x25);
+    internal static readonly SKColor CompletedGreen = new(0xA8, 0xD5, 0xA2);
+    internal static readonly SKColor WaitingAmber = new(0xD9, 0x92, 0x2E);
 }

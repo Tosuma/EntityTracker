@@ -15,12 +15,12 @@ public sealed class ProgressChartPresentationBuilder
         new Dictionary<ProgressStatusCategory, SKColor>
         {
             [ProgressStatusCategory.NotStarted] = ProgressChartPalette.Green40,
-            [ProgressStatusCategory.InProgress] = ProgressChartPalette.Green80,
+            [ProgressStatusCategory.InProgress] = ProgressChartPalette.InProgressBlue,
             [ProgressStatusCategory.ReworkNeeded] = ProgressChartPalette.Coral,
-            [ProgressStatusCategory.DevelopmentCompleted] = ProgressChartPalette.Green60,
+            [ProgressStatusCategory.DevelopmentCompleted] = ProgressChartPalette.CompletedGreen,
             [ProgressStatusCategory.Reconciled] = ProgressChartPalette.Green100,
-            [ProgressStatusCategory.Blocked] = ProgressChartPalette.Coral,
-            [ProgressStatusCategory.Reworking] = ProgressChartPalette.Green80
+            [ProgressStatusCategory.Blocked] = ProgressChartPalette.BlockedBrick,
+            [ProgressStatusCategory.Reworking] = ProgressChartPalette.ReworkingLavender
         };
 
     public ProgressChartPresentation Build(ProgressDashboardReport report) =>
@@ -82,7 +82,7 @@ public sealed class ProgressChartPresentationBuilder
                 Values = report.ReadyAndBlockedOverTime
                     .Select(static point => point.BlockedCount)
                     .ToArray(),
-                Stroke = new SolidColorPaint(ProgressChartPalette.Coral, 3),
+                Stroke = new SolidColorPaint(ProgressChartPalette.WaitingAmber, 3),
                 Fill = null,
                 GeometrySize = 5
             }

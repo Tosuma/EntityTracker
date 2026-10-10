@@ -16,6 +16,14 @@
     <Color x:Key="Color.Review.Warning.Header">#D9922E</Color>
     <Color x:Key="Color.Review.Warning.Surface">#40D9922E</Color>
     <Color x:Key="Color.Review.Warning.Border">#D9922E</Color>
+    <!-- Status extension: muted hues for statuses the brand greens and coral cannot tell apart. Each keeps
+         at least 4.5:1 text contrast and stays distinct from the other statuses, including under
+         red-green colour blindness. Reports use the same values (ProgressChartPalette, ReportLabels, report.js). -->
+    <Color x:Key="Color.Status.InProgress">#3D6A8A</Color>
+    <Color x:Key="Color.Status.Reworking">#B58BD0</Color>
+    <Color x:Key="Color.Status.Blocked">#9E2B25</Color>
+    <Color x:Key="Color.Status.DevelopmentCompleted">#A8D5A2</Color>
+    <Color x:Key="Color.Status.WaitingOnDependencies">#D9922E</Color>
 
     <SolidColorBrush x:Key="Brush.Brand.DarkGreen" Color="{StaticResource Color.Brand.DarkGreen}" />
     <SolidColorBrush x:Key="Brush.Brand.Green100" Color="{StaticResource Color.Brand.Green100}" />
@@ -67,13 +75,14 @@
     <SolidColorBrush x:Key="Brush.Review.Warning.Text" Color="{DynamicResource TextFillColorPrimary}" />
 
     <SolidColorBrush x:Key="Brush.Status.NotStarted" Color="{StaticResource Color.Brand.Green40}" />
-    <SolidColorBrush x:Key="Brush.Status.InProgress" Color="{StaticResource Color.Brand.Green80}" />
+    <SolidColorBrush x:Key="Brush.Status.InProgress" Color="{StaticResource Color.Status.InProgress}" />
     <SolidColorBrush x:Key="Brush.Status.ReworkNeeded" Color="{StaticResource Color.Brand.Coral}" />
-    <SolidColorBrush x:Key="Brush.Status.Reworking" Color="{StaticResource Color.Brand.Green80}" />
-    <SolidColorBrush x:Key="Brush.Status.DevelopmentCompleted" Color="{StaticResource Color.Brand.Green60}" />
+    <SolidColorBrush x:Key="Brush.Status.Reworking" Color="{StaticResource Color.Status.Reworking}" />
+    <SolidColorBrush x:Key="Brush.Status.DevelopmentCompleted" Color="{StaticResource Color.Status.DevelopmentCompleted}" />
     <SolidColorBrush x:Key="Brush.Status.Reconciled" Color="{StaticResource Color.Brand.Green100}" />
     <SolidColorBrush x:Key="Brush.Status.Ready" Color="{StaticResource Color.Brand.Green80}" />
-    <SolidColorBrush x:Key="Brush.Status.Blocked" Color="{StaticResource Color.Brand.Coral}" />
+    <SolidColorBrush x:Key="Brush.Status.Blocked" Color="{StaticResource Color.Status.Blocked}" />
+    <SolidColorBrush x:Key="Brush.Status.WaitingOnDependencies" Color="{StaticResource Color.Status.WaitingOnDependencies}" />
     <!-- Selected entities in the dependency graph: an amber no status uses, readable on both themes. -->
     <SolidColorBrush x:Key="Brush.Graph.Selection" Color="#C8821E" />
 

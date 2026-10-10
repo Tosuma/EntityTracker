@@ -9,15 +9,15 @@
 
   var STATUS_COLORS = {
     "Not started": ["#A0AFAF", "#141E1E"],
-    "In progress": ["#41605E", "#FFFFFF"],
-    "Reworking": ["#41605E", "#FFFFFF"],
+    "In progress": ["#3D6A8A", "#FFFFFF"],
+    "Reworking": ["#B58BD0", "#141E1E"],
     "Rework needed": ["#FF6359", "#141E1E"],
-    "Blocked": ["#FF6359", "#141E1E"],
-    "Dev. completed": ["#718886", "#FFFFFF"],
-    "Completed": ["#718886", "#FFFFFF"],
+    "Blocked": ["#9E2B25", "#FFFFFF"],
+    "Dev. completed": ["#A8D5A2", "#141E1E"],
+    "Completed": ["#A8D5A2", "#141E1E"],
     "Reconciled": ["#123836", "#FFFFFF"],
-    "Ready": ["#D0D7D7", "#141E1E"],
-    "Waiting on dependencies": ["#F6D9A8", "#141E1E"]
+    "Ready": ["#41605E", "#FFFFFF"],
+    "Waiting on dependencies": ["#D9922E", "#141E1E"]
   };
 
   // Name matching lives in report-search.js, shared with the report's own tests.

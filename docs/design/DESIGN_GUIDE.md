@@ -11,22 +11,40 @@ resources instead of choosing colors directly in individual screens or controls.
 | Dark Green | `#141E1E` | Brand dark surface and report text |
 | Green 100% | `#123836` | Primary actions, dark surfaces, reconciled work |
 | Green 90% | `#2A4C4A` | Primary-action hover state |
-| Green 80% | `#41605E` | Strong borders, in-progress and ready states |
-| Green 60% | `#718886` | Development-completed state and supporting graphics |
+| Green 80% | `#41605E` | Strong borders, ready state and positive trends |
+| Green 60% | `#718886` | Supporting graphics |
 | Green 40% | `#A0AFAF` | Not-started state and neutral graphics |
 | Green 30% | `#B8C3C3` | Report support color |
 | Green 20% | `#D0D7D7` | Report chart grids |
 | Green 10% | `#E7EBEB` | Text on dark green and report backgrounds |
 | White | `#FFFFFF` | Text on dark green and report/chart canvas |
-| Coral | `#FF6359` | Rework, blocked/error states, destructive actions |
+| Coral | `#FF6359` | Rework needed, error states, destructive actions |
+
+### Status extension
+
+The brand palette has too few distinct hues for every status, so a small set of muted colors
+extends it. They are used only for the statuses below, never as decoration.
+
+| Name | Hex | Status | Text over it |
+| --- | --- | --- | --- |
+| Slate blue | `#3D6A8A` | In progress | White (5.8:1) |
+| Lavender | `#B58BD0` | Reworking | Dark Green (6.1:1) |
+| Brick red | `#9E2B25` | Blocked | White (7.4:1) |
+| Soft green | `#A8D5A2` | Development completed / Completed | Dark Green (10.3:1) |
+| Amber | `#D9922E` | Waiting on dependencies | Dark Green (6.6:1) |
+
+A new status color must meet 4.5:1 contrast with its text and stay clearly distinguishable from the
+other statuses it appears beside (development statuses together, work statuses together), also
+under simulated deuteranopia and protanopia. The set above keeps every pair at least ΔE 17 apart
+in all three. Define it once in `EntityTrackerPalette.xaml` and mirror it in Reporting.
 
 The application icon is existing artwork and is not recolored by this guide.
 
 Synchronization review uses one additional amber warning palette for retained, non-fatal
 unresolved dependencies. Its centralized header and border color is `#D9922E`; its surface is a
 translucent tint over the current theme surface and its text follows the active system text color.
-These values are not status colors and must not replace Coral for errors, removal, destructive
-actions, or blocked states.
+The same amber marks the Waiting on dependencies status. It must not replace Coral for errors,
+removal, or destructive actions.
 
 ## Contrast and text
 
@@ -61,13 +79,16 @@ Status colors are deliberately shared by the overview, progress dashboard, and P
 
 | Meaning | Color | Notes |
 | --- | --- | --- |
-| Not started | Green 40% | Neutral status; use Dark Green text over the color |
-| In progress | Green 80% | Active work; use White text over the color |
-| Rework needed | Coral | Attention state; use Dark Green text over the color |
-| Development completed | Green 60% | Complete but not reconciled; use Dark Green text over the color |
-| Reconciled | Green 100% | Fully implemented/reconciled; use White text over the color |
-| Ready | Green 80% | Dependency-ready work |
-| Blocked/error/destructive | Coral | Always add a label, icon, or explanatory message |
+| Not started | Green 40% | Not begun; Dark Green text |
+| In progress | Slate blue | Being worked on; White text |
+| Rework needed | Coral | Needs attention; Dark Green text |
+| Reworking | Lavender | Being reworked; Dark Green text |
+| Blocked | Brick red | Stuck; White text |
+| Development completed / Completed | Soft green | Done, not yet reconciled; Dark Green text |
+| Reconciled | Green 100% | Fully implemented/reconciled; White text |
+| Ready | Green 80% | Dependency-ready work; White text |
+| Waiting on dependencies | Amber | Waiting for other entities; Dark Green text |
+| Error/destructive | Coral | Always add a label, icon, or explanatory message |
 | Unresolved import warning | Warning palette | Retained non-fatal references in synchronization review only |
 
 Coral is the primary accent color. Reserve it for conditions or actions that deserve attention
@@ -91,7 +112,8 @@ Destructive actions require confirmation where the workflow already calls for it
   review uses a pale Coral fill for possibly removed entities and the dedicated yellow warning
   palette for retained unresolved dependencies.
 - Charts use Dark Green for axes and labels, Green 20% for grid lines, the status mapping above for
-  categories, Green 80% for positive/ready trends, and Coral for negative/blocked trends.
+  categories, Green 80% for positive/ready trends, Amber for waiting-on-dependencies trends, and
+  Coral for negative trends.
 
 ## Scrolling
 

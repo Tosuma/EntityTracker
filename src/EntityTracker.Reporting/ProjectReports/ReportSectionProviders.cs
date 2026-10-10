@@ -54,7 +54,7 @@ public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IRepo
             [
                 new ReportSeries("Ready to start", ReportLabels.Green80,
                     report.ReadyAndBlockedOverTime.Select(point => (double)point.ReadyCount).ToArray()),
-                new ReportSeries("Waiting on dependencies", ReportLabels.Coral,
+                new ReportSeries("Waiting on dependencies", ReportLabels.WaitingAmber,
                     report.ReadyAndBlockedOverTime.Select(point => (double)point.BlockedCount).ToArray())
             ]),
         ProgressChartKind.WeeklyNetImplementedChange => new ReportChart(

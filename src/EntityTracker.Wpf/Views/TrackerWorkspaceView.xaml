@@ -231,11 +231,11 @@
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.Reworking}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Reworking}" />
-                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Reworking" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.Blocked}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Blocked}" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Blocked" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.DevelopmentCompleted}">
@@ -274,11 +274,11 @@
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Blocked}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Blocked}" />
                     <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
-                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Blocked" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.WaitingOnDependencies}">
-                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Blocked}" />
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.WaitingOnDependencies}" />
                     <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Waiting on dependencies" />

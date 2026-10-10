@@ -41,9 +41,9 @@ public sealed class ProgressChartPresentationBuilderTests
         SKColor[] expectedStatusColors =
         [
             new(0xA0, 0xAF, 0xAF),
-            new(0x41, 0x60, 0x5E),
+            new(0x3D, 0x6A, 0x8A),
             new(0xFF, 0x63, 0x59),
-            new(0x71, 0x88, 0x86),
+            new(0xA8, 0xD5, 0xA2),
             new(0x12, 0x38, 0x36)
         ];
         Assert.Equal(expectedStatusColors.Length, presentation.CurrentStatusSeries.Length);
@@ -65,7 +65,7 @@ public sealed class ProgressChartPresentationBuilderTests
             Assert.IsType<SolidColorPaint>(
                 Assert.IsType<LineSeries<int>>(presentation.ReadinessSeries[0]).Stroke).Color);
         Assert.Equal(
-            new SKColor(0xFF, 0x63, 0x59),
+            new SKColor(0xD9, 0x92, 0x2E),
             Assert.IsType<SolidColorPaint>(
                 Assert.IsType<LineSeries<int>>(presentation.ReadinessSeries[1]).Stroke).Color);
         Assert.Equal(
