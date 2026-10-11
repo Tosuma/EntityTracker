@@ -62,6 +62,9 @@
                     Background="{DynamicResource Brush.Status.NotStarted}"
                     CornerRadius="10">
                 <TextBlock x:Name="BadgeText"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                            FontSize="12"
                            FontWeight="SemiBold"
                            Foreground="{DynamicResource Brush.Status.NotStarted.Text}"
@@ -98,7 +101,7 @@
                 <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.DevelopmentCompleted}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.DevelopmentCompleted}" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Status.DevelopmentCompleted.Text}" />
-                    <Setter TargetName="BadgeText" Property="Text" Value="Dev. completed" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Completed" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.Reconciled}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Reconciled}" />
@@ -116,6 +119,9 @@
                     BorderThickness="1"
                     CornerRadius="10">
                 <TextBlock x:Name="BadgeText" FontSize="12" FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                            Foreground="{DynamicResource Brush.Text.Primary}" />
             </Border>
             <DataTemplate.Triggers>

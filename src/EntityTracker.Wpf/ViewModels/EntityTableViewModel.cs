@@ -511,7 +511,7 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
         DevelopmentStatus.ReworkNeeded => "Rework needed",
         DevelopmentStatus.Reworking => "Reworking",
         DevelopmentStatus.Blocked => "Blocked",
-        DevelopmentStatus.DevelopmentCompleted => "Dev. completed",
+        DevelopmentStatus.DevelopmentCompleted => "Completed",
         DevelopmentStatus.Reconciled => "Reconciled",
         _ => status.ToString()
     };

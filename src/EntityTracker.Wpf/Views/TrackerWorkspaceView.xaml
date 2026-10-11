@@ -214,6 +214,9 @@
                     Background="{DynamicResource Brush.Status.NotStarted}"
                     CornerRadius="10">
                 <TextBlock x:Name="BadgeText"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                            FontSize="12"
                            FontWeight="SemiBold"
                            Foreground="{DynamicResource Brush.Status.NotStarted.Text}"
@@ -243,7 +246,7 @@
                 <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.DevelopmentCompleted}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.DevelopmentCompleted}" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Status.DevelopmentCompleted.Text}" />
-                    <Setter TargetName="BadgeText" Property="Text" Value="Dev. completed" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Completed" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.Reconciled}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Reconciled}" />
@@ -262,6 +265,9 @@
                     BorderThickness="1"
                     CornerRadius="10">
                 <TextBlock x:Name="BadgeText"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                            FontSize="12"
                            FontWeight="SemiBold"
                            Foreground="{DynamicResource Brush.Text.Primary}"
@@ -912,7 +918,10 @@
                                         <DataTemplate>
                                             <ContentControl AutomationProperties.Name="{Binding WorkStatus, StringFormat=Work status: {0}}"
                                                             Content="{Binding WorkStatusDisplay}"
-                                                            ContentTemplate="{StaticResource WorkStatusBadgeTemplate}" />
+                                                            ContentTemplate="{StaticResource WorkStatusBadgeTemplate}"
+                                                            Margin="4,0"
+                                                            HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center" />
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
@@ -924,7 +933,10 @@
                                         <DataTemplate>
                                             <ContentControl AutomationProperties.Name="{Binding Status, StringFormat=Development status: {0}}"
                                                             Content="{Binding DevelopmentStatus}"
-                                                            ContentTemplate="{StaticResource DevelopmentStatusBadgeTemplate}" />
+                                                            ContentTemplate="{StaticResource DevelopmentStatusBadgeTemplate}"
+                                                            Margin="4,0"
+                                                            HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center" />
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
@@ -1327,7 +1339,10 @@
                                         <DataTemplate>
                                             <ContentControl AutomationProperties.Name="{Binding Status, StringFormat=Development status: {0}}"
                                                             Content="{Binding DevelopmentStatus}"
-                                                            ContentTemplate="{StaticResource DevelopmentStatusBadgeTemplate}" />
+                                                            ContentTemplate="{StaticResource DevelopmentStatusBadgeTemplate}"
+                                                            Margin="4,0"
+                                                            HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center" />
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>

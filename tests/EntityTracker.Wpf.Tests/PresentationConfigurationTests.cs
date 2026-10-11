@@ -604,6 +604,46 @@ public sealed class PresentationConfigurationTests
     [Theory]
     [InlineData("TrackerWorkspaceView.xaml")]
     [InlineData("ProjectDashboardView.xaml")]
+    public void StatusBadges_CentreTheirTextAndShortenLongLabels(string view)
+    {
+        XDocument document = LoadWpfXaml("Views", view);
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        XElement[] labels = document.Descendants()
+            .Where(element => element.Name.LocalName == "TextBlock" && (string?)element.Attribute(x + "Name") == "BadgeText")
+            .ToArray();
+
+        Assert.Equal(2, labels.Length);
+        Assert.All(labels, label =>
+        {
+            Assert.Equal("Center", (string?)label.Attribute("VerticalAlignment"));
+            Assert.Equal("CharacterEllipsis", (string?)label.Attribute("TextTrimming"));
+        });
+    }
+
+    [Fact]
+    public void EntityTables_CentreStatusBadgesInTheirCellsWithRoomAround()
+    {
+        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+
+        XElement[] cells = document.Descendants()
+            .Where(element => element.Name.LocalName == "ContentControl" &&
+                              ((string?)element.Attribute("ContentTemplate"))?.Contains("StatusBadgeTemplate", StringComparison.Ordinal) == true &&
+                              element.Ancestors().Any(static ancestor => ancestor.Name.LocalName == "DataGridTemplateColumn"))
+            .ToArray();
+
+        Assert.Equal(3, cells.Length);
+        Assert.All(cells, cell =>
+        {
+            Assert.Equal("Center", (string?)cell.Attribute("HorizontalAlignment"));
+            Assert.Equal("Center", (string?)cell.Attribute("VerticalAlignment"));
+            Assert.Equal("4,0", (string?)cell.Attribute("Margin"));
+        });
+    }
+
+    [Theory]
+    [InlineData("TrackerWorkspaceView.xaml")]
+    [InlineData("ProjectDashboardView.xaml")]
     public void StatusBadges_TakeFillAndTextFromTheirStatusVariables(string view)
     {
         XDocument document = LoadWpfXaml("Views", view);
