@@ -619,6 +619,10 @@ public sealed class PresentationConfigurationTests
             Assert.Equal("Center", (string?)label.Attribute("VerticalAlignment"));
             Assert.Equal("CharacterEllipsis", (string?)label.Attribute("TextTrimming"));
         });
+
+        // Room around the label: more at the sides than above and below.
+        XElement[] boxes = labels.Select(static label => label.Parent!).ToArray();
+        Assert.All(boxes, box => Assert.Equal("12,5", (string?)box.Attribute("Padding")));
     }
 
     [Fact]

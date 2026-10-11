@@ -210,7 +210,7 @@ public sealed class EntityDetailsViewModel : INotifyPropertyChanged
         Domain.DevelopmentStatus.ReworkNeeded => "Rework needed",
         Domain.DevelopmentStatus.Reworking => "Reworking",
         Domain.DevelopmentStatus.Blocked => "Blocked",
-        Domain.DevelopmentStatus.DevelopmentCompleted => "Dev. completed",
+        Domain.DevelopmentStatus.DevelopmentCompleted => "Completed",
         Domain.DevelopmentStatus.Reconciled => "Reconciled",
         null => "Unknown status",
         _ => status.Value.ToString()

@@ -37,7 +37,7 @@ public sealed partial class ReportColorTests
 
         Assert.Equal([ColorScheme.Status.InProgress.Fill, ColorScheme.Status.InProgress.Text], colors.Status["In progress"]);
         Assert.Equal([ColorScheme.Status.DevelopmentCompleted.Fill, ColorScheme.Status.DevelopmentCompleted.Text],
-            colors.Status["Dev. completed"]);
+            colors.Status["Completed"]);
         Assert.Equal([ColorScheme.ReportWorkStatus.Ready.Fill, ColorScheme.ReportWorkStatus.Ready.Text], colors.Work["Ready"]);
         Assert.Equal([ColorScheme.ReportWorkStatus.WaitingOnDependencies.Fill, ColorScheme.ReportWorkStatus.WaitingOnDependencies.Text],
             colors.Work["Waiting on dependencies"]);

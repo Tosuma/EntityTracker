@@ -590,7 +590,7 @@ public sealed class SchemaSynchronizationReviewViewModel : INotifyPropertyChange
             impact.EntityId,
             impact.SourceName,
             impact.CurrentStatus == EntityTracker.Domain.DevelopmentStatus.DevelopmentCompleted
-                ? "Dev. completed"
+                ? "Completed"
                 : "Reconciled",
             impact.Decision);
 

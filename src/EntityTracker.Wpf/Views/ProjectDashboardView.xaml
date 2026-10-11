@@ -57,7 +57,7 @@
 
         <DataTemplate x:Key="ComparisonDevelopmentStatusBadgeTemplate">
             <Border x:Name="Badge"
-                    Padding="8,3"
+                    Padding="12,5"
                     HorizontalAlignment="Left"
                     Background="{DynamicResource Brush.Status.NotStarted}"
                     CornerRadius="10">
@@ -112,7 +112,7 @@
         </DataTemplate>
 
         <DataTemplate x:Key="ComparisonWorkStatusBadgeTemplate">
-            <Border x:Name="Badge" Margin="0,4,0,0" Padding="8,3"
+            <Border x:Name="Badge" Margin="0,4,0,0" Padding="12,5"
                     HorizontalAlignment="Left"
                     Background="{DynamicResource Brush.Surface.Subtle}"
                     BorderBrush="{DynamicResource Brush.Border.Medium}"

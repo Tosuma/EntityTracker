@@ -209,7 +209,7 @@
 
         <DataTemplate x:Key="DevelopmentStatusBadgeTemplate">
             <Border x:Name="Badge"
-                    Padding="8,3"
+                    Padding="12,5"
                     HorizontalAlignment="Left"
                     Background="{DynamicResource Brush.Status.NotStarted}"
                     CornerRadius="10">
@@ -258,7 +258,7 @@
 
         <DataTemplate x:Key="WorkStatusBadgeTemplate">
             <Border x:Name="Badge"
-                    Padding="8,3"
+                    Padding="12,5"
                     HorizontalAlignment="Left"
                     Background="{DynamicResource Brush.Surface.Subtle}"
                     BorderBrush="{DynamicResource Brush.Border.Medium}"
@@ -627,7 +627,7 @@
                                 </Style>
                             </Button.Style>
                             <StackPanel>
-                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Dev. completed" />
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Completed" />
                                 <TextBlock Margin="0,3,0,0"
                                            FontSize="22"
                                            FontWeight="SemiBold"
@@ -693,7 +693,7 @@
                                                 CornerRadius="4" />
                                         <TextBlock FontSize="11"
                                                    Foreground="{DynamicResource Brush.Text.Secondary}"
-                                                   Text="Dev. completed" />
+                                                   Text="Completed" />
                                     </StackPanel>
                                     <StackPanel Margin="0,0,10,0" Orientation="Horizontal">
                                         <Border Width="8"

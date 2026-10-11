@@ -756,7 +756,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         new(DevelopmentStatus.InProgress, "In progress"),
         new(DevelopmentStatus.ReworkNeeded, "Rework needed"),
         new(DevelopmentStatus.Reworking, "Reworking"),
-        new(DevelopmentStatus.DevelopmentCompleted, "Dev. completed"),
+        new(DevelopmentStatus.DevelopmentCompleted, "Completed"),
         new(DevelopmentStatus.Reconciled, "Reconciled")
     ];
 

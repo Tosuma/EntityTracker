@@ -218,7 +218,7 @@ public sealed class ProgressChartPresentationBuilder
         ProgressStatusCategory.NotStarted => "Not started",
         ProgressStatusCategory.InProgress => "In progress",
         ProgressStatusCategory.ReworkNeeded => "Rework needed",
-        ProgressStatusCategory.DevelopmentCompleted => "Dev. completed",
+        ProgressStatusCategory.DevelopmentCompleted => "Completed",
         ProgressStatusCategory.Reconciled => "Reconciled",
         ProgressStatusCategory.Blocked => "Blocked",
         ProgressStatusCategory.Reworking => "Reworking",

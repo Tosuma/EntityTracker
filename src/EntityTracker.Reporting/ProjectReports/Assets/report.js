@@ -617,7 +617,7 @@
       "aria-label": "Dependency tree. Point at an entity for its details; click it to highlight its links." });
     host.appendChild(canvas);
     var legendNode = el("div", { className: "legend graph-legend" }, [
-      "Not started", "Blocked", "In progress", "Rework needed", "Reworking", "Dev. completed", "Reconciled", "Missing"
+      "Not started", "Blocked", "In progress", "Rework needed", "Reworking", "Completed", "Reconciled", "Missing"
     ].map(function (label) {
       var span = el("span", { text: label });
       span.style.setProperty("--swatch", label === "Missing" ? COLORS.missingSwatch : STATUS_COLORS[label][0]);

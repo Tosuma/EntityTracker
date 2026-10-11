@@ -1441,7 +1441,7 @@ public sealed class MainWindowViewModelTests
             row => Assert.Equal(DevelopmentStatus.DevelopmentCompleted, row.DevelopmentStatus));
         NotificationItem notice = Assert.Single(notifications.Items);
         Assert.Equal(("Bulk status update", NotificationKind.Success), (notice.Title, notice.Kind));
-        Assert.Equal("1 entity updated to Dev. completed; 1 already matched.", notice.Message);
+        Assert.Equal("1 entity updated to Completed; 1 already matched.", notice.Message);
     }
 
     [Fact]
