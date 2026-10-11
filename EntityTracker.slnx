@@ -4,6 +4,7 @@
     <Project Path="src/EntityTracker.Application/EntityTracker.Application.csproj" />
     <Project Path="src/EntityTracker.Infrastructure/EntityTracker.Infrastructure.csproj" />
     <Project Path="src/EntityTracker.Reporting/EntityTracker.Reporting.csproj" />
+    <Project Path="src/EntityTracker.Theme/EntityTracker.Theme.csproj" />
     <Project Path="src/EntityTracker.Wpf/EntityTracker.Wpf.csproj" />
   </Folder>
   <Folder Name="/tools/">

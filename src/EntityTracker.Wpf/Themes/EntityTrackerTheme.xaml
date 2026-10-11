@@ -1,6 +1,10 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:themes="clr-namespace:EntityTracker.Wpf.Themes">
     <ResourceDictionary.MergedDictionaries>
+        <!-- Every fixed colour, made from EntityTracker.Theme/ColorScheme.cs. Merged first so the
+             dictionaries below can refer to it. -->
+        <themes:ColorSchemeResources />
         <ResourceDictionary Source="EntityTrackerPalette.xaml" />
         <ResourceDictionary Source="EntityTrackerTypography.xaml" />
         <ResourceDictionary Source="EntityTrackerComponents.xaml" />

@@ -13,7 +13,7 @@ public sealed class ProgressChartPresentationBuilder
 {
     private static readonly IReadOnlyDictionary<ProgressStatusCategory, SKColor> StatusFills =
         Enum.GetValues<ProgressStatusCategory>().ToDictionary(
-            static status => status, static status => StatusColors.For(status).FillColor);
+            static status => status, static status => ProgressChartPalette.From(ProgressChartPalette.Status(status).Fill));
 
     public ProgressChartPresentation Build(ProgressDashboardReport report) =>
         Build(report, includeExportPieLabels: false);
@@ -51,8 +51,8 @@ public sealed class ProgressChartPresentationBuilder
                 Values = report.ImplementedOverTime
                     .Select(static point => point.ImplementedCount)
                     .ToArray(),
-                Stroke = new SolidColorPaint(ProgressChartPalette.Green100, 3),
-                Fill = new SolidColorPaint(ProgressChartPalette.Green100.WithAlpha(35)),
+                Stroke = new SolidColorPaint(ProgressChartPalette.Implemented, 3),
+                Fill = new SolidColorPaint(ProgressChartPalette.Implemented.WithAlpha(35)),
                 GeometrySize = 5
             }
         ];
@@ -64,7 +64,7 @@ public sealed class ProgressChartPresentationBuilder
                 Values = report.ReadyAndBlockedOverTime
                     .Select(static point => point.ReadyCount)
                     .ToArray(),
-                Stroke = new SolidColorPaint(ProgressChartPalette.Green80, 3),
+                Stroke = new SolidColorPaint(ProgressChartPalette.ReadyTrend, 3),
                 Fill = null,
                 GeometrySize = 5
             },
@@ -74,7 +74,7 @@ public sealed class ProgressChartPresentationBuilder
                 Values = report.ReadyAndBlockedOverTime
                     .Select(static point => point.BlockedCount)
                     .ToArray(),
-                Stroke = new SolidColorPaint(ProgressChartPalette.Coral, 3),
+                Stroke = new SolidColorPaint(ProgressChartPalette.WaitingTrend, 3),
                 Fill = null,
                 GeometrySize = 5
             }
@@ -92,13 +92,13 @@ public sealed class ProgressChartPresentationBuilder
             {
                 Name = "Increase",
                 Values = positive,
-                Fill = new SolidColorPaint(ProgressChartPalette.Green80)
+                Fill = new SolidColorPaint(ProgressChartPalette.Increase)
             },
             new ColumnSeries<int?>
             {
                 Name = "Decrease",
                 Values = negative,
-                Fill = new SolidColorPaint(ProgressChartPalette.Coral)
+                Fill = new SolidColorPaint(ProgressChartPalette.Decrease)
             }
         ];
 
@@ -177,7 +177,7 @@ public sealed class ProgressChartPresentationBuilder
         return $"{count} ({percentage.ToString("0.#", CultureInfo.CurrentCulture)}%)";
     }
 
-    private static SKColor GetPieLabelColor(ProgressStatusCategory status) => StatusColors.For(status).TextColor;
+    private static SKColor GetPieLabelColor(ProgressStatusCategory status) => ProgressChartPalette.From(ProgressChartPalette.Status(status).Text);
 
     private static Axis[] CreateDateAxes(DateOnly[] dates)
     {
@@ -209,9 +209,9 @@ public sealed class ProgressChartPresentationBuilder
             : string.Empty;
     }
 
-    private static SolidColorPaint CreateTextPaint() => new(ProgressChartPalette.DarkGreen);
+    private static SolidColorPaint CreateTextPaint() => new(ProgressChartPalette.Text);
 
-    private static SolidColorPaint CreateGridPaint() => new(ProgressChartPalette.Green20, 1);
+    private static SolidColorPaint CreateGridPaint() => new(ProgressChartPalette.Grid, 1);
 
     private static string FormatStatus(ProgressStatusCategory status) => status switch
     {

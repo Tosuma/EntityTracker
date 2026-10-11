@@ -4,6 +4,11 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
+
+using EntityTracker.Application.Workflow;
+using EntityTracker.Domain;
+using EntityTracker.Theme;
 
 namespace EntityTracker.Reporting.ProjectReports;
 
@@ -12,7 +17,7 @@ namespace EntityTracker.Reporting.ProjectReports;
 /// styles and script that draw it. Nothing is loaded from the network, so the file works offline
 /// wherever it is opened, and the browser can print it to PDF.
 /// </summary>
-public static class ProjectReportHtmlWriter
+public static partial class ProjectReportHtmlWriter
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -39,7 +44,7 @@ public static class ProjectReportHtmlWriter
                         "style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:\">");
         html.AppendLine("<meta name=\"generator\" content=\"EntityTracker\">");
         html.Append("<title>").Append(WebUtility.HtmlEncode(title)).AppendLine("</title>");
-        html.Append("<style>").Append(Asset("report.css")).AppendLine("</style>");
+        html.Append("<style>").Append(Styles()).AppendLine("</style>");
         html.AppendLine("</head>");
         html.AppendLine("<body>");
         html.AppendLine("<noscript><p class=\"noscript\">This report needs JavaScript to show its charts and search. " +
@@ -47,6 +52,9 @@ public static class ProjectReportHtmlWriter
         html.Append("<main id=\"report\" data-creator=\"").Append(WebUtility.HtmlEncode(CreatorName)).AppendLine("\"></main>");
         html.Append("<script id=\"report-data\" type=\"application/json\">")
             .Append(JsonSerializer.Serialize(report, JsonOptions))
+            .AppendLine("</script>");
+        html.Append("<script id=\"report-colors\" type=\"application/json\">")
+            .Append(JsonSerializer.Serialize(Colors(), JsonOptions))
             .AppendLine("</script>");
         html.Append("<script>").Append(Asset("report-search.js")).AppendLine("</script>");
         html.Append("<script>").Append(Asset("report-charts.js")).AppendLine("</script>");
@@ -70,6 +78,55 @@ public static class ProjectReportHtmlWriter
     public static string AudienceLabel(ReportAudience audience) =>
         audience == ReportAudience.Client ? "Client report" : "Internal report";
 
+    /// <summary>
+    /// Gets the CSS variables report.css may use, from <see cref="ColorScheme"/>: every base colour (for
+    /// example --green-100) and every entry of <see cref="ColorScheme.Report"/> (for example --ink).
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> CssColors { get; } =
+        ColorSchemeCatalog.Section(nameof(ColorScheme.Base))
+            .Concat(ColorSchemeCatalog.Section(nameof(ColorScheme.Report)))
+            .ToDictionary(static entry => ColorSchemeCatalog.Kebab(entry.Name), static entry => (string)entry.Value);
+
+    /// <summary>
+    /// Gets report.css with each colour variable replaced by its value, which also works where variables
+    /// don't (the printed page's margins). Variables the script sets, such as --swatch, are left alone.
+    /// </summary>
+    public static string Styles() => CssVariable().Replace(Asset("report.css"), static match =>
+        CssColors.TryGetValue(match.Groups[1].Value, out string? color) ? color : match.Value);
+
+    /// <summary>The colours report.js draws with: status badges by label, and a few chart colours.</summary>
+    public static ReportColors Colors() => new(
+        Enum.GetValues<DevelopmentStatus>().ToDictionary(ReportLabels.Status, static status => Pair(status switch
+        {
+            DevelopmentStatus.NotStarted => ColorScheme.Status.NotStarted,
+            DevelopmentStatus.InProgress => ColorScheme.Status.InProgress,
+            DevelopmentStatus.ReworkNeeded => ColorScheme.Status.ReworkNeeded,
+            DevelopmentStatus.Reworking => ColorScheme.Status.Reworking,
+            DevelopmentStatus.Blocked => ColorScheme.Status.Blocked,
+            DevelopmentStatus.DevelopmentCompleted => ColorScheme.Status.DevelopmentCompleted,
+            DevelopmentStatus.Reconciled => ColorScheme.Status.Reconciled,
+            _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
+        })),
+        new Dictionary<string, string[]>
+        {
+            [ReportLabels.WorkStatus(EntityWorkflowState.Ready)] = Pair(ColorScheme.ReportWorkStatus.Ready),
+            [ReportLabels.WorkStatus(EntityWorkflowState.Blocked)] = Pair(ColorScheme.ReportWorkStatus.WaitingOnDependencies),
+            [ReportLabels.WorkStatus(EntityWorkflowState.ManuallyBlocked)] = Pair(ColorScheme.ReportWorkStatus.Blocked),
+            [ReportLabels.WorkStatus(EntityWorkflowState.InProgress)] = Pair(ColorScheme.ReportWorkStatus.InProgress),
+            [ReportLabels.WorkStatus(EntityWorkflowState.DevelopmentCompleted)] = Pair(ColorScheme.ReportWorkStatus.Completed),
+            [ReportLabels.WorkStatus(EntityWorkflowState.Reconciled)] = Pair(ColorScheme.ReportWorkStatus.Reconciled)
+        },
+        ColorScheme.Chart.SliceBorder,
+        ColorScheme.Chart.Grid,
+        ColorScheme.Chart.Decrease,
+        ColorScheme.Chart.UnknownStatus,
+        ColorScheme.Report.MissingSwatch);
+
+    private static string[] Pair(StatusColor color) => [color.Fill, color.Text];
+
+    [GeneratedRegex(@"var\(--([a-z0-9-]+)\)")]
+    private static partial Regex CssVariable();
+
     /// <summary>Gets one of the report's embedded styles or scripts, for example "report-search.js".</summary>
     public static string Asset(string name)
     {
@@ -80,3 +137,16 @@ public static class ProjectReportHtmlWriter
         return reader.ReadToEnd();
     }
 }
+
+/// <summary>
+/// The colours written into a report for report.js: [fill, text] per development status label
+/// (<paramref name="Status"/>) and per work status label (<paramref name="Work"/>), and the chart colours it uses.
+/// </summary>
+public sealed record ReportColors(
+    IReadOnlyDictionary<string, string[]> Status,
+    IReadOnlyDictionary<string, string[]> Work,
+    string SliceBorder,
+    string Grid,
+    string Decrease,
+    string UnknownStatus,
+    string MissingSwatch);

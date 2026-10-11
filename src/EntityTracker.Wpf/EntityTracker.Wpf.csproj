@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\EntityTracker.Application\EntityTracker.Application.csproj" />
+    <ProjectReference Include="..\EntityTracker.Theme\EntityTracker.Theme.csproj" />
     <ProjectReference Include="..\EntityTracker.Infrastructure\EntityTracker.Infrastructure.csproj" />
     <ProjectReference Include="..\EntityTracker.Reporting\EntityTracker.Reporting.csproj" />
   </ItemGroup>

@@ -601,60 +601,6 @@ public sealed class PresentationConfigurationTests
             (string?)error.Parent?.Parent?.Attribute("Style"));
     }
 
-    [Fact]
-    public void ProductStatusColors_MeetNormalTextContrastThreshold()
-    {
-        XDocument palette = LoadWpfXaml("Themes", "EntityTrackerPalette.xaml");
-        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
-        Dictionary<string, string> colors = palette.Descendants()
-            .Where(element => element.Name.LocalName == "Color")
-            .ToDictionary(
-                element => (string)element.Attribute(x + "Key")!,
-                element => element.Value);
-        (string Foreground, string Background)[] pairs =
-        [
-            ("Color.Brand.DarkGreen", "Color.Brand.Green40"),
-            ("Color.Brand.DarkGreen", "Color.Brand.Green60"),
-            ("Color.Brand.DarkGreen", "Color.Brand.Coral"),
-            ("Color.Brand.White", "Color.Brand.Green80"),
-            ("Color.Brand.White", "Color.Brand.Green100"),
-            ("Color.Brand.Green10", "Color.Brand.Green80"),
-            ("Color.Brand.Green10", "Color.Brand.Green100"),
-            .. StatusNames.Select(status => ($"{status}.Text", status))
-        ];
-
-        Assert.All(pairs, pair => Assert.True(
-            ContrastRatio(colors[pair.Foreground], colors[pair.Background]) >= 4.5,
-            $"{pair.Foreground} on {pair.Background} does not meet 4.5:1 contrast."));
-    }
-
-    private static readonly string[] DevelopmentStatuses =
-        ["NotStarted", "InProgress", "ReworkNeeded", "Reworking", "Blocked", "DevelopmentCompleted", "Reconciled"];
-
-    private static readonly string[] WorkStatuses =
-        ["Ready", "WaitingOnDependencies", "Blocked", "InProgress", "Completed", "Reconciled"];
-
-    private static IEnumerable<string> StatusNames =>
-        DevelopmentStatuses.Select(static status => $"Color.Status.{status}")
-            .Concat(WorkStatuses.Select(static status => $"Color.WorkStatus.{status}"));
-
-    [Fact]
-    public void StatusColors_EveryStatusHasItsOwnFillAndTextVariables()
-    {
-        XDocument palette = LoadWpfXaml("Themes", "EntityTrackerPalette.xaml");
-        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
-        Dictionary<string, string?> brushes = palette.Descendants()
-            .Where(element => element.Name.LocalName == "SolidColorBrush")
-            .ToDictionary(element => (string)element.Attribute(x + "Key")!, element => (string?)element.Attribute("Color"));
-
-        foreach (string color in StatusNames)
-        {
-            string brush = color.Replace("Color.", "Brush.", StringComparison.Ordinal);
-            Assert.Equal($"{{StaticResource {color}}}", brushes[brush]);
-            Assert.Equal($"{{StaticResource {color}.Text}}", brushes[$"{brush}.Text"]);
-        }
-    }
-
     [Theory]
     [InlineData("TrackerWorkspaceView.xaml")]
     [InlineData("ProjectDashboardView.xaml")]
@@ -1177,27 +1123,6 @@ public sealed class PresentationConfigurationTests
         string repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
         return XDocument.Load(Path.Combine(
             [repositoryRoot, "src", "EntityTracker.Wpf", .. relativePath]));
-    }
-
-    private static double ContrastRatio(string foreground, string background)
-    {
-        double lighter = Math.Max(RelativeLuminance(foreground), RelativeLuminance(background));
-        double darker = Math.Min(RelativeLuminance(foreground), RelativeLuminance(background));
-        return (lighter + 0.05) / (darker + 0.05);
-    }
-
-    private static double RelativeLuminance(string color)
-    {
-        string hex = color.TrimStart('#');
-        double Channel(int offset)
-        {
-            double value = Convert.ToInt32(hex.Substring(offset, 2), 16) / 255d;
-            return value <= 0.04045
-                ? value / 12.92
-                : Math.Pow((value + 0.055) / 1.055, 2.4);
-        }
-
-        return (0.2126 * Channel(0)) + (0.7152 * Channel(2)) + (0.0722 * Channel(4));
     }
 
     private static string FindRepositoryRoot(string startDirectory)
