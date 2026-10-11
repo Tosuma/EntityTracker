@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Reporting.ProjectReports;
+using EntityTracker.Theme;
 
 using Jint;
 
@@ -105,7 +106,7 @@ public sealed class ProjectReportTests
         Assert.Contains("\"class\": \"card\"", html, StringComparison.Ordinal);
         Assert.Contains("\"class\": \"band\"", html, StringComparison.Ordinal);
         Assert.Contains("\"class\": \"outline\"", html, StringComparison.Ordinal);
-        Assert.Contains(".graph .card { fill: var(--surface); }", html, StringComparison.Ordinal);
+        Assert.Contains($".graph .card {{ fill: {ColorScheme.Report.Surface}; }}", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -198,7 +199,7 @@ public sealed class ProjectReportTests
         Assert.Equal(string.Join('|', EntityNameWords.Words(name)), words);
     }
 
-    private static ProjectReport Report() => new(
+    internal static ProjectReport Report() => new(
         "Commerce modernization",
         ReportAudience.Internal,
         new DateTimeOffset(2026, 10, 6, 9, 0, 0, TimeSpan.Zero),

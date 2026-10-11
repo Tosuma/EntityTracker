@@ -1,19 +1,5 @@
-:root {
-  --green-100: #123836;
-  --green-90: #2A4C4A;
-  --green-80: #41605E;
-  --green-60: #718886;
-  --green-40: #A0AFAF;
-  --green-20: #D0D7D7;
-  --green-10: #E7EBEB;
-  --coral: #FF6359;
-  --ink: #141E1E;
-  --muted: #55615F;
-  --surface: #FFFFFF;
-  --page: #F6F8F8;
-  --border: #D0D7D7;
-  --focus: #C8821E;
-}
+/* Colours: each colour variable is filled in from EntityTracker.Theme/ColorScheme.cs when the report is
+   written: the base colours (--green-100, --coral, ...) and ColorScheme.Report (--ink, --muted, ...). */
 
 * { box-sizing: border-box; }
 
@@ -30,7 +16,7 @@ main { max-width: 1280px; margin: 0 auto; padding: 24px 16px 48px; }
 
 header.report-header {
   background: var(--green-100);
-  color: #FFFFFF;
+  color: var(--on-dark);
   border-radius: 10px;
   padding: 20px 24px;
   margin-bottom: 20px;
@@ -38,14 +24,14 @@ header.report-header {
 
 header.report-header h1 { margin: 0 0 4px; font-size: 26px; font-weight: 600; }
 
-.header-meta { display: flex; flex-wrap: wrap; gap: 6px 18px; color: #D0D7D7; font-size: 13px; }
+.header-meta { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--header-meta); font-size: 13px; }
 
 .audience {
   display: inline-block;
   margin-left: 10px;
   padding: 2px 10px;
   border-radius: 999px;
-  background: #FFFFFF;
+  background: var(--surface);
   color: var(--green-100);
   font-size: 12px;
   font-weight: 600;
@@ -106,7 +92,7 @@ section.report-section h2 { margin: 0 0 12px; font-size: 18px; font-weight: 600;
 
 .card .label { color: var(--muted); font-size: 13px; }
 .card .value { font-size: 28px; font-weight: 600; color: var(--green-100); }
-.card.attention .value { color: #C2382F; }
+.card.attention .value { color: var(--attention); }
 
 .chart svg { width: 100%; height: auto; display: block; }
 .chart .empty { color: var(--muted); padding: 24px 0; }
@@ -117,11 +103,11 @@ section.report-section h2 { margin: 0 0 12px; font-size: 18px; font-weight: 600;
 .chart svg:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; border-radius: 4px; }
 .chart .guide { stroke: var(--green-60); stroke-dasharray: 3 3; opacity: 0; pointer-events: none; }
 .chart .guide.visible { opacity: 1; }
-.chart circle.active { stroke: #FFFFFF; stroke-width: 2; }
+.chart circle.active { stroke: var(--surface); stroke-width: 2; }
 .chart .series { transition: opacity 150ms ease; }
 .chart .series.faded { opacity: 0.2; }
 .chart .slice { transition: transform 150ms ease, filter 150ms ease; }
-.chart .slice.active, .chart .bar.active { filter: brightness(1.12) drop-shadow(0 2px 4px rgba(18, 56, 54, 0.3)); }
+.chart .slice.active, .chart .bar.active { filter: brightness(1.12) drop-shadow(0 2px 4px color-mix(in srgb, var(--green-100) 30%, transparent)); }
 
 .chart-tip {
   position: absolute;
@@ -132,7 +118,7 @@ section.report-section h2 { margin: 0 0 12px; font-size: 18px; font-weight: 600;
   color: var(--ink);
   border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(18, 56, 54, 0.16);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--green-100) 16%, transparent);
   font-size: 13px;
   pointer-events: none;
   opacity: 0;
@@ -178,10 +164,10 @@ th {
 }
 th[aria-sort="ascending"]::after { content: " ▲"; font-size: 10px; }
 th[aria-sort="descending"]::after { content: " ▼"; font-size: 10px; }
-tbody tr:nth-child(even) td { background: #FAFBFB; }
+tbody tr:nth-child(even) td { background: var(--row-stripe); }
 td.entity { font-weight: 600; }
 td.scope { white-space: nowrap; }
-mark { background: #F6D9A8; color: inherit; padding: 0; }
+mark { background: var(--highlight); color: inherit; padding: 0; }
 
 .status {
   display: inline-block;
@@ -211,7 +197,7 @@ mark { background: #F6D9A8; color: inherit; padding: 0; }
 .graph-tools button:focus-visible, .entity-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .graph-note { color: var(--muted); margin-left: auto; }
 
-.graph-host { border: 1px solid var(--border); border-radius: 8px; background: #FBFCFC; overflow: hidden; }
+.graph-host { border: 1px solid var(--border); border-radius: 8px; background: var(--graph-canvas); overflow: hidden; }
 /* The tree is fitted to the page width and does not move; its height follows from its shape. */
 svg.graph { display: block; width: 100%; height: auto; user-select: none; }
 svg.graph:focus { outline: none; }
@@ -224,7 +210,7 @@ svg.graph:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px;
 .graph .node .halo { fill: none; stroke: none; }
 .graph .card { fill: var(--surface); }
 .graph .outline { fill: none; stroke: var(--green-40); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.graph .node.missing .band { fill: #FFE4E1; }
+.graph .node.missing .band { fill: var(--missing-band); }
 .graph .node.missing .outline { stroke: var(--coral); stroke-width: 1.5; stroke-dasharray: 5 3; }
 .graph .card, .graph .band { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 .graph .node.dim { opacity: 0.25; }
@@ -261,13 +247,13 @@ header.report-header { position: relative; }
   font: inherit;
   font-size: 13px;
   padding: 6px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  border: 1px solid color-mix(in srgb, var(--on-dark) 60%, transparent);
   border-radius: 6px;
   background: transparent;
-  color: #FFFFFF;
+  color: var(--on-dark);
   cursor: pointer;
 }
-.print-button:hover { background: rgba(255, 255, 255, 0.12); }
+.print-button:hover { background: color-mix(in srgb, var(--on-dark) 12%, transparent); }
 .print-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 nav.contents {
@@ -287,12 +273,12 @@ nav.contents a:hover { text-decoration: underline; }
 @page {
   size: A4;
   margin: 16mm 12mm 18mm;
-  @top-left { font: 9px "Segoe UI", sans-serif; color: #55615F; }
-  @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 9px "Segoe UI", sans-serif; color: #55615F; }
+  @top-left { font: 9px "Segoe UI", sans-serif; color: var(--muted); }
+  @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 9px "Segoe UI", sans-serif; color: var(--muted); }
 }
 
 @media print {
-  body { background: #FFFFFF; font-size: 11px; }
+  body { background: var(--surface); font-size: 11px; }
   main { max-width: none; padding: 0; }
   .toolbar, .table-tools, .no-print, .chart-tip, .section-hint { display: none !important; }
   .print-only { display: block; }

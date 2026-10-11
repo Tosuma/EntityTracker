@@ -64,11 +64,33 @@ Status colors are deliberately shared by the overview, progress dashboard, and P
 | Not started | Green 40% | Neutral status; use Dark Green text over the color |
 | In progress | Green 80% | Active work; use White text over the color |
 | Rework needed | Coral | Attention state; use Dark Green text over the color |
-| Development completed | Green 60% | Complete but not reconciled; use Dark Green text over the color |
+| Development completed / Completed | Deep Teal `#0F6455` | Complete but not reconciled; use White text over the color |
 | Reconciled | Green 100% | Fully implemented/reconciled; use White text over the color |
-| Ready | Green 80% | Dependency-ready work |
+| Ready | Green 40% | Dependency-ready work (as Not started); use Dark Green text. The exported report uses Green 20% |
 | Blocked/error/destructive | Coral | Always add a label, icon, or explanatory message |
 | Unresolved import warning | Warning palette | Retained non-fatal references in synchronization review only |
+
+### Colour scheme
+
+Every colour in the app, its charts and the exported Project report is defined in one file:
+[`src/EntityTracker.Theme/ColorScheme.cs`](../../src/EntityTracker.Theme/ColorScheme.cs). Nothing
+else defines a colour; a test fails if a hex value, `rgb()`/`rgba()` or a colour built from numbers
+appears anywhere else in `src`.
+
+- `ColorScheme.Base` names each colour once (the brand palette above plus a few supporting tints).
+- The other sections assign a base colour to one part of the application:
+  - `Status` and `WorkStatus`: a fill and a text colour per development and work status.
+  - `ReportWorkStatus`: the exported report's work status badges (lighter Ready and Waiting).
+  - `App`: everything else in the app (accent, surfaces, overlays, notifications, review, graph).
+  - `Chart`: the progress charts, in the app, saved as images and in the exported report.
+  - `Report`: the exported report's page (text, borders, highlights).
+- To recolour one thing, change its assignment, for example
+  `Status.InProgress = new(Base.Coral, Base.DarkGreen)`. To change a colour everywhere it is used,
+  change its `Base` value. Rebuild; the app, the charts and the report all follow.
+- Each status's text colour must keep 4.5:1 contrast with its fill; a test checks every pair.
+
+The app's text, page, card, border and focus colours are not in the scheme: they follow the Windows
+light or dark theme through Fluent resources.
 
 Coral is the primary accent color. Reserve it for conditions or actions that deserve attention
 rather than using it as decoration. The synchronization-review warning palette is the sole
@@ -132,11 +154,20 @@ Feature XAML should reference semantic brush keys such as `Brush.Text.Primary`,
 `Brush.Surface.Card`, `Brush.Status.ReworkNeeded`, or the shared button styles. Do not add raw hex
 values to feature XAML.
 
-Reporting is intentionally independent of WPF. Its matching SkiaSharp values live in
-[`src/EntityTracker.Reporting/ProgressChartPalette.cs`](../../src/EntityTracker.Reporting/ProgressChartPalette.cs).
-This small duplication preserves project boundaries. Any shared brand or semantic status change
-must update the WPF theme, reporting palette, this guide, and the reporting palette tests together.
-Review-only warning colors do not belong in Reporting.
+The scheme reaches each part through one adapter:
+
+- WPF: [`Themes/ColorSchemeResources.cs`](../../src/EntityTracker.Wpf/Themes/ColorSchemeResources.cs)
+  turns every entry into a `Color` and a `SolidColorBrush` (keys such as `Brush.Brand.Green80`,
+  `Brush.Status.InProgress` and `.Text`, `Brush.WorkStatus.Ready`, `Brush.Accent`). It is merged
+  first in `EntityTrackerTheme.xaml`. `EntityTrackerPalette.xaml` keeps only the theme-following
+  Fluent brushes.
+- Charts: [`ProgressChartPalette.cs`](../../src/EntityTracker.Reporting/ProgressChartPalette.cs) reads
+  the scheme as SkiaSharp colours.
+- Exported report: `ProjectReportHtmlWriter` fills in report.css's colour variables (the base colours
+  as `--green-100` etc. and `ColorScheme.Report` as `--ink` etc.) and writes the status and chart
+  colours report.js needs next to the report's data.
+
+`EntityTracker.Theme` has no dependencies, so Reporting can use it while staying independent of WPF.
 
 Live charts sit on an explicit light report canvas inside theme-aware application cards so their
 fixed Reporting labels remain readable in Dark mode. Native Windows chrome and operating-system

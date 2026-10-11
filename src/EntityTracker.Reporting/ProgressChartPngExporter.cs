@@ -48,7 +48,7 @@ public sealed class ProgressChartPngExporter
         using SKSurface surface = SKSurface.Create(new SKImageInfo(ImageWidth, ImageHeight)) ??
             throw new InvalidOperationException("The PNG drawing surface could not be created.");
         SKCanvas canvas = surface.Canvas;
-        canvas.Clear(ProgressChartPalette.White);
+        canvas.Clear(ProgressChartPalette.Canvas);
 
         using SKTypeface titleTypeface = SKTypeface.FromFamilyName(
             "Segoe UI",
@@ -59,14 +59,14 @@ public sealed class ProgressChartPngExporter
         using SKPaint titlePaint = new()
         {
             IsAntialias = true,
-            Color = ProgressChartPalette.DarkGreen,
+            Color = ProgressChartPalette.Text,
             TextSize = 32,
             Typeface = titleTypeface
         };
         using SKPaint subtitlePaint = new()
         {
             IsAntialias = true,
-            Color = ProgressChartPalette.DarkGreen.WithAlpha(184),
+            Color = ProgressChartPalette.Text.WithAlpha(184),
             TextSize = 19,
             Typeface = subtitleTypeface
         };

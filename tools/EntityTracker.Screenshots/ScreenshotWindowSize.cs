@@ -20,10 +20,17 @@ internal static class ScreenshotWindowSize
     internal static void Apply(Window window)
     {
         ArgumentNullException.ThrowIfNull(window);
+        // Windows asks for the size limits while it creates the window, before the hook can run, and WPF
+        // keeps the screen-sized limit it was given then. Once the hook is in place, a first resize asks
+        // again, so WPF learns the raised limit, and the second sets the real size.
         window.SourceInitialized += (_, _) =>
+        {
             HwndSource.FromHwnd(new WindowInteropHelper(window).Handle)?.AddHook(AllowLargerThanScreen);
-        window.Width = Width;
-        window.Height = Height;
+            window.Width = Width / 2;
+            window.Height = Height / 2;
+            window.Width = Width;
+            window.Height = Height;
+        };
     }
 
     /// <summary>Fails when a capture of the whole window is not exactly 1920 × 1080.</summary>
@@ -44,7 +51,7 @@ internal static class ScreenshotWindowSize
         info.MaxTrackSize = new NativePoint(int.MaxValue / 2, int.MaxValue / 2);
         info.MaxSize = info.MaxTrackSize;
         Marshal.StructureToPtr(info, lParam, fDeleteOld: false);
-        handled = true;
+        // Not handled: WPF reads the raised limit from the same message and would otherwise clamp the size.
         return IntPtr.Zero;
     }
 

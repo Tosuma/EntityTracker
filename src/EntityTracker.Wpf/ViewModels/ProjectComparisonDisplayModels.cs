@@ -56,7 +56,7 @@ public sealed record ProjectComparisonDisplayCell(
         Domain.DevelopmentStatus.ReworkNeeded => "Rework needed",
         Domain.DevelopmentStatus.Reworking => "Reworking",
         Domain.DevelopmentStatus.Blocked => "Blocked",
-        Domain.DevelopmentStatus.DevelopmentCompleted => "Dev. completed",
+        Domain.DevelopmentStatus.DevelopmentCompleted => "Completed",
         Domain.DevelopmentStatus.Reconciled => "Reconciled",
         null => "Not present",
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)

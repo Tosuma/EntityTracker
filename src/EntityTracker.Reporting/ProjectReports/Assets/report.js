@@ -7,18 +7,9 @@
   var SVG = "http://www.w3.org/2000/svg";
   var NO_MATCH = EntityTrackerSearch.NO_MATCH;
 
-  var STATUS_COLORS = {
-    "Not started": ["#A0AFAF", "#141E1E"],
-    "In progress": ["#41605E", "#FFFFFF"],
-    "Reworking": ["#41605E", "#FFFFFF"],
-    "Rework needed": ["#FF6359", "#141E1E"],
-    "Blocked": ["#FF6359", "#141E1E"],
-    "Dev. completed": ["#718886", "#FFFFFF"],
-    "Completed": ["#718886", "#FFFFFF"],
-    "Reconciled": ["#123836", "#FFFFFF"],
-    "Ready": ["#D0D7D7", "#141E1E"],
-    "Waiting on dependencies": ["#F6D9A8", "#141E1E"]
-  };
+  // Colours come from EntityTracker.Theme/ColorScheme.cs, written into the report next to its data.
+  var COLORS = JSON.parse(document.getElementById("report-colors").textContent);
+  var STATUS_COLORS = COLORS.status;
 
   // Name matching lives in report-search.js, shared with the report's own tests.
   var matchPriority = EntityTrackerSearch.matchPriority;
@@ -256,7 +247,7 @@
                "A", r, r, 0, large, 1, cx + r * Math.cos(end), cy + r * Math.sin(end),
                "L", cx + inner * Math.cos(end), cy + inner * Math.sin(end),
                "A", inner, inner, 0, large, 0, cx + inner * Math.cos(angle), cy + inner * Math.sin(angle), "Z"].join(" ");
-      var path = svg("path", { d: d, fill: series.pointColors[i], stroke: "#FFFFFF", "stroke-width": 1, "class": "slice" });
+      var path = svg("path", { d: d, fill: series.pointColors[i], stroke: COLORS.sliceBorder, "stroke-width": 1, "class": "slice" });
       slices.push({ index: i, path: path, middle: (angle + end) / 2, start: angle, end: end });
       group.appendChild(path);
       angle = end;
@@ -269,7 +260,7 @@
     if (!calm && group.animate) {
       var id = "sweep-" + (++uniqueId);
       var reach = r + 12, maskRadius = reach / 2, circumference = 2 * Math.PI * maskRadius;
-      var circle = svg("circle", { cx: cx, cy: cy, r: maskRadius, fill: "none", stroke: "#FFFFFF", "stroke-width": reach,
+      var circle = svg("circle", { cx: cx, cy: cy, r: maskRadius, fill: "none", stroke: COLORS.sliceBorder, "stroke-width": reach,
         "stroke-dasharray": circumference, transform: "rotate(-90 " + cx + " " + cy + ")" });
       var mask = svg("mask", { id: id, maskUnits: "userSpaceOnUse", x: 0, y: 0, width: 320, height: 220 });
       mask.appendChild(circle);
@@ -326,7 +317,7 @@
     for (var t = 0; t <= ticks; t++) {
       var value = minValue + range * t / ticks;
       var y = box.y(value);
-      node.appendChild(svg("line", { x1: box.left, x2: box.width - box.right, y1: y, y2: y, stroke: "#D0D7D7" }));
+      node.appendChild(svg("line", { x1: box.left, x2: box.width - box.right, y1: y, y2: y, stroke: COLORS.grid }));
       var text = svg("text", { x: box.left - 6, y: y + 4, "text-anchor": "end" });
       text.textContent = String(Math.round(value));
       node.appendChild(text);
@@ -432,7 +423,7 @@
       var rect = svg("rect", {
         x: box.left + i * slot + slot * 0.15, y: Math.min(zero, box.y(v)),
         width: Math.max(slot * 0.7, 1), height: Math.max(Math.abs(box.y(v) - zero), 1),
-        fill: v < 0 ? "#FF6359" : series.color, rx: 2, "class": "bar"
+        fill: v < 0 ? COLORS.decrease : series.color, rx: 2, "class": "bar"
       });
       box.node.appendChild(rect);
       // Each bar grows out of the zero line, a moment after the one before it.
@@ -547,7 +538,7 @@
             cell.appendChild(link);
           } else if ((column.key === "status" || column.key === "work") && value) {
             var chip = el("span", { className: "status", text: value });
-            var colors = STATUS_COLORS[value];
+            var colors = (column.key === "work" ? COLORS.work : STATUS_COLORS)[value];
             if (colors) { chip.style.setProperty("--swatch", colors[0]); chip.style.setProperty("--swatch-ink", colors[1]); }
             cell.appendChild(chip);
           } else {
@@ -626,10 +617,10 @@
       "aria-label": "Dependency tree. Point at an entity for its details; click it to highlight its links." });
     host.appendChild(canvas);
     var legendNode = el("div", { className: "legend graph-legend" }, [
-      "Not started", "Blocked", "In progress", "Rework needed", "Reworking", "Dev. completed", "Reconciled", "Missing"
+      "Not started", "Blocked", "In progress", "Rework needed", "Reworking", "Completed", "Reconciled", "Missing"
     ].map(function (label) {
       var span = el("span", { text: label });
-      span.style.setProperty("--swatch", label === "Missing" ? "#FFFFFF" : STATUS_COLORS[label][0]);
+      span.style.setProperty("--swatch", label === "Missing" ? COLORS.missingSwatch : STATUS_COLORS[label][0]);
       if (label === "Missing") span.className = "missing";
       return span;
     }));
@@ -663,7 +654,7 @@
         var group = svg("g", { "class": "node" + (node.missing ? " missing" : ""), "data-index": index,
           transform: "translate(" + node.treeX + " " + node.treeY + ")" });
         // As in the app: an empty name area above a band in the status colour, 2/3 and 1/3 of the box.
-        var color = node.missing ? null : (STATUS_COLORS[node.status] || ["#A0AFAF"])[0];
+        var color = node.missing ? null : (STATUS_COLORS[node.status] || [COLORS.unknownStatus])[0];
         group.appendChild(svg("rect", { "class": "halo", x: -6, y: -6, width: TREE_WIDTH + 12, height: TREE_HEIGHT + 12, rx: 14 }));
         group.appendChild(svg("rect", { "class": "card", width: TREE_WIDTH, height: TREE_HEIGHT, rx: TREE_RADIUS }));
         var band = svg("path", { "class": "band", d:

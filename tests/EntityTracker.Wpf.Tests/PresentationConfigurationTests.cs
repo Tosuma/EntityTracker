@@ -601,30 +601,77 @@ public sealed class PresentationConfigurationTests
             (string?)error.Parent?.Parent?.Attribute("Style"));
     }
 
-    [Fact]
-    public void ProductStatusColors_MeetNormalTextContrastThreshold()
+    [Theory]
+    [InlineData("TrackerWorkspaceView.xaml")]
+    [InlineData("ProjectDashboardView.xaml")]
+    public void StatusBadges_CentreTheirTextAndShortenLongLabels(string view)
     {
-        XDocument palette = LoadWpfXaml("Themes", "EntityTrackerPalette.xaml");
+        XDocument document = LoadWpfXaml("Views", view);
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
-        Dictionary<string, string> colors = palette.Descendants()
-            .Where(element => element.Name.LocalName == "Color")
-            .ToDictionary(
-                element => (string)element.Attribute(x + "Key")!,
-                element => element.Value);
-        (string Foreground, string Background)[] pairs =
-        [
-            ("Color.Brand.DarkGreen", "Color.Brand.Green40"),
-            ("Color.Brand.DarkGreen", "Color.Brand.Green60"),
-            ("Color.Brand.DarkGreen", "Color.Brand.Coral"),
-            ("Color.Brand.White", "Color.Brand.Green80"),
-            ("Color.Brand.White", "Color.Brand.Green100"),
-            ("Color.Brand.Green10", "Color.Brand.Green80"),
-            ("Color.Brand.Green10", "Color.Brand.Green100")
-        ];
 
-        Assert.All(pairs, pair => Assert.True(
-            ContrastRatio(colors[pair.Foreground], colors[pair.Background]) >= 4.5,
-            $"{pair.Foreground} on {pair.Background} does not meet 4.5:1 contrast."));
+        XElement[] labels = document.Descendants()
+            .Where(element => element.Name.LocalName == "TextBlock" && (string?)element.Attribute(x + "Name") == "BadgeText")
+            .ToArray();
+
+        Assert.Equal(2, labels.Length);
+        Assert.All(labels, label =>
+        {
+            Assert.Equal("Center", (string?)label.Attribute("VerticalAlignment"));
+            Assert.Equal("CharacterEllipsis", (string?)label.Attribute("TextTrimming"));
+        });
+
+        // Room around the label: more at the sides than above and below.
+        XElement[] boxes = labels.Select(static label => label.Parent!).ToArray();
+        Assert.All(boxes, box => Assert.Equal("12,5", (string?)box.Attribute("Padding")));
+    }
+
+    [Fact]
+    public void EntityTables_CentreStatusBadgesInTheirCellsWithRoomAround()
+    {
+        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+
+        XElement[] cells = document.Descendants()
+            .Where(element => element.Name.LocalName == "ContentControl" &&
+                              ((string?)element.Attribute("ContentTemplate"))?.Contains("StatusBadgeTemplate", StringComparison.Ordinal) == true &&
+                              element.Ancestors().Any(static ancestor => ancestor.Name.LocalName == "DataGridTemplateColumn"))
+            .ToArray();
+
+        Assert.Equal(3, cells.Length);
+        Assert.All(cells, cell =>
+        {
+            Assert.Equal("Center", (string?)cell.Attribute("HorizontalAlignment"));
+            Assert.Equal("Center", (string?)cell.Attribute("VerticalAlignment"));
+            Assert.Equal("4,0", (string?)cell.Attribute("Margin"));
+        });
+    }
+
+    [Theory]
+    [InlineData("TrackerWorkspaceView.xaml")]
+    [InlineData("ProjectDashboardView.xaml")]
+    public void StatusBadges_TakeFillAndTextFromTheirStatusVariables(string view)
+    {
+        XDocument document = LoadWpfXaml("Views", view);
+        XElement[] triggers = document.Descendants()
+            .Where(element => element.Name.LocalName == "DataTrigger" &&
+                              ((string?)element.Attribute("Value"))?.StartsWith("{x:Static ", StringComparison.Ordinal) == true &&
+                              element.Elements().Any(setter => (string?)setter.Attribute("TargetName") == "Badge"))
+            .ToArray();
+
+        Assert.Equal(12, triggers.Length);
+        foreach (XElement trigger in triggers)
+        {
+            string value = (string)trigger.Attribute("Value")!;
+            string status = value[(value.LastIndexOf('.') + 1)..^1];
+            string brush = value.Contains("DevelopmentStatus.", StringComparison.Ordinal)
+                ? $"Brush.Status.{status}"
+                : $"Brush.WorkStatus.{status}";
+            Assert.Contains(trigger.Elements(), setter => (string?)setter.Attribute("TargetName") == "Badge" &&
+                (string?)setter.Attribute("Property") == "Background" &&
+                (string?)setter.Attribute("Value") == $"{{DynamicResource {brush}}}");
+            Assert.Contains(trigger.Elements(), setter => (string?)setter.Attribute("TargetName") == "BadgeText" &&
+                (string?)setter.Attribute("Property") == "Foreground" &&
+                (string?)setter.Attribute("Value") == $"{{DynamicResource {brush}.Text}}");
+        }
     }
 
     [Fact]
@@ -1120,27 +1167,6 @@ public sealed class PresentationConfigurationTests
         string repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
         return XDocument.Load(Path.Combine(
             [repositoryRoot, "src", "EntityTracker.Wpf", .. relativePath]));
-    }
-
-    private static double ContrastRatio(string foreground, string background)
-    {
-        double lighter = Math.Max(RelativeLuminance(foreground), RelativeLuminance(background));
-        double darker = Math.Min(RelativeLuminance(foreground), RelativeLuminance(background));
-        return (lighter + 0.05) / (darker + 0.05);
-    }
-
-    private static double RelativeLuminance(string color)
-    {
-        string hex = color.TrimStart('#');
-        double Channel(int offset)
-        {
-            double value = Convert.ToInt32(hex.Substring(offset, 2), 16) / 255d;
-            return value <= 0.04045
-                ? value / 12.92
-                : Math.Pow((value + 0.055) / 1.055, 2.4);
-        }
-
-        return (0.2126 * Channel(0)) + (0.7152 * Channel(2)) + (0.0722 * Channel(4));
     }
 
     private static string FindRepositoryRoot(string startDirectory)

@@ -380,7 +380,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         new(DevelopmentStatus.InProgress, "In progress"),
         new(DevelopmentStatus.ReworkNeeded, "Rework needed"),
         new(DevelopmentStatus.Reworking, "Reworking"),
-        new(DevelopmentStatus.DevelopmentCompleted, "Dev. completed"),
+        new(DevelopmentStatus.DevelopmentCompleted, "Completed"),
         new(DevelopmentStatus.Reconciled, "Reconciled")
     ];
 
@@ -1448,7 +1448,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         DevelopmentStatus.ReworkNeeded => "Rework needed",
         DevelopmentStatus.Reworking => "Reworking",
         DevelopmentStatus.Blocked => "Blocked",
-        DevelopmentStatus.DevelopmentCompleted => "Dev. completed",
+        DevelopmentStatus.DevelopmentCompleted => "Completed",
         DevelopmentStatus.Reconciled => "Reconciled",
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
     };

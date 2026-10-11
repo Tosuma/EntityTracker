@@ -94,7 +94,7 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
         new("Rework needed", "Brush.Status.ReworkNeeded", false),
         new("Reworking", "Brush.Status.Reworking", false),
         new("Blocked", "Brush.Status.Blocked", false),
-        new("Dev. completed", "Brush.Status.DevelopmentCompleted", false),
+        new("Completed", "Brush.Status.DevelopmentCompleted", false),
         new("Reconciled", "Brush.Status.Reconciled", false),
         new("Missing dependency (outer ring)", "Brush.Text.Secondary", true)
     ];

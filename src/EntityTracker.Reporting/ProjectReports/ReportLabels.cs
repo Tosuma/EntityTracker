@@ -6,12 +6,6 @@ namespace EntityTracker.Reporting.ProjectReports;
 /// <summary>The words and colours a report uses, matching the app.</summary>
 public static class ReportLabels
 {
-    internal const string Green100 = "#123836";
-    internal const string Green80 = "#41605E";
-    internal const string Green60 = "#718886";
-    internal const string Green40 = "#A0AFAF";
-    internal const string Coral = "#FF6359";
-
     /// <summary>Every development status, in the order the app lists them.</summary>
     internal static IReadOnlyList<string> StatusOrder { get; } =
     [
@@ -40,28 +34,21 @@ public static class ReportLabels
         ProgressStatusCategory.NotStarted => "Not started",
         ProgressStatusCategory.InProgress => "In progress",
         ProgressStatusCategory.ReworkNeeded => "Rework needed",
-        ProgressStatusCategory.DevelopmentCompleted => "Dev. completed",
+        ProgressStatusCategory.DevelopmentCompleted => "Completed",
         ProgressStatusCategory.Reconciled => "Reconciled",
         ProgressStatusCategory.Blocked => "Blocked",
         ProgressStatusCategory.Reworking => "Reworking",
         _ => status.ToString()
     };
 
-    internal static string StatusColor(ProgressStatusCategory status) => status switch
-    {
-        ProgressStatusCategory.NotStarted => Green40,
-        ProgressStatusCategory.InProgress or ProgressStatusCategory.Reworking => Green80,
-        ProgressStatusCategory.DevelopmentCompleted => Green60,
-        ProgressStatusCategory.Reconciled => Green100,
-        _ => Coral
-    };
+    internal static string StatusColor(ProgressStatusCategory status) => ProgressChartPalette.Status(status).Fill;
 
     public static string Status(DevelopmentStatus status) => status switch
     {
         DevelopmentStatus.NotStarted => "Not started",
         DevelopmentStatus.InProgress => "In progress",
         DevelopmentStatus.ReworkNeeded => "Rework needed",
-        DevelopmentStatus.DevelopmentCompleted => "Dev. completed",
+        DevelopmentStatus.DevelopmentCompleted => "Completed",
         DevelopmentStatus.Reconciled => "Reconciled",
         DevelopmentStatus.Blocked => "Blocked",
         DevelopmentStatus.Reworking => "Reworking",

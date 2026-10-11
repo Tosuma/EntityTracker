@@ -87,7 +87,7 @@ internal static class Program
         DevelopmentStatus.NotStarted => "Not started",
         DevelopmentStatus.InProgress => "In progress",
         DevelopmentStatus.ReworkNeeded => "Rework needed",
-        DevelopmentStatus.DevelopmentCompleted => "Dev. completed",
+        DevelopmentStatus.DevelopmentCompleted => "Completed",
         DevelopmentStatus.Reconciled => "Reconciled",
         DevelopmentStatus.Blocked => "Blocked",
         DevelopmentStatus.Reworking => "Reworking",

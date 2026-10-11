@@ -9,6 +9,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
 using EntityTracker.Domain;
+using EntityTracker.Theme;
 using EntityTracker.Wpf.ViewModels;
 using EntityTracker.Wpf.ViewModels.DependencyGraph;
 
@@ -36,7 +37,14 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     public static readonly DependencyProperty SelectionBrushProperty = RegisterBrush(nameof(SelectionBrush));
 
     /// <summary>The amber used when no selection colour is set; no development status uses it.</summary>
-    internal static readonly Color DefaultSelectionColor = Color.FromRgb(0xC8, 0x82, 0x1E);
+    internal static readonly Color DefaultSelectionColor =
+        (Color)ColorConverter.ConvertFromString(ColorScheme.App.Graph.Selection);
+
+    private static readonly Brush LabelOnLight =
+        CreateFrozen((Color)ColorConverter.ConvertFromString(ColorScheme.App.Graph.LabelOnLight));
+
+    private static readonly Brush LabelOnDark =
+        CreateFrozen((Color)ColorConverter.ConvertFromString(ColorScheme.App.Graph.LabelOnDark));
 
     private const double MinScale = 0.15;
     private const double MaxScale = 4;
@@ -601,13 +609,13 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         return label;
     }
 
-    /// <summary>Picks black or white text, whichever reads better on the status colour.</summary>
+    /// <summary>Picks dark or light text (ColorScheme.App.Graph), whichever reads better on the status colour.</summary>
     private Brush ContrastingText(Brush background, bool placeholder)
     {
         if (placeholder || background is not SolidColorBrush { Color: var color })
             return LabelBrush ?? Brushes.Black;
         double luminance = (0.2126 * Linear(color.R) + 0.7152 * Linear(color.G) + 0.0722 * Linear(color.B));
-        return luminance > 0.4 ? Brushes.Black : Brushes.White;
+        return luminance > 0.4 ? LabelOnLight : LabelOnDark;
 
         static double Linear(byte channel)
         {

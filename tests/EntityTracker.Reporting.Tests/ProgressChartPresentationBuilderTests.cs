@@ -6,6 +6,8 @@ using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Drawing.Geometries;
 using LiveChartsCore.SkiaSharpView.Painting;
 
+using EntityTracker.Theme;
+
 using SkiaSharp;
 
 namespace EntityTracker.Reporting.Tests;
@@ -40,11 +42,11 @@ public sealed class ProgressChartPresentationBuilderTests
 
         SKColor[] expectedStatusColors =
         [
-            new(0xA0, 0xAF, 0xAF),
-            new(0x41, 0x60, 0x5E),
-            new(0xFF, 0x63, 0x59),
-            new(0x71, 0x88, 0x86),
-            new(0x12, 0x38, 0x36)
+            SKColor.Parse(ColorScheme.Status.NotStarted.Fill),
+            SKColor.Parse(ColorScheme.Status.InProgress.Fill),
+            SKColor.Parse(ColorScheme.Status.ReworkNeeded.Fill),
+            SKColor.Parse(ColorScheme.Status.DevelopmentCompleted.Fill),
+            SKColor.Parse(ColorScheme.Status.Reconciled.Fill)
         ];
         Assert.Equal(expectedStatusColors.Length, presentation.CurrentStatusSeries.Length);
         for (int index = 0; index < expectedStatusColors.Length; index++)
@@ -57,23 +59,23 @@ public sealed class ProgressChartPresentationBuilderTests
         }
 
         Assert.Equal(
-            new SKColor(0x12, 0x38, 0x36),
+            SKColor.Parse(ColorScheme.Chart.Implemented),
             Assert.IsType<SolidColorPaint>(
                 Assert.IsType<LineSeries<int>>(presentation.ImplementedSeries[0]).Stroke).Color);
         Assert.Equal(
-            new SKColor(0x41, 0x60, 0x5E),
+            SKColor.Parse(ColorScheme.Chart.ReadyTrend),
             Assert.IsType<SolidColorPaint>(
                 Assert.IsType<LineSeries<int>>(presentation.ReadinessSeries[0]).Stroke).Color);
         Assert.Equal(
-            new SKColor(0xFF, 0x63, 0x59),
+            SKColor.Parse(ColorScheme.Chart.WaitingTrend),
             Assert.IsType<SolidColorPaint>(
                 Assert.IsType<LineSeries<int>>(presentation.ReadinessSeries[1]).Stroke).Color);
         Assert.Equal(
-            new SKColor(0x41, 0x60, 0x5E),
+            SKColor.Parse(ColorScheme.Chart.Increase),
             Assert.IsType<SolidColorPaint>(
                 Assert.IsType<ColumnSeries<int?>>(presentation.WeeklySeries[0]).Fill).Color);
         Assert.Equal(
-            new SKColor(0xFF, 0x63, 0x59),
+            SKColor.Parse(ColorScheme.Chart.Decrease),
             Assert.IsType<SolidColorPaint>(
                 Assert.IsType<ColumnSeries<int?>>(presentation.WeeklySeries[1]).Fill).Color);
     }
@@ -105,11 +107,11 @@ public sealed class ProgressChartPresentationBuilderTests
 
         SKColor[] expectedLabelColors =
         [
-            new(0x14, 0x1E, 0x1E),
-            SKColors.White,
-            new(0x14, 0x1E, 0x1E),
-            new(0x14, 0x1E, 0x1E),
-            SKColors.White
+            SKColor.Parse(ColorScheme.Status.NotStarted.Text),
+            SKColor.Parse(ColorScheme.Status.InProgress.Text),
+            SKColor.Parse(ColorScheme.Status.ReworkNeeded.Text),
+            SKColor.Parse(ColorScheme.Status.DevelopmentCompleted.Text),
+            SKColor.Parse(ColorScheme.Status.Reconciled.Text)
         ];
         for (int index = 0; index < expectedLabelColors.Length; index++)
         {

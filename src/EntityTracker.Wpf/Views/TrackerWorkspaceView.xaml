@@ -209,42 +209,48 @@
 
         <DataTemplate x:Key="DevelopmentStatusBadgeTemplate">
             <Border x:Name="Badge"
-                    Padding="8,3"
+                    Padding="12,5"
                     HorizontalAlignment="Left"
                     Background="{DynamicResource Brush.Status.NotStarted}"
                     CornerRadius="10">
                 <TextBlock x:Name="BadgeText"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                            FontSize="12"
                            FontWeight="SemiBold"
-                           Foreground="{DynamicResource Brush.Brand.DarkGreen}"
+                           Foreground="{DynamicResource Brush.Status.NotStarted.Text}"
                            Text="Not started" />
             </Border>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.InProgress}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.InProgress}" />
-                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Status.InProgress.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="In progress" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.ReworkNeeded}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.ReworkNeeded}" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Status.ReworkNeeded.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Rework needed" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.Reworking}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Reworking}" />
-                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Status.Reworking.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Reworking" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.Blocked}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Blocked}" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Status.Blocked.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Blocked" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.DevelopmentCompleted}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.DevelopmentCompleted}" />
-                    <Setter TargetName="BadgeText" Property="Text" Value="Dev. completed" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Status.DevelopmentCompleted.Text}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Completed" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.Reconciled}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Reconciled}" />
-                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Status.Reconciled.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Reconciled" />
                 </DataTrigger>
             </DataTemplate.Triggers>
@@ -252,13 +258,16 @@
 
         <DataTemplate x:Key="WorkStatusBadgeTemplate">
             <Border x:Name="Badge"
-                    Padding="8,3"
+                    Padding="12,5"
                     HorizontalAlignment="Left"
                     Background="{DynamicResource Brush.Surface.Subtle}"
                     BorderBrush="{DynamicResource Brush.Border.Medium}"
                     BorderThickness="1"
                     CornerRadius="10">
                 <TextBlock x:Name="BadgeText"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                            FontSize="12"
                            FontWeight="SemiBold"
                            Foreground="{DynamicResource Brush.Text.Primary}"
@@ -266,39 +275,39 @@
             </Border>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Ready}">
-                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Ready}" />
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.Ready}" />
                     <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
-                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.Ready.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Ready" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Blocked}">
-                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Blocked}" />
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.Blocked}" />
                     <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
-                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.Blocked.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Blocked" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.WaitingOnDependencies}">
-                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Blocked}" />
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.WaitingOnDependencies}" />
                     <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
-                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.WaitingOnDependencies.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Waiting on dependencies" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.InProgress}">
-                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.InProgress}" />
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.InProgress}" />
                     <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
-                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.InProgress.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="In progress" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Completed}">
-                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.DevelopmentCompleted}" />
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.Completed}" />
                     <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
-                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.Completed.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Completed" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Reconciled}">
-                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.Reconciled}" />
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.Reconciled}" />
                     <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
-                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.Reconciled.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Reconciled" />
                 </DataTrigger>
             </DataTemplate.Triggers>
@@ -618,7 +627,7 @@
                                 </Style>
                             </Button.Style>
                             <StackPanel>
-                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Dev. completed" />
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Completed" />
                                 <TextBlock Margin="0,3,0,0"
                                            FontSize="22"
                                            FontWeight="SemiBold"
@@ -684,7 +693,7 @@
                                                 CornerRadius="4" />
                                         <TextBlock FontSize="11"
                                                    Foreground="{DynamicResource Brush.Text.Secondary}"
-                                                   Text="Dev. completed" />
+                                                   Text="Completed" />
                                     </StackPanel>
                                     <StackPanel Margin="0,0,10,0" Orientation="Horizontal">
                                         <Border Width="8"
@@ -909,7 +918,10 @@
                                         <DataTemplate>
                                             <ContentControl AutomationProperties.Name="{Binding WorkStatus, StringFormat=Work status: {0}}"
                                                             Content="{Binding WorkStatusDisplay}"
-                                                            ContentTemplate="{StaticResource WorkStatusBadgeTemplate}" />
+                                                            ContentTemplate="{StaticResource WorkStatusBadgeTemplate}"
+                                                            Margin="4,0"
+                                                            HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center" />
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
@@ -921,7 +933,10 @@
                                         <DataTemplate>
                                             <ContentControl AutomationProperties.Name="{Binding Status, StringFormat=Development status: {0}}"
                                                             Content="{Binding DevelopmentStatus}"
-                                                            ContentTemplate="{StaticResource DevelopmentStatusBadgeTemplate}" />
+                                                            ContentTemplate="{StaticResource DevelopmentStatusBadgeTemplate}"
+                                                            Margin="4,0"
+                                                            HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center" />
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
@@ -1324,7 +1339,10 @@
                                         <DataTemplate>
                                             <ContentControl AutomationProperties.Name="{Binding Status, StringFormat=Development status: {0}}"
                                                             Content="{Binding DevelopmentStatus}"
-                                                            ContentTemplate="{StaticResource DevelopmentStatusBadgeTemplate}" />
+                                                            ContentTemplate="{StaticResource DevelopmentStatusBadgeTemplate}"
+                                                            Margin="4,0"
+                                                            HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center" />
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>

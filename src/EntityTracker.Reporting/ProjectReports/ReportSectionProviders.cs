@@ -3,6 +3,7 @@ using System.Globalization;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
+using EntityTracker.Theme;
 
 namespace EntityTracker.Reporting.ProjectReports;
 
@@ -42,24 +43,24 @@ public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IRepo
     {
         ProgressChartKind.CurrentStatus => new ReportChart(
             report.CurrentStatusCounts.Select(count => ReportLabels.Status(count.Status)).ToArray(),
-            [new ReportSeries("Entities", ReportLabels.Green80,
+            [new ReportSeries("Entities", ColorScheme.Chart.Entities,
                 report.CurrentStatusCounts.Select(count => (double)count.Count).ToArray(),
                 report.CurrentStatusCounts.Select(count => ReportLabels.StatusColor(count.Status)).ToArray())]),
         ProgressChartKind.ImplementedOverTime => new ReportChart(
             report.ImplementedOverTime.Select(point => Date(point.Date)).ToArray(),
-            [new ReportSeries("Implemented", ReportLabels.Green100,
+            [new ReportSeries("Implemented", ColorScheme.Chart.Implemented,
                 report.ImplementedOverTime.Select(point => (double)point.ImplementedCount).ToArray())]),
         ProgressChartKind.ReadyAndBlockedOverTime => new ReportChart(
             report.ReadyAndBlockedOverTime.Select(point => Date(point.Date)).ToArray(),
             [
-                new ReportSeries("Ready to start", ReportLabels.Green80,
+                new ReportSeries("Ready to start", ColorScheme.Chart.ReadyTrend,
                     report.ReadyAndBlockedOverTime.Select(point => (double)point.ReadyCount).ToArray()),
-                new ReportSeries("Waiting on dependencies", ReportLabels.Coral,
+                new ReportSeries("Waiting on dependencies", ColorScheme.Chart.WaitingTrend,
                     report.ReadyAndBlockedOverTime.Select(point => (double)point.BlockedCount).ToArray())
             ]),
         ProgressChartKind.WeeklyNetImplementedChange => new ReportChart(
             report.WeeklyNetImplementedChange.Select(week => Date(week.WeekStartingMonday)).ToArray(),
-            [new ReportSeries("Net implemented change", ReportLabels.Green60,
+            [new ReportSeries("Net implemented change", ColorScheme.Chart.NetChange,
                 report.WeeklyNetImplementedChange.Select(week => (double)week.NetChange).ToArray())]),
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
     };
