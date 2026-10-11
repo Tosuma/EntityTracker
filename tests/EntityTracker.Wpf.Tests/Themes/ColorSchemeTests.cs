@@ -61,8 +61,6 @@ public sealed partial class ColorSchemeTests
     {
         foreach (ColorSchemeCatalog.Entry entry in ColorSchemeCatalog.All.Where(static entry => entry.Value is StatusColor))
         {
-            // The exported report has always shown white on Green 60% for Completed; kept on purpose.
-            if (entry.Section == nameof(ColorScheme.ReportWorkStatus) && entry.Name == "Completed") continue;
             StatusColor color = (StatusColor)entry.Value;
             Assert.True(ContrastRatio(color.Text, color.Fill) >= 4.5,
                 $"{entry.Section}.{entry.Name}: text {color.Text} on {color.Fill} is below 4.5:1 contrast.");

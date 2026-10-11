@@ -64,9 +64,9 @@ Status colors are deliberately shared by the overview, progress dashboard, and P
 | Not started | Green 40% | Neutral status; use Dark Green text over the color |
 | In progress | Green 80% | Active work; use White text over the color |
 | Rework needed | Coral | Attention state; use Dark Green text over the color |
-| Development completed | Green 60% | Complete but not reconciled; use Dark Green text over the color |
+| Development completed / Completed | Deep Teal `#0F6455` | Complete but not reconciled; use White text over the color |
 | Reconciled | Green 100% | Fully implemented/reconciled; use White text over the color |
-| Ready | Green 80% | Dependency-ready work |
+| Ready | Green 40% | Dependency-ready work (as Not started); use Dark Green text. The exported report uses Green 20% |
 | Blocked/error/destructive | Coral | Always add a label, icon, or explanatory message |
 | Unresolved import warning | Warning palette | Retained non-fatal references in synchronization review only |
 
@@ -87,9 +87,7 @@ appears anywhere else in `src`.
 - To recolour one thing, change its assignment, for example
   `Status.InProgress = new(Base.Coral, Base.DarkGreen)`. To change a colour everywhere it is used,
   change its `Base` value. Rebuild; the app, the charts and the report all follow.
-- Each status's text colour must keep 4.5:1 contrast with its fill; a test checks every pair. The
-  exported report's white-on-Green 60% Completed badge is the one known exception, kept as it has
-  always looked.
+- Each status's text colour must keep 4.5:1 contrast with its fill; a test checks every pair.
 
 The app's text, page, card, border and focus colours are not in the scheme: they follow the Windows
 light or dark theme through Fluent resources.

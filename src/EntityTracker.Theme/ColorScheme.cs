@@ -31,6 +31,7 @@ public static class ColorScheme
         public const string CoralHover = "#FF786F";
 
         // Supporting colours
+        public const string DeepTeal = "#0F6455";
         public const string Amber = "#D9922E";
         public const string PaleAmber = "#F6D9A8";
         public const string SelectionAmber = "#C8821E";
@@ -57,18 +58,18 @@ public static class ColorScheme
         public static readonly StatusColor ReworkNeeded = new(Base.Coral, Base.DarkGreen);
         public static readonly StatusColor Reworking = new(Base.Green80, Base.White);
         public static readonly StatusColor Blocked = new(Base.Coral, Base.DarkGreen);
-        public static readonly StatusColor DevelopmentCompleted = new(Base.Green60, Base.DarkGreen);
+        public static readonly StatusColor DevelopmentCompleted = new(Base.DeepTeal, Base.White);
         public static readonly StatusColor Reconciled = new(Base.Green100, Base.White);
     }
 
     /// <summary>Work statuses in the app: the Overview's and the dashboard's work status badges.</summary>
     public static class WorkStatus
     {
-        public static readonly StatusColor Ready = new(Base.Green80, Base.White);
+        public static readonly StatusColor Ready = new(Base.Green40, Base.DarkGreen);
         public static readonly StatusColor WaitingOnDependencies = new(Base.Coral, Base.DarkGreen);
         public static readonly StatusColor Blocked = new(Base.Coral, Base.DarkGreen);
         public static readonly StatusColor InProgress = new(Base.Green80, Base.White);
-        public static readonly StatusColor Completed = new(Base.Green60, Base.DarkGreen);
+        public static readonly StatusColor Completed = new(Base.DeepTeal, Base.White);
         public static readonly StatusColor Reconciled = new(Base.Green100, Base.White);
     }
 
@@ -79,8 +80,7 @@ public static class ColorScheme
         public static readonly StatusColor WaitingOnDependencies = new(Base.PaleAmber, Base.DarkGreen);
         public static readonly StatusColor Blocked = new(Base.Coral, Base.DarkGreen);
         public static readonly StatusColor InProgress = new(Base.Green80, Base.White);
-        // White on Green 60% is below 4.5:1 contrast; kept as the report has always shown it.
-        public static readonly StatusColor Completed = new(Base.Green60, Base.White);
+        public static readonly StatusColor Completed = new(Base.DeepTeal, Base.White);
         public static readonly StatusColor Reconciled = new(Base.Green100, Base.White);
     }
 
