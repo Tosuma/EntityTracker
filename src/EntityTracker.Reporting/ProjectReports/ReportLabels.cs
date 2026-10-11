@@ -11,12 +11,6 @@ public static class ReportLabels
     internal const string Green60 = "#718886";
     internal const string Green40 = "#A0AFAF";
     internal const string Coral = "#FF6359";
-    // The status extension, as in the app's palette.
-    internal const string InProgressBlue = "#3D6A8A";
-    internal const string ReworkingLavender = "#B58BD0";
-    internal const string BlockedBrick = "#9E2B25";
-    internal const string CompletedGreen = "#A8D5A2";
-    internal const string WaitingAmber = "#D9922E";
 
     /// <summary>Every development status, in the order the app lists them.</summary>
     internal static IReadOnlyList<string> StatusOrder { get; } =
@@ -53,16 +47,7 @@ public static class ReportLabels
         _ => status.ToString()
     };
 
-    internal static string StatusColor(ProgressStatusCategory status) => status switch
-    {
-        ProgressStatusCategory.NotStarted => Green40,
-        ProgressStatusCategory.InProgress => InProgressBlue,
-        ProgressStatusCategory.Reworking => ReworkingLavender,
-        ProgressStatusCategory.Blocked => BlockedBrick,
-        ProgressStatusCategory.DevelopmentCompleted => CompletedGreen,
-        ProgressStatusCategory.Reconciled => Green100,
-        _ => Coral
-    };
+    internal static string StatusColor(ProgressStatusCategory status) => StatusColors.For(status).Fill;
 
     public static string Status(DevelopmentStatus status) => status switch
     {

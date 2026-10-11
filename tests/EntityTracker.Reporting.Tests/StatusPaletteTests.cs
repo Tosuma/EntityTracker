@@ -12,22 +12,26 @@ using SkiaSharp;
 namespace EntityTracker.Reporting.Tests;
 
 /// <summary>
-/// Reports and PNG charts colour statuses exactly like the app, so the two cannot drift apart. The
-/// app's palette (EntityTrackerPalette.xaml) is the source of truth.
+/// Reports and charts take each status's colour from StatusColors, whose development colours match the
+/// app's palette (EntityTrackerPalette.xaml), and report.js repeats the same fills.
 /// </summary>
 public sealed partial class StatusPaletteTests
 {
     private static readonly IReadOnlyDictionary<string, string> AppStatusColors = LoadAppStatusColors();
 
     [Fact]
-    public void ReportStatusColorsMatchTheApp()
+    public void DevelopmentStatusColorsMatchTheApp()
     {
         Assert.All(Enum.GetValues<ProgressStatusCategory>(), status =>
-            Assert.Equal(AppStatusColors[status.ToString()], ReportLabels.StatusColor(status), ignoreCase: true));
+        {
+            Assert.Equal(AppStatusColors[status.ToString()], StatusColors.For(status).Fill, ignoreCase: true);
+            Assert.Equal(AppStatusColors[$"{status}.Text"], StatusColors.For(status).Text, ignoreCase: true);
+            Assert.Equal(StatusColors.For(status).Fill, ReportLabels.StatusColor(status));
+        });
     }
 
     [Fact]
-    public void ChartStatusColorsMatchTheApp()
+    public void ChartStatusColorsComeFromStatusColors()
     {
         ProgressStatusCategory[] statuses = Enum.GetValues<ProgressStatusCategory>();
         ProgressDashboardReport report = new(
@@ -42,22 +46,27 @@ public sealed partial class StatusPaletteTests
         {
             SKColor fill = Assert.IsType<SolidColorPaint>(
                 Assert.IsType<PieSeries<int>>(presentation.CurrentStatusSeries[index]).Fill).Color;
-            Assert.Equal(AppStatusColors[statuses[index].ToString()], Hex(fill), ignoreCase: true);
+            Assert.Equal(StatusColors.For(statuses[index]).Fill, Hex(fill), ignoreCase: true);
         }
     }
 
+    public static TheoryData<string, string> ReportLabelsAndColors => new()
+    {
+        { "Not started", StatusColors.NotStarted.Fill },
+        { "In progress", StatusColors.InProgress.Fill },
+        { "Rework needed", StatusColors.ReworkNeeded.Fill },
+        { "Reworking", StatusColors.Reworking.Fill },
+        { "Blocked", StatusColors.Blocked.Fill },
+        { "Dev. completed", StatusColors.DevelopmentCompleted.Fill },
+        { "Completed", StatusColors.WorkCompleted.Fill },
+        { "Reconciled", StatusColors.Reconciled.Fill },
+        { "Ready", StatusColors.WorkReady.Fill },
+        { "Waiting on dependencies", StatusColors.WorkWaitingOnDependencies.Fill }
+    };
+
     [Theory]
-    [InlineData("Not started", "NotStarted")]
-    [InlineData("In progress", "InProgress")]
-    [InlineData("Rework needed", "ReworkNeeded")]
-    [InlineData("Reworking", "Reworking")]
-    [InlineData("Blocked", "Blocked")]
-    [InlineData("Dev. completed", "DevelopmentCompleted")]
-    [InlineData("Completed", "DevelopmentCompleted")]
-    [InlineData("Reconciled", "Reconciled")]
-    [InlineData("Ready", "Ready")]
-    [InlineData("Waiting on dependencies", "WaitingOnDependencies")]
-    public void ExportedReportScriptColorsMatchTheApp(string label, string status)
+    [MemberData(nameof(ReportLabelsAndColors))]
+    public void ExportedReportScriptColorsMatchStatusColors(string label, string fill)
     {
         using Stream stream = typeof(ReportLabels).Assembly.GetManifestResourceStream(
             "EntityTracker.Reporting.ProjectReports.Assets.report.js")!;
@@ -68,12 +77,12 @@ public sealed partial class StatusPaletteTests
             """);
 
         Assert.True(match.Success, $"report.js has no colour for {label}.");
-        Assert.Equal(AppStatusColors[status], match.Groups[1].Value, ignoreCase: true);
+        Assert.Equal(fill, match.Groups[1].Value, ignoreCase: true);
     }
 
     private static string Hex(SKColor color) => $"#{color.Red:X2}{color.Green:X2}{color.Blue:X2}";
 
-    /// <summary>Resolves every Brush.Status.* in the app palette to its hex colour, keyed by status name.</summary>
+    /// <summary>Resolves every Brush.Status.* in the app palette to its hex colour, keyed by status name (and "Name.Text").</summary>
     private static Dictionary<string, string> LoadAppStatusColors()
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);

@@ -11,17 +11,9 @@ namespace EntityTracker.Reporting;
 
 public sealed class ProgressChartPresentationBuilder
 {
-    private static readonly IReadOnlyDictionary<ProgressStatusCategory, SKColor> StatusColors =
-        new Dictionary<ProgressStatusCategory, SKColor>
-        {
-            [ProgressStatusCategory.NotStarted] = ProgressChartPalette.Green40,
-            [ProgressStatusCategory.InProgress] = ProgressChartPalette.InProgressBlue,
-            [ProgressStatusCategory.ReworkNeeded] = ProgressChartPalette.Coral,
-            [ProgressStatusCategory.DevelopmentCompleted] = ProgressChartPalette.CompletedGreen,
-            [ProgressStatusCategory.Reconciled] = ProgressChartPalette.Green100,
-            [ProgressStatusCategory.Blocked] = ProgressChartPalette.BlockedBrick,
-            [ProgressStatusCategory.Reworking] = ProgressChartPalette.ReworkingLavender
-        };
+    private static readonly IReadOnlyDictionary<ProgressStatusCategory, SKColor> StatusFills =
+        Enum.GetValues<ProgressStatusCategory>().ToDictionary(
+            static status => status, static status => StatusColors.For(status).FillColor);
 
     public ProgressChartPresentation Build(ProgressDashboardReport report) =>
         Build(report, includeExportPieLabels: false);
@@ -37,7 +29,7 @@ public sealed class ProgressChartPresentationBuilder
 
         ISeries[] currentStatusSeries = CreateCurrentStatusSeries(
             report.CurrentStatusCounts,
-            StatusColors,
+            StatusFills,
             includeExportPieLabels);
 
         DateOnly[] implementedDates = report.ImplementedOverTime
@@ -82,7 +74,7 @@ public sealed class ProgressChartPresentationBuilder
                 Values = report.ReadyAndBlockedOverTime
                     .Select(static point => point.BlockedCount)
                     .ToArray(),
-                Stroke = new SolidColorPaint(ProgressChartPalette.WaitingAmber, 3),
+                Stroke = new SolidColorPaint(ProgressChartPalette.Coral, 3),
                 Fill = null,
                 GeometrySize = 5
             }
@@ -185,17 +177,7 @@ public sealed class ProgressChartPresentationBuilder
         return $"{count} ({percentage.ToString("0.#", CultureInfo.CurrentCulture)}%)";
     }
 
-    private static SKColor GetPieLabelColor(ProgressStatusCategory status) => status switch
-    {
-        ProgressStatusCategory.NotStarted => ProgressChartPalette.DarkGreen,
-        ProgressStatusCategory.InProgress => ProgressChartPalette.White,
-        ProgressStatusCategory.ReworkNeeded => ProgressChartPalette.DarkGreen,
-        ProgressStatusCategory.DevelopmentCompleted => ProgressChartPalette.DarkGreen,
-        ProgressStatusCategory.Reconciled => ProgressChartPalette.White,
-        ProgressStatusCategory.Blocked => ProgressChartPalette.DarkGreen,
-        ProgressStatusCategory.Reworking => ProgressChartPalette.White,
-        _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
-    };
+    private static SKColor GetPieLabelColor(ProgressStatusCategory status) => StatusColors.For(status).TextColor;
 
     private static Axis[] CreateDateAxes(DateOnly[] dates)
     {

@@ -620,11 +620,7 @@ public sealed class PresentationConfigurationTests
             ("Color.Brand.White", "Color.Brand.Green100"),
             ("Color.Brand.Green10", "Color.Brand.Green80"),
             ("Color.Brand.Green10", "Color.Brand.Green100"),
-            ("Color.Brand.White", "Color.Status.InProgress"),
-            ("Color.Brand.DarkGreen", "Color.Status.Reworking"),
-            ("Color.Brand.White", "Color.Status.Blocked"),
-            ("Color.Brand.DarkGreen", "Color.Status.DevelopmentCompleted"),
-            ("Color.Brand.DarkGreen", "Color.Status.WaitingOnDependencies")
+            .. StatusNames.Select(status => ($"{status}.Text", status))
         ];
 
         Assert.All(pairs, pair => Assert.True(
@@ -632,59 +628,60 @@ public sealed class PresentationConfigurationTests
             $"{pair.Foreground} on {pair.Background} does not meet 4.5:1 contrast."));
     }
 
+    private static readonly string[] DevelopmentStatuses =
+        ["NotStarted", "InProgress", "ReworkNeeded", "Reworking", "Blocked", "DevelopmentCompleted", "Reconciled"];
+
+    private static readonly string[] WorkStatuses =
+        ["Ready", "WaitingOnDependencies", "Blocked", "InProgress", "Completed", "Reconciled"];
+
+    private static IEnumerable<string> StatusNames =>
+        DevelopmentStatuses.Select(static status => $"Color.Status.{status}")
+            .Concat(WorkStatuses.Select(static status => $"Color.WorkStatus.{status}"));
+
     [Fact]
-    public void StatusColors_AreDistinctPerStatus()
+    public void StatusColors_EveryStatusHasItsOwnFillAndTextVariables()
     {
         XDocument palette = LoadWpfXaml("Themes", "EntityTrackerPalette.xaml");
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
-        Dictionary<string, string> colors = palette.Descendants()
-            .Where(element => element.Name.LocalName == "Color")
-            .ToDictionary(element => (string)element.Attribute(x + "Key")!, element => element.Value.Trim());
-        Dictionary<string, string> statuses = palette.Descendants()
-            .Where(element => element.Name.LocalName == "SolidColorBrush" &&
-                              ((string?)element.Attribute(x + "Key"))?.StartsWith("Brush.Status.", StringComparison.Ordinal) == true)
-            .ToDictionary(
-                element => ((string)element.Attribute(x + "Key")!)["Brush.Status.".Length..],
-                element => colors[((string)element.Attribute("Color")!)["{StaticResource ".Length..^1]]);
-        string[] development =
-            ["NotStarted", "InProgress", "ReworkNeeded", "Reworking", "Blocked", "DevelopmentCompleted", "Reconciled"];
-        string[] work = ["Ready", "WaitingOnDependencies", "Blocked", "InProgress", "DevelopmentCompleted", "Reconciled"];
+        Dictionary<string, string?> brushes = palette.Descendants()
+            .Where(element => element.Name.LocalName == "SolidColorBrush")
+            .ToDictionary(element => (string)element.Attribute(x + "Key")!, element => (string?)element.Attribute("Color"));
 
-        Assert.Equal(development.Length, development.Select(status => statuses[status]).Distinct().Count());
-        Assert.Equal(work.Length, work.Select(status => statuses[status]).Distinct().Count());
+        foreach (string color in StatusNames)
+        {
+            string brush = color.Replace("Color.", "Brush.", StringComparison.Ordinal);
+            Assert.Equal($"{{StaticResource {color}}}", brushes[brush]);
+            Assert.Equal($"{{StaticResource {color}.Text}}", brushes[$"{brush}.Text"]);
+        }
     }
 
     [Theory]
     [InlineData("TrackerWorkspaceView.xaml")]
     [InlineData("ProjectDashboardView.xaml")]
-    public void StatusBadges_UseReadableTextOnEachStatusColor(string view)
+    public void StatusBadges_TakeFillAndTextFromTheirStatusVariables(string view)
     {
         XDocument document = LoadWpfXaml("Views", view);
-        string[] onDark = ["InProgress", "Blocked", "Reconciled", "Ready"];
-        string[] onLight = ["ReworkNeeded", "Reworking", "DevelopmentCompleted", "WaitingOnDependencies"];
         XElement[] triggers = document.Descendants()
             .Where(element => element.Name.LocalName == "DataTrigger" &&
-                              element.Elements().Any(setter => (string?)setter.Attribute("TargetName") == "Badge" &&
-                                                               (string?)setter.Attribute("Property") == "Background" &&
-                                                               ((string?)setter.Attribute("Value"))?.StartsWith("{DynamicResource Brush.Status.", StringComparison.Ordinal) == true))
+                              ((string?)element.Attribute("Value"))?.StartsWith("{x:Static ", StringComparison.Ordinal) == true &&
+                              element.Elements().Any(setter => (string?)setter.Attribute("TargetName") == "Badge"))
             .ToArray();
 
-        Assert.NotEmpty(triggers);
+        Assert.Equal(12, triggers.Length);
         foreach (XElement trigger in triggers)
         {
-            string status = ((string)trigger.Elements().First(setter => (string?)setter.Attribute("Property") == "Background")
-                .Attribute("Value")!)["{DynamicResource Brush.Status.".Length..^1];
-            string? text = (string?)trigger.Elements().FirstOrDefault(setter =>
-                (string?)setter.Attribute("TargetName") == "BadgeText" &&
-                (string?)setter.Attribute("Property") == "Foreground")?.Attribute("Value");
-            bool white = text == "{DynamicResource Brush.Text.OnDark}";
-            if (onDark.Contains(status)) Assert.True(white, $"{status} badge in {view} needs white text.");
-            if (onLight.Contains(status)) Assert.False(white, $"{status} badge in {view} needs dark text.");
+            string value = (string)trigger.Attribute("Value")!;
+            string status = value[(value.LastIndexOf('.') + 1)..^1];
+            string brush = value.Contains("DevelopmentStatus.", StringComparison.Ordinal)
+                ? $"Brush.Status.{status}"
+                : $"Brush.WorkStatus.{status}";
+            Assert.Contains(trigger.Elements(), setter => (string?)setter.Attribute("TargetName") == "Badge" &&
+                (string?)setter.Attribute("Property") == "Background" &&
+                (string?)setter.Attribute("Value") == $"{{DynamicResource {brush}}}");
+            Assert.Contains(trigger.Elements(), setter => (string?)setter.Attribute("TargetName") == "BadgeText" &&
+                (string?)setter.Attribute("Property") == "Foreground" &&
+                (string?)setter.Attribute("Value") == $"{{DynamicResource {brush}.Text}}");
         }
-
-        // Waiting on dependencies has its own colour, no longer shared with Blocked.
-        Assert.Contains(triggers, trigger => trigger.Elements().Any(setter =>
-            (string?)setter.Attribute("Value") == "{DynamicResource Brush.Status.WaitingOnDependencies}"));
     }
 
     [Fact]
