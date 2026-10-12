@@ -4,12 +4,20 @@ This guide walks you through cloning, building, and running EntityTracker for th
 
 ## Prerequisites
 
-- Windows 10 or 11
-- [.NET SDK 10.0.400](https://dotnet.microsoft.com/download/dotnet/10.0) (pinned by `global.json`)
-- Git
-- Network access to `nuget.org` (for the initial package restore)
+To install and use EntityTracker:
 
-Verify your SDK version:
+- Windows 10 or 11
+- Git
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) or
+  [Rancher Desktop](https://rancherdesktop.io/) with the Docker engine (dockerd/moby) and Linux
+  containers, running when you install or update
+- Network access to `mcr.microsoft.com` and `nuget.org` (for the build image and packages)
+
+You don't need .NET to install or use EntityTracker: the installer builds the app inside the official
+.NET SDK container.
+
+To work on the code, you also need the [.NET SDK 10.0.400](https://dotnet.microsoft.com/download/dotnet/10.0)
+(pinned by `global.json`). Verify your SDK version:
 
 ```powershell
 dotnet --version
@@ -26,8 +34,19 @@ cd EntityTracker
 
 The script builds the newest approved `app-vX.Y.Z` release on your computer, installs it at
 `%LOCALAPPDATA%\Programs\EntityTracker`, creates a **Start Menu** shortcut, and opens it. Keep
-the source clone: it is used to check and build later releases. Git access and .NET package restore
-must work on this computer.
+the source clone: it is used to check and build later releases. Git access must work on this
+computer.
+
+The build runs in Docker, in the .NET SDK image the release pins (`mcr.microsoft.com/dotnet/sdk`).
+The first install downloads that image (about 1 GB); later updates reuse it and keep NuGet packages
+in the Docker volume `entitytracker-nuget`. The container only builds: its result is written to the
+installer's folder under `%LOCALAPPDATA%` and installed exactly as a local build would be, and the
+container is removed afterwards. If you have the .NET SDK and prefer to build without Docker, run
+`.\scripts\Install-EntityTracker.ps1 -BuildWith Local`.
+
+If the install or an update says Docker is not running, start Docker Desktop or Rancher Desktop and
+try again. Docker must use Linux containers and be allowed to share your user folder (both are the
+defaults).
 
 The app checks for new releases at startup, every 15 minutes, and before each Project Git sync.
 When an update is available, finish any open edit and choose **Close and update**. The updater

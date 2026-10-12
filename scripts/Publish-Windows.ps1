@@ -5,12 +5,14 @@ param(
     [string]$Version
 )
 
+# Runs the same on Windows and in the Linux .NET SDK container the installer builds in, so paths are
+# combined with [IO.Path]::Combine rather than written with backslashes.
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $artifactRoot = Join-Path $repositoryRoot 'artifacts'
-$publishDirectory = Join-Path $artifactRoot 'publish\win-x64'
+$publishDirectory = [IO.Path]::Combine($artifactRoot, 'publish', 'win-x64')
 $zipPath = Join-Path $artifactRoot 'EntityTracker-win-x64.zip'
-$projectPath = Join-Path $repositoryRoot 'src\EntityTracker.Wpf\EntityTracker.Wpf.csproj'
+$projectPath = [IO.Path]::Combine($repositoryRoot, 'src', 'EntityTracker.Wpf', 'EntityTracker.Wpf.csproj')
 $applicationLicensePath = Join-Path $repositoryRoot 'LICENSE'
 $thirdPartyNoticePath = Join-Path $repositoryRoot 'THIRD-PARTY-NOTICES.txt'
 $commonLicenseDirectory = Join-Path $repositoryRoot 'licenses'
@@ -41,6 +43,7 @@ dotnet publish $projectPath `
     --output $publishDirectory `
     -p:DebugType=None `
     -p:DebugSymbols=false `
+    -p:EnableWindowsTargeting=true `
     @versionArgument
 
 if ($LASTEXITCODE -ne 0) {
@@ -68,8 +71,12 @@ Copy-Item -LiteralPath $thirdPartyNoticePath -Destination (Join-Path $publishDir
 Copy-Item -LiteralPath (Join-Path $commonLicenseDirectory 'MIT.txt') -Destination $publishedLicenseDirectory
 Copy-Item -LiteralPath (Join-Path $commonLicenseDirectory 'Apache-2.0.txt') -Destination $publishedLicenseDirectory
 
-$dotnetCommand = Get-Command dotnet -ErrorAction Stop
-$dotnetRoot = Split-Path -Parent $dotnetCommand.Source
+# The .NET root holds the SDKs; in the container the dotnet command is only a link to it.
+$sdkListing = dotnet --list-sdks | Select-Object -First 1
+if ($LASTEXITCODE -ne 0 -or $sdkListing -notmatch '\[(?<sdks>[^\]]+)\]\s*$') {
+    throw "Could not find the .NET installation folder from: dotnet --list-sdks"
+}
+$dotnetRoot = Split-Path -Parent $Matches['sdks']
 $dotnetLicensePath = Join-Path $dotnetRoot 'LICENSE.txt'
 $dotnetNoticesPath = Join-Path $dotnetRoot 'ThirdPartyNotices.txt'
 

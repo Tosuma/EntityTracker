@@ -4,7 +4,11 @@ param(
     [string]$Tag,
     [int]$WaitForProcess = 0,
     # Set by the updater; when run by hand the version is read from the source checkout.
-    [string]$UpdaterVersion = ''
+    [string]$UpdaterVersion = '',
+    # Docker (default) builds in the .NET SDK container, so the machine needs no .NET; Local builds
+    # with the .NET SDK installed on this machine. Either way the app is installed the same way.
+    [ValidateSet('Docker', 'Local')]
+    [string]$BuildWith = 'Docker'
 )
 
 . (Join-Path $PSScriptRoot 'Install-Common.ps1')
@@ -66,9 +70,15 @@ try {
     Write-Host "Preparing approved release $Tag..."
     Invoke-RequiredCommand git @('-C', $SourcePath, 'archive', "--output=$archivePath", $Tag)
     Invoke-RequiredCommand tar @('-xf', $archivePath, '-C', $sourceStage)
-    Write-Host "Building EntityTracker $version locally..."
-    & (Join-Path $sourceStage 'scripts\Publish-Windows.ps1') -Version $version
-    if ($LASTEXITCODE -ne 0) { throw 'The app build failed.' }
+    if ($BuildWith -eq 'Docker') {
+        Write-Host "Building EntityTracker $version in Docker..."
+        & (Join-Path $sourceStage 'scripts\Invoke-DockerBuild.ps1') -SourcePath $sourceStage -Version $version
+    }
+    else {
+        Write-Host "Building EntityTracker $version locally..."
+        & (Join-Path $sourceStage 'scripts\Publish-Windows.ps1') -Version $version
+        if ($LASTEXITCODE -ne 0) { throw 'The app build failed.' }
+    }
     $publish = Join-Path $sourceStage 'artifacts\publish\win-x64'
     if (-not (Test-Path -LiteralPath (Join-Path $publish 'EntityTracker.Wpf.exe') -PathType Leaf)) {
         throw 'The app build did not produce EntityTracker.Wpf.exe.'

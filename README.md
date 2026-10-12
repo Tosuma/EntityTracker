@@ -480,7 +480,9 @@ runtime store for editing, reporting, and navigation.
 
 ## Getting started
 
-EntityTracker currently runs on Windows and uses the .NET SDK pinned by `global.json`.
+EntityTracker runs on Windows. Installing and updating it needs Git and Docker (Docker Desktop or
+Rancher Desktop), not .NET: the installer builds the app in the .NET SDK container. Working on the
+code uses the .NET SDK pinned by `global.json`.
 
 See the [getting started guide](docs/GETTING_STARTED.md) for prerequisites, one-command local
 installation, updates, and first steps. Colleagues build approved release tags on their own
