@@ -67,6 +67,35 @@ not part of this workflow.
 
 ## Release an installed-app update
 
+### Choose the version number
+
+Release tags are `app-vMAJOR.MINOR.PATCH`. Decide the bump by what the release asks of the people
+using EntityTracker, not by how large the change is. Ask: **can everyone keep working without
+updating, and without doing anything by hand?**
+
+- **Major** (`2.0.0`): someone is forced to update or to act. Use it when the release:
+  - changes the shared Project sync format (`ProjectSnapshot.CurrentFormatVersion`), so older
+    versions can no longer sync with a Project this version has written. This counts even though the
+    app tells colleagues an update is required: they are still forced to update;
+  - changes other shared data so older versions can't read it (for example the Project repository
+    layout or tombstones);
+  - removes something people rely on, or changes what it means: a feature, a status, a report
+    audience, accepted CSV input, or tables and columns that saved Help & SQL queries use;
+  - needs a manual step (re-import, re-clone, export) or a new install requirement (Windows or .NET
+    version, install location, update channel).
+- **Minor** (`1.11.0`): something new, nothing forced. New features and options; older versions keep
+  working alongside, including with data they simply ignore. The sync format version does not change.
+- **Patch** (`1.10.1`): nothing new. Fixes, wording, colours, layout and performance.
+
+The local database (`SqliteDatabase.CurrentSchemaVersion`) and settings (`EntityTrackerSettings.CurrentVersion`)
+are upgraded on each machine when the new version starts and force no one else to update, so a change
+to them alone does not need a major release.
+
+Tags up to `app-v1.10.0` did not follow this rule (`app-v1.8.0` raised the sync format in a minor
+release); they stay as they are.
+
+### Publish the release
+
 1. Merge the update to `main`. Wait for its Windows CI build, tests, and package job to pass.
 2. In your development checkout, update `main` and run the release script. Choose `Major`, `Minor`,
    or `Patch`, and write the release message that will be stored in the annotated Git tag:
@@ -93,7 +122,8 @@ Run the release-script fixture tests with `.\scripts\Test-New-AppRelease.ps1`. C
 The first `app-vX.Y.Z` tag must include the installer and updater scripts. Until it exists, the
 first-install script reports that there is no approved release. Use a new higher version for every
 update. Breaking shared Project snapshot changes must still increment and validate the snapshot
-format version, because a release can appear while an older process is finishing an in-flight sync.
+format version, because a release can appear while an older process is finishing an in-flight sync,
+and they are released as a major version (see [Choose the version number](#choose-the-version-number)).
 
 Colleagues clone the app repository once and run `.\scripts\Install-EntityTracker.ps1`. The
 script fetches an approved tag into that existing clone, archives its source without switching
