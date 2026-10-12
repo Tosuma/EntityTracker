@@ -209,7 +209,7 @@ Overview after the normal unsaved-work confirmation.
 
 A Tracker created as a copy of another keeps a link to it. **Sync from source** on the Project
 dashboard brings the source's later changes into the copy: which entities exist, their dependencies,
-requested priorities and groups. Each difference is a plain sentence naming both Trackers, with two
+requested priorities, groups and Filter active. A copy starts with its source's Filter active. Each difference is a plain sentence naming both Trackers, with two
 outcomes to choose from, such as "Add the dependency on customer" or "Leave it out". An entity that
 exists on only one side is a single choice that brings it whole, with all its dependencies, or leaves
 it out. **Use … for all** and **Keep … for all** decide everything at once, and single rows can still be

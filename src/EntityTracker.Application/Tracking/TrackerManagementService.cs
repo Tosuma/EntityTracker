@@ -102,7 +102,8 @@ public sealed class TrackerManagementService(
             entity.SourceName,
             provenance: EntityProvenance.Copied,
             requestedPriority: entity.RequestedPriority,
-            groupName: entity.GroupName)).ToArray();
+            groupName: entity.GroupName,
+            filterActive: entity.FilterActive)).ToArray();
 
         List<PersistedDependency> copiedResolved = [];
         List<PersistedUnresolvedDependency> copiedUnresolved = [];

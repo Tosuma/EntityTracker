@@ -12,7 +12,9 @@ public sealed record TrackerSyncEntity(
     bool Active,
     int? RequestedPriority,
     string GroupName,
-    IReadOnlyList<TrackerSyncDependency> Dependencies);
+    IReadOnlyList<TrackerSyncDependency> Dependencies,
+    // Missing (null) in baselines saved before Filter active was synced.
+    string? FilterActive = null);
 
 public sealed record TrackerSyncStructure(IReadOnlyList<TrackerSyncEntity> Entities);
 
@@ -29,7 +31,7 @@ public enum TrackerSyncChoice { Source, Destination }
 
 public sealed record TrackerSyncChoiceOption(TrackerSyncChoice Value, string Label);
 
-public enum TrackerSyncChangeKind { Entity, Dependency, RequestedPriority, Group }
+public enum TrackerSyncChangeKind { Entity, Dependency, RequestedPriority, Group, FilterActive }
 
 public sealed class TrackerSyncChange : INotifyPropertyChanged
 {

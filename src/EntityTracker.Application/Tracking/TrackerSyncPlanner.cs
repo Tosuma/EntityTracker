@@ -38,7 +38,8 @@ public static class TrackerSyncPlanner
                 entity.RequestedPriority,
                 entity.GroupName,
                 declarations[entity.Id].Values
-                    .OrderBy(static dependency => Key(dependency.Name), StringComparer.Ordinal).ToArray()))
+                    .OrderBy(static dependency => Key(dependency.Name), StringComparer.Ordinal).ToArray(),
+                entity.FilterActive))
             .ToArray());
 
         void Put(EntityId ownerId, string targetName, ImportedDependencyKind kind)
@@ -76,7 +77,8 @@ public static class TrackerSyncPlanner
                     bActive ? "Active" : "Archived or absent"));
 
             // An entity that is active on only one side is one decision: it comes whole, with its
-            // priority, group and dependencies, or not at all, so those are not asked about separately.
+            // priority, group, Filter active and dependencies, or not at all, so those are not asked
+            // about separately.
             if (aActive != bActive) continue;
             if (!aActive) continue;
             if (Different(hasBaseline, ae?.RequestedPriority, be?.RequestedPriority,
@@ -89,6 +91,11 @@ public static class TrackerSyncPlanner
                 changes.Add(new TrackerSyncChange(TrackerSyncChangeKind.Group, name, null,
                     string.IsNullOrEmpty(ae?.GroupName) ? "None" : ae.GroupName,
                     string.IsNullOrEmpty(be?.GroupName) ? "None" : be.GroupName));
+            // A baseline saved before Filter active was synced has null here, which counts as a first sync.
+            if (Different(hasBaseline, ae?.FilterActive ?? "", be?.FilterActive ?? "",
+                    oldAe?.FilterActive, oldBe?.FilterActive))
+                changes.Add(new TrackerSyncChange(TrackerSyncChangeKind.FilterActive, name, null,
+                    ae?.FilterActive ?? "", be?.FilterActive ?? ""));
 
             var ad = Dependencies(ae);
             var bd = Dependencies(be);
@@ -143,6 +150,8 @@ public static class TrackerSyncPlanner
             int? priority = Pick(TrackerSyncChangeKind.RequestedPriority, "",
                 ae?.RequestedPriority, be?.RequestedPriority);
             string group = Pick(TrackerSyncChangeKind.Group, "", ae?.GroupName ?? "", be?.GroupName ?? "");
+            string filterActive = Pick(TrackerSyncChangeKind.FilterActive, "",
+                ae?.FilterActive ?? "", be?.FilterActive ?? "");
             var ad = Dependencies(ae);
             var bd = Dependencies(be);
             List<TrackerSyncDependency> dependencies = [];
@@ -156,7 +165,7 @@ public static class TrackerSyncPlanner
                         ? selected with { Kind = ImportedDependencyKind.Mandatory }
                         : selected);
             }
-            result.Add(new TrackerSyncEntity(name, active, priority, group, dependencies));
+            result.Add(new TrackerSyncEntity(name, active, priority, group, dependencies, filterActive));
 
             T Pick<T>(TrackerSyncChangeKind kind, string target, T sourceValue, T destinationValue)
             {

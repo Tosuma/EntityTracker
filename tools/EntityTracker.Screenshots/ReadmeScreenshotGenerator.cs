@@ -388,6 +388,7 @@ internal sealed class ReadmeScreenshotGenerator
         TrackedEntity currency = entities.Single(entity => entity.SourceName == "currency_code");
         customer.ChangeRequestedPriority(2);
         customer.ChangeGroupName("Billing");
+        customer.ChangeFilterActive("Active customers only, by region");
         TrackedEntity reminder = new(EntityId.New(), source.Id, "payment_reminder",
             requestedPriority: 3, groupName: "Billing");
         await provider.GetRequiredService<ITrackedStateStore>().ApplyAsync(source.Id,
@@ -399,6 +400,7 @@ internal sealed class ReadmeScreenshotGenerator
                         EntityTracker.Application.Importing.ImportedDependencyKind.Mandatory)
                 ],
                 [],
+                entitiesWithProgressToUpdate: [customer],
                 entitiesWithRequestedPriorityToUpdate: [customer],
                 entitiesWithGroupNameToUpdate: [customer]),
             cancellationToken);

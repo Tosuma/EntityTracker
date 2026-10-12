@@ -625,6 +625,51 @@ public sealed class PresentationConfigurationTests
         Assert.All(boxes, box => Assert.Equal("12,5", (string?)box.Attribute("Padding")));
     }
 
+    [Theory]
+    [InlineData("PortfolioView.xaml")]
+    [InlineData("ProjectDashboardView.xaml")]
+    public void PageHeaders_StayPutWhileThePageScrollsAndHaveNoSubtitle(string view)
+    {
+        XDocument document = LoadWpfXaml("Views", view);
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        XElement header = Assert.Single(document.Descendants(), element => (string?)element.Attribute(x + "Name") == "PageHeader");
+
+        Assert.DoesNotContain(header.Ancestors(), static ancestor => ancestor.Name.LocalName == "ScrollViewer");
+        Assert.Equal("0", (string?)header.Attribute("Grid.Row"));
+        Assert.DoesNotContain(header.Descendants(), static element =>
+            (string?)element.Attribute("Style") == "{StaticResource PageDescriptionTextStyle}");
+        Assert.Contains(document.Descendants(), static element =>
+            element.Name.LocalName == "ScrollViewer" && (string?)element.Attribute("Grid.Row") == "1");
+    }
+
+    [Fact]
+    public void EntityEditor_DeveloperListReachesDownToTheGroupField()
+    {
+        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        XElement column = Assert.Single(document.Descendants(), element => (string?)element.Attribute(x + "Name") == "EditorDeveloperColumn");
+        XElement list = Assert.Single(document.Descendants(), element => (string?)element.Attribute(x + "Name") == "EditorDeveloperList");
+
+        Assert.Equal("{Binding ActualHeight, ElementName=EditorProgressFields}", (string?)column.Attribute("Height"));
+        Assert.Null(list.Attribute("MaxHeight"));
+        // The list fills the rest of the column, in a frame that shows how far it reaches.
+        Assert.Same(column.Elements().Last(), list.Parent);
+    }
+
+    [Fact]
+    public void Overview_WorkStatusColumnFitsWaitingOnDependencies()
+    {
+        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+
+        XElement column = Assert.Single(document.Descendants(), static element =>
+            element.Name.LocalName == "DataGridTemplateColumn" &&
+            element.Descendants().Any(static child => ((string?)child.Attribute("Filter"))?.Contains("ActiveTable.WorkStatusFilter", StringComparison.Ordinal) == true));
+
+        Assert.True(double.Parse((string)column.Attribute("Width")!, System.Globalization.CultureInfo.InvariantCulture) >= 200);
+    }
+
     [Fact]
     public void EntityTables_CentreStatusBadgesInTheirCellsWithRoomAround()
     {

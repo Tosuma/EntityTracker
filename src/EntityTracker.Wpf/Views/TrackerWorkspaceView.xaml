@@ -910,7 +910,7 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTemplateColumn Width="140">
+                                <DataGridTemplateColumn Width="200">
                                     <DataGridTemplateColumn.Header>
                                         <controls:FilterableColumnHeader Filter="{Binding DataContext.ActiveTable.WorkStatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                                     </DataGridTemplateColumn.Header>
@@ -2653,7 +2653,7 @@
                                         <ColumnDefinition Width="16" />
                                         <ColumnDefinition Width="2*" />
                                     </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0">
+                                    <StackPanel x:Name="EditorProgressFields" Grid.Column="0">
                                         <TextBlock FontWeight="SemiBold" Text="Development status" />
                                         <ComboBox x:Name="EditorStatusComboBox"
                                                   AutomationProperties.Name="Development status"
@@ -2701,13 +2701,16 @@
                                                  Text="{Binding Editor.EditedFilterActive, UpdateSourceTrigger=PropertyChanged}"
                                                  TextWrapping="Wrap" />
                                     </StackPanel>
-                                    <StackPanel Grid.Column="2" IsEnabled="{Binding Editor.CanEditProgress}">
-                                    <TextBlock FontWeight="SemiBold" Text="Responsible developers" />
-                                    <Button Margin="0,7,0,4" HorizontalAlignment="Left" Content="{Binding Editor.SelfAssignmentActionLabel}"
+                                    <!-- As tall as the fields in column 1: the developer list fills the space down to the Group field. -->
+                                    <DockPanel x:Name="EditorDeveloperColumn" Grid.Column="2" LastChildFill="True"
+                                               Height="{Binding ActualHeight, ElementName=EditorProgressFields}"
+                                               IsEnabled="{Binding Editor.CanEditProgress}">
+                                    <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="Responsible developers" />
+                                    <Button DockPanel.Dock="Top" Margin="0,7,0,4" HorizontalAlignment="Left" Content="{Binding Editor.SelfAssignmentActionLabel}"
                                             AutomationProperties.Name="{Binding Editor.SelfAssignmentAccessibleName}"
                                             Command="{Binding Editor.AssignMeCommand}"
                                             Style="{StaticResource SecondaryButtonStyle}" />
-                                    <StackPanel Visibility="{Binding Editor.HasAssignmentGuidance, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <StackPanel DockPanel.Dock="Top" Visibility="{Binding Editor.HasAssignmentGuidance, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <TextBlock Text="{Binding Editor.AssignmentGuidance}" TextWrapping="Wrap"
                                                    AutomationProperties.LiveSetting="Assertive" />
                                         <Button Margin="0,6,0,4" HorizontalAlignment="Left" Content="Open Settings"
@@ -2715,7 +2718,7 @@
                                                 Command="{Binding Editor.OpenIdentitySettingsCommand}"
                                                 Style="{StaticResource SecondaryButtonStyle}" />
                                     </StackPanel>
-                                    <Grid Margin="0,5,0,5">
+                                    <Grid DockPanel.Dock="Top" Margin="0,5,0,5">
                                         <TextBox x:Name="EditorDeveloperSearchBox" Padding="8,6"
                                                  AutomationProperties.Name="Search Project developers"
                                                  Text="{Binding Editor.DeveloperPicker.Query, UpdateSourceTrigger=PropertyChanged}" />
@@ -2726,19 +2729,7 @@
                                                    Text="Search developers by initials or name"
                                                    Visibility="{Binding Editor.DeveloperPicker.IsQueryEmpty, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                     </Grid>
-                                    <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto"
-                                                  CanContentScroll="False">
-                                        <ItemsControl ItemsSource="{Binding Editor.DeveloperPicker.FilteredChoices}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <CheckBox Margin="2,3" Content="{Binding Label}"
-                                                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                                                              AutomationProperties.Name="{Binding Label}" />
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </ScrollViewer>
-                                    <TextBlock Margin="0,7,0,0"
+                                    <TextBlock DockPanel.Dock="Bottom" Margin="0,7,0,0"
                                                Foreground="{DynamicResource Brush.Text.Secondary}"
                                                Text="No available developers. Add one from Project → Developers."
                                                TextWrapping="Wrap">
@@ -2753,7 +2744,22 @@
                                             </Style>
                                         </TextBlock.Style>
                                     </TextBlock>
-                                    </StackPanel>
+                                    <Border x:Name="EditorDeveloperListFrame" Padding="6,4" CornerRadius="4" BorderThickness="1"
+                                            BorderBrush="{DynamicResource Brush.Border.Default}">
+                                        <ScrollViewer x:Name="EditorDeveloperList" VerticalScrollBarVisibility="Auto"
+                                                      CanContentScroll="False">
+                                            <ItemsControl ItemsSource="{Binding Editor.DeveloperPicker.FilteredChoices}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <CheckBox Margin="2,3" Content="{Binding Label}"
+                                                                  IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                                  AutomationProperties.Name="{Binding Label}" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </Border>
+                                    </DockPanel>
                                 </Grid>
 
                                 <StackPanel Margin="0,0,0,12">

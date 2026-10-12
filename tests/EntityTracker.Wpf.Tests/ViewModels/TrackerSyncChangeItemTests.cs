@@ -63,6 +63,18 @@ public sealed class TrackerSyncChangeItemTests
     }
 
     [Fact]
+    public void FilterActiveShowsBothTextsInFull()
+    {
+        TrackerSyncChangeItem item = Single(
+            source: [Entity("order") with { FilterActive = "Active only, by region" }],
+            copy: [Entity("order") with { FilterActive = "" }]);
+
+        Assert.Equal("Filter active differs.\nIn Core schema: \u201CActive only, by region\u201D\nIn Release readiness: none",
+            item.Description);
+        Assert.Equal(("Use Core schema's", "Keep Release readiness's"), (item.UseSourceLabel, item.KeepCopyLabel));
+    }
+
+    [Fact]
     public void TheRadioChoicesFollowTheUnderlyingChoice()
     {
         TrackerSyncChangeItem item = Single(source: [Entity("order", 3)], copy: [Entity("order")]);
