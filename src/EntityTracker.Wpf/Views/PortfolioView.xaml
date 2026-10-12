@@ -3,26 +3,28 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:views="clr-namespace:EntityTracker.Wpf.Views">
     <Grid ClipToBounds="True">
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
+    <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+    <!-- The header stays put while the page below it scrolls. -->
+    <DockPanel x:Name="PageHeader" Grid.Row="0" Margin="0,0,0,18">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+            <Button Margin="0,0,8,0" Click="OnImportProject" Content="Import Project"
+                    AutomationProperties.Name="Import Project from existing Git checkout"
+                    Style="{StaticResource SecondaryButtonStyle}" />
+            <Button Margin="0,0,8,0" Click="OnOpenRecycleBins" Content="Recycle bins"
+                    Style="{StaticResource SecondaryButtonStyle}" />
+            <Button Click="OnCreateProject" Content="Create project"
+                    Style="{StaticResource PrimaryButtonStyle}" />
+        </StackPanel>
+        <StackPanel VerticalAlignment="Center">
+            <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Portfolio" />
+        </StackPanel>
+    </DockPanel>
+    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
                   ScrollChanged="OnPortfolioScrollChanged">
         <StackPanel>
-            <DockPanel Margin="0,0,0,18">
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Margin="0,0,8,0" Click="OnImportProject" Content="Import Project"
-                            AutomationProperties.Name="Import Project from existing Git checkout"
-                            Style="{StaticResource SecondaryButtonStyle}" />
-                    <Button Margin="0,0,8,0" Click="OnOpenRecycleBins" Content="Recycle bins"
-                            Style="{StaticResource SecondaryButtonStyle}" />
-                    <Button Click="OnCreateProject" Content="Create project"
-                            Style="{StaticResource PrimaryButtonStyle}" />
-                </StackPanel>
-                <StackPanel>
-                    <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Portfolio" />
-                    <TextBlock Margin="0,4,0,0" Style="{StaticResource PageDescriptionTextStyle}"
-                               Text="Entity-weighted progress across active projects and trackers." />
-                </StackPanel>
-            </DockPanel>
-
             <Border Margin="0,0,0,12" Style="{StaticResource InfoMessageStyle}"
                     Visibility="{Binding PortfolioReporting.IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <TextBlock AutomationProperties.LiveSetting="Polite" Text="Loading Portfolio…" />
@@ -138,7 +140,7 @@
                                          DataContext="{Binding PortfolioReporting.Progress}" />
         </StackPanel>
     </ScrollViewer>
-    <Canvas x:Name="ProjectActionLayer" Panel.ZIndex="1" ClipToBounds="True"
+    <Canvas x:Name="ProjectActionLayer" Grid.RowSpan="2" Panel.ZIndex="1" ClipToBounds="True"
             SizeChanged="OnProjectActionLayerSizeChanged">
         <Border x:Name="ProjectActionsMenu" MinWidth="190" Padding="8"
                 Background="{DynamicResource Brush.Surface.Page}"

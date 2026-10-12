@@ -839,6 +839,33 @@ public sealed class ShellViewModelTests
     }
 
     [Fact]
+    public async Task TrackerSync_CopiesFilterActiveAndLetsTheSourcesNewValueBeTaken()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "order", filterActive: "Active only");
+        Tracker copy = await harness.TrackerManagement.CopyAsync(
+            harness.DefaultTracker.Id, harness.DefaultProject.Id, "Copy with filters");
+        Assert.Equal("Active only", Assert.Single(await harness.Entities.GetAllAsync(copy.Id)).FilterActive);
+
+        await harness.SetFilterActiveAsync(harness.DefaultTracker.Id, "order", "Active only, by region");
+        using ShellViewModel shell = harness.CreateShell(
+            new EntityTrackerSettings(lastProjectId: harness.DefaultProject.Id,
+                lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        await shell.Catalog.OpenSyncTrackerAsync(copy);
+        TrackerSyncChangeItem item = Assert.Single(Assert.Single(shell.Catalog.SyncGroups).Changes);
+        Assert.Equal(TrackerSyncChangeKind.FilterActive, item.Change.Kind);
+
+        item.UseSource = true;
+        await WaitUntilAsync(() => shell.Catalog.ApplySyncCommand.CanExecute(null));
+        shell.Catalog.ApplySyncCommand.Execute(null);
+        await WaitUntilAsync(() => !shell.Catalog.IsOpen && !shell.Catalog.IsBusy);
+
+        Assert.Equal("Active only, by region", Assert.Single(await harness.Entities.GetAllAsync(copy.Id)).FilterActive);
+    }
+
+    [Fact]
     public async Task TrackerSync_NamesBothTrackersAndCanDecideEverythingAtOnce()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
@@ -1184,6 +1211,7 @@ public sealed class ShellViewModelTests
                 settings,
                 appearance,
                 adapters, developers, identity, periods);
+            harness.Entities = entities;
             harness.ReportBuilder = new EntityTracker.Reporting.ProjectReports.ProjectReportBuilder(
                 projects, trackers, new ProgressReportingService(history, TimeZoneInfo.Utc),
                 aggregateReporting, overview, DependencyGraphReportSectionProvider.AppSections);
@@ -1191,6 +1219,16 @@ public sealed class ShellViewModelTests
         }
 
         public EntityTracker.Reporting.ProjectReports.ProjectReportBuilder? ReportBuilder { get; private set; }
+
+        public SqliteEntityRepository Entities { get; private set; } = null!;
+
+        public async Task SetFilterActiveAsync(TrackerId trackerId, string name, string filterActive)
+        {
+            TrackedEntity entity = (await Entities.GetAllAsync(trackerId)).Single(item => item.SourceName == name);
+            entity.ChangeFilterActive(filterActive);
+            await _stateStore.ApplyAsync(trackerId, new TrackedStateChangeSet([], [], [], [], [], [],
+                entitiesWithProgressToUpdate: [entity]));
+        }
 
         public RecordingReportFiles ReportFiles { get; } = new();
 

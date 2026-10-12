@@ -329,7 +329,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     /// <summary>Gets what syncing does, naming both Trackers.</summary>
     public string SyncIntro =>
         $"{SyncCopyName} was created as a copy of {SyncSourceName}. Syncing brings {SyncSourceName}'s later changes " +
-        $"into {SyncCopyName}: which entities exist, their dependencies, requested priorities and groups.";
+        $"into {SyncCopyName}: which entities exist, their dependencies, requested priorities, groups and Filter active.";
 
     public string SyncSafety =>
         $"Only {SyncCopyName} changes. {SyncSourceName} is not touched, and progress (statuses, notes, " +

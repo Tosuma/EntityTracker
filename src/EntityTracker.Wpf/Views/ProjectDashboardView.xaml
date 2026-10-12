@@ -192,28 +192,30 @@
     </UserControl.Resources>
 
     <Grid x:Name="DashboardRoot" ClipToBounds="True">
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
+    <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+    <!-- The header stays put while the page below it scrolls. -->
+    <DockPanel x:Name="PageHeader" Grid.Row="0" Margin="0,0,0,18">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+            <Button Margin="0,0,8,0" Click="OnRenameProject" Content="Rename project" />
+            <Button Margin="0,0,8,0" Click="OnOpenProjectReport" Content="Project report"
+                    AutomationProperties.Name="Create a report of this project" />
+            <Button Margin="0,0,8,0" Click="OnOpenDevelopers" Content="Developers"
+                    AutomationProperties.Name="Manage project developers" />
+            <Button Margin="0,0,8,0" Click="OnOpenRecycleBin" Content="Tracker recycle bin" />
+            <Button Click="OnCreateTracker" Content="Create tracker"
+                    Style="{StaticResource PrimaryButtonStyle}" />
+        </StackPanel>
+        <StackPanel VerticalAlignment="Center">
+            <TextBlock Style="{StaticResource PageHeadingTextStyle}"
+                       Text="{Binding ProjectReporting.Dashboard.Project.Name}" />
+        </StackPanel>
+    </DockPanel>
+    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
                   ScrollChanged="OnDashboardScrollChanged">
         <StackPanel>
-            <DockPanel Margin="0,0,0,18">
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Margin="0,0,8,0" Click="OnRenameProject" Content="Rename project" />
-                    <Button Margin="0,0,8,0" Click="OnOpenProjectReport" Content="Project report"
-                            AutomationProperties.Name="Create a report of this project" />
-                    <Button Margin="0,0,8,0" Click="OnOpenDevelopers" Content="Developers"
-                            AutomationProperties.Name="Manage project developers" />
-                    <Button Margin="0,0,8,0" Click="OnOpenRecycleBin" Content="Tracker recycle bin" />
-                    <Button Click="OnCreateTracker" Content="Create tracker"
-                            Style="{StaticResource PrimaryButtonStyle}" />
-                </StackPanel>
-                <StackPanel>
-                    <TextBlock Style="{StaticResource PageHeadingTextStyle}"
-                               Text="{Binding ProjectReporting.Dashboard.Project.Name}" />
-                    <TextBlock Margin="0,4,0,0" Style="{StaticResource PageDescriptionTextStyle}"
-                               Text="Aggregate progress, comparable trackers, and entity-level differences." />
-                </StackPanel>
-            </DockPanel>
-
             <Border Margin="0,0,0,12" Style="{StaticResource InfoMessageStyle}"
                     Visibility="{Binding ProjectReporting.IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <TextBlock AutomationProperties.LiveSetting="Polite" Text="Loading Project dashboard…" />
@@ -534,7 +536,7 @@
             </Border>
         </StackPanel>
     </ScrollViewer>
-    <Canvas x:Name="TrackerActionLayer" Panel.ZIndex="1" ClipToBounds="True"
+    <Canvas x:Name="TrackerActionLayer" Grid.RowSpan="2" Panel.ZIndex="1" ClipToBounds="True"
             SizeChanged="OnTrackerActionLayerSizeChanged">
         <Border x:Name="TrackerActionsMenu" MinWidth="190" Padding="8"
                 Background="{DynamicResource Brush.Surface.Page}"

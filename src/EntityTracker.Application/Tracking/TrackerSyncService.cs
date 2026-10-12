@@ -77,6 +77,7 @@ public sealed class TrackerSyncService(
         List<EntityId> restores = [];
         List<TrackedEntity> priorityUpdates = [];
         List<TrackedEntity> groupUpdates = [];
+        List<TrackedEntity> filterActiveUpdates = [];
         foreach (TrackerSyncEntity wanted in selected.Entities)
         {
             string key = TrackerSyncPlanner.Key(wanted.Name);
@@ -85,7 +86,8 @@ public sealed class TrackerSyncService(
                 if (!wanted.Active) continue;
                 entity = new TrackedEntity(EntityId.New(), review.DestinationTrackerId,
                     wanted.Name, provenance: EntityProvenance.Copied,
-                    requestedPriority: wanted.RequestedPriority, groupName: wanted.GroupName);
+                    requestedPriority: wanted.RequestedPriority, groupName: wanted.GroupName,
+                    filterActive: wanted.FilterActive ?? "");
                 existingByKey.Add(key, entity);
                 additions.Add(entity);
                 continue;
@@ -103,6 +105,12 @@ public sealed class TrackerSyncService(
             {
                 entity.ChangeGroupName(wanted.GroupName);
                 groupUpdates.Add(entity);
+            }
+            if (wanted.FilterActive is { } filterActive &&
+                !string.Equals(entity.FilterActive, filterActive, StringComparison.Ordinal))
+            {
+                entity.ChangeFilterActive(filterActive);
+                filterActiveUpdates.Add(entity);
             }
         }
 
@@ -193,7 +201,8 @@ public sealed class TrackerSyncService(
         var snapshot = snapshotCalculator.Calculate(candidate, effective);
         TrackedStateChangeSet changes = new(additions, [], archives,
             reconciled, desiredResolved, desiredUnresolved,
-            reconciled, desiredOverrides, entityIdsToRestore: restores,
+            reconciled, desiredOverrides, entitiesWithProgressToUpdate: filterActiveUpdates,
+            entityIdsToRestore: restores,
             progressSnapshotAfterChanges: snapshot,
             entitiesWithRequestedPriorityToUpdate: priorityUpdates,
             entitiesWithGroupNameToUpdate: groupUpdates);

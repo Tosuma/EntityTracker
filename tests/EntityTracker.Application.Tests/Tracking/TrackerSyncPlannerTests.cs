@@ -83,10 +83,67 @@ public sealed class TrackerSyncPlannerTests
         Assert.Empty(Review(source, copy).Changes);
     }
 
+    [Fact]
+    public void AFilterActiveDifferenceIsOneChoiceBetweenTheTwoValues()
+    {
+        TrackerSyncStructure copy = new([Entity("order", filterActive: "Active only")]);
+        TrackerSyncStructure source = new([Entity("order", filterActive: "Active only, by region")]);
+
+        TrackerSyncReview review = Review(source, copy);
+
+        TrackerSyncChange change = Assert.Single(review.Changes);
+        Assert.Equal((TrackerSyncChangeKind.FilterActive, "Active only, by region", "Active only"),
+            (change.Kind, change.SourceValue, change.DestinationValue));
+        change.Choice = TrackerSyncChoice.Source;
+        Assert.Equal("Active only, by region", Assert.Single(TrackerSyncPlanner.Resolve(review).Entities).FilterActive);
+        change.Choice = TrackerSyncChoice.Destination;
+        Assert.Equal("Active only", Assert.Single(TrackerSyncPlanner.Resolve(review).Entities).FilterActive);
+    }
+
+    [Fact]
+    public void FilterActiveIsOnlyAskedAboutAgainWhenASideChangesIt()
+    {
+        TrackerSyncStructure copy = new([Entity("order", filterActive: "Mine")]);
+        TrackerSyncStructure source = new([Entity("order", filterActive: "Theirs")]);
+        TrackerSyncBaseline kept = new(source, copy);
+
+        Assert.Empty(TrackerSyncPlanner.CreateReview(SourceId, CopyId, source, copy, kept, "a", "b").Changes);
+
+        TrackerSyncStructure changed = new([Entity("order", filterActive: "Theirs, updated")]);
+        Assert.Equal(TrackerSyncChangeKind.FilterActive,
+            Assert.Single(TrackerSyncPlanner.CreateReview(SourceId, CopyId, changed, copy, kept, "a", "b").Changes).Kind);
+    }
+
+    [Fact]
+    public void ABaselineFromBeforeFilterActiveWasSyncedAsksAboutItOnce()
+    {
+        TrackerSyncStructure copy = new([Entity("order", filterActive: "Mine")]);
+        TrackerSyncStructure source = new([Entity("order", filterActive: "Theirs")]);
+        // Saved by an older version: the baseline's entities have no Filter active (null).
+        TrackerSyncBaseline old = new(new([Entity("order")]), new([Entity("order")]));
+
+        TrackerSyncChange change = Assert.Single(
+            TrackerSyncPlanner.CreateReview(SourceId, CopyId, source, copy, old, "a", "b").Changes);
+
+        Assert.Equal(TrackerSyncChangeKind.FilterActive, change.Kind);
+    }
+
+    [Fact]
+    public void ANewEntityBringsItsFilterActive()
+    {
+        TrackerSyncReview review = Review(new([Entity("invoice", filterActive: "Open invoices")]), new([]));
+
+        Assert.Single(review.Changes).Choice = TrackerSyncChoice.Source;
+
+        Assert.Equal("Open invoices", Assert.Single(TrackerSyncPlanner.Resolve(review).Entities).FilterActive);
+    }
+
     private static TrackerSyncReview Review(TrackerSyncStructure source, TrackerSyncStructure copy) =>
         TrackerSyncPlanner.CreateReview(SourceId, CopyId, source, copy, baseline: null, "a", "b");
 
     private static TrackerSyncEntity Entity(string name, bool active = true, int? priority = null, string group = "",
-        string[]? dependsOn = null, ImportedDependencyKind kind = ImportedDependencyKind.Mandatory) =>
-        new(name, active, priority, group, (dependsOn ?? []).Select(target => new TrackerSyncDependency(target, kind)).ToArray());
+        string[]? dependsOn = null, ImportedDependencyKind kind = ImportedDependencyKind.Mandatory,
+        string? filterActive = null) =>
+        new(name, active, priority, group, (dependsOn ?? []).Select(target => new TrackerSyncDependency(target, kind)).ToArray(),
+            filterActive);
 }

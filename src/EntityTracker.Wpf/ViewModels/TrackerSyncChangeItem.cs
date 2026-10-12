@@ -87,6 +87,9 @@ public sealed class TrackerSyncChangeItem : INotifyPropertyChanged
                     : ($"In {copy}, {entity} depends on {target}. In {source} it does not.",
                         $"Remove the dependency on {target}", "Keep it");
             }
+            case TrackerSyncChangeKind.FilterActive:
+                return ($"Filter active differs.\nIn {source}: {Text(change.SourceValue)}\nIn {copy}: {Text(change.DestinationValue)}",
+                    $"Use {source}'s", $"Keep {copy}'s");
             case TrackerSyncChangeKind.RequestedPriority:
             {
                 string sourceValue = Value(change.SourceValue), copyValue = Value(change.DestinationValue);
@@ -116,6 +119,7 @@ public sealed class TrackerSyncChangeItem : INotifyPropertyChanged
         ];
         if (!string.IsNullOrEmpty(entity.GroupName)) parts.Add($"group {entity.GroupName}");
         if (entity.RequestedPriority is { } priority) parts.Add($"priority {priority}");
+        if (!string.IsNullOrWhiteSpace(entity.FilterActive)) parts.Add("Filter active");
         return ", " + string.Join(" · ", parts);
     }
 
@@ -124,6 +128,9 @@ public sealed class TrackerSyncChangeItem : INotifyPropertyChanged
             TrackerSyncPlanner.Key(entity.Name) == TrackerSyncPlanner.Key(name));
 
     private static string Value(string value) => value == "None" ? "none" : value;
+
+    /// <summary>Gets free text as shown in a difference: quoted, or "none" when empty.</summary>
+    private static string Text(string value) => string.IsNullOrWhiteSpace(value) ? "none" : $"\u201C{value.Trim()}\u201D";
 
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
