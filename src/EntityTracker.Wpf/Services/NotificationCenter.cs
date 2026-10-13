@@ -6,6 +6,8 @@ using System.Windows.Input;
 using EntityTracker.Domain;
 using EntityTracker.Application.GitSync;
 using EntityTracker.Wpf.Commands;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.Services;
 
@@ -84,6 +86,8 @@ public sealed class NotificationItem : INotifyPropertyChanged
 
 public sealed class NotificationCenter : INotifyPropertyChanged
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<NotificationCenter>();
+
     public static string DescribeProjectSyncPhase(ProjectSyncPhase phase) => phase switch
     {
         ProjectSyncPhase.CheckingEdits => "Checking for unfinished edits…",
@@ -208,7 +212,10 @@ public sealed class NotificationCenter : INotifyPropertyChanged
 
         item.IsClosing = true;
         try { await Task.Delay(_exitDuration, _timeProvider); }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException)
+        {
+            Logger.LogDebug("A notification's closing animation was cut short.");
+        }
         _items.Remove(item);
     }
 
@@ -232,6 +239,9 @@ public sealed class NotificationCenter : INotifyPropertyChanged
                 item.Kind is not (NotificationKind.Progress or NotificationKind.ActionNeeded))
                 Remove(item);
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException)
+        {
+            Logger.LogDebug("A notification's display timer was cut short.");
+        }
     }
 }

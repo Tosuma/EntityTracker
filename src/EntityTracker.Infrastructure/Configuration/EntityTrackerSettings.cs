@@ -21,7 +21,8 @@ public sealed class EntityTrackerSettings
         bool showDependencyGraphRings = false,
         DependencyGraphView dependencyGraphView = DependencyGraphView.Tree,
         DependencyHighlightMode solarHighlightMode = DependencyHighlightMode.Dependencies,
-        DependencyHighlightMode treeHighlightMode = DependencyHighlightMode.DirectLinks)
+        DependencyHighlightMode treeHighlightMode = DependencyHighlightMode.DirectLinks,
+        bool detailedLogging = false)
     {
         if (!Enum.IsDefined(appearance))
         {
@@ -55,6 +56,7 @@ public sealed class EntityTrackerSettings
         DependencyGraphView = dependencyGraphView;
         SolarHighlightMode = solarHighlightMode;
         TreeHighlightMode = treeHighlightMode;
+        DetailedLogging = detailedLogging;
     }
 
     public ApplicationAppearance Appearance { get; }
@@ -83,6 +85,9 @@ public sealed class EntityTrackerSettings
 
     /// <summary>Gets what selecting an entity highlights in the tree.</summary>
     public DependencyHighlightMode TreeHighlightMode { get; }
+
+    /// <summary>Gets whether the log also records Debug detail, for troubleshooting.</summary>
+    public bool DetailedLogging { get; }
 
     /// <summary>Gets what selecting an entity highlights in the given view.</summary>
     public DependencyHighlightMode HighlightModeFor(DependencyGraphView view) =>

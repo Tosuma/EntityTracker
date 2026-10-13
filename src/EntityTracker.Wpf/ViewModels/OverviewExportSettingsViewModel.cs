@@ -2,11 +2,15 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Wpf.Services;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.ViewModels;
 
 public sealed class OverviewExportSettingsViewModel : INotifyPropertyChanged
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<OverviewExportSettingsViewModel>();
+
     private readonly EntityTrackerSettingsStore _store;
     private OverviewExportRows _rows;
     private OverviewCsvSeparator _separator;
@@ -55,8 +59,9 @@ public sealed class OverviewExportSettingsViewModel : INotifyPropertyChanged
             Notify(nameof(Rows));
             Notify(nameof(Separator));
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            Logger.LogError(exception, "Export preferences could not be saved.");
             ReportError("Export preferences could not be saved. Check the settings file and retry.");
             Notify(nameof(Rows));
             Notify(nameof(Separator));

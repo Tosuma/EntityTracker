@@ -1,11 +1,15 @@
 using System.Security;
 
 using EntityTracker.Application.Importing;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Infrastructure.Importing;
 
 public sealed class CsvSchemaImportFileParser : ISchemaImportFileParser
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<CsvSchemaImportFileParser>();
+
     private readonly ISchemaImportParser _parser;
 
     public CsvSchemaImportFileParser(ISchemaImportParser parser)
@@ -43,6 +47,7 @@ public sealed class CsvSchemaImportFileParser : ISchemaImportFileParser
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or SecurityException)
         {
+            Logger.LogWarning(exception, "The CSV file {FileName} could not be read.", Path.GetFileName(filePath));
             return SchemaImportResult.Failure(
             [
                 new ImportDiagnostic(

@@ -1,10 +1,14 @@
 using Microsoft.Data.Sqlite;
 using EntityTracker.Application.GitSync;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteBackupService : IProjectSyncBackup
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<SqliteBackupService>();
+
     public const int RetainedBackupCount = 14;
 
     private readonly SqliteDatabase _database;
@@ -74,6 +78,7 @@ public sealed class SqliteBackupService : IProjectSyncBackup
         }
         catch (Exception exception)
         {
+            Logger.LogError(exception, "The start-up database backup could not be created; start-up continues.");
             warnings.Add("EntityTracker could not create its startup database backup. " +
                          $"Startup will continue. {exception.Message}");
             return new SqliteBackupResult(createdPaths, warnings);
@@ -116,6 +121,8 @@ public sealed class SqliteBackupService : IProjectSyncBackup
             }
             catch (Exception exception)
             {
+                Logger.LogWarning(exception, "The database backup {FileName} could not be moved into its version folder.",
+                    Path.GetFileName(sourcePath));
                 warnings.Add($"Could not organize database backup '{Path.GetFileName(sourcePath)}': " +
                              exception.Message);
             }
@@ -138,6 +145,8 @@ public sealed class SqliteBackupService : IProjectSyncBackup
             }
             catch (IOException exception) when (IsSharingViolation(exception) && attempt < MoveAttempts)
             {
+                Logger.LogDebug(exception, "The database backup {FileName} is still locked; retrying the move (attempt {Attempt}).",
+                    Path.GetFileName(sourcePath), attempt);
                 await Task.Delay(MoveRetryDelay * attempt, cancellationToken);
             }
         }

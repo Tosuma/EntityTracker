@@ -4,11 +4,15 @@ using System.Windows.Input;
 using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.ViewModels;
 
 public sealed class ResponsibilitySearchSettingsViewModel : INotifyPropertyChanged
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<ResponsibilitySearchSettingsViewModel>();
+
     private readonly EntityTrackerSettingsStore _store;
     private readonly AsyncCommand _toggle;
     private bool _isEnabled;
@@ -45,8 +49,9 @@ public sealed class ResponsibilitySearchSettingsViewModel : INotifyPropertyChang
             _isEnabled = next;
             Changed?.Invoke(this, next);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            Logger.LogError(exception, "The responsible-name search setting could not be saved.");
             ReportError("Responsible-name search could not be saved. Check the settings file and retry.");
         }
         finally

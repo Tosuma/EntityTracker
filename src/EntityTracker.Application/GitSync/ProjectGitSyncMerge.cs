@@ -8,6 +8,8 @@ using EntityTracker.Application.Snapshots;
 using EntityTracker.Domain;
 using EntityTracker.Domain.Collaboration;
 
+using Microsoft.Extensions.Logging;
+
 namespace EntityTracker.Application.GitSync;
 
 public interface IProjectMergeReview
@@ -25,6 +27,7 @@ public sealed partial class ProjectGitSyncService
         if (read.Snapshot is null || mergeReview is null)
             throw new InvalidOperationException("This Project ID already exists with different data. Conflict review is required.");
         ProjectMergeResult proposal = new ProjectSnapshotMerger().Merge(null, read.Snapshot, incoming);
+        LogConflicts("Two-way reconciliation", proposal.Conflicts);
         IReadOnlyDictionary<string, MergeSide>? decisions = await mergeReview.ReviewAsync(proposal.Conflicts, token);
         if (decisions is null || proposal.Conflicts.Any(c => !decisions.ContainsKey(c.Path)))
             throw new ProjectSyncReviewCancelledException("Two-way reconciliation was cancelled.");
@@ -92,8 +95,9 @@ public sealed partial class ProjectGitSyncService
             LastResult = "Project deleted locally; tombstone publication pending",
             SyncStatus = "PendingDeletion" }, token);
         try { await snapshots.PurgeAsync(projectId, read.Revision, token); }
-        catch
+        catch (Exception exception)
         {
+            _log.LogError(exception, "The Project could not be deleted locally; the pending deletion is withdrawn.");
             await links.SaveAsync(link, CancellationToken.None);
             throw;
         }
@@ -175,8 +179,10 @@ public sealed partial class ProjectGitSyncService
         {
             progress?.Report(ProjectSyncPhase.Pushing);
             try { await git.PushAsync(link.RepositoryPath, token); }
-            catch (InvalidOperationException)
+            catch (InvalidOperationException exception)
             {
+                _log.LogWarning(exception, "Pushing the Project deletion was refused (attempt {Attempt}); checking the remote again.",
+                    attempt + 1);
                 GitWorkingTreeState next = await git.InspectAsync(link.RepositoryPath, token);
                 return await PublishTombstoneAsync(link, next, token, attempt + 1, progress, mode);
             }
@@ -290,6 +296,8 @@ public sealed partial class ProjectGitSyncService
         }
         ProjectMergeResult proposal = new ProjectSnapshotMerger().Merge(
             basis, read.Snapshot, remoteSnapshot);
+        _log.LogInformation("Merging the remote's changes with this Project (common base: {BaseCommit}).", Short(baseCommit));
+        LogConflicts("Merge", proposal.Conflicts);
         if (mode == ProjectSyncMode.Automatic && proposal.Conflicts.Count > 0)
             throw new ProjectSyncReviewRequiredException(
                 "Review Project merge conflicts with Sync now.");
@@ -352,8 +360,9 @@ public sealed partial class ProjectGitSyncService
         await links.SaveAsync(pending, token);
         progress?.Report(ProjectSyncPhase.Pushing);
         try { await git.PushAsync(link.RepositoryPath, token); }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException exception)
         {
+            _log.LogWarning(exception, "Pushing the merged snapshot was refused; fetching to see whether the remote moved on.");
             progress?.Report(ProjectSyncPhase.Rechecking);
             GitRemoteState advanced = await git.FetchAsync(link.RepositoryPath,
                 new GitRemoteState(head, canonical.Files), token,
@@ -438,5 +447,18 @@ public sealed partial class ProjectGitSyncService
             return tracker with { ProgressHistory = tracker.ProgressHistory.Append(next).ToArray() };
         }).ToArray();
         return snapshot with { Trackers = trackers };
+    }
+
+    /// <summary>Logs where the two sides conflict: the fields, never their values.</summary>
+    private void LogConflicts(string step, IReadOnlyList<ProjectMergeConflict> conflicts)
+    {
+        if (conflicts.Count == 0)
+        {
+            _log.LogInformation("{Step}: no conflicts.", step);
+            return;
+        }
+        _log.LogWarning("{Step}: {ConflictCount} conflicts to review: {Paths}.", step, conflicts.Count,
+            string.Join(", ", conflicts.Take(20).Select(static conflict => conflict.Path)) +
+            (conflicts.Count > 20 ? ", ..." : ""));
     }
 }

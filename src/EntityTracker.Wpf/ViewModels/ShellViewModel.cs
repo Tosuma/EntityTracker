@@ -14,6 +14,7 @@ using EntityTracker.Wpf.Services;
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using EntityTracker.Application.Diagnostics;
 
 namespace EntityTracker.Wpf.ViewModels;
 
@@ -76,8 +77,10 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         OverviewExportSettingsViewModel? overviewExport = null,
         DependencyGraphSettingsViewModel? graphSettings = null,
         EntityTracker.Reporting.ProjectReports.ProjectReportBuilder? reportBuilder = null,
-        IProjectReportFiles? reportFiles = null)
+        IProjectReportFiles? reportFiles = null,
+        DiagnosticsSettingsViewModel? diagnostics = null)
     {
+        Diagnostics = diagnostics;
         _reportBuilder = reportBuilder;
         _reportFiles = reportFiles;
         _projectRepository = projectRepository;
@@ -153,6 +156,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public AppearanceViewModel Appearance { get; }
     public AutoSyncSettingsViewModel? AutoSync { get; }
     public ResponsibilitySearchSettingsViewModel? ResponsibilitySearch { get; }
+
+    /// <summary>Gets Settings › About's log folder and detailed logging switch.</summary>
+    public DiagnosticsSettingsViewModel? Diagnostics { get; }
     public DependencyGraphSettingsViewModel? GraphSettings { get; }
     public OverviewExportSettingsViewModel? OverviewExport { get; }
     public LocalProjectIdentitySettingsViewModel? LocalIdentity => _localIdentitySettings;
@@ -552,9 +558,14 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             Notifications.DismissProjectActions(new ProjectId(link.ProjectId), notice);
             Notifications.Complete(notice, "Project deletion published to the linked repository.");
         }
-        catch (OperationCanceledException) { Notifications.Complete(notice, "Sync cancelled.", NotificationKind.Information); }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("Publishing the deletion of Project {ProjectId} was cancelled.", link.ProjectId);
+            Notifications.Complete(notice, "Sync cancelled.", NotificationKind.Information);
+        }
         catch (Exception error)
         {
+            _logger.LogHandled(error, "Publishing the deletion of Project {ProjectId} failed.", link.ProjectId);
             Notifications.NeedAction(notice, error.Message, "Retry",
                 () => PublishPendingDeletionAsync(link, notice));
         }

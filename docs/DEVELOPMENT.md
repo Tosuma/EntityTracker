@@ -345,6 +345,80 @@ EntityTracker retains the newest 14 daily logs and 14 automatic daily/pre-migrat
 the [recovery guide](operations/RECOVERY.md) before replacing, restoring, or resetting application
 data.
 
+## Logging
+
+### Where the logs are
+
+EntityTracker writes one log file per day to `%LOCALAPPDATA%\EntityTracker\logs\entity-tracker-YYYYMMDD.log`
+and keeps the newest 14. **Settings › About › Logs** shows the folder and has an **Open log folder**
+button.
+
+Each line looks like this:
+
+```text
+2026-10-13T07:41:07.1234567+00:00 [Information] (12) EntityTracker.Application.GitSync.ProjectGitSyncService [Sync 3f9a1c]: Sync finished in 812 ms: UpToDate, ...
+```
+
+The parts are:
+- time, in UTC;
+- level;
+- managed thread id;
+- category (the class that logged);
+- the scopes the line was logged in;
+- the message;
+- for a failure, the whole exception on the lines below.
+
+Every Git sync operation (Link, Import, Sync, Auto-sync, Unlink) runs in its own scope, such as
+`Sync 3f9a1c`. Its Git commands, phases, conflicts and result all carry that scope.
+
+### Levels
+
+| Level | Used for |
+|---|---|
+| Critical | A crash: an unhandled exception that ends the app. |
+| Error | Something failed and was handled, for example by telling the user. Logged with the exception. |
+| Warning | An expected, recoverable failure, such as an unreadable settings file that falls back to defaults or a refused push that is retried. Also logged with the exception. |
+| Information | What the app did: start and stop, each Git operation and its phases, Git commands that change something (fetch, push, commit, merge and the plumbing behind them), and cancellations the user asked for. |
+| Debug | Detail for troubleshooting: read-only Git commands, lock waits, retries, and searches a newer search replaced. |
+
+**Detailed logging:** by default the log holds Information and above. **Settings › About › Detailed
+logging (for troubleshooting)** adds Debug, takes effect immediately and is kept in `settings.json`.
+
+**Override:** set the environment variable `ENTITYTRACKER_LOG_LEVEL` (`Trace`, `Debug`,
+`Information`, `Warning`, `Error` or `Critical`) to override the setting, for example in a support
+session. The About page says when an override is active.
+
+### Rules for code
+
+- **Every caught exception is logged.** A `catch` block either:
+  - logs, with the exception (Error, or Warning for an expected recoverable case);
+  - or passes the exception on with `throw` (rethrow, or translate it and keep the original as the
+    inner exception). The place that finally handles it logs it once.
+  - Cancellation is not an error: it logs one Information line (Debug when a newer request or app
+    shutdown caused it).
+  - The only exception is the log itself, which can't log its own failure. Such a block says why with
+    a `// Not logged: <reason>` comment.
+
+  `LoggingCoverageTests` parses every `catch` block in `src` and fails on one that does none of
+  these.
+- **Handled Git sync failures:** a UI catch that shows such a failure to the user calls
+  `logger.LogHandled(exception, ...)`. The sync operation has already logged the failure in full, so
+  this writes only a line that points back to it. A failure that wasn't logged yet is logged in full.
+- **Message templates, never interpolation:**
+  - use `LogError(exception, "Sync of Project {ProjectId} failed.", id)`, not `$"..."`;
+  - name what was being done and the IDs involved.
+- **No user content:** never log notes, Filter active, comments or other text users wrote. Merge
+  conflicts are logged by field path only, never by value.
+- **Secrets:** Git's error output can contain remote URLs with credentials. It is never shown in the
+  UI. `SystemGitTransport` logs it (the first 4 KB) only after `LogRedaction.Redact`, which removes
+  credentials in URLs, token and password query values, and `Authorization`/`Bearer` values. Pass
+  anything that could contain a URL through `LogRedaction` too.
+- **Getting a logger:**
+  - classes the service container creates take an `ILogger<T>?` constructor parameter that defaults
+    to `NullLogger<T>.Instance`;
+  - views and other classes it doesn't create use
+    `private static readonly ILogger Logger = AppLogging.CreateLogger<T>();`.
+
 ## Repository structure
 
 ```text

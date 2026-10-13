@@ -2,12 +2,16 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.IO;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.Services;
 
 /// <summary>Keeps one UI process per local data store and asks it to show its window.</summary>
 public sealed class SingleInstanceCoordinator : IDisposable
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<SingleInstanceCoordinator>();
+
     private readonly Mutex _mutex;
     private readonly EventWaitHandle _activate;
     private readonly EventWaitHandle _stop = new(false, EventResetMode.ManualReset);
@@ -26,7 +30,11 @@ public sealed class SingleInstanceCoordinator : IDisposable
     public bool TryBecomePrimary(Action activate)
     {
         try { _ownsMutex = _mutex.WaitOne(0); }
-        catch (AbandonedMutexException) { _ownsMutex = true; }
+        catch (AbandonedMutexException exception)
+        {
+            Logger.LogWarning(exception, "An earlier EntityTracker ended without releasing its instance lock; this one takes over.");
+            _ownsMutex = true;
+        }
         if (!_ownsMutex)
         {
             _activate.Set();

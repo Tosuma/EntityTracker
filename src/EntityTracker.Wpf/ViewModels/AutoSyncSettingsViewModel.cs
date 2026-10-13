@@ -5,11 +5,15 @@ using EntityTracker.Application.GitSync;
 using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.ViewModels;
 
 public sealed class AutoSyncSettingsViewModel : INotifyPropertyChanged
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<AutoSyncSettingsViewModel>();
+
     public const int OneMinute = 1;
     public const int FiveMinutes = 5;
     public const int FifteenMinutes = 15;
@@ -65,8 +69,9 @@ public sealed class AutoSyncSettingsViewModel : INotifyPropertyChanged
             _intervalMinutes = minutes;
             _scheduler.Configure(enabled, minutes);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            Logger.LogError(exception, "Automatic sync settings could not be saved.");
             ReportError("Automatic sync settings could not be saved. Check the settings file and retry.");
         }
         finally

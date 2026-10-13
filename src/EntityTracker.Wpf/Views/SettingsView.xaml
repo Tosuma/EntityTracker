@@ -261,6 +261,28 @@
                                        Text="Open-source under the MIT License." />
                         </StackPanel>
                     </Border>
+                    <Border x:Name="AboutDiagnostics" Margin="0,14,0,0" Padding="18"
+                            Style="{StaticResource EntityTrackerCardStyle}"
+                            DataContext="{Binding Diagnostics}">
+                        <StackPanel>
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="Logs" />
+                            <TextBlock Margin="0,4,0,0" Style="{StaticResource PageDescriptionTextStyle}" TextWrapping="Wrap"
+                                       Text="EntityTracker keeps a log of the last 14 days. It helps find out what went wrong when something fails." />
+                            <TextBlock Margin="0,8,0,0" Text="{Binding LogFolder}" TextWrapping="Wrap"
+                                       AutomationProperties.Name="{Binding LogFolder, StringFormat=Log folder {0}}" />
+                            <Button Margin="0,10,0,0" HorizontalAlignment="Left" Content="Open log folder"
+                                    Command="{Binding OpenLogFolderCommand}"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                            <CheckBox Margin="0,14,0,0" Content="Detailed logging (for troubleshooting)"
+                                      IsChecked="{Binding DetailedLogging, Mode=OneWay}"
+                                      Command="{Binding ToggleDetailedLoggingCommand}" />
+                            <TextBlock Margin="24,2,0,0" Style="{StaticResource PageDescriptionTextStyle}" TextWrapping="Wrap"
+                                       Text="Also records each step, for example every Git command's details. Turn it on while reproducing a problem; the log grows faster." />
+                            <TextBlock Margin="24,6,0,0" Foreground="{DynamicResource Brush.Review.Warning.Header}" TextWrapping="Wrap"
+                                       Text="{Binding OverrideNote}"
+                                       Visibility="{Binding HasOverrideNote, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </Grid>
         </ScrollViewer>

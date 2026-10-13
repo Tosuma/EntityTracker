@@ -95,6 +95,13 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton(provider => new AutoSyncSettingsViewModel(settingsStore,
             provider.GetRequiredService<ProjectAutoSyncService>(),
             provider.GetRequiredService<EntityTrackerSettings>()));
+        // A typical log folder, so the About screenshot shows no temporary path.
+        services.AddSingleton(provider => new DiagnosticsSettingsViewModel(
+            settingsStore,
+            provider.GetRequiredService<EntityTrackerSettings>(),
+            new LogLevelSwitch(),
+            @"C:\Users\you\AppData\Local\EntityTracker\logs",
+            openFolder: static _ => { }));
         services.AddSingleton(provider => new ResponsibilitySearchSettingsViewModel(
             settingsStore,
             provider.GetRequiredService<EntityTrackerSettings>()));

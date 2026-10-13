@@ -8,11 +8,15 @@ using EntityTracker.Wpf.Commands;
 using LiveChartsCore;
 using LiveChartsCore.SkiaSharpView;
 using EntityTracker.Wpf.Services;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.ViewModels;
 
 public sealed class AggregateProgressDashboardViewModel : INotifyPropertyChanged
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<AggregateProgressDashboardViewModel>();
+
     private readonly Func<ProgressDateRange, CancellationToken, Task<ProgressDashboardReport?>> _loader;
     private readonly ProgressChartPresentationBuilder _presentationBuilder;
     private readonly AsyncCommand _applyRangeCommand;
@@ -210,10 +214,12 @@ public sealed class AggregateProgressDashboardViewModel : INotifyPropertyChanged
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            Logger.LogInformation("Loading aggregate progress was cancelled.");
             ReportError("Loading aggregate progress was cancelled.", NotificationKind.Information);
         }
         catch (Exception exception)
         {
+            Logger.LogError(exception, "Aggregate progress could not be loaded.");
             ReportError($"Aggregate progress could not be loaded: {exception.Message}");
         }
         finally

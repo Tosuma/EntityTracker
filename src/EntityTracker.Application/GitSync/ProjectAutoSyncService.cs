@@ -1,4 +1,10 @@
 using System.Collections.Concurrent;
+
+using EntityTracker.Application.Diagnostics;
+
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
 using EntityTracker.Application.Snapshots;
 using EntityTracker.Domain;
 
@@ -26,6 +32,7 @@ public sealed class ProjectAutoSyncService : IDisposable
     private readonly SemaphoreSlim _runGate = new(1, 1);
     private readonly SemaphoreSlim _settingsChanged = new(0, 1);
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly ILogger<ProjectAutoSyncService> _logger;
     private CancellationTokenSource? _currentPass;
     private Task? _loop;
     private volatile bool _enabled;
@@ -34,8 +41,10 @@ public sealed class ProjectAutoSyncService : IDisposable
     public ProjectAutoSyncService(IProjectSyncLinkStore links,
         Func<ProjectId, CancellationToken, Task<ProjectSyncLink>> sync,
         bool enabled = true, int intervalMinutes = 5,
-        IProjectUnsavedEditsGate? editGate = null, TimeProvider? clock = null)
+        IProjectUnsavedEditsGate? editGate = null, TimeProvider? clock = null,
+        ILogger<ProjectAutoSyncService>? logger = null)
     {
+        _logger = logger ?? NullLogger<ProjectAutoSyncService>.Instance;
         ArgumentNullException.ThrowIfNull(links);
         ArgumentNullException.ThrowIfNull(sync);
         ValidateInterval(intervalMinutes);
@@ -64,6 +73,8 @@ public sealed class ProjectAutoSyncService : IDisposable
         ValidateInterval(intervalMinutes);
         _enabled = enabled;
         _interval = TimeSpan.FromMinutes(intervalMinutes);
+        _logger.LogInformation("Automatic sync {State}, every {IntervalMinutes} minutes.",
+            enabled ? "on" : "off", intervalMinutes);
         if (!enabled) CancelCurrentPass();
         SignalSettingsChanged();
     }
@@ -97,7 +108,10 @@ public sealed class ProjectAutoSyncService : IDisposable
     private void SignalSettingsChanged()
     {
         try { _settingsChanged.Release(); }
-        catch (SemaphoreFullException) { }
+        catch (SemaphoreFullException exception)
+        {
+            _logger.LogDebug(exception, "Automatic sync was already signalled to pick up the changed settings.");
+        }
     }
 
     private async Task RunLoopAsync()
@@ -108,14 +122,26 @@ public sealed class ProjectAutoSyncService : IDisposable
             if (!_enabled)
             {
                 try { await _settingsChanged.WaitAsync(token); }
-                catch (OperationCanceledException) { break; }
+                catch (OperationCanceledException)
+                {
+                    _logger.LogDebug("Automatic sync stopped while switched off.");
+                    break;
+                }
                 continue;
             }
             using CancellationTokenSource pass = CancellationTokenSource.CreateLinkedTokenSource(token);
             lock (_passLock) _currentPass = pass;
             try { await RunPassAsync(pass.Token); }
-            catch (OperationCanceledException) when (pass.IsCancellationRequested) { }
-            catch { /* Per-Project failures are reported; a link-store failure retries next pass. */ }
+            catch (OperationCanceledException) when (pass.IsCancellationRequested)
+            {
+                _logger.LogDebug("An automatic sync pass was interrupted.");
+            }
+            catch (Exception exception)
+            {
+                // Per-Project failures are reported by each sync; this is a failure of the pass itself.
+                _logger.LogError(exception, "An automatic sync pass failed; it is retried in {IntervalMinutes} minutes.",
+                    _interval.TotalMinutes);
+            }
             finally { lock (_passLock) _currentPass = null; }
             if (token.IsCancellationRequested) break;
             if (!_enabled) continue;
@@ -127,13 +153,18 @@ public sealed class ProjectAutoSyncService : IDisposable
                 await Task.WhenAny(delay, changed);
                 wait.Cancel();
             }
-            catch (OperationCanceledException) { break; }
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("Automatic sync stopped.");
+                break;
+            }
         }
     }
 
     public async Task RunPassAsync(CancellationToken token = default)
     {
         IReadOnlyList<ProjectSyncLink> links = await _links.ReadAllAsync(token);
+        _logger.LogDebug("Automatic sync pass over {LinkCount} linked Projects.", links.Count);
         foreach (ProjectSyncLink link in links.OrderBy(link => link.ProjectId))
         {
             token.ThrowIfCancellationRequested();
@@ -154,6 +185,7 @@ public sealed class ProjectAutoSyncService : IDisposable
         try { await _runGate.WaitAsync(token); }
         catch (OperationCanceledException)
         {
+            _logger.LogDebug("Automatic sync of Project {ProjectId} was called off before it started.", projectId.Value);
             _inFlight.TryRemove(projectId.Value, out _);
             throw;
         }
@@ -168,19 +200,29 @@ public sealed class ProjectAutoSyncService : IDisposable
         }
         catch (ProjectSyncEditDeferredException)
         {
+            _logger.LogInformation("Automatic sync of Project {ProjectId} waits until the open edit is saved or closed.",
+                projectId.Value);
             deferred = true;
             SetState(projectId, new(ProjectSyncStateKind.Idle,
                 "Waiting for the unfinished edit to be saved or closed.", _clock.GetUtcNow()));
         }
-        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
+            _logger.LogDebug("Automatic sync of Project {ProjectId} stopped with the app.", projectId.Value);
+        }
+        catch (OperationCanceledException exception)
+        {
+            _logger.LogError(exception, "Automatic sync of Project {ProjectId} exceeded five minutes and was stopped.",
+                projectId.Value);
             SetState(projectId, new(ProjectSyncStateKind.Failed,
                 "Automatic sync exceeded five minutes. Check the repository and retry.", _clock.GetUtcNow()));
         }
         catch (Exception error)
         {
-            SetState(projectId, FromError(error, _clock.GetUtcNow()));
+            ProjectSyncState failed = FromError(error, _clock.GetUtcNow());
+            _logger.LogHandled(error, "Automatic sync of Project {ProjectId} ended as {State}.",
+                projectId.Value, failed.Kind);
+            SetState(projectId, failed);
         }
         finally
         {
@@ -200,9 +242,15 @@ public sealed class ProjectAutoSyncService : IDisposable
                 await RunProjectAsync(projectId, token);
             else _inFlight.TryRemove(projectId.Value, out _);
         }
-        catch (OperationCanceledException) { _inFlight.TryRemove(projectId.Value, out _); }
-        catch
+        catch (OperationCanceledException)
         {
+            _logger.LogDebug("Waiting to resume automatic sync of Project {ProjectId} was stopped.", projectId.Value);
+            _inFlight.TryRemove(projectId.Value, out _);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Automatic sync of Project {ProjectId} could not resume after the edit.",
+                projectId.Value);
             _inFlight.TryRemove(projectId.Value, out _);
             SetState(projectId, new(ProjectSyncStateKind.Failed,
                 "Automatic sync could not resume. Use Sync now to retry.", _clock.GetUtcNow()));

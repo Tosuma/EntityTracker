@@ -274,6 +274,20 @@ public sealed class EntityTrackerSettingsStoreTests
     }
 
     [Fact]
+    public async Task DetailedLogging_RoundTripsAndSurvivesOtherSettingsWrites()
+    {
+        using TemporarySettingsDirectory directory = new();
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+        Assert.False((await store.LoadAsync()).Settings.DetailedLogging);
+
+        await store.SaveDetailedLoggingAsync(true);
+        await store.SaveAppearanceAsync(ApplicationAppearance.Dark);
+        await store.SaveDependencyGraphViewAsync(DependencyGraphView.SolarSystem);
+
+        Assert.True((await new EntityTrackerSettingsStore(directory.SettingsPath).LoadAsync()).Settings.DetailedLogging);
+    }
+
+    [Fact]
     public async Task DependencyGraphView_UnknownValueFallsBackToTheTreeWithoutLosingTheFile()
     {
         using TemporarySettingsDirectory directory = new();

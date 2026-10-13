@@ -5,11 +5,15 @@ using EntityTracker.Application.Projects;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.ViewModels;
 
 public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<ProjectDevelopersViewModel>();
+
     private readonly ProjectDeveloperService _service;
     private readonly ProjectId _projectId;
     private readonly Func<ProjectId, Task>? _onPersisted;
@@ -165,6 +169,7 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
+            Logger.LogWarning(exception, "A Developer change was not saved.");
             ReportError(exception.Message);
         }
         finally { IsBusy = false; NotifyCommands(); }
@@ -181,7 +186,11 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
             await RefreshAsync();
             if (_onPersisted is not null) await _onPersisted(_projectId);
         }
-        catch (InvalidOperationException exception) { ReportError(exception.Message); }
+        catch (InvalidOperationException exception)
+        {
+            Logger.LogWarning(exception, "A Developer could not be retired or restored.");
+            ReportError(exception.Message);
+        }
         finally { IsBusy = false; NotifyCommands(); }
     }
 

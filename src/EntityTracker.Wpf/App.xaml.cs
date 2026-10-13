@@ -1,5 +1,9 @@
+using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Windows;
 
+using EntityTracker.Application.Diagnostics;
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
@@ -34,6 +38,8 @@ public partial class App : System.Windows.Application
 {
     private ServiceProvider? _serviceProvider;
     private ILogger<App>? _logger;
+    // Logs crashes even before the service provider exists.
+    private ILogger? _crashLogger;
     private IApplicationThemeService? _themeService;
     private SingleInstanceCoordinator? _singleInstance;
 
@@ -57,8 +63,12 @@ public partial class App : System.Windows.Application
             Shutdown();
             return;
         }
-        RollingFileLoggerProvider fileLoggerProvider = new(dataPaths.LogsDirectory);
+        LogLevelSwitch logLevel = new();
+        RollingFileLoggerProvider fileLoggerProvider = new(dataPaths.LogsDirectory, levelSwitch: logLevel);
         ILogger bootstrapLogger = fileLoggerProvider.CreateLogger("EntityTracker.Startup");
+        _crashLogger = bootstrapLogger;
+        AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
+        TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
         EntityTrackerSettingsStore settingsStore = new(dataPaths.SettingsPath);
 
         try
@@ -68,16 +78,24 @@ public partial class App : System.Windows.Application
             themeService.Apply(settings.Settings.Appearance);
             _themeService = themeService;
             SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+            logLevel.MinimumLevel = LoggingLevels.Resolve(settings.Settings.DetailedLogging, LoggingLevels.ReadOverride());
             bootstrapLogger.LogInformation(
-                "Starting EntityTracker with SQLite storage.");
+                "Starting EntityTracker {Version} on {OperatingSystem}, {Runtime}; data folder {DataFolder}; logging at {LogLevel}.",
+                typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown",
+                RuntimeInformation.OSDescription, RuntimeInformation.FrameworkDescription,
+                dataPaths.RootDirectory, logLevel.MinimumLevel);
+            _ = LogGitVersionAsync(bootstrapLogger);
 
             ServiceCollection services = new();
             services.AddLogging(builder =>
             {
                 builder.ClearProviders();
                 builder.AddProvider(fileLoggerProvider);
-                builder.SetMinimumLevel(LogLevel.Information);
+                // The provider filters by the level switch, so detailed logging can change while running.
+                builder.SetMinimumLevel(LogLevel.Trace);
             });
+            services.AddSingleton(logLevel);
+            services.AddSingleton(fileLoggerProvider);
             services.AddSingleton(dataPathResolver);
             services.AddSingleton(dataPaths);
             services.AddSingleton(settingsStore);
@@ -150,8 +168,9 @@ public partial class App : System.Windows.Application
             services.AddSingleton<ICsvFilePicker, CsvFilePicker>();
             services.AddSingleton<TrackerWorkspaceViewModelFactory>();
             services.AddSingleton<DashboardViewModelFactory>();
-            services.AddSingleton<IProjectSyncLinkStore>(new JsonProjectSyncLinkStore(
-                System.IO.Path.Combine(dataPaths.RootDirectory, "git-sync-links.v1.json")));
+            services.AddSingleton<IProjectSyncLinkStore>(provider => new JsonProjectSyncLinkStore(
+                System.IO.Path.Combine(dataPaths.RootDirectory, "git-sync-links.v1.json"),
+                provider.GetRequiredService<ILogger<JsonProjectSyncLinkStore>>()));
             services.AddSingleton<ILocalGitTransport, SystemGitTransport>();
             services.AddSingleton<IOutboundDeletionApproval, WpfOutboundDeletionApproval>();
             services.AddSingleton<IProjectMergeReview, WpfProjectMergeReview>();
@@ -169,10 +188,16 @@ public partial class App : System.Windows.Application
                     .SyncNowAsync(projectId, token, mode: ProjectSyncMode.Automatic),
                 settings.Settings.AutoSyncEnabled,
                 settings.Settings.AutoSyncIntervalMinutes,
-                provider.GetRequiredService<IProjectUnsavedEditsGate>()));
+                provider.GetRequiredService<IProjectUnsavedEditsGate>(),
+                logger: provider.GetRequiredService<ILogger<ProjectAutoSyncService>>()));
             services.AddSingleton(provider => new AutoSyncSettingsViewModel(
                 settingsStore, provider.GetRequiredService<ProjectAutoSyncService>(),
                 settings.Settings, provider.GetRequiredService<NotificationCenter>()));
+            services.AddSingleton(provider => new DiagnosticsSettingsViewModel(
+                settingsStore, settings.Settings, logLevel, dataPaths.LogsDirectory,
+                provider.GetRequiredService<ILogger<DiagnosticsSettingsViewModel>>(),
+                provider.GetRequiredService<NotificationCenter>(),
+                levelOverride: LoggingLevels.ReadOverride()));
             services.AddSingleton(provider => new ResponsibilitySearchSettingsViewModel(
                 settingsStore, settings.Settings, provider.GetRequiredService<NotificationCenter>()));
             services.AddSingleton(provider => new OverviewExportSettingsViewModel(
@@ -191,7 +216,9 @@ public partial class App : System.Windows.Application
                 ValidateScopes = true
             });
 
+            AppLogging.Factory = _serviceProvider.GetRequiredService<ILoggerFactory>();
             _logger = _serviceProvider.GetRequiredService<ILogger<App>>();
+            _crashLogger = _logger;
             DispatcherUnhandledException += OnDispatcherUnhandledException;
 
             IPersistenceInitializer persistenceInitializer =
@@ -292,6 +319,46 @@ public partial class App : System.Windows.Application
         Shutdown(-1);
     }
 
+    /// <summary>A crash on a thread other than the UI thread; the process may be ending.</summary>
+    private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e) =>
+        _crashLogger?.LogCritical(e.ExceptionObject as Exception,
+            "An unhandled exception occurred on a background thread (ending the app: {IsTerminating}).",
+            e.IsTerminating);
+
+    /// <summary>A background task failed and nothing awaited it.</summary>
+    private void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
+    {
+        _crashLogger?.LogError(e.Exception, "A background task failed and nothing waited for its result.");
+        e.SetObserved();
+    }
+
+    /// <summary>Records which Git the app will use, without delaying start-up.</summary>
+    private static async Task LogGitVersionAsync(ILogger logger)
+    {
+        try
+        {
+            using Process git = new()
+            {
+                StartInfo = new ProcessStartInfo("git", "--version")
+                {
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+            git.Start();
+            using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
+            string version = (await git.StandardOutput.ReadToEndAsync(timeout.Token)).Trim();
+            await git.WaitForExitAsync(timeout.Token);
+            logger.LogInformation("Git: {GitVersion}", version);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Git could not be run; Project Git sync will not work until Git is installed.");
+        }
+    }
+
     private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
     {
         if (_themeService?.CurrentAppearance != ApplicationAppearance.System ||
@@ -312,7 +379,10 @@ public partial class App : System.Windows.Application
         _singleInstance?.Dispose();
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         DispatcherUnhandledException -= OnDispatcherUnhandledException;
-        _logger?.LogInformation("EntityTracker stopped.");
+        _logger?.LogInformation("EntityTracker stopped (exit code {ExitCode}).", e.ApplicationExitCode);
+        AppDomain.CurrentDomain.UnhandledException -= OnUnhandledException;
+        TaskScheduler.UnobservedTaskException -= OnUnobservedTaskException;
+        AppLogging.Factory = null!;
         _serviceProvider?.Dispose();
         base.OnExit(e);
     }

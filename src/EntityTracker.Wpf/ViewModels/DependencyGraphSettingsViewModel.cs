@@ -4,12 +4,16 @@ using System.Windows.Input;
 using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.ViewModels;
 
 /// <summary>The dependency graph's display preferences: the slow rotation and the orbit rings.</summary>
 public sealed class DependencyGraphSettingsViewModel : INotifyPropertyChanged
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<DependencyGraphSettingsViewModel>();
+
     private readonly EntityTrackerSettingsStore _store;
     private readonly AsyncCommand _toggleAnimation;
     private readonly AsyncCommand _toggleRings;
@@ -100,8 +104,9 @@ public sealed class DependencyGraphSettingsViewModel : INotifyPropertyChanged
             await save();
             Changed?.Invoke(this, EventArgs.Empty);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            Logger.LogError(exception, "A dependency graph setting could not be saved.");
             ReportError("The dependency graph setting could not be saved. Check the settings file and retry.");
         }
         finally

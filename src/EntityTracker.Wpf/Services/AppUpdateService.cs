@@ -3,6 +3,8 @@ using System.IO;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using EntityTracker.Application.GitSync;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.Services;
 
@@ -40,6 +42,8 @@ public readonly record struct AppReleaseVersion(int Major, int Minor, int Patch)
 /// <summary>Checks approved app tags using the user's existing source checkout.</summary>
 public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<AppUpdateService>();
+
     private readonly AppInstallManifest? _install;
     private readonly string _requiredPath;
     private readonly SemaphoreSlim _checkLock = new(1, 1);
@@ -122,9 +126,17 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
             while (!_lifetime.IsCancellationRequested)
             {
                 try { await CheckAsync(_lifetime.Token); }
-                catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { break; }
+                catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+                {
+                    Logger.LogDebug("Update checks stopped with the app.");
+                    break;
+                }
                 try { await Task.Delay(TimeSpan.FromMinutes(15), _clock, _lifetime.Token); }
-                catch (OperationCanceledException) { break; }
+                catch (OperationCanceledException)
+                {
+                    Logger.LogDebug("Update checks stopped with the app.");
+                    break;
+                }
             }
         });
     }
@@ -180,6 +192,7 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
             catch (Exception error) when (error is not OperationCanceledException ||
                                           !cancellationToken.IsCancellationRequested)
             {
+                Logger.LogWarning(error, "The update check failed; EntityTracker treats the source as offline.");
                 if (!IsRequired) ChangeState(AppUpdateState.Offline);
             }
         }
@@ -290,6 +303,7 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
         }
         catch (Exception error) when (error is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
+            Logger.LogWarning(error, "The updater scripts of release {Tag} could not be read.", tag);
             return false;
         }
     }

@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
 using EntityTracker.Application.Snapshots;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Application.GitSync;
 
@@ -8,6 +10,8 @@ namespace EntityTracker.Application.GitSync;
 internal sealed class ProjectMergeConflictPresenter(
     ProjectSnapshot? basis, ProjectSnapshot local, ProjectSnapshot remote)
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<ProjectMergeConflictPresenter>();
+
     private sealed record Line(string Label, string Value);
 
     public ProjectMergeConflict Present(ProjectMergeConflict conflict)
@@ -150,8 +154,9 @@ internal sealed class ProjectMergeConflictPresenter(
             result["$present"] = new Line("", "Present");
             Visit(document.RootElement, "", "", snapshot, includeMetadataDates, result);
         }
-        catch (JsonException)
+        catch (JsonException exception)
         {
+            Logger.LogWarning(exception, "A conflicting value could not be read for the merge review.");
             result["$value"] = new Line("", "A value could not be previewed.");
         }
         return result;
@@ -294,7 +299,10 @@ internal sealed class ProjectMergeConflictPresenter(
             return $"Source entities: {Section("Source")}; destination entities: {Section("Destination")}";
         }
         catch (Exception error) when (error is JsonException or InvalidOperationException)
-        { return "Schema synchronization baseline"; }
+        {
+            Logger.LogWarning(error, "A schema synchronization baseline could not be described for the merge review.");
+            return "Schema synchronization baseline";
+        }
     }
 
     private static string DeveloperName(string? initials, string? displayName) =>

@@ -1,5 +1,7 @@
 using System.Diagnostics;
 
+using Microsoft.Extensions.Logging;
+
 namespace EntityTracker.Application.GitSync;
 
 public sealed record GitFetchTiming(TimeSpan Network, TimeSpan SnapshotRead,
@@ -10,7 +12,7 @@ public sealed record ProjectSyncTiming(TimeSpan Total,
     TimeSpan NetworkFetch, TimeSpan GitSnapshotRead, int GitSnapshotFileCount,
     int ReusedSnapshots, int BlobReadProcesses, string Outcome);
 
-internal sealed class ProjectSyncTimingCollector(IProgress<ProjectSyncPhase>? forward)
+internal sealed class ProjectSyncTimingCollector(IProgress<ProjectSyncPhase>? forward, ILogger? logger = null)
     : IProgress<ProjectSyncPhase>, IProgress<GitFetchTiming>
 {
     private readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -30,6 +32,7 @@ internal sealed class ProjectSyncTimingCollector(IProgress<ProjectSyncPhase>? fo
             _stages[previous] = _stages.GetValueOrDefault(previous) + now - _last;
         _last = now;
         _phase = phase;
+        logger?.LogInformation("Sync phase: {Phase}.", phase);
         forward?.Report(phase);
     }
 
@@ -40,6 +43,10 @@ internal sealed class ProjectSyncTimingCollector(IProgress<ProjectSyncPhase>? fo
         _files += timing.SnapshotFileCount;
         if (timing.ReusedSnapshot) _reused++;
         _blobProcesses += timing.BlobReadProcesses;
+        logger?.LogDebug(
+            "Fetch took {NetworkMs} ms on the network and {SnapshotMs} ms reading {FileCount} snapshot files (reused: {Reused}).",
+            (long)timing.Network.TotalMilliseconds, (long)timing.SnapshotRead.TotalMilliseconds,
+            timing.SnapshotFileCount, timing.ReusedSnapshot);
     }
 
     public ProjectSyncTiming Finish(string outcome)

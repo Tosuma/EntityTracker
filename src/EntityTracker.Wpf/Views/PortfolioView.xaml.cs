@@ -9,11 +9,15 @@ using EntityTracker.Application.GitSync;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.Views;
 
 public partial class PortfolioView : UserControl
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<PortfolioView>();
+
     private ToggleButton? _openProjectActionsToggle;
     private Window? _hostWindow;
 
@@ -59,12 +63,25 @@ public partial class PortfolioView : UserControl
         try { await Shell.ImportProjectAsync(path); }
         catch (ProjectNameCollisionException collision)
         {
+            Logger.LogInformation(collision, "The imported Project's name is already used here; asking for a local name.");
             string? name = ProjectLocalNameDialog.Prompt(Window.GetWindow(this), collision.ConflictingName);
-            if (name is null) return;
+            if (name is null)
+            {
+                Logger.LogInformation("Import was stopped: no local name was chosen.");
+                return;
+            }
             try { await Shell.ImportProjectAsync(path, name); }
-            catch (Exception error) { Shell.ShowNotification(error.Message); }
+            catch (Exception error)
+            {
+                Logger.LogHandled(error, "Importing the Project under a local name failed.");
+                Shell.ShowNotification(error.Message);
+            }
         }
-        catch (Exception error) { Shell.ShowNotification(error.Message); }
+        catch (Exception error)
+        {
+            Logger.LogHandled(error, "Importing the Project failed.");
+            Shell.ShowNotification(error.Message);
+        }
     }
 
     private async void OnOpenRecycleBins(object sender, RoutedEventArgs e) =>

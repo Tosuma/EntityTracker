@@ -2,8 +2,12 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using EntityTracker.Application.Diagnostics;
 using EntityTracker.Application.GitSync;
 using EntityTracker.Application.Snapshots;
+
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace EntityTracker.Infrastructure.GitSync;
 
@@ -17,6 +21,26 @@ public sealed class SystemGitTransport : ILocalGitTransport
     private static readonly StringComparison PathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
+    /// <summary>Commands that change the repository or reach the remote; the rest only read.</summary>
+    private static readonly HashSet<string> NotableVerbs = new(StringComparer.Ordinal)
+    {
+        "fetch", "push", "commit", "merge", "add", "write-tree", "commit-tree", "update-ref"
+    };
+
+    private const int MaxLoggedErrorChars = 4096;
+
+    private readonly ILogger<SystemGitTransport> _logger;
+
+    /// <summary>
+    /// Every Git command is logged: commands that change the repository or reach the remote at
+    /// Information, read-only ones at Debug, and every failure at Error with Git's own message, with
+    /// any credentials removed (<see cref="LogRedaction"/>).
+    /// </summary>
+    public SystemGitTransport(ILogger<SystemGitTransport>? logger = null)
+    {
+        _logger = logger ?? NullLogger<SystemGitTransport>.Instance;
+    }
+
     public async Task<IAsyncDisposable> LockAsync(string path, CancellationToken cancellationToken = default)
     {
         string full = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);
@@ -27,8 +51,14 @@ public sealed class SystemGitTransport : ILocalGitTransport
         {
             cancellationToken.ThrowIfCancellationRequested();
             try { return new GitFileLock(new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)); }
-            catch (IOException) { await Task.Delay(100, cancellationToken); }
+            catch (IOException exception)
+            {
+                if (attempt == 0)
+                    _logger.LogDebug(exception, "Waiting for another Git operation on {Repository} to finish.", full);
+                await Task.Delay(100, cancellationToken);
+            }
         }
+        _logger.LogWarning("Gave up waiting for another Git operation on {Repository} after 20 seconds.", full);
         throw new TimeoutException("Another Git operation is using this repository. Retry shortly.");
     }
 
@@ -191,7 +221,7 @@ public sealed class SystemGitTransport : ILocalGitTransport
         return await ReadSnapshotTreeAsync(path, commit, cancellationToken);
     }
 
-    private static async Task<IReadOnlyDictionary<string, byte[]>> ReadSnapshotTreeAsync(
+    private async Task<IReadOnlyDictionary<string, byte[]>> ReadSnapshotTreeAsync(
         string path, string commit, CancellationToken token)
     {
         string[] entries = SplitNull(await RunBytesAsync(path,
@@ -216,7 +246,7 @@ public sealed class SystemGitTransport : ILocalGitTransport
         return await ReadBlobsAsync(path, blobs, token);
     }
 
-    private static async Task<IReadOnlyDictionary<string, byte[]>> ReadBlobsAsync(
+    private async Task<IReadOnlyDictionary<string, byte[]>> ReadBlobsAsync(
         string path, IReadOnlyList<(string Path, string ObjectId)> blobs, CancellationToken token)
     {
         Dictionary<string, byte[]> files = new(StringComparer.Ordinal);
@@ -224,6 +254,7 @@ public sealed class SystemGitTransport : ILocalGitTransport
         if (blobs.Count == 0) return files;
         string[] args = ["cat-file", "--batch"];
         ValidateCommand(args);
+        Stopwatch elapsed = Stopwatch.StartNew();
         using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromSeconds(60));
         ProcessStartInfo start = new("git")
@@ -264,20 +295,32 @@ public sealed class SystemGitTransport : ILocalGitTransport
             }
             await writer;
             await process.WaitForExitAsync(timeout.Token);
-            _ = await error; // Never expose Git stderr; it can contain remote URLs or credentials.
+            // Git's stderr is never shown to the user (it can contain remote URLs or credentials); it is logged redacted.
+            byte[] stderr = await error;
             if (process.ExitCode != 0 || await output.ReadAsync(new byte[1], timeout.Token) != 0)
+            {
+                LogFailure(path, args, process.ExitCode, elapsed, stderr);
                 throw new InvalidDataException("Git returned unexpected snapshot data.");
+            }
+            _logger.LogDebug("Git cat-file --batch in {Repository} read {FileCount} snapshot files ({Bytes} bytes) in {ElapsedMs} ms.",
+                path, files.Count, totalBytes, elapsed.ElapsedMilliseconds);
             return files;
         }
         catch (OperationCanceledException)
         {
             if (!process.HasExited) process.Kill(entireProcessTree: true);
-            if (token.IsCancellationRequested) throw;
+            if (token.IsCancellationRequested)
+            {
+                _logger.LogInformation("Git cat-file in {Repository} was cancelled.", path);
+                throw;
+            }
+            _logger.LogError("Git cat-file in {Repository} timed out after {ElapsedMs} ms.", path, elapsed.ElapsedMilliseconds);
             throw new TimeoutException("Git cat-file timed out. Check the repository and retry.");
         }
-        catch (System.ComponentModel.Win32Exception)
+        catch (System.ComponentModel.Win32Exception exception)
         {
-            throw new InvalidOperationException("System Git is unavailable. Install Git 2.30 or later.");
+            _logger.LogError(exception, "Git could not be started; is Git installed and on PATH?");
+            throw new InvalidOperationException("System Git is unavailable. Install Git 2.30 or later.", exception);
         }
         catch
         {
@@ -356,7 +399,7 @@ public sealed class SystemGitTransport : ILocalGitTransport
         return commit;
     }
 
-    private static async Task WriteSnapshotFilesAsync(string path,
+    private async Task WriteSnapshotFilesAsync(string path,
         IReadOnlyDictionary<string, byte[]> oldFiles, ProjectSnapshotPackage package,
         CancellationToken cancellationToken)
     {
@@ -402,7 +445,7 @@ public sealed class SystemGitTransport : ILocalGitTransport
         await RunRemoteAsync(root, ["push", "--", remote, "HEAD:" + mergeRef], cancellationToken);
     }
 
-    private static async Task<(string Remote, string Upstream)> UpstreamAsync(
+    private async Task<(string Remote, string Upstream)> UpstreamAsync(
         string root, string branch, CancellationToken token)
     {
         string remote = (await RunAsync(root, ["config", "--get", "branch." + branch + ".remote"], token)).Trim();
@@ -413,7 +456,7 @@ public sealed class SystemGitTransport : ILocalGitTransport
         return (remote, upstream);
     }
 
-    private static async Task RunRemoteAsync(string root, string[] args, CancellationToken token)
+    private async Task RunRemoteAsync(string root, string[] args, CancellationToken token)
     {
         try { await RunAsync(root, args, token); }
         catch (ProjectSyncAuthenticationException) { throw; }
@@ -491,14 +534,16 @@ public sealed class SystemGitTransport : ILocalGitTransport
     private static string[] SplitNull(byte[] bytes) => Encoding.UTF8.GetString(bytes)
         .Split('\0', StringSplitOptions.RemoveEmptyEntries);
 
-    private static async Task<string> RunAsync(string? root, string[] args, CancellationToken token, bool allowFailure = false) =>
+    private async Task<string> RunAsync(string? root, string[] args, CancellationToken token, bool allowFailure = false) =>
         Encoding.UTF8.GetString(await RunBytesAsync(root, args, token, allowFailure));
 
-    private static async Task<byte[]> RunBytesAsync(string? root, string[] args, CancellationToken token, bool allowFailure = false)
+    private async Task<byte[]> RunBytesAsync(string? root, string[] args, CancellationToken token, bool allowFailure = false)
     {
         ValidateCommand(args);
+        TimeSpan limit = TimeSpan.FromSeconds(args[0] is "fetch" or "push" ? 120 : 30);
         using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
-        timeout.CancelAfter(TimeSpan.FromSeconds(args[0] is "fetch" or "push" ? 120 : 30));
+        timeout.CancelAfter(limit);
+        Stopwatch elapsed = Stopwatch.StartNew();
         ProcessStartInfo start = new("git")
         {
             WorkingDirectory = root ?? Environment.CurrentDirectory,
@@ -521,27 +566,56 @@ public sealed class SystemGitTransport : ILocalGitTransport
             Task<byte[]> error = ReadBoundedAsync(process.StandardError.BaseStream, timeout.Token);
             await process.WaitForExitAsync(timeout.Token);
             byte[] result = await output;
-            byte[] stderr = await error; // Never expose Git stderr: URLs and credentials may appear.
+            // Git's stderr is never shown to the user (URLs and credentials may appear); it is logged redacted.
+            byte[] stderr = await error;
             if (process.ExitCode != 0 && !allowFailure)
             {
+                LogFailure(root, args, process.ExitCode, elapsed, stderr);
                 if (args[0] is "fetch" or "push" && LooksLikeAuthenticationFailure(stderr))
                     throw new ProjectSyncAuthenticationException(
                         "Git authentication failed. Repair access with command-line Git outside EntityTracker, then retry.");
                 throw new InvalidOperationException($"Git {args[0]} failed. Check the repository with system Git and retry.");
             }
+            if (process.ExitCode != 0)
+                _logger.LogDebug("Git {Command} in {Repository} returned {ExitCode} (allowed) in {ElapsedMs} ms.",
+                    Describe(args), root ?? "(no repository)", process.ExitCode, elapsed.ElapsedMilliseconds);
+            else
+                _logger.Log(NotableVerbs.Contains(args[0]) ? LogLevel.Information : LogLevel.Debug,
+                    "Git {Command} in {Repository} finished in {ElapsedMs} ms.",
+                    Describe(args), root ?? "(no repository)", elapsed.ElapsedMilliseconds);
             return process.ExitCode == 0 ? result : [];
         }
         catch (OperationCanceledException)
         {
             if (!process.HasExited) process.Kill(entireProcessTree: true);
-            if (token.IsCancellationRequested) throw;
+            if (token.IsCancellationRequested)
+            {
+                _logger.LogInformation("Git {Command} in {Repository} was cancelled.", Describe(args), root ?? "(no repository)");
+                throw;
+            }
+            _logger.LogError("Git {Command} in {Repository} timed out after {LimitSeconds} s.",
+                Describe(args), root ?? "(no repository)", limit.TotalSeconds);
             throw new TimeoutException($"Git {args[0]} timed out. Check the repository and retry.");
         }
-        catch (System.ComponentModel.Win32Exception)
+        catch (System.ComponentModel.Win32Exception exception)
         {
-            throw new InvalidOperationException("System Git is unavailable. Install Git 2.30 or later.");
+            _logger.LogError(exception, "Git could not be started; is Git installed and on PATH?");
+            throw new InvalidOperationException("System Git is unavailable. Install Git 2.30 or later.", exception);
         }
     }
+
+    private void LogFailure(string? root, string[] args, int exitCode, Stopwatch elapsed, byte[] stderr)
+    {
+        string message = Encoding.UTF8.GetString(stderr).Trim();
+        if (message.Length > MaxLoggedErrorChars) message = message[..MaxLoggedErrorChars] + " [...]";
+        _logger.LogError("Git {Command} in {Repository} failed with exit code {ExitCode} after {ElapsedMs} ms{Kind}: {GitError}",
+            Describe(args), root ?? "(no repository)", exitCode, elapsed.ElapsedMilliseconds,
+            args[0] is "fetch" or "push" && LooksLikeAuthenticationFailure(stderr) ? " (authentication)" : "",
+            LogRedaction.Redact(message));
+    }
+
+    /// <summary>Gets the command as it is logged, such as "fetch --prune origin", with secrets removed.</summary>
+    private static string Describe(string[] args) => LogRedaction.Redact(string.Join(' ', args));
 
     private static readonly HashSet<string> AllowedVerbs = new(StringComparer.Ordinal)
     {

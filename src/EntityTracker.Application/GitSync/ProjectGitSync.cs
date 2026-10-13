@@ -2,6 +2,14 @@ using EntityTracker.Application.Snapshots;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Domain;
 
+using System.Diagnostics;
+using System.Security.Cryptography;
+
+using EntityTracker.Application.Diagnostics;
+
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace EntityTracker.Application.GitSync;
 
 public sealed record ProjectSyncLink(
@@ -126,8 +134,66 @@ public sealed partial class ProjectGitSyncService(
     IProjectRepository? projects = null, IProjectSyncBackup? backup = null,
     IProjectMergeReview? mergeReview = null,
     IProjectUnsavedEditsGate? editGate = null,
-    IProjectSyncVersionGate? versionGate = null)
+    IProjectSyncVersionGate? versionGate = null,
+    ILogger<ProjectGitSyncService>? logger = null)
 {
+    private readonly ILogger _log = logger ?? NullLogger<ProjectGitSyncService>.Instance;
+
+    /// <summary>
+    /// Runs one Git sync operation in its own log scope ("Sync 3f9a1c"), so its Git commands, phases and
+    /// result read as a unit, and logs how it ended. A failure is logged here, once, with the whole
+    /// exception; callers only add what they told the user.
+    /// </summary>
+    private async Task<T> LoggedAsync<T>(string operation, string subject, Func<Task<T>> body,
+        Func<T, string> describe)
+    {
+        string id = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(3));
+        using IDisposable? scope = _log.BeginScope("{Operation} {OperationId}", operation, id);
+        long started = Stopwatch.GetTimestamp();
+        _log.LogInformation("{Operation} started: {Subject}.", operation, subject);
+        try
+        {
+            T result = await body();
+            _log.LogInformation("{Operation} finished in {ElapsedMs} ms: {Result}.",
+                operation, ElapsedMs(started), describe(result));
+            return result;
+        }
+        catch (Exception exception) when (exception is OperationCanceledException or ProjectSyncReviewCancelledException)
+        {
+            _log.LogInformation("{Operation} was cancelled after {ElapsedMs} ms.", operation, ElapsedMs(started));
+            throw;
+        }
+        catch (ProjectSyncEditDeferredException)
+        {
+            _log.LogInformation("{Operation} was put off: an entity is being edited.", operation);
+            throw;
+        }
+        catch (Exception exception) when (exception is ProjectSyncUpdateRequiredException
+                                              or ProjectSyncVersionCheckUnavailableException
+                                              or ProjectSyncReviewRequiredException
+                                              or ProjectSyncDeletionApprovalRequiredException)
+        {
+            _log.LogWarning(exception, "{Operation} stopped after {ElapsedMs} ms and needs attention.",
+                operation, ElapsedMs(started));
+            AppLogging.MarkLogged(exception);
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _log.LogError(exception, "{Operation} failed after {ElapsedMs} ms: {Subject}.",
+                operation, ElapsedMs(started), subject);
+            AppLogging.MarkLogged(exception);
+            throw;
+        }
+    }
+
+    private static long ElapsedMs(long started) => (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+
+    private static string Describe(ProjectSyncLink link) =>
+        $"{link.SyncStatus}, {link.LastResult}, at commit {Short(link.LastCommonCommit)}";
+
+    private static string Short(string? commit) => commit is { Length: >= 7 } ? commit[..7] : commit ?? "none";
+
     private async Task EnsureEditsReadyAsync(ProjectId projectId, ProjectSyncMode mode,
         CancellationToken token)
     {
@@ -150,7 +216,11 @@ public sealed partial class ProjectGitSyncService(
     public async Task<ProjectSyncLink?> GetLinkAsync(ProjectId projectId, CancellationToken token = default) =>
         (await links.ReadAllAsync(token)).SingleOrDefault(link => link.ProjectId == projectId.Value);
 
-    public async Task<ProjectSyncLink> LinkAsync(ProjectId projectId, string path, CancellationToken token = default)
+    public Task<ProjectSyncLink> LinkAsync(ProjectId projectId, string path, CancellationToken token = default) =>
+        LoggedAsync("Link", $"Project {projectId.Value:D} to the checkout {path}",
+            () => LinkCoreAsync(projectId, path, token), Describe);
+
+    private async Task<ProjectSyncLink> LinkCoreAsync(ProjectId projectId, string path, CancellationToken token)
     {
         if (versionGate is not null) await versionGate.EnsureSyncAllowedAsync(token);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -185,8 +255,12 @@ public sealed partial class ProjectGitSyncService(
         return link;
     }
 
-    public async Task<ProjectSyncLink> ImportAsync(string path, string? localName = null,
-        CancellationToken token = default)
+    /// <summary>Loads a Project from an existing Git checkout (Portfolio › Import Project).</summary>
+    public Task<ProjectSyncLink> ImportAsync(string path, string? localName = null,
+        CancellationToken token = default) =>
+        LoggedAsync("Import", $"the checkout {path}", () => ImportCoreAsync(path, localName, token), Describe);
+
+    private async Task<ProjectSyncLink> ImportCoreAsync(string path, string? localName, CancellationToken token)
     {
         if (versionGate is not null) await versionGate.EnsureSyncAllowedAsync(token);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -231,10 +305,16 @@ public sealed partial class ProjectGitSyncService(
             throw new InvalidOperationException("The selected checkout has no Project snapshot to import.");
         ProjectSnapshot incoming = codec.Decode(state.SnapshotFiles);
         ProjectId projectId = new(incoming.Project.Id);
+        _log.LogInformation(
+            "The checkout on {Branch} at commit {Commit} holds Project {ProjectName} ({ProjectId}): {TrackerCount} Trackers, {EntityCount} entities, snapshot format {Format}.",
+            state.Branch, Short(state.Head), incoming.Project.Name, incoming.Project.Id, incoming.Trackers.Count,
+            incoming.Trackers.Sum(static tracker => tracker.Entities.Count), incoming.FormatVersion);
         ProjectSnapshotRead current = await snapshots.ReadAsync(projectId, token);
         string hash = codec.Encode(incoming).Sha256;
         if (current.Snapshot is not null)
         {
+            _log.LogInformation("Project {ProjectId} already exists here; {Action}.", projectId.Value,
+                codec.Encode(current.Snapshot).Sha256 == hash ? "it matches the checkout" : "the differences are reviewed");
             if (existingLinks.Any(link => link.ProjectId == projectId.Value &&
                                           link.SyncStatus != "RemoteDeletedLocalKept"))
                 throw new InvalidOperationException("This Project is already linked. Unlink it before selecting another repository.");
@@ -259,6 +339,7 @@ public sealed partial class ProjectGitSyncService(
             throw new InvalidOperationException("The Project changed during import. Retry.");
         await backup.CreatePreApplyBackupAsync(token);
         long revision = await snapshots.ApplyAsync(incoming, current.Revision, displayName, token);
+        _log.LogInformation("Imported as the new Project {ProjectName} at revision {Revision}.", displayName, revision);
         ProjectSyncLink imported = NewLink(projectId, state, revision, hash) with
         {
             LastResult = "Imported existing checkout"
@@ -304,11 +385,12 @@ public sealed partial class ProjectGitSyncService(
         IProgress<ProjectSyncTiming>? timing = null,
         ProjectSyncMode mode = ProjectSyncMode.Manual)
     {
-        ProjectSyncTimingCollector collector = new(progress);
+        ProjectSyncTimingCollector collector = new(progress, _log);
         string outcome = "Completed";
         try
         {
-            ProjectSyncLink result = await SyncCoreAsync(projectId, localName, token, collector, mode);
+            ProjectSyncLink result = await LoggedAsync(mode == ProjectSyncMode.Automatic ? "Auto-sync" : "Sync",
+                $"Project {projectId.Value:D}", () => SyncCoreAsync(projectId, localName, token, collector, mode), Describe);
             if (result.SyncStatus is "PendingPush" or "PendingRemote") outcome = "Action needed";
             return result;
         }
@@ -580,8 +662,9 @@ public sealed partial class ProjectGitSyncService(
             {
                 progress?.Report(ProjectSyncPhase.Pushing);
                 try { await git.PushAsync(link.RepositoryPath, token); }
-                catch (InvalidOperationException)
+                catch (InvalidOperationException exception)
                 {
+                    _log.LogWarning(exception, "Push was refused; fetching to see whether the remote moved on.");
                     progress?.Report(ProjectSyncPhase.Rechecking);
                     GitRemoteState refreshed = await git.FetchAsync(link.RepositoryPath, remote,
                         token, progress as IProgress<GitFetchTiming>);
@@ -661,7 +744,11 @@ public sealed partial class ProjectGitSyncService(
     }
 
     public Task UnlinkAsync(ProjectId projectId, CancellationToken token = default) =>
-        links.RemoveAsync(projectId.Value, token);
+        LoggedAsync("Unlink", $"Project {projectId.Value:D}", async () =>
+        {
+            await links.RemoveAsync(projectId.Value, token);
+            return true;
+        }, static _ => "the link was removed");
 
     private static bool PathEquals(string a, string b) =>
         string.Equals(Path.GetFullPath(a).TrimEnd(Path.DirectorySeparatorChar),
@@ -687,7 +774,11 @@ public sealed partial class ProjectGitSyncService(
 
         IReadOnlyList<GitCommitSummary> commits;
         try { commits = await git.ListCommitsAsync(link.RepositoryPath, link.LastCommonCommit, state.Head, token); }
-        catch (NotSupportedException) { return null; }
+        catch (NotSupportedException exception)
+        {
+            _log.LogDebug(exception, "Commit history can't be listed here; unrecorded snapshot commits are left for review.");
+            return null;
+        }
         bool onlySnapshotCommits = commits.Count > 0 && commits.All(commit =>
             commit.Subject is SnapshotCommitSubject or MergeCommitSubject &&
             commit.ChangedPaths.All(path => path.StartsWith(".entitytracker/", StringComparison.Ordinal)));
