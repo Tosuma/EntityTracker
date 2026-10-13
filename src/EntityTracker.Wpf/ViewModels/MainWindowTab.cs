@@ -5,6 +5,5 @@ public enum MainWindowTab
     Overview,
     DependencyGraph,
     Archived,
-    SchemaSynchronization,
     AddEntity
 }

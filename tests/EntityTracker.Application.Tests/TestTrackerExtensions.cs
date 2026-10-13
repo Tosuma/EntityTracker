@@ -5,7 +5,6 @@ using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Planning;
-using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 
@@ -128,60 +127,4 @@ internal static class TestTrackerExtensions
         DevelopmentStatus targetStatus,
         CancellationToken cancellationToken = default) =>
         service.ApplyAsync(TestTrackerId, entityIds, targetStatus, cancellationToken);
-
-    internal static SchemaSynchronizationPlan CreatePlan(
-        this SchemaSynchronizationPlanner planner,
-        SchemaImportCandidate importCandidate,
-        SchemaImportMode mode,
-        IEnumerable<TrackedEntity> persistedEntities,
-        IEnumerable<PersistedDependency> persistedDependencies,
-        IEnumerable<PersistedUnresolvedDependency> persistedUnresolvedDependencies,
-        IEnumerable<ManualDependencyOverride>? manualDependencyOverrides = null) =>
-        planner.CreatePlan(
-            TestTrackerId,
-            importCandidate,
-            mode,
-            persistedEntities,
-            persistedDependencies,
-            persistedUnresolvedDependencies,
-            manualDependencyOverrides);
-
-    internal static Task<SchemaSynchronizationResult> PlanAsync(
-        this SchemaSynchronizationService service,
-        string filePath,
-        SchemaImportMode mode,
-        CancellationToken cancellationToken = default) =>
-        service.PlanAsync(TestTrackerId, filePath, mode, cancellationToken);
-
-    internal static EntityDependencyEditPlan PreviewDependencyEdit(
-        this SchemaSynchronizationService service,
-        SchemaSynchronizationPlan plan,
-        EntityId ownerId,
-        IEnumerable<ManualDependencyOverride> desiredOwnerOverrides) =>
-        service.PreviewDependencyEdit(TestTrackerId, plan, ownerId, desiredOwnerOverrides);
-
-    internal static SchemaSynchronizationPlan StageDependencyEdit(
-        this SchemaSynchronizationService service,
-        SchemaSynchronizationPlan plan,
-        EntityDependencyEditPlan editPlan) =>
-        service.StageDependencyEdit(TestTrackerId, plan, editPlan);
-
-    internal static SchemaSynchronizationPlan StageProgressDecision(
-        this SchemaSynchronizationService service,
-        SchemaSynchronizationPlan plan,
-        EntityId entityId,
-        SynchronizationProgressDecision decision) =>
-        service.StageProgressDecision(TestTrackerId, plan, entityId, decision);
-
-    internal static Task<SchemaImportSummary> ApplyAsync(
-        this SchemaSynchronizationService service,
-        SchemaSynchronizationPlan plan,
-        string sourceFileName,
-        CancellationToken cancellationToken = default) =>
-        service.ApplyAsync(TestTrackerId, plan, sourceFileName, cancellationToken);
-
-    internal static Task<SchemaImportSummary?> GetLatestImportAsync(
-        this SchemaSynchronizationService service,
-        CancellationToken cancellationToken = default) =>
-        service.GetLatestImportAsync(TestTrackerId, cancellationToken);
 }

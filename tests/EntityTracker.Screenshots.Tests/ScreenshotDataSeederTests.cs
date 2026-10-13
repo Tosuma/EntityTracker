@@ -1,3 +1,4 @@
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
@@ -22,10 +23,8 @@ public sealed class ScreenshotDataSeederTests
             Path.GetFullPath(workspace.Paths.DatabasePath),
             StringComparison.OrdinalIgnoreCase);
 
-        ScreenshotCsvFilePicker picker = new();
         await using ServiceProvider provider = ScreenshotServiceProviderFactory.Create(
             workspace.Paths,
-            picker,
             new FixedTimeProvider(ScreenshotDataSeeder.FixedNow));
         await provider.GetRequiredService<IPersistenceInitializer>().InitializeAsync();
         Tracker[] trackers = (await provider
@@ -46,10 +45,13 @@ public sealed class ScreenshotDataSeederTests
         Assert.Equal(
             Enum.GetValues<DevelopmentStatus>().Order(),
             entities.Select(static entity => entity.Status).Distinct().Order());
-        Assert.Equal(
-            10,
-            (await provider.GetRequiredService<IDependencyRepository>()
-                .GetAllUnresolvedAsync(tracker.Id)).Count);
+        IDependencyRepository dependencies = provider.GetRequiredService<IDependencyRepository>();
+        EffectiveDependencyState dependencyState = provider.GetRequiredService<EffectiveDependencyResolver>()
+            .Resolve(entities,
+                await dependencies.GetAllAsync(tracker.Id),
+                await dependencies.GetAllUnresolvedAsync(tracker.Id),
+                await provider.GetRequiredService<IManualDependencyOverrideRepository>().GetAllAsync(tracker.Id));
+        Assert.Equal(10, dependencyState.UnresolvedDependencies.Count);
         Assert.Contains(
             entities,
             static entity => entity.SourceName == "time_zone" &&

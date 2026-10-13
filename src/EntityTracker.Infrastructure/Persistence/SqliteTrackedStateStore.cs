@@ -1,7 +1,6 @@
 using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
-using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
 using System.Security.Cryptography;
@@ -16,7 +15,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 /// Applies one validated tracked-schema change set using a single SQLite transaction.
 /// Conditional upserts leave audit timestamps unchanged for relationships that did not change.
 /// </summary>
-public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchronizationStore, ITrackerSyncStore
+public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncStore
 {
     private readonly SqliteDatabase _database;
 
@@ -33,17 +32,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
         TrackedStateChangeSet changeSet,
         CancellationToken cancellationToken = default)
     {
-        await ApplyInternalAsync(trackerId, changeSet, null, cancellationToken, null);
-    }
-
-    public async Task<SchemaImportSummary> ApplyAsync(
-        TrackerId trackerId,
-        TrackedStateChangeSet changeSet,
-        SchemaImportCompletion completion,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(completion);
-        return (await ApplyInternalAsync(trackerId, changeSet, completion, cancellationToken, null))!;
+        await ApplyInternalAsync(trackerId, changeSet, cancellationToken, null);
     }
 
     public async Task<TrackerSyncBaseline?> ReadBaselineAsync(
@@ -72,13 +61,12 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
     {
         ArgumentNullException.ThrowIfNull(commit);
         await ApplyInternalAsync(commit.DestinationTrackerId, commit.ChangeSet,
-            null, cancellationToken, commit);
+            cancellationToken, commit);
     }
 
-    private async Task<SchemaImportSummary?> ApplyInternalAsync(
+    private async Task ApplyInternalAsync(
         TrackerId trackerId,
         TrackedStateChangeSet changeSet,
-        SchemaImportCompletion? completion,
         CancellationToken cancellationToken,
         TrackerSyncCommit? syncCommit)
     {
@@ -297,18 +285,6 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
                     cancellationToken);
             }
 
-            SchemaImportSummary? summary = null;
-            if (completion is not null)
-            {
-                summary = new SchemaImportSummary(appliedAtUtc, completion);
-                await UpsertImportSummaryAsync(
-                    connection,
-                    transaction,
-                    trackerId,
-                    summary,
-                    cancellationToken);
-            }
-
             if (syncCommit is not null)
             {
                 using SqliteCommand baselineCommand = connection.CreateCommand();
@@ -324,7 +300,6 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
             }
 
             await transaction.CommitAsync(cancellationToken);
-            return summary;
         }
         catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
         {
@@ -370,41 +345,6 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
             }
         }
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(state.ToString())));
-    }
-
-    public async Task<SchemaImportSummary?> GetLatestImportAsync(
-        TrackerId trackerId,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(trackerId);
-        await using SqliteConnection connection =
-            await _database.OpenConnectionAsync(cancellationToken);
-        using SqliteCommand command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT applied_at_utc, source_file_name, import_mode,
-                   new_entity_count, changed_entity_count, archived_entity_count,
-                   unchanged_entity_count, unresolved_entity_count
-            FROM schema_import_summary
-            WHERE tracker_id = $trackerId;
-            """;
-        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
-        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken))
-        {
-            return null;
-        }
-
-        SchemaImportCompletion completion = new(
-            reader.GetString(1),
-            SqlitePersistenceValues.ParseEnum<SchemaImportMode>(reader.GetString(2), "import mode"),
-            reader.GetInt32(3),
-            reader.GetInt32(4),
-            reader.GetInt32(5),
-            reader.GetInt32(6),
-            reader.GetInt32(7));
-        return new SchemaImportSummary(
-            SqlitePersistenceValues.ParseTimestamp(reader.GetString(0), "import timestamp"),
-            completion);
     }
 
     public async Task EnsureHistoryBaselineAsync(
@@ -540,51 +480,6 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ISchemaSynchro
             throw new InvalidOperationException(
                 "History baseline entities are not owned by the selected tracker.");
         }
-    }
-
-    private static async Task UpsertImportSummaryAsync(
-        SqliteConnection connection,
-        SqliteTransaction transaction,
-        TrackerId trackerId,
-        SchemaImportSummary summary,
-        CancellationToken cancellationToken)
-    {
-        using SqliteCommand command = CreateCommand(connection, transaction, """
-            INSERT INTO schema_import_summary
-            (
-                tracker_id, applied_at_utc, source_file_name, import_mode,
-                new_entity_count, changed_entity_count, archived_entity_count,
-                unchanged_entity_count, unresolved_entity_count
-            )
-            VALUES
-            (
-                $trackerId, $appliedAtUtc, $sourceFileName, $importMode,
-                $newCount, $changedCount, $archivedCount,
-                $unchangedCount, $unresolvedCount
-            )
-            ON CONFLICT (tracker_id)
-            DO UPDATE SET
-                applied_at_utc = excluded.applied_at_utc,
-                source_file_name = excluded.source_file_name,
-                import_mode = excluded.import_mode,
-                new_entity_count = excluded.new_entity_count,
-                changed_entity_count = excluded.changed_entity_count,
-                archived_entity_count = excluded.archived_entity_count,
-                unchanged_entity_count = excluded.unchanged_entity_count,
-                unresolved_entity_count = excluded.unresolved_entity_count;
-            """);
-        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
-        command.Parameters.AddWithValue(
-            "$appliedAtUtc",
-            SqlitePersistenceValues.FormatTimestamp(summary.AppliedAtUtc));
-        command.Parameters.AddWithValue("$sourceFileName", summary.SourceFileName);
-        command.Parameters.AddWithValue("$importMode", summary.Mode.ToString());
-        command.Parameters.AddWithValue("$newCount", summary.NewEntityCount);
-        command.Parameters.AddWithValue("$changedCount", summary.ChangedEntityCount);
-        command.Parameters.AddWithValue("$archivedCount", summary.ArchivedEntityCount);
-        command.Parameters.AddWithValue("$unchangedCount", summary.UnchangedEntityCount);
-        command.Parameters.AddWithValue("$unresolvedCount", summary.UnresolvedEntityCount);
-        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private static async Task<long> CountAsync(

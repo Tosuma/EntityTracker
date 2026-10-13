@@ -3,13 +3,6 @@ using EntityTracker.Application.GitSync;
 
 namespace EntityTracker.Screenshots;
 
-internal sealed class ScreenshotCsvFilePicker : ICsvFilePicker
-{
-    internal string? SelectedPath { get; set; }
-
-    public string? SelectCsvFile() => SelectedPath;
-}
-
 internal sealed class ScreenshotClipboard : IClipboardService
 {
     public void SetPng(byte[] png)
@@ -35,11 +28,6 @@ internal sealed class ScreenshotOutboundDeletionApproval : IOutboundDeletionAppr
 {
     public Task<bool> ApproveAsync(IReadOnlyList<string> deletedObjects,
         CancellationToken cancellationToken = default) => Task.FromResult(false);
-}
-
-internal sealed class ScreenshotSynchronizationConfirmation : ISchemaSynchronizationConfirmation
-{
-    public bool ConfirmArchiveMissingEntities(int entityCount) => true;
 }
 
 internal sealed class ScreenshotContextDiscardConfirmation : IContextDiscardConfirmation

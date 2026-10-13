@@ -211,8 +211,8 @@ public static class ProjectSnapshotValidator
             if (tracker.ImportSummary is { } summary)
             {
                 Utc(summary.AppliedAtUtc);
-                EnumValue<EntityTracker.Application.Synchronization.SchemaImportMode>(summary.Mode);
-                if (string.IsNullOrWhiteSpace(summary.SourceFileName) ||
+                if (summary.Mode is not ("Complete" or "Partial") ||
+                    string.IsNullOrWhiteSpace(summary.SourceFileName) ||
                     summary.NewEntityCount < 0 || summary.ChangedEntityCount < 0 ||
                     summary.ArchivedEntityCount < 0 || summary.UnchangedEntityCount < 0 ||
                     summary.UnresolvedEntityCount < 0)

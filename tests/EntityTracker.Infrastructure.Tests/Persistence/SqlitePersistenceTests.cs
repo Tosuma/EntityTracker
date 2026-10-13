@@ -123,7 +123,6 @@ public sealed class SqlitePersistenceTests
 
         TrackedEntity loaded = Assert.IsType<TrackedEntity>(await repository.GetAsync(existing.Id));
         Assert.Equal("Keep notes", loaded.Notes);
-        Assert.Null(await new SqliteTrackedStateStore(database).GetLatestImportAsync());
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
         Assert.Equal(20L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
     }

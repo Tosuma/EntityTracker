@@ -32,7 +32,6 @@ public enum CatalogDialogKind
 public enum TrackerCreationMode
 {
     Blank,
-    Csv,
     Copy
 }
 
@@ -56,13 +55,11 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     private readonly ProjectManagementService _projectService;
     private readonly TrackerManagementService _trackerService;
     private readonly TrackerSyncService _trackerSyncService;
-    private readonly TrackerCsvCreationService _csvCreationService;
     private readonly CatalogNameValidationService _nameValidation;
     private readonly CatalogPurgeImpactService _purgeImpactService;
     private readonly PortfolioQueryService _portfolioQueryService;
     private readonly IProjectRepository _projectRepository;
     private readonly ITrackerRepository _trackerRepository;
-    private readonly ICsvFilePicker _filePicker;
     private readonly ILogger<CatalogManagementViewModel> _logger;
     private readonly ProjectGitSyncService? _gitSync;
     private readonly AsyncCommand _submitNameCommand;
@@ -83,7 +80,6 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     private Tracker? _trackerBeingEdited;
     private Project? _pendingProject;
     private Tracker? _pendingTracker;
-    private PreparedCsvTrackerCreation? _preparedCsv;
     private CatalogPurgeImpact? _purgeImpact;
     private string _copyPreview = string.Empty;
     private TrackerSyncReview? _syncReview;
@@ -97,13 +93,11 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     public CatalogManagementViewModel(
         ProjectManagementService projectService,
         TrackerManagementService trackerService,
-        TrackerCsvCreationService csvCreationService,
         CatalogNameValidationService nameValidation,
         CatalogPurgeImpactService purgeImpactService,
         PortfolioQueryService portfolioQueryService,
         IProjectRepository projectRepository,
         ITrackerRepository trackerRepository,
-        ICsvFilePicker filePicker,
         TrackerSyncService trackerSyncService,
         ILogger<CatalogManagementViewModel>? logger = null,
         ProjectGitSyncService? gitSync = null)
@@ -111,19 +105,16 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         _projectService = projectService;
         _trackerService = trackerService;
         _trackerSyncService = trackerSyncService;
-        _csvCreationService = csvCreationService;
         _nameValidation = nameValidation;
         _purgeImpactService = purgeImpactService;
         _portfolioQueryService = portfolioQueryService;
         _projectRepository = projectRepository;
         _trackerRepository = trackerRepository;
-        _filePicker = filePicker;
         _logger = logger ?? NullLogger<CatalogManagementViewModel>.Instance;
         _gitSync = gitSync;
         RecycledProjects = [];
         RecycledTrackers = [];
         CopySources = [];
-        CsvReview = new SchemaSynchronizationReviewViewModel();
         _submitNameCommand = new AsyncCommand(SubmitNameAsync, () => !IsBusy);
         _prepareTrackerCommand = new AsyncCommand(PrepareTrackerAsync, () => !IsBusy);
         _applyTrackerCommand = new AsyncCommand(ApplyTrackerAsync, CanApplyTracker);
@@ -143,7 +134,6 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     public ObservableCollection<Project> RecycledProjects { get; }
     public ObservableCollection<Tracker> RecycledTrackers { get; }
     public ObservableCollection<TrackerCopySourceOption> CopySources { get; }
-    public SchemaSynchronizationReviewViewModel CsvReview { get; }
 
     public CatalogDialogKind DialogKind
     {
@@ -172,7 +162,6 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
             {
                 ResetPreparedCandidate();
                 OnPropertyChanged(nameof(IsBlankMode));
-                OnPropertyChanged(nameof(IsCsvMode));
                 OnPropertyChanged(nameof(IsCopyMode));
                 OnPropertyChanged(nameof(ShowApplyTracker));
                 OnPropertyChanged(nameof(PrepareTrackerLabel));
@@ -419,7 +408,6 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     public bool IsRecycleConfirmation => DialogKind == CatalogDialogKind.RecycleConfirmation;
     public bool IsPurgeConfirmation => DialogKind == CatalogDialogKind.PurgeConfirmation;
     public bool IsBlankMode => CreationMode == TrackerCreationMode.Blank;
-    public bool IsCsvMode => CreationMode == TrackerCreationMode.Csv;
     public bool IsCopyMode => CreationMode == TrackerCreationMode.Copy;
     public bool HasCopySources => CopySources.Count > 0;
     public bool HasRecycledProjects => RecycledProjects.Count > 0;
@@ -430,7 +418,6 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     public string PrepareTrackerLabel => CreationMode switch
     {
         TrackerCreationMode.Blank => "Create tracker",
-        TrackerCreationMode.Csv => "Choose CSV and review",
         TrackerCreationMode.Copy => "Review copy",
         _ => "Prepare"
     };
@@ -454,8 +441,8 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     public string PurgeImpactSummary => PurgeImpact is null
         ? "Calculating affected data…"
         : $"{PurgeImpact.TrackerCount} tracker(s), {PurgeImpact.EntityCount} entities " +
-          $"({PurgeImpact.ArchivedEntityCount} archived), {PurgeImpact.HistoryCount} history records, " +
-          $"and {PurgeImpact.ImportSummaryCount} import summary record(s) will be permanently removed.";
+          $"({PurgeImpact.ArchivedEntityCount} archived) and {PurgeImpact.HistoryCount} history records " +
+          "will be permanently removed.";
 
     public ICommand SubmitNameCommand => _submitNameCommand;
     public ICommand PrepareTrackerCommand => _prepareTrackerCommand;
@@ -704,49 +691,20 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
             return;
         }
 
-        if (CreationMode == TrackerCreationMode.Copy)
+        if (SelectedCopySource is null)
         {
-            if (SelectedCopySource is null)
-            {
-                ErrorMessage = "Select a source tracker.";
-                return;
-            }
-
-            OperationMessage = "The copy is ready. Review the copied and reset fields, then create the tracker.";
-            _applyTrackerCommand.NotifyCanExecuteChanged();
+            ErrorMessage = "Select a source tracker.";
             return;
         }
 
-        string? filePath = _filePicker.SelectCsvFile();
-        if (filePath is null)
-        {
-            return;
-        }
-
-        await RunAsync(async () =>
-        {
-            TrackerCsvPreparationResult result = await _csvCreationService.PrepareAsync(
-                _targetProject.Id,
-                Name,
-                filePath);
-            if (!result.IsSuccess)
-            {
-                CsvReview.SetFailure(string.Join(Environment.NewLine, result.Diagnostics.Select(static item => item.Message)));
-                return;
-            }
-
-            _preparedCsv = result.Prepared;
-            CsvReview.ReplacePlan(result.Prepared!.Plan);
-            OperationMessage = $"Review {result.Prepared.SourceFileName}. Nothing is saved until Apply.";
-            _applyTrackerCommand.NotifyCanExecuteChanged();
-        });
+        OperationMessage = "The copy is ready. Review the copied and reset fields, then create the tracker.";
+        _applyTrackerCommand.NotifyCanExecuteChanged();
     }
 
     private bool CanApplyTracker() => !IsBusy && _targetProject is not null &&
         !string.IsNullOrWhiteSpace(Name) && CreationMode switch
         {
             TrackerCreationMode.Blank => true,
-            TrackerCreationMode.Csv => _preparedCsv?.Plan.CanApply == true,
             TrackerCreationMode.Copy => SelectedCopySource is not null && OperationMessage is not null,
             _ => false
         };
@@ -772,8 +730,6 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
             Tracker tracker = CreationMode switch
             {
                 TrackerCreationMode.Blank => await _trackerService.CreateBlankAsync(_targetProject.Id, Name),
-                TrackerCreationMode.Csv => await _csvCreationService.CommitAsync(
-                    _preparedCsv ?? throw new InvalidOperationException("Prepare a CSV review first.")),
                 TrackerCreationMode.Copy => await _trackerService.CopyAsync(
                     SelectedCopySource?.Tracker.Id ??
                         throw new InvalidOperationException("Select a source tracker."),
@@ -909,8 +865,6 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
 
     private void ResetPreparedCandidate()
     {
-        _preparedCsv = null;
-        CsvReview.Clear();
         OperationMessage = null;
         _applyTrackerCommand.NotifyCanExecuteChanged();
     }
@@ -945,7 +899,6 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(SelectedCopySource));
         OnPropertyChanged(nameof(CreationMode));
         OnPropertyChanged(nameof(IsBlankMode));
-        OnPropertyChanged(nameof(IsCsvMode));
         OnPropertyChanged(nameof(IsCopyMode));
         OnPropertyChanged(nameof(ShowApplyTracker));
         OnPropertyChanged(nameof(PrepareTrackerLabel));

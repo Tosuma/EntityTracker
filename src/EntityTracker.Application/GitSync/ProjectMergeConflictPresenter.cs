@@ -300,8 +300,8 @@ internal sealed class ProjectMergeConflictPresenter(
         }
         catch (Exception error) when (error is JsonException or InvalidOperationException)
         {
-            Logger.LogWarning(error, "A schema synchronization baseline could not be described for the merge review.");
-            return "Schema synchronization baseline";
+            Logger.LogWarning(error, "A Sync from source baseline could not be described for the merge review.");
+            return "Sync from source baseline";
         }
     }
 
@@ -317,7 +317,7 @@ internal sealed class ProjectMergeConflictPresenter(
         "SourceName" => "Name",
         "LifecycleState" => "State",
         "IsRetired" => "Availability",
-        "SyncBaselineJson" => "Schema synchronization baseline",
+        "SyncBaselineJson" => "Sync from source baseline",
         "ResponsibleDeveloper" => "Responsible Developer",
         "FilterActive" => "Filter active",
         "Notes" => "Internal notes",

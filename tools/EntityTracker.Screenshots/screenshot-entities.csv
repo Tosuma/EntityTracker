@@ -1,0 +1,126 @@
+name;dependencies
+country_code;
+region_code;
+currency_code;
+language_code;
+time_zone;
+tax_category;
+document_type;
+status_code;
+priority_level;currency_code, time_zone
+measurement_unit;country_code, time_zone
+customer_account;priority_level
+customer_profile;tax_category, document_type
+customer_contact;customer_account, tax_category, measurement_unit, country_code
+customer_address;tax_category
+customer_preference;language_code, measurement_unit
+supplier_account;tax_category, unit
+supplier_profile;region_code, document_type, space
+supplier_contact;document_type, priority_level, tax_category, structure, currency_code
+supplier_address;customer_preference, priority_level, facility
+supplier_contract;priority_level, measurement_unit, currency_code, property, supplier_profile
+employee_record;region_code, legal_entity
+employee_contact;supplier_contact, region_code, unit, customer_preference, measurement_unit
+employee_role;customer_contact, supplier_address, employee_record, space
+employee_assignment;customer_profile, structure
+employee_schedule;customer_address, facility
+department_record;customer_address, tax_category
+team_record;employee_role, employee_record, language_code
+position_record;supplier_profile, team_record, customer_profile
+skill_record;customer_account, customer_address, priority_level
+certification_record;supplier_account, supplier_contract
+product_category;employee_record, supplier_contract
+product_brand;measurement_unit, language_code, team_record
+product_record;priority_level
+product_variant;product_brand, customer_profile, measurement_unit, employee_schedule, supplier_address
+product_attribute;department_record, product_brand
+product_price;product_category
+product_cost;position_record, certification_record
+product_inventory;region_code, supplier_contract, measurement_unit
+product_supplier;skill_record, supplier_profile
+product_bundle;status_code, employee_schedule, product_variant
+warehouse_record;customer_address, language_code
+warehouse_zone;product_record, supplier_address
+storage_bin;supplier_contact, product_cost
+inventory_balance;supplier_profile
+inventory_movement;team_record, supplier_contact
+stock_adjustment;supplier_contact
+stock_reservation;tax_category, supplier_contact, time_zone
+reorder_rule;skill_record, inventory_balance
+inventory_count;tax_category, product_cost
+inventory_snapshot;time_zone, supplier_profile, employee_contact, product_supplier
+sales_channel;stock_reservation, customer_profile, time_zone, region_code
+sales_order;product_cost, supplier_contract
+sales_order_line;tax_category, stock_adjustment
+sales_quote;employee_contact, employee_schedule
+sales_quote_line;storage_bin, priority_level, currency_code, supplier_contract
+sales_invoice;sales_quote, reorder_rule
+sales_invoice_line;employee_contact, supplier_profile, currency_code
+sales_return;measurement_unit, region_code, product_record
+sales_return_line;supplier_contract, stock_reservation
+sales_discount;country_code
+purchase_order;inventory_count, inventory_balance
+purchase_order_line;country_code, stock_reservation, sales_return_line, supplier_contract
+purchase_receipt;sales_discount, document_type, supplier_account
+purchase_receipt_line;team_record, warehouse_record, product_inventory
+purchase_return;employee_role, skill_record, priority_level
+shipment_record;inventory_movement, stock_reservation, customer_preference
+shipment_item;product_cost, supplier_contact
+shipment_route;inventory_balance, region_code, employee_contact, purchase_order_line
+delivery_record;stock_reservation
+delivery_attempt;purchase_order_line
+carrier_record;customer_profile, purchase_receipt
+freight_rate;certification_record, shipment_record
+tracking_event;employee_assignment, customer_address
+package_record;employee_assignment, product_attribute, position_record, sales_return_line
+package_item;inventory_snapshot
+payment_method;time_zone, tax_category, sales_order_line
+payment_record;shipment_route, product_price
+payment_allocation;delivery_record
+refund_record;sales_order, language_code
+credit_note;purchase_order_line, sales_invoice_line, department_record
+billing_account;package_item, customer_preference, product_inventory
+billing_schedule;inventory_count
+billing_cycle;product_bundle, warehouse_record
+billing_event;billing_account, inventory_balance, billing_cycle
+account_balance;billing_account, reorder_rule
+general_ledger_account;sales_return_line, supplier_contact, sales_quote
+journal_entry;employee_schedule
+journal_entry_line;delivery_record, billing_schedule
+fiscal_period;product_record, purchase_receipt, tracking_event, delivery_attempt, credit_note
+cost_center;storage_bin
+budget_record;delivery_attempt
+budget_line;product_price
+expense_record;customer_address, language_code
+expense_category;journal_entry_line, purchase_order_line, inventory_snapshot
+expense_approval;product_bundle
+project_record;product_category, employee_contact
+project_phase;sales_discount, product_supplier
+project_task;purchase_order
+task_assignment;sales_order_line, certification_record
+task_dependency;purchase_return, task_assignment
+service_catalog;purchase_receipt, journal_entry, billing_schedule
+service_request;stock_reservation, product_supplier, billing_cycle
+service_request_item;language_code
+service_assignment;status_code, journal_entry
+service_event;sales_order, task_assignment
+support_ticket;customer_address, reorder_rule, billing_account
+support_comment;general_ledger_account, purchase_return, product_supplier
+support_category;delivery_attempt, employee_role, status_code
+support_priority;expense_category
+support_resolution;package_record
+contract_record;product_supplier, employee_contact, budget_record
+contract_term;budget_record, status_code, purchase_order
+contract_party;stock_adjustment, sales_order
+contract_document;contract_record, product_bundle
+contract_renewal;product_supplier, customer_address, supplier_account, general_ledger_account
+audit_event;customer_address, freight_rate
+audit_detail;sales_return, journal_entry
+notification_record;product_attribute, measurement_unit
+notification_template;support_comment, customer_profile
+notification_delivery;purchase_return, purchase_receipt
+report_definition;supplier_contact, country_code, sales_invoice_line
+report_run;sales_channel, tax_category
+dashboard_definition;package_record, department_record, service_request, budget_record
+dashboard_widget;credit_note, purchase_return
+user_preference;measurement_unit

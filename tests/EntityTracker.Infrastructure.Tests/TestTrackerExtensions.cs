@@ -2,7 +2,6 @@ global using EntityTracker.Infrastructure.Tests;
 
 using EntityTracker.Application.History;
 using EntityTracker.Application.Persistence;
-using EntityTracker.Application.Synchronization;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Persistence;
 
@@ -79,22 +78,6 @@ internal static class TestTrackerExtensions
         TrackedStateChangeSet changeSet,
         CancellationToken cancellationToken = default) =>
         store.ApplyAsync(store.Database.GetTrackerId(), changeSet, cancellationToken);
-
-    internal static Task<SchemaImportSummary> ApplyAsync(
-        this SqliteTrackedStateStore store,
-        TrackedStateChangeSet changeSet,
-        SchemaImportCompletion completion,
-        CancellationToken cancellationToken = default) =>
-        store.ApplyAsync(
-            store.Database.GetTrackerId(),
-            changeSet,
-            completion,
-            cancellationToken);
-
-    internal static Task<SchemaImportSummary?> GetLatestImportAsync(
-        this SqliteTrackedStateStore store,
-        CancellationToken cancellationToken = default) =>
-        store.GetLatestImportAsync(store.Database.GetTrackerId(), cancellationToken);
 
     internal static Task EnsureHistoryBaselineAsync(
         this SqliteTrackedStateStore store,

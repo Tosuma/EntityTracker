@@ -11,12 +11,10 @@ using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Planning;
 using EntityTracker.Application.Projects;
 using EntityTracker.Application.Ranking;
-using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Configuration;
-using EntityTracker.Infrastructure.Importing;
 using EntityTracker.Infrastructure.Persistence;
 using EntityTracker.Reporting;
 using EntityTracker.Wpf.Services;
@@ -684,13 +682,9 @@ public sealed class ShellViewModelTests
     }
 
     [Fact]
-    public async Task HelpSqlNavigation_GuardsAndDiscardsUnappliedSynchronizationReview()
+    public async Task HelpNavigation_GuardsAndDiscardsAnUnsavedNewEntity()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
-        await harness.AddEntityAsync(harness.DefaultTracker.Id, "Existing");
-        harness.SetCsvPath(
-            "table_name;mandatory_dependencies;mandatory_dependency_count;optional_dependencies;optional_dependency_count;total_dependency_count",
-            "Existing;;0;;0;0");
         RecordingDiscardConfirmation confirmation = new(false);
         using ShellViewModel shell = harness.CreateShell(
             new EntityTrackerSettings(
@@ -698,19 +692,19 @@ public sealed class ShellViewModelTests
                 lastTrackerId: harness.DefaultTracker.Id),
             confirmation);
         await shell.InitializeAsync();
-        Assert.True(await shell.NavigateAsync(ShellDestination.SchemaSynchronization));
+        Assert.True(await shell.NavigateAsync(ShellDestination.AddEntity));
         MainWindowViewModel workspace = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
-        await workspace.ImportCsvAsync();
-        Assert.True(workspace.Review.HasReview);
+        workspace.ManualCreation.EntityName = "Pending entity";
+        Assert.True(workspace.HasUnsavedWork);
 
-        Assert.False(await shell.NavigateAsync(ShellDestination.HelpSql));
-        Assert.Equal(ShellDestination.SchemaSynchronization, shell.SelectedDestination);
-        Assert.True(workspace.Review.HasReview);
+        Assert.False(await shell.NavigateAsync(ShellDestination.Help));
+        Assert.Equal(ShellDestination.AddEntity, shell.SelectedDestination);
+        Assert.True(workspace.HasUnsavedWork);
 
         confirmation.Result = true;
-        Assert.True(await shell.NavigateAsync(ShellDestination.HelpSql));
-        Assert.Equal(ShellDestination.HelpSql, shell.SelectedDestination);
-        Assert.False(workspace.Review.HasReview);
+        Assert.True(await shell.NavigateAsync(ShellDestination.Help));
+        Assert.Equal(ShellDestination.Help, shell.SelectedDestination);
+        Assert.False(workspace.HasUnsavedWork);
         Assert.Equal(2, confirmation.CallCount);
     }
 
@@ -1009,7 +1003,6 @@ public sealed class ShellViewModelTests
         private readonly CatalogManagementViewModel _catalog;
         private readonly AppearanceViewModel _appearance;
         private readonly TestAdapters _adapters;
-        private readonly TestClipboard _clipboard = new();
         private readonly ProjectDeveloperService _developers;
         public LocalProjectIdentityService Identity { get; }
         public SqliteResponsibilityPeriodRepository Periods { get; }
@@ -1095,15 +1088,6 @@ public sealed class ShellViewModelTests
                 stateStore,
                 priorities,
                 snapshots);
-            SchemaSynchronizationPlanner planner = new(ranker, resolver, snapshots);
-            SchemaSynchronizationService synchronization = new(
-                new CsvSchemaImportFileParser(new CsvSchemaImportParser()),
-                entities,
-                dependencies,
-                overrides,
-                planner,
-                editor,
-                stateStore);
             EntityOverviewService overview = new(
                 entities,
                 new SqliteEntityAuditReader(database),
@@ -1158,7 +1142,6 @@ public sealed class ShellViewModelTests
             TestAdapters adapters = new();
             TrackerWorkspaceViewModelFactory workspaceFactory = new(
                 overview,
-                synchronization,
                 new BulkStatusUpdateService(
                     entities,
                     dependencies,
@@ -1182,23 +1165,15 @@ public sealed class ShellViewModelTests
                     ranker),
                 adapters,
                 adapters,
-                adapters,
-                adapters,
                 NullLoggerFactory.Instance, developers, periods, stateStore, identity);
             CatalogManagementViewModel catalog = new(
                 projectManagement,
                 trackerManagement,
-                new TrackerCsvCreationService(
-                    projects,
-                    new CsvSchemaImportFileParser(new CsvSchemaImportParser()),
-                    planner,
-                    catalogStore),
                 new CatalogNameValidationService(projects, trackers),
-                new CatalogPurgeImpactService(trackers, entities, history, stateStore),
+                new CatalogPurgeImpactService(trackers, entities, history),
                 portfolio,
                 projects,
                 trackers,
-                adapters,
                 new TrackerSyncService(projects, trackers, entities, dependencies, overrides,
                     stateStore, resolver, snapshots, (IDependencyRankingService)ranker));
             AppearanceViewModel appearance = new(
@@ -1256,7 +1231,6 @@ public sealed class ShellViewModelTests
                 confirmation,
                 _catalog,
                 _appearance,
-                _clipboard,
                 initialSettings,
                 developerService: _developers,
                 localIdentitySettings: new LocalProjectIdentitySettingsViewModel(Identity),
@@ -1291,13 +1265,6 @@ public sealed class ShellViewModelTests
                     progressSnapshotAfterChanges:
                         new ProgressSnapshotState(1, 0, 0, 0, 0, 0)));
 
-        public void SetCsvPath(params string[] lines)
-        {
-            string path = Path.Combine(_directory, "schema.csv");
-            File.WriteAllLines(path, lines);
-            _adapters.CsvPath = path;
-        }
-
         public async ValueTask DisposeAsync()
         {
             for (int attempt = 0; attempt < 30; attempt++)
@@ -1330,26 +1297,11 @@ public sealed class ShellViewModelTests
     }
 
     private sealed class TestAdapters :
-        ICsvFilePicker,
         IProgressChartFilePicker,
-        IClipboardService,
-        ISchemaSynchronizationConfirmation,
         IContextDiscardConfirmation
     {
-        public string? CsvPath { get; set; }
-
-        public string? SelectCsvFile() => CsvPath;
         public string? SelectPngPath(string suggestedFileName) => null;
-        public void SetPng(byte[] png) { }
-        public void SetText(string text) { }
-        public bool ConfirmArchiveMissingEntities(int entityCount) => true;
         public bool ConfirmDiscard(string description) => true;
-    }
-
-    private sealed class TestClipboard : IClipboardService
-    {
-        public void SetPng(byte[] png) { }
-        public void SetText(string text) { }
     }
 
     private sealed class TestThemeService : IApplicationThemeService

@@ -1,7 +1,6 @@
 using EntityTracker.Application.History;
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
-using EntityTracker.Application.Synchronization;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Persistence;
 
@@ -156,16 +155,6 @@ public sealed class ProjectTrackerMigrationTests
         Assert.Equal(5, snapshot.State.ReworkNeededCount);
         Assert.Equal(6, snapshot.State.DevelopmentCompletedCount);
         Assert.Equal(7, snapshot.State.ReconciledCount);
-        SchemaImportSummary summary = Assert.IsType<SchemaImportSummary>(
-            await new SqliteTrackedStateStore(database).GetLatestImportAsync(tracker.Id));
-        Assert.Equal(new DateTimeOffset(2025, 1, 7, 0, 0, 0, TimeSpan.Zero), summary.AppliedAtUtc);
-        Assert.Equal("preserved.csv", summary.SourceFileName);
-        Assert.Equal(SchemaImportMode.Partial, summary.Mode);
-        Assert.Equal(1, summary.NewEntityCount);
-        Assert.Equal(2, summary.ChangedEntityCount);
-        Assert.Equal(3, summary.ArchivedEntityCount);
-        Assert.Equal(4, summary.UnchangedEntityCount);
-        Assert.Equal(5, summary.UnresolvedEntityCount);
 
         await using SqliteConnection connection = await OpenAsync(file.DatabasePath);
         Assert.Equal(20L, await ScalarInt64Async(connection, "PRAGMA user_version;"));

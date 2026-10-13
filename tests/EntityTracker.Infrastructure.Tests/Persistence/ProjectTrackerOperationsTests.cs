@@ -4,10 +4,8 @@ using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Projects;
 using EntityTracker.Application.Ranking;
-using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
-using EntityTracker.Infrastructure.Importing;
 using EntityTracker.Infrastructure.Persistence;
 
 namespace EntityTracker.Infrastructure.Tests.Persistence;
@@ -572,84 +570,6 @@ public sealed class ProjectTrackerOperationsTests
                               activeProjects.Contains(tracker.ProjectId))
             .Select(static tracker => tracker.Id)
             .ToArray();
-    }
-
-    [Fact]
-    public async Task CsvCreation_PreparesWithoutWrites_AndCommitsAllStateAtomically()
-    {
-        await using TemporarySqliteFile file = new();
-        SqliteDatabase database = new(file.DatabasePath);
-        await database.InitializeAsync();
-        SqliteProjectRepository projects = new(database);
-        SqliteTrackerRepository trackers = new(database);
-        SqliteEntityRepository entities = new(database);
-        SqliteDependencyRepository dependencies = new(database);
-        SqliteTrackedStateStore stateStore = new(database);
-        Tracker defaultTracker = Assert.Single(await trackers.GetAllAsync());
-        TrackerCsvCreationService service = new(
-            projects,
-            new CsvSchemaImportFileParser(new CsvSchemaImportParser()),
-            new SchemaSynchronizationPlanner(new DependencyRanker()),
-            new SqliteProjectTrackerStore(database));
-        string validPath = FixturePath("valid", "extracted_dependencies.csv");
-        string invalidPath = FixturePath("invalid", "malformed.csv");
-
-        TrackerCsvPreparationResult failed = await service.PrepareAsync(
-            defaultTracker.ProjectId,
-            "Failed",
-            invalidPath);
-        Assert.False(failed.IsSuccess);
-        Assert.Single(await trackers.GetAllAsync());
-
-        using (CancellationTokenSource cancellation = new())
-        {
-            cancellation.Cancel();
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-                service.PrepareAsync(
-                    defaultTracker.ProjectId,
-                    "Cancelled",
-                    validPath,
-                    cancellation.Token));
-        }
-        Assert.Single(await trackers.GetAllAsync());
-
-        TrackerCsvPreparationResult result = await service.PrepareAsync(
-            defaultTracker.ProjectId,
-            "Imported",
-            validPath);
-        Assert.True(result.IsSuccess);
-        Assert.Single(await trackers.GetAllAsync());
-
-        TrackerCsvPreparationResult cancelledCommit = await service.PrepareAsync(
-            defaultTracker.ProjectId,
-            "Cancelled commit",
-            validPath);
-        using (CancellationTokenSource cancellation = new())
-        {
-            cancellation.Cancel();
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-                service.CommitAsync(cancelledCommit.Prepared!, cancellation.Token));
-        }
-        Assert.Single(await trackers.GetAllAsync());
-        Assert.Empty(await entities.GetAllAsync(cancelledCommit.Prepared!.Tracker.Id));
-
-        Tracker imported = await service.CommitAsync(result.Prepared!);
-        Assert.Equal(6, (await entities.GetAllAsync(imported.Id)).Count);
-        Assert.Equal(6, (await dependencies.GetAllAsync(imported.Id)).Count);
-        Assert.Empty(await dependencies.GetAllUnresolvedAsync(imported.Id));
-        Assert.Equal(
-            "extracted_dependencies.csv",
-            Assert.IsType<SchemaImportSummary>(
-                await stateStore.GetLatestImportAsync(imported.Id)).SourceFileName);
-
-        TrackerCsvPreparationResult duplicate = await service.PrepareAsync(
-            defaultTracker.ProjectId,
-            " imported ",
-            validPath);
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.CommitAsync(duplicate.Prepared!));
-        Assert.Equal(2, (await trackers.GetAllAsync()).Count);
-        Assert.Empty(await entities.GetAllAsync(duplicate.Prepared!.Tracker.Id));
     }
 
     private static TrackerManagementService CreateTrackerService(SqliteDatabase database) => new(

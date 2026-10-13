@@ -6,8 +6,7 @@ namespace EntityTracker.Application.Projects;
 public sealed class CatalogPurgeImpactService(
     ITrackerRepository trackerRepository,
     IEntityRepository entityRepository,
-    IProgressHistoryRepository historyRepository,
-    ISchemaSynchronizationStore synchronizationStore)
+    IProgressHistoryRepository historyRepository)
 {
     public async Task<CatalogPurgeImpact> GetTrackerImpactAsync(
         TrackerId trackerId,
@@ -38,7 +37,6 @@ public sealed class CatalogPurgeImpactService(
         int archived = 0;
         int statusHistory = 0;
         int snapshots = 0;
-        int imports = 0;
         foreach (TrackerId trackerId in trackerIds)
         {
             IReadOnlyList<TrackedEntity> entities = await entityRepository.GetAllAsync(
@@ -54,9 +52,6 @@ public sealed class CatalogPurgeImpactService(
             snapshots += (await historyRepository.GetProgressSnapshotsAsync(
                 trackerId,
                 cancellationToken)).Count;
-            imports += await synchronizationStore.GetLatestImportAsync(
-                trackerId,
-                cancellationToken) is null ? 0 : 1;
         }
 
         return new CatalogPurgeImpact(
@@ -64,7 +59,6 @@ public sealed class CatalogPurgeImpactService(
             active,
             archived,
             statusHistory,
-            snapshots,
-            imports);
+            snapshots);
     }
 }

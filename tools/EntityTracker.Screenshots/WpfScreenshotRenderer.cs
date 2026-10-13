@@ -142,30 +142,6 @@ internal sealed class WpfScreenshotRenderer(Window window, string outputDirector
         Save(composite, Path.Combine(_outputDirectory, fileName));
     }
 
-    internal async Task CaptureReviewSectionAsync(
-        FrameworkElement section,
-        ScrollViewer scrollViewer,
-        string fileName)
-    {
-        ArgumentNullException.ThrowIfNull(section);
-        await SettleAsync();
-        Point currentPosition = section.TransformToAncestor(scrollViewer).Transform(new Point());
-        scrollViewer.ScrollToVerticalOffset(
-            Math.Max(0, scrollViewer.VerticalOffset + currentPosition.Y - 4));
-        await SettleAsync();
-
-        RenderTargetBitmap full = RenderVisual(Root, includePageBackground: true);
-        Point viewport = scrollViewer.TransformToAncestor(Root).Transform(new Point());
-        Int32Rect crop = ClampCrop(
-            (int)Math.Floor(viewport.X),
-            (int)Math.Floor(viewport.Y),
-            (int)Math.Ceiling(scrollViewer.ActualWidth),
-            (int)Math.Ceiling(Root.ActualHeight - viewport.Y - 12),
-            full.PixelWidth,
-            full.PixelHeight);
-        Save(new CroppedBitmap(full, crop), Path.Combine(_outputDirectory, fileName));
-    }
-
     internal async Task ScrollSectionIntoViewAndCaptureAsync(
         FrameworkElement section,
         ScrollViewer scrollViewer,

@@ -10,7 +10,6 @@ using EntityTracker.Application.Overview;
 using EntityTracker.Application.Projects;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
-using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Configuration;
@@ -47,16 +46,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private readonly AsyncCommand _assignMeCommand;
     private readonly AsyncCommand _openIdentitySettingsCommand;
     private string? _assignmentGuidance;
-    private readonly SchemaSynchronizationService _synchronizationService;
     private readonly BulkStatusUpdateService _bulkStatusUpdateService;
-    private readonly ICsvFilePicker _filePicker;
-    private readonly ISchemaSynchronizationConfirmation _confirmationService;
     private readonly IContextDiscardConfirmation _discardConfirmation;
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly AsyncCommand _refreshCommand;
-    private readonly AsyncCommand _importCsvCommand;
-    private readonly AsyncCommand _applySynchronizationCommand;
-    private readonly AsyncCommand _cancelSynchronizationCommand;
     private readonly AsyncCommand _applyBulkStatusCommand;
     private readonly RelayCommand<EntityOverviewRow> _openEntityDetailsCommand;
     private readonly RelayCommand _closeEntityDetailsCommand;
@@ -64,14 +57,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private readonly AsyncCommand _backFromResponsibilityHistoryCommand;
     private readonly RelayCommand _showArchivedResponsibilityHistoryCommand;
     private readonly AsyncCommand<EntityOverviewRow> _editOverviewEntityCommand;
-    private readonly AsyncCommand<SchemaSynchronizationReviewRow> _editReviewEntityCommand;
     private readonly RelayCommand<DevelopmentStatus> _selectOverviewStatusCommand;
-    private readonly RelayCommand<SynchronizationProgressImpactRow> _keepSynchronizationStatusCommand;
-    private readonly RelayCommand<SynchronizationProgressImpactRow> _markSynchronizationReworkCommand;
     private IReadOnlyList<EntityId> _selectedOverviewEntityIds = [];
     private bool _hasOverviewError;
     private string _busyMessage = string.Empty;
-    private SchemaImportSummary? _latestImportSummary;
     private bool _isBusy;
     private MainWindowTab _selectedTab = MainWindowTab.Overview;
     private int _notStartedCount;
@@ -88,13 +77,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public MainWindowViewModel(
         TrackerId trackerId,
         EntityOverviewService overviewService,
-        SchemaSynchronizationService synchronizationService,
         BulkStatusUpdateService bulkStatusUpdateService,
         ManualEntityCreationService manualEntityCreationService,
         EntityDependencyEditorService entityDependencyEditorService,
         EntityLifecycleService entityLifecycleService,
-        ICsvFilePicker filePicker,
-        ISchemaSynchronizationConfirmation confirmationService,
         IContextDiscardConfirmation discardConfirmation,
         ILoggerFactory? loggerFactory = null,
         ProjectDeveloperService? developers = null,
@@ -108,13 +94,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         IProgressChartFilePicker? graphFilePicker = null)
     {
         ArgumentNullException.ThrowIfNull(overviewService);
-        ArgumentNullException.ThrowIfNull(synchronizationService);
         ArgumentNullException.ThrowIfNull(bulkStatusUpdateService);
         ArgumentNullException.ThrowIfNull(manualEntityCreationService);
         ArgumentNullException.ThrowIfNull(entityDependencyEditorService);
         ArgumentNullException.ThrowIfNull(entityLifecycleService);
-        ArgumentNullException.ThrowIfNull(filePicker);
-        ArgumentNullException.ThrowIfNull(confirmationService);
         ArgumentNullException.ThrowIfNull(discardConfirmation);
         _trackerId = trackerId;
         _developers = developers;
@@ -126,10 +109,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         _overviewExportSettings = overviewExportSettings;
         _notifications = notifications;
         _overviewService = overviewService;
-        _synchronizationService = synchronizationService;
         _bulkStatusUpdateService = bulkStatusUpdateService;
-        _filePicker = filePicker;
-        _confirmationService = confirmationService;
         _discardConfirmation = discardConfirmation;
         ILoggerFactory effectiveLoggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
         _logger = effectiveLoggerFactory.CreateLogger<MainWindowViewModel>();
@@ -141,7 +121,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         ArchivedTable.PropertyChanged += OnArchivedTablePropertyChanged;
         DependencyGraph = new DependencyGraphViewModel(OpenEntityDetails, graphFilePicker, notifications,
             effectiveLoggerFactory.CreateLogger<DependencyGraphViewModel>());
-        Review = new SchemaSynchronizationReviewViewModel();
         ManualCreation = new ManualEntityCreationViewModel(
             trackerId,
             manualEntityCreationService,
@@ -156,12 +135,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             trackerId,
             entityDependencyEditorService,
             entityLifecycleService,
-            synchronizationService,
             OnDependencyEditsPersistedAsync,
             OnEntityArchivedAsync,
             OnEntityRestoredAsync,
             OnEntityPurgedAsync,
-            OnReviewDependencyEditsStaged,
             () => !IsBusy && !ManualCreation.IsBusy,
             effectiveLoggerFactory.CreateLogger<EntityDependencyEditorViewModel>(),
             developers is null ? null : new DeveloperPickerViewModel(trackerId, developers),
@@ -173,24 +150,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             () => !IsBusy && !ManualCreation.IsBusy && !Editor.IsOpen);
         _exportOverviewCommand = new AsyncCommand<OverviewExportFormat>(ExportOverviewAsync,
             _ => !_isExporting && !IsBusy && !Editor.IsOpen && ActiveTable.SourceItems.Count > 0);
-        _importCsvCommand = new AsyncCommand(
-            () => ImportCsvAsync(),
-            () => !IsBusy && !ManualCreation.IsBusy && !Editor.IsOpen);
-        _applySynchronizationCommand = new AsyncCommand(
-            () => ApplySynchronizationAsync(),
-            () => !IsBusy && !ManualCreation.IsBusy && !Editor.IsOpen && Review.CanApply);
-        _cancelSynchronizationCommand = new AsyncCommand(
-            () => CancelSynchronizationAsync(),
-            () => !IsBusy &&
-                  !ManualCreation.IsBusy &&
-                  !Editor.IsOpen &&
-                  (Review.HasReview || Review.HasDiagnostics));
         _applyBulkStatusCommand = new AsyncCommand(
             () => ApplyBulkStatusAsync(),
             CanApplyBulkStatus);
         _openEntityDetailsCommand = new RelayCommand<EntityOverviewRow>(
             OpenEntityDetails,
-            _ => !IsBusy && !ManualCreation.IsBusy && !Editor.IsOpen && !Review.HasReview);
+            _ => !IsBusy && !ManualCreation.IsBusy && !Editor.IsOpen);
         _closeEntityDetailsCommand = new RelayCommand(
             CloseEntityDetails,
             () => IsEntityDetailsOpen);
@@ -206,23 +171,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             OpenOverviewEntityAsync,
             _ => !IsBusy &&
                  !ManualCreation.IsBusy &&
-                 !Editor.IsOpen &&
-                 !Review.HasReview);
-        _editReviewEntityCommand = new AsyncCommand<SchemaSynchronizationReviewRow>(
-            row => EditReviewEntityAsync(row),
-            _ => !IsBusy && !ManualCreation.IsBusy && !Editor.IsOpen && Review.HasReview);
+                 !Editor.IsOpen);
         _selectOverviewStatusCommand = new RelayCommand<DevelopmentStatus>(
             status => ActiveTable.SetSingleStatusFilter(status));
-        _keepSynchronizationStatusCommand = new RelayCommand<SynchronizationProgressImpactRow>(
-            row => StageSynchronizationProgressDecision(
-                row,
-                SynchronizationProgressDecision.KeepCurrentStatus),
-            _ => !IsBusy && Review.HasReview && !Editor.IsOpen);
-        _markSynchronizationReworkCommand = new RelayCommand<SynchronizationProgressImpactRow>(
-            row => StageSynchronizationProgressDecision(
-                row,
-                SynchronizationProgressDecision.MarkReworkNeeded),
-            _ => !IsBusy && Review.HasReview && !Editor.IsOpen);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -342,9 +293,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public TrackerId TrackerId => _trackerId;
 
     public bool HasUnsavedWork =>
-        Review.HasReview || ManualCreation.IsDirty || Editor.IsDirty;
-
-    public SchemaSynchronizationReviewViewModel Review { get; }
+        ManualCreation.IsDirty || Editor.IsDirty;
 
     public ManualEntityCreationViewModel ManualCreation { get; }
 
@@ -426,36 +375,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         get => _busyMessage;
         private set => SetField(ref _busyMessage, value);
     }
-
-    public SchemaImportSummary? LatestImportSummary
-    {
-        get => _latestImportSummary;
-        private set
-        {
-            if (SetField(ref _latestImportSummary, value))
-            {
-                OnPropertyChanged(nameof(HasLatestImport));
-                OnPropertyChanged(nameof(LatestImportHeadline));
-                OnPropertyChanged(nameof(LatestImportDetails));
-            }
-        }
-    }
-
-    public bool HasLatestImport => LatestImportSummary is not null;
-
-    public string LatestImportHeadline => LatestImportSummary is null
-        ? "No successful CSV import has been applied yet."
-        : $"Latest import: {LatestImportSummary.SourceFileName}";
-
-    public string LatestImportDetails => LatestImportSummary is null
-        ? "Choose an import type and select a CSV when you are ready."
-        : $"{LatestImportSummary.Mode} · " +
-          $"{LatestImportSummary.AppliedAtUtc.ToLocalTime():g} · " +
-          $"{LatestImportSummary.NewEntityCount} new, " +
-          $"{LatestImportSummary.ChangedEntityCount} changed, " +
-          $"{LatestImportSummary.ArchivedEntityCount} archived, " +
-          $"{LatestImportSummary.UnchangedEntityCount} unchanged, " +
-          $"{LatestImportSummary.UnresolvedEntityCount} unresolved";
 
     public bool IsBusy
     {
@@ -654,12 +573,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public ICommand RefreshCommand => _refreshCommand;
 
-    public ICommand ImportCsvCommand => _importCsvCommand;
-
-    public ICommand ApplySynchronizationCommand => _applySynchronizationCommand;
-
-    public ICommand CancelSynchronizationCommand => _cancelSynchronizationCommand;
-
     public ICommand ApplyBulkStatusCommand => _applyBulkStatusCommand;
 
     public ICommand OpenEntityDetailsCommand => _openEntityDetailsCommand;
@@ -671,8 +584,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public ICommand EditOverviewEntityCommand => _editOverviewEntityCommand;
 
-    public ICommand EditReviewEntityCommand => _editReviewEntityCommand;
-
     public ICommand OpenOverviewSearchCommand => ActiveTable.OpenSearchCommand;
 
     public ICommand ClearOverviewSearchCommand => ActiveTable.ClearSearchCommand;
@@ -680,10 +591,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public ICommand CloseOverviewSearchCommand => ActiveTable.CloseSearchCommand;
 
     public ICommand SelectOverviewStatusCommand => _selectOverviewStatusCommand;
-
-    public ICommand KeepSynchronizationStatusCommand => _keepSynchronizationStatusCommand;
-
-    public ICommand MarkSynchronizationReworkCommand => _markSynchronizationReworkCommand;
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -702,7 +609,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public void DiscardTransientWork()
     {
-        Review.Clear();
         ManualCreation.Reset();
         Editor.DiscardAndClose();
         PrepareForDeactivation();
@@ -809,126 +715,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    public async Task ImportCsvAsync(CancellationToken cancellationToken = default)
-    {
-        if (IsBusy || ManualCreation.IsBusy || Editor.IsOpen)
-        {
-            return;
-        }
-
-        string? filePath;
-        try
-        {
-            filePath = _filePicker.SelectCsvFile();
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "A CSV file could not be selected.");
-            Review.SetFailure($"A CSV file could not be selected: {exception.Message}");
-            SelectedTab = MainWindowTab.SchemaSynchronization;
-            NotifyCommandsChanged();
-            return;
-        }
-
-        if (filePath is null)
-        {
-            return;
-        }
-
-        Review.BeginImport(Path.GetFileName(filePath));
-        SchemaImportMode mode = Review.Mode;
-        SelectedTab = MainWindowTab.SchemaSynchronization;
-        IsBusy = true;
-        BusyMessage = $"Comparing {Review.SelectedFileName} with persisted state…";
-        try
-        {
-            SchemaSynchronizationResult result = await _synchronizationService.PlanAsync(
-                _trackerId,
-                filePath,
-                mode,
-                cancellationToken);
-            Review.Load(result);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            _logger.LogInformation("The CSV synchronization review was cancelled.");
-            Review.SetFailure("CSV synchronization review was cancelled.");
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "A CSV synchronization review could not be prepared.");
-            Review.SetFailure($"The CSV could not be compared: {exception.Message}");
-        }
-        finally
-        {
-            EndBusyOperation();
-        }
-    }
-
-    public async Task ApplySynchronizationAsync(CancellationToken cancellationToken = default)
-    {
-        if (IsBusy || ManualCreation.IsBusy || Editor.IsOpen || !Review.CanApply ||
-            Review.CurrentPlan is null)
-        {
-            return;
-        }
-
-        SchemaSynchronizationPlan plan = Review.CurrentPlan;
-        int archiveCount = plan.ChangeSet.EntityIdsToArchive.Count;
-        if (archiveCount > 0 && !_confirmationService.ConfirmArchiveMissingEntities(archiveCount))
-        {
-            return;
-        }
-
-        IsBusy = true;
-        BusyMessage = "Applying schema synchronization…";
-        try
-        {
-            SchemaImportSummary summary = await _synchronizationService.ApplyAsync(
-                _trackerId,
-                plan,
-                Review.SelectedFileName,
-                cancellationToken);
-            LatestImportSummary = summary;
-            Notify("Schema synchronization",
-                $"Applied {summary.SourceFileName}: {summary.NewEntityCount} new, " +
-                $"{summary.ChangedEntityCount} changed, {summary.ArchivedEntityCount} archived, " +
-                $"{summary.UnresolvedEntityCount} unresolved.",
-                NotificationKind.Success);
-            Review.Clear();
-            SelectedTab = MainWindowTab.Overview;
-            BusyMessage = "Recomputing dependency ranking…";
-            await LoadOverviewAndProgressAsync(cancellationToken);
-            PersistedStateChanged?.Invoke(this, EventArgs.Empty);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            _logger.LogInformation("Applying schema synchronization was cancelled.");
-            Review.SetOperationFailure(
-                "Applying synchronization was cancelled; no partial changes were saved.");
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "Schema synchronization could not be applied.");
-            Review.SetOperationFailure($"Synchronization could not be applied: {exception.Message}");
-        }
-        finally
-        {
-            EndBusyOperation();
-        }
-    }
-
-    public Task CancelSynchronizationAsync()
-    {
-        if (!IsBusy && !ManualCreation.IsBusy && !Editor.IsOpen)
-        {
-            Review.Clear();
-            NotifyCommandsChanged();
-        }
-
-        return Task.CompletedTask;
-    }
-
     private async Task LoadOverviewAsync(CancellationToken cancellationToken)
     {
         EntityOverviewResult result = await _overviewService.GetAsync(_trackerId, cancellationToken);
@@ -952,9 +738,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private async Task LoadOverviewAndProgressAsync(CancellationToken cancellationToken)
     {
         await LoadOverviewAsync(cancellationToken);
-        LatestImportSummary = await _synchronizationService.GetLatestImportAsync(
-            _trackerId,
-            cancellationToken);
     }
 
     private void SetOverviewFailure(string message, NotificationKind kind = NotificationKind.Failure)
@@ -1029,16 +812,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     {
         _exportOverviewCommand.NotifyCanExecuteChanged();
         _refreshCommand.NotifyCanExecuteChanged();
-        _importCsvCommand.NotifyCanExecuteChanged();
-        _applySynchronizationCommand.NotifyCanExecuteChanged();
-        _cancelSynchronizationCommand.NotifyCanExecuteChanged();
         _applyBulkStatusCommand.NotifyCanExecuteChanged();
         _openEntityDetailsCommand.NotifyCanExecuteChanged();
         _assignMeCommand.NotifyCanExecuteChanged();
         _editOverviewEntityCommand.NotifyCanExecuteChanged();
-        _editReviewEntityCommand.NotifyCanExecuteChanged();
-        _keepSynchronizationStatusCommand.NotifyCanExecuteChanged();
-        _markSynchronizationReworkCommand.NotifyCanExecuteChanged();
     }
 
     private bool CanApplyBulkStatus() =>
@@ -1046,8 +823,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         SelectedTab == MainWindowTab.Overview &&
         !IsBusy &&
         !ManualCreation.IsBusy &&
-        !Editor.IsOpen &&
-        !Review.HasReview;
+        !Editor.IsOpen;
 
     public void ClearOverviewSelection()
     {
@@ -1303,41 +1079,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     {
         SelectedTab = MainWindowTab.Archived;
         await Editor.BeginArchivedAsync(entityId);
-    }
-
-    private void OnReviewDependencyEditsStaged(SchemaSynchronizationPlan plan)
-    {
-        Review.ReplacePlan(plan);
-        SelectedTab = MainWindowTab.SchemaSynchronization;
-        NotifyCommandsChanged();
-    }
-
-    private void StageSynchronizationProgressDecision(
-        SynchronizationProgressImpactRow row,
-        SynchronizationProgressDecision decision)
-    {
-        if (Review.CurrentPlan is null)
-        {
-            return;
-        }
-
-        SchemaSynchronizationPlan revised = _synchronizationService.StageProgressDecision(
-            _trackerId,
-            Review.CurrentPlan,
-            row.EntityId,
-            decision);
-        Review.ReplacePlan(revised);
-        NotifyCommandsChanged();
-    }
-
-    private async Task EditReviewEntityAsync(SchemaSynchronizationReviewRow row)
-    {
-        if (Review.CurrentPlan is null)
-        {
-            return;
-        }
-
-        await Editor.BeginReviewAsync(Review.CurrentPlan, row.EntityId);
     }
 
     private void OnManualCreationPropertyChanged(

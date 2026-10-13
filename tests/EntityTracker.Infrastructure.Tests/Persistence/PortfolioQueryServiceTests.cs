@@ -206,8 +206,7 @@ public sealed class PortfolioQueryServiceTests
         CatalogPurgeImpactService impact = new(
             trackers,
             entities,
-            new SqliteProgressHistoryRepository(database),
-            state);
+            new SqliteProgressHistoryRepository(database));
 
         Assert.False((await validation.ValidateProjectAsync(" reserved PROJECT ")).IsValid);
         Assert.False((await validation.ValidateTrackerAsync(

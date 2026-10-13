@@ -15,13 +15,11 @@ using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Planning;
 using EntityTracker.Application.Projects;
 using EntityTracker.Application.Ranking;
-using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Application.GitSync;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Configuration;
-using EntityTracker.Infrastructure.Importing;
 using EntityTracker.Infrastructure.Persistence;
 using EntityTracker.Infrastructure.GitSync;
 using EntityTracker.Reporting;
@@ -108,8 +106,6 @@ public partial class App : System.Windows.Application
                 provider.GetRequiredService<ILogger<AppearanceViewModel>>(),
                 provider.GetRequiredService<NotificationCenter>()));
             ConfigurePersistence(services, dataPaths);
-            services.AddSingleton<ISchemaImportParser, CsvSchemaImportParser>();
-            services.AddSingleton<ISchemaImportFileParser, CsvSchemaImportFileParser>();
             services.AddSingleton<IDependencyRankingService, DependencyRanker>();
             services.AddSingleton<EffectiveDependencyResolver>();
             services.AddSingleton<PriorityPlanningService>();
@@ -117,7 +113,6 @@ public partial class App : System.Windows.Application
             services.AddSingleton<ProgressSnapshotCalculator>();
             services.AddSingleton<EntityOverviewService>();
             services.AddSingleton<BulkStatusUpdateService>();
-            services.AddSingleton<SchemaSynchronizationPlanner>();
             services.AddSingleton<ProgressHistoryInitializer>();
             services.AddSingleton<ProgressDashboardBuilder>();
             services.AddSingleton<AggregateProgressDashboardBuilder>();
@@ -147,10 +142,7 @@ public partial class App : System.Windows.Application
             services.AddSingleton<IOverviewExportFilePicker, OverviewExportFilePicker>();
             services.AddSingleton<OverviewExportService>();
             services.AddSingleton<IClipboardService, WpfClipboardService>();
-            services.AddSingleton<ISchemaSynchronizationConfirmation,
-                WpfSchemaSynchronizationConfirmation>();
             services.AddSingleton<IContextDiscardConfirmation, WpfContextDiscardConfirmation>();
-            services.AddSingleton<SchemaSynchronizationService>();
             services.AddSingleton<ManualEntityCreationService>();
             services.AddSingleton<EntityDependencyEditorService>();
             services.AddSingleton<EntityLifecycleService>();
@@ -160,12 +152,10 @@ public partial class App : System.Windows.Application
             services.AddSingleton<LocalProjectIdentitySettingsViewModel>();
             services.AddSingleton<TrackerManagementService>();
             services.AddSingleton<TrackerSyncService>();
-            services.AddSingleton<TrackerCsvCreationService>();
             services.AddSingleton<CatalogNameValidationService>();
             services.AddSingleton<PortfolioQueryService>();
             services.AddSingleton<ProjectEntityComparisonQueryService>();
             services.AddSingleton<CatalogPurgeImpactService>();
-            services.AddSingleton<ICsvFilePicker, CsvFilePicker>();
             services.AddSingleton<TrackerWorkspaceViewModelFactory>();
             services.AddSingleton<DashboardViewModelFactory>();
             services.AddSingleton<IProjectSyncLinkStore>(provider => new JsonProjectSyncLinkStore(
@@ -290,8 +280,6 @@ public partial class App : System.Windows.Application
         services.AddSingleton<ITrackedStateStore>(static provider =>
             provider.GetRequiredService<SqliteTrackedStateStore>());
         services.AddSingleton<ITrackerSyncStore>(static provider =>
-            provider.GetRequiredService<SqliteTrackedStateStore>());
-        services.AddSingleton<ISchemaSynchronizationStore>(static provider =>
             provider.GetRequiredService<SqliteTrackedStateStore>());
         services.AddSingleton<IProgressHistoryRepository, SqliteProgressHistoryRepository>();
         services.AddSingleton<IProjectRepository, SqliteProjectRepository>();

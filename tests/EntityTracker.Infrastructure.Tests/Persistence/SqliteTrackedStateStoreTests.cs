@@ -7,7 +7,6 @@ using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Planning;
 using EntityTracker.Application.Ranking;
-using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Persistence;
@@ -18,59 +17,6 @@ namespace EntityTracker.Infrastructure.Tests.Persistence;
 
 public sealed class SqliteTrackedStateStoreTests
 {
-    [Fact]
-    public async Task SchemaSynchronizationApply_RecordsAndReplacesLatestSuccessfulImport()
-    {
-        await using TemporarySqliteFile file = new();
-        MutableTimeProvider time = new(
-            new DateTimeOffset(2026, 8, 24, 10, 0, 0, TimeSpan.Zero));
-        SqliteDatabase database = new(file.DatabasePath, time);
-        await database.InitializeAsync();
-        SqliteTrackedStateStore store = new(database);
-        TrackedStateChangeSet noChanges = new([], [], [], [], [], []);
-
-        SchemaImportSummary first = await store.ApplyAsync(
-            noChanges,
-            new SchemaImportCompletion("first.csv", SchemaImportMode.Complete, 0, 0, 0, 12, 2));
-        time.Advance(TimeSpan.FromHours(2));
-        SchemaImportSummary second = await store.ApplyAsync(
-            noChanges,
-            new SchemaImportCompletion("second.csv", SchemaImportMode.Partial, 1, 2, 0, 9, 1));
-
-        Assert.Equal(new DateTimeOffset(2026, 8, 24, 10, 0, 0, TimeSpan.Zero), first.AppliedAtUtc);
-        Assert.Equal("second.csv", second.SourceFileName);
-        SchemaImportSummary latest = Assert.IsType<SchemaImportSummary>(
-            await store.GetLatestImportAsync());
-        Assert.Equal(new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero), latest.AppliedAtUtc);
-        Assert.Equal(SchemaImportMode.Partial, latest.Mode);
-        Assert.Equal(1, latest.NewEntityCount);
-        Assert.Equal(2, latest.ChangedEntityCount);
-        Assert.Equal(9, latest.UnchangedEntityCount);
-        Assert.Equal(1, latest.UnresolvedEntityCount);
-    }
-
-    [Fact]
-    public async Task SchemaSynchronizationApply_WhenStateMutationFails_PreservesPreviousSummary()
-    {
-        await using TemporarySqliteFile file = new();
-        SqliteDatabase database = new(file.DatabasePath);
-        await database.InitializeAsync();
-        SqliteTrackedStateStore store = new(database);
-        TrackedEntity existing = new(EntityId.New(), database.GetTrackerId(), "Existing");
-        await store.ApplyAsync(new TrackedStateChangeSet([existing], [], [], [], [], []));
-        await store.ApplyAsync(
-            new TrackedStateChangeSet([], [], [], [], [], []),
-            new SchemaImportCompletion("successful.csv", SchemaImportMode.Complete, 0, 0, 0, 1, 0));
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => store.ApplyAsync(
-            new TrackedStateChangeSet([existing], [], [], [], [], []),
-            new SchemaImportCompletion("failed.csv", SchemaImportMode.Complete, 1, 0, 0, 1, 0)));
-
-        SchemaImportSummary latest = Assert.IsType<SchemaImportSummary>(
-            await store.GetLatestImportAsync());
-        Assert.Equal("successful.csv", latest.SourceFileName);
-    }
-
     [Fact]
     public async Task HistoryBaseline_IsTruthfulAndIdempotent()
     {
@@ -720,95 +666,6 @@ public sealed class SqliteTrackedStateStoreTests
     }
 
     [Fact]
-    public async Task PlannedSynchronization_PreservesProgressWhenDependencyChangesShiftRanks()
-    {
-        await using TemporarySqliteFile file = new();
-        SqliteDatabase database = new(file.DatabasePath);
-        await database.InitializeAsync();
-        SqliteEntityRepository entities = new(database);
-        SqliteDependencyRepository dependencies = new(database);
-        TrackedEntity alpha = new(
-            EntityId.New(),
-            database.GetTrackerId(),
-            "Alpha",
-            DevelopmentStatus.DevelopmentCompleted,
-            "Alpha progress");
-        TrackedEntity zulu = new(
-            EntityId.New(),
-            database.GetTrackerId(),
-            "Zulu",
-            DevelopmentStatus.InProgress,
-            "Zulu progress");
-        Assert.True(await entities.TryAddAsync(alpha));
-        Assert.True(await entities.TryAddAsync(zulu));
-        SchemaImportCandidate candidate = new(
-            [
-                new ImportedEntity(EntitySourceKey.From("Alpha"), "Alpha"),
-                new ImportedEntity(EntitySourceKey.From("Zulu"), "Zulu")
-            ],
-            [new ImportedDependency(
-                EntitySourceKey.From("Alpha"),
-                EntitySourceKey.From("Zulu"),
-                ImportedDependencyKind.Mandatory)]);
-        DependencyRanker ranker = new();
-        SchemaSynchronizationPlan plan = new SchemaSynchronizationPlanner(ranker).CreatePlan(
-            database.GetTrackerId(),
-            candidate,
-            SchemaImportMode.Complete,
-            await entities.GetAllAsync(),
-            await dependencies.GetAllAsync(),
-            await dependencies.GetAllUnresolvedAsync());
-
-        await new SqliteTrackedStateStore(database).ApplyAsync(plan.ChangeSet);
-
-        EntityOverviewResult overview = await new EntityOverviewService(
-            entities,
-            new SqliteEntityAuditReader(database),
-            dependencies,
-            new SqliteManualDependencyOverrideRepository(database),
-            ranker,
-            new EffectiveDependencyResolver(),
-            new WorkflowReadinessEvaluator(),
-            new PriorityPlanningService()).GetAsync(database.GetTrackerId());
-        Assert.Equal(["Zulu", "Alpha"], overview.Items.Select(static item => item.SourceName));
-        TrackedEntity loadedAlpha = (await entities.GetAsync(alpha.Id))!;
-        TrackedEntity loadedZulu = (await entities.GetAsync(zulu.Id))!;
-        Assert.Equal(DevelopmentStatus.DevelopmentCompleted, loadedAlpha.Status);
-        Assert.Equal("Alpha progress", loadedAlpha.Notes);
-        Assert.Equal(DevelopmentStatus.InProgress, loadedZulu.Status);
-        Assert.Equal("Zulu progress", loadedZulu.Notes);
-    }
-
-    [Fact]
-    public async Task PlannedSynchronization_FiveNewTablesPersistAsFiveTrackedEntities()
-    {
-        await using TemporarySqliteFile file = new();
-        SqliteDatabase database = new(file.DatabasePath);
-        await database.InitializeAsync();
-        SqliteEntityRepository entities = new(database);
-        SqliteDependencyRepository dependencies = new(database);
-        SchemaImportCandidate candidate = new(
-            Enumerable.Range(1, 5).Select(index =>
-            {
-                string name = $"Table{index}";
-                return new ImportedEntity(EntitySourceKey.From(name), name);
-            }),
-            []);
-        SchemaSynchronizationPlan plan = new SchemaSynchronizationPlanner(
-            new DependencyRanker()).CreatePlan(
-                database.GetTrackerId(),
-                candidate,
-                SchemaImportMode.Complete,
-                [],
-                [],
-                []);
-
-        await new SqliteTrackedStateStore(database).ApplyAsync(plan.ChangeSet);
-
-        Assert.Equal(5, (await entities.GetAllAsync()).Count);
-    }
-
-    [Fact]
     public async Task ManualCreation_PersistsEntityAndResolvesExistingReferenceAtomically()
     {
         await using TemporarySqliteFile file = new();
@@ -879,62 +736,6 @@ public sealed class SqliteTrackedStateStoreTests
         Assert.Null(item.Rank);
         Assert.Equal(DependencyResolutionState.Unresolved, item.DependencyState);
         Assert.Equal(["Missing"], item.MissingDependencyNames);
-    }
-
-    [Fact]
-    public async Task PartialSynchronization_MatchesManualEntityAndPreservesProgress()
-    {
-        await using TemporarySqliteFile file = new();
-        SqliteDatabase database = new(file.DatabasePath);
-        await database.InitializeAsync();
-        SqliteEntityRepository entities = new(database);
-        SqliteDependencyRepository dependencies = new(database);
-        SqliteTrackedStateStore store = new(database);
-        DependencyRanker ranker = new();
-        ManualEntityCreationResult creation = await new ManualEntityCreationService(
-            entities,
-            dependencies,
-            new SqliteManualDependencyOverrideRepository(database),
-            ranker,
-            new EffectiveDependencyResolver(),
-            store).CreateAsync(
-                database.GetTrackerId(),
-                new ManualEntityCreationRequest("Future", []));
-        TrackedEntity withProgress = new(
-            creation.CreatedEntityId!,
-            database.GetTrackerId(),
-            "Future",
-            DevelopmentStatus.InProgress,
-            "Keep manual progress",
-            provenance: EntityProvenance.ManualOnly);
-        await store.ApplyAsync(new TrackedStateChangeSet(
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            entitiesWithProgressToUpdate: [withProgress]));
-        SchemaImportCandidate candidate = new(
-            [new ImportedEntity(EntitySourceKey.From("future"), "future")],
-            []);
-        SchemaSynchronizationPlan plan = new SchemaSynchronizationPlanner(ranker).CreatePlan(
-            database.GetTrackerId(),
-            candidate,
-            SchemaImportMode.Partial,
-            await entities.GetAllAsync(),
-            await dependencies.GetAllAsync(),
-            await dependencies.GetAllUnresolvedAsync());
-
-        await store.ApplyAsync(plan.ChangeSet);
-
-        TrackedEntity loaded = (await entities.GetAsync(creation.CreatedEntityId!))!;
-        Assert.Equal(creation.CreatedEntityId, loaded.Id);
-        Assert.Equal("future", loaded.SourceName);
-        Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
-        Assert.Equal("Keep manual progress", loaded.Notes);
-        Assert.Equal(EntityProvenance.ManualAndImported, loaded.Provenance);
-        Assert.Single(await entities.GetAllAsync());
     }
 
     private static async Task<string> ReadUpdatedTimestampAsync(

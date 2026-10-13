@@ -1,7 +1,6 @@
 using EntityTracker.Application.Importing;
 using EntityTracker.Application.History;
 using EntityTracker.Application.Persistence;
-using EntityTracker.Application.Synchronization;
 using System.Text.Json;
 using EntityTracker.Domain;
 
@@ -148,17 +147,6 @@ public sealed class SqliteProjectTrackerStore(
                 creation.InitialSnapshot,
                 timestamp,
                 cancellationToken);
-
-            if (creation.ImportCompletion is { } completion)
-            {
-                await InsertImportSummaryAsync(
-                    connection,
-                    transaction,
-                    tracker.Id,
-                    completion,
-                    timestamp,
-                    cancellationToken);
-            }
 
             if (creation.SyncBaseline is { } syncBaseline)
             {
@@ -360,33 +348,6 @@ public sealed class SqliteProjectTrackerStore(
         command.Parameters.AddWithValue("$manualBlocked", snapshot.ManuallyBlockedCount);
         command.Parameters.AddWithValue("$reworking", snapshot.ReworkingCount);
         command.Parameters.AddWithValue("$snapshotId", Guid.NewGuid().ToString("D"));
-        await command.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    private static async Task InsertImportSummaryAsync(
-        SqliteConnection connection,
-        SqliteTransaction transaction,
-        TrackerId trackerId,
-        SchemaImportCompletion completion,
-        string timestamp,
-        CancellationToken cancellationToken)
-    {
-        using SqliteCommand command = CreateCommand(connection, transaction, """
-            INSERT INTO schema_import_summary
-            (tracker_id, applied_at_utc, source_file_name, import_mode, new_entity_count,
-             changed_entity_count, archived_entity_count, unchanged_entity_count,
-             unresolved_entity_count)
-            VALUES ($trackerId, $timestamp, $file, $mode, $new, $changed, $archived, $unchanged, $unresolved);
-            """);
-        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
-        command.Parameters.AddWithValue("$timestamp", timestamp);
-        command.Parameters.AddWithValue("$file", completion.SourceFileName);
-        command.Parameters.AddWithValue("$mode", completion.Mode.ToString());
-        command.Parameters.AddWithValue("$new", completion.NewEntityCount);
-        command.Parameters.AddWithValue("$changed", completion.ChangedEntityCount);
-        command.Parameters.AddWithValue("$archived", completion.ArchivedEntityCount);
-        command.Parameters.AddWithValue("$unchanged", completion.UnchangedEntityCount);
-        command.Parameters.AddWithValue("$unresolved", completion.UnresolvedEntityCount);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

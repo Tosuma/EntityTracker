@@ -156,7 +156,7 @@ public sealed class PresentationConfigurationTests
         string[] pages = ["MainWindow.xaml", Path.Combine("Views", "TrackerWorkspaceView.xaml"),
             Path.Combine("Views", "PortfolioView.xaml"), Path.Combine("Views", "ProjectDashboardView.xaml"),
             Path.Combine("Views", "AggregateProgressView.xaml"), Path.Combine("Views", "ProjectDevelopersView.xaml"),
-            Path.Combine("Views", "SettingsView.xaml"), Path.Combine("Views", "HelpSqlView.xaml")];
+            Path.Combine("Views", "SettingsView.xaml"), Path.Combine("Views", "HelpView.xaml")];
 
         string[] offenders = pages
             .SelectMany(page => removed
@@ -428,32 +428,23 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
-    public void SchemaSynchronization_UsesStructuredFluentReviewAndSingleShellSqlDestination()
+    public void SchemaImport_IsGoneFromNavigationTheWorkspaceAndHelp()
     {
-        XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
-        XDocument help = LoadWpfXaml("Views", "HelpSqlView.xaml");
-        string workspaceText = workspace.ToString(SaveOptions.DisableFormatting);
+        string mainWindow = LoadWpfXaml("MainWindow.xaml").ToString(SaveOptions.DisableFormatting);
+        string workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml").ToString(SaveOptions.DisableFormatting);
+        XDocument help = LoadWpfXaml("Views", "HelpView.xaml");
         string helpText = help.ToString(SaveOptions.DisableFormatting);
 
-        Assert.Contains("Review.UnchangedEntities", workspaceText, StringComparison.Ordinal);
-        Assert.Contains("Review.BlockedEntities", workspaceText, StringComparison.Ordinal);
-        Assert.Contains("Review.ShowImportConfiguration", workspaceText, StringComparison.Ordinal);
-        Assert.Contains("Review.ImportModeLabel", workspaceText, StringComparison.Ordinal);
-        Assert.Contains("SchemaReviewSummary", workspaceText, StringComparison.Ordinal);
-        Assert.Contains("SchemaReviewScrollViewer", workspaceText, StringComparison.Ordinal);
-        Assert.Contains("Review.ToggleFilterCommand", workspaceText, StringComparison.Ordinal);
-        Assert.Contains("Review.ClearFilterCommand", workspaceText, StringComparison.Ordinal);
-        Assert.Contains("Reset filter", workspaceText, StringComparison.Ordinal);
-        Assert.Contains("SynchronizationDependencyChangeTemplate", workspaceText, StringComparison.Ordinal);
-        Assert.Contains("Apply changes", workspaceText, StringComparison.Ordinal);
-        Assert.Contains("Schema synchronization review", workspaceText, StringComparison.Ordinal);
-        Assert.Contains("Focusable=\"True\"", workspaceText, StringComparison.Ordinal);
-        Assert.Contains("ShellDestination.HelpSql", workspaceText, StringComparison.Ordinal);
-        Assert.DoesNotContain("MainWindowTab.SqlHelp", workspaceText, StringComparison.Ordinal);
-        Assert.DoesNotContain("Binding Help.Query", workspaceText, StringComparison.Ordinal);
-        Assert.Contains("UTF-8 CSV", helpText, StringComparison.Ordinal);
-        Assert.Contains("semicolon", helpText, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("six column headers", helpText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SchemaSynchronization", mainWindow, StringComparison.Ordinal);
+        Assert.DoesNotContain("Schema synchronization", mainWindow, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SchemaSynchronization", workspace, StringComparison.Ordinal);
+        Assert.DoesNotContain("ImportCsv", workspace, StringComparison.Ordinal);
+        Assert.Contains(help.Descendants(), element =>
+            element.Name.LocalName == "TextBlock" && (string?)element.Attribute("Text") == "Help");
+        Assert.DoesNotContain("PostgreSQL", helpText, StringComparison.Ordinal);
+        Assert.DoesNotContain("Copy SQL", helpText, StringComparison.Ordinal);
+        Assert.DoesNotContain("CSV", helpText, StringComparison.Ordinal);
+        Assert.DoesNotContain("import", helpText.Replace("Import Project", ""), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -467,9 +458,8 @@ public sealed class PresentationConfigurationTests
             "ProjectDashboard",
             "Overview",
             "Archived",
-            "SchemaSynchronization",
             "AddEntity",
-            "HelpSql",
+            "Help",
             "Settings"
         ];
 
@@ -549,7 +539,6 @@ public sealed class PresentationConfigurationTests
     {
         XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
         XDocument filterHeader = LoadWpfXaml("Controls", "FilterableColumnHeader.xaml");
-        XDocument help = LoadWpfXaml("Views", "HelpSqlView.xaml");
         XDocument catalog = LoadWpfXaml("Views", "CatalogModalView.xaml");
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
 
@@ -569,10 +558,6 @@ public sealed class PresentationConfigurationTests
         Assert.Equal(
             "{DynamicResource Brush.Surface.Page}",
             (string?)popupSurface.Attribute("Background"));
-
-        XElement query = Assert.Single(help.Descendants(), element =>
-            (string?)element.Attribute(x + "Name") == "QueryTextBox");
-        Assert.Null((string?)query.Attribute("PreviewMouseWheel"));
 
         string repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
         string mainWindowCode = File.ReadAllText(Path.Combine(
@@ -743,7 +728,6 @@ public sealed class PresentationConfigurationTests
     {
         XDocument typography = LoadWpfXaml("Themes", "EntityTrackerTypography.xaml");
         XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
-        XDocument help = LoadWpfXaml("Views", "HelpSqlView.xaml");
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
 
         XElement pageHeading = Assert.Single(typography.Descendants(), element =>
@@ -777,19 +761,6 @@ public sealed class PresentationConfigurationTests
             Assert.False(string.IsNullOrWhiteSpace(
                 (string?)element.Attribute("AutomationProperties.Name")));
         });
-
-        XElement query = Assert.Single(help.Descendants(), element =>
-            (string?)element.Attribute(x + "Name") == "QueryTextBox");
-        Assert.Equal(
-            "PostgreSQL schema extraction query",
-            (string?)query.Attribute("AutomationProperties.Name"));
-        Assert.Equal("Consolas", (string?)query.Attribute("FontFamily"));
-        Assert.Equal("True", (string?)query.Attribute("IsReadOnly"));
-
-        XElement copyQuery = Assert.Single(help.Descendants(), element =>
-            (string?)element.Attribute(x + "Name") == "CopyQueryButton");
-        Assert.Equal("Copy SQL query", (string?)copyQuery.Attribute("AutomationProperties.Name"));
-        Assert.Equal("{Binding Help.CopyQueryCommand}", (string?)copyQuery.Attribute("Command"));
     }
 
     [Fact]

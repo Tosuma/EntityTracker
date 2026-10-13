@@ -10,7 +10,6 @@ using EntityTracker.Application.Planning;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Projects;
 using System.Globalization;
-using EntityTracker.Application.Synchronization;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
@@ -26,12 +25,10 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private readonly TrackerId _trackerId;
     private readonly NotificationCenter? _notifications;
     private readonly EntityLifecycleService _lifecycleService;
-    private readonly SchemaSynchronizationService _synchronizationService;
     private readonly Func<Task> _onPersisted;
     private readonly Func<Task> _onArchived;
     private readonly Func<Task> _onRestored;
     private readonly Func<Task> _onPurged;
-    private readonly Action<SchemaSynchronizationPlan> _onReviewStaged;
     private readonly Func<bool> _canOperate;
     private readonly ILogger<EntityDependencyEditorViewModel> _logger;
     private readonly IResponsibilityPeriodRepository? _responsibilityPeriods;
@@ -76,7 +73,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private int _previewVersion;
     private EntityDependencyEditPlan? _currentEditPlan;
     private ArchivedEntityDetails? _archivedDetails;
-    private SchemaSynchronizationPlan? _reviewPlan;
     private DevelopmentStatus _selectedStatus;
     private string _editedNotes = string.Empty;
     private string _editedFilterActive = string.Empty;
@@ -98,12 +94,10 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         TrackerId trackerId,
         EntityDependencyEditorService editorService,
         EntityLifecycleService lifecycleService,
-        SchemaSynchronizationService synchronizationService,
         Func<Task> onPersisted,
         Func<Task> onArchived,
         Func<Task> onRestored,
         Func<Task> onPurged,
-        Action<SchemaSynchronizationPlan> onReviewStaged,
         Func<bool>? canOperate = null,
         ILogger<EntityDependencyEditorViewModel>? logger = null,
         DeveloperPickerViewModel? developerPicker = null,
@@ -116,22 +110,18 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _notifications = notifications;
         ArgumentNullException.ThrowIfNull(editorService);
         ArgumentNullException.ThrowIfNull(lifecycleService);
-        ArgumentNullException.ThrowIfNull(synchronizationService);
         ArgumentNullException.ThrowIfNull(onPersisted);
         ArgumentNullException.ThrowIfNull(onArchived);
         ArgumentNullException.ThrowIfNull(onRestored);
         ArgumentNullException.ThrowIfNull(onPurged);
-        ArgumentNullException.ThrowIfNull(onReviewStaged);
 
         _trackerId = trackerId;
         _editorService = editorService;
         _lifecycleService = lifecycleService;
-        _synchronizationService = synchronizationService;
         _onPersisted = onPersisted;
         _onArchived = onArchived;
         _onRestored = onRestored;
         _onPurged = onPurged;
-        _onReviewStaged = onReviewStaged;
         _canOperate = canOperate ?? (() => true);
         _logger = logger ?? NullLogger<EntityDependencyEditorViewModel>.Instance;
         DeveloperPicker = developerPicker;
@@ -438,7 +428,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _mode, value))
             {
-                OnPropertyChanged(nameof(IsReviewMode));
                 OnPropertyChanged(nameof(IsArchivedMode));
                 OnPropertyChanged(nameof(ShowStandaloneSections));
                 OnPropertyChanged(nameof(ShowArchivedSections));
@@ -458,7 +447,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
     }
 
-    public bool IsReviewMode => Mode == EntityEditorMode.SynchronizationReview;
 
     public bool IsArchivedMode => Mode == EntityEditorMode.ArchivedDetails;
 
@@ -637,24 +625,17 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     public bool HasNameError => NameError.Length > 0;
 
     /// <summary>
-    /// Gets a warning when the new name may not match where the entity came from: a CSV import or
-    /// the Tracker it was copied from.
+    /// Gets a warning when the new name may not match the Tracker the entity was copied from.
     /// </summary>
     public string RenameNotice
     {
         get
         {
             if (CurrentEditPlan is not { } plan || HasNameError || !IsNameKeyChanged(plan.Entity.SourceName)) return string.Empty;
-            return plan.Entity.Provenance switch
-            {
-                EntityProvenance.ManualOnly => string.Empty,
-                EntityProvenance.Copied =>
-                    "This entity was copied from another Tracker. Syncing with that Tracker will show the old " +
-                    "and the new name as two different entities.",
-                _ =>
-                    "This name came from a CSV import. If the source database still uses the old name, the next " +
-                    "schema synchronization will see the old name as a new entity and propose archiving this one."
-            };
+            return plan.Entity.Provenance is EntityProvenance.Copied or EntityProvenance.CopiedAndImported
+                ? "This entity was copied from another Tracker. Syncing with that Tracker will show the old " +
+                  "and the new name as two different entities."
+                : string.Empty;
         }
     }
 
@@ -849,22 +830,18 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
     public string ContextTitle => Mode switch
     {
-        EntityEditorMode.SynchronizationReview =>
-            "Correct dependencies before applying the import",
         EntityEditorMode.ArchivedDetails => "Archived entity details",
         _ => "Edit entity"
     };
 
     public string ContextDescription => Mode switch
     {
-        EntityEditorMode.SynchronizationReview =>
-            "Changes are staged with this synchronization and are saved only when the review is applied.",
         EntityEditorMode.ArchivedDetails =>
             "Archived entities are read-only until explicitly restored.",
-        _ => "Update name, group, assignment, priority, progress, notes, and manual dependency corrections. Imported facts remain visible."
+        _ => "Update name, group, assignment, priority, progress, notes, and dependencies."
     };
 
-    public string SaveLabel => IsReviewMode ? "Stage Changes" : "Save Changes";
+    public string SaveLabel => "Save Changes";
 
     public string ArchiveConfirmationMessage => CurrentEditPlan is null
         ? string.Empty
@@ -955,43 +932,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         {
             IsBusy = false;
         }
-    }
-
-    public Task BeginReviewAsync(
-        SchemaSynchronizationPlan plan,
-        EntityId ownerId)
-    {
-        ArgumentNullException.ThrowIfNull(plan);
-        ArgumentNullException.ThrowIfNull(ownerId);
-        if (IsBusy || IsOpen || !_canOperate())
-        {
-            return Task.CompletedTask;
-        }
-
-        ResetSessionState();
-        _reviewPlan = plan;
-        Mode = EntityEditorMode.SynchronizationReview;
-        IsOpen = true;
-        try
-        {
-            ManualDependencyOverride[] desired = plan.CandidateManualOverrides
-                .Where(item => item.DependentEntityId == ownerId)
-                .ToArray();
-            LoadPlan(
-                _synchronizationService.PreviewDependencyEdit(
-                    _trackerId,
-                    plan,
-                    ownerId,
-                    desired),
-                true);
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "Review dependency edits could not be loaded.");
-            Errors = [$"Entity dependencies could not be loaded: {exception.Message}"];
-        }
-
-        return Task.CompletedTask;
     }
 
     public async Task BeginArchivedAsync(
@@ -1119,14 +1059,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                     not DependencyEditOrigin.DormantSuppression)
                 .Select(item => item.DependencySourceKey)
                 .ToArray();
-            ManualDependencySearchResult result = IsReviewMode
-                ? _editorService.SearchDependencies(
-                    _trackerId,
-                    CurrentEditPlan.Entity.Id,
-                    DependencyQuery,
-                    _reviewPlan!.CandidateEntities,
-                    excludedKeys)
-                : await _editorService.SearchDependenciesAsync(
+            ManualDependencySearchResult result = await _editorService.SearchDependenciesAsync(
                     _trackerId,
                     CurrentEditPlan.Entity.Id,
                     DependencyQuery,
@@ -1285,13 +1218,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             desired.Count);
         try
         {
-            EntityDependencyEditPlan plan = IsReviewMode
-                ? _synchronizationService.PreviewDependencyEdit(
-                    _trackerId,
-                    _reviewPlan!,
-                    CurrentEditPlan.Entity.Id,
-                    desired)
-                : await _editorService.PreviewAsync(
+            EntityDependencyEditPlan plan = await _editorService.PreviewAsync(
                     _trackerId,
                     CurrentEditPlan.Entity.Id,
                     desired);
@@ -1335,31 +1262,19 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         IsBusy = true;
         try
         {
-            if (IsReviewMode)
-            {
-                SchemaSynchronizationPlan revised =
-                    _synchronizationService.StageDependencyEdit(
-                        _trackerId,
-                        _reviewPlan!,
-                        CurrentEditPlan);
-                _onReviewStaged(revised);
-            }
-            else
-            {
-                await _editorService.SaveAsync(
-                    _trackerId,
-                    CurrentEditPlan,
-                    SelectedStatus,
-                    EditedNotes,
-                    SelectedRequestedPriority,
-                    EditedResponsibleDeveloper,
-                    EditedGroupName,
-                    developerIds: DeveloperPicker?.SelectedIds,
-                    filterActive: EditedFilterActive,
-                    sharedNotes: EditedSharedNotes,
-                    sourceName: EditedName);
-                await _onPersisted();
-            }
+            await _editorService.SaveAsync(
+                _trackerId,
+                CurrentEditPlan,
+                SelectedStatus,
+                EditedNotes,
+                SelectedRequestedPriority,
+                EditedResponsibleDeveloper,
+                EditedGroupName,
+                developerIds: DeveloperPicker?.SelectedIds,
+                filterActive: EditedFilterActive,
+                sharedNotes: EditedSharedNotes,
+                sourceName: EditedName);
+            await _onPersisted();
 
             CloseSession();
         }
@@ -1415,7 +1330,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
     private async Task ConfirmArchiveAsync()
     {
-        if (CurrentEditPlan is null || IsReviewMode)
+        if (CurrentEditPlan is null)
         {
             return;
         }
@@ -1616,7 +1531,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         Errors = [];
         _typedPurgeConfirmation = string.Empty;
         OnPropertyChanged(nameof(TypedPurgeConfirmation));
-        _reviewPlan = null;
         _initialOverrideSignature = null;
         Mode = EntityEditorMode.Standalone;
         _selectedStatus = DevelopmentStatus.NotStarted;

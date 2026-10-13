@@ -7,7 +7,6 @@ using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Planning;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Lifecycle;
-using EntityTracker.Application.Synchronization;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.ViewModels;
 
@@ -151,10 +150,9 @@ public sealed class EntityDependencyEditorViewModelTests
     }
 
     [Theory]
-    [InlineData(EntityProvenance.Imported, "CSV import")]
-    [InlineData(EntityProvenance.ManualAndImported, "CSV import")]
-    [InlineData(EntityProvenance.Copied, "copied from another Tracker")]
-    public async Task Name_WarnsWhenTheOldNameMayComeBack(EntityProvenance provenance, string reason)
+    [InlineData(EntityProvenance.Copied)]
+    [InlineData(EntityProvenance.CopiedAndImported)]
+    public async Task Name_WarnsWhenTheCopySourceStillUsesTheOldName(EntityProvenance provenance)
     {
         TrackedEntity owner = Entity(1, "custmer", provenance);
         EntityDependencyEditorViewModel viewModel = ViewModel([owner]);
@@ -165,7 +163,7 @@ public sealed class EntityDependencyEditorViewModelTests
 
         viewModel.EditedName = "customer";
         Assert.True(viewModel.HasRenameNotice);
-        Assert.Contains(reason, viewModel.RenameNotice, StringComparison.Ordinal);
+        Assert.Contains("copied from another Tracker", viewModel.RenameNotice, StringComparison.Ordinal);
         Assert.True(viewModel.SaveCommand.CanExecute(null));
     }
 
@@ -194,21 +192,10 @@ public sealed class EntityDependencyEditorViewModelTests
                 store,
                 new EffectiveDependencyResolver(),
                 new DependencyRanker()),
-            new SchemaSynchronizationService(
-                new StubSchemaImportFileParser(),
-                entityRepository,
-                dependencyRepository,
-                overrideRepository,
-                new SchemaSynchronizationPlanner(
-                    new DependencyRanker(),
-                    new EffectiveDependencyResolver()),
-                editorService,
-                new StubSynchronizationStore()),
             () => Task.CompletedTask,
             () => Task.CompletedTask,
             () => Task.CompletedTask,
-            () => Task.CompletedTask,
-            _ => { });
+            () => Task.CompletedTask);
     }
 
     private static Task WaitUntilAsync(Func<bool> condition,
@@ -270,28 +257,5 @@ public sealed class EntityDependencyEditorViewModelTests
             IEnumerable<TrackedEntity> entities,
             ProgressSnapshotState snapshot,
             CancellationToken cancellationToken = default) => Task.CompletedTask;
-    }
-
-    private sealed class StubSynchronizationStore : ISchemaSynchronizationStore
-    {
-        public Task<SchemaImportSummary> ApplyAsync(
-            TrackerId trackerId,
-            TrackedStateChangeSet changeSet,
-            SchemaImportCompletion completion,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new SchemaImportSummary(DateTimeOffset.UtcNow, completion));
-
-        public Task<SchemaImportSummary?> GetLatestImportAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<SchemaImportSummary?>(null);
-    }
-
-    private sealed class StubSchemaImportFileParser : ISchemaImportFileParser
-    {
-        public Task<SchemaImportResult> ParseAsync(
-            string filePath,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(SchemaImportResult.Failure([]));
     }
 }
