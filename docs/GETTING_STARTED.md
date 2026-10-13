@@ -77,6 +77,26 @@ update, so use this manual path to move from `app-v1.0.0` to `app-v1.0.1` or lat
 If Windows reports that the install folder is in use even after closing EntityTracker and the
 updater, restart the computer and rerun the installer before opening the app.
 
+## Uninstall
+
+Close EntityTracker, then run from your clone:
+
+```powershell
+.\scripts\Uninstall-EntityTracker.ps1
+```
+
+It asks before removing the app from `%LOCALAPPDATA%\Programs\EntityTracker`, the **Start Menu**
+shortcut, and any temporary build folders left by an update. Your data stays in
+`%LOCALAPPDATA%\EntityTracker`, so installing again picks up your Projects and settings. The
+source clone is not changed.
+
+- `-RemoveData` also deletes your data: every Project and Tracker on this computer, with settings,
+  backups and logs. It asks again first. Projects linked to a Git repository can be imported again
+  from it; anything else is gone.
+- `-RemoveDockerCache` also deletes the Docker volume `entitytracker-nuget` that speeds up builds.
+  The .NET SDK build images stay in Docker, since other tools may use them.
+- `-Force` skips the questions.
+
 ## Run from source for development
 
 ```powershell

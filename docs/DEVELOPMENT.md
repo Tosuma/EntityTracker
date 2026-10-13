@@ -144,6 +144,12 @@ Desktop or Rancher Desktop but no .NET:
   containers, or can't write to the folder.
 - **Without Docker:** `-BuildWith Local` builds with the .NET SDK on the machine instead.
 
+`.\scripts\Uninstall-EntityTracker.ps1` removes what the installer created: the app folder, any
+`EntityTracker.new.*`/`EntityTracker.old.*` folders, the Start Menu shortcut and the updater's build
+folders. It keeps `%LOCALAPPDATA%\EntityTracker` unless run with `-RemoveData`, refuses while the app
+is running, and never touches the source clone. `.\scripts\Test-Uninstall.ps1` checks it against a
+fake install; CI also runs it.
+
 `Publish-Windows.ps1` therefore runs both on Windows and in that Linux container. CI checks the
 container build in its Linux job, and `.\scripts\Test-DockerBuild.ps1` checks the script against a
 fake `docker`. An exact release can be

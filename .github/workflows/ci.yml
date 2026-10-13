@@ -51,6 +51,10 @@ jobs:
         shell: pwsh
         run: .\scripts\Test-DockerBuild.ps1
 
+      - name: Test uninstall script
+        shell: pwsh
+        run: .\scripts\Test-Uninstall.ps1
+
       - name: Set up .NET from global.json
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
 
