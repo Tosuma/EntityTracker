@@ -98,9 +98,7 @@ public sealed class LocalProjectIdentitySettingsViewModelTests
         }
     }
 
-    private static async Task WaitUntilAsync(Func<Task<bool>> predicate)
-    {
-        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(3));
-        while (!await predicate()) await Task.Delay(10, timeout.Token);
-    }
+    private static Task WaitUntilAsync(Func<Task<bool>> predicate,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(predicate))] string description = "") =>
+        TestWait.UntilAsync(predicate, description);
 }

@@ -536,14 +536,9 @@ public sealed class EntityTableViewModelTests
         filter.ApplyCommand.Execute(null);
     }
 
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));
-        while (!condition())
-        {
-            await Task.Delay(10, timeout.Token);
-        }
-    }
+    private static Task WaitUntilAsync(Func<bool> condition,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(condition))] string description = "") =>
+        TestWait.UntilAsync(condition, description);
 
     private static EntityOverviewDeveloper Developer(int id, string initials, string name) =>
         new(new DeveloperId(new Guid(id, 0, 0, new byte[8])), initials, name);

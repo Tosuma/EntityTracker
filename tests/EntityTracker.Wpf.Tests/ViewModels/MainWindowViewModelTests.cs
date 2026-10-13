@@ -1639,14 +1639,9 @@ public sealed class MainWindowViewModelTests
     private static SchemaImportResult FailureResult() => SchemaImportResult.Failure(
         [new ImportDiagnostic(ImportDiagnosticCode.FileAccessError, "No file configured.")]);
 
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));
-        while (!condition())
-        {
-            await Task.Delay(10, timeout.Token);
-        }
-    }
+    private static Task WaitUntilAsync(Func<bool> condition,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(condition))] string description = "") =>
+        TestWait.UntilAsync(condition, description);
 
     private static void AssertStatusFilter(
         MainWindowViewModel viewModel,

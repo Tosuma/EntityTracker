@@ -211,14 +211,9 @@ public sealed class EntityDependencyEditorViewModelTests
             _ => { });
     }
 
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));
-        while (!condition())
-        {
-            await Task.Delay(10, timeout.Token);
-        }
-    }
+    private static Task WaitUntilAsync(Func<bool> condition,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(condition))] string description = "") =>
+        TestWait.UntilAsync(condition, description);
 
     private static TrackedEntity Entity(
         int id,
