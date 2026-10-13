@@ -356,11 +356,11 @@ button.
 Each line looks like this:
 
 ```text
-2026-10-13T09:41:07.1234567+02:00 [Information] (12) EntityTracker.Application.GitSync.ProjectGitSyncService [Sync 3f9a1c]: Sync finished in 812 ms: UpToDate, ...
+2026-10-13T07:41:07.1234567+00:00 [Information] (12) EntityTracker.Application.GitSync.ProjectGitSyncService [Sync 3f9a1c]: Sync finished in 812 ms: UpToDate, ...
 ```
 
 The parts are:
-- time;
+- time, in UTC;
 - level;
 - managed thread id;
 - category (the class that logged);
