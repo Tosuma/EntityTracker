@@ -425,16 +425,17 @@ public sealed class EntityTrackerSettingsStore
 
     /// <summary>
     /// Reads the view by name, so a value this version does not know (for example a view added
-    /// later) falls back to the solar system instead of making the whole file unreadable.
+    /// later) falls back to the tree instead of making the whole file unreadable. Without a saved view the
+    /// graph also opens on the tree.
     /// </summary>
     private static DependencyGraphView ParseDependencyGraphView(SettingsDocument document, ICollection<string> warnings)
     {
-        if (document.DependencyGraphView is null) return DependencyGraphView.SolarSystem;
+        if (document.DependencyGraphView is null) return DependencyGraphView.Tree;
         if (Enum.TryParse(document.DependencyGraphView, ignoreCase: false, out DependencyGraphView view) &&
             Enum.IsDefined(view) && !int.TryParse(document.DependencyGraphView, out _))
             return view;
-        warnings.Add("The dependency graph view is not recognised; the solar system is shown.");
-        return DependencyGraphView.SolarSystem;
+        warnings.Add("The dependency graph view is not recognised; the tree is shown.");
+        return DependencyGraphView.Tree;
     }
 
     private static OverviewExportRows ParseExportRows(SettingsDocument document, ICollection<string> warnings)

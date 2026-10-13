@@ -818,8 +818,8 @@
                                   SelectionMode="Extended"
                                   SelectionUnit="FullRow">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Width="72" Binding="{Binding Priority}" Header="Priority" />
-                                <DataGridTextColumn Width="70" Binding="{Binding Rank}" Header="Rank" />
+                                <DataGridTextColumn Width="72" Binding="{Binding Priority}" Header="Priority" ElementStyle="{StaticResource CenteredCellTextStyle}" />
+                                <DataGridTextColumn Width="70" Binding="{Binding Rank}" Header="Rank" ElementStyle="{StaticResource CenteredCellTextStyle}" />
                                 <DataGridTemplateColumn Width="2.2*" Header="Entity">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
@@ -981,13 +981,13 @@
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
                                 <DataGridTextColumn Width="145"
-                                                    Binding="{Binding GroupNameDisplay}">
+                                                    Binding="{Binding GroupNameDisplay}" ElementStyle="{StaticResource CenteredCellTextStyle}">
                                     <DataGridTextColumn.Header>
                                         <controls:FilterableColumnHeader Filter="{Binding DataContext.ActiveTable.GroupFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                                     </DataGridTextColumn.Header>
                                 </DataGridTextColumn>
                                 <DataGridTextColumn Width="2.2*"
-                                                    Binding="{Binding BlockersDisplay}">
+                                                    Binding="{Binding BlockersDisplay}" ElementStyle="{StaticResource CenteredCellTextStyle}">
                                     <DataGridTextColumn.Header>
                                         <TextBlock AutomationProperties.HelpText="Unresolved or not-yet-implemented direct dependencies"
                                                    Text="Blockers"
@@ -1386,7 +1386,7 @@
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                                <DataGridTextColumn Width="145" Binding="{Binding GroupNameDisplay}">
+                                <DataGridTextColumn Width="145" Binding="{Binding GroupNameDisplay}" ElementStyle="{StaticResource CenteredCellTextStyle}">
                                     <DataGridTextColumn.Header>
                                         <controls:FilterableColumnHeader Filter="{Binding DataContext.ArchivedTable.GroupFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                                     </DataGridTextColumn.Header>

@@ -251,9 +251,10 @@ public sealed class EntityTrackerSettingsStoreTests
     {
         using TemporarySettingsDirectory directory = new();
         EntityTrackerSettingsStore store = new(directory.SettingsPath);
-        Assert.Equal(DependencyGraphView.SolarSystem, (await store.LoadAsync()).Settings.DependencyGraphView);
+        // The graph opens on the tree until another view is chosen.
+        Assert.Equal(DependencyGraphView.Tree, (await store.LoadAsync()).Settings.DependencyGraphView);
 
-        await store.SaveDependencyGraphViewAsync(DependencyGraphView.Tree);
+        await store.SaveDependencyGraphViewAsync(DependencyGraphView.SolarSystem);
         ProjectId project = ProjectId.New();
         await store.SaveAppearanceAsync(ApplicationAppearance.Dark);
         await store.SaveActiveContextAsync(project, null);
@@ -267,24 +268,24 @@ public sealed class EntityTrackerSettingsStoreTests
 
         EntityTrackerSettings saved = (await new EntityTrackerSettingsStore(directory.SettingsPath)
             .LoadAsync()).Settings;
-        Assert.Equal(DependencyGraphView.Tree, saved.DependencyGraphView);
+        Assert.Equal(DependencyGraphView.SolarSystem, saved.DependencyGraphView);
         Assert.False(saved.AnimateDependencyGraph);
         Assert.True(saved.ShowDependencyGraphRings);
     }
 
     [Fact]
-    public async Task DependencyGraphView_UnknownValueFallsBackToTheSolarSystemWithoutLosingTheFile()
+    public async Task DependencyGraphView_UnknownValueFallsBackToTheTreeWithoutLosingTheFile()
     {
         using TemporarySettingsDirectory directory = new();
         EntityTrackerSettingsStore store = new(directory.SettingsPath);
-        await store.SaveDependencyGraphViewAsync(DependencyGraphView.Tree);
+        await store.SaveDependencyGraphViewAsync(DependencyGraphView.SolarSystem);
         await store.SaveAppearanceAsync(ApplicationAppearance.Dark);
         string json = await File.ReadAllTextAsync(directory.SettingsPath);
-        await File.WriteAllTextAsync(directory.SettingsPath, json.Replace("\"Tree\"", "\"Galaxy\""));
+        await File.WriteAllTextAsync(directory.SettingsPath, json.Replace("\"SolarSystem\"", "\"Galaxy\""));
 
         SettingsLoadResult result = await new EntityTrackerSettingsStore(directory.SettingsPath).LoadAsync();
 
-        Assert.Equal(DependencyGraphView.SolarSystem, result.Settings.DependencyGraphView);
+        Assert.Equal(DependencyGraphView.Tree, result.Settings.DependencyGraphView);
         Assert.Equal(ApplicationAppearance.Dark, result.Settings.Appearance);
         Assert.Contains(result.Warnings, warning => warning.Contains("dependency graph view", StringComparison.Ordinal));
     }

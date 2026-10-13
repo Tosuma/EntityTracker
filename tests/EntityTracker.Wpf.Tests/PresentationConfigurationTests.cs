@@ -659,6 +659,25 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void EntityTables_CentreTheirTextColumnsVertically()
+    {
+        XDocument components = LoadWpfXaml("Themes", "EntityTrackerComponents.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement style = Assert.Single(components.Descendants(), element =>
+            (string?)element.Attribute(x + "Key") == "CenteredCellTextStyle");
+        Assert.Contains(style.Elements(), setter =>
+            (string?)setter.Attribute("Property") == "VerticalAlignment" && (string?)setter.Attribute("Value") == "Center");
+
+        // Every text column in the Overview and Archived tables uses it; template columns centre their own content.
+        XElement[] columns = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml").Descendants()
+            .Where(static element => element.Name.LocalName == "DataGridTextColumn")
+            .ToArray();
+        Assert.Equal(5, columns.Length);
+        Assert.All(columns, column =>
+            Assert.Equal("{StaticResource CenteredCellTextStyle}", (string?)column.Attribute("ElementStyle")));
+    }
+
+    [Fact]
     public void Overview_WorkStatusColumnFitsWaitingOnDependencies()
     {
         XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");

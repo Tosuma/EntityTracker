@@ -35,6 +35,44 @@ public sealed class ProjectTrackerMigrationTests
     }
 
     [Fact]
+    public async Task InitializeAsync_NewDatabaseCanStartWithoutAnyProject()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath) { StartNewDatabaseWithoutProjects = true };
+
+        await database.InitializeAsync();
+        await new SqliteDatabase(file.DatabasePath) { StartNewDatabaseWithoutProjects = true }.InitializeAsync();
+
+        Assert.Empty(await new SqliteProjectRepository(database).GetAllAsync());
+        Assert.Empty(await new SqliteTrackerRepository(database).GetAllAsync());
+    }
+
+    [Fact]
+    public async Task InitializeAsync_AnExistingDatabaseKeepsItsProjectsWhenStartingEmptyIsAsked()
+    {
+        await using TemporarySqliteFile file = new();
+        await new SqliteDatabase(file.DatabasePath).InitializeAsync();
+        SqliteDatabase database = new(file.DatabasePath) { StartNewDatabaseWithoutProjects = true };
+
+        await database.InitializeAsync();
+
+        Assert.Equal("Default project", Assert.Single(await new SqliteProjectRepository(database).GetAllAsync()).Name);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_AnOldDatabaseStillMovesItsEntitiesIntoTheDefaultTracker()
+    {
+        await using TemporarySqliteFile file = new();
+        await CreatePopulatedVersionElevenDatabaseAsync(file.DatabasePath);
+        SqliteDatabase database = new(file.DatabasePath) { StartNewDatabaseWithoutProjects = true };
+
+        await database.InitializeAsync();
+
+        Tracker tracker = Assert.Single(await new SqliteTrackerRepository(database).GetAllAsync());
+        Assert.NotEmpty(await new SqliteEntityRepository(database).GetAllAsync(tracker.Id));
+    }
+
+    [Fact]
     public async Task InitializeAsync_VersionElevenPreservesCompleteStateInDefaultTracker()
     {
         await using TemporarySqliteFile file = new();

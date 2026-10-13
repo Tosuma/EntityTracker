@@ -19,7 +19,7 @@ public sealed class EntityTrackerSettings
         OverviewCsvSeparator overviewCsvSeparator = OverviewCsvSeparator.Semicolon,
         bool animateDependencyGraph = true,
         bool showDependencyGraphRings = false,
-        DependencyGraphView dependencyGraphView = DependencyGraphView.SolarSystem,
+        DependencyGraphView dependencyGraphView = DependencyGraphView.Tree,
         DependencyHighlightMode solarHighlightMode = DependencyHighlightMode.Dependencies,
         DependencyHighlightMode treeHighlightMode = DependencyHighlightMode.DirectLinks)
     {

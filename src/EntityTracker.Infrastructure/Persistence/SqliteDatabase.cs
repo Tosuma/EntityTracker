@@ -472,6 +472,13 @@ public sealed class SqliteDatabase
 
     private readonly string _connectionString;
 
+    /// <summary>
+    /// Gets or sets whether a database created by <see cref="InitializeAsync"/> starts without any
+    /// Project, instead of with the empty "Default project" the Project/Tracker migration creates. The
+    /// app sets it so a first start is empty; existing databases are never affected.
+    /// </summary>
+    public bool StartNewDatabaseWithoutProjects { get; init; }
+
     public SqliteDatabase(string databasePath, TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(databasePath);
@@ -551,6 +558,12 @@ public sealed class SqliteDatabase
                 transaction,
                 "tracked_entities",
                 "tracker_id",
+                cancellationToken);
+            // A database created by this start has nothing to migrate into a default Project.
+            bool newDatabase = schemaVersion == 0 && !await TableExistsAsync(
+                connection,
+                transaction,
+                "tracked_entities",
                 cancellationToken);
             if (schemaVersion < 18)
                 await ExecuteAsync(connection, transaction, """
@@ -959,6 +972,18 @@ public sealed class SqliteDatabase
                 await ExecuteAsync(connection, transaction,
                     "ALTER TABLE tracked_entities ADD COLUMN shared_notes TEXT NOT NULL DEFAULT '';",
                     cancellationToken);
+
+            if (newDatabase && StartNewDatabaseWithoutProjects)
+            {
+                // The Project/Tracker migration (version 12) moves entities from before Projects
+                // existed into a "Default project". A new database has no such entities, so the empty
+                // default Project and Tracker it created are removed again.
+                await ExecuteAsync(connection, transaction, """
+                    DELETE FROM trackers;
+                    DELETE FROM projects;
+                    """, cancellationToken);
+                await EnsureNoForeignKeyViolationsAsync(connection, transaction, cancellationToken);
+            }
 
             await ExecuteAsync(
                 connection,
