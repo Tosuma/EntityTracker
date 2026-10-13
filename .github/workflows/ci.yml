@@ -47,6 +47,14 @@ jobs:
         shell: pwsh
         run: .\scripts\Test-InstallerVersion.ps1
 
+      - name: Test Docker build script
+        shell: pwsh
+        run: .\scripts\Test-DockerBuild.ps1
+
+      - name: Test uninstall script
+        shell: pwsh
+        run: .\scripts\Test-Uninstall.ps1
+
       - name: Set up .NET from global.json
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
 
@@ -58,6 +66,35 @@ jobs:
 
       - name: Test
         run: dotnet test EntityTracker.slnx --configuration Release --no-build --no-restore
+
+  docker_build:
+    # The installer builds the app in the Linux .NET SDK container. Windows runners can't run Linux
+    # containers, so this runs the installer's own Docker build script on Linux.
+    name: Build in Docker as the installer does
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Build in the .NET SDK container
+        shell: pwsh
+        run: ./scripts/Invoke-DockerBuild.ps1 -SourcePath . -Version 0.0.0
+
+      - name: Check the build output
+        shell: pwsh
+        run: |
+          $publish = 'artifacts/publish/win-x64'
+          foreach ($file in @('EntityTracker.Wpf.exe', 'EntityTracker.Wpf.dll', 'libSkiaSharp.dll',
+                              'LICENSE.txt', 'THIRD-PARTY-NOTICES.txt',
+                              'licenses/DotNet-LICENSE.txt', 'licenses/SkiaSharp-HarfBuzzSharp-THIRD-PARTY-NOTICES.txt')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $publish $file) -PathType Leaf)) {
+              throw "The Docker build did not produce $file."
+            }
+          }
 
   package:
     name: Package Windows application

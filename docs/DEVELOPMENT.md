@@ -128,7 +128,31 @@ and they are released as a major version (see [Choose the version number](#choos
 Colleagues clone the app repository once and run `.\scripts\Install-EntityTracker.ps1`. The
 script fetches an approved tag into that existing clone, archives its source without switching
 branches or touching local edits, builds a self-contained app, and installs it under
-`%LOCALAPPDATA%\Programs\EntityTracker` with a Start Menu shortcut. An exact release can be
+`%LOCALAPPDATA%\Programs\EntityTracker` with a Start Menu shortcut.
+
+The build runs in Docker by default (`scripts/Invoke-DockerBuild.ps1`), so colleagues need Docker
+Desktop or Rancher Desktop but no .NET:
+
+- **Image:** the staged release's `global.json` selects the image `mcr.microsoft.com/dotnet/sdk:<version>`.
+  It is a Linux container, building the WPF app for Windows with `EnableWindowsTargeting`.
+- **Build:** the staged source folder under `%LOCALAPPDATA%\EntityTracker\updater` is mounted at
+  `/src`, and the container runs `scripts/Publish-Windows.ps1` there. The output lands in
+  `artifacts/publish/win-x64` exactly as a local build's would, and the installer installs it as
+  before. The container is removed afterwards; NuGet packages stay in the `entitytracker-nuget`
+  volume.
+- **Checks first:** the script stops with a plain message when Docker isn't running, uses Windows
+  containers, or can't write to the folder.
+- **Without Docker:** `-BuildWith Local` builds with the .NET SDK on the machine instead.
+
+`.\scripts\Uninstall-EntityTracker.ps1` removes what the installer created: the app folder, any
+`EntityTracker.new.*`/`EntityTracker.old.*` folders, the Start Menu shortcut and the updater's build
+folders. It keeps `%LOCALAPPDATA%\EntityTracker` unless run with `-RemoveData`, refuses while the app
+is running, and never touches the source clone. `.\scripts\Test-Uninstall.ps1` checks it against a
+fake install; CI also runs it.
+
+`Publish-Windows.ps1` therefore runs both on Windows and in that Linux container. CI checks the
+container build in its Linux job, and `.\scripts\Test-DockerBuild.ps1` checks the script against a
+fake `docker`. An exact release can be
 selected with `-Tag app-v1.0.0` for recovery. The app's update notification uses the same installer
 through a separate updater window after the app closes. Neither script clones or initializes a
 repository, configures Git, or manages credentials.
