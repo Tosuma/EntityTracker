@@ -7,11 +7,15 @@ using EntityTracker.Domain;
 using EntityTracker.Reporting;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.ViewModels;
 
 public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<ProjectDashboardViewModel>();
+
     private readonly PortfolioQueryService _queryService;
     private readonly ProjectEntityComparisonQueryService _comparisonService;
     private readonly AsyncCommand<ProjectComparisonCategory> _selectCategoryCommand;
@@ -216,10 +220,12 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            Logger.LogInformation("Loading the project dashboard was cancelled.");
             ReportError("Loading the project dashboard was cancelled.", NotificationKind.Information);
         }
         catch (Exception exception)
         {
+            Logger.LogError(exception, "The project dashboard could not be loaded.");
             ReportError($"The project dashboard could not be loaded: {exception.Message}");
         }
         finally
@@ -333,6 +339,7 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            Logger.LogError(exception, "The project comparison could not be loaded.");
             ReportError($"The project comparison could not be loaded: {exception.Message}");
         }
     }

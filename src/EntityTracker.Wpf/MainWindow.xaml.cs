@@ -10,11 +10,15 @@ using EntityTracker.Domain;
 using EntityTracker.Wpf.Controls;
 using EntityTracker.Wpf.ViewModels;
 using EntityTracker.Wpf.Services;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf;
 
 public partial class MainWindow : Window
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<MainWindow>();
+
     private readonly ShellViewModel _viewModel;
     private readonly MouseWheelScrollRouter _mouseWheelRouter = new();
     private bool _updatingSelectors;
@@ -178,6 +182,7 @@ public partial class MainWindow : Window
         }
         catch (Exception error)
         {
+            Logger.LogError(error, "The updater could not be started.");
             UpdateActionButton.IsEnabled = true;
             MessageBox.Show(this, error.Message, "Update could not start",
                 MessageBoxButton.OK, MessageBoxImage.Error);
@@ -330,7 +335,12 @@ public partial class MainWindow : Window
 
         double rightEdge;
         try { rightEdge = card.TransformToAncestor(this).Transform(new Point(card.ActualWidth, 0)).X; }
-        catch (InvalidOperationException) { rightEdge = card.ActualWidth + 20; }
+        catch (InvalidOperationException exception)
+        {
+            // Cosmetic: a notification that already left the window slides out by its own width.
+            Logger.LogDebug(exception, "A closing notification was no longer in the window.");
+            rightEdge = card.ActualWidth + 20;
+        }
 
         DoubleAnimation slideOut = new(slide.X + SlideOutDistance(rightEdge), NotificationSlideOut)
         {

@@ -442,6 +442,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            _logger.LogDebug("A newer group search superseded this one.");
         }
         catch (Exception exception)
         {
@@ -489,6 +490,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            _logger.LogDebug("A newer dependency search superseded this one.");
         }
         catch (Exception exception)
         {
@@ -536,6 +538,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            _logger.LogInformation("Entity creation was cancelled; nothing was saved.");
             Errors = ["Entity creation was cancelled; no partial changes were saved."];
             HasFatalValidation = false;
             OperationMessage = null;
@@ -766,6 +769,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
+            _logger.LogDebug("A newer group search superseded this one.");
         }
         finally
         {
@@ -795,6 +799,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
+            _logger.LogDebug("A newer dependency search superseded this one.");
         }
         finally
         {

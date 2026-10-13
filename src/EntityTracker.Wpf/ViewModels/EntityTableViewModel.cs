@@ -4,6 +4,8 @@ using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.ViewModels;
 
@@ -12,6 +14,8 @@ internal readonly record struct TableSearchState(bool IsOpen, string Query, bool
 
 public sealed class EntityTableViewModel : INotifyPropertyChanged
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<EntityTableViewModel>();
+
     private static readonly IReadOnlyDictionary<DevelopmentStatus, int> StatusOrder =
         new Dictionary<DevelopmentStatus, int>
         {
@@ -359,7 +363,7 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
         }
         catch (OperationCanceledException)
         {
-            // A newer query superseded this one.
+            Logger.LogDebug("A newer search superseded this one.");
         }
         finally
         {

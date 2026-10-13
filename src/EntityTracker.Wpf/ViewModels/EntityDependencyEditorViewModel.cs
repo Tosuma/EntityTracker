@@ -244,8 +244,9 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             choice.IsSelected = !choice.IsSelected;
             AssignmentGuidance = null;
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            _logger.LogError(exception, "The local Developer choice could not be checked.");
             AssignmentGuidance = "Your local Developer choice could not be checked. Open Settings and try again.";
         }
     }
@@ -942,6 +943,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            _logger.LogInformation("Loading entity dependencies was cancelled.");
             Errors = ["Loading entity dependencies was cancelled."];
         }
         catch (Exception exception)
@@ -1050,6 +1052,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            _logger.LogInformation("Loading archived entity details was cancelled.");
             Errors = ["Loading archived entity details was cancelled."];
         }
         catch (Exception exception)

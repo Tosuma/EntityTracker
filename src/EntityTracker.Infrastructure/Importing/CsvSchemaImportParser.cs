@@ -4,11 +4,15 @@ using CsvHelper;
 using CsvHelper.Configuration;
 
 using EntityTracker.Application.Importing;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Infrastructure.Importing;
 
 public sealed class CsvSchemaImportParser : ISchemaImportParser
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<CsvSchemaImportParser>();
+
     private const string TableNameHeader = SchemaCsvContract.TableNameHeader;
     private const string MandatoryDependenciesHeader =
         SchemaCsvContract.MandatoryDependenciesHeader;
@@ -128,8 +132,9 @@ public sealed class CsvSchemaImportParser : ISchemaImportParser
                 new SchemaImportCandidate(entities, dependencies, unresolvedDependencies),
                 OrderDiagnostics(diagnostics));
         }
-        catch (CsvHelperException)
+        catch (CsvHelperException exception)
         {
+            Logger.LogWarning(exception, "The CSV has malformed quoting or field data near row {Row}.", csv.Parser.RawRow);
             diagnostics.Add(new ImportDiagnostic(
                 ImportDiagnosticCode.MalformedRow,
                 "The CSV contains malformed quoting or field data.",

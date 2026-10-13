@@ -69,6 +69,58 @@ public sealed class RollingFileLoggerProviderTests
         Assert.Null(exception);
     }
 
+    [Fact]
+    public void Logger_WritesTheScopesALineWasLoggedIn()
+    {
+        using TemporaryLogDirectory directory = new();
+        TestTimeProvider time = new(new DateTimeOffset(2026, 10, 13, 9, 0, 0, TimeSpan.Zero));
+        using RollingFileLoggerProvider provider = new(directory.Path, time);
+        using ILoggerFactory factory = LoggerFactory.Create(builder =>
+        {
+            builder.AddProvider(provider);
+            builder.SetMinimumLevel(LogLevel.Trace);
+        });
+        ILogger logger = factory.CreateLogger("EntityTracker.Test");
+
+        using (logger.BeginScope("ProjectSync 7f3a2c"))
+        using (logger.BeginScope("Fetch"))
+        {
+            logger.LogInformation("Fetched {Commits} commits.", 3);
+        }
+        logger.LogInformation("After the sync.");
+
+        string[] lines = File.ReadAllLines(System.IO.Path.Combine(directory.Path, "entity-tracker-20261013.log"));
+        Assert.Contains("[ProjectSync 7f3a2c > Fetch]: Fetched 3 commits.", lines[0], StringComparison.Ordinal);
+        Assert.Matches(@"^2026-10-13T09:00:00\.0000000\+00:00 \[Information\] \(\d+\) EntityTracker\.Test", lines[0]);
+        Assert.EndsWith("EntityTracker.Test: After the sync.", lines[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Logger_FollowsTheLevelSwitchWhileRunning()
+    {
+        using TemporaryLogDirectory directory = new();
+        LogLevelSwitch level = new();
+        using RollingFileLoggerProvider provider = new(directory.Path, levelSwitch: level);
+        ILogger logger = provider.CreateLogger("EntityTracker.Test");
+
+        Assert.False(logger.IsEnabled(LogLevel.Debug));
+        level.MinimumLevel = LogLevel.Debug;
+
+        Assert.True(logger.IsEnabled(LogLevel.Debug));
+        Assert.False(logger.IsEnabled(LogLevel.Trace));
+    }
+
+    [Theory]
+    [InlineData(false, null, LogLevel.Information)]
+    [InlineData(true, null, LogLevel.Debug)]
+    [InlineData(false, "trace", LogLevel.Trace)]
+    [InlineData(true, "Warning", LogLevel.Warning)]
+    [InlineData(true, "none", LogLevel.Debug)]
+    [InlineData(false, "2", LogLevel.Information)]
+    [InlineData(false, "loud", LogLevel.Information)]
+    public void LoggingLevels_TakeTheSettingUnlessTheVariableNamesALevel(bool detailed, string? variable, LogLevel expected) =>
+        Assert.Equal(expected, LoggingLevels.Resolve(detailed, variable));
+
     private sealed class TestTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;

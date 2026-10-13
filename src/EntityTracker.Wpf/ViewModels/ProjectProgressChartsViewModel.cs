@@ -10,6 +10,8 @@ using EntityTracker.Reporting;
 using EntityTracker.Reporting.ProjectReports;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.ViewModels;
 
@@ -23,6 +25,8 @@ public sealed record ProgressChartScope(Tracker? Tracker, string Name);
 /// </summary>
 public sealed class ProjectProgressChartsViewModel : INotifyPropertyChanged
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<ProjectProgressChartsViewModel>();
+
     private static readonly ProgressChartScope AllScope = new(null, "All chosen Trackers");
 
     private readonly ProjectId _projectId;
@@ -170,9 +174,11 @@ public sealed class ProjectProgressChartsViewModel : INotifyPropertyChanged
         }
         catch (OperationCanceledException) when (loading.IsCancellationRequested)
         {
+            Logger.LogDebug("A newer load superseded this progress chart load.");
         }
         catch (Exception exception) when (exception is InvalidOperationException or IOException)
         {
+            Logger.LogError(exception, "The progress charts could not be loaded.");
             Show(null);
             _notifications?.Show("Progress charts", $"The charts could not be loaded: {exception.Message}",
                 NotificationKind.Failure);
@@ -222,6 +228,7 @@ public sealed class ProjectProgressChartsViewModel : INotifyPropertyChanged
         catch (Exception exception) when (exception is InvalidOperationException or IOException or
                                               UnauthorizedAccessException or System.Runtime.InteropServices.ExternalException)
         {
+            Logger.LogError(exception, "A chart image could not be created.");
             _notifications?.Show("Chart image", $"The chart image could not be created: {exception.Message}",
                 NotificationKind.Failure);
         }

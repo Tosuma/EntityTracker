@@ -4,11 +4,15 @@ using System.Runtime.CompilerServices;
 using EntityTracker.Application.Projects;
 using EntityTracker.Reporting;
 using EntityTracker.Wpf.Services;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.ViewModels;
 
 public sealed class PortfolioDashboardViewModel : INotifyPropertyChanged
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<PortfolioDashboardViewModel>();
+
     private readonly PortfolioQueryService _queryService;
     private PortfolioDashboard? _dashboard;
     private readonly NotificationCenter? _notifications;
@@ -75,10 +79,12 @@ public sealed class PortfolioDashboardViewModel : INotifyPropertyChanged
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            Logger.LogInformation("Loading the portfolio was cancelled.");
             ReportError("Loading the portfolio was cancelled.", NotificationKind.Information);
         }
         catch (Exception exception)
         {
+            Logger.LogError(exception, "The portfolio could not be loaded.");
             ReportError($"The portfolio could not be loaded: {exception.Message}");
         }
         finally

@@ -527,6 +527,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "The sync choice preview could not be prepared.");
             if (revision != _syncChoiceRevision) return;
             _syncPreviewError = exception.Message;
         }

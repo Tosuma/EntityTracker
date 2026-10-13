@@ -726,6 +726,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            _logger.LogInformation("Loading persisted entities was cancelled.");
             SetOverviewFailure("Loading persisted entities was cancelled.", NotificationKind.Information);
         }
         catch (Exception exception)
@@ -784,6 +785,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            _logger.LogInformation("The bulk status update was cancelled (statuses saved: {Saved}).", operationCompleted);
             ClearOverviewSelection();
             Notify("Bulk status update", operationCompleted
                 ? "The statuses were updated, but refreshing the overview was cancelled. " +
@@ -849,6 +851,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            _logger.LogInformation("The CSV synchronization review was cancelled.");
             Review.SetFailure("CSV synchronization review was cancelled.");
         }
         catch (Exception exception)
@@ -900,6 +903,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            _logger.LogInformation("Applying schema synchronization was cancelled.");
             Review.SetOperationFailure(
                 "Applying synchronization was cancelled; no partial changes were saved.");
         }

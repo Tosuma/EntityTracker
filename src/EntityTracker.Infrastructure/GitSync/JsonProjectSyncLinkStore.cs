@@ -1,10 +1,19 @@
 using System.Text.Json;
 using EntityTracker.Application.GitSync;
 
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace EntityTracker.Infrastructure.GitSync;
 
-public sealed class JsonProjectSyncLinkStore(string path) : IProjectSyncLinkStore
+/// <summary>
+/// Keeps which Project is linked to which local Git checkout. Failures surface to the sync operation
+/// that asked, which logs them; link changes are logged at Debug.
+/// </summary>
+public sealed class JsonProjectSyncLinkStore(string path, ILogger<JsonProjectSyncLinkStore>? logger = null)
+    : IProjectSyncLinkStore
 {
+    private readonly ILogger _logger = logger ?? NullLogger<JsonProjectSyncLinkStore>.Instance;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
@@ -29,6 +38,8 @@ public sealed class JsonProjectSyncLinkStore(string path) : IProjectSyncLinkStor
             all.RemoveAll(x => x.ProjectId == link.ProjectId);
             all.Add(link);
             await WriteUnsafeAsync(all, cancellationToken);
+            _logger.LogDebug("Saved the Git link of Project {ProjectId}: {SyncStatus}, {LastResult}.",
+                link.ProjectId, link.SyncStatus, link.LastResult);
         }
         finally { _gate.Release(); }
     }
@@ -39,8 +50,9 @@ public sealed class JsonProjectSyncLinkStore(string path) : IProjectSyncLinkStor
         try
         {
             List<ProjectSyncLink> all = await ReadUnsafeAsync(cancellationToken);
-            all.RemoveAll(x => x.ProjectId == projectId);
+            int removed = all.RemoveAll(x => x.ProjectId == projectId);
             await WriteUnsafeAsync(all, cancellationToken);
+            _logger.LogInformation("Removed the Git link of Project {ProjectId} ({Count} entry).", projectId, removed);
         }
         finally { _gate.Release(); }
     }

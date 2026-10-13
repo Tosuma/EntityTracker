@@ -6,6 +6,7 @@ using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
 using Microsoft.Extensions.Logging;
+using EntityTracker.Application.Diagnostics;
 
 namespace EntityTracker.Wpf.ViewModels;
 
@@ -141,6 +142,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {
+            _logger?.LogError(error, "The repository link of Project {ProjectId} could not be loaded.", _projectId.Value);
             ShowFailure("Repository link status could not be loaded: " + error.Message);
         }
         Notify();
@@ -183,6 +185,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
             try { _link = await _service.SyncNowAsync(_projectId, cancellation.Token, progress, timing); }
             catch (ProjectNameCollisionException collision)
             {
+                _logger?.LogInformation(collision, "The remote Project's name is already used here; asking for a local name.");
                 string? name = ProjectLocalNameDialog.Prompt(System.Windows.Application.Current.MainWindow,
                     collision.ConflictingName);
                 if (name is null)
@@ -212,6 +215,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
         }
         catch (OperationCanceledException)
         {
+            _logger?.LogInformation("Sync of Project {ProjectId} was cancelled.", _projectId.Value);
             if (_link is not null) _autoSync?.ReportManual(_projectId,
                 ProjectAutoSyncService.FromLink(_link));
             if (notice is not null) _notifications?.Complete(notice, "Sync cancelled.",
@@ -219,6 +223,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
         }
         catch (ProjectSyncReviewCancelledException)
         {
+            _logger?.LogInformation("The sync review of Project {ProjectId} was cancelled.", _projectId.Value);
             if (_link is not null) _autoSync?.ReportManual(_projectId,
                 ProjectAutoSyncService.FromLink(_link));
             if (notice is not null) _notifications?.Complete(notice,
@@ -227,10 +232,16 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
         catch (Exception error)
         {
             // The sync notice below carries the error.
+            _logger?.LogHandled(error, "Sync of Project {ProjectId} failed.", _projectId.Value);
             _autoSync?.ReportManual(_projectId,
                 ProjectAutoSyncService.FromError(error, DateTimeOffset.UtcNow));
             try { _link = await _service.GetLinkAsync(_projectId); }
-            catch { /* Keep the original sync error visible. */ }
+            catch (Exception linkError)
+            {
+                // Keep the original sync error visible.
+                _logger?.LogWarning(linkError, "The link of Project {ProjectId} could not be read again after the failed sync.",
+                    _projectId.Value);
+            }
             if (notice is not null)
             {
                 bool review = error is ProjectSyncReviewRequiredException;
@@ -285,7 +296,11 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
         _busy = true;
         Notify();
         try { await action(); }
-        catch (Exception error) { ShowFailure(error.Message); }
+        catch (Exception error)
+        {
+            _logger?.LogHandled(error, "A repository action on Project {ProjectId} failed.", _projectId.Value);
+            ShowFailure(error.Message);
+        }
         finally { _busy = false; Notify(); }
     }
 

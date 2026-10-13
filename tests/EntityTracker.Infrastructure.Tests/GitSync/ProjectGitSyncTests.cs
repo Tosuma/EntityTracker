@@ -6,6 +6,7 @@ using EntityTracker.Infrastructure.GitSync;
 using EntityTracker.Infrastructure.Snapshots;
 using EntityTracker.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Infrastructure.Tests.GitSync;
 
@@ -259,6 +260,56 @@ public sealed class ProjectGitSyncTests
             foreach (string suffix in new[] { "", "-wal", "-shm" })
                 if (File.Exists(databasePath + suffix)) File.Delete(databasePath + suffix);
         }
+    }
+
+    [Fact]
+    public async Task AFailedGitCommandIsLoggedWithGitsMessageButNeverTheCredentials()
+    {
+        using TestRepository repo = new();
+        repo.Init();
+        repo.Write("README.md", "readme");
+        repo.Git("add", "README.md");
+        repo.Git("commit", "-m", "Initial");
+        // Nothing listens on port 9, so the fetch fails at once; the URL carries a password.
+        repo.Git("remote", "add", "origin", "https://ada:supersecret@127.0.0.1:9/repo.git");
+        repo.Git("config", "branch.main.remote", "origin");
+        repo.Git("config", "branch.main.merge", "refs/heads/main");
+        CapturingLogger<SystemGitTransport> logger = new();
+
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() => new SystemGitTransport(logger).FetchAsync(repo.Root));
+
+        CapturingLogger<SystemGitTransport>.Entry failure = Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
+        Assert.Contains("Git fetch", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("exit code", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("127.0.0.1", failure.Message, StringComparison.Ordinal);
+        Assert.All(logger.Entries, entry => Assert.DoesNotContain("supersecret", entry.Message, StringComparison.Ordinal));
+        // The read-only commands before the fetch are logged too, at Debug.
+        Assert.Contains(logger.Entries, entry => entry.Level == LogLevel.Debug &&
+            entry.Message.StartsWith("Git symbolic-ref", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ImportingACheckoutIsLoggedAsOneOperation()
+    {
+        using TestRepository repo = new();
+        repo.Init();
+        repo.Write("README.md", "readme");
+        repo.Git("add", "README.md");
+        repo.Git("commit", "-m", "Initial");
+        CapturingLogger<ProjectGitSyncService> logger = new();
+        ProjectGitSyncService service = new(new JsonProjectSyncLinkStore(repo.Root + "-links.json"),
+            new SystemGitTransport(), new TestSnapshotStore(Snapshot(Guid.NewGuid())),
+            new ProjectSnapshotJsonCodec(), new RejectDeletions(), logger: logger);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ImportAsync(repo.Root));
+
+        Assert.Contains(logger.Entries, entry => entry.Level == LogLevel.Information &&
+            entry.Message.StartsWith("Import started: the checkout " + repo.Root, StringComparison.Ordinal));
+        CapturingLogger<ProjectGitSyncService>.Entry failure = Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
+        Assert.IsType<InvalidOperationException>(failure.Exception);
+        string scope = Assert.Single(failure.Scopes);
+        Assert.Matches("^Import [0-9a-f]{6}$", scope);
+        Assert.All(logger.Entries, entry => Assert.Equal(scope, Assert.Single(entry.Scopes)));
     }
 
     private static ProjectGitSyncService CreateService(TestRepository repo, TestSnapshotStore snapshots) => new(

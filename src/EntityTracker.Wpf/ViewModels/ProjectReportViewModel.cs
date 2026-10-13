@@ -10,6 +10,8 @@ using EntityTracker.Reporting;
 using EntityTracker.Reporting.ProjectReports;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.ViewModels;
 
@@ -45,6 +47,8 @@ public sealed record ReportAudienceOption(ReportAudience Audience, string Label,
 /// </summary>
 public sealed class ProjectReportViewModel : INotifyPropertyChanged
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<ProjectReportViewModel>();
+
     private readonly ProjectId _projectId;
     private readonly ProjectReportBuilder _builder;
     private readonly IProjectReportFiles _files;
@@ -239,6 +243,7 @@ public sealed class ProjectReportViewModel : INotifyPropertyChanged
         }
         catch (Exception exception) when (exception is InvalidOperationException or IOException or UnauthorizedAccessException)
         {
+            Logger.LogError(exception, "The project report could not be created.");
             _notifications?.Show("Project report", $"The report could not be created: {exception.Message}",
                 NotificationKind.Failure);
         }

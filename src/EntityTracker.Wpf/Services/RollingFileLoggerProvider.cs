@@ -6,44 +6,67 @@ using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.Services;
 
-public sealed class RollingFileLoggerProvider : ILoggerProvider
+/// <summary>
+/// The level the app logs at, changeable while it runs (Settings › About › Detailed logging).
+/// </summary>
+public sealed class LogLevelSwitch(LogLevel minimumLevel = LogLevel.Information)
+{
+    private volatile int _minimumLevel = (int)minimumLevel;
+
+    public LogLevel MinimumLevel
+    {
+        get => (LogLevel)_minimumLevel;
+        set => _minimumLevel = (int)value;
+    }
+}
+
+/// <summary>
+/// Writes the app's log to one file per day in the logs folder and keeps the last
+/// <see cref="RetainedLogCount"/> files. Each line has the time (UTC), level, thread, category and the
+/// scopes it was written in, for example
+/// <c>2026-10-13T09:15:02.123Z [Information] (12) EntityTracker.Application.GitSync.ProjectGitSync [ProjectSync 7f3a2c]: ...</c>,
+/// followed by the exception, if any, with all its inner exceptions.
+/// </summary>
+public sealed class RollingFileLoggerProvider : ILoggerProvider, ISupportExternalScope
 {
     public const int RetainedLogCount = 14;
 
     private readonly RollingFileLogSink _sink;
+    private readonly LogLevelSwitch _levelSwitch;
+    private IExternalScopeProvider _scopes = new LoggerExternalScopeProvider();
 
     public RollingFileLoggerProvider(
         string logDirectory,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        LogLevelSwitch? levelSwitch = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(logDirectory);
         _sink = new RollingFileLogSink(
             Path.GetFullPath(logDirectory),
             timeProvider ?? TimeProvider.System);
+        _levelSwitch = levelSwitch ?? new LogLevelSwitch();
     }
 
+    public string LogDirectory => _sink.Directory;
+
     public ILogger CreateLogger(string categoryName) =>
-        new RollingFileLogger(categoryName, _sink);
+        new RollingFileLogger(categoryName, this);
+
+    public void SetScopeProvider(IExternalScopeProvider scopeProvider) =>
+        _scopes = scopeProvider ?? new LoggerExternalScopeProvider();
 
     public void Dispose()
     {
         // The sink opens files only for each individual write.
     }
 
-    private sealed class RollingFileLogger : ILogger
+    private sealed class RollingFileLogger(string categoryName, RollingFileLoggerProvider provider) : ILogger
     {
-        private readonly string _categoryName;
-        private readonly RollingFileLogSink _sink;
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull =>
+            provider._scopes.Push(state);
 
-        public RollingFileLogger(string categoryName, RollingFileLogSink sink)
-        {
-            _categoryName = categoryName;
-            _sink = sink;
-        }
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => logLevel != LogLevel.None;
+        public bool IsEnabled(LogLevel logLevel) =>
+            logLevel != LogLevel.None && logLevel >= provider._levelSwitch.MinimumLevel;
 
         public void Log<TState>(
             LogLevel logLevel,
@@ -64,56 +87,67 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
                 return;
             }
 
-            _sink.Write(logLevel, _categoryName, eventId, message, exception);
+            List<string> scopes = [];
+            provider._scopes.ForEachScope(static (scope, list) =>
+            {
+                string? text = scope?.ToString();
+                if (!string.IsNullOrWhiteSpace(text)) list.Add(text);
+            }, scopes);
+            provider._sink.Write(logLevel, categoryName, eventId, scopes, message, exception);
         }
     }
 
     private sealed class RollingFileLogSink
     {
         private readonly object _gate = new();
-        private readonly string _directory;
         private readonly TimeProvider _timeProvider;
         private DateOnly? _lastPrunedDate;
 
         public RollingFileLogSink(string directory, TimeProvider timeProvider)
         {
-            _directory = directory;
+            Directory = directory;
             _timeProvider = timeProvider;
         }
+
+        public string Directory { get; }
 
         public void Write(
             LogLevel level,
             string category,
             EventId eventId,
+            IReadOnlyList<string> scopes,
             string message,
             Exception? exception)
         {
+            DateTimeOffset now = _timeProvider.GetUtcNow();
+            StringBuilder entry = new();
+            entry.Append(now.ToString("O", CultureInfo.InvariantCulture));
+            entry.Append(" [").Append(level).Append("] (").Append(Environment.CurrentManagedThreadId).Append(") ");
+            entry.Append(category);
+            if (eventId.Id != 0)
+            {
+                entry.Append(" (").Append(eventId.Id).Append(')');
+            }
+
+            if (scopes.Count > 0)
+            {
+                entry.Append(" [").Append(string.Join(" > ", scopes)).Append(']');
+            }
+
+            entry.Append(": ").AppendLine(message);
+            if (exception is not null)
+            {
+                // Exception.ToString includes every inner exception and its stack trace.
+                entry.AppendLine(exception.ToString());
+            }
+
             lock (_gate)
             {
                 try
                 {
-                    DateTimeOffset now = _timeProvider.GetUtcNow();
                     DateOnly currentDate = DateOnly.FromDateTime(now.UtcDateTime);
-                    Directory.CreateDirectory(_directory);
-
-                    string path = Path.Combine(
-                        _directory,
-                        $"entity-tracker-{now:yyyyMMdd}.log");
-                    StringBuilder entry = new();
-                    entry.Append(now.ToString("O", CultureInfo.InvariantCulture));
-                    entry.Append(" [").Append(level).Append("] ");
-                    entry.Append(category);
-                    if (eventId.Id != 0)
-                    {
-                        entry.Append(" (").Append(eventId.Id).Append(')');
-                    }
-
-                    entry.Append(": ").AppendLine(message);
-                    if (exception is not null)
-                    {
-                        entry.AppendLine(exception.ToString());
-                    }
-
+                    System.IO.Directory.CreateDirectory(Directory);
+                    string path = Path.Combine(Directory, $"entity-tracker-{now:yyyyMMdd}.log");
                     File.AppendAllText(path, entry.ToString(), Encoding.UTF8);
 
                     if (_lastPrunedDate != currentDate)
@@ -124,18 +158,18 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
                 }
                 catch (IOException)
                 {
-                    // Logging must never make an application operation fail.
+                    // Not logged: this is the log itself, and logging must never make an operation fail.
                 }
                 catch (UnauthorizedAccessException)
                 {
-                    // Logging must never make an application operation fail.
+                    // Not logged: this is the log itself, and logging must never make an operation fail.
                 }
             }
         }
 
         private void PruneLogs()
         {
-            DirectoryInfo directory = new(_directory);
+            DirectoryInfo directory = new(Directory);
             foreach (FileInfo obsoleteLog in directory
                          .EnumerateFiles("entity-tracker-*.log", SearchOption.TopDirectoryOnly)
                          .OrderByDescending(static file => file.Name, StringComparer.Ordinal)

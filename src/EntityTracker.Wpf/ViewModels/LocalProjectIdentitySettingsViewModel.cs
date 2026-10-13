@@ -5,11 +5,15 @@ using System.Windows.Input;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
+using EntityTracker.Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.ViewModels;
 
 public sealed class LocalProjectIdentitySettingsViewModel : INotifyPropertyChanged
 {
+    private static readonly ILogger Logger = AppLogging.CreateLogger<LocalProjectIdentitySettingsViewModel>();
+
     private readonly LocalProjectIdentityService _identity;
     private readonly AsyncCommand _clearCommand;
     private readonly SemaphoreSlim _operationGate = new(1, 1);
@@ -88,8 +92,9 @@ public sealed class LocalProjectIdentitySettingsViewModel : INotifyPropertyChang
             SelectedDeveloper = AvailableDevelopers.FirstOrDefault(item => item.Developer.Id == selected?.Id);
             OnPropertyChanged(nameof(HasAvailableDevelopers));
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            Logger.LogError(exception, "The local Developer choice could not be loaded.");
             ReportError("The local Developer choice could not be loaded.");
         }
         finally { if (entered) _operationGate.Release(); SetBusy(false); }
@@ -103,7 +108,11 @@ public sealed class LocalProjectIdentitySettingsViewModel : INotifyPropertyChang
         bool entered = false;
         try { await _operationGate.WaitAsync(); entered = true;
             await _identity.SetAsync(projectId, developerId); _errorMessage = null; }
-        catch (Exception) { ReportError("The local Developer choice could not be saved."); }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "The local Developer choice could not be saved.");
+            ReportError("The local Developer choice could not be saved.");
+        }
         finally { if (entered) _operationGate.Release(); SetBusy(false); }
     }
 
