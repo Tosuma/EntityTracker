@@ -593,6 +593,11 @@ internal sealed class ReadmeScreenshotGenerator
         WpfScreenshotRenderer renderer,
         CancellationToken cancellationToken)
     {
+        // The graph opens on the tree by default; the first screenshots show the solar system, as if chosen.
+        // Chosen first: a settings change re-applies all graph settings, including rotation.
+        DependencyGraphSettingsViewModel graphSettings = shell.GraphSettings
+            ?? throw new InvalidOperationException("The screenshot shell has no graph settings.");
+        await graphSettings.SetViewAsync(DependencyGraphView.SolarSystem);
         // A still map keeps the captures deterministic.
         viewModel.DependencyGraph.IsAnimationEnabled = false;
         await shell.NavigateAsync(ShellDestination.DependencyGraph, cancellationToken);

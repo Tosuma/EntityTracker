@@ -150,6 +150,22 @@ public sealed class ShellViewModelTests
     }
 
     [Fact]
+    public async Task GraphView_OpensOnTheTreeTheFirstTime()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        DependencyGraphSettingsViewModel graphSettings = new(harness.SettingsStore,
+            (await harness.SettingsStore.LoadAsync()).Settings);
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true), graphSettings);
+
+        await shell.InitializeAsync();
+
+        Assert.Equal(DependencyGraphView.Tree,
+            Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace).DependencyGraph.View);
+    }
+
+    [Fact]
     public async Task GraphView_OpensAsSavedAndRemembersAChangeMadeInTheGraph()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
@@ -174,6 +190,8 @@ public sealed class ShellViewModelTests
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
         await harness.SettingsStore.SaveDependencyHighlightModeAsync(DependencyGraphView.Tree, DependencyHighlightMode.Dependents);
+        // Open on the solar system, so HighlightMode below is the solar system's.
+        await harness.SettingsStore.SaveDependencyGraphViewAsync(DependencyGraphView.SolarSystem);
         DependencyGraphSettingsViewModel graphSettings = new(harness.SettingsStore,
             (await harness.SettingsStore.LoadAsync()).Settings);
         using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
@@ -943,20 +961,13 @@ public sealed class ShellViewModelTests
         workspace.Editor.CancelCommand.Execute(null);
     }
 
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));
-        while (!condition())
-        {
-            await Task.Delay(10, timeout.Token);
-        }
-    }
+    private static Task WaitUntilAsync(Func<bool> condition,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(condition))] string description = "") =>
+        TestWait.UntilAsync(condition, description);
 
-    private static async Task WaitUntilAsync(Func<Task<bool>> condition)
-    {
-        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(3));
-        while (!await condition()) await Task.Delay(10, timeout.Token);
-    }
+    private static Task WaitUntilAsync(Func<Task<bool>> condition,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(condition))] string description = "") =>
+        TestWait.UntilAsync(condition, description);
 
     /// <summary>Saves exported and previewed reports in memory instead of on disk or in a browser.</summary>
     private sealed class RecordingReportFiles : IProjectReportFiles

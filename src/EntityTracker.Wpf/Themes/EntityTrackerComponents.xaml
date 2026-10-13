@@ -243,6 +243,13 @@
             </Trigger>
         </Style.Triggers>
     </Style>
+    <!-- Text in a table's text column, centred vertically in its row like the other cells. Set as the
+         column's ElementStyle; the Fluent cell template itself is kept. -->
+    <Style x:Key="CenteredCellTextStyle"
+           TargetType="{x:Type TextBlock}"
+           BasedOn="{x:Static DataGridTextColumn.DefaultElementStyle}">
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
     <Style x:Key="EntityTrackerDataGridRowStyle"
            TargetType="{x:Type DataGridRow}"
            BasedOn="{StaticResource {x:Type DataGridRow}}">

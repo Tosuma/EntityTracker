@@ -245,7 +245,8 @@ public partial class App : System.Windows.Application
         IServiceCollection services,
         ApplicationDataPaths dataPaths)
     {
-        services.AddSingleton(new SqliteDatabase(dataPaths.DatabasePath));
+        // A first start is empty: no default Project.
+        services.AddSingleton(new SqliteDatabase(dataPaths.DatabasePath) { StartNewDatabaseWithoutProjects = true });
         services.AddSingleton(provider => new SqliteBackupService(
             provider.GetRequiredService<SqliteDatabase>(),
             dataPaths.BackupsDirectory));

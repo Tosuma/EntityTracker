@@ -173,9 +173,7 @@ public sealed class NotificationCenterTests
         Assert.Equal("Fetching upstream changes…", item.Message);
     }
 
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(3));
-        while (!condition()) await Task.Delay(10, timeout.Token);
-    }
+    private static Task WaitUntilAsync(Func<bool> condition,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(condition))] string description = "") =>
+        TestWait.UntilAsync(condition, description);
 }

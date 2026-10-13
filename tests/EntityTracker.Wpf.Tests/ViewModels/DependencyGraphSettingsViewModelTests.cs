@@ -48,14 +48,15 @@ public sealed class DependencyGraphSettingsViewModelTests
             DependencyGraphSettingsViewModel viewModel = new(store, (await store.LoadAsync()).Settings);
             int changes = 0;
             viewModel.Changed += (_, _) => changes++;
-            Assert.Equal(DependencyGraphView.SolarSystem, viewModel.View);
-
-            await viewModel.SetViewAsync(DependencyGraphView.Tree);
-            await viewModel.SetViewAsync(DependencyGraphView.Tree);
-
+            // The graph opens on the tree the first time.
             Assert.Equal(DependencyGraphView.Tree, viewModel.View);
+
+            await viewModel.SetViewAsync(DependencyGraphView.SolarSystem);
+            await viewModel.SetViewAsync(DependencyGraphView.SolarSystem);
+
+            Assert.Equal(DependencyGraphView.SolarSystem, viewModel.View);
             Assert.Equal(1, changes);
-            Assert.Equal(DependencyGraphView.Tree, (await store.LoadAsync()).Settings.DependencyGraphView);
+            Assert.Equal(DependencyGraphView.SolarSystem, (await store.LoadAsync()).Settings.DependencyGraphView);
         }
         finally
         {
@@ -91,9 +92,7 @@ public sealed class DependencyGraphSettingsViewModelTests
         }
     }
 
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));
-        while (!condition()) await Task.Delay(10, timeout.Token);
-    }
+    private static Task WaitUntilAsync(Func<bool> condition,
+        [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(condition))] string description = "") =>
+        TestWait.UntilAsync(condition, description);
 }
