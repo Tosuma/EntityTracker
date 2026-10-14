@@ -45,7 +45,7 @@ internal static class MergedPlaceholders
                 .SelectMany(side => side!.Entities).FirstOrDefault(e => e.Id == missing);
             if (known is null) continue;
             entities.Add(new SnapshotEntity(known.Id, merged.Id, known.SourceName, "NotStarted",
-                string.Empty, Placeholder, "Manual", null, string.Empty, string.Empty,
+                string.Empty, Placeholder, null, string.Empty, string.Empty,
                 known.CreatedAtUtc, known.SchemaUpdatedAtUtc, known.CreatedAtUtc, [], []));
             ids.Add(missing);
         }

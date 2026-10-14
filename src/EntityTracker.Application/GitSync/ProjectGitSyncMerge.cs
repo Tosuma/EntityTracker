@@ -421,7 +421,7 @@ public sealed partial class ProjectGitSyncService
                 new EntityId(e.Id), new TrackerId(tracker.Id), e.SourceName,
                 Enum.Parse<DevelopmentStatus>(e.DevelopmentStatus), e.Notes,
                 Enum.Parse<EntityLifecycleState>(e.LifecycleState),
-                Enum.Parse<EntityProvenance>(e.Provenance), e.RequestedPriority,
+                e.RequestedPriority,
                 e.ResponsibleDeveloper, e.GroupName, e.FilterActive, e.SharedNotes)).ToArray();
             EffectiveDependencyState dependencies = new EffectiveDependencyResolver().Resolve(
                 entities,

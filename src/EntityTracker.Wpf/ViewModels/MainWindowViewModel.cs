@@ -1163,7 +1163,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             item.SourceName,
             item.ResponsibleDeveloper,
             item.GroupName,
-            FormatProvenance(item.Provenance),
             FormatStatus(item.Status),
             WorkStatusDisplayMapper.Format(WorkStatusDisplayMapper.From(item.WorkflowState)),
             item.DependencyCount.ToString(
@@ -1200,13 +1199,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     private static string FormatPriority(int? priority) =>
         priority?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—";
-
-    private static string FormatProvenance(EntityProvenance provenance) => provenance switch
-    {
-        EntityProvenance.Manual => "Manual",
-        EntityProvenance.Copied => "Copied",
-        _ => throw new ArgumentOutOfRangeException(nameof(provenance), provenance, null)
-    };
 
     private static string FormatRank(int? rank) =>
         rank?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—";

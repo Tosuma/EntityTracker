@@ -85,7 +85,6 @@ public sealed class TrackerManagementService(
             idMap[entity.Id],
             tracker.Id,
             entity.SourceName,
-            provenance: EntityProvenance.Copied,
             requestedPriority: entity.RequestedPriority,
             groupName: entity.GroupName,
             filterActive: entity.FilterActive)).ToArray();

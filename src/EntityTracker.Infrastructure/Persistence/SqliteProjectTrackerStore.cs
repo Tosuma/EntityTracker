@@ -241,11 +241,11 @@ public sealed class SqliteProjectTrackerStore(
         using SqliteCommand command = CreateCommand(connection, transaction, """
             INSERT INTO tracked_entities
             (id, tracker_id, source_name, notes, filter_active, shared_notes,
-             lifecycle_state, provenance, requested_priority, group_name,
+             lifecycle_state, requested_priority, group_name,
              created_at_utc, schema_updated_at_utc, progress_updated_at_utc)
             VALUES
             ($id, $trackerId, $sourceName, $notes, $filterActive, $sharedNotes,
-             $lifecycle, $provenance, $priority, $group,
+             $lifecycle, $priority, $group,
              $timestamp, $timestamp, $timestamp);
             """);
         command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
@@ -255,7 +255,6 @@ public sealed class SqliteProjectTrackerStore(
         command.Parameters.AddWithValue("$filterActive", entity.FilterActive);
         command.Parameters.AddWithValue("$sharedNotes", entity.SharedNotes);
         command.Parameters.AddWithValue("$lifecycle", entity.LifecycleState.ToString());
-        command.Parameters.AddWithValue("$provenance", entity.Provenance.ToString());
         command.Parameters.AddWithValue("$priority", entity.RequestedPriority is null ? DBNull.Value : entity.RequestedPriority.Value);
         command.Parameters.AddWithValue("$group", entity.GroupName);
         command.Parameters.AddWithValue("$timestamp", timestamp);

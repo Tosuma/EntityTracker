@@ -58,10 +58,7 @@ public sealed class ProgressDemoSeederTests
                 index % 2 == 0
                     ? DevelopmentStatus.Reconciled
                     : DevelopmentStatus.InProgress,
-                $"Keep note {index}",
-                provenance: index == 10
-                    ? EntityProvenance.Manual
-                    : EntityProvenance.Manual))
+                $"Keep note {index}"))
             .ToArray();
         TrackedEntity archived = new(
             new EntityId(Guid.Parse("20000000-0000-0000-0000-000000000001")),
@@ -69,8 +66,7 @@ public sealed class ProgressDemoSeederTests
             "Archived entity",
             DevelopmentStatus.Reconciled,
             "Keep archived note",
-            EntityLifecycleState.Archived,
-            EntityProvenance.Manual);
+            EntityLifecycleState.Archived);
         TrackedEntity missing = TrackedEntity.Placeholder(tracker.Id, "Missing target");
         await new SqliteTrackedStateStore(database).ApplyAsync(tracker.Id, new TrackedStateChangeSet(
             [.. active, archived, missing],
@@ -178,14 +174,12 @@ public sealed class ProgressDemoSeederTests
         EntityId Id,
         string SourceName,
         string Notes,
-        EntityLifecycleState LifecycleState,
-        EntityProvenance Provenance)
+        EntityLifecycleState LifecycleState)
     {
         public static EntityProjection From(TrackedEntity entity) => new(
             entity.Id,
             entity.SourceName,
             entity.Notes,
-            entity.LifecycleState,
-            entity.Provenance);
+            entity.LifecycleState);
     }
 }

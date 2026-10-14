@@ -132,7 +132,6 @@ public sealed class ManualEntityCreationService
             placeholder?.Id ?? EntityId.New(),
             trackerId,
             entityName,
-            provenance: EntityProvenance.Manual,
             requestedPriority: request.RequestedPriority,
             responsibleDeveloper: request.ResponsibleDeveloper,
             groupName: request.GroupName);

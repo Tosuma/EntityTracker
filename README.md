@@ -273,7 +273,7 @@ available as read-only records with their progress, notes, and dependencies inta
 deliberately restored from the archived view.
 
 Entity names and each row's **View details** action open a read-only side pane with priorities,
-rank, provenance, assignment, full notes, effective dependencies, blockers, and audit timestamps.
+rank, assignment, full notes, effective dependencies, blockers, and audit timestamps.
 Use **Edit** in the details header to open the entity editor. Opening or closing the pane does not
 disturb bulk row selection.
 
@@ -393,7 +393,7 @@ and save or copy any chart as a PNG image for slides or e-mails.
 ![Progress charts on the Project report page](images/light/project-report-charts.png)
 
 A **Client report** shows progress, statuses, Filter active, shared notes and dependencies, and leaves out
-internal notes, developer names and technical details such as origin and missing references; they
+internal notes, developer names and technical details such as missing references; they
 are left out of the file itself, not just hidden. An **Internal report** includes everything.
 SharePoint usually downloads `.html` files instead of showing them; the downloaded file opens in
 any browser.

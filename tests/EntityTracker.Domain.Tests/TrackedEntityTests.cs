@@ -19,7 +19,6 @@ public sealed class TrackedEntityTests
         Assert.Equal(string.Empty, entity.FilterActive);
         Assert.Equal(string.Empty, entity.SharedNotes);
         Assert.Equal(EntityLifecycleState.Active, entity.LifecycleState);
-        Assert.Equal(EntityProvenance.Manual, entity.Provenance);
         Assert.Null(entity.RequestedPriority);
         Assert.Equal(string.Empty, entity.ResponsibleDeveloper);
         Assert.Equal(string.Empty, entity.GroupName);
@@ -195,16 +194,6 @@ public sealed class TrackedEntityTests
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             entity.ChangeLifecycleState((EntityLifecycleState)999));
         Assert.Equal(EntityLifecycleState.Active, entity.LifecycleState);
-    }
-
-    [Fact]
-    public void Provenance_RejectsUndefinedValues()
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new TrackedEntity(
-            EntityId.New(),
-            TestTrackerId,
-            "sales.Customer",
-            provenance: (EntityProvenance)999));
     }
 
     [Theory]

@@ -136,8 +136,7 @@ public sealed class SqliteTrackedStateStoreTests
                 entity.SourceName,
                 DevelopmentStatus.InProgress,
                 entity.Notes,
-                entity.LifecycleState,
-                entity.Provenance))
+                entity.LifecycleState))
             .ToArray();
 
         await store.ApplyAsync(new TrackedStateChangeSet(
@@ -325,7 +324,6 @@ public sealed class SqliteTrackedStateStoreTests
             DevelopmentStatus.Reconciled,
             "Preserved notes",
             EntityLifecycleState.Archived,
-            EntityProvenance.Manual,
             requestedPriority: 3,
             responsibleDeveloper: "Legacy Team",
             groupName: "Legacy Data");
@@ -351,7 +349,6 @@ public sealed class SqliteTrackedStateStoreTests
         Assert.Equal(EntityLifecycleState.Active, loaded.LifecycleState);
         Assert.Equal(DevelopmentStatus.Reconciled, loaded.Status);
         Assert.Equal("Preserved notes", loaded.Notes);
-        Assert.Equal(EntityProvenance.Manual, loaded.Provenance);
         Assert.Equal(3, loaded.RequestedPriority);
         Assert.Empty(loaded.ResponsibleDeveloper);
         Assert.Equal("Legacy Data", loaded.GroupName);
@@ -395,7 +392,6 @@ public sealed class SqliteTrackedStateStoreTests
             entity.Status,
             entity.Notes,
             entity.LifecycleState,
-            entity.Provenance,
             requestedPriority: 2);
 
         await store.ApplyAsync(new TrackedStateChangeSet(
@@ -416,8 +412,7 @@ public sealed class SqliteTrackedStateStoreTests
             entity.SourceName,
             entity.Status,
             entity.Notes,
-            entity.LifecycleState,
-            entity.Provenance);
+            entity.LifecycleState);
         await store.ApplyAsync(new TrackedStateChangeSet(
             [],
             [],
@@ -621,7 +616,6 @@ public sealed class SqliteTrackedStateStoreTests
 
         Assert.True(result.IsSuccess);
         TrackedEntity created = (await entities.GetAsync(result.CreatedEntityId!))!;
-        Assert.Equal(EntityProvenance.Manual, created.Provenance);
         // The new entity took the placeholder's ID, so the owner's dependency now refers to it.
         Assert.Equal(future.Id, created.Id);
         Assert.Equal(EntityLifecycleState.Active, created.LifecycleState);

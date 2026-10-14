@@ -562,7 +562,6 @@ public sealed class EntityTableViewModelTests
             name,
             responsibleDeveloper,
             group,
-            "CSV",
             status.ToString(),
             workflowState.ToString(),
             "0",

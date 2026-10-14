@@ -1129,16 +1129,16 @@ public sealed class ExistingCheckoutRemoteSyncTests
         Guid copiedEntityId = Derive(id, 5);
         Guid firstEvent = Derive(id, 6);
         SnapshotEntity entity = new(entityId, trackerId, "Orders", "InProgress", "Keep notes",
-            "Active", "Manual", 2, "", "Core", time, later, later,
+            "Active", 2, "", "Core", time, later, later,
             [new SnapshotDependency(dependencyId, time, later), new SnapshotDependency(Derive(id, 16), time, later)],
             [new SnapshotResponsibilityPeriod(Derive(id, 12), entityId, Derive(id, 14), later, null)]);
         SnapshotEntity dependency = new(dependencyId, trackerId, "Customers", "Reconciled", "Archived notes",
-            "Archived", "Manual", 4, "", "Legacy", time, later, later, [],
+            "Archived", 4, "", "Legacy", time, later, later, [],
             [new SnapshotResponsibilityPeriod(Derive(id, 13), dependencyId, Derive(id, 15), later, null)]);
         SnapshotEntity copied = new(copiedEntityId, recycledTrackerId, "Copied entity", "NotStarted", "",
-            "Active", "Copied", null, "", "", time, later, later, []);
+            "Active", null, "", "", time, later, later, []);
         SnapshotEntity external = new(Derive(id, 16), trackerId, "External", "NotStarted", "",
-            "Placeholder", "Manual", null, "", "", time, time, time, [], []);
+            "Placeholder", null, "", "", time, time, time, [], []);
         SnapshotTracker tracker = new(trackerId, id, "Delivery", "Active", time, later, null, null,
             [entity, dependency, external],
             [new SnapshotStatusEvent(firstEvent, entityId, null, null, "NotStarted", "Created", time, 0),

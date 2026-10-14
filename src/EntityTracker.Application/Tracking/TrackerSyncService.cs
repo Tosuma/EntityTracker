@@ -84,8 +84,7 @@ public sealed class TrackerSyncService(
                 if (!wanted.Active) continue;
                 // A placeholder with the name becomes the entity, keeping its ID.
                 entity = new TrackedEntity(entity?.Id ?? EntityId.New(), review.DestinationTrackerId,
-                    wanted.Name, provenance: EntityProvenance.Copied,
-                    requestedPriority: wanted.RequestedPriority, groupName: wanted.GroupName,
+                    wanted.Name, requestedPriority: wanted.RequestedPriority, groupName: wanted.GroupName,
                     filterActive: wanted.FilterActive ?? "");
                 existingByKey[key] = entity;
                 additions.Add(entity);

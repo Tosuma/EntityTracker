@@ -55,8 +55,7 @@ public sealed class DependencyGraphReportSectionProviderTests
         EntityOverviewRow secret = Row(1, "customer") with
         {
             Notes = "Internal: vendor contract expires",
-            ResponsibleDeveloper = "Alice Brown",
-            Provenance = "Manual"
+            ResponsibleDeveloper = "Alice Brown"
         };
 
         string json = JsonSerializer.Serialize(DependencyGraphReportSectionProvider.Graph([secret]));
@@ -164,6 +163,6 @@ public sealed class DependencyGraphReportSectionProviderTests
     private static EntityOverviewRow Row(int id, string name, params string[] dependencies) => new(
         new EntityId(new Guid(id, 0, 0, new byte[8])), EntityLifecycleState.Active,
         DevelopmentStatus.NotStarted, EntityWorkflowState.Ready, DependencyResolutionState.Resolved,
-        "—", "—", name, "", "", "CSV", "", "", "", dependencies, [],
+        "—", "—", name, "", "", "", "", "", dependencies, [],
         "", "", "", "—", "", "");
 }

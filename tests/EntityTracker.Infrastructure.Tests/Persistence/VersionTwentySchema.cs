@@ -125,7 +125,7 @@ internal static class VersionTwentySchema
             SELECT entity.id, entity.tracker_id, upper(entity.source_name), entity.source_name,
                    status.development_status, entity.notes, entity.created_at_utc,
                    entity.schema_updated_at_utc, entity.progress_updated_at_utc, entity.lifecycle_state,
-                   CASE entity.provenance WHEN 'Manual' THEN 'ManualOnly' ELSE entity.provenance END,
+                   'ManualOnly',
                    entity.requested_priority, entity.group_name, entity.filter_active, entity.shared_notes
             FROM tracked_entities entity JOIN status_v20 status ON status.entity_id = entity.id
             WHERE entity.lifecycle_state <> 'Placeholder';

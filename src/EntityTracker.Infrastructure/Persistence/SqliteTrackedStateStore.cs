@@ -268,7 +268,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
         string[] queries =
         [
             "SELECT id, project_id, recycled_at_utc, copied_from_tracker_id FROM trackers WHERE id = $id ORDER BY id;",
-            "SELECT e.id, e.source_name, s.development_status, e.notes, e.filter_active, e.shared_notes, e.lifecycle_state, e.provenance, e.requested_priority, e.group_name, e.schema_updated_at_utc, e.progress_updated_at_utc FROM tracked_entities e JOIN entity_current_status s ON s.entity_id = e.id WHERE e.tracker_id = $id ORDER BY e.id;",
+            "SELECT e.id, e.source_name, s.development_status, e.notes, e.filter_active, e.shared_notes, e.lifecycle_state, e.requested_priority, e.group_name, e.schema_updated_at_utc, e.progress_updated_at_utc FROM tracked_entities e JOIN entity_current_status s ON s.entity_id = e.id WHERE e.tracker_id = $id ORDER BY e.id;",
             "SELECT d.dependent_entity_id, d.dependency_entity_id, d.updated_at_utc FROM entity_dependencies d JOIN tracked_entities e ON e.id = d.dependent_entity_id WHERE e.tracker_id = $id ORDER BY d.dependent_entity_id, d.dependency_entity_id;",
             "SELECT b.side, b.name, b.is_active, b.requested_priority, b.group_name, b.filter_active, d.dependency_name FROM tracker_sync_baseline_entities b LEFT JOIN tracker_sync_baseline_dependencies d ON d.baseline_entity_id = b.id WHERE b.tracker_id = $id ORDER BY b.side, b.name, d.dependency_name;",
             "SELECT p.id, p.entity_id, p.developer_id, p.started_at_utc, p.ended_at_utc FROM responsibility_periods p JOIN tracked_entities e ON e.id = p.entity_id WHERE e.tracker_id = $id ORDER BY p.id;"
@@ -567,14 +567,14 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
             INSERT INTO tracked_entities
             (
                 id, tracker_id, source_name, notes, filter_active, shared_notes,
-                lifecycle_state, provenance, requested_priority, group_name,
+                lifecycle_state, requested_priority, group_name,
                 created_at_utc, schema_updated_at_utc,
                 progress_updated_at_utc
             )
             VALUES
             (
                 $id, $trackerId, $sourceName, $notes, $filterActive, $sharedNotes,
-                $lifecycleState, $provenance, $requestedPriority, $groupName,
+                $lifecycleState, $requestedPriority, $groupName,
                 $timestamp, $timestamp, $timestamp
             )
             -- Adding an entity with a placeholder's ID turns the placeholder into it, so the
@@ -585,7 +585,6 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
                 filter_active = excluded.filter_active,
                 shared_notes = excluded.shared_notes,
                 lifecycle_state = excluded.lifecycle_state,
-                provenance = excluded.provenance,
                 requested_priority = excluded.requested_priority,
                 group_name = excluded.group_name,
                 created_at_utc = excluded.created_at_utc,
@@ -630,14 +629,12 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
             UPDATE tracked_entities
             SET source_name = $sourceName,
                 lifecycle_state = $lifecycleState,
-                provenance = $provenance,
                 schema_updated_at_utc = $timestamp
             WHERE id = $id;
             """);
         command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
         command.Parameters.AddWithValue("$sourceName", entity.SourceName);
         command.Parameters.AddWithValue("$lifecycleState", entity.LifecycleState.ToString());
-        command.Parameters.AddWithValue("$provenance", entity.Provenance.ToString());
         command.Parameters.AddWithValue("$timestamp", timestamp);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -701,7 +698,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
               AND EXISTS (SELECT 1 FROM entity_dependencies WHERE dependency_entity_id = $entityId);
             UPDATE tracked_entities
             SET lifecycle_state = 'Placeholder', notes = '',
-                filter_active = '', shared_notes = '', provenance = 'Manual',
+                filter_active = '', shared_notes = '',
                 requested_priority = NULL, group_name = ''
             WHERE id = $entityId
               AND tracker_id = $trackerId
@@ -836,7 +833,6 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
         command.Parameters.AddWithValue("$filterActive", entity.FilterActive);
         command.Parameters.AddWithValue("$sharedNotes", entity.SharedNotes);
         command.Parameters.AddWithValue("$lifecycleState", entity.LifecycleState.ToString());
-        command.Parameters.AddWithValue("$provenance", entity.Provenance.ToString());
         command.Parameters.AddWithValue(
             "$requestedPriority",
             entity.RequestedPriority is null ? DBNull.Value : entity.RequestedPriority.Value);

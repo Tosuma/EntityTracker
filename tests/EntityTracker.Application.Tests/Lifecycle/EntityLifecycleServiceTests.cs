@@ -57,8 +57,7 @@ public sealed class EntityLifecycleServiceTests
             "Legacy",
             DevelopmentStatus.Reconciled,
             "Keep notes",
-            EntityLifecycleState.Archived,
-            EntityProvenance.Copied);
+            EntityLifecycleState.Archived);
         RecordingStore store = new();
         EntityLifecycleService service = CreateService([archivedEntity], store);
 

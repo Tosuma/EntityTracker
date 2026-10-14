@@ -94,7 +94,7 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                     string entityId = entity.Str("id");
                     return new SnapshotEntity(entity.Guid("id"), entity.Guid("tracker_id"),
                         entity.Str("source_name"), entity.Str("development_status"), entity.Str("notes"),
-                        entity.Str("lifecycle_state"), entity.Str("provenance"), entity.IntOrNull("requested_priority"),
+                        entity.Str("lifecycle_state"), entity.IntOrNull("requested_priority"),
                         string.Empty, entity.Str("group_name"),
                         entity.Time("created_at_utc"), entity.Time("schema_updated_at_utc"),
                         entity.Time("progress_updated_at_utc"),
@@ -193,10 +193,10 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         foreach (SnapshotEntity entity in tracker.Entities)
         {
             await InsertAsync(connection, transaction, "tracked_entities",
-                ["id", "tracker_id", "source_name", "notes", "filter_active", "shared_notes", "lifecycle_state", "provenance", "requested_priority", "group_name", "created_at_utc", "schema_updated_at_utc", "progress_updated_at_utc"],
+                ["id", "tracker_id", "source_name", "notes", "filter_active", "shared_notes", "lifecycle_state", "requested_priority", "group_name", "created_at_utc", "schema_updated_at_utc", "progress_updated_at_utc"],
                 [Id(entity.Id), Id(tracker.Id),
                  entity.SourceName, entity.Notes, entity.FilterActive, entity.SharedNotes, entity.LifecycleState,
-                 entity.Provenance, entity.RequestedPriority, entity.GroupName,
+                 entity.RequestedPriority, entity.GroupName,
                  Time(entity.CreatedAtUtc), Time(entity.SchemaUpdatedAtUtc), Time(entity.ProgressUpdatedAtUtc)], cancellationToken);
         }
         foreach (SnapshotTracker tracker in snapshot.Trackers)

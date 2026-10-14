@@ -488,7 +488,6 @@ public sealed class DependencyGraphViewModelTests
             name,
             string.Empty,
             string.Empty,
-            "CSV",
             status.ToString(),
             EntityWorkflowState.Ready.ToString(),
             dependencies.Length.ToString(),

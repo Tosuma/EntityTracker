@@ -449,16 +449,16 @@ public sealed class ProjectSnapshotTests
         Guid eventA = Guid.Parse("40000000-0000-0000-0000-000000000001");
         Guid eventB = Guid.Parse("40000000-0000-0000-0000-000000000002");
         SnapshotEntity first = new(entityA, trackerA, "Orders", "InProgress", "Keep notes",
-            "Active", "Manual", 2, "", "Core", T0, T1, T2,
+            "Active", 2, "", "Core", T0, T1, T2,
             [new SnapshotDependency(entityB, T0, T1), new SnapshotDependency(externalA, T0, T2)],
             [new SnapshotResponsibilityPeriod(Guid.Parse("50000000-0000-0000-0000-000000000001"),
                 entityA, Guid.Parse("60000000-0000-0000-0000-000000000001"), T2, null)]);
         SnapshotEntity second = new(entityB, trackerA, "Customers", "Reconciled", "Archived notes",
-            "Archived", "Manual", 4, "", "Legacy", T0, T1, T2, [],
+            "Archived", 4, "", "Legacy", T0, T1, T2, [],
             [new SnapshotResponsibilityPeriod(Guid.Parse("50000000-0000-0000-0000-000000000002"),
                 entityB, Guid.Parse("60000000-0000-0000-0000-000000000002"), T2, null)]);
         SnapshotEntity third = new(entityC, trackerB, "Copied entity", "NotStarted", "",
-            "Active", "Copied", null, "", "", T0, T1, T2, []);
+            "Active", null, "", "", T0, T1, T2, []);
         SnapshotTracker a = new(trackerA, project, "Delivery", "Active", T0, T2, null,
             Guid.Parse("99999999-9999-9999-9999-999999999999"),
             [first, second, Placeholder(externalA, trackerA, "External")],
@@ -478,7 +478,7 @@ public sealed class ProjectSnapshotTests
     }
 
     private static SnapshotEntity Placeholder(Guid id, Guid trackerId, string name) =>
-        new(id, trackerId, name, "NotStarted", "", "Placeholder", "Manual", null, "", "", T0, T0, T0, [], []);
+        new(id, trackerId, name, "NotStarted", "", "Placeholder", null, "", "", T0, T0, T0, [], []);
 
     /// <summary>
     /// The snapshot as an older format would hold it: no placeholders, no dependency lists (formats
@@ -493,7 +493,7 @@ public sealed class ProjectSnapshotTests
             Entities = tracker.Entities.Where(entity => entity.LifecycleState != "Placeholder")
                 .Select(entity => entity with
                 {
-                    Provenance = entity.Provenance == "Manual" ? "ManualOnly" : entity.Provenance,
+                    LegacyProvenance = "ManualOnly",
                     Dependencies = [],
                     LegacyDependencies = [],
                     LegacyUnresolvedDependencies = [],

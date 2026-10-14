@@ -23,6 +23,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 {
     private readonly EntityDependencyEditorService _editorService;
     private readonly TrackerId _trackerId;
+    private bool _trackerIsCopy;
     private readonly NotificationCenter? _notifications;
     private readonly EntityLifecycleService _lifecycleService;
     private readonly Func<Task> _onPersisted;
@@ -497,7 +498,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             {
                 OnPropertyChanged(nameof(HasSelectedEntity));
                 OnPropertyChanged(nameof(SelectedEntityName));
-                OnPropertyChanged(nameof(EntityDetails));
                 OnPropertyChanged(nameof(ArchiveConfirmationMessage));
                 OnPropertyChanged(nameof(CanArchive));
                 OnPropertyChanged(nameof(CanEditProgress));
@@ -517,7 +517,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             {
                 OnPropertyChanged(nameof(HasSelectedEntity));
                 OnPropertyChanged(nameof(SelectedEntityName));
-                OnPropertyChanged(nameof(EntityDetails));
                 OnPropertyChanged(nameof(CanRestoreEntity));
                 OnPropertyChanged(nameof(CanPurgeEntity));
                 OnPropertyChanged(nameof(CanConfirmPurge));
@@ -615,15 +614,16 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     public bool HasNameError => NameError.Length > 0;
 
     /// <summary>
-    /// Gets a warning when the new name may not match the Tracker the entity was copied from.
+    /// Gets a warning when the entity's Tracker is a copy of another: Sync from source matches entities
+    /// by name, so the new name may not match the source.
     /// </summary>
     public string RenameNotice
     {
         get
         {
             if (CurrentEditPlan is not { } plan || HasNameError || !IsNameKeyChanged(plan.Entity.SourceName)) return string.Empty;
-            return plan.Entity.Provenance == EntityProvenance.Copied
-                ? "This entity was copied from another Tracker. Syncing with that Tracker will show the old " +
+            return _trackerIsCopy
+                ? "This Tracker was copied from another Tracker. Syncing with that Tracker will show the old " +
                   "and the new name as two different entities."
                 : string.Empty;
         }
@@ -814,9 +814,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
     public string SelectedEntityName => SelectedEntity?.SourceName ?? "Loading entity…";
 
-    public string EntityDetails => SelectedEntity is null
-        ? "Loading entity details…"
-        : $"Origin: {FormatProvenance(SelectedEntity.Provenance)}";
 
     public string ContextTitle => Mode switch
     {
@@ -891,6 +888,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         IsBusy = true;
         try
         {
+            _trackerIsCopy = await _editorService.IsCopiedTrackerAsync(_trackerId, cancellationToken);
             LoadPlan(await _editorService.LoadAsync(_trackerId, entityId, cancellationToken), true);
             if (DeveloperPicker is not null && _responsibilityPeriods is not null)
             {
@@ -1584,12 +1582,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private static string FormatResolution(EntityDependencyEditItem item) =>
         item.IsResolved ? "Resolved" : "⚠ Unresolved";
 
-    private static string FormatProvenance(EntityProvenance provenance) => provenance switch
-    {
-        EntityProvenance.Manual => "Added by hand",
-        EntityProvenance.Copied => "Copied from another Tracker",
-        _ => throw new ArgumentOutOfRangeException(nameof(provenance), provenance, null)
-    };
 
     private static string FormatPriority(int? priority) =>
         priority?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—";

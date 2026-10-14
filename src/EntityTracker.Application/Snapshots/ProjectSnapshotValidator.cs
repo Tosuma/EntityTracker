@@ -75,15 +75,10 @@ public static class ProjectSnapshotValidator
                 }
                 EnumValue<DevelopmentStatus>(entity.DevelopmentStatus);
                 EnumValue<EntityLifecycleState>(entity.LifecycleState);
-                if (legacy)
-                {
-                    if (!LegacyProvenances.Contains(entity.Provenance, StringComparer.Ordinal))
-                        throw new InvalidDataException($"Unsupported snapshot value '{entity.Provenance}'.");
-                }
-                else
-                {
-                    EnumValue<EntityProvenance>(entity.Provenance);
-                }
+                if (legacy
+                        ? !LegacyProvenances.Contains(entity.LegacyProvenance, StringComparer.Ordinal)
+                        : entity.LegacyProvenance is not null)
+                    throw new InvalidDataException($"Unsupported snapshot value '{entity.LegacyProvenance}'.");
                 if (entity.RequestedPriority is < 1 or > 5)
                 {
                     throw new InvalidDataException("An entity priority is invalid.");

@@ -105,7 +105,6 @@ public sealed class BulkStatusUpdateService
                 targetStatus,
                 entity.Notes,
                 entity.LifecycleState,
-                entity.Provenance,
                 entity.RequestedPriority,
                 entity.ResponsibleDeveloper,
                 entity.GroupName,

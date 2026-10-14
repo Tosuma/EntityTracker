@@ -20,6 +20,8 @@ namespace EntityTracker.Infrastructure.Persistence;
 /// <item>Status events and progress snapshots are identified by their GUIDs; an explicit sequence keeps
 /// the order they were recorded in.</item>
 /// <item>The Tracker sync baseline, a JSON document, becomes rows.</item>
+/// <item>Entity provenance goes: with the schema import gone it only told whether an entity came from a
+/// Tracker copy, which the Tracker itself records.</item>
 /// </list>
 /// </summary>
 internal static class SqliteNormalFormMigration
@@ -94,7 +96,6 @@ internal static class SqliteNormalFormMigration
                 schema_updated_at_utc TEXT NOT NULL,
                 progress_updated_at_utc TEXT NOT NULL,
                 lifecycle_state TEXT NOT NULL CHECK (lifecycle_state IN ('Active', 'Archived', 'Placeholder')),
-                provenance TEXT NOT NULL CHECK (provenance IN ('Manual', 'Copied')),
                 requested_priority INTEGER NULL CHECK
                     (requested_priority IS NULL OR requested_priority BETWEEN 1 AND 5),
                 group_name TEXT NOT NULL,
@@ -105,10 +106,10 @@ internal static class SqliteNormalFormMigration
             );
             INSERT INTO tracked_entities_v22
             (id, tracker_id, source_name, notes, created_at_utc, schema_updated_at_utc,
-             progress_updated_at_utc, lifecycle_state, provenance, requested_priority, group_name,
+             progress_updated_at_utc, lifecycle_state, requested_priority, group_name,
              filter_active, shared_notes)
             SELECT id, tracker_id, trim(source_name), notes, created_at_utc, schema_updated_at_utc,
-                   progress_updated_at_utc, lifecycle_state, provenance, requested_priority, group_name,
+                   progress_updated_at_utc, lifecycle_state, requested_priority, group_name,
                    filter_active, shared_notes
             FROM tracked_entities;
             DROP TABLE tracked_entities;

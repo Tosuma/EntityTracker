@@ -145,7 +145,6 @@ public sealed class ProjectTrackerMigrationTests
         Assert.Equal(DevelopmentStatus.InProgress, active.Status);
         Assert.Equal("Preserved notes", active.Notes);
         Assert.Equal(EntityLifecycleState.Active, active.LifecycleState);
-        Assert.Equal(EntityProvenance.Manual, active.Provenance);
         Assert.Equal(4, active.RequestedPriority);
         Assert.Equal(string.Empty, active.ResponsibleDeveloper);
         ResponsibilityPeriod migratedAssignment = Assert.Single(

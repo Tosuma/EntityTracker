@@ -242,18 +242,18 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
     {
         public static SnapshotEntityLegacy From(SnapshotEntity entity) => new(
             entity.Id, entity.TrackerId, entity.SourceName, entity.DevelopmentStatus,
-            entity.Notes, entity.LifecycleState, entity.Provenance,
+            entity.Notes, entity.LifecycleState, entity.LegacyProvenance ?? "ManualOnly",
             entity.RequestedPriority, entity.ResponsibleDeveloper, entity.GroupName,
             entity.CreatedAtUtc, entity.SchemaUpdatedAtUtc, entity.ProgressUpdatedAtUtc,
             entity.LegacyDependencies ?? [], entity.LegacyUnresolvedDependencies ?? [],
             entity.LegacyOverrides ?? [], entity.ResponsibilityPeriods);
 
         public SnapshotEntity ToSnapshotEntity() => new(Id, TrackerId, SourceName,
-            DevelopmentStatus, Notes, LifecycleState, Provenance, RequestedPriority,
+            DevelopmentStatus, Notes, LifecycleState, RequestedPriority,
             ResponsibleDeveloper, GroupName, CreatedAtUtc, SchemaUpdatedAtUtc,
             ProgressUpdatedAtUtc, [], ResponsibilityPeriods,
             LegacyDependencies: Dependencies, LegacyUnresolvedDependencies: UnresolvedDependencies,
-            LegacyOverrides: ManualOverrides);
+            LegacyOverrides: ManualOverrides, LegacyProvenance: Provenance);
     }
 
     private sealed record SnapshotEntityV3(
@@ -274,7 +274,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
         // Empty Shared notes are left out, so adding the field does not rewrite every entity file.
         public static SnapshotEntityV3 From(SnapshotEntity entity, bool includeFilterActive, bool includeSharedNotes) => new(
             entity.Id, entity.TrackerId, entity.SourceName, entity.DevelopmentStatus,
-            entity.Notes, entity.LifecycleState, entity.Provenance,
+            entity.Notes, entity.LifecycleState, entity.LegacyProvenance ?? "ManualOnly",
             entity.RequestedPriority, entity.GroupName,
             entity.CreatedAtUtc, entity.SchemaUpdatedAtUtc, entity.ProgressUpdatedAtUtc,
             entity.LegacyDependencies ?? [], entity.LegacyUnresolvedDependencies ?? [],
@@ -283,17 +283,17 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
             includeSharedNotes && entity.SharedNotes.Length > 0 ? entity.SharedNotes : null);
 
         public SnapshotEntity ToSnapshotEntity(bool includeFilterActive, bool includeSharedNotes) => new(Id, TrackerId, SourceName,
-            DevelopmentStatus, Notes, LifecycleState, Provenance, RequestedPriority,
+            DevelopmentStatus, Notes, LifecycleState, RequestedPriority,
             string.Empty, GroupName, CreatedAtUtc, SchemaUpdatedAtUtc,
             ProgressUpdatedAtUtc, [], ResponsibilityPeriods, includeFilterActive ? FilterActive ?? "" : "",
             includeSharedNotes ? SharedNotes ?? "" : "",
-            Dependencies, UnresolvedDependencies, ManualOverrides);
+            Dependencies, UnresolvedDependencies, ManualOverrides, Provenance);
     }
 
     /// <summary>Format 6: one dependency list, by entity ID; no imported dependencies or corrections.</summary>
     private sealed record SnapshotEntityV6(
         Guid Id, Guid TrackerId, string SourceName, string DevelopmentStatus,
-        string Notes, string LifecycleState, string Provenance,
+        string Notes, string LifecycleState,
         int? RequestedPriority, string GroupName,
         DateTimeOffset CreatedAtUtc, DateTimeOffset SchemaUpdatedAtUtc,
         DateTimeOffset ProgressUpdatedAtUtc,
@@ -306,14 +306,14 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
         // Empty Shared notes are left out, as in format 5.
         public static SnapshotEntityV6 From(SnapshotEntity entity) => new(
             entity.Id, entity.TrackerId, entity.SourceName, entity.DevelopmentStatus,
-            entity.Notes, entity.LifecycleState, entity.Provenance,
+            entity.Notes, entity.LifecycleState,
             entity.RequestedPriority, entity.GroupName,
             entity.CreatedAtUtc, entity.SchemaUpdatedAtUtc, entity.ProgressUpdatedAtUtc,
             entity.Dependencies, entity.ResponsibilityPeriods ?? [], entity.FilterActive,
             entity.SharedNotes.Length > 0 ? entity.SharedNotes : null);
 
         public SnapshotEntity ToSnapshotEntity() => new(Id, TrackerId, SourceName,
-            DevelopmentStatus, Notes, LifecycleState, Provenance, RequestedPriority,
+            DevelopmentStatus, Notes, LifecycleState, RequestedPriority,
             string.Empty, GroupName, CreatedAtUtc, SchemaUpdatedAtUtc,
             ProgressUpdatedAtUtc, Dependencies, ResponsibilityPeriods, FilterActive, SharedNotes ?? "");
     }

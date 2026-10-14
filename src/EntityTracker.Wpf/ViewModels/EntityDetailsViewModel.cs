@@ -25,7 +25,6 @@ public sealed class EntityDetailsViewModel : INotifyPropertyChanged
         SourceName = row.SourceName;
         Lifecycle = row.LifecycleState == EntityLifecycleState.Archived ? "Archived" : "Active";
         IsArchived = row.LifecycleState == EntityLifecycleState.Archived;
-        Provenance = row.Provenance;
         Notes = string.IsNullOrWhiteSpace(row.Notes) ? "No internal notes" : row.Notes;
         SharedNotes = string.IsNullOrWhiteSpace(row.SharedNotes) ? "No shared notes" : row.SharedNotes;
         FilterActive = string.IsNullOrWhiteSpace(row.FilterActive) ? "No filter instructions" : row.FilterActive;
@@ -84,7 +83,6 @@ public sealed class EntityDetailsViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(SelfAssignmentAccessibleName));
     }
 
-    public string Provenance { get; }
 
     public string Notes { get; }
 

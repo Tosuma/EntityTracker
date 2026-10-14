@@ -361,8 +361,8 @@ public sealed class EntityDependencyEditorServiceTests
 
         TrackedStateChangeSet changeSet = Assert.IsType<TrackedStateChangeSet>(store.LastChangeSet);
         TrackedEntity renamed = Assert.Single(changeSet.EntitiesToUpdate);
-        Assert.Equal((owner.Id, "customer_account", "Billing", owner.Provenance),
-            (renamed.Id, renamed.SourceName, renamed.GroupName, renamed.Provenance));
+        Assert.Equal((owner.Id, "customer_account", "Billing"),
+            (renamed.Id, renamed.SourceName, renamed.GroupName));
         Assert.Empty(changeSet.EntitiesWithProgressToUpdate);
     }
 

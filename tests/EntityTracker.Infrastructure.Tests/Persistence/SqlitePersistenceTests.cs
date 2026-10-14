@@ -47,7 +47,7 @@ public sealed class SqlitePersistenceTests
         Assert.Contains("schema_updated_at_utc", entityColumns);
         Assert.Contains("progress_updated_at_utc", entityColumns);
         Assert.Contains("lifecycle_state", entityColumns);
-        Assert.Contains("provenance", entityColumns);
+        Assert.DoesNotContain("provenance", entityColumns);
         Assert.Contains("requested_priority", entityColumns);
         Assert.DoesNotContain("responsible_developer", entityColumns);
         Assert.Contains("responsibility_periods", tableNames);
@@ -386,9 +386,6 @@ public sealed class SqlitePersistenceTests
         Assert.All(
             await entityRepository.GetAllAsync(),
             static entity => Assert.Equal(EntityLifecycleState.Active, entity.LifecycleState));
-        Assert.All(
-            await entityRepository.GetAllAsync(),
-            static entity => Assert.Equal(EntityProvenance.Manual, entity.Provenance));
         Assert.Equal(
             DevelopmentStatus.DevelopmentCompleted,
             (await entityRepository.GetAsync(dependencyId))!.Status);
@@ -434,7 +431,6 @@ public sealed class SqlitePersistenceTests
         Assert.Equal("Keep notes", loaded.Notes);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
         Assert.Equal(22L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
-        Assert.Equal(EntityProvenance.Manual, loaded.Provenance);
     }
 
     [Fact]
@@ -474,7 +470,6 @@ public sealed class SqlitePersistenceTests
         TrackedEntity loaded = (await new SqliteEntityRepository(database).GetAsync(id))!;
 
         Assert.Equal(EntityLifecycleState.Active, loaded.LifecycleState);
-        Assert.Equal(EntityProvenance.Manual, loaded.Provenance);
         Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
         Assert.Equal("Keep notes", loaded.Notes);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
@@ -560,8 +555,7 @@ public sealed class SqlitePersistenceTests
             firstDatabase.GetTrackerId(),
             "sales.Customer",
             DevelopmentStatus.InProgress,
-            "Manual implementation notes",
-            provenance: EntityProvenance.Manual);
+            "Manual implementation notes");
 
         Assert.True(await firstRepository.TryAddAsync(entity));
 
@@ -575,7 +569,6 @@ public sealed class SqlitePersistenceTests
         Assert.Equal("sales.Customer", loaded.SourceName);
         Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
         Assert.Equal("Manual implementation notes", loaded.Notes);
-        Assert.Equal(EntityProvenance.Manual, loaded.Provenance);
     }
 
     [Fact]
@@ -645,8 +638,7 @@ public sealed class SqlitePersistenceTests
             database.GetTrackerId(),
             "OriginalName",
             DevelopmentStatus.DevelopmentCompleted,
-            "Keep this manual progress",
-            provenance: EntityProvenance.Manual);
+            "Keep this manual progress");
         Assert.True(await repository.TryAddAsync(original));
         EntityAudit originalAudit = await ReadEntityAuditAsync(file.DatabasePath, id);
 
@@ -654,8 +646,7 @@ public sealed class SqlitePersistenceTests
         TrackedEntity importedMetadata = new(
             id,
             database.GetTrackerId(),
-            "RenamedEntity",
-            provenance: EntityProvenance.Manual);
+            "RenamedEntity");
         Assert.True(await repository.UpdateSchemaMetadataAsync(importedMetadata));
 
         TrackedEntity? afterMetadataUpdate = await repository.GetAsync(id);
@@ -663,7 +654,6 @@ public sealed class SqlitePersistenceTests
         Assert.Equal("RenamedEntity", afterMetadataUpdate.SourceName);
         Assert.Equal(DevelopmentStatus.DevelopmentCompleted, afterMetadataUpdate.Status);
         Assert.Equal("Keep this manual progress", afterMetadataUpdate.Notes);
-        Assert.Equal(EntityProvenance.Manual, afterMetadataUpdate.Provenance);
         EntityAudit metadataAudit = await ReadEntityAuditAsync(file.DatabasePath, id);
         Assert.Equal(originalAudit.CreatedAtUtc, metadataAudit.CreatedAtUtc);
         Assert.Equal(originalAudit.ProgressUpdatedAtUtc, metadataAudit.ProgressUpdatedAtUtc);
@@ -689,7 +679,6 @@ public sealed class SqlitePersistenceTests
         Assert.Equal("RenamedEntity", afterProgressUpdate.SourceName);
         Assert.Equal(DevelopmentStatus.InProgress, afterProgressUpdate.Status);
         Assert.Equal("Updated manual notes", afterProgressUpdate.Notes);
-        Assert.Equal(EntityProvenance.Manual, afterProgressUpdate.Provenance);
         EntityAudit progressAudit = await ReadEntityAuditAsync(file.DatabasePath, id);
         Assert.Equal(originalAudit.CreatedAtUtc, progressAudit.CreatedAtUtc);
         Assert.Equal(metadataAudit.SchemaUpdatedAtUtc, progressAudit.SchemaUpdatedAtUtc);

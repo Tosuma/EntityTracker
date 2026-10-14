@@ -242,7 +242,7 @@ internal sealed class ProjectMergeConflictPresenter(
                 DateTimeStyles.AssumeUniversal, out DateTimeOffset date))
             return date.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss.fffffff 'UTC'",
                 CultureInfo.InvariantCulture);
-        if (property is "DevelopmentStatus" or "LifecycleState" or "Provenance" or
+        if (property is "DevelopmentStatus" or "LifecycleState" or
             "Kind" or "Action" or "Mode") return Humanize(value);
         return value;
     }

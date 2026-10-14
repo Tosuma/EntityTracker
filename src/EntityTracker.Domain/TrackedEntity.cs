@@ -9,7 +9,6 @@ public sealed class TrackedEntity
         DevelopmentStatus status = DevelopmentStatus.NotStarted,
         string notes = "",
         EntityLifecycleState lifecycleState = EntityLifecycleState.Active,
-        EntityProvenance provenance = EntityProvenance.Manual,
         int? requestedPriority = null,
         string? responsibleDeveloper = null,
         string? groupName = null,
@@ -25,7 +24,6 @@ public sealed class TrackedEntity
 
         EnsureDefinedStatus(status);
         EnsureDefinedLifecycleState(lifecycleState);
-        EnsureDefinedProvenance(provenance);
         EnsureValidRequestedPriority(requestedPriority);
 
         Id = id;
@@ -36,7 +34,6 @@ public sealed class TrackedEntity
         FilterActive = filterActive;
         SharedNotes = sharedNotes;
         LifecycleState = lifecycleState;
-        Provenance = provenance;
         RequestedPriority = requestedPriority;
         ResponsibleDeveloper = NormalizeResponsibleDeveloper(responsibleDeveloper);
         GroupName = NormalizeGroupName(groupName);
@@ -82,8 +79,6 @@ public sealed class TrackedEntity
     public string SharedNotes { get; private set; }
 
     public EntityLifecycleState LifecycleState { get; private set; }
-
-    public EntityProvenance Provenance { get; private set; }
 
     public int? RequestedPriority { get; private set; }
 
@@ -172,16 +167,6 @@ public sealed class TrackedEntity
         }
     }
 
-    private static void EnsureDefinedProvenance(EntityProvenance provenance)
-    {
-        if (!Enum.IsDefined(provenance))
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(provenance),
-                provenance,
-                "The entity provenance is not defined.");
-        }
-    }
 
     private static void EnsureValidRequestedPriority(int? requestedPriority)
     {

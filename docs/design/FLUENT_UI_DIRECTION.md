@@ -108,7 +108,7 @@ The default active entity table shows manager essentials:
 - Blockers;
 - row actions.
 
-Provenance, dependency counts and full dependency lists, notes, timestamps, and other secondary
+Dependency counts and full dependency lists, notes, timestamps, and other secondary
 information belong in a read-only right-side details pane. Opening the pane must not interfere with
 extended row selection for bulk status updates. Editing remains accessible only through the row
 kebab and its guarded modal.

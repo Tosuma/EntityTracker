@@ -185,16 +185,16 @@ public sealed class PlaceholderEntityTests
         Guid trackerId = Guid.NewGuid();
         Guid ownerId = Guid.NewGuid();
         Guid targetId = Guid.NewGuid();
-        SnapshotEntity owner = new(ownerId, trackerId, "Owner", "NotStarted", "", "Active", "ManualAndImported",
-            null, "", "", time, time, time, [], [],
+        SnapshotEntity owner = new(ownerId, trackerId, "Owner", "NotStarted", "", "Active", null, "", "", time, time, time, [], [],
             LegacyDependencies: [new SnapshotLegacyDependency(ownerId, targetId, "Optional", time, time)],
             LegacyUnresolvedDependencies: [new SnapshotLegacyUnresolvedDependency(ownerId, "Future", "Mandatory", time, time),
                 new SnapshotLegacyUnresolvedDependency(ownerId, "Dropped", "Mandatory", time, time)],
             LegacyOverrides: [new SnapshotLegacyOverride(ownerId, "Dropped", "Suppress", time, time),
-                new SnapshotLegacyOverride(ownerId, "External", "Add", time, time)]);
-        SnapshotEntity target = new(targetId, trackerId, "Target", "NotStarted", "", "Active", "Imported",
-            null, "", "", time, time, time, [], [],
-            LegacyDependencies: [], LegacyUnresolvedDependencies: [], LegacyOverrides: []);
+                new SnapshotLegacyOverride(ownerId, "External", "Add", time, time)],
+            LegacyProvenance: "ManualAndImported");
+        SnapshotEntity target = new(targetId, trackerId, "Target", "NotStarted", "", "Active", null, "", "", time, time, time, [], [],
+            LegacyDependencies: [], LegacyUnresolvedDependencies: [], LegacyOverrides: [],
+            LegacyProvenance: "Imported");
         ProjectSnapshot older = new(5,
             new SnapshotProject(projectId, "Older", "Active", time, time, null),
             [new SnapshotTracker(trackerId, projectId, "Tracker", "Active", time, time, null, null,

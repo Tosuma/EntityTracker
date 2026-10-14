@@ -13,7 +13,6 @@ public sealed class EntityOverviewItem
         int? requestedPriority,
         int? effectivePriority,
         string sourceName,
-        EntityProvenance provenance,
         DevelopmentStatus status,
         string notes,
         string responsibleDeveloper,
@@ -35,7 +34,6 @@ public sealed class EntityOverviewItem
         RequestedPriority = requestedPriority;
         EffectivePriority = effectivePriority;
         SourceName = sourceName;
-        Provenance = provenance;
         Status = status;
         Notes = notes;
         FilterActive = filterActive;
@@ -63,8 +61,6 @@ public sealed class EntityOverviewItem
     public int? EffectivePriority { get; }
 
     public string SourceName { get; }
-
-    public EntityProvenance Provenance { get; }
 
     public DevelopmentStatus Status { get; }
 

@@ -867,19 +867,6 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task Overview_ShowsManualProvenance()
-    {
-        MainWindowViewModel viewModel = CreateViewModel(
-            [Entity(1, "Planned", provenance: EntityProvenance.Manual)],
-            [],
-            out _);
-
-        await viewModel.InitializeAsync();
-
-        Assert.Equal("Manual", Assert.Single(viewModel.OverviewItems).Provenance);
-    }
-
-    [Fact]
     public async Task ManualCreation_SuccessReturnsToRefreshedOverview()
     {
         MainWindowViewModel viewModel = CreateViewModel(
@@ -896,7 +883,6 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(MainWindowTab.Overview, viewModel.SelectedTab);
         EntityOverviewRow row = Assert.Single(viewModel.OverviewItems);
         Assert.Equal("NewManualEntity", row.SourceName);
-        Assert.Equal("Manual", row.Provenance);
         Assert.Equal("Not started", row.Status);
         Assert.Equal(row.EntityId, revealedEntityId);
         Assert.Equal(row.EntityId, viewModel.SelectedEntityDetails?.EntityId);
@@ -1171,7 +1157,6 @@ public sealed class MainWindowViewModelTests
         string name,
         DevelopmentStatus status = DevelopmentStatus.NotStarted,
         string notes = "",
-        EntityProvenance provenance = EntityProvenance.Manual,
         EntityLifecycleState lifecycle = EntityLifecycleState.Active,
         int? requestedPriority = null,
         string? responsibleDeveloper = null,
@@ -1183,7 +1168,6 @@ public sealed class MainWindowViewModelTests
             status,
             notes,
             lifecycle,
-            provenance,
             requestedPriority,
             responsibleDeveloper,
             groupName);

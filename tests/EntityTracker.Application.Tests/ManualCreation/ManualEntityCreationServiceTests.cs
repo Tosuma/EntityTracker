@@ -245,7 +245,6 @@ public sealed class ManualEntityCreationServiceTests
         Assert.Equal("NewEntity", added.SourceName);
         Assert.Equal(DevelopmentStatus.NotStarted, added.Status);
         Assert.Equal(EntityLifecycleState.Active, added.LifecycleState);
-        Assert.Equal(EntityProvenance.Manual, added.Provenance);
         Assert.Equal("Platform Team", added.ResponsibleDeveloper);
         Assert.Equal("Core Data", added.GroupName);
         Assert.Null(added.RequestedPriority);

@@ -53,6 +53,7 @@ public static class ProjectSnapshotUpgrade
                 }
                 return entity with
                 {
+                    LegacyProvenance = null,
                     ResponsibleDeveloper = string.Empty,
                     ResponsibilityPeriods = periods.OrderBy(p => p.StartedAtUtc)
                         .ThenBy(p => p.Id).ToArray()
@@ -162,14 +163,13 @@ public static class ProjectSnapshotUpgrade
                         new EntityTracker.Domain.TrackerId(tracker.Id), name).Value;
                     idsByName[name] = targetId;
                     placeholders[targetId] = new SnapshotEntity(targetId, tracker.Id, name, "NotStarted",
-                        string.Empty, "Placeholder", "Manual", null, string.Empty, string.Empty,
+                        string.Empty, "Placeholder", null, string.Empty, string.Empty,
                         created, created, created, [], []);
                 }
                 dependencies.Add(new SnapshotDependency(targetId, created, updated));
             }
             entities.Add(entity with
             {
-                Provenance = entity.Provenance is "Copied" or "CopiedAndImported" ? "Copied" : "Manual",
                 Dependencies = dependencies.OrderBy(d => d.DependencyEntityId).ToArray(),
                 LegacyDependencies = null,
                 LegacyUnresolvedDependencies = null,

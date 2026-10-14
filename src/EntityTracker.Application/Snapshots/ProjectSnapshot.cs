@@ -39,7 +39,7 @@ public sealed record SnapshotTracker(
 
 public sealed record SnapshotEntity(
     Guid Id, Guid TrackerId, string SourceName, string DevelopmentStatus,
-    string Notes, string LifecycleState, string Provenance,
+    string Notes, string LifecycleState,
     int? RequestedPriority, string ResponsibleDeveloper, string GroupName,
     DateTimeOffset CreatedAtUtc, DateTimeOffset SchemaUpdatedAtUtc,
     DateTimeOffset ProgressUpdatedAtUtc,
@@ -50,7 +50,9 @@ public sealed record SnapshotEntity(
     // Formats 1–5 only; format 6 keeps these empty and uses Dependencies.
     IReadOnlyList<SnapshotLegacyDependency>? LegacyDependencies = null,
     IReadOnlyList<SnapshotLegacyUnresolvedDependency>? LegacyUnresolvedDependencies = null,
-    IReadOnlyList<SnapshotLegacyOverride>? LegacyOverrides = null);
+    IReadOnlyList<SnapshotLegacyOverride>? LegacyOverrides = null,
+    // Formats 1–5 only: how the entity entered its Tracker (Imported, ManualOnly, Copied, ...).
+    string? LegacyProvenance = null);
 
 public sealed record SnapshotResponsibilityPeriod(Guid Id, Guid EntityId, Guid DeveloperId,
     DateTimeOffset StartedAtUtc, DateTimeOffset? EndedAtUtc);

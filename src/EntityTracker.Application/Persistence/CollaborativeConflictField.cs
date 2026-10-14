@@ -6,7 +6,6 @@ public enum CollaborativeConflictField
     DevelopmentStatus = 1,
     Notes = 2,
     LifecycleState = 3,
-    Provenance = 4,
     Dependency = 5,
     Identity = 7,
     RequestedPriority = 8,

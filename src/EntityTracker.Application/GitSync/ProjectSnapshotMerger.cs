@@ -245,7 +245,6 @@ public sealed class ProjectSnapshotMerger
             SharedNotes = Field(path + "/SharedNotes", b.SharedNotes, l.SharedNotes, r.SharedNotes),
             LifecycleState = Field(path + "/LifecycleState", b.LifecycleState,
                 l.LifecycleState, r.LifecycleState, ProjectConflictKind.Lifecycle),
-            Provenance = Field(path + "/Provenance", b.Provenance, l.Provenance, r.Provenance),
             RequestedPriority = Field(path + "/RequestedPriority", b.RequestedPriority,
                 l.RequestedPriority, r.RequestedPriority),
             ResponsibleDeveloper = string.Empty,

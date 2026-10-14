@@ -242,9 +242,9 @@ public sealed class ResponsibilityPeriodTests
             [new SnapshotTracker(trackerId, projectId, "Tracker", "Active", created, created,
                 null, null,
                 [new SnapshotEntity(entityId, trackerId, "Legacy", "NotStarted", "",
-                    "Active", "Imported", null, "AL, BO, al", "", created, created,
+                    "Active", null, "AL, BO, al", "", created, created,
                     created, [], LegacyDependencies: [], LegacyUnresolvedDependencies: [],
-                    LegacyOverrides: [])], [], [])], []);
+                    LegacyOverrides: [], LegacyProvenance: "Imported")], [], [])], []);
         ProjectSnapshotJsonCodec codec = new();
         ProjectSnapshot decoded = codec.Decode(codec.Encode(older).Files);
         await new SqliteProjectSnapshotStore(database).ApplyAsync(decoded, 0);

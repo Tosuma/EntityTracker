@@ -1725,10 +1725,6 @@
                                 <TextBlock FontWeight="SemiBold" Text="Rank" />
                                 <TextBlock Margin="0,3,0,0" Text="{Binding Rank}" TextWrapping="Wrap" />
                             </StackPanel>
-                            <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,12,0,0">
-                                <TextBlock FontWeight="SemiBold" Text="Provenance" />
-                                <TextBlock Margin="0,3,0,0" Text="{Binding Provenance}" TextWrapping="Wrap" />
-                            </StackPanel>
                         </Grid>
 
                         <Grid Margin="0,0,0,16">
@@ -1949,12 +1945,10 @@
                                   HorizontalScrollBarVisibility="Disabled"
                                   VerticalScrollBarVisibility="Auto">
                         <StackPanel MaxWidth="860" HorizontalAlignment="Stretch">
-                            <TextBlock FontSize="17"
+                            <TextBlock Margin="0,0,0,16"
+                                       FontSize="17"
                                        FontWeight="SemiBold"
                                        Text="{Binding Editor.SelectedEntityName}" />
-                            <TextBlock Margin="0,3,0,16"
-                                       Foreground="{DynamicResource Brush.Text.Secondary}"
-                                       Text="{Binding Editor.EntityDetails}" />
                             <StackPanel Visibility="{Binding Editor.HasSelectedEntity, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <Border Margin="0,0,0,14"
                                         Padding="16"

@@ -428,7 +428,6 @@ public sealed class ProjectTrackerOperationsTests
         Assert.All(copiedEntities, entity =>
         {
             Assert.Equal(copy.Id, entity.TrackerId);
-            Assert.Equal(EntityProvenance.Copied, entity.Provenance);
             Assert.Equal(DevelopmentStatus.NotStarted, entity.Status);
             Assert.Equal(string.Empty, entity.Notes);
             Assert.Equal(string.Empty, entity.ResponsibleDeveloper);

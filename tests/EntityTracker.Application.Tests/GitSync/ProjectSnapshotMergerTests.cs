@@ -631,12 +631,11 @@ public sealed class ProjectSnapshotMergerTests
     }
 
     private static SnapshotEntity Entity(Guid id, Guid trackerId, string name) =>
-        new(id, trackerId, name, "NotStarted", "", "Active", "Manual",
-            null, "", "", Time, Time, Time, []);
+        new(id, trackerId, name, "NotStarted", "", "Active", null, "", "", Time, Time, Time, []);
 
     private static SnapshotEntity Placeholder(Guid trackerId, string name, DateTimeOffset? createdAtUtc = null) =>
         new(TrackedEntity.PlaceholderId(new TrackerId(trackerId), name).Value, trackerId, name, "NotStarted", "",
-            "Placeholder", "Manual", null, "", "", createdAtUtc ?? Time, createdAtUtc ?? Time,
+            "Placeholder", null, "", "", createdAtUtc ?? Time, createdAtUtc ?? Time,
             createdAtUtc ?? Time, [], []);
 
     /// <summary>Edits the first entity of the first Tracker; the other entities stay.</summary>

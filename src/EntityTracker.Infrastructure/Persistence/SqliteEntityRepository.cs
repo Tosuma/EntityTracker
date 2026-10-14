@@ -31,7 +31,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT entity.id, entity.tracker_id, entity.source_name, status.development_status, entity.notes,
-                   entity.lifecycle_state, entity.provenance, entity.requested_priority, entity.group_name,
+                   entity.lifecycle_state, entity.requested_priority, entity.group_name,
                    entity.filter_active, entity.shared_notes
             FROM tracked_entities entity
             JOIN entity_current_status status ON status.entity_id = entity.id
@@ -56,7 +56,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT entity.id, entity.tracker_id, entity.source_name, status.development_status, entity.notes,
-                   entity.lifecycle_state, entity.provenance, entity.requested_priority, entity.group_name,
+                   entity.lifecycle_state, entity.requested_priority, entity.group_name,
                    entity.filter_active, entity.shared_notes
             FROM tracked_entities entity
             JOIN entity_current_status status ON status.entity_id = entity.id
@@ -105,7 +105,6 @@ public sealed class SqliteEntityRepository : IEntityRepository
                 filter_active,
                 shared_notes,
                 lifecycle_state,
-                provenance,
                 requested_priority,
                 group_name,
                 created_at_utc,
@@ -121,7 +120,6 @@ public sealed class SqliteEntityRepository : IEntityRepository
                 $filterActive,
                 $sharedNotes,
                 $lifecycleState,
-                $provenance,
                 $requestedPriority,
                 $groupName,
                 $createdAtUtc,
@@ -164,14 +162,12 @@ public sealed class SqliteEntityRepository : IEntityRepository
         command.CommandText = """
             UPDATE tracked_entities
             SET source_name = $sourceName,
-                provenance = $provenance,
                 schema_updated_at_utc = $schemaUpdatedAtUtc
             WHERE tracker_id = $trackerId AND id = $id;
             """;
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
         command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
         command.Parameters.AddWithValue("$sourceName", entity.SourceName);
-        command.Parameters.AddWithValue("$provenance", entity.Provenance.ToString());
         command.Parameters.AddWithValue(
             "$schemaUpdatedAtUtc",
             SqlitePersistenceValues.FormatTimestamp(_database.TimeProvider.GetUtcNow()));
@@ -198,7 +194,6 @@ public sealed class SqliteEntityRepository : IEntityRepository
         command.Parameters.AddWithValue("$filterActive", entity.FilterActive);
         command.Parameters.AddWithValue("$sharedNotes", entity.SharedNotes);
         command.Parameters.AddWithValue("$lifecycleState", entity.LifecycleState.ToString());
-        command.Parameters.AddWithValue("$provenance", entity.Provenance.ToString());
         command.Parameters.AddWithValue(
             "$requestedPriority",
             entity.RequestedPriority is null ? DBNull.Value : entity.RequestedPriority.Value);
@@ -218,13 +213,10 @@ public sealed class SqliteEntityRepository : IEntityRepository
             SqlitePersistenceValues.ParseEnum<EntityLifecycleState>(
                 reader.GetString(5),
                 "entity lifecycle state");
-        EntityProvenance provenance = SqlitePersistenceValues.ParseEnum<EntityProvenance>(
-            reader.GetString(6),
-            "entity provenance");
-        int? requestedPriority = reader.IsDBNull(7) ? null : reader.GetInt32(7);
-        string groupName = reader.GetString(8);
-        string filterActive = reader.GetString(9);
-        string sharedNotes = reader.GetString(10);
+        int? requestedPriority = reader.IsDBNull(6) ? null : reader.GetInt32(6);
+        string groupName = reader.GetString(7);
+        string filterActive = reader.GetString(8);
+        string sharedNotes = reader.GetString(9);
 
         return new TrackedEntity(
             id,
@@ -233,7 +225,6 @@ public sealed class SqliteEntityRepository : IEntityRepository
             status,
             notes,
             lifecycleState,
-            provenance,
             requestedPriority,
             null,
             groupName,
