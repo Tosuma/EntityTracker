@@ -13,7 +13,6 @@ public sealed class BulkStatusUpdateService
 {
     private readonly IEntityRepository _entityRepository;
     private readonly IDependencyRepository _dependencyRepository;
-    private readonly IManualDependencyOverrideRepository _overrideRepository;
     private readonly EffectiveDependencyResolver _effectiveDependencyResolver;
     private readonly ITrackedStateStore _store;
     private readonly ProgressSnapshotCalculator _snapshotCalculator;
@@ -21,20 +20,17 @@ public sealed class BulkStatusUpdateService
     public BulkStatusUpdateService(
         IEntityRepository entityRepository,
         IDependencyRepository dependencyRepository,
-        IManualDependencyOverrideRepository overrideRepository,
         EffectiveDependencyResolver effectiveDependencyResolver,
         ITrackedStateStore store,
         ProgressSnapshotCalculator? snapshotCalculator = null)
     {
         ArgumentNullException.ThrowIfNull(entityRepository);
         ArgumentNullException.ThrowIfNull(dependencyRepository);
-        ArgumentNullException.ThrowIfNull(overrideRepository);
         ArgumentNullException.ThrowIfNull(effectiveDependencyResolver);
         ArgumentNullException.ThrowIfNull(store);
 
         _entityRepository = entityRepository;
         _dependencyRepository = dependencyRepository;
-        _overrideRepository = overrideRepository;
         _effectiveDependencyResolver = effectiveDependencyResolver;
         _store = store;
         _snapshotCalculator = snapshotCalculator ?? new ProgressSnapshotCalculator();
@@ -73,21 +69,15 @@ public sealed class BulkStatusUpdateService
         EntityId[] selectedIds = entityIds.Distinct().ToArray();
         Task<IReadOnlyList<TrackedEntity>> entitiesTask =
             _entityRepository.GetAllAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<PersistedDependency>> resolvedTask =
+        Task<IReadOnlyList<EntityDependency>> dependenciesTask =
             _dependencyRepository.GetAllAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
-            _dependencyRepository.GetAllUnresolvedAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
-            _overrideRepository.GetAllAsync(trackerId, cancellationToken);
-        await Task.WhenAll(entitiesTask, resolvedTask, unresolvedTask, overridesTask);
+        await Task.WhenAll(entitiesTask, dependenciesTask);
 
         TrackedEntity[] entities = (await entitiesTask).ToArray();
         TrackerStateValidator.EnsureOwned(
             trackerId,
             entities,
-            await resolvedTask,
-            await unresolvedTask,
-            await overridesTask);
+            await dependenciesTask);
         Dictionary<EntityId, TrackedEntity> entitiesById = entities.ToDictionary(
             static entity => entity.Id);
         foreach (EntityId selectedId in selectedIds)
@@ -115,7 +105,6 @@ public sealed class BulkStatusUpdateService
                 targetStatus,
                 entity.Notes,
                 entity.LifecycleState,
-                entity.Provenance,
                 entity.RequestedPriority,
                 entity.ResponsibleDeveloper,
                 entity.GroupName,
@@ -135,16 +124,11 @@ public sealed class BulkStatusUpdateService
             .ToArray();
         EffectiveDependencyState effectiveState = _effectiveDependencyResolver.Resolve(
             candidateEntities,
-            await resolvedTask,
-            await unresolvedTask,
-            await overridesTask);
+            await dependenciesTask);
 
         await _store.ApplyAsync(
             trackerId,
             new TrackedStateChangeSet(
-                [],
-                [],
-                [],
                 [],
                 [],
                 [],

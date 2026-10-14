@@ -2,7 +2,7 @@ using System.Globalization;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-using EntityTracker.Application.Importing;
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 using Domain = EntityTracker.Domain;
@@ -25,7 +25,6 @@ public sealed class EntityDetailsViewModel : INotifyPropertyChanged
         SourceName = row.SourceName;
         Lifecycle = row.LifecycleState == EntityLifecycleState.Archived ? "Archived" : "Active";
         IsArchived = row.LifecycleState == EntityLifecycleState.Archived;
-        Provenance = row.Provenance;
         Notes = string.IsNullOrWhiteSpace(row.Notes) ? "No internal notes" : row.Notes;
         SharedNotes = string.IsNullOrWhiteSpace(row.SharedNotes) ? "No shared notes" : row.SharedNotes;
         FilterActive = string.IsNullOrWhiteSpace(row.FilterActive) ? "No filter instructions" : row.FilterActive;
@@ -84,7 +83,6 @@ public sealed class EntityDetailsViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(SelfAssignmentAccessibleName));
     }
 
-    public string Provenance { get; }
 
     public string Notes { get; }
 
@@ -187,13 +185,10 @@ public sealed class EntityDetailsViewModel : INotifyPropertyChanged
 
     private static EntityDetailListItem CreateBlockerItem(DependencyBlocker blocker)
     {
-        string dependencyKind = blocker.DependencyKind == ImportedDependencyKind.Mandatory
-            ? "Mandatory"
-            : "Optional";
         string reason = blocker.Kind == DependencyBlockerKind.Unresolved
             ? "Unresolved reference"
             : $"Not yet implemented · {FormatStatus(blocker.DevelopmentStatus)}";
-        return new EntityDetailListItem(blocker.SourceName, $"{dependencyKind} · {reason}");
+        return new EntityDetailListItem(blocker.SourceName, reason);
     }
 
     private static string FormatPriority(int? priority) =>

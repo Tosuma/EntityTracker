@@ -15,7 +15,7 @@ public sealed class ProjectSnapshotTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(6)]
+    [InlineData(ProjectSnapshot.CurrentFormatVersion + 1)]
     public void UnsupportedManifestFormat_ReportsApplicationAndProjectVersions(int projectVersion)
     {
         ProjectSnapshot snapshot = CompleteSnapshot();
@@ -61,22 +61,12 @@ public sealed class ProjectSnapshotTests
         Assert.Equal(entity.FilterActive, decoded.Trackers.SelectMany(t => t.Entities)
             .Single(item => item.Id == entity.Id).FilterActive);
 
-        ProjectSnapshot old = persisted with { FormatVersion = 3 };
+        ProjectSnapshot old = AsFormat(persisted, 3);
         ProjectSnapshot olderDecoded = codec.Decode(codec.Encode(old).Files);
         Assert.Equal(string.Empty, olderDecoded.Trackers.SelectMany(t => t.Entities)
             .Single(item => item.Id == entity.Id).FilterActive);
 
-        ProjectSnapshot versionTwo = persisted with
-        {
-            FormatVersion = 2,
-            Trackers = persisted.Trackers.Select(item => item with
-            {
-                Entities = item.Entities.Select(value => value with
-                {
-                    ResponsibilityPeriods = null
-                }).ToArray()
-            }).ToArray()
-        };
+        ProjectSnapshot versionTwo = AsFormat(persisted, 2);
         ProjectSnapshotPackage legacyPackage = codec.Encode(versionTwo);
         Assert.DoesNotContain("filterActive", Encoding.UTF8.GetString(legacyPackage.Files
             .Single(pair => pair.Key.EndsWith($"entities/{entity.Id:D}.json", StringComparison.Ordinal)).Value));
@@ -119,7 +109,7 @@ public sealed class ProjectSnapshotTests
         Assert.DoesNotContain("sharedNotes", Encoding.UTF8.GetString(package.Files
             .Single(pair => pair.Key.EndsWith($"entities/{other.Id:D}.json", StringComparison.Ordinal)).Value));
 
-        ProjectSnapshot versionFour = persisted with { FormatVersion = 4 };
+        ProjectSnapshot versionFour = AsFormat(persisted, 4);
         ProjectSnapshotPackage olderPackage = codec.Encode(versionFour);
         Assert.DoesNotContain("sharedNotes", Encoding.UTF8.GetString(olderPackage.Files
             .Single(pair => pair.Key.EndsWith($"entities/{entity.Id:D}.json", StringComparison.Ordinal)).Value));
@@ -159,9 +149,7 @@ public sealed class ProjectSnapshotTests
         Assert.Equal(2, imported.Trackers.Count);
         Assert.Contains(imported.Trackers, t => t.LifecycleState == "Recycled");
         Assert.Contains(imported.Trackers.SelectMany(t => t.Entities), e => e.LifecycleState == "Archived");
-        Assert.Contains(imported.Trackers.SelectMany(t => t.Entities), e => e.UnresolvedDependencies.Count > 0);
         Assert.Contains(imported.Trackers.SelectMany(t => t.Entities), e => e.Dependencies.Count > 0);
-        Assert.Contains(imported.Trackers.SelectMany(t => t.Entities), e => e.ManualOverrides.Count > 0);
 
         ProjectSnapshot reordered = actual with
         {
@@ -244,19 +232,26 @@ public sealed class ProjectSnapshotTests
         ProjectSnapshot seed = CompleteSnapshot();
         SnapshotTracker tracker = seed.Trackers[0];
         SnapshotEntity template = tracker.Entities[0];
-        SnapshotEntity[] additions = Enumerable.Range(0, 100).Select(index =>
+        SnapshotEntity[] additions = Enumerable.Range(0, 100).SelectMany(index =>
         {
             Guid id = Guid.NewGuid();
-            return template with
+            SnapshotEntity external = Placeholder(Guid.NewGuid(), tracker.Id, $"External {index:D3}");
+            return new[]
             {
-                Id = id,
-                SourceName = $"Extra entity {index:D3}",
-                Dependencies = [new SnapshotDependency(id, tracker.Entities[1].Id, "Mandatory", T0, T1)],
-                UnresolvedDependencies = [new SnapshotUnresolvedDependency(id,
-                    $"External {index:D3}", "Optional", T0, T2)],
-                ManualOverrides = [new SnapshotOverride(id,
-                    $"External {index:D3}", "Suppress", T1, T2)],
-                ResponsibilityPeriods = []
+                template with
+                {
+                    Id = id,
+                    SourceName = $"Extra entity {index:D3}",
+                    // No status history, so Not started.
+                    DevelopmentStatus = "NotStarted",
+                    Dependencies =
+                    [
+                        new SnapshotDependency(tracker.Entities[1].Id, T0, T1),
+                        new SnapshotDependency(external.Id, T0, T2)
+                    ],
+                    ResponsibilityPeriods = []
+                },
+                external
             };
         }).ToArray();
         ProjectSnapshot expanded = seed with { Trackers =
@@ -267,13 +262,12 @@ public sealed class ProjectSnapshotTests
         ProjectSnapshot actual = Assert.IsType<ProjectSnapshot>(
             (await store.ReadAsync(new ProjectId(seed.Project.Id))).Snapshot);
         SnapshotTracker exported = actual.Trackers.Single(item => item.Id == tracker.Id);
-        Assert.Equal(102, exported.Entities.Count);
+        // The 3 seed entities (one a placeholder) and 100 added, each with a placeholder of its own.
+        Assert.Equal(203, exported.Entities.Count);
         Assert.All(exported.Entities, entity =>
         {
-            if (entity.Id == tracker.Entities[1].Id) return;
-            Assert.Single(entity.Dependencies);
-            Assert.Single(entity.UnresolvedDependencies);
-            Assert.Single(entity.ManualOverrides);
+            if (entity.Id == tracker.Entities[1].Id || entity.LifecycleState == "Placeholder") return;
+            Assert.Equal(2, entity.Dependencies.Count);
         });
         ProjectSnapshotJsonCodec codec = new();
         Assert.Equal(codec.Encode(expanded).Sha256, codec.Encode(actual).Sha256);
@@ -295,7 +289,7 @@ public sealed class ProjectSnapshotTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => store.ApplyAsync(snapshot, revision - 1));
         Assert.Throws<ProjectSnapshotFormatVersionException>(() =>
-            ProjectSnapshotValidator.Validate(snapshot with { FormatVersion = 6 }));
+            ProjectSnapshotValidator.Validate(snapshot with { FormatVersion = ProjectSnapshot.CurrentFormatVersion + 1 }));
         Assert.Throws<InvalidDataException>(() => ProjectSnapshotValidator.Validate(snapshot with
         {
             Trackers = [snapshot.Trackers[0], snapshot.Trackers[0]]
@@ -308,7 +302,7 @@ public sealed class ProjectSnapshotTests
             {
                 Entities = [entity with
                 {
-                    Dependencies = [new SnapshotDependency(entity.Id, Guid.NewGuid(), "Mandatory", T0, T1)]
+                    Dependencies = [new SnapshotDependency(entity.Id, T0, T1)]
                 }, tracker.Entities[1]]
             }, snapshot.Trackers[1]]
         }));
@@ -319,7 +313,7 @@ public sealed class ProjectSnapshotTests
         Assert.Throws<InvalidDataException>(() => codec.Decode(malformed));
         malformed[".entitytracker/project.json"] = package.Files[".entitytracker/project.json"];
         malformed[".entitytracker/manifest.json"] = Encoding.UTF8.GetBytes(
-            "{\"formatVersion\":6,\"projectId\":\"" + snapshot.Project.Id + "\"}");
+            "{\"formatVersion\":" + (ProjectSnapshot.CurrentFormatVersion + 1) + ",\"projectId\":\"" + snapshot.Project.Id + "\"}");
         Assert.Throws<ProjectSnapshotFormatVersionException>(() => codec.Decode(malformed));
 
         ProjectSnapshotRead after = await store.ReadAsync(new ProjectId(snapshot.Project.Id));
@@ -385,6 +379,7 @@ public sealed class ProjectSnapshotTests
         string entityId = snapshot.Trackers[0].Entities[0].Id.ToString("D");
         await using SqliteConnection connection = new($"Data Source={file.DatabasePath}");
         await connection.OpenAsync();
+        EntityNameCollation.Register(connection);
         using (SqliteCommand mode = connection.CreateCommand())
         {
             mode.CommandText = "PRAGMA journal_mode;";
@@ -395,12 +390,9 @@ public sealed class ProjectSnapshotTests
             $"UPDATE projects SET name = name WHERE id = '{projectId}';",
             $"UPDATE trackers SET name = name WHERE id = '{trackerId}';",
             $"UPDATE tracked_entities SET notes = notes WHERE id = '{entityId}';",
-            $"UPDATE schema_dependencies SET dependency_kind = dependency_kind WHERE dependent_entity_id = '{entityId}';",
-            $"UPDATE unresolved_schema_dependencies SET dependency_kind = dependency_kind WHERE dependent_entity_id = '{entityId}';",
-            $"UPDATE manual_dependency_overrides SET override_action = override_action WHERE dependent_entity_id = '{entityId}';",
+            $"UPDATE entity_dependencies SET updated_at_utc = updated_at_utc WHERE dependent_entity_id = '{entityId}';",
             $"UPDATE entity_status_history SET new_status = new_status WHERE entity_id = '{entityId}';",
-            $"UPDATE progress_snapshots SET ready_count = ready_count WHERE tracker_id = '{trackerId}';",
-            $"UPDATE schema_import_summary SET import_mode = import_mode WHERE tracker_id = '{trackerId}';"
+            $"UPDATE progress_snapshots SET ready_count = ready_count WHERE tracker_id = '{trackerId}';"
         })
         {
             using SqliteCommand command = connection.CreateCommand();
@@ -453,32 +445,30 @@ public sealed class ProjectSnapshotTests
         Guid entityA = Guid.Parse("30000000-0000-0000-0000-000000000001");
         Guid entityB = Guid.Parse("30000000-0000-0000-0000-000000000002");
         Guid entityC = Guid.Parse("30000000-0000-0000-0000-000000000003");
+        Guid externalA = Guid.Parse("30000000-0000-0000-0000-000000000004");
         Guid eventA = Guid.Parse("40000000-0000-0000-0000-000000000001");
         Guid eventB = Guid.Parse("40000000-0000-0000-0000-000000000002");
         SnapshotEntity first = new(entityA, trackerA, "Orders", "InProgress", "Keep notes",
-            "Active", "ManualAndImported", 2, "", "Core", T0, T1, T2,
-            [new SnapshotDependency(entityA, entityB, "Mandatory", T0, T1)],
-            [new SnapshotUnresolvedDependency(entityA, "External", "Optional", T0, T2)],
-            [new SnapshotOverride(entityA, "External", "Suppress", T1, T2)],
+            "Active", 2, "", "Core", T0, T1, T2,
+            [new SnapshotDependency(entityB, T0, T1), new SnapshotDependency(externalA, T0, T2)],
             [new SnapshotResponsibilityPeriod(Guid.Parse("50000000-0000-0000-0000-000000000001"),
                 entityA, Guid.Parse("60000000-0000-0000-0000-000000000001"), T2, null)]);
         SnapshotEntity second = new(entityB, trackerA, "Customers", "Reconciled", "Archived notes",
-            "Archived", "Imported", 4, "", "Legacy", T0, T1, T2, [], [], [],
+            "Archived", 4, "", "Legacy", T0, T1, T2, [],
             [new SnapshotResponsibilityPeriod(Guid.Parse("50000000-0000-0000-0000-000000000002"),
                 entityB, Guid.Parse("60000000-0000-0000-0000-000000000002"), T2, null)]);
         SnapshotEntity third = new(entityC, trackerB, "Copied entity", "NotStarted", "",
-            "Active", "Copied", null, "", "", T0, T1, T2, [], [], []);
+            "Active", null, "", "", T0, T1, T2, []);
         SnapshotTracker a = new(trackerA, project, "Delivery", "Active", T0, T2, null,
             Guid.Parse("99999999-9999-9999-9999-999999999999"),
-            [first, second],
+            [first, second, Placeholder(externalA, trackerA, "External")],
             [new SnapshotStatusEvent(eventA, entityA, null, null, "NotStarted", "Created", T0, 0),
              new SnapshotStatusEvent(eventB, entityA, eventA, "NotStarted", "InProgress", "Transition", T1, 2),
              new SnapshotStatusEvent(Guid.NewGuid(), entityB, null, null, "Reconciled", "Baseline", T0, 1)],
             [new SnapshotProgress(Guid.NewGuid(), T0, 1, 0, 0, 0, 0, 1, 0),
-             new SnapshotProgress(Guid.NewGuid(), T2, 0, 0, 1, 0, 0, 1, 1)],
-            new SnapshotImportSummary(T2, "schema.csv", "Partial", 1, 2, 3, 4, 5));
+             new SnapshotProgress(Guid.NewGuid(), T2, 0, 0, 1, 0, 0, 1, 1)]);
         SnapshotTracker b = new(trackerB, project, "Archive", "Recycled", T0, T2, T2,
-            trackerA, [third], [], [new SnapshotProgress(Guid.NewGuid(), T1, 1, 0, 0, 0, 0, 0, 0)], null);
+            trackerA, [third], [], [new SnapshotProgress(Guid.NewGuid(), T1, 1, 0, 0, 0, 0, 0, 0)]);
         return new ProjectSnapshot(ProjectSnapshot.CurrentFormatVersion,
             new SnapshotProject(project, "Portable project", "Active", T0, T2, null), [a, b],
             [new SnapshotDeveloper(Guid.Parse("60000000-0000-0000-0000-000000000001"),
@@ -486,4 +476,30 @@ public sealed class ProjectSnapshotTests
              new SnapshotDeveloper(Guid.Parse("60000000-0000-0000-0000-000000000002"),
                 project, "Grace", "", false)]);
     }
+
+    private static SnapshotEntity Placeholder(Guid id, Guid trackerId, string name) =>
+        new(id, trackerId, name, "NotStarted", "", "Placeholder", null, "", "", T0, T0, T0, [], []);
+
+    /// <summary>
+    /// The snapshot as an older format would hold it: no placeholders, no dependency lists (formats
+    /// 1–5 kept imported dependencies instead), the old provenance names, and before format 3 no
+    /// responsibility periods.
+    /// </summary>
+    private static ProjectSnapshot AsFormat(ProjectSnapshot snapshot, int formatVersion) => snapshot with
+    {
+        FormatVersion = formatVersion,
+        Trackers = snapshot.Trackers.Select(tracker => tracker with
+        {
+            Entities = tracker.Entities.Where(entity => entity.LifecycleState != "Placeholder")
+                .Select(entity => entity with
+                {
+                    LegacyProvenance = "ManualOnly",
+                    Dependencies = [],
+                    LegacyDependencies = [],
+                    LegacyUnresolvedDependencies = [],
+                    LegacyOverrides = [],
+                    ResponsibilityPeriods = formatVersion >= 3 ? entity.ResponsibilityPeriods : null
+                }).ToArray()
+        }).ToArray()
+    };
 }

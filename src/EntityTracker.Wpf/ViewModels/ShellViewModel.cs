@@ -63,7 +63,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         IContextDiscardConfirmation discardConfirmation,
         CatalogManagementViewModel catalogManagement,
         AppearanceViewModel appearance,
-        IClipboardService clipboard,
         EntityTrackerSettings initialSettings,
         ILogger<ShellViewModel>? logger = null,
         ProjectGitSyncService? gitSync = null,
@@ -109,10 +108,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         GraphSettings = graphSettings;
         if (GraphSettings is not null)
             GraphSettings.Changed += OnGraphSettingsChanged;
-        Help = new SqlQueryHelpViewModel(
-            clipboard,
-            () => _ = NavigateAsync(ShellDestination.SchemaSynchronization),
-            notifications: Notifications);
         _startupProjectId = initialSettings.LastProjectId;
         _startupTrackerId = initialSettings.LastTrackerId;
         _logger = logger ?? NullLogger<ShellViewModel>.Instance;
@@ -128,9 +123,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             new(ShellDestination.Overview, "Tracker", "Overview", true, true),
             new(ShellDestination.DependencyGraph, "Tracker", "Dependency graph", true, true),
             new(ShellDestination.Archived, "Tracker", "Archived", true, true),
-            new(ShellDestination.SchemaSynchronization, "Manage", "Schema synchronization", true, true),
             new(ShellDestination.AddEntity, "Manage", "Add entity", true, true),
-            new(ShellDestination.HelpSql, "Utilities", "Help & SQL", false, false),
+            new(ShellDestination.Help, "Utilities", "Help", false, false),
             new(ShellDestination.Settings, "Utilities", "Settings", false, false)
         ];
         _navigateCommand = new AsyncCommand<ShellDestination>(
@@ -183,8 +177,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     public NotificationCenter Notifications { get; }
     public bool HasActiveProjectSync => _autoSync?.HasActiveSync == true;
-
-    public SqlQueryHelpViewModel Help { get; }
 
     public PortfolioDashboardViewModel PortfolioReporting { get; }
 
@@ -287,9 +279,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(IsOverview));
                 OnPropertyChanged(nameof(IsDependencyGraph));
                 OnPropertyChanged(nameof(IsArchived));
-                OnPropertyChanged(nameof(IsSchemaSynchronization));
                 OnPropertyChanged(nameof(IsAddEntity));
-                OnPropertyChanged(nameof(IsHelpSql));
+                OnPropertyChanged(nameof(IsHelp));
                 OnPropertyChanged(nameof(IsSettings));
                 OnPropertyChanged(nameof(IsTrackerWorkspace));
             }
@@ -361,9 +352,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public bool IsOverview => SelectedDestination == ShellDestination.Overview;
     public bool IsDependencyGraph => SelectedDestination == ShellDestination.DependencyGraph;
     public bool IsArchived => SelectedDestination == ShellDestination.Archived;
-    public bool IsSchemaSynchronization => SelectedDestination == ShellDestination.SchemaSynchronization;
     public bool IsAddEntity => SelectedDestination == ShellDestination.AddEntity;
-    public bool IsHelpSql => SelectedDestination == ShellDestination.HelpSql;
+    public bool IsHelp => SelectedDestination == ShellDestination.Help;
     public bool IsSettings => SelectedDestination == ShellDestination.Settings;
 
     public ICommand NavigateCommand => _navigateCommand;
@@ -780,7 +770,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 ShellDestination.Overview => MainWindowTab.Overview,
                 ShellDestination.DependencyGraph => MainWindowTab.DependencyGraph,
                 ShellDestination.Archived => MainWindowTab.Archived,
-                ShellDestination.SchemaSynchronization => MainWindowTab.SchemaSynchronization,
                 ShellDestination.AddEntity => MainWindowTab.AddEntity,
                 _ => CurrentWorkspace.SelectedTab
             };
@@ -847,7 +836,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             MainWindowTab.Overview => ShellDestination.Overview,
             MainWindowTab.DependencyGraph => ShellDestination.DependencyGraph,
             MainWindowTab.Archived => ShellDestination.Archived,
-            MainWindowTab.SchemaSynchronization => ShellDestination.SchemaSynchronization,
             MainWindowTab.AddEntity => ShellDestination.AddEntity,
             _ => SelectedDestination
         };
@@ -980,7 +968,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         ShellDestination.Overview or
         ShellDestination.DependencyGraph or
         ShellDestination.Archived or
-        ShellDestination.SchemaSynchronization or
         ShellDestination.AddEntity;
 
     private static void Replace<T>(ObservableCollection<T> collection, IEnumerable<T> items)

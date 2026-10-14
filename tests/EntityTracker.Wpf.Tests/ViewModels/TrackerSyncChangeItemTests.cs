@@ -1,4 +1,4 @@
-using EntityTracker.Application.Importing;
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.ViewModels;
@@ -94,5 +94,5 @@ public sealed class TrackerSyncChangeItemTests
 
     private static TrackerSyncEntity Entity(string name, int? priority = null, string group = "", params string[] dependsOn) =>
         new(name, true, priority, group,
-            dependsOn.Select(target => new TrackerSyncDependency(target, ImportedDependencyKind.Mandatory)).ToArray());
+            dependsOn.Select(target => new TrackerSyncDependency(target)).ToArray());
 }

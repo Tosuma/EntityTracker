@@ -87,7 +87,6 @@ public sealed class PriorityPlanningService
             target.Status,
             target.Notes,
             target.LifecycleState,
-            target.Provenance,
             candidateRequestedPriority,
             target.ResponsibleDeveloper,
             target.GroupName,

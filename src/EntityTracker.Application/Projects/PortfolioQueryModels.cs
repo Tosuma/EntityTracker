@@ -88,8 +88,7 @@ public sealed record CatalogPurgeImpact(
     int ActiveEntityCount,
     int ArchivedEntityCount,
     int StatusHistoryCount,
-    int ProgressSnapshotCount,
-    int ImportSummaryCount)
+    int ProgressSnapshotCount)
 {
     public int EntityCount => ActiveEntityCount + ArchivedEntityCount;
 

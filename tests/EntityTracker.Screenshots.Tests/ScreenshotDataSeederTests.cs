@@ -1,3 +1,4 @@
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
@@ -22,10 +23,8 @@ public sealed class ScreenshotDataSeederTests
             Path.GetFullPath(workspace.Paths.DatabasePath),
             StringComparison.OrdinalIgnoreCase);
 
-        ScreenshotCsvFilePicker picker = new();
         await using ServiceProvider provider = ScreenshotServiceProviderFactory.Create(
             workspace.Paths,
-            picker,
             new FixedTimeProvider(ScreenshotDataSeeder.FixedNow));
         await provider.GetRequiredService<IPersistenceInitializer>().InitializeAsync();
         Tracker[] trackers = (await provider
@@ -42,14 +41,16 @@ public sealed class ScreenshotDataSeederTests
 
         IReadOnlyList<TrackedEntity> entities =
             await provider.GetRequiredService<IEntityRepository>().GetAllAsync(tracker.Id);
-        Assert.Equal(125, entities.Count);
+        // 125 entities, and a placeholder for each of the 6 names they depend on that no entity has.
+        Assert.Equal(125, entities.Count(static entity => !entity.IsPlaceholder));
+        Assert.Equal(6, entities.Count(static entity => entity.IsPlaceholder));
         Assert.Equal(
             Enum.GetValues<DevelopmentStatus>().Order(),
             entities.Select(static entity => entity.Status).Distinct().Order());
-        Assert.Equal(
-            10,
-            (await provider.GetRequiredService<IDependencyRepository>()
-                .GetAllUnresolvedAsync(tracker.Id)).Count);
+        IDependencyRepository dependencies = provider.GetRequiredService<IDependencyRepository>();
+        EffectiveDependencyState dependencyState = provider.GetRequiredService<EffectiveDependencyResolver>()
+            .Resolve(entities, await dependencies.GetAllAsync(tracker.Id));
+        Assert.Equal(10, dependencyState.UnresolvedDependencies.Count);
         Assert.Contains(
             entities,
             static entity => entity.SourceName == "time_zone" &&

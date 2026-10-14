@@ -1,7 +1,6 @@
 using System.IO;
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.ManualOverrides;
@@ -9,7 +8,6 @@ using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Planning;
 using EntityTracker.Application.Ranking;
-using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Configuration;
@@ -34,8 +32,7 @@ public sealed class MainWindowViewModelTests
             NotificationCenter notifications = new(displayTime: TimeSpan.FromMinutes(1));
             StubOverviewExportFilePicker picker = new(Path.Combine(directory, "overview.csv"));
             MainWindowViewModel viewModel = CreateViewModel(
-                [Entity(1, "First"), Entity(2, "Second")], [], FailureResult(),
-                new StubFilePicker(), out _, overviewExportService: new OverviewExportService(),
+                [Entity(1, "First"), Entity(2, "Second")], [], out _, overviewExportService: new OverviewExportService(),
                 overviewExportFilePicker: picker, overviewExportSettings: settings,
                 notifications: notifications);
             await viewModel.InitializeAsync();
@@ -88,8 +85,6 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [service, foundation],
             [Dependency(service, foundation)],
-            FailureResult(),
-            new StubFilePicker(),
             out _);
 
         await viewModel.InitializeAsync();
@@ -112,8 +107,6 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [Entity(1, "NeedsReview", DevelopmentStatus.ReworkNeeded)],
             [],
-            FailureResult(),
-            new StubFilePicker(),
             out _);
 
         await viewModel.InitializeAsync();
@@ -129,45 +122,6 @@ public sealed class MainWindowViewModelTests
         Assert.Contains(
             viewModel.Editor.StatusOptions,
             static option => option.Value == DevelopmentStatus.ReworkNeeded);
-    }
-
-    [Fact]
-    public async Task SynchronizationReview_RequiresAndStagesCompletedEntityDecision()
-    {
-        TrackedEntity target = Entity(1, "Target");
-        TrackedEntity owner = Entity(
-            2,
-            "Owner",
-            DevelopmentStatus.DevelopmentCompleted);
-        MainWindowViewModel viewModel = CreateViewModel(
-            [target, owner],
-            [],
-            SchemaImportResult.Success(Candidate(
-                ["Target", "Owner"],
-                [("Owner", "Target", ImportedDependencyKind.Mandatory)])),
-            new StubFilePicker("schema.csv"),
-            out _);
-
-        await viewModel.ImportCsvAsync();
-
-        SynchronizationProgressImpactRow row = Assert.Single(viewModel.Review.ProgressImpacts);
-        Assert.Equal("Decision required", row.DecisionText);
-        Assert.Same(row, Assert.Single(viewModel.Review.ChangedEntities).ProgressImpact);
-        Assert.Contains(
-            Assert.Single(viewModel.Review.ChangedEntities).DependencyChangeItems,
-            static change => change.Action == "Added" && change.DependencySourceName == "Target");
-        Assert.False(viewModel.Review.CanApply);
-        Assert.False(viewModel.ApplySynchronizationCommand.CanExecute(null));
-
-        viewModel.MarkSynchronizationReworkCommand.Execute(row);
-
-        Assert.True(viewModel.Review.CanApply);
-        Assert.Equal(
-            SynchronizationProgressDecision.MarkReworkNeeded,
-            Assert.Single(viewModel.Review.ProgressImpacts).Decision);
-        Assert.Equal(
-            DevelopmentStatus.ReworkNeeded,
-            Assert.Single(viewModel.Review.CurrentPlan!.ChangeSet.EntitiesWithProgressToUpdate).Status);
     }
 
     [Fact]
@@ -189,8 +143,6 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [ready, blocked, inProgress, developmentCompleted, reconciled, archived],
             [],
-            FailureResult(),
-            new StubFilePicker(),
             out _,
             [Unresolved(blocked, "Missing")]);
 
@@ -240,8 +192,6 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [ready, blocked, inProgress, rework, developmentCompleted, reconciled, archived],
             [],
-            FailureResult(),
-            new StubFilePicker(),
             out _,
             [Unresolved(blocked, "Missing")]);
 
@@ -277,8 +227,6 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [Entity(1, "Matching entity"), Entity(2, "Other entity")],
             [],
-            FailureResult(),
-            new StubFilePicker(),
             out _);
         await viewModel.InitializeAsync();
 
@@ -314,8 +262,6 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [upstream, direct, resolved],
             [Dependency(upstream, direct)],
-            FailureResult(),
-            new StubFilePicker(),
             out _,
             [Unresolved(direct, "Zulu Missing"), Unresolved(direct, "alpha missing")]);
 
@@ -362,8 +308,6 @@ public sealed class MainWindowViewModelTests
                 Entity(3, "Customer Profile", DevelopmentStatus.InProgress)
             ],
             [],
-            FailureResult(),
-            new StubFilePicker(),
             out _);
         await viewModel.InitializeAsync();
         viewModel.OpenOverviewSearchCommand.Execute(null);
@@ -392,8 +336,6 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [alpha, beta, downstream, unresolvedOwner],
             [Dependency(beta, alpha), Dependency(downstream, beta)],
-            FailureResult(),
-            new StubFilePicker(),
             out _,
             [Unresolved(unresolvedOwner, "Legacy API")]);
         await viewModel.InitializeAsync();
@@ -418,8 +360,6 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [Entity(1, "Alpha"), Entity(2, "Beta")],
             [],
-            FailureResult(),
-            new StubFilePicker(),
             out _);
         await viewModel.InitializeAsync();
         viewModel.OpenOverviewSearchCommand.Execute(null);
@@ -444,7 +384,7 @@ public sealed class MainWindowViewModelTests
     public void ActiveAndArchivedTables_HaveIndependentSearchState()
     {
         MainWindowViewModel viewModel = CreateViewModel(
-            [], [], FailureResult(), new StubFilePicker(), out _);
+            [], [], out _);
 
         viewModel.OpenOverviewSearchCommand.Execute(null);
         Assert.True(viewModel.IsOverviewSearchOpen);
@@ -464,15 +404,13 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [entity],
             [],
-            FailureResult(),
-            new StubFilePicker(),
             out _);
         await viewModel.InitializeAsync();
 
         viewModel.EditOverviewEntityCommand.Execute(Assert.Single(viewModel.OverviewItems));
 
         Assert.True(viewModel.Editor.IsOpen);
-        Assert.False(viewModel.Editor.IsReviewMode);
+        Assert.Equal(EntityEditorMode.Standalone, viewModel.Editor.Mode);
         Assert.True(viewModel.Editor.CanArchive);
         Assert.Equal("Customer", viewModel.Editor.SelectedEntityName);
         Assert.Equal(MainWindowTab.Overview, viewModel.SelectedTab);
@@ -485,8 +423,6 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [entity],
             [],
-            FailureResult(),
-            new StubFilePicker(),
             out _);
         await viewModel.InitializeAsync();
         EntityOverviewRow row = Assert.Single(viewModel.OverviewItems);
@@ -517,8 +453,6 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [owner, dependency],
             [Dependency(owner, dependency)],
-            FailureResult(),
-            new StubFilePicker(),
             out _);
         await viewModel.InitializeAsync();
         EntityOverviewRow row = viewModel.OverviewItems.Single(item => item.EntityId == owner.Id);
@@ -558,7 +492,7 @@ public sealed class MainWindowViewModelTests
     public async Task SearchPreferenceChangeClearsBulkSelectionBeforeReprojection()
     {
         MainWindowViewModel viewModel = CreateViewModel(
-            [Entity(1, "Invoice")], [], FailureResult(), new StubFilePicker(), out _);
+            [Entity(1, "Invoice")], [], out _);
         await viewModel.InitializeAsync();
         viewModel.UpdateOverviewSelection([Assert.Single(viewModel.OverviewItems)]);
         Assert.Equal(1, viewModel.SelectedActiveEntityCount);
@@ -584,8 +518,6 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [target, archived],
             [Dependency(archived, target)],
-            FailureResult(),
-            new StubFilePicker(),
             out _);
         await viewModel.InitializeAsync();
         viewModel.SelectedTab = MainWindowTab.Archived;
@@ -623,9 +555,7 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [entity],
             [],
-            FailureResult(),
-            new StubFilePicker(),
-            out StubSynchronizationStore store);
+            out StubStateStore store);
         await viewModel.InitializeAsync();
         viewModel.EditOverviewEntityCommand.Execute(Assert.Single(viewModel.OverviewItems));
         await WaitUntilAsync(() => viewModel.Editor.IsOpen && !viewModel.Editor.IsBusy);
@@ -663,9 +593,7 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [entity],
             [],
-            FailureResult(),
-            new StubFilePicker(),
-            out StubSynchronizationStore store);
+            out StubStateStore store);
         await viewModel.InitializeAsync();
         viewModel.EditOverviewEntityCommand.Execute(Assert.Single(viewModel.OverviewItems));
         await WaitUntilAsync(() => viewModel.Editor.IsOpen && !viewModel.Editor.IsBusy);
@@ -692,8 +620,6 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [entity],
             [],
-            FailureResult(),
-            new StubFilePicker(),
             out _,
             discardConfirmation: discard);
         await viewModel.InitializeAsync();
@@ -733,8 +659,6 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [unrelated, target, prerequisite],
             [Dependency(target, prerequisite)],
-            FailureResult(),
-            new StubFilePicker(),
             out _);
 
         await viewModel.InitializeAsync();
@@ -761,8 +685,6 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [owner, archived],
             [],
-            FailureResult(),
-            new StubFilePicker(),
             out _);
         await viewModel.InitializeAsync();
         viewModel.EditOverviewEntityCommand.Execute(Assert.Single(viewModel.OverviewItems));
@@ -785,9 +707,7 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [owner, prerequisite],
             [Dependency(owner, prerequisite)],
-            FailureResult(),
-            new StubFilePicker(),
-            out StubSynchronizationStore store,
+            out StubStateStore store,
             [Unresolved(prerequisite, "Missing")]);
         await viewModel.InitializeAsync();
         EntityOverviewRow ownerRow = viewModel.OverviewItems.Single(item => item.EntityId == owner.Id);
@@ -827,9 +747,7 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [archived],
             [],
-            FailureResult(),
-            new StubFilePicker(),
-            out StubSynchronizationStore store);
+            out StubStateStore store);
         await viewModel.InitializeAsync();
         viewModel.SelectedTab = MainWindowTab.Archived;
 
@@ -885,9 +803,7 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [entity],
             [],
-            FailureResult(),
-            new StubFilePicker(),
-            out StubSynchronizationStore store);
+            out StubStateStore store);
         await viewModel.InitializeAsync();
         viewModel.EditOverviewEntityCommand.Execute(Assert.Single(viewModel.OverviewItems));
 
@@ -909,9 +825,7 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [entity],
             [],
-            FailureResult(),
-            new StubFilePicker(),
-            out StubSynchronizationStore store);
+            out StubStateStore store);
         await viewModel.InitializeAsync();
         viewModel.EditOverviewEntityCommand.Execute(Assert.Single(viewModel.OverviewItems));
         viewModel.Editor.RequestArchiveCommand.Execute(null);
@@ -934,9 +848,7 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [entity],
             [],
-            FailureResult(),
-            new StubFilePicker(),
-            out StubSynchronizationStore store,
+            out StubStateStore store,
             notifications: notifications);
         store.Exception = new InvalidOperationException("Database unavailable");
         await viewModel.InitializeAsync();
@@ -955,47 +867,11 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task Overview_ShowsManualProvenance()
-    {
-        MainWindowViewModel viewModel = CreateViewModel(
-            [Entity(1, "Planned", provenance: EntityProvenance.ManualOnly)],
-            [],
-            FailureResult(),
-            new StubFilePicker(),
-            out _);
-
-        await viewModel.InitializeAsync();
-
-        Assert.Equal("Manual only", Assert.Single(viewModel.OverviewItems).Provenance);
-    }
-
-    [Fact]
-    public async Task CompleteReview_ShowsAbsentManualOnlyEntityAsKeptActive()
-    {
-        MainWindowViewModel viewModel = CreateViewModel(
-            [Entity(1, "Planned", provenance: EntityProvenance.ManualOnly)],
-            [],
-            SchemaImportResult.Success(Candidate([], [])),
-            new StubFilePicker("empty.csv"),
-            out _);
-
-        await viewModel.ImportCsvAsync();
-
-        SchemaSynchronizationReviewRow row =
-            Assert.Single(viewModel.Review.ManualOnlyEntities);
-        Assert.Equal("Planned", row.SourceName);
-        Assert.Contains("kept active", row.Details, StringComparison.OrdinalIgnoreCase);
-        Assert.Empty(viewModel.Review.MissingEntities);
-    }
-
-    [Fact]
     public async Task ManualCreation_SuccessReturnsToRefreshedOverview()
     {
         MainWindowViewModel viewModel = CreateViewModel(
             [],
             [],
-            FailureResult(),
-            new StubFilePicker(),
             out _);
         viewModel.SelectedTab = MainWindowTab.AddEntity;
         EntityId? revealedEntityId = null;
@@ -1007,7 +883,6 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(MainWindowTab.Overview, viewModel.SelectedTab);
         EntityOverviewRow row = Assert.Single(viewModel.OverviewItems);
         Assert.Equal("NewManualEntity", row.SourceName);
-        Assert.Equal("Manual only", row.Provenance);
         Assert.Equal("Not started", row.Status);
         Assert.Equal(row.EntityId, revealedEntityId);
         Assert.Equal(row.EntityId, viewModel.SelectedEntityDetails?.EntityId);
@@ -1023,8 +898,6 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [archived],
             [],
-            FailureResult(),
-            new StubFilePicker(),
             out _);
         await viewModel.InitializeAsync();
         viewModel.SelectedTab = MainWindowTab.AddEntity;
@@ -1040,357 +913,13 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public void ImportMode_DefaultsToCompleteAndPartialRequiresSelection()
-    {
-        MainWindowViewModel viewModel = CreateViewModel(
-            [], [], FailureResult(), new StubFilePicker(), out _);
-
-        Assert.True(viewModel.Review.IsCompleteImport);
-        Assert.Equal(SchemaImportMode.Complete, viewModel.Review.Mode);
-        Assert.True(viewModel.Review.CanSelectImportMode);
-
-        viewModel.Review.IsPartialImport = true;
-
-        Assert.False(viewModel.Review.IsCompleteImport);
-        Assert.Equal(SchemaImportMode.Partial, viewModel.Review.Mode);
-        Assert.True(viewModel.Review.CanSelectImportMode);
-    }
-
-    [Fact]
-    public async Task ImportCsvAsync_CompleteImport_ShowsOnlyActionableReviewAndUnchangedCount()
-    {
-        TrackedEntity a = Entity(1, "A");
-        TrackedEntity removed = Entity(2, "Removed");
-        MainWindowViewModel viewModel = CreateViewModel(
-            [a, removed],
-            [],
-            SchemaImportResult.Success(Candidate(["A", "NewEntity"], [])),
-            new StubFilePicker("C:\\schemas\\current.csv"),
-            out _);
-
-        await viewModel.ImportCsvAsync();
-
-        Assert.Equal(MainWindowTab.SchemaSynchronization, viewModel.SelectedTab);
-        Assert.Equal("current.csv", viewModel.Review.SelectedFileName);
-        Assert.Equal("NewEntity", Assert.Single(viewModel.Review.NewEntities).SourceName);
-        Assert.Equal("Removed", Assert.Single(viewModel.Review.MissingEntities).SourceName);
-        Assert.Empty(viewModel.Review.ChangedEntities);
-        Assert.Equal(1, viewModel.Review.UnchangedEntityCount);
-        Assert.Equal("A", Assert.Single(viewModel.Review.UnchangedEntities).SourceName);
-        Assert.True(viewModel.Review.HasArchiveImpact);
-        Assert.Contains("1 of 2", viewModel.Review.ArchiveImpactText);
-        Assert.False(viewModel.Review.CanSelectImportMode);
-        Assert.True(viewModel.ApplySynchronizationCommand.CanExecute(null));
-
-        Assert.True(viewModel.Review.ToggleFilterCommand.CanExecute(
-            SchemaSynchronizationReviewFilter.New));
-        Assert.False(viewModel.Review.ToggleFilterCommand.CanExecute(
-            SchemaSynchronizationReviewFilter.Changed));
-        viewModel.Review.ToggleFilterCommand.Execute(SchemaSynchronizationReviewFilter.New);
-        Assert.True(viewModel.Review.IsNewFilterSelected);
-        Assert.True(viewModel.Review.ShowNewEntities);
-        Assert.False(viewModel.Review.ShowMissingEntities);
-        Assert.False(viewModel.Review.ShowUnchangedEntities);
-        Assert.True(viewModel.Review.HasActiveFilter);
-
-        viewModel.Review.ToggleFilterCommand.Execute(SchemaSynchronizationReviewFilter.New);
-        Assert.False(viewModel.Review.HasActiveFilter);
-        Assert.True(viewModel.Review.ShowNewEntities);
-        Assert.True(viewModel.Review.ShowMissingEntities);
-        Assert.True(viewModel.Review.ShowUnchangedEntities);
-
-        viewModel.Review.ToggleFilterCommand.Execute(SchemaSynchronizationReviewFilter.Missing);
-        Assert.True(viewModel.Review.ShowArchiveImpact);
-        viewModel.Review.ClearFilterCommand.Execute(null);
-        Assert.False(viewModel.Review.HasActiveFilter);
-    }
-
-    [Fact]
-    public async Task ImportCsvAsync_PartialImport_DoesNotShowAbsentPersistedEntity()
-    {
-        TrackedEntity a = Entity(1, "A");
-        TrackedEntity b = Entity(2, "B");
-        MainWindowViewModel viewModel = CreateViewModel(
-            [a, b],
-            [],
-            SchemaImportResult.Success(Candidate(["A"], [])),
-            new StubFilePicker("partial.csv"),
-            out _);
-        viewModel.Review.IsPartialImport = true;
-
-        await viewModel.ImportCsvAsync();
-
-        Assert.Equal("Partial", viewModel.Review.ImportModeLabel);
-        Assert.Empty(viewModel.Review.MissingEntities);
-        Assert.Equal(1, viewModel.Review.UnchangedEntityCount);
-    }
-
-    [Fact]
-    public async Task ImportCsvAsync_IdenticalImport_ExposesCollapsedUnchangedEntitiesAndNoOpState()
-    {
-        TrackedEntity a = Entity(1, "A");
-        MainWindowViewModel viewModel = CreateViewModel(
-            [a],
-            [],
-            SchemaImportResult.Success(Candidate(["A"], [])),
-            new StubFilePicker("same.csv"),
-            out _);
-
-        await viewModel.ImportCsvAsync();
-
-        Assert.True(viewModel.Review.HasNoActionableChanges);
-        Assert.False(viewModel.Review.ShowImportConfiguration);
-        Assert.Equal("Complete", viewModel.Review.ImportModeLabel);
-        Assert.False(viewModel.Review.IsUnchangedExpanded);
-        Assert.Equal("A", Assert.Single(viewModel.Review.UnchangedEntities).SourceName);
-        Assert.True(viewModel.Review.CanApply);
-
-        viewModel.Review.IsUnchangedExpanded = true;
-        await viewModel.CancelSynchronizationAsync();
-
-        Assert.False(viewModel.Review.IsUnchangedExpanded);
-        Assert.Empty(viewModel.Review.UnchangedEntities);
-        Assert.True(viewModel.Review.ShowImportConfiguration);
-    }
-
-    [Fact]
-    public async Task ImportCsvAsync_SeparatesDirectlyUnresolvedAndUpstreamBlockedEffects()
-    {
-        MainWindowViewModel viewModel = CreateViewModel(
-            [],
-            [],
-            SchemaImportResult.Success(Candidate(
-                ["Direct", "Upstream"],
-                [("Upstream", "Direct", ImportedDependencyKind.Mandatory)],
-                [("Direct", "MissingRoot", ImportedDependencyKind.Mandatory)])),
-            new StubFilePicker("unresolved.csv"),
-            out _);
-
-        await viewModel.ImportCsvAsync();
-
-        Assert.Equal("Direct", Assert.Single(viewModel.Review.UnresolvedEntities).SourceName);
-        SynchronizationResolutionEffectRow blocked = Assert.Single(viewModel.Review.BlockedEntities);
-        Assert.Equal("Upstream", blocked.SourceName);
-        Assert.Contains("MissingRoot", blocked.Explanation);
-
-        viewModel.Review.ToggleFilterCommand.Execute(
-            SchemaSynchronizationReviewFilter.Unresolved);
-        Assert.True(viewModel.Review.IsUnresolvedFilterSelected);
-        Assert.False(viewModel.Review.ShowNewEntities);
-        Assert.True(viewModel.Review.ShowUnresolvedEntities);
-        Assert.True(viewModel.Review.ShowBlockedEntities);
-    }
-
-    [Fact]
-    public async Task ImportCsvAsync_UnknownCsvWarning_IsReplacedByCandidateUnresolvedSummary()
-    {
-        ImportDiagnostic warning = new(
-            ImportDiagnosticCode.UnknownDependency,
-            "CSV-relative warning",
-            2,
-            "mandatory_dependencies",
-            ImportDiagnosticSeverity.Warning);
-        MainWindowViewModel viewModel = CreateViewModel(
-            [],
-            [],
-            SchemaImportResult.Success(
-                Candidate(
-                    ["Owner"],
-                    [],
-                    [("Owner", "Missing", ImportedDependencyKind.Mandatory)]),
-                [warning]),
-            new StubFilePicker("unknown.csv"),
-            out _);
-
-        await viewModel.ImportCsvAsync();
-
-        Assert.Empty(viewModel.Review.Warnings);
-        SchemaSynchronizationReviewRow unresolved =
-            Assert.Single(viewModel.Review.UnresolvedEntities);
-        Assert.Equal("Owner", unresolved.SourceName);
-        Assert.Contains("Missing", unresolved.Details);
-    }
-
-    [Fact]
-    public async Task ImportCsvAsync_InvalidFile_ShowsDiagnosticAndNoReview()
-    {
-        ImportDiagnostic diagnostic = new(
-            ImportDiagnosticCode.CountMismatch,
-            "Declared count does not match.",
-            4,
-            "mandatory_dependency_count");
-        MainWindowViewModel viewModel = CreateViewModel(
-            [],
-            [],
-            SchemaImportResult.Failure([diagnostic]),
-            new StubFilePicker("invalid.csv"),
-            out _);
-
-        await viewModel.ImportCsvAsync();
-
-        Assert.False(viewModel.Review.HasReview);
-        Assert.Equal(
-            "Row 4, mandatory_dependency_count: Declared count does not match.",
-            Assert.Single(viewModel.Review.Diagnostics));
-    }
-
-    [Fact]
-    public async Task CancelSynchronizationAsync_DiscardsPlanWithoutCallingStore()
-    {
-        MainWindowViewModel viewModel = CreateViewModel(
-            [],
-            [],
-            SchemaImportResult.Success(Candidate(["New"], [])),
-            new StubFilePicker("new.csv"),
-            out StubSynchronizationStore store);
-        await viewModel.ImportCsvAsync();
-
-        await viewModel.CancelSynchronizationAsync();
-
-        Assert.Equal(0, store.ApplyCount);
-        Assert.False(viewModel.Review.HasReview);
-        Assert.Equal("No file selected", viewModel.Review.SelectedFileName);
-        Assert.Equal(SchemaImportMode.Complete, viewModel.Review.Mode);
-        Assert.True(viewModel.Review.CanSelectImportMode);
-    }
-
-    [Fact]
-    public async Task ApplySynchronizationAsync_AppliesWholePlanAndReturnsToFreshOverview()
-    {
-        NotificationCenter notifications = new();
-        MainWindowViewModel viewModel = CreateViewModel(
-            [],
-            [],
-            SchemaImportResult.Success(Candidate(["New"], [])),
-            new StubFilePicker("new.csv"),
-            out StubSynchronizationStore store,
-            notifications: notifications);
-        await viewModel.ImportCsvAsync();
-
-        await viewModel.ApplySynchronizationAsync();
-
-        Assert.Equal(1, store.ApplyCount);
-        Assert.NotNull(store.AppliedChangeSet);
-        Assert.Equal(MainWindowTab.Overview, viewModel.SelectedTab);
-        Assert.False(viewModel.Review.HasReview);
-        Assert.Equal(SchemaImportMode.Complete, viewModel.Review.Mode);
-        Assert.True(viewModel.HasLatestImport);
-        Assert.Contains("new.csv", viewModel.LatestImportHeadline);
-        NotificationItem notice = Assert.Single(notifications.Items);
-        Assert.Equal(("Schema synchronization", NotificationKind.Success), (notice.Title, notice.Kind));
-        Assert.Contains("Applied new.csv", notice.Message);
-    }
-
-    [Fact]
-    public async Task ApplySynchronizationAsync_WhenArchivingIsDeclined_ChangesNothing()
-    {
-        MainWindowViewModel viewModel = CreateViewModel(
-            [Entity(1, "Missing")],
-            [],
-            SchemaImportResult.Success(Candidate([], [])),
-            new StubFilePicker("complete.csv"),
-            out StubSynchronizationStore store,
-            confirmationService: new DeclineConfirmationService());
-        await viewModel.ImportCsvAsync();
-
-        await viewModel.ApplySynchronizationAsync();
-
-        Assert.Equal(0, store.ApplyCount);
-        Assert.True(viewModel.Review.HasReview);
-        Assert.Equal(MainWindowTab.SchemaSynchronization, viewModel.SelectedTab);
-    }
-
-    [Fact]
-    public async Task ApplySynchronizationAsync_StoreFailure_PreservesReviewForInspection()
-    {
-        MainWindowViewModel viewModel = CreateViewModel(
-            [],
-            [],
-            SchemaImportResult.Success(Candidate(["New"], [])),
-            new StubFilePicker("new.csv"),
-            out StubSynchronizationStore store);
-        store.Exception = new InvalidOperationException("Transaction failed");
-        await viewModel.ImportCsvAsync();
-
-        await viewModel.ApplySynchronizationAsync();
-
-        Assert.True(viewModel.Review.HasReview);
-        Assert.Contains("Transaction failed", Assert.Single(viewModel.Review.Diagnostics));
-    }
-
-    [Fact]
-    public async Task CyclicReview_CanStageSuppressionBeforeAtomicApply()
-    {
-        MainWindowViewModel viewModel = CreateViewModel(
-            [],
-            [],
-            SchemaImportResult.Success(Candidate(
-                ["A", "B"],
-                [
-                    ("A", "B", ImportedDependencyKind.Mandatory),
-                    ("B", "A", ImportedDependencyKind.Mandatory)
-                ])),
-            new StubFilePicker("cycle.csv"),
-            out StubSynchronizationStore store);
-        await viewModel.ImportCsvAsync();
-        SchemaSynchronizationReviewRow b = viewModel.Review.NewEntities.Single(
-            row => row.SourceName == "B");
-
-        viewModel.EditReviewEntityCommand.Execute(b);
-
-        Assert.Equal(MainWindowTab.SchemaSynchronization, viewModel.SelectedTab);
-        Assert.True(viewModel.Editor.IsOpen);
-        Assert.True(viewModel.Editor.IsReviewMode);
-        Assert.False(viewModel.Editor.CanArchive);
-        Assert.False(viewModel.Editor.RequestArchiveCommand.CanExecute(null));
-        Assert.Equal("B", viewModel.Editor.SelectedEntityName);
-        EntityDependencyEditRow imported = Assert.Single(viewModel.Editor.Dependencies);
-        viewModel.Editor.SuppressCommand.Execute(imported);
-        Assert.False(viewModel.Editor.HasErrors);
-        Assert.True(viewModel.Editor.SaveCommand.CanExecute(null));
-
-        viewModel.Editor.SaveCommand.Execute(null);
-
-        Assert.Equal(MainWindowTab.SchemaSynchronization, viewModel.SelectedTab);
-        Assert.True(viewModel.Review.CanApply);
-        Assert.Equal(0, store.ApplyCount);
-
-        await viewModel.ApplySynchronizationAsync();
-
-        Assert.Equal(1, store.ApplyCount);
-        Assert.Equal(
-            ManualDependencyOverrideAction.Suppress,
-            Assert.Single(store.AppliedChangeSet!.ManualDependencyOverrides).Action);
-    }
-
-    [Fact]
-    public async Task ImportCsvAsync_CancelledPicker_PreservesExistingReview()
-    {
-        MainWindowViewModel viewModel = CreateViewModel(
-            [],
-            [],
-            SchemaImportResult.Success(Candidate(["New"], [])),
-            new StubFilePicker("first.csv", null),
-            out _);
-        await viewModel.ImportCsvAsync();
-        SchemaSynchronizationPlan originalPlan = viewModel.Review.CurrentPlan!;
-
-        await viewModel.ImportCsvAsync();
-
-        Assert.Same(originalPlan, viewModel.Review.CurrentPlan);
-        Assert.Equal("first.csv", viewModel.Review.SelectedFileName);
-    }
-
-    [Fact]
     public async Task ApplyBulkStatusAsync_StoreFailurePostsAFailureAndKeepsTheOverview()
     {
         NotificationCenter notifications = new();
         MainWindowViewModel viewModel = CreateViewModel(
             [Entity(1, "First")],
             [],
-            FailureResult(),
-            new StubFilePicker(),
-            out StubSynchronizationStore store,
+            out StubStateStore store,
             notifications: notifications);
         await viewModel.InitializeAsync();
         viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
@@ -1418,9 +947,7 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [first, second],
             [],
-            FailureResult(),
-            new StubFilePicker(),
-            out StubSynchronizationStore store,
+            out StubStateStore store,
             notifications: notifications);
         await viewModel.InitializeAsync();
         viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
@@ -1450,8 +977,6 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [Entity(1, "Alpha"), Entity(2, "Beta")],
             [],
-            FailureResult(),
-            new StubFilePicker(),
             out _);
         await viewModel.InitializeAsync();
 
@@ -1472,7 +997,7 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(0, viewModel.SelectedActiveEntityCount);
 
         viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
-        viewModel.SelectedTab = MainWindowTab.SchemaSynchronization;
+        viewModel.SelectedTab = MainWindowTab.AddEntity;
         Assert.Equal(0, viewModel.SelectedActiveEntityCount);
     }
 
@@ -1482,8 +1007,6 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [Entity(1, "Alpha"), Entity(2, "Beta")],
             [],
-            FailureResult(),
-            new StubFilePicker(),
             out _);
         await viewModel.InitializeAsync();
         int clearRequestCount = 0;
@@ -1509,8 +1032,6 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [active, archived],
             [],
-            FailureResult(),
-            new StubFilePicker(),
             out _);
         await viewModel.InitializeAsync();
 
@@ -1534,8 +1055,6 @@ public sealed class MainWindowViewModelTests
         MainWindowViewModel viewModel = CreateViewModel(
             [],
             [],
-            FailureResult(),
-            new StubFilePicker(),
             out _);
 
         viewModel.ManualCreation.EntityName = "Pending entity";
@@ -1549,63 +1068,45 @@ public sealed class MainWindowViewModelTests
     private static MainWindowViewModel CreateViewModel(
         IReadOnlyList<TrackedEntity> entities,
         IReadOnlyList<PersistedDependency> dependencies,
-        SchemaImportResult importResult,
-        ICsvFilePicker picker,
-        out StubSynchronizationStore store,
+        out StubStateStore store,
         IReadOnlyList<PersistedUnresolvedDependency>? unresolvedDependencies = null,
-        ISchemaSynchronizationConfirmation? confirmationService = null,
         IContextDiscardConfirmation? discardConfirmation = null,
         OverviewExportService? overviewExportService = null,
         IOverviewExportFilePicker? overviewExportFilePicker = null,
         OverviewExportSettingsViewModel? overviewExportSettings = null,
         NotificationCenter? notifications = null)
     {
-        StubEntityRepository entityRepository = new(entities);
+        StubEntityRepository entityRepository = new(TestDependencies.WithPlaceholders(entities, unresolvedDependencies));
         StubDependencyRepository dependencyRepository = new(
-            dependencies,
-            unresolvedDependencies ?? []);
+            TestDependencies.Named(entities, dependencies, unresolvedDependencies));
         DependencyRanker ranker = new();
         EffectiveDependencyResolver resolver = new();
-        StubManualDependencyOverrideRepository overrideRepository = new();
-        store = new StubSynchronizationStore(entityRepository);
+        store = new StubStateStore(entityRepository);
         EntityDependencyEditorService editorService = new(
             entityRepository,
             dependencyRepository,
-            overrideRepository,
             resolver,
             ranker,
             store,
             new PriorityPlanningService());
-        SchemaSynchronizationService synchronizationService = new(
-            new StubFileParser(importResult),
-            entityRepository,
-            dependencyRepository,
-            overrideRepository,
-            new SchemaSynchronizationPlanner(ranker, resolver),
-            editorService,
-            store);
         return new MainWindowViewModel(
             TestTrackerId,
             new EntityOverviewService(
                 entityRepository,
                 entityRepository,
                 dependencyRepository,
-                overrideRepository,
                 ranker,
                 resolver,
                 new WorkflowReadinessEvaluator(),
                 new PriorityPlanningService()),
-            synchronizationService,
             new BulkStatusUpdateService(
                 entityRepository,
                 dependencyRepository,
-                overrideRepository,
                 resolver,
                 store),
             new ManualEntityCreationService(
                 entityRepository,
                 dependencyRepository,
-                overrideRepository,
                 ranker,
                 resolver,
                 store),
@@ -1613,31 +1114,15 @@ public sealed class MainWindowViewModelTests
             new EntityLifecycleService(
                 entityRepository,
                 dependencyRepository,
-                overrideRepository,
                 store,
                 resolver,
                 ranker),
-            picker,
-            confirmationService ?? new AlwaysConfirmService(),
             discardConfirmation ?? new AlwaysDiscardConfirmation(),
             overviewExportService: overviewExportService,
             overviewExportFilePicker: overviewExportFilePicker,
             overviewExportSettings: overviewExportSettings,
             notifications: notifications);
     }
-
-    private sealed class AlwaysConfirmService : ISchemaSynchronizationConfirmation
-    {
-        public bool ConfirmArchiveMissingEntities(int entityCount) => true;
-    }
-
-    private sealed class DeclineConfirmationService : ISchemaSynchronizationConfirmation
-    {
-        public bool ConfirmArchiveMissingEntities(int entityCount) => false;
-    }
-
-    private static SchemaImportResult FailureResult() => SchemaImportResult.Failure(
-        [new ImportDiagnostic(ImportDiagnosticCode.FileAccessError, "No file configured.")]);
 
     private static Task WaitUntilAsync(Func<bool> condition,
         [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(condition))] string description = "") =>
@@ -1672,7 +1157,6 @@ public sealed class MainWindowViewModelTests
         string name,
         DevelopmentStatus status = DevelopmentStatus.NotStarted,
         string notes = "",
-        EntityProvenance provenance = EntityProvenance.Imported,
         EntityLifecycleState lifecycle = EntityLifecycleState.Active,
         int? requestedPriority = null,
         string? responsibleDeveloper = null,
@@ -1684,40 +1168,18 @@ public sealed class MainWindowViewModelTests
             status,
             notes,
             lifecycle,
-            provenance,
             requestedPriority,
             responsibleDeveloper,
             groupName);
 
     private static PersistedDependency Dependency(TrackedEntity owner, TrackedEntity target) =>
-        new(new DependencyEdge(owner.Id, target.Id), ImportedDependencyKind.Mandatory);
+        new(new DependencyEdge(owner.Id, target.Id));
 
     private static PersistedUnresolvedDependency Unresolved(
         TrackedEntity owner,
         string dependencySourceName) =>
         new(
-            new UnresolvedDependency(owner.Id, dependencySourceName),
-            ImportedDependencyKind.Mandatory);
-
-    private static SchemaImportCandidate Candidate(
-        IEnumerable<string> names,
-        IEnumerable<(string Owner, string Target, ImportedDependencyKind Kind)> dependencies,
-        IEnumerable<(string Owner, string Target, ImportedDependencyKind Kind)>? unresolved = null)
-    {
-        ImportedEntity[] entities = names.Select(name =>
-            new ImportedEntity(EntitySourceKey.From(name), name)).ToArray();
-        return new SchemaImportCandidate(
-            entities,
-            dependencies.Select(item => new ImportedDependency(
-                EntitySourceKey.From(item.Owner),
-                EntitySourceKey.From(item.Target),
-                item.Kind)),
-            (unresolved ?? []).Select(item => new UnresolvedImportedDependency(
-                EntitySourceKey.From(item.Owner),
-                EntitySourceKey.From(item.Target),
-                item.Target,
-                item.Kind)));
-    }
+            new UnresolvedDependency(owner.Id, dependencySourceName));
 
     private sealed class StubEntityRepository : IEntityRepository, IEntityAuditReader
     {
@@ -1798,46 +1260,14 @@ public sealed class MainWindowViewModelTests
         }
     }
 
-    private sealed class StubDependencyRepository(
-        IReadOnlyList<PersistedDependency> dependencies,
-        IReadOnlyList<PersistedUnresolvedDependency> unresolvedDependencies)
-        : IDependencyRepository
-    {
-        public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) => Task.FromResult(dependencies);
-
-        public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(unresolvedDependencies);
-
-    }
-
-    private sealed class StubFileParser(SchemaImportResult result) : ISchemaImportFileParser
-    {
-        public Task<SchemaImportResult> ParseAsync(
-            string filePath,
-            CancellationToken cancellationToken = default) => Task.FromResult(result);
-    }
-
-    private sealed class StubFilePicker(params string?[] paths) : ICsvFilePicker
-    {
-        private readonly Queue<string?> _paths = new(paths);
-
-        public string? SelectCsvFile() => _paths.Count == 0 ? null : _paths.Dequeue();
-    }
-
-    private sealed class StubSynchronizationStore(StubEntityRepository entityRepository)
-        : ITrackedStateStore, ISchemaSynchronizationStore
+    private sealed class StubStateStore(StubEntityRepository entityRepository)
+        : ITrackedStateStore
     {
         public int ApplyCount { get; private set; }
 
         public TrackedStateChangeSet? AppliedChangeSet { get; private set; }
 
         public Exception? Exception { get; set; }
-
-        public SchemaImportSummary? LatestSummary { get; private set; }
 
         public Task ApplyAsync(
             TrackerId trackerId,
@@ -1894,22 +1324,5 @@ public sealed class MainWindowViewModelTests
             IEnumerable<TrackedEntity> entities,
             ProgressSnapshotState snapshot,
             CancellationToken cancellationToken = default) => Task.CompletedTask;
-
-        public async Task<SchemaImportSummary> ApplyAsync(
-            TrackerId trackerId,
-            TrackedStateChangeSet changeSet,
-            SchemaImportCompletion completion,
-            CancellationToken cancellationToken = default)
-        {
-            await ApplyAsync(trackerId, changeSet, cancellationToken);
-            LatestSummary = new SchemaImportSummary(
-                new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero),
-                completion);
-            return LatestSummary;
-        }
-
-        public Task<SchemaImportSummary?> GetLatestImportAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) => Task.FromResult(LatestSummary);
     }
 }

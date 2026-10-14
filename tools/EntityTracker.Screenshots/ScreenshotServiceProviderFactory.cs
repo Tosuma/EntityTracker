@@ -1,6 +1,5 @@
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.ManualOverrides;
@@ -9,13 +8,11 @@ using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Planning;
 using EntityTracker.Application.Projects;
 using EntityTracker.Application.Ranking;
-using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Application.GitSync;
 using EntityTracker.Application.Snapshots;
 using EntityTracker.Infrastructure.Configuration;
-using EntityTracker.Infrastructure.Importing;
 using EntityTracker.Infrastructure.Persistence;
 using EntityTracker.Infrastructure.GitSync;
 using EntityTracker.Infrastructure.Snapshots;
@@ -34,12 +31,10 @@ internal static class ScreenshotServiceProviderFactory
 {
     internal static ServiceProvider Create(
         ApplicationDataPaths paths,
-        ScreenshotCsvFilePicker csvFilePicker,
         TimeProvider timeProvider,
         ApplicationAppearance appearance = ApplicationAppearance.Light)
     {
         ArgumentNullException.ThrowIfNull(paths);
-        ArgumentNullException.ThrowIfNull(csvFilePicker);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         ServiceCollection services = new();
@@ -64,12 +59,8 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<IEntityRepository, SqliteEntityRepository>();
         services.AddSingleton<IEntityAuditReader, SqliteEntityAuditReader>();
         services.AddSingleton<IDependencyRepository, SqliteDependencyRepository>();
-        services.AddSingleton<IManualDependencyOverrideRepository,
-            SqliteManualDependencyOverrideRepository>();
         services.AddSingleton<SqliteTrackedStateStore>();
         services.AddSingleton<ITrackedStateStore>(static provider =>
-            provider.GetRequiredService<SqliteTrackedStateStore>());
-        services.AddSingleton<ISchemaSynchronizationStore>(static provider =>
             provider.GetRequiredService<SqliteTrackedStateStore>());
         services.AddSingleton<ITrackerSyncStore>(static provider =>
             provider.GetRequiredService<SqliteTrackedStateStore>());
@@ -114,8 +105,6 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<IOverviewExportFilePicker, OverviewExportFilePicker>();
         services.AddSingleton<ProjectRepositoryCardViewModelFactory>();
 
-        services.AddSingleton<ISchemaImportParser, CsvSchemaImportParser>();
-        services.AddSingleton<ISchemaImportFileParser, CsvSchemaImportFileParser>();
         services.AddSingleton<IDependencyRankingService, DependencyRanker>();
         services.AddSingleton<EffectiveDependencyResolver>();
         services.AddSingleton<PriorityPlanningService>();
@@ -123,7 +112,6 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<ProgressSnapshotCalculator>();
         services.AddSingleton<EntityOverviewService>();
         services.AddSingleton<BulkStatusUpdateService>();
-        services.AddSingleton<SchemaSynchronizationPlanner>();
         services.AddSingleton<ProgressHistoryInitializer>();
         services.AddSingleton<ProgressDashboardBuilder>();
         services.AddSingleton<AggregateProgressDashboardBuilder>();
@@ -151,12 +139,8 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<ProgressChartPngExporter>();
         services.AddSingleton<IProgressChartFilePicker, ScreenshotChartFilePicker>();
         services.AddSingleton<IClipboardService, ScreenshotClipboard>();
-        services.AddSingleton<ISchemaSynchronizationConfirmation,
-            ScreenshotSynchronizationConfirmation>();
         services.AddSingleton<IContextDiscardConfirmation,
             ScreenshotContextDiscardConfirmation>();
-        services.AddSingleton<ICsvFilePicker>(csvFilePicker);
-        services.AddSingleton<SchemaSynchronizationService>();
         services.AddSingleton<ManualEntityCreationService>();
         services.AddSingleton<EntityDependencyEditorService>();
         services.AddSingleton<EntityLifecycleService>();
@@ -166,7 +150,6 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<LocalProjectIdentitySettingsViewModel>();
         services.AddSingleton<TrackerManagementService>();
         services.AddSingleton<TrackerSyncService>();
-        services.AddSingleton<TrackerCsvCreationService>();
         services.AddSingleton<CatalogNameValidationService>();
         services.AddSingleton<PortfolioQueryService>();
         services.AddSingleton<ProjectEntityComparisonQueryService>();

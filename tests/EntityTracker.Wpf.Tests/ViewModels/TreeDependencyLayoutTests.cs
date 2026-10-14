@@ -159,6 +159,6 @@ public sealed class TreeDependencyLayoutTests
     private static EntityOverviewRow Row(int id, string name, params string[] dependencies) => new(
         new EntityId(new Guid(id, 0, 0, new byte[8])), EntityLifecycleState.Active,
         DevelopmentStatus.NotStarted, EntityWorkflowState.Ready, DependencyResolutionState.Resolved,
-        "—", "—", name, "", "", "CSV", "", "", "", dependencies, [],
+        "—", "—", name, "", "", "", "", "", dependencies, [],
         "", "", "", "—", "", "");
 }

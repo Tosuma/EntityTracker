@@ -1,9 +1,9 @@
 using EntityTracker.Application.History;
 using EntityTracker.Application.Lifecycle;
+using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Projects;
-using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Application.Workflow;
 using EntityTracker.DemoData;
@@ -15,6 +15,39 @@ namespace EntityTracker.Screenshots;
 
 internal static class ScreenshotDataSeeder
 {
+    /// <summary>
+    /// Adds the sample entities in file order, as a person would with Add entity. Each line is
+    /// "name;dependency, dependency"; a dependency on an entity added later, or on a name no entity
+    /// has, is kept by name and resolves once an entity with that name exists.
+    /// </summary>
+    private static async Task CreateSampleEntitiesAsync(
+        ManualEntityCreationService creation,
+        TrackerId trackerId,
+        string samplePath,
+        CancellationToken cancellationToken)
+    {
+        Dictionary<string, EntityId> created = new(StringComparer.Ordinal);
+        foreach (string line in (await File.ReadAllLinesAsync(samplePath, cancellationToken)).Skip(1))
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            string[] parts = line.Split(';');
+            string name = parts[0].Trim();
+            ManualDependencySelection[] dependencies = parts[1]
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(dependency => created.TryGetValue(dependency, out EntityId? id)
+                    ? ManualDependencySelection.Existing(id, dependency)
+                    : ManualDependencySelection.Unresolved(dependency))
+                .ToArray();
+            ManualEntityCreationResult result = await creation.CreateAsync(
+                trackerId, new ManualEntityCreationRequest(name, dependencies), cancellationToken);
+            if (!result.IsSuccess)
+                throw new InvalidDataException(
+                    $"The screenshot entity {name} could not be created: " +
+                    string.Join("; ", result.Diagnostics.Select(static item => item.Message)));
+            created.Add(name, result.CreatedEntityId!);
+        }
+    }
+
     internal const string PrimaryProjectName = "Commerce modernization";
     internal const string PrimaryTrackerName = "Core schema";
 
@@ -29,18 +62,17 @@ internal static class ScreenshotDataSeeder
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
         ArgumentNullException.ThrowIfNull(workspace);
 
-        string schemaPath = Path.Combine(repositoryRoot, "synthetic_dependencies_125.csv");
-        if (!File.Exists(schemaPath))
+        string samplePath = Path.Combine(repositoryRoot, "tools", "EntityTracker.Screenshots",
+            "screenshot-entities.csv");
+        if (!File.Exists(samplePath))
         {
             throw new FileNotFoundException(
-                "The deterministic screenshot schema could not be found.",
-                schemaPath);
+                "The deterministic screenshot entities could not be found.",
+                samplePath);
         }
 
-        ScreenshotCsvFilePicker picker = new();
         await using (ServiceProvider provider = ScreenshotServiceProviderFactory.Create(
                          workspace.Paths,
-                         picker,
                          new FixedTimeProvider(FixedNow)))
         {
             await provider.GetRequiredService<IPersistenceInitializer>()
@@ -50,27 +82,10 @@ internal static class ScreenshotDataSeeder
                     .GetAllAsync(cancellationToken))
                 .Single(static item => item.Name == "Default tracker");
 
-            SchemaSynchronizationService synchronization =
-                provider.GetRequiredService<SchemaSynchronizationService>();
-            SchemaSynchronizationResult result = await synchronization.PlanAsync(
+            await CreateSampleEntitiesAsync(
+                provider.GetRequiredService<ManualEntityCreationService>(),
                 tracker.Id,
-                schemaPath,
-                SchemaImportMode.Complete,
-                cancellationToken);
-            if (!result.IsSuccess || result.Plan?.CanApply != true)
-            {
-                string diagnostics = string.Join(
-                    Environment.NewLine,
-                    result.ImportDiagnostics.Select(static item => item.Message)
-                        .Concat(result.RankingDiagnostics.Select(static item => item.Message)));
-                throw new InvalidDataException(
-                    $"The deterministic screenshot schema could not be applied.{Environment.NewLine}{diagnostics}");
-            }
-
-            await synchronization.ApplyAsync(
-                tracker.Id,
-                result.Plan,
-                Path.GetFileName(schemaPath),
+                samplePath,
                 cancellationToken);
             await provider.GetRequiredService<ProgressHistoryInitializer>()
                 .EnsureInitializedAsync(tracker.Id, cancellationToken);
@@ -96,7 +111,7 @@ internal static class ScreenshotDataSeeder
             ProjectDeveloper platform = await provider.GetRequiredService<ProjectDeveloperService>()
                 .CreateAsync(tracker.ProjectId, "PT", "Platform Team", cancellationToken);
             await provider.GetRequiredService<ITrackedStateStore>().ApplyAsync(tracker.Id,
-                new TrackedStateChangeSet([], [], [], [], [], [],
+                new TrackedStateChangeSet([], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(noteEntity.Id, [platform.Id])]),
                 cancellationToken);
         }
@@ -114,7 +129,6 @@ internal static class ScreenshotDataSeeder
 
         await using ServiceProvider catalogProvider = ScreenshotServiceProviderFactory.Create(
             workspace.Paths,
-            new ScreenshotCsvFilePicker(),
             new FixedTimeProvider(FixedNow));
         await catalogProvider.GetRequiredService<IPersistenceInitializer>()
             .InitializeAsync(cancellationToken);

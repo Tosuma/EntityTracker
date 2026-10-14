@@ -6,7 +6,16 @@ public sealed record ProjectSnapshot(
     IReadOnlyList<SnapshotTracker> Trackers,
     IReadOnlyList<SnapshotDeveloper>? Developers = null)
 {
-    public const int CurrentFormatVersion = 5;
+    /// <summary>
+    /// Format 6 stores each entity's dependencies as one list of entity IDs; a name no entity has yet is
+    /// a placeholder entity (lifecycle Placeholder). Formats 1–5 stored imported
+    /// dependencies (by entity ID or name, with a kind) and manual Add/Suppress corrections; they are
+    /// read into the Legacy fields and converted by <see cref="ProjectSnapshotUpgrade"/>.
+    /// </summary>
+    public const int CurrentFormatVersion = 6;
+
+    public static bool IsSupportedFormat(int formatVersion) =>
+        formatVersion is >= 1 and <= CurrentFormatVersion;
 }
 
 public sealed record SnapshotDeveloper(
@@ -24,34 +33,53 @@ public sealed record SnapshotTracker(
     IReadOnlyList<SnapshotEntity> Entities,
     IReadOnlyList<SnapshotStatusEvent> StatusHistory,
     IReadOnlyList<SnapshotProgress> ProgressHistory,
-    SnapshotImportSummary? ImportSummary,
-    string? SyncBaselineJson = null);
+    string? SyncBaselineJson = null,
+    // Formats 1–5 only: the last CSV import, which format 6 no longer keeps.
+    SnapshotImportSummary? LegacyImportSummary = null);
 
 public sealed record SnapshotEntity(
     Guid Id, Guid TrackerId, string SourceName, string DevelopmentStatus,
-    string Notes, string LifecycleState, string Provenance,
+    string Notes, string LifecycleState,
     int? RequestedPriority, string ResponsibleDeveloper, string GroupName,
     DateTimeOffset CreatedAtUtc, DateTimeOffset SchemaUpdatedAtUtc,
     DateTimeOffset ProgressUpdatedAtUtc,
     IReadOnlyList<SnapshotDependency> Dependencies,
-    IReadOnlyList<SnapshotUnresolvedDependency> UnresolvedDependencies,
-    IReadOnlyList<SnapshotOverride> ManualOverrides,
     IReadOnlyList<SnapshotResponsibilityPeriod>? ResponsibilityPeriods = null,
     string FilterActive = "",
-    string SharedNotes = "");
+    string SharedNotes = "",
+    // Formats 1–5 only; format 6 keeps these empty and uses Dependencies.
+    IReadOnlyList<SnapshotLegacyDependency>? LegacyDependencies = null,
+    IReadOnlyList<SnapshotLegacyUnresolvedDependency>? LegacyUnresolvedDependencies = null,
+    IReadOnlyList<SnapshotLegacyOverride>? LegacyOverrides = null,
+    // Formats 1–5 only: how the entity entered its Tracker (Imported, ManualOnly, Copied, ...).
+    string? LegacyProvenance = null);
 
 public sealed record SnapshotResponsibilityPeriod(Guid Id, Guid EntityId, Guid DeveloperId,
     DateTimeOffset StartedAtUtc, DateTimeOffset? EndedAtUtc);
 
+/// <summary>
+/// An entity's dependency on another entity of the same Tracker, by ID. An unresolved reference is a
+/// dependency on a placeholder entity.
+/// </summary>
 public sealed record SnapshotDependency(
+    Guid DependencyEntityId, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc)
+{
+    public EntityTracker.Domain.EntityDependency ToEntityDependency(Guid ownerId) =>
+        new(new EntityTracker.Domain.EntityId(ownerId), new EntityTracker.Domain.EntityId(DependencyEntityId));
+}
+
+/// <summary>Formats 1–5: an imported dependency on another entity of the Tracker.</summary>
+public sealed record SnapshotLegacyDependency(
     Guid DependentEntityId, Guid DependencyEntityId, string Kind,
     DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
 
-public sealed record SnapshotUnresolvedDependency(
+/// <summary>Formats 1–5: an imported dependency on a name no entity had.</summary>
+public sealed record SnapshotLegacyUnresolvedDependency(
     Guid DependentEntityId, string DependencySourceName, string Kind,
     DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
 
-public sealed record SnapshotOverride(
+/// <summary>Formats 1–5: a manual Add or Suppress correction of the imported dependencies.</summary>
+public sealed record SnapshotLegacyOverride(
     Guid DependentEntityId, string DependencySourceName, string Action,
     DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
 

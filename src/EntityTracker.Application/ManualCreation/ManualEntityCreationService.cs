@@ -1,7 +1,6 @@
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Groups;
 using EntityTracker.Application.History;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Tracking;
@@ -13,7 +12,6 @@ public sealed class ManualEntityCreationService
 {
     private readonly IEntityRepository _entityRepository;
     private readonly IDependencyRepository _dependencyRepository;
-    private readonly IManualDependencyOverrideRepository _overrideRepository;
     private readonly IDependencyRankingService _dependencyRanker;
     private readonly EffectiveDependencyResolver _effectiveDependencyResolver;
     private readonly ITrackedStateStore _store;
@@ -22,7 +20,6 @@ public sealed class ManualEntityCreationService
     public ManualEntityCreationService(
         IEntityRepository entityRepository,
         IDependencyRepository dependencyRepository,
-        IManualDependencyOverrideRepository overrideRepository,
         IDependencyRankingService dependencyRanker,
         EffectiveDependencyResolver effectiveDependencyResolver,
         ITrackedStateStore store,
@@ -30,14 +27,12 @@ public sealed class ManualEntityCreationService
     {
         ArgumentNullException.ThrowIfNull(entityRepository);
         ArgumentNullException.ThrowIfNull(dependencyRepository);
-        ArgumentNullException.ThrowIfNull(overrideRepository);
         ArgumentNullException.ThrowIfNull(dependencyRanker);
         ArgumentNullException.ThrowIfNull(effectiveDependencyResolver);
         ArgumentNullException.ThrowIfNull(store);
 
         _entityRepository = entityRepository;
         _dependencyRepository = dependencyRepository;
-        _overrideRepository = overrideRepository;
         _dependencyRanker = dependencyRanker;
         _effectiveDependencyResolver = effectiveDependencyResolver;
         _store = store;
@@ -82,17 +77,13 @@ public sealed class ManualEntityCreationService
 
         Task<IReadOnlyList<TrackedEntity>> entitiesTask =
             _entityRepository.GetAllAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<PersistedDependency>> dependenciesTask =
+        Task<IReadOnlyList<EntityDependency>> dependenciesTask =
             _dependencyRepository.GetAllAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
-            _dependencyRepository.GetAllUnresolvedAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
-            _overrideRepository.GetAllAsync(trackerId, cancellationToken);
-        await Task.WhenAll(entitiesTask, dependenciesTask, unresolvedTask, overridesTask);
+        await Task.WhenAll(entitiesTask, dependenciesTask);
 
         TrackedEntity[] currentEntities = (await entitiesTask).ToArray();
-        PersistedDependency[] currentResolved = (await dependenciesTask).ToArray();
-        PersistedUnresolvedDependency[] currentUnresolved = (await unresolvedTask).ToArray();
+        EntityDependency[] currentDependencies = (await dependenciesTask).ToArray();
+        TrackerStateValidator.EnsureOwned(trackerId, currentEntities, currentDependencies);
         Dictionary<EntityId, TrackedEntity> currentById = currentEntities.ToDictionary(
             static entity => entity.Id);
         Dictionary<EntitySourceKey, TrackedEntity> currentByKey = currentEntities.ToDictionary(
@@ -116,6 +107,12 @@ public sealed class ManualEntityCreationService
             activeByKey,
             diagnostics);
 
+        // A placeholder with this name (an unresolved reference to it) becomes the new entity, keeping
+        // its ID, so the dependencies on it now refer to the new entity.
+        TrackedEntity? placeholder = entityKey is not null &&
+            currentByKey.TryGetValue(entityKey, out TrackedEntity? named) && named.IsPlaceholder
+            ? named
+            : null;
         ArchivedEntityMatch? archivedEntityMatch = null;
         if (entityKey is not null &&
             currentByKey.TryGetValue(entityKey, out TrackedEntity? existingEntity) &&
@@ -132,59 +129,28 @@ public sealed class ManualEntityCreationService
         }
 
         TrackedEntity createdEntity = new(
-            EntityId.New(),
+            placeholder?.Id ?? EntityId.New(),
             trackerId,
             entityName,
-            provenance: EntityProvenance.ManualOnly,
             requestedPriority: request.RequestedPriority,
             responsibleDeveloper: request.ResponsibleDeveloper,
             groupName: request.GroupName);
-        Dictionary<EntitySourceKey, TrackedEntity> candidateActiveByKey = new(activeByKey)
-        {
-            [entityKey!] = createdEntity
-        };
-
-        Dictionary<EntityId, Dictionary<EntitySourceKey, DependencyDeclaration>>
-            currentDeclarations = DependencyStateResolver.BuildCurrentDeclarations(
-                currentResolved,
-                currentUnresolved,
-                currentById);
-        Dictionary<EntityId, Dictionary<EntitySourceKey, DependencyDeclaration>>
-            candidateImportedDeclarations = candidateActiveByKey.Values.ToDictionary(
-                static entity => entity.Id,
-                entity => currentDeclarations.TryGetValue(
-                    entity.Id,
-                    out Dictionary<EntitySourceKey, DependencyDeclaration>? declarations)
-                    ? declarations.ToDictionary(static item => item.Key, static item => item.Value)
-                    : []);
-
-        DependencyStateResolver.Resolve(candidateImportedDeclarations, candidateActiveByKey);
-
-        PersistedDependency[] candidateImportedResolved =
-            DependencyStateResolver.CreateResolvedDependencies(candidateImportedDeclarations);
-        PersistedUnresolvedDependency[] candidateImportedUnresolved =
-            DependencyStateResolver.CreateUnresolvedDependencies(candidateImportedDeclarations);
-        ManualDependencyOverride[] createdOverrides = validatedDependencies
-            .Select(dependency => new ManualDependencyOverride(
-                createdEntity.Id,
-                dependency.TargetName,
-                ManualDependencyOverrideAction.Add))
+        TrackedEntity[] withCreated = currentEntities
+            .Where(entity => entity.Id != createdEntity.Id)
+            .Append(createdEntity)
             .ToArray();
-        ManualDependencyOverride[] candidateOverrides = (await overridesTask)
-            .Concat(createdOverrides)
+        DependencyTargets targets = new(trackerId, withCreated);
+        EntityDependency[] createdDependencies = validatedDependencies
+            .Select(dependency => new EntityDependency(
+                createdEntity.Id, dependency.TargetId ?? targets.For(dependency.TargetName).Id))
             .ToArray();
-        TrackerStateValidator.EnsureOwned(
-            trackerId,
-            currentEntities,
-            currentResolved,
-            currentUnresolved,
-            await overridesTask);
-        TrackedEntity[] candidateEntities = candidateActiveByKey.Values.ToArray();
+        TrackedEntity[] allEntities = [.. withCreated, .. targets.NewPlaceholders];
+        TrackedEntity[] candidateEntities = allEntities
+            .Where(static entity => entity.LifecycleState == EntityLifecycleState.Active)
+            .ToArray();
         EffectiveDependencyState effectiveState = _effectiveDependencyResolver.Resolve(
-            candidateEntities,
-            candidateImportedResolved,
-            candidateImportedUnresolved,
-            candidateOverrides);
+            allEntities,
+            [.. currentDependencies, .. createdDependencies]);
         DependencyRankingResult ranking = _dependencyRanker.Rank(
             candidateEntities,
             effectiveState.ResolvedDependencies.Select(static dependency => dependency.Edge),
@@ -201,33 +167,12 @@ public sealed class ManualEntityCreationService
             return ManualEntityCreationResult.Failure(diagnostics);
         }
 
-        HashSet<EntityId> reconciledOwnerIds = [createdEntity.Id];
-        foreach (TrackedEntity entity in candidateEntities.Where(entity =>
-                     entity.Id != createdEntity.Id))
-        {
-            IReadOnlyDictionary<EntitySourceKey, DependencyDeclaration> current =
-                currentDeclarations.TryGetValue(
-                    entity.Id,
-                    out Dictionary<EntitySourceKey, DependencyDeclaration>? declarations)
-                    ? declarations
-                    : new Dictionary<EntitySourceKey, DependencyDeclaration>();
-            if (!AreEquivalent(current, candidateImportedDeclarations[entity.Id]))
-            {
-                reconciledOwnerIds.Add(entity.Id);
-            }
-        }
-
         TrackedStateChangeSet changeSet = new(
-            [createdEntity],
+            [createdEntity, .. targets.NewPlaceholders],
             [],
             [],
-            reconciledOwnerIds,
-            candidateImportedResolved.Where(dependency =>
-                reconciledOwnerIds.Contains(dependency.Edge.DependentEntityId)),
-            candidateImportedUnresolved.Where(dependency =>
-                reconciledOwnerIds.Contains(dependency.Dependency.DependentEntityId)),
             [createdEntity.Id],
-            createdOverrides,
+            createdDependencies,
             responsibilitySelections: [new ResponsibilitySelection(createdEntity.Id, request.DeveloperIds)],
             progressSnapshotAfterChanges: _snapshotCalculator.Calculate(
                 candidateEntities,
@@ -259,7 +204,7 @@ public sealed class ManualEntityCreationService
         }
 
         EntitySourceKey key = EntitySourceKey.From(entityName);
-        if (currentByKey.TryGetValue(key, out TrackedEntity? existing))
+        if (currentByKey.TryGetValue(key, out TrackedEntity? existing) && !existing.IsPlaceholder)
         {
             string state = existing.LifecycleState == EntityLifecycleState.Archived
                 ? "archived"
@@ -379,7 +324,8 @@ public sealed class ManualEntityCreationService
                 activeEntity.Id);
         }
 
-        if (currentByKey.TryGetValue(selection.SourceKey, out TrackedEntity? archivedEntity))
+        currentByKey.TryGetValue(selection.SourceKey, out TrackedEntity? existing);
+        if (existing is { IsPlaceholder: false } archivedEntity)
         {
             diagnostics.Add(new ManualEntityCreationDiagnostic(
                 ManualEntityCreationDiagnosticCode.ArchivedDependency,
@@ -391,18 +337,12 @@ public sealed class ManualEntityCreationService
             ManualEntityCreationDiagnosticCode.UnresolvedDependency,
             $"'{selection.SourceName}' does not exist and will be added as an unresolved dependency.",
             ManualEntityCreationDiagnosticSeverity.Warning));
+        // A placeholder for the name is reused; otherwise one is created.
         return new ValidatedDependency(
             selection.SourceKey,
-            selection.SourceName,
-            null);
+            existing?.SourceName ?? selection.SourceName,
+            existing?.Id);
     }
-
-    private static bool AreEquivalent(
-        IReadOnlyDictionary<EntitySourceKey, DependencyDeclaration> current,
-        IReadOnlyDictionary<EntitySourceKey, DependencyDeclaration> candidate) =>
-        current.Count == candidate.Count && current.All(item =>
-            candidate.TryGetValue(item.Key, out DependencyDeclaration? value) &&
-            item.Value == value);
 
     private static bool IsSupportedSourceName(string sourceName) =>
         !sourceName.Contains(',', StringComparison.Ordinal);
@@ -423,8 +363,9 @@ public sealed class ManualEntityCreationService
         diagnostics.Any(static diagnostic =>
             diagnostic.Severity == ManualEntityCreationDiagnosticSeverity.Error);
 
+    /// <param name="TargetId">The entity depended on; null when a placeholder must be created for the name.</param>
     private sealed record ValidatedDependency(
         EntitySourceKey TargetKey,
         string TargetName,
-        EntityId? ResolvedTargetId);
+        EntityId? TargetId);
 }

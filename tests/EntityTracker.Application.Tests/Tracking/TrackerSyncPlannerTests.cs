@@ -1,4 +1,4 @@
-using EntityTracker.Application.Importing;
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
 
@@ -31,7 +31,6 @@ public sealed class TrackerSyncPlannerTests
         Assert.True(invoice.Active);
         Assert.Equal((2, "Sales"), (invoice.RequestedPriority, invoice.GroupName));
         Assert.Equal(["country", "customer"], invoice.Dependencies.Select(item => item.Name).Order());
-        Assert.All(invoice.Dependencies, item => Assert.Equal(ImportedDependencyKind.Mandatory, item.Kind));
 
         change.Choice = TrackerSyncChoice.Destination;
         Assert.DoesNotContain(TrackerSyncPlanner.Resolve(review).Entities, entity => entity.Name == "invoice");
@@ -71,16 +70,18 @@ public sealed class TrackerSyncPlannerTests
     }
 
     [Fact]
-    public void ADifferenceInDependencyKindAloneIsNotAsked()
+    public void ABaselineSavedWithDependencyKindsStillLoads()
     {
-        TrackerSyncStructure copy = new([Entity("order", dependsOn: ["customer"]), Entity("customer")]);
-        TrackerSyncStructure source = new(
-        [
-            Entity("order", dependsOn: ["customer"], kind: ImportedDependencyKind.Optional),
-            Entity("customer")
-        ]);
+        const string json = """
+            {"Source":{"Entities":[{"Name":"order","Active":true,"RequestedPriority":null,"GroupName":"",
+              "Dependencies":[{"Name":"customer","Kind":"Optional"}]}]},
+             "Destination":{"Entities":[]}}
+            """;
 
-        Assert.Empty(Review(source, copy).Changes);
+        TrackerSyncBaseline baseline = Assert.IsType<TrackerSyncBaseline>(
+            System.Text.Json.JsonSerializer.Deserialize<TrackerSyncBaseline>(json));
+
+        Assert.Equal("customer", Assert.Single(Assert.Single(baseline.Source.Entities).Dependencies).Name);
     }
 
     [Fact]
@@ -142,8 +143,7 @@ public sealed class TrackerSyncPlannerTests
         TrackerSyncPlanner.CreateReview(SourceId, CopyId, source, copy, baseline: null, "a", "b");
 
     private static TrackerSyncEntity Entity(string name, bool active = true, int? priority = null, string group = "",
-        string[]? dependsOn = null, ImportedDependencyKind kind = ImportedDependencyKind.Mandatory,
-        string? filterActive = null) =>
-        new(name, active, priority, group, (dependsOn ?? []).Select(target => new TrackerSyncDependency(target, kind)).ToArray(),
+        string[]? dependsOn = null, string? filterActive = null) =>
+        new(name, active, priority, group, (dependsOn ?? []).Select(target => new TrackerSyncDependency(target)).ToArray(),
             filterActive);
 }

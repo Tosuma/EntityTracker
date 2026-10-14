@@ -88,8 +88,7 @@ public sealed class EntityTableSectionProvider : IReportSectionProvider
         new("waitingOn", "Waiting on"),
         new("internalNotes", "Internal notes", ReportVisibility.InternalOnly, Searchable: true),
         new("developers", "Responsible developers", ReportVisibility.InternalOnly, Searchable: true, Filter: true),
-        new("missing", "Missing dependencies", ReportVisibility.InternalOnly),
-        new("origin", "Origin", ReportVisibility.InternalOnly, Filter: true)
+        new("missing", "Missing dependencies", ReportVisibility.InternalOnly)
     ];
 
     public ReportSection Build(ReportContext context) => new TableSection("entities", "Entities",
@@ -113,7 +112,6 @@ public sealed class EntityTableSectionProvider : IReportSectionProvider
             ["sharedNotes"] = item.SharedNotes,
             ["internalNotes"] = item.Notes,
             ["developers"] = string.Join(", ", item.CurrentDevelopers.Select(static developer => developer.DisplayName)),
-            ["missing"] = string.Join(", ", item.MissingDependencyNames),
-            ["origin"] = item.Provenance.ToString()
+            ["missing"] = string.Join(", ", item.MissingDependencyNames)
         };
 }

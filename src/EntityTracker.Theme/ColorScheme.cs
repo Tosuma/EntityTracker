@@ -116,7 +116,7 @@ public static class ColorScheme
             public const string Action = Base.NotificationYellow;
         }
 
-        /// <summary>Schema synchronization review: possibly removed entities, and retained warnings.</summary>
+        /// <summary>Review surfaces: possibly removed items, and retained warnings.</summary>
         public static class Review
         {
             public static class Missing

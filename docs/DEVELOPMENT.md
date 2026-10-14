@@ -80,7 +80,7 @@ updating, and without doing anything by hand?**
   - changes other shared data so older versions can't read it (for example the Project repository
     layout or tombstones);
   - removes something people rely on, or changes what it means: a feature, a status, a report
-    audience, accepted CSV input, or tables and columns that saved Help & SQL queries use;
+    audience, or the meaning of saved data such as dependencies;
   - needs a manual step (re-import, re-clone, export) or a new install requirement (Windows or .NET
     version, install location, update channel).
 - **Minor** (`1.11.0`): something new, nothing forced. New features and options; older versions keep
@@ -254,12 +254,11 @@ The update command renders and validates the complete manifest in Dark mode and 
 before replacing the files owned by the generator under `images\dark` and `images\light`;
 unrelated image assets are preserved. Each open screenshot window switches to the opposite
 appearance and back before capture, exercising live Light-to-Dark and Dark-to-Light transitions.
-The utility imports the repository's 125-entity synthetic schema, creates two Projects and three
+The utility adds the repository's 125-entity synthetic schema, creates two Projects and three
 related Trackers, creates fixed status and 90-day history data, and captures the portfolio, Project
 dashboard, an illustrative upstream Git repository card with a sample sync duration,
-Tracker copy review, overview, synchronization,
-entity, progress, archive, destructive
-confirmation, Help &amp; SQL, SQL-query, and Settings states. It uses a new SQLite database below the
+Tracker copy review, overview, entity, progress, archive, destructive confirmation, Help, and
+Settings states. It uses a new SQLite database below the
 operating-system temporary directory for each appearance and never reads or changes
 `%LOCALAPPDATA%\EntityTracker`. The application may remain open while the screenshots are
 generated. The linked Git card is an illustrative state backed by a directory inside the
@@ -282,28 +281,26 @@ EntityTracker and run:
 
 The Project/Tracker pair is matched case-insensitively, so same-named Trackers in different
 Projects remain unambiguous. The command replaces statuses and progress history for that Tracker
-only, without a backup; names, notes, dependencies, provenance, and archive state are preserved.
+only, without a backup; names, notes, dependencies, and archive state are preserved.
 Add `-DemoNotes` to also give some entities that have no notes example Internal notes and Shared
 notes, so the difference shows in the app and in Project reports; existing notes are never changed.
 The README screenshots and sample reports use demo notes.
 
-## Import a PostgreSQL schema
+## Dependencies and unresolved references
 
-1. Open **Schema Synchronization**.
-2. Choose the import type:
-   - **Complete** is the default. Entities absent from the CSV may be archived after review and
-     confirmation.
-   - **Partial** leaves persisted entities absent from the CSV unchanged.
-3. If you already have a compatible CSV, select **Choose CSV and Review**.
-4. If you need the extraction query, select **Get SQL Query**, copy it, and run it in PostgreSQL.
-5. Export the query result as UTF-8 CSV with a semicolon (`;`) delimiter and a header row.
-6. Review all actionable differences and apply the synchronization when satisfied.
+A dependency always refers to an entity by its ID, so renaming an entity never breaks the
+dependencies on it. A dependency on a name that no entity has yet is stored as a dependency on a
+placeholder entity with that name (lifecycle `Placeholder`). Placeholders are not shown as entities;
+they appear as unresolved references. When an entity with a placeholder's name is added, it takes
+the placeholder's ID, so every dependency on the name connects to it; renaming an entity to a
+placeholder's name moves the placeholder's dependents to that entity. A placeholder is removed when
+nothing depends on it any more, and permanently deleting an entity others still depend on turns it
+back into a placeholder.
 
-Nothing is saved merely by selecting a CSV. Canceling review changes no persisted state.
-
-The query helper and CSV import are independent: opening or copying the SQL is never required to
-import an existing compatible file. The exact versioned input format is documented in the
-[schema CSV contract](importing/schema-csv-contract-v1.md).
+A placeholder's ID is derived from its Tracker and its name (`TrackedEntity.PlaceholderId`), so two
+colleagues who refer to the same missing name create the same placeholder, and a Git merge keeps
+one. When a merge meets a placeholder and a real entity with the same name, it folds the
+placeholder into the entity.
 
 ## Settings and current storage behavior
 
@@ -332,6 +329,10 @@ settings.json        optional local appearance and last active Project/Tracker c
 backups\             automatic SQLite backups
 logs\                daily application logs
 ```
+
+Name columns use the `ENTITY_NAME` collation, which the app registers on every connection. Other
+SQLite tools can read the database, but writing to tables with names needs that collation (for
+example `EntityNameCollation.Register` on a `Microsoft.Data.Sqlite` connection).
 
 Running from source and running a published ZIP use the same Local Application Data database for
 the same Windows user. They therefore show the same tracked data unless one process is run under a

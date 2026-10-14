@@ -1,6 +1,5 @@
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Tracking;
@@ -15,7 +14,6 @@ public sealed class EntityLifecycleService
 {
     private readonly IEntityRepository _entityRepository;
     private readonly IDependencyRepository _dependencyRepository;
-    private readonly IManualDependencyOverrideRepository _overrideRepository;
     private readonly ITrackedStateStore _store;
     private readonly EffectiveDependencyResolver _effectiveDependencyResolver;
     private readonly IDependencyRankingService _dependencyRanker;
@@ -24,7 +22,6 @@ public sealed class EntityLifecycleService
     public EntityLifecycleService(
         IEntityRepository entityRepository,
         IDependencyRepository dependencyRepository,
-        IManualDependencyOverrideRepository overrideRepository,
         ITrackedStateStore store,
         EffectiveDependencyResolver effectiveDependencyResolver,
         IDependencyRankingService dependencyRanker,
@@ -32,14 +29,12 @@ public sealed class EntityLifecycleService
     {
         ArgumentNullException.ThrowIfNull(entityRepository);
         ArgumentNullException.ThrowIfNull(dependencyRepository);
-        ArgumentNullException.ThrowIfNull(overrideRepository);
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(effectiveDependencyResolver);
         ArgumentNullException.ThrowIfNull(dependencyRanker);
 
         _entityRepository = entityRepository;
         _dependencyRepository = dependencyRepository;
-        _overrideRepository = overrideRepository;
         _store = store;
         _effectiveDependencyResolver = effectiveDependencyResolver;
         _dependencyRanker = dependencyRanker;
@@ -56,21 +51,15 @@ public sealed class EntityLifecycleService
 
         Task<IReadOnlyList<TrackedEntity>> entitiesTask =
             _entityRepository.GetAllAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<PersistedDependency>> resolvedTask =
+        Task<IReadOnlyList<EntityDependency>> dependenciesTask =
             _dependencyRepository.GetAllAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
-            _dependencyRepository.GetAllUnresolvedAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
-            _overrideRepository.GetAllAsync(trackerId, cancellationToken);
-        await Task.WhenAll(entitiesTask, resolvedTask, unresolvedTask, overridesTask);
+        await Task.WhenAll(entitiesTask, dependenciesTask);
 
         TrackedEntity[] entities = (await entitiesTask).ToArray();
         TrackerStateValidator.EnsureOwned(
             trackerId,
             entities,
-            await resolvedTask,
-            await unresolvedTask,
-            await overridesTask);
+            await dependenciesTask);
         TrackedEntity? entity = entities.SingleOrDefault(item => item.Id == entityId);
         if (entity?.LifecycleState != EntityLifecycleState.Active)
         {
@@ -84,7 +73,6 @@ public sealed class EntityLifecycleService
             entity.Status,
             entity.Notes,
             EntityLifecycleState.Archived,
-            entity.Provenance,
             entity.RequestedPriority,
             entity.ResponsibleDeveloper,
             entity.GroupName,
@@ -95,13 +83,11 @@ public sealed class EntityLifecycleService
             .ToArray();
         EffectiveDependencyState effectiveState = _effectiveDependencyResolver.Resolve(
             candidateEntities,
-            await resolvedTask,
-            await unresolvedTask,
-            await overridesTask);
+            await dependenciesTask);
         await _store.ApplyAsync(
             trackerId,
             new TrackedStateChangeSet(
-                [], [], [entityId], [], [], [],
+                [], [], [entityId],
                 progressSnapshotAfterChanges: _snapshotCalculator.Calculate(
                     candidateEntities,
                     effectiveState)),
@@ -119,21 +105,15 @@ public sealed class EntityLifecycleService
 
         Task<IReadOnlyList<TrackedEntity>> entitiesTask =
             _entityRepository.GetAllAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<PersistedDependency>> resolvedTask =
+        Task<IReadOnlyList<EntityDependency>> dependenciesTask =
             _dependencyRepository.GetAllAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
-            _dependencyRepository.GetAllUnresolvedAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
-            _overrideRepository.GetAllAsync(trackerId, cancellationToken);
-        await Task.WhenAll(entitiesTask, resolvedTask, unresolvedTask, overridesTask);
+        await Task.WhenAll(entitiesTask, dependenciesTask);
 
         TrackedEntity[] currentEntities = (await entitiesTask).ToArray();
         TrackerStateValidator.EnsureOwned(
             trackerId,
             currentEntities,
-            await resolvedTask,
-            await unresolvedTask,
-            await overridesTask);
+            await dependenciesTask);
         TrackedEntity? archived = currentEntities.SingleOrDefault(entity => entity.Id == entityId);
         if (archived is null)
         {
@@ -152,7 +132,6 @@ public sealed class EntityLifecycleService
             archived.Status,
             archived.Notes,
             EntityLifecycleState.Active,
-            archived.Provenance,
             archived.RequestedPriority,
             archived.ResponsibleDeveloper,
             archived.GroupName,
@@ -163,9 +142,7 @@ public sealed class EntityLifecycleService
             .ToArray();
         EffectiveDependencyState effectiveState = _effectiveDependencyResolver.Resolve(
             candidateEntities,
-            await resolvedTask,
-            await unresolvedTask,
-            await overridesTask);
+            await dependenciesTask);
         DependencyRankingResult ranking = _dependencyRanker.Rank(
             candidateEntities.Where(static entity =>
                 entity.LifecycleState == EntityLifecycleState.Active),
@@ -181,9 +158,6 @@ public sealed class EntityLifecycleService
         await _store.ApplyAsync(
             trackerId,
             new TrackedStateChangeSet(
-                [],
-                [],
-                [],
                 [],
                 [],
                 [],
@@ -205,19 +179,13 @@ public sealed class EntityLifecycleService
 
         Task<IReadOnlyList<TrackedEntity>> entitiesTask =
             _entityRepository.GetAllAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<PersistedDependency>> resolvedTask =
+        Task<IReadOnlyList<EntityDependency>> dependenciesTask =
             _dependencyRepository.GetAllAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
-            _dependencyRepository.GetAllUnresolvedAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
-            _overrideRepository.GetAllAsync(trackerId, cancellationToken);
-        await Task.WhenAll(entitiesTask, resolvedTask, unresolvedTask, overridesTask);
+        await Task.WhenAll(entitiesTask, dependenciesTask);
 
         TrackedEntity[] entities = (await entitiesTask).ToArray();
-        PersistedDependency[] resolved = (await resolvedTask).ToArray();
-        PersistedUnresolvedDependency[] unresolved = (await unresolvedTask).ToArray();
-        ManualDependencyOverride[] overrides = (await overridesTask).ToArray();
-        TrackerStateValidator.EnsureOwned(trackerId, entities, resolved, unresolved, overrides);
+        EntityDependency[] dependencies = (await dependenciesTask).ToArray();
+        TrackerStateValidator.EnsureOwned(trackerId, entities, dependencies);
 
         TrackedEntity? archived = entities.SingleOrDefault(entity => entity.Id == entityId);
         if (archived?.LifecycleState != EntityLifecycleState.Archived)
@@ -225,68 +193,28 @@ public sealed class EntityLifecycleService
             return false;
         }
 
-        EntitySourceKey targetKey = EntitySourceKey.From(archived.SourceName);
+        // The entity's own dependencies go with it. If other entities depend on it, it stays as a
+        // placeholder with the same ID and name, so their dependencies become unresolved references.
+        EntityDependency[] remaining = dependencies
+            .Where(dependency => dependency.DependentEntityId != entityId)
+            .ToArray();
+        bool referenced = remaining.Any(dependency => dependency.DependencyEntityId == entityId);
         TrackedEntity[] remainingEntities = entities
             .Where(entity => entity.Id != entityId)
-            .ToArray();
-        PersistedDependency[] remainingResolved = resolved
-            .Where(dependency =>
-                dependency.Edge.DependentEntityId != entityId &&
-                dependency.Edge.DependencyEntityId != entityId)
-            .ToArray();
-        PersistedUnresolvedDependency[] remainingUnresolved = unresolved
-            .Where(dependency => dependency.Dependency.DependentEntityId != entityId)
-            .Concat(resolved
-                .Where(dependency => dependency.Edge.DependencyEntityId == entityId)
-                .Select(dependency => new PersistedUnresolvedDependency(
-                    new UnresolvedDependency(
-                        dependency.Edge.DependentEntityId,
-                        archived.SourceName),
-                    dependency.Kind)))
-            .GroupBy(dependency => new
-            {
-                dependency.Dependency.DependentEntityId,
-                Key = EntitySourceKey.From(dependency.Dependency.DependencySourceName)
-            })
-            .Select(group => group
-                .OrderByDescending(dependency => dependency.Kind == ImportedDependencyKind.Mandatory)
-                .First())
-            .ToArray();
-        ManualDependencyOverride[] remainingOverrides = overrides
-            .Where(overrideItem => overrideItem.DependentEntityId != entityId)
-            .Where(overrideItem =>
-                overrideItem.Action != ManualDependencyOverrideAction.Suppress ||
-                EntitySourceKey.From(overrideItem.DependencySourceName) != targetKey)
-            .ToArray();
-
-        EntityId[] reconciledOwners = resolved
-            .Where(dependency => dependency.Edge.DependencyEntityId == entityId)
-            .Select(dependency => dependency.Edge.DependentEntityId)
-            .Distinct()
-            .ToArray();
-        EntityId[] overrideOwners = overrides
-            .Where(overrideItem => overrideItem.DependentEntityId == entityId ||
-                (overrideItem.Action == ManualDependencyOverrideAction.Suppress &&
-                 EntitySourceKey.From(overrideItem.DependencySourceName) == targetKey))
-            .Select(overrideItem => overrideItem.DependentEntityId)
-            .Distinct()
+            .Concat(referenced
+                ? [new TrackedEntity(archived.Id, trackerId, archived.SourceName,
+                    lifecycleState: EntityLifecycleState.Placeholder)]
+                : [])
             .ToArray();
         EffectiveDependencyState effectiveState = _effectiveDependencyResolver.Resolve(
             remainingEntities,
-            remainingResolved,
-            remainingUnresolved,
-            remainingOverrides);
+            remaining);
         await _store.ApplyAsync(
             trackerId,
             new TrackedStateChangeSet(
                 [],
                 [],
                 [],
-                reconciledOwners,
-                remainingResolved,
-                remainingUnresolved,
-                overrideOwners,
-                remainingOverrides,
                 progressSnapshotAfterChanges: _snapshotCalculator.Calculate(
                     remainingEntities,
                     effectiveState),

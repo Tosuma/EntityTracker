@@ -96,7 +96,6 @@ public partial class TrackerWorkspaceView : UserControl
         viewModel.EntityRevealRequested += OnEntityRevealRequested;
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
         viewModel.Editor.PropertyChanged += OnEditorPropertyChanged;
-        viewModel.Review.PropertyChanged += OnSynchronizationReviewPropertyChanged;
         ObserveDetails(viewModel.SelectedEntityDetails);
     }
 
@@ -111,7 +110,6 @@ public partial class TrackerWorkspaceView : UserControl
         _viewModel.EntityRevealRequested -= OnEntityRevealRequested;
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         _viewModel.Editor.PropertyChanged -= OnEditorPropertyChanged;
-        _viewModel.Review.PropertyChanged -= OnSynchronizationReviewPropertyChanged;
         ObserveDetails(null);
         _viewModel = null;
     }
@@ -138,34 +136,6 @@ public partial class TrackerWorkspaceView : UserControl
                 ViewFullResponsibilityHistoryButton.Focus();
             else
                 CloseEntityDetailsButton.Focus();
-        }));
-    }
-
-    private void OnSynchronizationReviewPropertyChanged(
-        object? sender,
-        PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName != nameof(SchemaSynchronizationReviewViewModel.CurrentPlan) ||
-            _viewModel?.SelectedTab != MainWindowTab.SchemaSynchronization)
-        {
-            return;
-        }
-
-        Dispatcher.BeginInvoke(new Action(() =>
-        {
-            if (_viewModel?.SelectedTab != MainWindowTab.SchemaSynchronization)
-            {
-                return;
-            }
-
-            if (_viewModel.Review.HasReview)
-            {
-                SchemaReviewHeading.Focus();
-            }
-            else
-            {
-                ChooseCsvButton.Focus();
-            }
         }));
     }
 
@@ -236,7 +206,6 @@ public partial class TrackerWorkspaceView : UserControl
                 bool focused = _viewModel.Editor.Mode switch
                 {
                     EntityEditorMode.ArchivedDetails => RestoreEntityButton.Focus(),
-                    EntityEditorMode.SynchronizationReview => EditorDependencyComboBox.Focus(),
                     _ => EditorStatusComboBox.Focus()
                 };
                 if (!focused)

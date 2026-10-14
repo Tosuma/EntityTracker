@@ -33,7 +33,6 @@
                             <TextBlock Margin="0,18,0,6" FontWeight="SemiBold" Text="Starting point" />
                             <StackPanel Orientation="Horizontal">
                                 <RadioButton Margin="0,0,18,0" Content="Blank" GroupName="CreationMode" IsChecked="{Binding IsBlankMode, Mode=OneWay}" Checked="OnBlankChecked" />
-                                <RadioButton Margin="0,0,18,0" Content="Complete import (CSV)" GroupName="CreationMode" IsChecked="{Binding IsCsvMode, Mode=OneWay}" Checked="OnCsvChecked" />
                                 <RadioButton Content="Copy tracker" GroupName="CreationMode" IsChecked="{Binding IsCopyMode, Mode=OneWay}" Checked="OnCopyChecked"
                                              IsEnabled="{Binding HasCopySources}" ToolTip="Create or import a tracker before copying." ToolTipService.ShowOnDisabled="True" />
                             </StackPanel>
@@ -47,15 +46,6 @@
                                     <TextBlock Text="{Binding CopyPreview}" TextWrapping="Wrap" />
                                 </Border>
                             </StackPanel>
-                            <Border Margin="0,16,0,0" Padding="12" Style="{StaticResource EntityTrackerCardStyle}"
-                                    Visibility="{Binding IsCsvMode, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <StackPanel>
-                                    <TextBlock FontWeight="SemiBold" Text="Complete import review" />
-                                    <TextBlock Margin="0,6,0,0" Text="{Binding CsvReview.NewEntities.Count, StringFormat={}{0} new entities}" />
-                                    <TextBlock Text="{Binding CsvReview.UnresolvedEntities.Count, StringFormat={}{0} unresolved references}" />
-                                    <TextBlock Margin="0,6,0,0" Text="Nothing is persisted until Apply." TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Border>
                             <TextBlock Margin="0,12,0,0" Text="{Binding OperationMessage}" TextWrapping="Wrap" />
                             </StackPanel>
 

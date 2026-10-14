@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 
-using EntityTracker.Application.Importing;
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.ManualOverrides;
@@ -10,7 +10,6 @@ using EntityTracker.Application.Planning;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Projects;
 using System.Globalization;
-using EntityTracker.Application.Synchronization;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
@@ -24,14 +23,13 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 {
     private readonly EntityDependencyEditorService _editorService;
     private readonly TrackerId _trackerId;
+    private bool _trackerIsCopy;
     private readonly NotificationCenter? _notifications;
     private readonly EntityLifecycleService _lifecycleService;
-    private readonly SchemaSynchronizationService _synchronizationService;
     private readonly Func<Task> _onPersisted;
     private readonly Func<Task> _onArchived;
     private readonly Func<Task> _onRestored;
     private readonly Func<Task> _onPurged;
-    private readonly Action<SchemaSynchronizationPlan> _onReviewStaged;
     private readonly Func<bool> _canOperate;
     private readonly ILogger<EntityDependencyEditorViewModel> _logger;
     private readonly IResponsibilityPeriodRepository? _responsibilityPeriods;
@@ -45,9 +43,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private readonly RelayCommand<ManualDependencySuggestion> _addExistingCommand;
     private readonly RelayCommand _refreshDependencySuggestionsCommand;
     private readonly RelayCommand<string> _useGroupSuggestionCommand;
-    private readonly RelayCommand<EntityDependencyEditRow> _suppressCommand;
-    private readonly RelayCommand<EntityDependencyEditRow> _removeManualCommand;
-    private readonly RelayCommand<EntityDependencyEditRow> _restoreDependencyCommand;
+    private readonly RelayCommand<EntityDependencyEditRow> _removeDependencyCommand;
     private readonly RelayCommand _addUnresolvedCommand;
     private readonly RelayCommand _cancelCommand;
     private readonly RelayCommand _requestArchiveCommand;
@@ -76,7 +72,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private int _previewVersion;
     private EntityDependencyEditPlan? _currentEditPlan;
     private ArchivedEntityDetails? _archivedDetails;
-    private SchemaSynchronizationPlan? _reviewPlan;
     private DevelopmentStatus _selectedStatus;
     private string _editedNotes = string.Empty;
     private string _editedFilterActive = string.Empty;
@@ -91,19 +86,17 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private IReadOnlyList<PriorityPlanningRow> _priorityPreviewRows = [];
     private IReadOnlyList<string> _priorityUnresolvedDependencyNames = [];
     private bool _hasPendingPriorityChange;
-    private string? _initialOverrideSignature;
+    private string? _initialDependencySignature;
     private HashSet<DeveloperId> _initialDeveloperIds = [];
 
     public EntityDependencyEditorViewModel(
         TrackerId trackerId,
         EntityDependencyEditorService editorService,
         EntityLifecycleService lifecycleService,
-        SchemaSynchronizationService synchronizationService,
         Func<Task> onPersisted,
         Func<Task> onArchived,
         Func<Task> onRestored,
         Func<Task> onPurged,
-        Action<SchemaSynchronizationPlan> onReviewStaged,
         Func<bool>? canOperate = null,
         ILogger<EntityDependencyEditorViewModel>? logger = null,
         DeveloperPickerViewModel? developerPicker = null,
@@ -116,22 +109,18 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _notifications = notifications;
         ArgumentNullException.ThrowIfNull(editorService);
         ArgumentNullException.ThrowIfNull(lifecycleService);
-        ArgumentNullException.ThrowIfNull(synchronizationService);
         ArgumentNullException.ThrowIfNull(onPersisted);
         ArgumentNullException.ThrowIfNull(onArchived);
         ArgumentNullException.ThrowIfNull(onRestored);
         ArgumentNullException.ThrowIfNull(onPurged);
-        ArgumentNullException.ThrowIfNull(onReviewStaged);
 
         _trackerId = trackerId;
         _editorService = editorService;
         _lifecycleService = lifecycleService;
-        _synchronizationService = synchronizationService;
         _onPersisted = onPersisted;
         _onArchived = onArchived;
         _onRestored = onRestored;
         _onPurged = onPurged;
-        _onReviewStaged = onReviewStaged;
         _canOperate = canOperate ?? (() => true);
         _logger = logger ?? NullLogger<EntityDependencyEditorViewModel>.Instance;
         DeveloperPicker = developerPicker;
@@ -156,19 +145,11 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _useGroupSuggestionCommand = new RelayCommand<string>(
             UseGroupSuggestion,
             _ => CanEditProgress);
-        _suppressCommand = new RelayCommand<EntityDependencyEditRow>(
-            row => _ = SetOverrideAsync(
-                row.SourceName,
-                ManualDependencyOverrideAction.Suppress),
-            row => CanEdit && row.CanSuppress);
-        _removeManualCommand = new RelayCommand<EntityDependencyEditRow>(
-            row => _ = RemoveOverrideAsync(row.SourceName),
-            row => CanEdit && row.CanRemoveManual);
-        _restoreDependencyCommand = new RelayCommand<EntityDependencyEditRow>(
-            row => _ = RemoveOverrideAsync(row.SourceName),
-            row => CanEdit && row.CanRestore);
+        _removeDependencyCommand = new RelayCommand<EntityDependencyEditRow>(
+            row => _ = RemoveDependencyAsync(row.SourceName),
+            _ => CanEdit);
         _addUnresolvedCommand = new RelayCommand(
-            () => _ = AddManualDependencyAsync(DependencyQuery.Trim()),
+            () => _ = AddDependencyAsync(DependencyQuery.Trim()),
             () => CanEdit && CanAddAsUnresolved);
         _saveCommand = new AsyncCommand(
             SaveAsync,
@@ -438,7 +419,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _mode, value))
             {
-                OnPropertyChanged(nameof(IsReviewMode));
                 OnPropertyChanged(nameof(IsArchivedMode));
                 OnPropertyChanged(nameof(ShowStandaloneSections));
                 OnPropertyChanged(nameof(ShowArchivedSections));
@@ -458,7 +438,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
     }
 
-    public bool IsReviewMode => Mode == EntityEditorMode.SynchronizationReview;
 
     public bool IsArchivedMode => Mode == EntityEditorMode.ArchivedDetails;
 
@@ -519,7 +498,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             {
                 OnPropertyChanged(nameof(HasSelectedEntity));
                 OnPropertyChanged(nameof(SelectedEntityName));
-                OnPropertyChanged(nameof(EntityDetails));
                 OnPropertyChanged(nameof(ArchiveConfirmationMessage));
                 OnPropertyChanged(nameof(CanArchive));
                 OnPropertyChanged(nameof(CanEditProgress));
@@ -539,7 +517,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             {
                 OnPropertyChanged(nameof(HasSelectedEntity));
                 OnPropertyChanged(nameof(SelectedEntityName));
-                OnPropertyChanged(nameof(EntityDetails));
                 OnPropertyChanged(nameof(CanRestoreEntity));
                 OnPropertyChanged(nameof(CanPurgeEntity));
                 OnPropertyChanged(nameof(CanConfirmPurge));
@@ -637,24 +614,18 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     public bool HasNameError => NameError.Length > 0;
 
     /// <summary>
-    /// Gets a warning when the new name may not match where the entity came from: a CSV import or
-    /// the Tracker it was copied from.
+    /// Gets a warning when the entity's Tracker is a copy of another: Sync from source matches entities
+    /// by name, so the new name may not match the source.
     /// </summary>
     public string RenameNotice
     {
         get
         {
             if (CurrentEditPlan is not { } plan || HasNameError || !IsNameKeyChanged(plan.Entity.SourceName)) return string.Empty;
-            return plan.Entity.Provenance switch
-            {
-                EntityProvenance.ManualOnly => string.Empty,
-                EntityProvenance.Copied =>
-                    "This entity was copied from another Tracker. Syncing with that Tracker will show the old " +
-                    "and the new name as two different entities.",
-                _ =>
-                    "This name came from a CSV import. If the source database still uses the old name, the next " +
-                    "schema synchronization will see the old name as a new entity and propose archiving this one."
-            };
+            return _trackerIsCopy
+                ? "This Tracker was copied from another Tracker. Syncing with that Tracker will show the old " +
+                  "and the new name as two different entities."
+                : string.Empty;
         }
     }
 
@@ -837,39 +808,32 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                    !_initialDeveloperIds.SetEquals(DeveloperPicker.SelectedIds) ||
                    EditedGroupName != entity.GroupName ||
                    SelectedRequestedPriority != entity.RequestedPriority ||
-                   OverrideSignature(CurrentEditPlan.DesiredOverrides) != _initialOverrideSignature;
+                   DependencySignature(CurrentEditPlan.DesiredDependencies) != _initialDependencySignature;
         }
     }
 
     public string SelectedEntityName => SelectedEntity?.SourceName ?? "Loading entity…";
 
-    public string EntityDetails => SelectedEntity is null
-        ? "Loading entity details…"
-        : $"Origin: {FormatProvenance(SelectedEntity.Provenance)}";
 
     public string ContextTitle => Mode switch
     {
-        EntityEditorMode.SynchronizationReview =>
-            "Correct dependencies before applying the import",
         EntityEditorMode.ArchivedDetails => "Archived entity details",
         _ => "Edit entity"
     };
 
     public string ContextDescription => Mode switch
     {
-        EntityEditorMode.SynchronizationReview =>
-            "Changes are staged with this synchronization and are saved only when the review is applied.",
         EntityEditorMode.ArchivedDetails =>
             "Archived entities are read-only until explicitly restored.",
-        _ => "Update name, group, assignment, priority, progress, notes, and manual dependency corrections. Imported facts remain visible."
+        _ => "Update name, group, assignment, priority, progress, notes, and dependencies."
     };
 
-    public string SaveLabel => IsReviewMode ? "Stage Changes" : "Save Changes";
+    public string SaveLabel => "Save Changes";
 
     public string ArchiveConfirmationMessage => CurrentEditPlan is null
         ? string.Empty
         : $"Archive '{CurrentEditPlan.Entity.SourceName}'? It will disappear from active views and dependency searches. " +
-          "Identity, group, assignment, progress, notes, imported relationships, and manual overrides will be preserved. " +
+          "Identity, group, assignment, progress, notes, and dependencies will be preserved. " +
           "Entities that depend on it may become unresolved. You can restore it later from the Archived view. " +
           "Unsaved edits will be discarded.";
 
@@ -887,11 +851,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
     public ICommand AddUnresolvedCommand => _addUnresolvedCommand;
 
-    public ICommand SuppressCommand => _suppressCommand;
-
-    public ICommand RemoveManualCommand => _removeManualCommand;
-
-    public ICommand RestoreCommand => _restoreDependencyCommand;
+    public ICommand RemoveDependencyCommand => _removeDependencyCommand;
 
     public ICommand RestoreEntityCommand => _restoreEntityCommand;
 
@@ -928,6 +888,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         IsBusy = true;
         try
         {
+            _trackerIsCopy = await _editorService.IsCopiedTrackerAsync(_trackerId, cancellationToken);
             LoadPlan(await _editorService.LoadAsync(_trackerId, entityId, cancellationToken), true);
             if (DeveloperPicker is not null && _responsibilityPeriods is not null)
             {
@@ -955,43 +916,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         {
             IsBusy = false;
         }
-    }
-
-    public Task BeginReviewAsync(
-        SchemaSynchronizationPlan plan,
-        EntityId ownerId)
-    {
-        ArgumentNullException.ThrowIfNull(plan);
-        ArgumentNullException.ThrowIfNull(ownerId);
-        if (IsBusy || IsOpen || !_canOperate())
-        {
-            return Task.CompletedTask;
-        }
-
-        ResetSessionState();
-        _reviewPlan = plan;
-        Mode = EntityEditorMode.SynchronizationReview;
-        IsOpen = true;
-        try
-        {
-            ManualDependencyOverride[] desired = plan.CandidateManualOverrides
-                .Where(item => item.DependentEntityId == ownerId)
-                .ToArray();
-            LoadPlan(
-                _synchronizationService.PreviewDependencyEdit(
-                    _trackerId,
-                    plan,
-                    ownerId,
-                    desired),
-                true);
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "Review dependency edits could not be loaded.");
-            Errors = [$"Entity dependencies could not be loaded: {exception.Message}"];
-        }
-
-        return Task.CompletedTask;
     }
 
     public async Task BeginArchivedAsync(
@@ -1046,9 +970,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             Dependencies = details.Dependencies.Select(static item =>
                 new EntityDependencyEditRow(
                     item.DependencySourceName,
-                    FormatOrigin(item),
-                    FormatResolution(item),
-                    item.Origin)).ToArray();
+                    FormatResolution(item))).ToArray();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -1115,18 +1037,9 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         try
         {
             EntitySourceKey[] excludedKeys = CurrentEditPlan.Dependencies
-                .Where(item => item.Origin is not DependencyEditOrigin.SuppressedImported and
-                    not DependencyEditOrigin.DormantSuppression)
                 .Select(item => item.DependencySourceKey)
                 .ToArray();
-            ManualDependencySearchResult result = IsReviewMode
-                ? _editorService.SearchDependencies(
-                    _trackerId,
-                    CurrentEditPlan.Entity.Id,
-                    DependencyQuery,
-                    _reviewPlan!.CandidateEntities,
-                    excludedKeys)
-                : await _editorService.SearchDependenciesAsync(
+            ManualDependencySearchResult result = await _editorService.SearchDependenciesAsync(
                     _trackerId,
                     CurrentEditPlan.Entity.Id,
                     DependencyQuery,
@@ -1226,51 +1139,50 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             suggestion.SourceName,
             CurrentEditPlan?.Entity.SourceName ?? "<no entity>",
             Mode);
-        _ = AddManualDependencyAsync(suggestion.SourceName);
+        _ = AddDependencyAsync(suggestion.SourceName, DependencyTarget.Entity(suggestion.EntityId));
     }
 
-    private Task AddManualDependencyAsync(string sourceName)
+    /// <summary>
+    /// Adds a dependency on <paramref name="target"/>, or by default on the name: the entity with that
+    /// name, or a placeholder for it when no entity has it.
+    /// </summary>
+    private Task AddDependencyAsync(string sourceName, DependencyTarget? target = null)
     {
         if (sourceName.Length == 0)
         {
             return Task.CompletedTask;
         }
 
-        return SetOverrideAsync(sourceName, ManualDependencyOverrideAction.Add);
+        if (CurrentEditPlan is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        DependencyTarget[] desired = WithoutDependencyNamed(sourceName)
+            .Append(target ?? DependencyTarget.Named(sourceName))
+            .ToArray();
+        return PreviewAsync(desired);
     }
 
-    private Task SetOverrideAsync(
-        string sourceName,
-        ManualDependencyOverrideAction action)
+    private Task RemoveDependencyAsync(string sourceName)
     {
         if (CurrentEditPlan is null)
         {
             return Task.CompletedTask;
         }
 
-        EntitySourceKey key = EntitySourceKey.From(sourceName);
-        ManualDependencyOverride[] desired = CurrentEditPlan.DesiredOverrides
-            .Where(item => EntitySourceKey.From(item.DependencySourceName) != key)
-            .Append(new ManualDependencyOverride(CurrentEditPlan.Entity.Id, sourceName, action))
-            .ToArray();
-        return PreviewAsync(desired);
+        return PreviewAsync(WithoutDependencyNamed(sourceName).ToArray());
     }
 
-    private Task RemoveOverrideAsync(string sourceName)
+    private IEnumerable<DependencyTarget> WithoutDependencyNamed(string sourceName)
     {
-        if (CurrentEditPlan is null)
-        {
-            return Task.CompletedTask;
-        }
-
         EntitySourceKey key = EntitySourceKey.From(sourceName);
-        ManualDependencyOverride[] desired = CurrentEditPlan.DesiredOverrides
-            .Where(item => EntitySourceKey.From(item.DependencySourceName) != key)
-            .ToArray();
-        return PreviewAsync(desired);
+        return CurrentEditPlan!.Dependencies
+            .Where(item => item.DependencySourceKey != key)
+            .Select(static item => item.Target);
     }
 
-    private async Task PreviewAsync(IReadOnlyList<ManualDependencyOverride> desired)
+    private async Task PreviewAsync(IReadOnlyList<DependencyTarget> desired)
     {
         if (CurrentEditPlan is null)
         {
@@ -1279,19 +1191,13 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
         int previewVersion = ++_previewVersion;
         _logger.LogInformation(
-            "Starting dependency preview {PreviewVersion} for {EntityName} with {OverrideCount} override(s).",
+            "Starting dependency preview {PreviewVersion} for {EntityName} with {DependencyCount} dependencies.",
             previewVersion,
             CurrentEditPlan.Entity.SourceName,
             desired.Count);
         try
         {
-            EntityDependencyEditPlan plan = IsReviewMode
-                ? _synchronizationService.PreviewDependencyEdit(
-                    _trackerId,
-                    _reviewPlan!,
-                    CurrentEditPlan.Entity.Id,
-                    desired)
-                : await _editorService.PreviewAsync(
+            EntityDependencyEditPlan plan = await _editorService.PreviewAsync(
                     _trackerId,
                     CurrentEditPlan.Entity.Id,
                     desired);
@@ -1317,7 +1223,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         {
             _logger.LogError(
                 exception,
-                "Dependency preview {PreviewVersion} failed for {EntityName} with {OverrideCount} override(s).",
+                "Dependency preview {PreviewVersion} failed for {EntityName} with {DependencyCount} dependencies.",
                 previewVersion,
                 CurrentEditPlan?.Entity.SourceName ?? "<no entity>",
                 desired.Count);
@@ -1335,31 +1241,19 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         IsBusy = true;
         try
         {
-            if (IsReviewMode)
-            {
-                SchemaSynchronizationPlan revised =
-                    _synchronizationService.StageDependencyEdit(
-                        _trackerId,
-                        _reviewPlan!,
-                        CurrentEditPlan);
-                _onReviewStaged(revised);
-            }
-            else
-            {
-                await _editorService.SaveAsync(
-                    _trackerId,
-                    CurrentEditPlan,
-                    SelectedStatus,
-                    EditedNotes,
-                    SelectedRequestedPriority,
-                    EditedResponsibleDeveloper,
-                    EditedGroupName,
-                    developerIds: DeveloperPicker?.SelectedIds,
-                    filterActive: EditedFilterActive,
-                    sharedNotes: EditedSharedNotes,
-                    sourceName: EditedName);
-                await _onPersisted();
-            }
+            await _editorService.SaveAsync(
+                _trackerId,
+                CurrentEditPlan,
+                SelectedStatus,
+                EditedNotes,
+                SelectedRequestedPriority,
+                EditedResponsibleDeveloper,
+                EditedGroupName,
+                developerIds: DeveloperPicker?.SelectedIds,
+                filterActive: EditedFilterActive,
+                sharedNotes: EditedSharedNotes,
+                sourceName: EditedName);
+            await _onPersisted();
 
             CloseSession();
         }
@@ -1415,7 +1309,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
     private async Task ConfirmArchiveAsync()
     {
-        if (CurrentEditPlan is null || IsReviewMode)
+        if (CurrentEditPlan is null)
         {
             return;
         }
@@ -1520,7 +1414,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     {
         if (initializeProgress)
         {
-            _initialOverrideSignature = OverrideSignature(plan.DesiredOverrides);
+            _initialDependencySignature = DependencySignature(plan.DesiredDependencies);
         }
 
         CurrentEditPlan = plan;
@@ -1549,9 +1443,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
         Dependencies = plan.Dependencies.Select(static item => new EntityDependencyEditRow(
             item.DependencySourceName,
-            FormatOrigin(item),
-            FormatResolution(item),
-            item.Origin)).ToArray();
+            FormatResolution(item))).ToArray();
         Warnings = plan.Warnings;
         Errors = plan.Errors;
         RefreshPriorityPresentation();
@@ -1616,8 +1508,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         Errors = [];
         _typedPurgeConfirmation = string.Empty;
         OnPropertyChanged(nameof(TypedPurgeConfirmation));
-        _reviewPlan = null;
-        _initialOverrideSignature = null;
+        _initialDependencySignature = null;
         Mode = EntityEditorMode.Standalone;
         _selectedStatus = DevelopmentStatus.NotStarted;
         OnPropertyChanged(nameof(SelectedStatus));
@@ -1667,9 +1558,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
     private bool ContainsDependency(EntitySourceKey? key) =>
         key is not null && CurrentEditPlan?.Dependencies.Any(item =>
-            item.DependencySourceKey == key &&
-            item.Origin is not DependencyEditOrigin.SuppressedImported and
-                not DependencyEditOrigin.DormantSuppression) == true;
+            item.DependencySourceKey == key) == true;
 
     private void NotifyCommandsChanged()
     {
@@ -1679,9 +1568,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _refreshDependencySuggestionsCommand.NotifyCanExecuteChanged();
         _useGroupSuggestionCommand.NotifyCanExecuteChanged();
         _addUnresolvedCommand.NotifyCanExecuteChanged();
-        _suppressCommand.NotifyCanExecuteChanged();
-        _removeManualCommand.NotifyCanExecuteChanged();
-        _restoreDependencyCommand.NotifyCanExecuteChanged();
+        _removeDependencyCommand.NotifyCanExecuteChanged();
         _restoreEntityCommand.NotifyCanExecuteChanged();
         _requestPurgeCommand.NotifyCanExecuteChanged();
         _confirmPurgeCommand.NotifyCanExecuteChanged();
@@ -1692,36 +1579,9 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _cancelArchiveCommand.NotifyCanExecuteChanged();
     }
 
-    private static string FormatOrigin(EntityDependencyEditItem item) => item.Origin switch
-    {
-        DependencyEditOrigin.Imported => $"Imported ({item.ImportedKind})",
-        DependencyEditOrigin.Manual => "Manual addition",
-        DependencyEditOrigin.ImportedAndManual =>
-            $"Manual addition + imported ({item.ImportedKind})",
-        DependencyEditOrigin.SuppressedImported =>
-            $"Suppressed imported ({item.ImportedKind})",
-        DependencyEditOrigin.DormantSuppression => "Suppression retained; absent from current CSV",
-        _ => throw new ArgumentOutOfRangeException(nameof(item))
-    };
+    private static string FormatResolution(EntityDependencyEditItem item) =>
+        item.IsResolved ? "Resolved" : "⚠ Unresolved";
 
-    private static string FormatResolution(EntityDependencyEditItem item)
-    {
-        if (item.Origin is DependencyEditOrigin.SuppressedImported or
-            DependencyEditOrigin.DormantSuppression)
-        {
-            return "Not in effective graph";
-        }
-
-        return item.IsResolved ? "Resolved" : "⚠ Unresolved";
-    }
-
-    private static string FormatProvenance(EntityProvenance provenance) => provenance switch
-    {
-        EntityProvenance.Imported => "CSV",
-        EntityProvenance.ManualOnly => "Manual only",
-        EntityProvenance.ManualAndImported => "Manual + CSV",
-        _ => throw new ArgumentOutOfRangeException(nameof(provenance), provenance, null)
-    };
 
     private static string FormatPriority(int? priority) =>
         priority?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—";
@@ -1747,13 +1607,12 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         return true;
     }
 
-    private static string OverrideSignature(IEnumerable<ManualDependencyOverride> overrides) =>
+    private static string DependencySignature(IEnumerable<EntityDependency> dependencies) =>
         string.Join(
             "|",
-            overrides
-                .OrderBy(static item => item.DependencySourceName, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(static item => item.Action)
-                .Select(static item => $"{item.Action}:{item.DependencySourceName.Trim().ToUpperInvariant()}"));
+            dependencies
+                .Select(static item => item.DependencyEntityId.Value.ToString("D"))
+                .Order(StringComparer.Ordinal));
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));

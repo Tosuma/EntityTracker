@@ -1,6 +1,5 @@
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Domain;
 
@@ -13,7 +12,6 @@ public sealed class TrackerManagementService(
     ITrackerRepository trackerRepository,
     IEntityRepository entityRepository,
     IDependencyRepository dependencyRepository,
-    IManualDependencyOverrideRepository overrideRepository,
     IProjectTrackerStore store,
     EffectiveDependencyResolver effectiveDependencyResolver,
     ProgressSnapshotCalculator snapshotCalculator,
@@ -35,7 +33,7 @@ public sealed class TrackerManagementService(
         await store.CreateTrackerAsync(
             new TrackerCreationState(
                 tracker,
-                new TrackedStateChangeSet([], [], [], [], [], []),
+                new TrackedStateChangeSet([], [], []),
                 baseline),
             cancellationToken);
         return tracker;
@@ -53,24 +51,13 @@ public sealed class TrackerManagementService(
 
         Task<IReadOnlyList<TrackedEntity>> entitiesTask =
             entityRepository.GetAllAsync(sourceTrackerId, cancellationToken);
-        Task<IReadOnlyList<PersistedDependency>> resolvedTask =
+        Task<IReadOnlyList<EntityDependency>> dependenciesTask =
             dependencyRepository.GetAllAsync(sourceTrackerId, cancellationToken);
-        Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
-            dependencyRepository.GetAllUnresolvedAsync(sourceTrackerId, cancellationToken);
-        Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
-            overrideRepository.GetAllAsync(sourceTrackerId, cancellationToken);
-        await Task.WhenAll(entitiesTask, resolvedTask, unresolvedTask, overridesTask);
+        await Task.WhenAll(entitiesTask, dependenciesTask);
 
         TrackedEntity[] sourceEntities = (await entitiesTask).ToArray();
-        PersistedDependency[] sourceResolved = (await resolvedTask).ToArray();
-        PersistedUnresolvedDependency[] sourceUnresolved = (await unresolvedTask).ToArray();
-        ManualDependencyOverride[] sourceOverrides = (await overridesTask).ToArray();
-        TrackerStateValidator.EnsureOwned(
-            sourceTrackerId,
-            sourceEntities,
-            sourceResolved,
-            sourceUnresolved,
-            sourceOverrides);
+        EntityDependency[] sourceDependencies = (await dependenciesTask).ToArray();
+        TrackerStateValidator.EnsureOwned(sourceTrackerId, sourceEntities, sourceDependencies);
 
         DateTimeOffset now = _timeProvider.GetUtcNow().ToUniversalTime();
         Tracker tracker = new(
@@ -94,78 +81,44 @@ public sealed class TrackerManagementService(
                     idMap[period.EntityId], period.DeveloperId,
                     period.StartedAtUtc, period.EndedAtUtc)).ToArray()
             : [];
-        Dictionary<EntityId, TrackedEntity> sourceById = sourceEntities.ToDictionary(
-            static entity => entity.Id);
         TrackedEntity[] copiedEntities = activeSource.Select(entity => new TrackedEntity(
             idMap[entity.Id],
             tracker.Id,
             entity.SourceName,
-            provenance: EntityProvenance.Copied,
             requestedPriority: entity.RequestedPriority,
             groupName: entity.GroupName,
             filterActive: entity.FilterActive)).ToArray();
 
-        List<PersistedDependency> copiedResolved = [];
-        List<PersistedUnresolvedDependency> copiedUnresolved = [];
-        foreach (PersistedDependency dependency in sourceResolved.Where(dependency =>
-                     idMap.ContainsKey(dependency.Edge.DependentEntityId)))
-        {
-            EntityId copiedOwnerId = idMap[dependency.Edge.DependentEntityId];
-            if (idMap.TryGetValue(dependency.Edge.DependencyEntityId, out EntityId? copiedTargetId))
-            {
-                copiedResolved.Add(new PersistedDependency(
-                    new DependencyEdge(copiedOwnerId, copiedTargetId),
-                    dependency.Kind));
-            }
-            else if (sourceById.TryGetValue(
-                         dependency.Edge.DependencyEntityId,
-                         out TrackedEntity? archivedTarget))
-            {
-                copiedUnresolved.Add(new PersistedUnresolvedDependency(
-                    new UnresolvedDependency(copiedOwnerId, archivedTarget.SourceName),
-                    dependency.Kind));
-            }
-        }
-
-        copiedUnresolved.AddRange(sourceUnresolved
-            .Where(dependency => idMap.ContainsKey(dependency.Dependency.DependentEntityId))
-            .Select(dependency => new PersistedUnresolvedDependency(
-                new UnresolvedDependency(
-                    idMap[dependency.Dependency.DependentEntityId],
-                    dependency.Dependency.DependencySourceName),
-                dependency.Kind)));
-        ManualDependencyOverride[] copiedOverrides = sourceOverrides
+        // A dependency on a copied entity points at its copy. One on an entity that is not copied (an
+        // archived entity or a placeholder) points at a placeholder with its name in the copy.
+        Dictionary<EntityId, TrackedEntity> sourceById = sourceEntities.ToDictionary(static entity => entity.Id);
+        DependencyTargets targets = new(tracker.Id, copiedEntities);
+        EntityDependency[] copiedDependencies = sourceDependencies
             .Where(item => idMap.ContainsKey(item.DependentEntityId))
-            .Select(item => new ManualDependencyOverride(
-                idMap[item.DependentEntityId],
-                item.DependencySourceName,
-                item.Action))
+            .Select(item => new EntityDependency(idMap[item.DependentEntityId],
+                idMap.TryGetValue(item.DependencyEntityId, out EntityId? copiedTarget)
+                    ? copiedTarget
+                    : targets.For(sourceById[item.DependencyEntityId].SourceName).Id))
             .ToArray();
+        TrackedEntity[] copiedWithPlaceholders = [.. copiedEntities, .. targets.NewPlaceholders];
         EffectiveDependencyState effective = effectiveDependencyResolver.Resolve(
-            copiedEntities,
-            copiedResolved,
-            copiedUnresolved,
-            copiedOverrides);
+            copiedWithPlaceholders,
+            copiedDependencies);
         ProgressSnapshotState baseline = snapshotCalculator.Calculate(copiedEntities, effective);
         EntityId[] ownerIds = copiedEntities.Select(static entity => entity.Id).ToArray();
         TrackedStateChangeSet changeSet = new(
-            copiedEntities,
+            copiedWithPlaceholders,
             [],
             [],
             ownerIds,
-            copiedResolved,
-            copiedUnresolved,
-            ownerIds,
-            copiedOverrides,
+            copiedDependencies,
             progressSnapshotAfterChanges: baseline,
             responsibilityPeriodsToCopy: copiedPeriods);
         await store.CreateTrackerAsync(
             new TrackerCreationState(tracker, changeSet, baseline,
                 SyncBaseline: new TrackerSyncBaseline(
-                    TrackerSyncPlanner.Capture(sourceEntities, sourceResolved,
-                        sourceUnresolved, sourceOverrides),
-                    TrackerSyncPlanner.Capture(copiedEntities, copiedResolved,
-                        copiedUnresolved, copiedOverrides))),
+                    TrackerSyncPlanner.Capture(sourceEntities, sourceDependencies),
+                    TrackerSyncPlanner.Capture(copiedWithPlaceholders, copiedDependencies))),
             cancellationToken);
         return tracker;
     }

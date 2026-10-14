@@ -49,15 +49,15 @@ ordinary CI, including pull requests from forks.
 ## Architecture expectations
 
 - Domain must remain independent of Application, Infrastructure, Reporting, and WPF.
-- Application may depend on Domain but must not depend on WPF, SQLite, SharePoint, CSV, file-dialog,
+- Application may depend on Domain but must not depend on WPF, SQLite, SharePoint, file-dialog,
   or charting types.
 - Business rules, ranking, synchronization, and readiness do not belong in WPF view models or
   code-behind.
 - Infrastructure-specific types must not leak into Domain or Application.
 - Prefer focused interfaces with a current concrete responsibility; do not add generic repository,
   factory, service, or mediator frameworks for hypothetical future use.
-- Preserve stable entity identity, imported facts, manual overrides, history, and dependency
-  semantics unless the change explicitly and safely migrates them.
+- Preserve stable entity identity, history, and dependency semantics (dependencies refer to entities
+  by ID) unless the change explicitly and safely migrates them.
 
 The authoritative details are in
 [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md).

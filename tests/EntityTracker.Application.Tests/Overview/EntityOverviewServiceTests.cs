@@ -1,5 +1,4 @@
 using EntityTracker.Application.Dependencies;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Planning;
@@ -26,8 +25,8 @@ public sealed class EntityOverviewServiceTests
         TrackedEntity screen = Entity(3, "Screen");
         PersistedDependency[] dependencies =
         [
-            Dependency(service, foundation, ImportedDependencyKind.Optional),
-            Dependency(screen, service, ImportedDependencyKind.Mandatory)
+            Dependency(service, foundation),
+            Dependency(screen, service)
         ];
         EntityOverviewService serviceUnderTest = CreateService(
             [screen, service, foundation],
@@ -70,28 +69,14 @@ public sealed class EntityOverviewServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_DependencyNamesReflectEffectiveManualOverrides()
+    public async Task GetAsync_DependencyNamesListResolvedAndMissingDependencies()
     {
         TrackedEntity owner = Entity(1, "Owner");
-        TrackedEntity suppressed = Entity(2, "Suppressed");
         TrackedEntity retained = Entity(3, "Retained");
         EntityOverviewService service = CreateService(
-            [owner, suppressed, retained],
-            [
-                Dependency(owner, suppressed, ImportedDependencyKind.Mandatory),
-                Dependency(owner, retained, ImportedDependencyKind.Optional)
-            ],
-            overrides:
-            [
-                new ManualDependencyOverride(
-                    owner.Id,
-                    suppressed.SourceName,
-                    ManualDependencyOverrideAction.Suppress),
-                new ManualDependencyOverride(
-                    owner.Id,
-                    "Manual Missing",
-                    ManualDependencyOverrideAction.Add)
-            ]);
+            [owner, retained],
+            [Dependency(owner, retained)],
+            [Unresolved(owner, "Manual Missing")]);
 
         EntityOverviewResult result = await service.GetAsync();
 
@@ -116,18 +101,8 @@ public sealed class EntityOverviewServiceTests
             groupName: "Legacy Data");
         EntityOverviewService service = CreateService(
             [active, archived],
-            [Dependency(archived, active, ImportedDependencyKind.Optional)],
-            [Unresolved(archived, "Missing Legacy", ImportedDependencyKind.Mandatory)],
-            [
-                new ManualDependencyOverride(
-                    archived.Id,
-                    active.SourceName,
-                    ManualDependencyOverrideAction.Suppress),
-                new ManualDependencyOverride(
-                    archived.Id,
-                    "Manual Legacy",
-                    ManualDependencyOverrideAction.Add)
-            ]);
+            [],
+            [Unresolved(archived, "Missing Legacy"), Unresolved(archived, "Manual Legacy")]);
 
         EntityOverviewResult result = await service.GetAsync();
 
@@ -153,8 +128,8 @@ public sealed class EntityOverviewServiceTests
         EntityOverviewService service = CreateService(
             [alpha, beta],
             [
-                Dependency(alpha, beta, ImportedDependencyKind.Mandatory),
-                Dependency(beta, alpha, ImportedDependencyKind.Mandatory)
+                Dependency(alpha, beta),
+                Dependency(beta, alpha)
             ]);
 
         EntityOverviewResult result = await service.GetAsync();
@@ -166,23 +141,6 @@ public sealed class EntityOverviewServiceTests
     }
 
     [Fact]
-    public async Task GetAsync_UnknownEntityReference_ReturnsDiagnosticAndNoRows()
-    {
-        TrackedEntity known = Entity(1, "Known");
-        TrackedEntity unknown = Entity(2, "Unknown");
-        EntityOverviewService service = CreateService(
-            [known],
-            [Dependency(known, unknown, ImportedDependencyKind.Optional)]);
-
-        EntityOverviewResult result = await service.GetAsync();
-
-        Assert.False(result.IsSuccess);
-        Assert.Empty(result.Items);
-        Assert.Contains(result.Diagnostics, static diagnostic =>
-            diagnostic.Code == DependencyRankingDiagnosticCode.UnknownEntity);
-    }
-
-    [Fact]
     public async Task GetAsync_UsesDirectImplementationBlockersWhileKeepingStructuralGraphState()
     {
         TrackedEntity alpha = Entity(1, "Alpha");
@@ -190,8 +148,8 @@ public sealed class EntityOverviewServiceTests
         TrackedEntity safe = Entity(3, "Safe", DevelopmentStatus.DevelopmentCompleted);
         EntityOverviewService service = CreateService(
             [beta, safe, alpha],
-            [Dependency(beta, alpha, ImportedDependencyKind.Mandatory)],
-            [Unresolved(alpha, "MissingX", ImportedDependencyKind.Optional)]);
+            [Dependency(beta, alpha)],
+            [Unresolved(alpha, "MissingX")]);
 
         EntityOverviewResult result = await service.GetAsync();
 
@@ -235,7 +193,7 @@ public sealed class EntityOverviewServiceTests
         TrackedEntity unprioritized = Entity(4, "Unprioritized");
         EntityOverviewService service = CreateService(
             [unprioritized, lowerTarget, highestTarget, prerequisite],
-            [Dependency(highestTarget, prerequisite, ImportedDependencyKind.Mandatory)]);
+            [Dependency(highestTarget, prerequisite)]);
 
         EntityOverviewResult result = await service.GetAsync();
 
@@ -253,8 +211,8 @@ public sealed class EntityOverviewServiceTests
         TrackedEntity target = Entity(2, "AlphaTarget", requestedPriority: 1);
         EntityOverviewService service = CreateService(
             [target, prerequisite],
-            [Dependency(target, prerequisite, ImportedDependencyKind.Mandatory)],
-            [Unresolved(prerequisite, "Missing", ImportedDependencyKind.Mandatory)]);
+            [Dependency(target, prerequisite)],
+            [Unresolved(prerequisite, "Missing")]);
 
         EntityOverviewResult result = await service.GetAsync();
 
@@ -275,9 +233,7 @@ public sealed class EntityOverviewServiceTests
             new StubEntityRepository([dependency, owner]),
             new StubEntityAuditReader([dependency, owner]),
             new StubDependencyRepository(
-                [Dependency(owner, dependency, ImportedDependencyKind.Mandatory)],
-                []),
-            new StubManualDependencyOverrideRepository(),
+                TestDependencies.Named([dependency, owner], [Dependency(owner, dependency)])),
             rankingService,
             new EffectiveDependencyResolver(),
             new WorkflowReadinessEvaluator(),
@@ -293,16 +249,13 @@ public sealed class EntityOverviewServiceTests
     private static EntityOverviewService CreateService(
         IEnumerable<TrackedEntity> entities,
         IEnumerable<PersistedDependency> dependencies,
-        IEnumerable<PersistedUnresolvedDependency>? unresolvedDependencies = null,
-        IEnumerable<ManualDependencyOverride>? overrides = null)
+        IEnumerable<PersistedUnresolvedDependency>? unresolvedDependencies = null)
     {
         return new EntityOverviewService(
-            new StubEntityRepository(entities.ToArray()),
+            new StubEntityRepository(TestDependencies.WithPlaceholders(entities, unresolvedDependencies)),
             new StubEntityAuditReader(entities.ToArray()),
             new StubDependencyRepository(
-                dependencies.ToArray(),
-                unresolvedDependencies?.ToArray() ?? []),
-            new StubManualDependencyOverrideRepository(overrides?.ToArray()),
+                TestDependencies.Named(entities, dependencies, unresolvedDependencies)),
             new DependencyRanker(),
             new EffectiveDependencyResolver(),
             new WorkflowReadinessEvaluator(),
@@ -331,22 +284,17 @@ public sealed class EntityOverviewServiceTests
 
     private static PersistedDependency Dependency(
         TrackedEntity dependent,
-        TrackedEntity dependency,
-        ImportedDependencyKind kind)
+        TrackedEntity dependency)
     {
-        return new PersistedDependency(
-            new DependencyEdge(dependent.Id, dependency.Id),
-            kind);
+        return new PersistedDependency(new DependencyEdge(dependent.Id, dependency.Id));
     }
 
     private static PersistedUnresolvedDependency Unresolved(
         TrackedEntity dependent,
-        string dependencySourceName,
-        ImportedDependencyKind kind)
+        string dependencySourceName)
     {
         return new PersistedUnresolvedDependency(
-            new UnresolvedDependency(dependent.Id, dependencySourceName),
-            kind);
+            new UnresolvedDependency(dependent.Id, dependencySourceName));
     }
 
     private sealed class StubEntityRepository(IReadOnlyList<TrackedEntity> entities)
@@ -380,22 +328,6 @@ public sealed class EntityOverviewServiceTests
                     Timestamp,
                     Timestamp))
                 .ToArray());
-    }
-
-    private sealed class StubDependencyRepository(
-        IReadOnlyList<PersistedDependency> dependencies,
-        IReadOnlyList<PersistedUnresolvedDependency> unresolvedDependencies)
-        : IDependencyRepository
-    {
-        public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) => Task.FromResult(dependencies);
-
-        public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(unresolvedDependencies);
-
     }
 
     private sealed class RecordingRankingService : IDependencyRankingService

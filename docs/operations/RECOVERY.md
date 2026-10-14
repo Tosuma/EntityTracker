@@ -87,7 +87,7 @@ EntityTracker writes UTC daily logs to `logs\entity-tracker-yyyyMMdd.log` and re
 failures, unhandled UI exceptions, and Project sync stage timings. Sync timing entries include
 fetch and Git snapshot read durations and file counts, without repository paths or snapshot content.
 
-Logs intentionally do not include entity notes, CSV contents, SQL query contents, authentication
+Logs intentionally do not include entity notes, exported file contents, authentication
 material, or the complete settings document. Review a log before sharing it because exception
 messages can still contain local file paths.
 

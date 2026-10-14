@@ -6,20 +6,19 @@ public sealed class TrackedEntityTests
         new(new Guid("10000000-0000-0000-0000-000000000001"));
 
     [Fact]
-    public void Constructor_PreservesIdentityAndSourceNameAndDefaultsStatus()
+    public void Constructor_PreservesIdentityTrimsTheSourceNameAndDefaultsStatus()
     {
         EntityId id = EntityId.New();
 
         TrackedEntity entity = new(id, TestTrackerId, " sales.Customer ");
 
         Assert.Same(id, entity.Id);
-        Assert.Equal(" sales.Customer ", entity.SourceName);
+        Assert.Equal("sales.Customer", entity.SourceName);
         Assert.Equal(DevelopmentStatus.NotStarted, entity.Status);
         Assert.Equal(string.Empty, entity.Notes);
         Assert.Equal(string.Empty, entity.FilterActive);
         Assert.Equal(string.Empty, entity.SharedNotes);
         Assert.Equal(EntityLifecycleState.Active, entity.LifecycleState);
-        Assert.Equal(EntityProvenance.Imported, entity.Provenance);
         Assert.Null(entity.RequestedPriority);
         Assert.Equal(string.Empty, entity.ResponsibleDeveloper);
         Assert.Equal(string.Empty, entity.GroupName);
@@ -195,49 +194,6 @@ public sealed class TrackedEntityTests
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             entity.ChangeLifecycleState((EntityLifecycleState)999));
         Assert.Equal(EntityLifecycleState.Active, entity.LifecycleState);
-    }
-
-    [Fact]
-    public void ManualOnlyProvenance_CanTransitionToManualAndImported()
-    {
-        TrackedEntity entity = new(
-            EntityId.New(),
-            TestTrackerId,
-            "sales.Customer",
-            provenance: EntityProvenance.ManualOnly);
-
-        entity.ChangeProvenance(EntityProvenance.ManualAndImported);
-
-        Assert.Equal(EntityProvenance.ManualAndImported, entity.Provenance);
-    }
-
-    [Fact]
-    public void CopiedProvenance_CanTransitionToCopiedAndImported()
-    {
-        TrackedEntity entity = new(
-            EntityId.New(),
-            TestTrackerId,
-            "sales.Customer",
-            provenance: EntityProvenance.Copied);
-
-        entity.ChangeProvenance(EntityProvenance.CopiedAndImported);
-
-        Assert.Equal(EntityProvenance.CopiedAndImported, entity.Provenance);
-    }
-
-    [Fact]
-    public void Provenance_RejectsUndefinedOrInvalidTransitions()
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new TrackedEntity(
-            EntityId.New(),
-            TestTrackerId,
-            "sales.Customer",
-            provenance: (EntityProvenance)999));
-
-        TrackedEntity imported = new(EntityId.New(), TestTrackerId, "sales.Customer");
-        Assert.Throws<InvalidOperationException>(() =>
-            imported.ChangeProvenance(EntityProvenance.ManualAndImported));
-        Assert.Equal(EntityProvenance.Imported, imported.Provenance);
     }
 
     [Theory]

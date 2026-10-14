@@ -1,5 +1,4 @@
 using EntityTracker.Application.Dependencies;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Planning;
 using EntityTracker.Domain;
@@ -63,23 +62,18 @@ public sealed class PriorityPlanningServiceTests
     }
 
     [Fact]
-    public void CalculateEffectivePriorities_UsesManualOverridesAndExcludesArchivedTargets()
+    public void CalculateEffectivePriorities_FollowsDependenciesAndExcludesArchivedOwners()
     {
         TrackedEntity importedTarget = Entity(1, "ImportedTarget");
         TrackedEntity manualTarget = Entity(2, "ManualTarget");
         TrackedEntity owner = Entity(3, "Owner", 3);
         TrackedEntity[] active = [importedTarget, manualTarget, owner];
-        PersistedDependency imported = Dependency(owner, importedTarget);
-        ManualDependencyOverride[] overrides =
-        [
-            new(owner.Id, importedTarget.SourceName, ManualDependencyOverrideAction.Suppress),
-            new(owner.Id, manualTarget.SourceName, ManualDependencyOverrideAction.Add)
-        ];
+        EntityDependency[] dependencies = [new EntityDependency(owner.Id, manualTarget.Id)];
 
         IReadOnlyDictionary<EntityId, int?> activePriorities =
             _service.CalculateEffectivePriorities(
                 active,
-                _resolver.Resolve(active, [imported], [], overrides));
+                _resolver.Resolve(active, dependencies));
         Assert.Null(activePriorities[importedTarget.Id]);
         Assert.Equal(3, activePriorities[manualTarget.Id]);
 
@@ -93,7 +87,7 @@ public sealed class PriorityPlanningServiceTests
         IReadOnlyDictionary<EntityId, int?> archivedPriorities =
             _service.CalculateEffectivePriorities(
                 archivedState,
-                _resolver.Resolve(archivedState, [imported], [], overrides));
+                _resolver.Resolve(archivedState, dependencies));
         Assert.DoesNotContain(owner.Id, archivedPriorities.Keys);
         Assert.Null(archivedPriorities[manualTarget.Id]);
 
@@ -106,7 +100,7 @@ public sealed class PriorityPlanningServiceTests
         IReadOnlyDictionary<EntityId, int?> restoredPriorities =
             _service.CalculateEffectivePriorities(
                 restoredState,
-                _resolver.Resolve(restoredState, [imported], [], overrides));
+                _resolver.Resolve(restoredState, dependencies));
         Assert.Equal(3, restoredPriorities[manualTarget.Id]);
     }
 
@@ -118,12 +112,10 @@ public sealed class PriorityPlanningServiceTests
         TrackedEntity target = Entity(3, "Target");
         TrackedEntity unrelated = Entity(4, "Unrelated");
         TrackedEntity[] entities = [foundation, middle, target, unrelated];
-        EffectiveDependencyState state = _resolver.Resolve(
-            entities,
-            [Dependency(target, middle), Dependency(middle, foundation)],
-            [Unresolved(middle, "zeta_missing"), Unresolved(target, "Alpha_missing"),
-                Unresolved(unrelated, "Ignored")],
-            []);
+        EffectiveDependencyState state = TestDependencies.Resolve(entities,
+                [Dependency(target, middle), Dependency(middle, foundation)],
+                [Unresolved(middle, "zeta_missing"), Unresolved(target, "Alpha_missing"),
+                    Unresolved(unrelated, "Ignored")]);
 
         PriorityPlanningPreview preview = _service.CreatePreview(
             target.Id,
@@ -167,17 +159,16 @@ public sealed class PriorityPlanningServiceTests
     private EffectiveDependencyState Resolve(
         IReadOnlyList<TrackedEntity> entities,
         IReadOnlyList<PersistedDependency> dependencies) =>
-        _resolver.Resolve(entities, dependencies, [], []);
+        TestDependencies.Resolve(entities, dependencies);
 
     private static PersistedDependency Dependency(TrackedEntity owner, TrackedEntity target) =>
-        new(new DependencyEdge(owner.Id, target.Id), ImportedDependencyKind.Mandatory);
+        new(new DependencyEdge(owner.Id, target.Id));
 
     private static PersistedUnresolvedDependency Unresolved(
         TrackedEntity owner,
         string targetName) =>
         new(
-            new UnresolvedDependency(owner.Id, targetName),
-            ImportedDependencyKind.Mandatory);
+            new UnresolvedDependency(owner.Id, targetName));
 
     private static TrackedEntity Entity(int id, string name, int? priority = null) =>
         new(Id(id), TestTrackerId, name, requestedPriority: priority);

@@ -13,7 +13,7 @@ public sealed class OverviewExportService
     [
         "Priority", "Rank", "Entity", "Work status", "Development status",
         "Responsible dev", "Group", "Blockers", "Entity ID", "Requested priority",
-        "Provenance", "Current Developer names", "Dependency count", "Dependencies",
+        "Current Developer names", "Dependency count", "Dependencies",
         "Internal notes", "Shared notes", "Filter active", "Created UTC", "Schema updated UTC", "Progress updated UTC"
     ];
 
@@ -94,7 +94,7 @@ public sealed class OverviewExportService
         row.Status, string.Join(", ", row.DeveloperItems.Select(dev => dev.Initials)),
         EmptyDash(row.GroupName), EmptyDash(row.BlockersDisplay), row.EntityId.Value.ToString("D"),
         row.RequestedPriorityValue?.ToString(CultureInfo.InvariantCulture) ?? "",
-        row.Provenance, string.Join(", ", row.DeveloperItems.Select(dev =>
+        string.Join(", ", row.DeveloperItems.Select(dev =>
             string.IsNullOrWhiteSpace(dev.DisplayName) ? dev.Initials : dev.DisplayName)),
         row.DependencyCount, string.Join(" | ", row.DependencyNames), row.Notes, row.SharedNotes, row.FilterActive,
         Utc(row.CreatedAtUtc), Utc(row.SchemaUpdatedAtUtc), Utc(row.ProgressUpdatedAtUtc)

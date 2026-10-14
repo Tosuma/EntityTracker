@@ -1,0 +1,58 @@
+<UserControl x:Class="EntityTracker.Wpf.Views.HelpView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled"
+                  ScrollViewer.CanContentScroll="False">
+        <StackPanel MaxWidth="1040" HorizontalAlignment="Left">
+            <StackPanel>
+                <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Help" />
+                <TextBlock Margin="0,4,0,0"
+                           Style="{StaticResource PageDescriptionTextStyle}"
+                           Text="A concise guide to navigation, tracker status, reports, lifecycle actions, and Project Git synchronization." />
+            </StackPanel>
+
+            <TextBlock Margin="0,24,0,8" Style="{StaticResource SectionHeadingTextStyle}" Text="Working in EntityTracker" />
+            <UniformGrid Columns="2">
+                <Border Margin="0,0,6,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Portfolio, Project, and Tracker" />
+                        <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}"
+                                   Text="Portfolio lists Projects. A Project dashboard lists its Trackers and opens the Project Developers directory. Opening a Tracker makes it the active context for Overview, Dependency graph, Archived, and Add entity. Developers can be added, edited, retired, and restored; entity responsibility still uses its existing text field. A Tracker copied from another can use Sync from source on the Project dashboard to take over the source&apos;s later changes; only the copy changes, and progress is never copied." />
+                    </StackPanel>
+                </Border>
+                <Border Margin="6,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Development status, Work status, and Blockers" />
+                        <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}"
+                                   Text="Development status is set by the user and records detailed progress. Work status summarizes it as Ready or Blocked before work starts, In progress for work or rework, Completed after development, and Reconciled after reconciliation. Blockers list unresolved or incomplete dependencies even when work is already in progress." />
+                    </StackPanel>
+                </Border>
+                <Border Margin="0,0,6,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Reports" />
+                        <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}"
+                                   Text="The Project report shows progress, the dependency graph and every entity for the Trackers you choose, and exports it as one offline web page for the client or for the team. Its Progress charts show the charts live for all chosen Trackers or one of them, and each chart can be saved or copied as an image. Project and Portfolio dashboards compare multiple Trackers without changing their stored data." />
+                    </StackPanel>
+                </Border>
+                <Border Margin="6,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Recycle, Restore, and Permanently delete" />
+                        <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}"
+                                   Text="Recycle hides a Project or Tracker while keeping it recoverable. Restore returns it. Permanently delete removes the selected item and its listed data after exact-name confirmation and cannot be undone." />
+                    </StackPanel>
+                </Border>
+            </UniformGrid>
+
+            <TextBlock Margin="0,12,0,8" Style="{StaticResource SectionHeadingTextStyle}"
+                       Text="Project Git synchronization" />
+            <Border Margin="0,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                <StackPanel>
+                    <TextBlock TextWrapping="Wrap" Text="Install system Git and prepare one dedicated repository per Project outside EntityTracker. Clone an existing remote or initialize a repository, check out a branch, set your Git identity, remote, upstream, and credentials with Git. Then use Import Project on Portfolio or Link repository on the Project dashboard. Select the clean repository root." />
+                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Text="Automatic sync is enabled by default and checks linked Projects after startup and at the interval in Settings. It pauses a Project with an unfinished edit until that edit is saved or closed. Sync now remains available at any time. Conflicts and outbound deletions require Sync now for review or approval." />
+                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Text="If authentication fails, repair credentials with command-line Git outside EntityTracker. If a checkout moved, changed branch or upstream, or became invalid, restore it or unlink and relink its existing root. Check the Project card for the last result. Before inbound SQLite changes, EntityTracker creates a backup in %LOCALAPPDATA%\EntityTracker\backups\v&lt;schema-version&gt;. Close the app before restoring that backup; keep a copy of the current database and repository first." />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

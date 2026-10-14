@@ -110,9 +110,9 @@ installed app, so close one before opening the other.
 
 1. **Create a Project** — On the Portfolio, click **New project** and give it a name.
 2. **Create a Tracker** — Open the Project dashboard and create a Tracker (e.g. "Core").
-3. **Import a schema** — Open **Schema Synchronization**, choose **Get SQL Query**, run the
-   query in your PostgreSQL instance, export the result as a semicolon-delimited UTF-8 CSV,
-   then choose **Choose CSV and Review** and apply.
+3. **Add entities** — Open **Add entity** in the Tracker and add each entity with the entities it
+   depends on. A dependency on a name that is not an entity yet is kept as an unresolved reference
+   and connects by itself when you add that entity.
 4. **Track progress** — Open the Tracker overview, select entities, and update their
    development status. Use filters and search to find work items.
 5. **Share a report** — On the Project dashboard, open **Project report**, choose the Trackers and
@@ -189,7 +189,6 @@ dotnet test EntityTracker.slnx --no-build --no-restore
 ## Further reading
 
 - [Development, build, and run guide](DEVELOPMENT.md) — full reference for publishing, CI,
-  screenshots, and schema import details.
+  screenshots, and how dependencies and unresolved references are stored.
 - [Architecture rules](architecture/ARCHITECTURE.md) — layering and dependency constraints.
-- [Schema CSV contract](importing/schema-csv-contract-v1.md) — exact CSV format for imports.
 - [Recovery guide](operations/RECOVERY.md) — backup, restore, and data recovery procedures.

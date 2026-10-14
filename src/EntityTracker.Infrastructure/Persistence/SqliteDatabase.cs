@@ -1,11 +1,12 @@
 using Microsoft.Data.Sqlite;
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Domain;
 
 namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    internal const int CurrentSchemaVersion = 20;
+    internal const int CurrentSchemaVersion = 22;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -537,7 +538,8 @@ public sealed class SqliteDatabase
             return;
         }
 
-        bool requiresForeignKeyRebuild = schemaVersion < 16;
+        // Versions 16, 21 and 22 rebuild tables that other tables reference.
+        bool requiresForeignKeyRebuild = schemaVersion < 22;
         bool rebuildWorkflowTrackedEntities = schemaVersion is > 0 and < 7;
         if (requiresForeignKeyRebuild)
         {
@@ -973,6 +975,12 @@ public sealed class SqliteDatabase
                     "ALTER TABLE tracked_entities ADD COLUMN shared_notes TEXT NOT NULL DEFAULT '';",
                     cancellationToken);
 
+            if (schemaVersion < 21)
+                await MigrateToOneDependencyListAsync(connection, transaction, cancellationToken);
+
+            if (schemaVersion < 22)
+                await SqliteNormalFormMigration.MigrateAsync(connection, transaction, cancellationToken);
+
             if (newDatabase && StartNewDatabaseWithoutProjects)
             {
                 // The Project/Tracker migration (version 12) moves entities from before Projects
@@ -999,6 +1007,201 @@ public sealed class SqliteDatabase
             {
                 await ExecuteAsync(connection, "PRAGMA foreign_keys = ON;", CancellationToken.None);
             }
+        }
+    }
+
+    /// <summary>
+    /// Version 21: the schema import is gone, so dependencies are no longer split into imported ones
+    /// (schema_dependencies, unresolved_schema_dependencies) and manual Add/Suppress corrections
+    /// (manual_dependency_overrides). Every entity keeps the dependencies that were in effect, as one
+    /// list in entity_dependencies; Optional dependencies become ordinary ones. A dependency always
+    /// refers to an entity by ID: a name no entity of the Tracker has becomes a placeholder entity
+    /// (lifecycle 'Placeholder'), with the same ID the shared snapshot upgrade gives it. The import
+    /// summaries go, and entity provenance keeps only Manual and Copied.
+    /// </summary>
+    private static async Task MigrateToOneDependencyListAsync(SqliteConnection connection,
+        SqliteTransaction transaction, CancellationToken cancellationToken)
+    {
+        Dictionary<string, string> names = new(StringComparer.Ordinal);
+        Dictionary<string, string> trackers = new(StringComparer.Ordinal);
+        Dictionary<(string Tracker, string Key), string> idsByKey = [];
+        await ReadAsync("SELECT id, tracker_id, source_name FROM tracked_entities;", reader =>
+        {
+            names[reader.GetString(0)] = reader.GetString(2);
+            trackers[reader.GetString(0)] = reader.GetString(1);
+            idsByKey[(reader.GetString(1), EntitySourceKey.From(reader.GetString(2)).Value)] = reader.GetString(0);
+        });
+        // Per owner, by name key: (name, created, updated). Built in the order the old resolver used.
+        Dictionary<string, Dictionary<string, (string Name, string Created, string Updated)>> lists =
+            new(StringComparer.Ordinal);
+        void Put(string owner, string name, string created, string updated)
+        {
+            if (!lists.TryGetValue(owner, out var list))
+                lists[owner] = list = new(StringComparer.Ordinal);
+            list[EntitySourceKey.From(name).Value] = (name.Trim(), created, updated);
+        }
+        if (await TableExistsAsync(connection, transaction, "schema_dependencies", cancellationToken))
+            await ReadAsync("""
+                SELECT dependent_entity_id, dependency_entity_id, created_at_utc, updated_at_utc
+                FROM schema_dependencies;
+                """, reader =>
+            {
+                if (names.TryGetValue(reader.GetString(1), out string? target))
+                    Put(reader.GetString(0), target, reader.GetString(2), reader.GetString(3));
+            });
+        if (await TableExistsAsync(connection, transaction, "unresolved_schema_dependencies", cancellationToken))
+            await ReadAsync("""
+                SELECT dependent_entity_id, dependency_source_name, created_at_utc, updated_at_utc
+                FROM unresolved_schema_dependencies;
+                """, reader => Put(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3)));
+        List<(string Owner, string Name, string Action, string Created, string Updated)> overrides = [];
+        if (await TableExistsAsync(connection, transaction, "manual_dependency_overrides", cancellationToken))
+            await ReadAsync("""
+                SELECT dependent_entity_id, dependency_source_name, override_action, created_at_utc, updated_at_utc
+                FROM manual_dependency_overrides;
+                """, reader => overrides.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2),
+                reader.GetString(3), reader.GetString(4))));
+        foreach (var item in overrides.Where(static item => item.Action == "Suppress"))
+            if (lists.TryGetValue(item.Owner, out var list))
+                list.Remove(EntitySourceKey.From(item.Name).Value);
+        foreach (var item in overrides.Where(static item => item.Action == "Add"))
+            Put(item.Owner, item.Name, item.Created, item.Updated);
+
+        // Each dependency as (owner, target ID); a name no entity has gets a placeholder.
+        List<(string Owner, string Target, string Created, string Updated)> dependencies = [];
+        Dictionary<string, (string Tracker, string Name, string Created)> placeholders = new(StringComparer.Ordinal);
+        foreach ((string owner, var list) in lists)
+        foreach ((string key, var dependency) in list)
+        {
+            if (!trackers.TryGetValue(owner, out string? tracker) ||
+                EntitySourceKey.From(names[owner]).Value == key) continue;
+            if (!idsByKey.TryGetValue((tracker, key), out string? target))
+            {
+                target = SqlitePersistenceValues.Format(TrackedEntity.PlaceholderId(
+                    SqlitePersistenceValues.ParseTrackerId(tracker), dependency.Name));
+                idsByKey[(tracker, key)] = target;
+                placeholders[target] = (tracker, dependency.Name, dependency.Created);
+            }
+            dependencies.Add((owner, target, dependency.Created, dependency.Updated));
+        }
+
+        await ExecuteAsync(connection, transaction, """
+            DROP TABLE IF EXISTS schema_dependencies;
+            DROP TABLE IF EXISTS unresolved_schema_dependencies;
+            DROP TABLE IF EXISTS manual_dependency_overrides;
+            DROP TABLE IF EXISTS schema_import_summary;
+            DROP TABLE IF EXISTS entity_dependencies;
+
+            CREATE TABLE tracked_entities_v21
+            (
+                id TEXT NOT NULL PRIMARY KEY,
+                tracker_id TEXT NOT NULL,
+                source_key TEXT NOT NULL,
+                source_name TEXT NOT NULL,
+                development_status TEXT NOT NULL CHECK (development_status IN
+                    ('NotStarted', 'InProgress', 'ReworkNeeded', 'DevelopmentCompleted',
+                     'Reconciled', 'Blocked', 'Reworking')),
+                notes TEXT NOT NULL,
+                created_at_utc TEXT NOT NULL,
+                schema_updated_at_utc TEXT NOT NULL,
+                progress_updated_at_utc TEXT NOT NULL,
+                lifecycle_state TEXT NOT NULL CHECK (lifecycle_state IN ('Active', 'Archived', 'Placeholder')),
+                provenance TEXT NOT NULL CHECK (provenance IN ('Manual', 'Copied')),
+                requested_priority INTEGER NULL CHECK
+                    (requested_priority IS NULL OR requested_priority BETWEEN 1 AND 5),
+                group_name TEXT NOT NULL,
+                filter_active TEXT NOT NULL DEFAULT '',
+                shared_notes TEXT NOT NULL DEFAULT '',
+                UNIQUE (tracker_id, source_key),
+                FOREIGN KEY (tracker_id) REFERENCES trackers (id) ON DELETE RESTRICT
+            );
+            INSERT INTO tracked_entities_v21
+            (id, tracker_id, source_key, source_name, development_status, notes,
+             created_at_utc, schema_updated_at_utc, progress_updated_at_utc,
+             lifecycle_state, provenance, requested_priority, group_name,
+             filter_active, shared_notes)
+            SELECT id, tracker_id, source_key, source_name, development_status, notes,
+                   created_at_utc, schema_updated_at_utc, progress_updated_at_utc, lifecycle_state,
+                   CASE WHEN provenance IN ('Copied', 'CopiedAndImported') THEN 'Copied' ELSE 'Manual' END,
+                   requested_priority, group_name, filter_active, shared_notes
+            FROM tracked_entities;
+            -- Triggers on other tables refer to tracked_entities by name. The legacy rename leaves them
+            -- alone; they are valid again once the new table has the name.
+            PRAGMA legacy_alter_table = ON;
+            DROP TABLE tracked_entities;
+            ALTER TABLE tracked_entities_v21 RENAME TO tracked_entities;
+            PRAGMA legacy_alter_table = OFF;
+            CREATE INDEX ix_tracked_entities_tracker_lifecycle
+                ON tracked_entities (tracker_id, lifecycle_state, source_key);
+
+            -- A dependency always refers to an entity by ID. An unresolved reference is a dependency
+            -- on a placeholder entity.
+            CREATE TABLE entity_dependencies
+            (
+                dependent_entity_id TEXT NOT NULL,
+                dependency_entity_id TEXT NOT NULL,
+                created_at_utc TEXT NOT NULL,
+                updated_at_utc TEXT NOT NULL,
+                PRIMARY KEY (dependent_entity_id, dependency_entity_id),
+                CHECK (dependency_entity_id <> dependent_entity_id),
+                FOREIGN KEY (dependent_entity_id) REFERENCES tracked_entities (id) ON DELETE CASCADE,
+                FOREIGN KEY (dependency_entity_id) REFERENCES tracked_entities (id)
+            );
+            CREATE INDEX ix_entity_dependencies_target
+                ON entity_dependencies (dependency_entity_id);
+            """, cancellationToken);
+
+        foreach ((string id, var placeholder) in placeholders)
+            await InsertAsync("""
+                INSERT INTO tracked_entities
+                (id, tracker_id, source_key, source_name, development_status, notes,
+                 created_at_utc, schema_updated_at_utc, progress_updated_at_utc,
+                 lifecycle_state, provenance, requested_priority, group_name, filter_active, shared_notes)
+                VALUES ($id, $tracker, $key, $name, 'NotStarted', '', $created, $created, $created,
+                        'Placeholder', 'Manual', NULL, '', '', '');
+                """, ("$id", id), ("$tracker", placeholder.Tracker),
+                ("$key", EntitySourceKey.From(placeholder.Name).Value), ("$name", placeholder.Name),
+                ("$created", placeholder.Created));
+        foreach (var dependency in dependencies)
+            await InsertAsync("""
+                INSERT OR IGNORE INTO entity_dependencies
+                (dependent_entity_id, dependency_entity_id, created_at_utc, updated_at_utc)
+                VALUES ($owner, $target, $created, $updated);
+                """, ("$owner", dependency.Owner), ("$target", dependency.Target),
+                ("$created", dependency.Created), ("$updated", dependency.Updated));
+
+        foreach ((string table, string project) in new[]
+        {
+            ("tracked_entities", "(SELECT project_id FROM trackers WHERE id = {0}.tracker_id)"),
+            ("entity_dependencies", "(SELECT tracker.project_id FROM tracked_entities entity JOIN trackers tracker ON tracker.id = entity.tracker_id WHERE entity.id = {0}.dependent_entity_id)")
+        })
+        foreach (string operation in new[] { "INSERT", "UPDATE", "DELETE" })
+        {
+            string row = operation == "DELETE" ? "OLD" : "NEW";
+            await ExecuteAsync(connection, transaction,
+                $"DROP TRIGGER IF EXISTS rev_{table}_{operation.ToLowerInvariant()}; " +
+                $"CREATE TRIGGER rev_{table}_{operation.ToLowerInvariant()} AFTER {operation} ON {table} BEGIN " +
+                $"UPDATE project_revisions SET revision = revision + 1 WHERE project_id = {string.Format(project, row)}; END;",
+                cancellationToken);
+        }
+        await EnsureNoForeignKeyViolationsAsync(connection, transaction, cancellationToken);
+
+        async Task InsertAsync(string sql, params (string Name, string Value)[] values)
+        {
+            using SqliteCommand insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText = sql;
+            foreach ((string name, string value) in values) insert.Parameters.AddWithValue(name, value);
+            await insert.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        async Task ReadAsync(string sql, Action<SqliteDataReader> row)
+        {
+            using SqliteCommand command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = sql;
+            await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken)) row(reader);
         }
     }
 
@@ -1121,6 +1324,7 @@ public sealed class SqliteDatabase
         try
         {
             await connection.OpenAsync(cancellationToken);
+            EntityNameCollation.Register(connection);
             using SqliteCommand busy = connection.CreateCommand();
             busy.CommandText = "PRAGMA busy_timeout = 5000;";
             await busy.ExecuteNonQueryAsync(cancellationToken);

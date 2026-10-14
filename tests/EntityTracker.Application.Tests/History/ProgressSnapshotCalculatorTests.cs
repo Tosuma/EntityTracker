@@ -1,6 +1,5 @@
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Domain;
 
@@ -22,15 +21,12 @@ public sealed class ProgressSnapshotCalculatorTests
             TestTrackerId,
             "Archived",
             lifecycleState: EntityLifecycleState.Archived);
+        TrackedEntity missing = TrackedEntity.Placeholder(TestTrackerId, "Missing");
         TrackedEntity[] entities =
-            [ready, blocked, inProgress, rework, completed, reconciled, archived];
+            [ready, blocked, inProgress, rework, completed, reconciled, archived, missing];
         EffectiveDependencyState effective = new EffectiveDependencyResolver().Resolve(
             entities,
-            [],
-            [new PersistedUnresolvedDependency(
-                new UnresolvedDependency(blocked.Id, "Missing"),
-                ImportedDependencyKind.Mandatory)],
-            []);
+            [new EntityDependency(blocked.Id, missing.Id)]);
 
         ProgressSnapshotState result = new ProgressSnapshotCalculator().Calculate(
             entities,
@@ -53,12 +49,10 @@ public sealed class ProgressSnapshotCalculatorTests
         TrackedEntity manualBlock = Entity(2, "Manual block", DevelopmentStatus.Blocked);
         TrackedEntity reworking = Entity(3, "Reworking", DevelopmentStatus.Reworking);
         TrackedEntity pendingRework = Entity(4, "Pending rework", DevelopmentStatus.ReworkNeeded);
-        TrackedEntity[] entities = [waiting, manualBlock, reworking, pendingRework];
+        TrackedEntity missing = TrackedEntity.Placeholder(TestTrackerId, "Missing");
+        TrackedEntity[] entities = [waiting, manualBlock, reworking, pendingRework, missing];
         EffectiveDependencyState effective = new EffectiveDependencyResolver().Resolve(
-            entities, [],
-            [new PersistedUnresolvedDependency(
-                new UnresolvedDependency(waiting.Id, "Missing"),
-                ImportedDependencyKind.Mandatory)], []);
+            entities, [new EntityDependency(waiting.Id, missing.Id)]);
 
         ProgressSnapshotState result = new ProgressSnapshotCalculator().Calculate(entities, effective);
 

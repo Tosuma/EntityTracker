@@ -15,7 +15,7 @@ public sealed class SqliteProjectDeveloperStore(SqliteDatabase database) : IProj
         command.CommandText = """
             SELECT id, initials, display_name, is_retired
             FROM project_developers WHERE project_id = $projectId
-            ORDER BY is_retired, initials_key, id;
+            ORDER BY is_retired, initials, id;
             """;
         command.Parameters.AddWithValue("$projectId", SqlitePersistenceValues.Format(projectId));
         List<ProjectDeveloper> developers = [];
@@ -34,9 +34,9 @@ public sealed class SqliteProjectDeveloperStore(SqliteDatabase database) : IProj
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             INSERT INTO project_developers
-                (id, project_id, initials_key, initials, display_name, is_retired)
-            SELECT $id, $projectId, $key, $initials, $displayName, $retired
-            FROM projects WHERE id = $projectId AND lifecycle_state = 'Active';
+                (id, project_id, initials, display_name, is_retired)
+            SELECT $id, $projectId, $initials, $displayName, $retired
+            FROM projects WHERE id = $projectId AND recycled_at_utc IS NULL;
             """;
         AddParameters(command, developer);
         try
@@ -58,11 +58,11 @@ public sealed class SqliteProjectDeveloperStore(SqliteDatabase database) : IProj
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             UPDATE project_developers
-            SET initials_key = $key, initials = $initials,
+            SET initials = $initials,
                 display_name = $displayName, is_retired = $retired
             WHERE id = $id AND project_id = $projectId
               AND EXISTS (SELECT 1 FROM projects
-                          WHERE id = $projectId AND lifecycle_state = 'Active');
+                          WHERE id = $projectId AND recycled_at_utc IS NULL);
             """;
         AddParameters(command, developer);
         try
@@ -90,7 +90,7 @@ public sealed class SqliteProjectDeveloperStore(SqliteDatabase database) : IProj
             command.CommandText = """
                 UPDATE project_developers SET is_retired = $retired
                 WHERE id = $id AND project_id = $project
-                  AND EXISTS (SELECT 1 FROM projects WHERE id = $project AND lifecycle_state = 'Active');
+                  AND EXISTS (SELECT 1 FROM projects WHERE id = $project AND recycled_at_utc IS NULL);
                 """;
             command.Parameters.AddWithValue("$id", developer.Id.Value.ToString("D"));
             command.Parameters.AddWithValue("$project", SqlitePersistenceValues.Format(developer.ProjectId));
@@ -124,7 +124,6 @@ public sealed class SqliteProjectDeveloperStore(SqliteDatabase database) : IProj
     {
         command.Parameters.AddWithValue("$id", developer.Id.Value.ToString("D"));
         command.Parameters.AddWithValue("$projectId", SqlitePersistenceValues.Format(developer.ProjectId));
-        command.Parameters.AddWithValue("$key", developer.Initials.ToUpperInvariant());
         command.Parameters.AddWithValue("$initials", developer.Initials);
         command.Parameters.AddWithValue("$displayName", developer.DisplayName);
         command.Parameters.AddWithValue("$retired", developer.IsRetired ? 1 : 0);

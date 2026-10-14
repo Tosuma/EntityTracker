@@ -27,7 +27,7 @@ public sealed class SqliteBackupServiceTests
         ProjectDeveloper developer = await new ProjectDeveloperService(
             new SqliteProjectDeveloperStore(database)).CreateAsync(tracker.ProjectId, "PT", "Platform Team");
         await new SqliteTrackedStateStore(database).ApplyAsync(tracker.Id,
-            new TrackedStateChangeSet([], [], [], [], [], [],
+            new TrackedStateChangeSet([], [], [],
                 responsibilitySelections: [new ResponsibilitySelection(prioritized.Id, [developer.Id])]));
         string backupDirectory = Path.Combine(
             Path.GetDirectoryName(file.DatabasePath)!,
@@ -66,6 +66,7 @@ public sealed class SqliteBackupServiceTests
         await using TemporarySqliteFile file = new();
         SqliteDatabase database = new(file.DatabasePath);
         await database.InitializeAsync();
+        await VersionTwentySchema.RevertAsync(file.DatabasePath);
         await using (SqliteConnection connection = new($"Data Source={file.DatabasePath}"))
         {
             await connection.OpenAsync();

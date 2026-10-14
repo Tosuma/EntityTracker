@@ -47,11 +47,11 @@ public sealed class SqliteTrackerRepository(SqliteDatabase database) : ITrackerR
                 SELECT 1
                 FROM trackers
                 WHERE project_id = $projectId
-                  AND name_key = $nameKey
+                  AND name = $name
                   AND ($excludedId IS NULL OR id <> $excludedId));
             """;
         command.Parameters.AddWithValue("$projectId", SqlitePersistenceValues.Format(projectId));
-        command.Parameters.AddWithValue("$nameKey", normalized.ToUpperInvariant());
+        command.Parameters.AddWithValue("$name", normalized);
         command.Parameters.AddWithValue(
             "$excludedId",
             excludingTrackerId is null
@@ -77,7 +77,7 @@ public sealed class SqliteTrackerRepository(SqliteDatabase database) : ITrackerR
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = SelectSql +
             (projectId is null ? string.Empty : " WHERE tracker.project_id = $projectId") +
-            " ORDER BY tracker.name_key, tracker.id;";
+            " ORDER BY tracker.name, tracker.id;";
         if (projectId is not null)
         {
             command.Parameters.AddWithValue("$projectId", SqlitePersistenceValues.Format(projectId));
@@ -108,7 +108,8 @@ public sealed class SqliteTrackerRepository(SqliteDatabase database) : ITrackerR
         reader.IsDBNull(7) ? null : SqlitePersistenceValues.ParseTrackerId(reader.GetString(7)));
 
     private const string SelectSql = """
-        SELECT tracker.id, tracker.project_id, tracker.name, tracker.lifecycle_state,
+        SELECT tracker.id, tracker.project_id, tracker.name,
+               CASE WHEN tracker.recycled_at_utc IS NULL THEN 'Active' ELSE 'Recycled' END,
                tracker.created_at_utc, tracker.updated_at_utc, tracker.recycled_at_utc,
                tracker.copied_from_tracker_id
         FROM trackers tracker

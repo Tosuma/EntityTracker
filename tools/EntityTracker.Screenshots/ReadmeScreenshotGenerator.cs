@@ -46,11 +46,9 @@ internal sealed class ReadmeScreenshotGenerator
 
         await ScreenshotDataSeeder.SeedAsync(repositoryRoot, workspace, cancellationToken);
 
-        ScreenshotCsvFilePicker picker = new();
         FixedTimeProvider captureTime = new(ScreenshotDataSeeder.FixedNow);
         await using ServiceProvider provider = ScreenshotServiceProviderFactory.Create(
             workspace.Paths,
-            picker,
             captureTime,
             appearance);
         await provider.GetRequiredService<IPersistenceInitializer>()
@@ -245,46 +243,46 @@ internal sealed class ReadmeScreenshotGenerator
                 .Single(developer => developer.Initials == "PT");
             ITrackedStateStore responsibilityStore = provider.GetRequiredService<ITrackedStateStore>();
             await responsibilityStore.ApplyAsync(tracker.Id,
-                new TrackedStateChangeSet([], [], [], [], [], [],
+                new TrackedStateChangeSet([], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
                         [alice.Id])]), cancellationToken);
             captureTime.Advance(TimeSpan.FromMinutes(1));
             await responsibilityStore.ApplyAsync(tracker.Id,
-                new TrackedStateChangeSet([], [], [], [], [], [],
+                new TrackedStateChangeSet([], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
                         [alice.Id, platform.Id])]), cancellationToken);
             captureTime.Advance(TimeSpan.FromMinutes(1));
             await responsibilityStore.ApplyAsync(tracker.Id,
-                new TrackedStateChangeSet([], [], [], [], [], [],
+                new TrackedStateChangeSet([], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
                         [platform.Id])]), cancellationToken);
 
             captureTime.Advance(TimeSpan.FromMinutes(1));
             await responsibilityStore.ApplyAsync(tracker.Id,
-                new TrackedStateChangeSet([], [], [], [], [], [],
+                new TrackedStateChangeSet([], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
                         [alice.Id, platform.Id])]), cancellationToken);
             captureTime.Advance(TimeSpan.FromMinutes(1));
             await responsibilityStore.ApplyAsync(tracker.Id,
-                new TrackedStateChangeSet([], [], [], [], [], [],
+                new TrackedStateChangeSet([], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
                         [platform.Id])]), cancellationToken);
 
             captureTime.Advance(TimeSpan.FromMinutes(1));
             await responsibilityStore.ApplyAsync(tracker.Id,
-                new TrackedStateChangeSet([], [], [], [], [], [],
+                new TrackedStateChangeSet([], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
                         [alice.Id, platform.Id])]), cancellationToken);
             captureTime.Advance(TimeSpan.FromMinutes(1));
             await responsibilityStore.ApplyAsync(tracker.Id,
-                new TrackedStateChangeSet([], [], [], [], [], [],
+                new TrackedStateChangeSet([], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
                         [platform.Id])]), cancellationToken);
 
             // Show two separate current Developers in the overview and filter screenshots.
             captureTime.Advance(TimeSpan.FromMinutes(1));
             await responsibilityStore.ApplyAsync(tracker.Id,
-                new TrackedStateChangeSet([], [], [], [], [], [],
+                new TrackedStateChangeSet([], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
                         [alice.Id, platform.Id])]), cancellationToken);
 
@@ -299,32 +297,6 @@ internal sealed class ReadmeScreenshotGenerator
             await CaptureOverviewAsync(viewModel, window, renderer, cancellationToken);
             await CaptureDependencyGraphAsync(shell, viewModel, window, renderer, cancellationToken);
 
-            viewModel.Review.Clear();
-            await shell.NavigateAsync(ShellDestination.SchemaSynchronization, cancellationToken);
-            await renderer.CaptureAsync("schema-synchronization.png");
-
-            await CaptureChangedReviewAsync(
-                workspace,
-                picker,
-                viewModel,
-                renderer,
-                cancellationToken);
-            await CaptureMissingReviewAsync(
-                repositoryRoot,
-                picker,
-                viewModel,
-                window,
-                renderer,
-                cancellationToken);
-            await CaptureUnresolvedReviewAsync(
-                repositoryRoot,
-                picker,
-                viewModel,
-                window,
-                renderer,
-                cancellationToken);
-
-            viewModel.Review.Clear();
             await shell.NavigateAsync(ShellDestination.AddEntity, cancellationToken);
             await PopulateManualCreationAsync(viewModel, cancellationToken);
             await renderer.CaptureAsync("add-entity.png");
@@ -339,11 +311,8 @@ internal sealed class ReadmeScreenshotGenerator
                 renderer,
                 cancellationToken);
 
-            await shell.NavigateAsync(ShellDestination.HelpSql, cancellationToken);
-            await renderer.CaptureAsync("help-and-sql.png");
-            await renderer.BringNamedElementIntoViewAndCaptureAsync(
-                "QueryTextBox",
-                "sql-query.png");
+            await shell.NavigateAsync(ShellDestination.Help, cancellationToken);
+            await renderer.CaptureAsync("help.png");
 
             shell.SelectedSettingsCategory = SettingsCategory.General;
             await shell.NavigateAsync(ShellDestination.Settings, cancellationToken);
@@ -394,12 +363,9 @@ internal sealed class ReadmeScreenshotGenerator
         await provider.GetRequiredService<ITrackedStateStore>().ApplyAsync(source.Id,
             new TrackedStateChangeSet([reminder], [], [], [reminder.Id],
                 [
-                    new PersistedDependency(new DependencyEdge(reminder.Id, customer.Id),
-                        EntityTracker.Application.Importing.ImportedDependencyKind.Mandatory),
-                    new PersistedDependency(new DependencyEdge(reminder.Id, currency.Id),
-                        EntityTracker.Application.Importing.ImportedDependencyKind.Mandatory)
+                    new EntityDependency(reminder.Id, customer.Id),
+                    new EntityDependency(reminder.Id, currency.Id)
                 ],
-                [],
                 entitiesWithProgressToUpdate: [customer],
                 entitiesWithRequestedPriorityToUpdate: [customer],
                 entitiesWithGroupNameToUpdate: [customer]),
@@ -416,58 +382,6 @@ internal sealed class ReadmeScreenshotGenerator
             cancellationToken);
         await renderer.CaptureAsync("tracker-sync.png", settleMilliseconds: 400);
         shell.Catalog.CancelCommand.Execute(null);
-    }
-
-    private static async Task CaptureChangedReviewAsync(
-        ScreenshotWorkspace workspace,
-        ScreenshotCsvFilePicker picker,
-        MainWindowViewModel viewModel,
-        WpfScreenshotRenderer renderer,
-        CancellationToken cancellationToken)
-    {
-        EntityOverviewRow affectedEntity = viewModel.OverviewItems
-            .Where(static row => row.DevelopmentStatus is
-                DevelopmentStatus.DevelopmentCompleted or DevelopmentStatus.Reconciled)
-            .Where(static row => row.DependencyNames.Count > 0)
-            .OrderBy(static row => row.SourceName, StringComparer.Ordinal)
-            .FirstOrDefault()
-            ?? throw new InvalidDataException(
-                "The deterministic tracker has no completed entity with dependencies.");
-        string[] importedDependencies = affectedEntity.DependencyNames
-            .Skip(1)
-            .Append("screenshot_missing_dependency")
-            .ToArray();
-        string partialSchemaPath = Path.Combine(
-            workspace.RootDirectory,
-            "partial-schema-changes.csv");
-        await File.WriteAllLinesAsync(
-            partialSchemaPath,
-            [
-                "table_name;mandatory_dependencies;mandatory_dependency_count;optional_dependencies;optional_dependency_count;total_dependency_count",
-                $"{affectedEntity.SourceName};{string.Join(", ", importedDependencies)};{importedDependencies.Length};;0;{importedDependencies.Length}"
-            ],
-            cancellationToken);
-
-        viewModel.Review.Clear();
-        viewModel.Review.IsPartialImport = true;
-        picker.SelectedPath = partialSchemaPath;
-        await viewModel.ImportCsvAsync(cancellationToken);
-        if (!viewModel.Review.HasChangedEntities ||
-            viewModel.Review.PendingProgressDecisionCount == 0)
-        {
-            throw new InvalidDataException(
-                "The deterministic changed-entity review contains no progress decision.");
-        }
-
-        viewModel.Review.ToggleFilterCommand.Execute(
-            SchemaSynchronizationReviewFilter.Changed);
-        if (!viewModel.Review.IsChangedFilterSelected)
-        {
-            throw new InvalidDataException(
-                "The deterministic changed-entity review filter was not selected.");
-        }
-
-        await renderer.CaptureAsync("schema-synchronization-changed-entities.png");
     }
 
     private static async Task CaptureTrackerLifecycleAsync(
@@ -687,56 +601,6 @@ internal sealed class ReadmeScreenshotGenerator
         viewModel.SelectedTab = MainWindowTab.Overview;
     }
 
-    private static async Task CaptureMissingReviewAsync(
-        string repositoryRoot,
-        ScreenshotCsvFilePicker picker,
-        MainWindowViewModel viewModel,
-        MainWindow window,
-        WpfScreenshotRenderer renderer,
-        CancellationToken cancellationToken)
-    {
-        viewModel.Review.Clear();
-        picker.SelectedPath = Path.Combine(repositoryRoot, "extracted_dependencies.csv");
-        await viewModel.ImportCsvAsync(cancellationToken);
-        if (!viewModel.Review.HasMissingEntities)
-        {
-            throw new InvalidDataException(
-                "The deterministic missing-entity review contains no missing entities.");
-        }
-
-        await renderer.CaptureReviewSectionAsync(
-            window.FindWorkspaceElement("MissingReviewSection")
-                ?? throw new InvalidOperationException("Missing review section not found."),
-            (ScrollViewer)(window.FindWorkspaceElement("SchemaReviewScrollViewer")
-                ?? throw new InvalidOperationException("Schema review scroll viewer not found.")),
-            "schema-synchronization-import-csv-with-missing-entities.png");
-    }
-
-    private static async Task CaptureUnresolvedReviewAsync(
-        string repositoryRoot,
-        ScreenshotCsvFilePicker picker,
-        MainWindowViewModel viewModel,
-        MainWindow window,
-        WpfScreenshotRenderer renderer,
-        CancellationToken cancellationToken)
-    {
-        viewModel.Review.Clear();
-        picker.SelectedPath = Path.Combine(repositoryRoot, "synthetic_dependencies_125.csv");
-        await viewModel.ImportCsvAsync(cancellationToken);
-        if (!viewModel.Review.HasUnresolvedEntities)
-        {
-            throw new InvalidDataException(
-                "The deterministic unresolved-dependency review contains no unresolved entities.");
-        }
-
-        await renderer.CaptureReviewSectionAsync(
-            window.FindWorkspaceElement("UnresolvedReviewSection")
-                ?? throw new InvalidOperationException("Unresolved review section not found."),
-            (ScrollViewer)(window.FindWorkspaceElement("SchemaReviewScrollViewer")
-                ?? throw new InvalidOperationException("Schema review scroll viewer not found.")),
-            "schema-synchronization-unresolved-dependencies.png");
-    }
-
     private static async Task CaptureEditorAsync(
         ShellViewModel shell,
         MainWindowViewModel viewModel,
@@ -744,7 +608,6 @@ internal sealed class ReadmeScreenshotGenerator
         WpfScreenshotRenderer renderer,
         CancellationToken cancellationToken)
     {
-        viewModel.Review.Clear();
         await shell.NavigateAsync(ShellDestination.Overview, cancellationToken);
         viewModel.ActiveTable.ClearAllFiltersAndSort();
         EntityOverviewRow row = viewModel.OverviewItems.Single(static item =>
@@ -817,7 +680,8 @@ internal sealed class ReadmeScreenshotGenerator
         HashSet<EntityId> dependencyTargets = (await dependencyRepository.GetAllAsync(
                 tracker.Id,
                 cancellationToken))
-            .Select(static dependency => dependency.Edge.DependencyEntityId)
+            .Where(static dependency => dependency.DependencyEntityId is not null)
+            .Select(static dependency => dependency.DependencyEntityId!)
             .ToHashSet();
         TrackedEntity leaf = entities
             .Where(static entity => entity.LifecycleState == EntityLifecycleState.Active)
@@ -829,7 +693,7 @@ internal sealed class ReadmeScreenshotGenerator
                 .ListAsync(tracker.ProjectId, cancellationToken))
             .Single(developer => developer.Initials == "PT");
         await provider.GetRequiredService<ITrackedStateStore>().ApplyAsync(tracker.Id,
-            new TrackedStateChangeSet([], [], [], [], [], [],
+            new TrackedStateChangeSet([], [], [],
                 responsibilitySelections: [new ResponsibilitySelection(leaf.Id, [platform.Id])]),
             cancellationToken);
 

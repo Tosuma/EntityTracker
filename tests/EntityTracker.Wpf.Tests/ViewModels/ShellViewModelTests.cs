@@ -2,7 +2,6 @@ using System.IO;
 
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.ManualOverrides;
@@ -11,12 +10,10 @@ using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Planning;
 using EntityTracker.Application.Projects;
 using EntityTracker.Application.Ranking;
-using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Configuration;
-using EntityTracker.Infrastructure.Importing;
 using EntityTracker.Infrastructure.Persistence;
 using EntityTracker.Reporting;
 using EntityTracker.Wpf.Services;
@@ -684,13 +681,9 @@ public sealed class ShellViewModelTests
     }
 
     [Fact]
-    public async Task HelpSqlNavigation_GuardsAndDiscardsUnappliedSynchronizationReview()
+    public async Task HelpNavigation_GuardsAndDiscardsAnUnsavedNewEntity()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
-        await harness.AddEntityAsync(harness.DefaultTracker.Id, "Existing");
-        harness.SetCsvPath(
-            "table_name;mandatory_dependencies;mandatory_dependency_count;optional_dependencies;optional_dependency_count;total_dependency_count",
-            "Existing;;0;;0;0");
         RecordingDiscardConfirmation confirmation = new(false);
         using ShellViewModel shell = harness.CreateShell(
             new EntityTrackerSettings(
@@ -698,19 +691,19 @@ public sealed class ShellViewModelTests
                 lastTrackerId: harness.DefaultTracker.Id),
             confirmation);
         await shell.InitializeAsync();
-        Assert.True(await shell.NavigateAsync(ShellDestination.SchemaSynchronization));
+        Assert.True(await shell.NavigateAsync(ShellDestination.AddEntity));
         MainWindowViewModel workspace = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
-        await workspace.ImportCsvAsync();
-        Assert.True(workspace.Review.HasReview);
+        workspace.ManualCreation.EntityName = "Pending entity";
+        Assert.True(workspace.HasUnsavedWork);
 
-        Assert.False(await shell.NavigateAsync(ShellDestination.HelpSql));
-        Assert.Equal(ShellDestination.SchemaSynchronization, shell.SelectedDestination);
-        Assert.True(workspace.Review.HasReview);
+        Assert.False(await shell.NavigateAsync(ShellDestination.Help));
+        Assert.Equal(ShellDestination.AddEntity, shell.SelectedDestination);
+        Assert.True(workspace.HasUnsavedWork);
 
         confirmation.Result = true;
-        Assert.True(await shell.NavigateAsync(ShellDestination.HelpSql));
-        Assert.Equal(ShellDestination.HelpSql, shell.SelectedDestination);
-        Assert.False(workspace.Review.HasReview);
+        Assert.True(await shell.NavigateAsync(ShellDestination.Help));
+        Assert.Equal(ShellDestination.Help, shell.SelectedDestination);
+        Assert.False(workspace.HasUnsavedWork);
         Assert.Equal(2, confirmation.CallCount);
     }
 
@@ -1009,7 +1002,6 @@ public sealed class ShellViewModelTests
         private readonly CatalogManagementViewModel _catalog;
         private readonly AppearanceViewModel _appearance;
         private readonly TestAdapters _adapters;
-        private readonly TestClipboard _clipboard = new();
         private readonly ProjectDeveloperService _developers;
         public LocalProjectIdentityService Identity { get; }
         public SqliteResponsibilityPeriodRepository Periods { get; }
@@ -1073,7 +1065,6 @@ public sealed class ShellViewModelTests
             SqliteTrackerRepository trackers = new(database);
             SqliteEntityRepository entities = new(database);
             SqliteDependencyRepository dependencies = new(database);
-            SqliteManualDependencyOverrideRepository overrides = new(database);
             SqliteTrackedStateStore stateStore = new(database);
             SqliteProgressHistoryRepository history = new(database);
             SqliteProjectTrackerStore catalogStore = new(database);
@@ -1089,26 +1080,15 @@ public sealed class ShellViewModelTests
             EntityDependencyEditorService editor = new(
                 entities,
                 dependencies,
-                overrides,
                 resolver,
                 ranker,
                 stateStore,
                 priorities,
                 snapshots);
-            SchemaSynchronizationPlanner planner = new(ranker, resolver, snapshots);
-            SchemaSynchronizationService synchronization = new(
-                new CsvSchemaImportFileParser(new CsvSchemaImportParser()),
-                entities,
-                dependencies,
-                overrides,
-                planner,
-                editor,
-                stateStore);
             EntityOverviewService overview = new(
                 entities,
                 new SqliteEntityAuditReader(database),
                 dependencies,
-                overrides,
                 ranker,
                 resolver,
                 new WorkflowReadinessEvaluator(),
@@ -1118,7 +1098,6 @@ public sealed class ShellViewModelTests
                 trackers,
                 entities,
                 dependencies,
-                overrides,
                 catalogStore,
                 resolver,
                 snapshots);
@@ -1128,14 +1107,12 @@ public sealed class ShellViewModelTests
                 trackers,
                 entities,
                 dependencies,
-                overrides,
                 history,
                 resolver,
                 snapshots);
             ProgressHistoryInitializer historyInitializer = new(
                 entities,
                 dependencies,
-                overrides,
                 stateStore,
                 resolver,
                 snapshots);
@@ -1158,17 +1135,14 @@ public sealed class ShellViewModelTests
             TestAdapters adapters = new();
             TrackerWorkspaceViewModelFactory workspaceFactory = new(
                 overview,
-                synchronization,
                 new BulkStatusUpdateService(
                     entities,
                     dependencies,
-                    overrides,
                     resolver,
                     stateStore),
                 new ManualEntityCreationService(
                     entities,
                     dependencies,
-                    overrides,
                     ranker,
                     resolver,
                     stateStore),
@@ -1176,31 +1150,21 @@ public sealed class ShellViewModelTests
                 new EntityLifecycleService(
                     entities,
                     dependencies,
-                    overrides,
                     stateStore,
                     resolver,
                     ranker),
-                adapters,
-                adapters,
                 adapters,
                 adapters,
                 NullLoggerFactory.Instance, developers, periods, stateStore, identity);
             CatalogManagementViewModel catalog = new(
                 projectManagement,
                 trackerManagement,
-                new TrackerCsvCreationService(
-                    projects,
-                    new CsvSchemaImportFileParser(new CsvSchemaImportParser()),
-                    planner,
-                    catalogStore),
                 new CatalogNameValidationService(projects, trackers),
-                new CatalogPurgeImpactService(trackers, entities, history, stateStore),
+                new CatalogPurgeImpactService(trackers, entities, history),
                 portfolio,
                 projects,
                 trackers,
-                adapters,
-                new TrackerSyncService(projects, trackers, entities, dependencies, overrides,
-                    stateStore, resolver, snapshots, (IDependencyRankingService)ranker));
+                new TrackerSyncService(projects, trackers, entities, dependencies, stateStore, resolver, snapshots, (IDependencyRankingService)ranker));
             AppearanceViewModel appearance = new(
                 settings,
                 new TestThemeService());
@@ -1237,7 +1201,7 @@ public sealed class ShellViewModelTests
         {
             TrackedEntity entity = (await Entities.GetAllAsync(trackerId)).Single(item => item.SourceName == name);
             entity.ChangeFilterActive(filterActive);
-            await _stateStore.ApplyAsync(trackerId, new TrackedStateChangeSet([], [], [], [], [], [],
+            await _stateStore.ApplyAsync(trackerId, new TrackedStateChangeSet([], [], [],
                 entitiesWithProgressToUpdate: [entity]));
         }
 
@@ -1256,7 +1220,6 @@ public sealed class ShellViewModelTests
                 confirmation,
                 _catalog,
                 _appearance,
-                _clipboard,
                 initialSettings,
                 developerService: _developers,
                 localIdentitySettings: new LocalProjectIdentitySettingsViewModel(Identity),
@@ -1271,14 +1234,19 @@ public sealed class ShellViewModelTests
         {
             EntityId id = EntityId.New();
             await _stateStore.ApplyAsync(trackerId, new TrackedStateChangeSet(
-                [new TrackedEntity(id, trackerId, name)], [], [], [], [], [],
+                [new TrackedEntity(id, trackerId, name)], [], [],
                 progressSnapshotAfterChanges: new ProgressSnapshotState(1, 0, 0, 0, 0, 0)));
             return id;
         }
 
-        public Task AddDependencyByNameAsync(TrackerId trackerId, EntityId owner, string dependencyName) =>
-            _stateStore.ApplyAsync(trackerId, new TrackedStateChangeSet([], [], [], [], [], [],
-                [owner], [new ManualDependencyOverride(owner, dependencyName, ManualDependencyOverrideAction.Add)]));
+        public async Task AddDependencyByNameAsync(TrackerId trackerId, EntityId owner, string dependencyName)
+        {
+            TrackedEntity target = (await new SqliteEntityRepository(
+                    new SqliteDatabase(Path.Combine(_directory, "entity-tracker.db"))).GetAllAsync(trackerId))
+                .Single(entity => entity.SourceName == dependencyName);
+            await _stateStore.ApplyAsync(trackerId, new TrackedStateChangeSet([], [], [],
+                [owner], [new EntityDependency(owner, target.Id)]));
+        }
 
         public Task AddEntityAsync(TrackerId trackerId, string name, string notes = "", string filterActive = "",
             string sharedNotes = "") =>
@@ -1287,16 +1255,9 @@ public sealed class ShellViewModelTests
                 new TrackedStateChangeSet(
                     [new TrackedEntity(EntityId.New(), trackerId, name, notes: notes, filterActive: filterActive,
                         sharedNotes: sharedNotes)],
-                    [], [], [], [], [],
+                    [], [],
                     progressSnapshotAfterChanges:
                         new ProgressSnapshotState(1, 0, 0, 0, 0, 0)));
-
-        public void SetCsvPath(params string[] lines)
-        {
-            string path = Path.Combine(_directory, "schema.csv");
-            File.WriteAllLines(path, lines);
-            _adapters.CsvPath = path;
-        }
 
         public async ValueTask DisposeAsync()
         {
@@ -1330,26 +1291,11 @@ public sealed class ShellViewModelTests
     }
 
     private sealed class TestAdapters :
-        ICsvFilePicker,
         IProgressChartFilePicker,
-        IClipboardService,
-        ISchemaSynchronizationConfirmation,
         IContextDiscardConfirmation
     {
-        public string? CsvPath { get; set; }
-
-        public string? SelectCsvFile() => CsvPath;
         public string? SelectPngPath(string suggestedFileName) => null;
-        public void SetPng(byte[] png) { }
-        public void SetText(string text) { }
-        public bool ConfirmArchiveMissingEntities(int entityCount) => true;
         public bool ConfirmDiscard(string description) => true;
-    }
-
-    private sealed class TestClipboard : IClipboardService
-    {
-        public void SetPng(byte[] png) { }
-        public void SetText(string text) { }
     }
 
     private sealed class TestThemeService : IApplicationThemeService

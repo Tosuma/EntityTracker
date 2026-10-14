@@ -1,7 +1,6 @@
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Groups;
 using EntityTracker.Application.History;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Planning;
@@ -12,32 +11,31 @@ using EntityTracker.Domain;
 namespace EntityTracker.Application.ManualOverrides;
 
 /// <summary>
-/// Validates dependency corrections against the effective graph and persists valid edits.
+/// Validates an entity's dependency changes against the resulting graph and saves valid edits.
 /// </summary>
 public sealed class EntityDependencyEditorService
 {
     private readonly IEntityRepository _entityRepository;
     private readonly IDependencyRepository _dependencyRepository;
-    private readonly IManualDependencyOverrideRepository _overrideRepository;
     private readonly EffectiveDependencyResolver _effectiveDependencyResolver;
     private readonly IDependencyRankingService _dependencyRanker;
     private readonly ITrackedStateStore _store;
     private readonly ProgressSnapshotCalculator _snapshotCalculator;
     private readonly PriorityPlanningService _priorityPlanningService;
+    private readonly ITrackerRepository? _trackerRepository;
 
     public EntityDependencyEditorService(
         IEntityRepository entityRepository,
         IDependencyRepository dependencyRepository,
-        IManualDependencyOverrideRepository overrideRepository,
         EffectiveDependencyResolver effectiveDependencyResolver,
         IDependencyRankingService dependencyRanker,
         ITrackedStateStore store,
         PriorityPlanningService priorityPlanningService,
-        ProgressSnapshotCalculator? snapshotCalculator = null)
+        ProgressSnapshotCalculator? snapshotCalculator = null,
+        ITrackerRepository? trackerRepository = null)
     {
         ArgumentNullException.ThrowIfNull(entityRepository);
         ArgumentNullException.ThrowIfNull(dependencyRepository);
-        ArgumentNullException.ThrowIfNull(overrideRepository);
         ArgumentNullException.ThrowIfNull(effectiveDependencyResolver);
         ArgumentNullException.ThrowIfNull(dependencyRanker);
         ArgumentNullException.ThrowIfNull(store);
@@ -45,13 +43,21 @@ public sealed class EntityDependencyEditorService
 
         _entityRepository = entityRepository;
         _dependencyRepository = dependencyRepository;
-        _overrideRepository = overrideRepository;
         _effectiveDependencyResolver = effectiveDependencyResolver;
         _dependencyRanker = dependencyRanker;
         _store = store;
         _priorityPlanningService = priorityPlanningService;
         _snapshotCalculator = snapshotCalculator ?? new ProgressSnapshotCalculator();
+        _trackerRepository = trackerRepository;
     }
+
+    /// <summary>
+    /// Whether the Tracker was copied from another. Sync from source matches entities by name, so a
+    /// rename there may not match the source.
+    /// </summary>
+    public async Task<bool> IsCopiedTrackerAsync(TrackerId trackerId, CancellationToken cancellationToken = default) =>
+        _trackerRepository is not null &&
+        (await _trackerRepository.GetAsync(trackerId, cancellationToken))?.CopiedFromTrackerId is not null;
 
     public async Task<IReadOnlyList<TrackedEntity>> GetEditableEntitiesAsync(
         TrackerId trackerId,
@@ -108,23 +114,20 @@ public sealed class EntityDependencyEditorService
         CancellationToken cancellationToken = default)
     {
         Snapshot snapshot = await LoadSnapshotAsync(trackerId, cancellationToken);
-        ManualDependencyOverride[] ownerOverrides = snapshot.Overrides
-            .Where(item => item.DependentEntityId == ownerId)
-            .ToArray();
         return CreatePlan(
             trackerId,
             ownerId,
             snapshot.Entities,
-            snapshot.ResolvedDependencies,
-            snapshot.UnresolvedDependencies,
-            snapshot.Overrides,
-            ownerOverrides);
+            snapshot.Dependencies,
+            snapshot.Dependencies
+                .Where(item => item.DependentEntityId == ownerId)
+                .Select(static item => DependencyTarget.Entity(item.DependencyEntityId)));
     }
 
     public async Task<EntityDependencyEditPlan> PreviewAsync(
         TrackerId trackerId,
         EntityId ownerId,
-        IEnumerable<ManualDependencyOverride> desiredOwnerOverrides,
+        IEnumerable<DependencyTarget> desiredTargets,
         CancellationToken cancellationToken = default)
     {
         Snapshot snapshot = await LoadSnapshotAsync(trackerId, cancellationToken);
@@ -132,10 +135,8 @@ public sealed class EntityDependencyEditorService
             trackerId,
             ownerId,
             snapshot.Entities,
-            snapshot.ResolvedDependencies,
-            snapshot.UnresolvedDependencies,
-            snapshot.Overrides,
-            desiredOwnerOverrides);
+            snapshot.Dependencies,
+            desiredTargets);
     }
 
     public async Task<ArchivedEntityDetails> LoadArchivedDetailsAsync(
@@ -151,126 +152,98 @@ public sealed class EntityDependencyEditorService
             throw new InvalidOperationException("The selected entity is no longer archived.");
         }
 
-        Dictionary<EntityId, TrackedEntity> entitiesById = snapshot.Entities.ToDictionary(
-            static entity => entity.Id);
-        Dictionary<EntitySourceKey, TrackedEntity> entitiesByKey = snapshot.Entities.ToDictionary(
-            static entity => EntitySourceKey.From(entity.SourceName));
-        Dictionary<EntityId, Dictionary<EntitySourceKey, DependencyDeclaration>> imported =
-            DependencyStateResolver.BuildCurrentDeclarations(
-                snapshot.ResolvedDependencies,
-                snapshot.UnresolvedDependencies,
-                entitiesById);
-        Dictionary<EntitySourceKey, DependencyDeclaration> ownerImported = imported.TryGetValue(
-            ownerId,
-            out Dictionary<EntitySourceKey, DependencyDeclaration>? declarations)
-            ? declarations
-            : [];
-        Dictionary<EntitySourceKey, ManualDependencyOverride> ownerOverrides = snapshot.Overrides
-            .Where(item => item.DependentEntityId == ownerId)
-            .ToDictionary(static item => EntitySourceKey.From(item.DependencySourceName));
-
+        Dictionary<EntityId, TrackedEntity> byId = snapshot.Entities.ToDictionary(static entity => entity.Id);
         return new ArchivedEntityDetails(
             owner,
-            CreateItems(ownerImported, ownerOverrides, entitiesByKey));
+            CreateItems(snapshot.Dependencies
+                .Where(item => item.DependentEntityId == ownerId)
+                .Select(item => (byId[item.DependencyEntityId], DependencyTarget.Entity(item.DependencyEntityId)))));
     }
 
+    /// <summary>
+    /// Works out what the owner's dependency list would be with <paramref name="desiredTargets"/>: the
+    /// resolved graph, its ranking, and anything that stops it from being saved. A name no entity has
+    /// gets a placeholder entity, which is added when the plan is saved.
+    /// </summary>
     public EntityDependencyEditPlan CreatePlan(
         TrackerId trackerId,
         EntityId ownerId,
         IEnumerable<TrackedEntity> entities,
-        IEnumerable<PersistedDependency> importedResolvedDependencies,
-        IEnumerable<PersistedUnresolvedDependency> importedUnresolvedDependencies,
-        IEnumerable<ManualDependencyOverride> allOverrides,
-        IEnumerable<ManualDependencyOverride> desiredOwnerOverrides)
+        IEnumerable<EntityDependency> allDependencies,
+        IEnumerable<DependencyTarget> desiredTargets)
     {
         ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(ownerId);
+        ArgumentNullException.ThrowIfNull(desiredTargets);
         TrackedEntity[] entityArray = entities.ToArray();
-        PersistedDependency[] resolvedArray = importedResolvedDependencies.ToArray();
-        PersistedUnresolvedDependency[] unresolvedArray = importedUnresolvedDependencies.ToArray();
-        ManualDependencyOverride[] currentOverrides = allOverrides.ToArray();
-        ManualDependencyOverride[] desiredOverrides = desiredOwnerOverrides.ToArray();
-        TrackerStateValidator.EnsureOwned(
-            trackerId,
-            entityArray,
-            resolvedArray,
-            unresolvedArray,
-            currentOverrides);
+        EntityDependency[] currentDependencies = allDependencies.ToArray();
+        TrackerStateValidator.EnsureOwned(trackerId, entityArray, currentDependencies);
         TrackedEntity owner = RequireActiveOwner(ownerId, entityArray);
         Dictionary<EntityId, TrackedEntity> entitiesById = entityArray.ToDictionary(
             static entity => entity.Id);
-        Dictionary<EntitySourceKey, TrackedEntity> entitiesByKey = entityArray.ToDictionary(
-            static entity => EntitySourceKey.From(entity.SourceName));
-        Dictionary<EntityId, Dictionary<EntitySourceKey, DependencyDeclaration>> imported =
-            DependencyStateResolver.BuildCurrentDeclarations(
-                resolvedArray,
-                unresolvedArray,
-                entitiesById);
-        Dictionary<EntitySourceKey, DependencyDeclaration> ownerImported =
-            imported.TryGetValue(
-                ownerId,
-                out Dictionary<EntitySourceKey, DependencyDeclaration>? declarations)
-                ? declarations
-                : [];
+        HashSet<EntityId> currentTargets = currentDependencies
+            .Where(item => item.DependentEntityId == ownerId)
+            .Select(static item => item.DependencyEntityId)
+            .ToHashSet();
+        DependencyTargets targets = new(trackerId, entityArray);
 
         List<string> warnings = [];
         List<string> errors = [];
-        Dictionary<EntitySourceKey, ManualDependencyOverride> desiredByKey = [];
-        foreach (ManualDependencyOverride dependencyOverride in desiredOverrides)
+        List<(EntityDependency Dependency, TrackedEntity Target, DependencyTarget Requested)> desired = [];
+        foreach (DependencyTarget requested in desiredTargets)
         {
-            if (dependencyOverride.DependentEntityId != ownerId)
+            TrackedEntity? target = null;
+            if (requested.EntityId is { } targetId)
             {
-                errors.Add("Every dependency override must belong to the entity being edited.");
-                continue;
+                if (!entitiesById.TryGetValue(targetId, out target))
+                {
+                    errors.Add("A dependency refers to an entity that no longer exists.");
+                    continue;
+                }
+            }
+            else
+            {
+                target = targets.For(requested.Name!);
             }
 
-            EntitySourceKey key = EntitySourceKey.From(dependencyOverride.DependencySourceName);
-            if (!desiredByKey.TryAdd(key, dependencyOverride))
-            {
-                errors.Add($"Dependency '{dependencyOverride.DependencySourceName}' has already been edited.");
-                continue;
-            }
-
-            if (key == EntitySourceKey.From(owner.SourceName))
+            if (target.Id == ownerId)
             {
                 errors.Add("An entity cannot depend on itself.");
                 continue;
             }
 
-            if (dependencyOverride.Action == ManualDependencyOverrideAction.Add)
+            if (desired.Any(item => item.Target.Id == target.Id))
             {
-                if (entitiesByKey.TryGetValue(key, out TrackedEntity? target) &&
-                    target.LifecycleState == EntityLifecycleState.Archived)
-                {
+                errors.Add($"Dependency '{target.SourceName}' has already been added.");
+                continue;
+            }
+
+            if (target.LifecycleState == EntityLifecycleState.Archived)
+            {
+                if (currentTargets.Contains(target.Id))
+                    warnings.Add($"'{target.SourceName}' is archived; this dependency stays unresolved until it is restored.");
+                else
                     errors.Add($"'{target.SourceName}' exists but is archived.");
-                }
-                else if (!entitiesByKey.TryGetValue(key, out target) ||
-                         target.LifecycleState != EntityLifecycleState.Active)
-                {
-                    warnings.Add(
-                        $"'{dependencyOverride.DependencySourceName}' does not exist and will remain unresolved.");
-                }
             }
-            else if (!ownerImported.ContainsKey(key) &&
-                     !currentOverrides.Any(item =>
-                         item.DependentEntityId == ownerId &&
-                         item.Action == ManualDependencyOverrideAction.Suppress &&
-                         EntitySourceKey.From(item.DependencySourceName) == key))
+            else if (target.IsPlaceholder)
             {
-                errors.Add(
-                    $"'{dependencyOverride.DependencySourceName}' is not an imported dependency and cannot be suppressed.");
+                warnings.Add($"'{target.SourceName}' does not exist and will remain unresolved.");
             }
+
+            // A placeholder that does not exist yet is asked for by name again in the next preview.
+            bool isNew = targets.NewPlaceholders.Contains(target);
+            desired.Add((new EntityDependency(ownerId, target.Id), target,
+                isNew ? DependencyTarget.Named(target.SourceName) : DependencyTarget.Entity(target.Id)));
         }
 
-        ManualDependencyOverride[] candidateOverrides = currentOverrides
+        TrackedEntity[] candidateEntities = [.. entityArray, .. targets.NewPlaceholders];
+        EntityDependency[] candidateDependencies = currentDependencies
             .Where(item => item.DependentEntityId != ownerId)
-            .Concat(desiredByKey.Values)
+            .Concat(desired.Select(static item => item.Dependency))
             .ToArray();
         EffectiveDependencyState effectiveState = _effectiveDependencyResolver.Resolve(
-            entityArray,
-            resolvedArray,
-            unresolvedArray,
-            candidateOverrides);
+            candidateEntities,
+            candidateDependencies);
         TrackedEntity[] activeEntities = entityArray
             .Where(static entity => entity.LifecycleState == EntityLifecycleState.Active)
             .ToArray();
@@ -282,9 +255,10 @@ public sealed class EntityDependencyEditorService
 
         return new EntityDependencyEditPlan(
             owner,
-            entityArray,
-            CreateItems(ownerImported, desiredByKey, entitiesByKey),
-            desiredByKey.Values,
+            candidateEntities,
+            CreateItems(desired.Select(static item => (item.Target, item.Requested))),
+            desired.Select(static item => item.Dependency),
+            targets.NewPlaceholders,
             effectiveState,
             ranking,
             warnings.Distinct(StringComparer.Ordinal),
@@ -329,7 +303,6 @@ public sealed class EntityDependencyEditorService
             status,
             notes,
             plan.Entity.LifecycleState,
-            plan.Entity.Provenance,
             requestedPriority,
             responsibleDeveloper,
             groupName,
@@ -361,19 +334,16 @@ public sealed class EntityDependencyEditorService
             .ToArray();
         RenameEffects rename = renamed
             ? await PlanRenameAsync(trackerId, plan, name, candidateEntities, cancellationToken)
-            : new RenameEffects([plan.Entity.Id], plan.DesiredOverrides, plan.EffectiveState);
+            : new RenameEffects([plan.Entity.Id], plan.DesiredDependencies, plan.EffectiveState);
 
         await _store.ApplyAsync(
             trackerId,
             new TrackedStateChangeSet(
-                [],
+                plan.NewPlaceholders,
                 renamed ? [updatedEntity] : [],
                 [],
-                [],
-                [],
-                [],
-                rename.OverrideOwnerIds,
-                rename.Overrides,
+                rename.DependencyOwnerIds,
+                rename.Dependencies,
                 progressUpdates,
                 progressSnapshotAfterChanges: _snapshotCalculator.Calculate(
                     candidateEntities,
@@ -423,15 +393,17 @@ public sealed class EntityDependencyEditorService
         ArgumentNullException.ThrowIfNull(name);
         if (string.IsNullOrWhiteSpace(name)) return null;
         EntitySourceKey key = EntitySourceKey.From(name);
+        // A placeholder is only an unresolved reference: renaming an entity to its name connects it.
         return (await _entityRepository.GetAllAsync(trackerId, cancellationToken))
-            .FirstOrDefault(entity => entity.Id != entityId && EntitySourceKey.From(entity.SourceName) == key)
+            .FirstOrDefault(entity => entity.Id != entityId && !entity.IsPlaceholder &&
+                                      EntitySourceKey.From(entity.SourceName) == key)
             ?.SourceName;
     }
 
     /// <summary>
-    /// Works out what else a rename changes. Dependencies other entities added by hand, or suppressed,
-    /// name this entity, so they follow it to the new name; the dependency graph is then worked out
-    /// again, since the new name may now match dependencies that named it before it existed.
+    /// Works out what else a rename changes. Dependencies on the entity refer to its ID and need no
+    /// change. If a placeholder has the new name, the dependencies on it move to the entity, and the
+    /// placeholder, no longer referred to, goes.
     /// </summary>
     private async Task<RenameEffects> PlanRenameAsync(
         TrackerId trackerId,
@@ -447,37 +419,40 @@ public sealed class EntityDependencyEditorService
             throw new InvalidOperationException($"Another entity in this Tracker is already called {conflict}.");
 
         Snapshot snapshot = await LoadSnapshotAsync(trackerId, cancellationToken);
-        EntitySourceKey oldKey = EntitySourceKey.From(plan.Entity.SourceName);
-        bool keyChanged = oldKey != EntitySourceKey.From(newName);
-        ManualDependencyOverride[] others = snapshot.Overrides
-            .Where(item => item.DependentEntityId != plan.Entity.Id)
-            .Select(item => keyChanged && EntitySourceKey.From(item.DependencySourceName) == oldKey
-                ? new ManualDependencyOverride(item.DependentEntityId, newName, item.Action)
-                : item)
+        EntitySourceKey key = EntitySourceKey.From(newName);
+        TrackedEntity? placeholder = candidateEntities.FirstOrDefault(entity =>
+            entity.IsPlaceholder && EntitySourceKey.From(entity.SourceName) == key);
+        EntityDependency[] ownDependencies = plan.DesiredDependencies
+            .Where(item => item.DependencyEntityId != placeholder?.Id)
             .ToArray();
-        EntityId[] followingOwners = keyChanged
-            ? snapshot.Overrides
-                .Where(item => item.DependentEntityId != plan.Entity.Id &&
-                               EntitySourceKey.From(item.DependencySourceName) == oldKey)
-                .Select(static item => item.DependentEntityId)
-                .Distinct()
-                .ToArray()
-            : [];
-        ManualDependencyOverride[] allOverrides = [.. others, .. plan.DesiredOverrides];
+        EntityDependency[] others = snapshot.Dependencies
+            .Where(item => item.DependentEntityId != plan.Entity.Id)
+            .ToArray();
+        EntityId[] followingOwners = placeholder is null
+            ? []
+            : others.Where(item => item.DependencyEntityId == placeholder.Id)
+                .Select(static item => item.DependentEntityId).Distinct().ToArray();
+        EntityDependency[] followingLists = others
+            .Where(item => followingOwners.Contains(item.DependentEntityId))
+            .Select(item => item.DependencyEntityId == placeholder!.Id
+                ? new EntityDependency(item.DependentEntityId, plan.Entity.Id)
+                : item)
+            .Distinct()
+            .ToArray();
+        TrackedEntity[] entities = candidateEntities.Where(entity => entity.Id != placeholder?.Id).ToArray();
         EffectiveDependencyState state = _effectiveDependencyResolver.Resolve(
-            candidateEntities,
-            snapshot.ResolvedDependencies,
-            snapshot.UnresolvedDependencies,
-            allOverrides);
+            entities,
+            [.. others.Where(item => !followingOwners.Contains(item.DependentEntityId)), .. followingLists,
+             .. ownDependencies]);
         return new RenameEffects(
             [plan.Entity.Id, .. followingOwners],
-            [.. plan.DesiredOverrides, .. others.Where(item => followingOwners.Contains(item.DependentEntityId))],
+            [.. ownDependencies, .. followingLists],
             state);
     }
 
     private sealed record RenameEffects(
-        IReadOnlyList<EntityId> OverrideOwnerIds,
-        IReadOnlyList<ManualDependencyOverride> Overrides,
+        IReadOnlyList<EntityId> DependencyOwnerIds,
+        IReadOnlyList<EntityDependency> Dependencies,
         EffectiveDependencyState EffectiveState);
 
     private async Task<Snapshot> LoadSnapshotAsync(
@@ -487,24 +462,16 @@ public sealed class EntityDependencyEditorService
         ArgumentNullException.ThrowIfNull(trackerId);
         Task<IReadOnlyList<TrackedEntity>> entitiesTask =
             _entityRepository.GetAllAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<PersistedDependency>> resolvedTask =
+        Task<IReadOnlyList<EntityDependency>> dependenciesTask =
             _dependencyRepository.GetAllAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
-            _dependencyRepository.GetAllUnresolvedAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
-            _overrideRepository.GetAllAsync(trackerId, cancellationToken);
-        await Task.WhenAll(entitiesTask, resolvedTask, unresolvedTask, overridesTask);
+        await Task.WhenAll(entitiesTask, dependenciesTask);
         TrackerStateValidator.EnsureOwned(
             trackerId,
             await entitiesTask,
-            await resolvedTask,
-            await unresolvedTask,
-            await overridesTask);
+            await dependenciesTask);
         return new Snapshot(
             await entitiesTask,
-            await resolvedTask,
-            await unresolvedTask,
-            await overridesTask);
+            await dependenciesTask);
     }
 
     private static TrackedEntity RequireActiveOwner(
@@ -526,46 +493,22 @@ public sealed class EntityDependencyEditorService
     }
 
     private static IEnumerable<EntityDependencyEditItem> CreateItems(
-        IReadOnlyDictionary<EntitySourceKey, DependencyDeclaration> imported,
-        IReadOnlyDictionary<EntitySourceKey, ManualDependencyOverride> overrides,
-        IReadOnlyDictionary<EntitySourceKey, TrackedEntity> entitiesByKey)
+        IEnumerable<(TrackedEntity Target, DependencyTarget Requested)> dependencies)
     {
-        foreach (EntitySourceKey key in imported.Keys.Concat(overrides.Keys)
-                     .Distinct()
-                     .OrderBy(static item => item.Value, StringComparer.Ordinal))
+        foreach ((TrackedEntity target, DependencyTarget requested) in dependencies
+                     .OrderBy(static item => EntitySourceKey.From(item.Target.SourceName).Value, StringComparer.Ordinal))
         {
-            imported.TryGetValue(key, out DependencyDeclaration? importedDeclaration);
-            overrides.TryGetValue(key, out ManualDependencyOverride? dependencyOverride);
-            bool hasImported = importedDeclaration is not null;
-            bool isAddition = dependencyOverride?.Action == ManualDependencyOverrideAction.Add;
-            bool isSuppression = dependencyOverride?.Action == ManualDependencyOverrideAction.Suppress;
-            DependencyEditOrigin origin = (hasImported, isAddition, isSuppression) switch
-            {
-                (true, true, false) => DependencyEditOrigin.ImportedAndManual,
-                (true, false, true) => DependencyEditOrigin.SuppressedImported,
-                (false, true, false) => DependencyEditOrigin.Manual,
-                (false, false, true) => DependencyEditOrigin.DormantSuppression,
-                _ => DependencyEditOrigin.Imported
-            };
-            string targetName = dependencyOverride?.DependencySourceName ??
-                                importedDeclaration!.TargetName;
-            bool isEffective = !isSuppression;
-            entitiesByKey.TryGetValue(key, out TrackedEntity? target);
-            bool isResolved = isEffective &&
-                              target?.LifecycleState == EntityLifecycleState.Active;
+            bool isResolved = target.LifecycleState == EntityLifecycleState.Active;
             yield return new EntityDependencyEditItem(
-                targetName,
-                key,
-                origin,
-                importedDeclaration?.Kind,
+                target.SourceName,
+                EntitySourceKey.From(target.SourceName),
                 isResolved,
-                isResolved ? target!.Id : null);
+                isResolved ? target.Id : null,
+                requested);
         }
     }
 
     private sealed record Snapshot(
         IReadOnlyList<TrackedEntity> Entities,
-        IReadOnlyList<PersistedDependency> ResolvedDependencies,
-        IReadOnlyList<PersistedUnresolvedDependency> UnresolvedDependencies,
-        IReadOnlyList<ManualDependencyOverride> Overrides);
+        IReadOnlyList<EntityDependency> Dependencies);
 }

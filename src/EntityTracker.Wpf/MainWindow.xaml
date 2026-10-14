@@ -122,12 +122,6 @@
                                    FontWeight="SemiBold"
                                    Text="MANAGE" />
                         <ToggleButton Command="{Binding NavigateCommand}"
-                                CommandParameter="{x:Static viewModels:ShellDestination.SchemaSynchronization}"
-                                IsChecked="{Binding IsSchemaSynchronization, Mode=OneWay}"
-                                Content="Schema synchronization"
-                                ToolTip="Select a Tracker to synchronize its schema."
-                                Style="{StaticResource ShellNavigationButtonStyle}" />
-                        <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.AddEntity}"
                                 IsChecked="{Binding IsAddEntity, Mode=OneWay}"
                                 Content="Add entity"
@@ -142,9 +136,9 @@
                                    FontWeight="SemiBold"
                                    Text="UTILITIES" />
                         <ToggleButton Command="{Binding NavigateCommand}"
-                                CommandParameter="{x:Static viewModels:ShellDestination.HelpSql}"
-                                IsChecked="{Binding IsHelpSql, Mode=OneWay}"
-                                Content="Help &amp; SQL"
+                                CommandParameter="{x:Static viewModels:ShellDestination.Help}"
+                                IsChecked="{Binding IsHelp, Mode=OneWay}"
+                                Content="Help"
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.Settings}"
@@ -335,7 +329,7 @@
                     <views:TrackerWorkspaceView x:Name="WorkspaceView"
                                                 DataContext="{Binding CurrentWorkspace}"
                                                 Visibility="{Binding DataContext.IsTrackerWorkspace, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <views:HelpSqlView Visibility="{Binding IsHelpSql, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <views:HelpView Visibility="{Binding IsHelp, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <views:SettingsView Visibility="{Binding IsSettings, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 </Grid>
 

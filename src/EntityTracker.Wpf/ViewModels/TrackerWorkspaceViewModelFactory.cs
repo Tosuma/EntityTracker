@@ -4,7 +4,6 @@ using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Projects;
 using EntityTracker.Application.Persistence;
-using EntityTracker.Application.Synchronization;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Services;
@@ -15,14 +14,11 @@ namespace EntityTracker.Wpf.ViewModels;
 
 public sealed class TrackerWorkspaceViewModelFactory(
     EntityOverviewService overviewService,
-    SchemaSynchronizationService synchronizationService,
     BulkStatusUpdateService bulkStatusUpdateService,
     ManualEntityCreationService manualEntityCreationService,
     EntityDependencyEditorService entityDependencyEditorService,
     EntityLifecycleService entityLifecycleService,
-    ICsvFilePicker csvFilePicker,
     IProgressChartFilePicker chartFilePicker,
-    ISchemaSynchronizationConfirmation synchronizationConfirmation,
     IContextDiscardConfirmation discardConfirmation,
     ILoggerFactory loggerFactory,
     ProjectDeveloperService? developers = null,
@@ -39,13 +35,10 @@ public sealed class TrackerWorkspaceViewModelFactory(
         return new MainWindowViewModel(
             trackerId,
             overviewService,
-            synchronizationService,
             bulkStatusUpdateService,
             manualEntityCreationService,
             entityDependencyEditorService,
             entityLifecycleService,
-            csvFilePicker,
-            synchronizationConfirmation,
             discardConfirmation,
             loggerFactory,
             developers,

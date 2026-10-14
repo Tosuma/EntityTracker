@@ -1,4 +1,4 @@
-using EntityTracker.Application.Importing;
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Domain;
 
@@ -32,7 +32,7 @@ public sealed class CollaborativeConflictTests
         Assert.Throws<ArgumentException>(() => new CollaborativeConflict(
             EntitySourceKey.From("customer"),
             EntityId.New(),
-            CollaborativeConflictField.ImportedDependency,
+            CollaborativeConflictField.Dependency,
             "present",
             "removed",
             "present"));

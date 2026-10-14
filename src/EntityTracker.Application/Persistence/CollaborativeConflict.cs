@@ -1,4 +1,4 @@
-using EntityTracker.Application.Importing;
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Domain;
 
 namespace EntityTracker.Application.Persistence;
@@ -25,9 +25,7 @@ public sealed class CollaborativeConflict
             throw new ArgumentOutOfRangeException(nameof(field));
         }
 
-        bool isDependencyConflict = field is
-            CollaborativeConflictField.ImportedDependency or
-            CollaborativeConflictField.ManualDependencyOverride;
+        bool isDependencyConflict = field == CollaborativeConflictField.Dependency;
 
         if (isDependencyConflict != (dependencyKey is not null))
         {

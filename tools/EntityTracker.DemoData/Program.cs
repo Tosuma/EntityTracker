@@ -104,7 +104,7 @@ internal static class Program
         Console.WriteLine();
         Console.WriteLine(
             "This replaces progress statuses and progress history in the selected database. " +
-            "Entity identities, dependencies, notes, provenance, and archive state are preserved. " +
+            "Entity identities, dependencies, notes, and archive state are preserved. " +
             "--demo-notes adds example Internal and Shared notes to some entities that have no notes.");
     }
 }

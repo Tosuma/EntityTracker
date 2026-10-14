@@ -15,7 +15,8 @@ public sealed class SqliteProjectRepository(SqliteDatabase database) : IProjectR
         await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, name, lifecycle_state, created_at_utc, updated_at_utc, recycled_at_utc
+            SELECT id, name, CASE WHEN recycled_at_utc IS NULL THEN 'Active' ELSE 'Recycled' END,
+                   created_at_utc, updated_at_utc, recycled_at_utc
             FROM projects
             WHERE id = $id;
             """;
@@ -30,9 +31,10 @@ public sealed class SqliteProjectRepository(SqliteDatabase database) : IProjectR
         await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, name, lifecycle_state, created_at_utc, updated_at_utc, recycled_at_utc
+            SELECT id, name, CASE WHEN recycled_at_utc IS NULL THEN 'Active' ELSE 'Recycled' END,
+                   created_at_utc, updated_at_utc, recycled_at_utc
             FROM projects
-            ORDER BY name_key, id;
+            ORDER BY name, id;
             """;
         List<Project> projects = [];
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -56,10 +58,10 @@ public sealed class SqliteProjectRepository(SqliteDatabase database) : IProjectR
             SELECT EXISTS(
                 SELECT 1
                 FROM projects
-                WHERE name_key = $nameKey
+                WHERE name = $name
                   AND ($excludedId IS NULL OR id <> $excludedId));
             """;
-        command.Parameters.AddWithValue("$nameKey", normalized.ToUpperInvariant());
+        command.Parameters.AddWithValue("$name", normalized);
         command.Parameters.AddWithValue(
             "$excludedId",
             excludingProjectId is null

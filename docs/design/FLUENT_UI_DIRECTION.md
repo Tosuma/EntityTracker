@@ -72,17 +72,15 @@ Tracker
   Reports
 
 Manage
-  Schema synchronization
   Add entity
 
 Utilities
-  Help & SQL
+  Help
   Settings
 ```
 
 Ready and Blocked remain Work-status filters within Overview. They are not separate destinations.
-Import CSV and Add Entity remain focused destinations rather than shortcuts on the Overview page.
-The SQL query remains independently available and is never a prerequisite for importing.
+Add Entity remains a focused destination rather than a shortcut on the Overview page.
 
 The obsolete SharePoint Connections page and configuration are removed. The shell does not expose
 a remote connection, repository, or Sync control before a separately approved synchronization
@@ -110,7 +108,7 @@ The default active entity table shows manager essentials:
 - Blockers;
 - row actions.
 
-Provenance, dependency counts and full dependency lists, notes, timestamps, and other secondary
+Dependency counts and full dependency lists, notes, timestamps, and other secondary
 information belong in a read-only right-side details pane. Opening the pane must not interfere with
 extended row selection for bulk status updates. Editing remains accessible only through the row
 kebab and its guarded modal.

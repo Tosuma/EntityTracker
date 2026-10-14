@@ -1,6 +1,5 @@
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
@@ -209,8 +208,7 @@ public sealed class BulkStatusUpdateServiceTests
         RecordingStore store) =>
         new(
             new StubEntityRepository(entities),
-            new StubDependencyRepository(dependencies),
-            new StubOverrideRepository(),
+            new StubDependencyRepository(TestDependencies.Named(entities, dependencies)),
             new EffectiveDependencyResolver(),
             store);
 
@@ -238,8 +236,7 @@ public sealed class BulkStatusUpdateServiceTests
         TrackedEntity owner,
         TrackedEntity target) =>
         new(
-            new DependencyEdge(owner.Id, target.Id),
-            ImportedDependencyKind.Mandatory);
+            new DependencyEdge(owner.Id, target.Id));
 
     private sealed class StubEntityRepository(IReadOnlyList<TrackedEntity> entities)
         : IEntityRepository
@@ -253,27 +250,6 @@ public sealed class BulkStatusUpdateServiceTests
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
             TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(entities);
-    }
-
-    private sealed class StubDependencyRepository(
-        IReadOnlyList<PersistedDependency> dependencies) : IDependencyRepository
-    {
-        public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) => Task.FromResult(dependencies);
-
-        public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<PersistedUnresolvedDependency>>([]);
-    }
-
-    private sealed class StubOverrideRepository : IManualDependencyOverrideRepository
-    {
-        public Task<IReadOnlyList<ManualDependencyOverride>> GetAllAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<ManualDependencyOverride>>([]);
     }
 
     private sealed class RecordingStore : ITrackedStateStore

@@ -130,6 +130,6 @@ internal sealed class GraphCanvasHost
     public static EntityOverviewRow Row(int id, params string[] dependencies) => new(
         new EntityId(new Guid(id, 0, 0, new byte[8])), EntityLifecycleState.Active,
         DevelopmentStatus.NotStarted, EntityWorkflowState.Ready, DependencyResolutionState.Resolved,
-        "—", "—", $"e{id}", "", "", "CSV", "", "", "", dependencies, [],
+        "—", "—", $"e{id}", "", "", "", "", "", dependencies, [],
         "", "", "", "—", "", "");
 }
