@@ -365,7 +365,7 @@ public sealed partial class ProjectGitSyncService(
         return read.Snapshot is { Trackers.Count: 1 } snapshot &&
             snapshot.Project.LifecycleState == "Active" &&
             snapshot.Trackers[0] is { Name: "Default tracker", LifecycleState: "Active",
-                CopiedFromTrackerId: null, ImportSummary: null } tracker &&
+                CopiedFromTrackerId: null } tracker &&
             tracker.Entities.Count == 0 && tracker.StatusHistory.Count == 0 &&
             tracker.ProgressHistory.Count <= 1 &&
             tracker.ProgressHistory.All(progress => progress.ReadyCount == 0 &&
@@ -810,7 +810,8 @@ public sealed partial class ProjectGitSyncService(
             .Except((current.Developers ?? []).Select(d => d.Id))
             .Select(id => $"Developer {id:D}"));
         HashSet<Guid> trackerIds = current.Trackers.Select(t => t.Id).ToHashSet();
-        foreach (SnapshotTracker tracker in previous.Trackers)
+        // Both sides in the current format, so a format upgrade is not a deletion.
+        foreach (SnapshotTracker tracker in previous.Trackers.Select(ProjectSnapshotUpgrade.ToCurrentDependencies))
         {
             if (!trackerIds.Contains(tracker.Id))
             {
@@ -818,12 +819,11 @@ public sealed partial class ProjectGitSyncService(
                 deleted.AddRange(tracker.Entities.Select(e => $"Entity {e.Id:D}"));
                 deleted.AddRange(tracker.StatusHistory.Select(e => $"Status event {e.EventId:D}"));
                 deleted.AddRange(tracker.ProgressHistory.Select(e => $"Progress record {e.SnapshotId:D}"));
-                if (tracker.ImportSummary is not null)
-                    deleted.Add($"Import summary {tracker.Id:D}");
                 deleted.AddRange(tracker.Entities.SelectMany(RelationshipDeletions));
                 continue;
             }
-            SnapshotTracker next = current.Trackers.Single(t => t.Id == tracker.Id);
+            SnapshotTracker next = ProjectSnapshotUpgrade.ToCurrentDependencies(
+                current.Trackers.Single(t => t.Id == tracker.Id));
             foreach (SnapshotEntity removed in tracker.Entities.Where(e =>
                          next.Entities.All(n => n.Id != e.Id)))
             {
@@ -832,30 +832,21 @@ public sealed partial class ProjectGitSyncService(
             }
             deleted.AddRange(tracker.StatusHistory.Select(e => e.EventId).Except(next.StatusHistory.Select(e => e.EventId)).Select(id => $"Status event {id:D}"));
             deleted.AddRange(tracker.ProgressHistory.Select(e => e.SnapshotId).Except(next.ProgressHistory.Select(e => e.SnapshotId)).Select(id => $"Progress record {id:D}"));
-            if (tracker.ImportSummary is not null && next.ImportSummary is null)
-                deleted.Add($"Import summary {tracker.Id:D}");
             foreach (SnapshotEntity entity in tracker.Entities)
             {
                 SnapshotEntity? updated = next.Entities.SingleOrDefault(e => e.Id == entity.Id);
                 if (updated is null) continue;
-                deleted.AddRange(entity.Dependencies.Where(d => !updated.Dependencies.Any(n => n.DependencyEntityId == d.DependencyEntityId))
-                    .Select(d => $"Dependency {d.DependentEntityId:D} → {d.DependencyEntityId:D}"));
-                deleted.AddRange(entity.UnresolvedDependencies.Where(d => !updated.UnresolvedDependencies.Any(n =>
-                        string.Equals(n.DependencySourceName, d.DependencySourceName, StringComparison.OrdinalIgnoreCase)))
-                    .Select(d => $"Unresolved dependency {d.DependentEntityId:D} → {d.DependencySourceName}"));
-                deleted.AddRange(entity.ManualOverrides.Where(d => !updated.ManualOverrides.Any(n =>
-                        string.Equals(n.DependencySourceName, d.DependencySourceName, StringComparison.OrdinalIgnoreCase)))
-                    .Select(d => $"Manual override {d.DependentEntityId:D} → {d.DependencySourceName}"));
+                deleted.AddRange(entity.Dependencies
+                    .Where(d => updated.Dependencies.All(n => n.DependencyEntityId != d.DependencyEntityId))
+                    .Select(d => DependencyDeletion(entity, d)));
             }
         }
         return deleted.Order(StringComparer.Ordinal).ToArray();
     }
 
     private static IEnumerable<string> RelationshipDeletions(SnapshotEntity entity) =>
-        entity.Dependencies.Select(d =>
-                $"Dependency {d.DependentEntityId:D} → {d.DependencyEntityId:D}")
-            .Concat(entity.UnresolvedDependencies.Select(d =>
-                $"Unresolved dependency {d.DependentEntityId:D} → {d.DependencySourceName}"))
-            .Concat(entity.ManualOverrides.Select(d =>
-                $"Manual override {d.DependentEntityId:D} → {d.DependencySourceName}"));
+        entity.Dependencies.Select(d => DependencyDeletion(entity, d));
+
+    private static string DependencyDeletion(SnapshotEntity entity, SnapshotDependency dependency) =>
+        $"Dependency {entity.Id:D} → {dependency.DependencyEntityId:D}";
 }

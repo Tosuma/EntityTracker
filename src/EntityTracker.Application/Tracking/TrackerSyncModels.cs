@@ -1,11 +1,13 @@
 using System.ComponentModel;
-using EntityTracker.Application.Importing;
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
 using EntityTracker.Domain;
 
 namespace EntityTracker.Application.Tracking;
 
-public sealed record TrackerSyncDependency(string Name, ImportedDependencyKind Kind);
+/// <summary>A dependency by name. Baselines saved before dependency kinds were removed carry a
+/// "Kind" property too; it is ignored when they are read.</summary>
+public sealed record TrackerSyncDependency(string Name);
 
 public sealed record TrackerSyncEntity(
     string Name,

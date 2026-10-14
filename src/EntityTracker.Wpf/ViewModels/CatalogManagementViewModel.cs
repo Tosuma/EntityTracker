@@ -821,8 +821,8 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
             item => item.TrackerId == sourceTracker.Id);
         CopyPreview = source is null
             ? string.Empty
-            : $"Copy {source.Progress.ActiveEntityCount} active entities. Imported dependencies, unresolved references, " +
-              "manual corrections, groups, and requested priorities are copied. New identities are generated; " +
+            : $"Copy {source.Progress.ActiveEntityCount} active entities. Dependencies, unresolved references, " +
+              "groups, and requested priorities are copied. New identities are generated; " +
               "development status resets to Not started and notes, assignments, and history reset.";
     }
 

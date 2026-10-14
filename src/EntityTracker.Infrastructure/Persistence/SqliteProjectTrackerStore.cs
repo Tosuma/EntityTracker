@@ -1,4 +1,4 @@
-using EntityTracker.Application.Importing;
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
 using EntityTracker.Application.Persistence;
 using System.Text.Json;
@@ -51,13 +51,7 @@ public sealed class SqliteProjectTrackerStore(
         }
 
         HashSet<EntityId> entityIds = changeSet.EntitiesToAdd.Select(static entity => entity.Id).ToHashSet();
-        if (changeSet.ResolvedDependencies.Any(dependency =>
-                !entityIds.Contains(dependency.Edge.DependentEntityId) ||
-                !entityIds.Contains(dependency.Edge.DependencyEntityId)) ||
-            changeSet.UnresolvedDependencies.Any(dependency =>
-                !entityIds.Contains(dependency.Dependency.DependentEntityId)) ||
-            changeSet.ManualDependencyOverrides.Any(item =>
-                !entityIds.Contains(item.DependentEntityId)))
+        if (changeSet.Dependencies.Any(dependency => !entityIds.Contains(dependency.DependentEntityId)))
         {
             throw new InvalidOperationException("Tracker creation contains a cross-tracker relationship.");
         }
@@ -94,48 +88,14 @@ public sealed class SqliteProjectTrackerStore(
                 await SqliteResponsibilityWriter.InsertCopiedPeriodAsync(connection, transaction,
                     tracker.ProjectId, period, cancellationToken);
 
-            foreach (PersistedDependency dependency in changeSet.ResolvedDependencies)
+            foreach (EntityDependency dependency in changeSet.Dependencies)
             {
                 using SqliteCommand command = CreateCommand(connection, transaction, """
-                    INSERT INTO schema_dependencies
-                    (dependent_entity_id, dependency_entity_id, dependency_kind, created_at_utc, updated_at_utc)
-                    VALUES ($owner, $target, $kind, $timestamp, $timestamp);
+                    INSERT INTO entity_dependencies
+                    (dependent_entity_id, dependency_entity_id, created_at_utc, updated_at_utc)
+                    VALUES ($dependentEntityId, $targetId, $timestamp, $timestamp);
                     """);
-                command.Parameters.AddWithValue("$owner", SqlitePersistenceValues.Format(dependency.Edge.DependentEntityId));
-                command.Parameters.AddWithValue("$target", SqlitePersistenceValues.Format(dependency.Edge.DependencyEntityId));
-                command.Parameters.AddWithValue("$kind", dependency.Kind.ToString());
-                command.Parameters.AddWithValue("$timestamp", timestamp);
-                await command.ExecuteNonQueryAsync(cancellationToken);
-            }
-
-            foreach (PersistedUnresolvedDependency dependency in changeSet.UnresolvedDependencies)
-            {
-                using SqliteCommand command = CreateCommand(connection, transaction, """
-                    INSERT INTO unresolved_schema_dependencies
-                    (dependent_entity_id, dependency_source_key, dependency_source_name,
-                     dependency_kind, created_at_utc, updated_at_utc)
-                    VALUES ($owner, $key, $name, $kind, $timestamp, $timestamp);
-                    """);
-                command.Parameters.AddWithValue("$owner", SqlitePersistenceValues.Format(dependency.Dependency.DependentEntityId));
-                command.Parameters.AddWithValue("$key", EntitySourceKey.From(dependency.Dependency.DependencySourceName).Value);
-                command.Parameters.AddWithValue("$name", dependency.Dependency.DependencySourceName);
-                command.Parameters.AddWithValue("$kind", dependency.Kind.ToString());
-                command.Parameters.AddWithValue("$timestamp", timestamp);
-                await command.ExecuteNonQueryAsync(cancellationToken);
-            }
-
-            foreach (ManualDependencyOverride dependencyOverride in changeSet.ManualDependencyOverrides)
-            {
-                using SqliteCommand command = CreateCommand(connection, transaction, """
-                    INSERT INTO manual_dependency_overrides
-                    (dependent_entity_id, dependency_source_key, dependency_source_name,
-                     override_action, created_at_utc, updated_at_utc)
-                    VALUES ($owner, $key, $name, $action, $timestamp, $timestamp);
-                    """);
-                command.Parameters.AddWithValue("$owner", SqlitePersistenceValues.Format(dependencyOverride.DependentEntityId));
-                command.Parameters.AddWithValue("$key", EntitySourceKey.From(dependencyOverride.DependencySourceName).Value);
-                command.Parameters.AddWithValue("$name", dependencyOverride.DependencySourceName);
-                command.Parameters.AddWithValue("$action", dependencyOverride.Action.ToString());
+                SqliteDependencyValues.Add(command, dependency);
                 command.Parameters.AddWithValue("$timestamp", timestamp);
                 await command.ExecuteNonQueryAsync(cancellationToken);
             }
@@ -266,7 +226,6 @@ public sealed class SqliteProjectTrackerStore(
         string entityPredicate = $"entity_id IN (SELECT id FROM tracked_entities WHERE {trackerPredicate})";
         await ExecuteDeleteAsync(connection, transaction, $"DELETE FROM entity_status_history WHERE {entityPredicate};", id, cancellationToken);
         await ExecuteDeleteAsync(connection, transaction, $"DELETE FROM progress_snapshots WHERE {trackerPredicate};", id, cancellationToken);
-        await ExecuteDeleteAsync(connection, transaction, $"DELETE FROM schema_import_summary WHERE {trackerPredicate};", id, cancellationToken);
         await ExecuteDeleteAsync(connection, transaction, $"DELETE FROM tracked_entities WHERE {trackerPredicate};", id, cancellationToken);
         await ExecuteDeleteAsync(
             connection,
@@ -299,10 +258,12 @@ public sealed class SqliteProjectTrackerStore(
              $lifecycle, $provenance, $priority, $group,
              $timestamp, $timestamp, $timestamp);
 
+            -- A placeholder is only an unresolved reference: it has no status history.
             INSERT INTO entity_status_history
             (entity_id, previous_status, new_status, entry_kind, occurred_at_utc,
              event_id, previous_event_id)
-            VALUES ($id, NULL, $status, 'Baseline', $timestamp, $eventId, NULL);
+            SELECT $id, NULL, $status, 'Baseline', $timestamp, $eventId, NULL
+            WHERE $lifecycle <> 'Placeholder';
             """);
         command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(entity.TrackerId));

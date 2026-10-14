@@ -10,7 +10,8 @@ public sealed class EntityDependencyEditPlan
         TrackedEntity entity,
         IEnumerable<TrackedEntity> candidateEntities,
         IEnumerable<EntityDependencyEditItem> dependencies,
-        IEnumerable<ManualDependencyOverride> desiredOverrides,
+        IEnumerable<EntityDependency> desiredDependencies,
+        IEnumerable<TrackedEntity> newPlaceholders,
         EffectiveDependencyState effectiveState,
         DependencyRankingResult candidateRanking,
         IEnumerable<string> warnings,
@@ -19,7 +20,8 @@ public sealed class EntityDependencyEditPlan
         Entity = entity;
         CandidateEntities = candidateEntities.ToArray();
         Dependencies = dependencies.ToArray();
-        DesiredOverrides = desiredOverrides.ToArray();
+        DesiredDependencies = desiredDependencies.ToArray();
+        NewPlaceholders = newPlaceholders.ToArray();
         EffectiveState = effectiveState;
         CandidateRanking = candidateRanking;
         Warnings = warnings.ToArray();
@@ -32,7 +34,15 @@ public sealed class EntityDependencyEditPlan
 
     public IReadOnlyList<EntityDependencyEditItem> Dependencies { get; }
 
-    public IReadOnlyList<ManualDependencyOverride> DesiredOverrides { get; }
+    /// <summary>The complete dependency list the entity would have.</summary>
+    public IReadOnlyList<EntityDependency> DesiredDependencies { get; }
+
+    /// <summary>The targets to pass back for the next preview: the current dependency list.</summary>
+    public IReadOnlyList<DependencyTarget> DesiredTargets =>
+        Dependencies.Select(static item => item.Target).ToArray();
+
+    /// <summary>Placeholders for names no entity has; they are added when the plan is saved.</summary>
+    public IReadOnlyList<TrackedEntity> NewPlaceholders { get; }
 
     public EffectiveDependencyState EffectiveState { get; }
 

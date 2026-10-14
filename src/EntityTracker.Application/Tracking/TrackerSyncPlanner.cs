@@ -1,4 +1,4 @@
-using EntityTracker.Application.Importing;
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Domain;
 
@@ -8,29 +8,21 @@ public static class TrackerSyncPlanner
 {
     public static TrackerSyncStructure Capture(
         IReadOnlyList<TrackedEntity> entities,
-        IReadOnlyList<PersistedDependency> resolved,
-        IReadOnlyList<PersistedUnresolvedDependency> unresolved,
-        IReadOnlyList<ManualDependencyOverride> overrides)
+        IReadOnlyList<EntityDependency> dependencies)
     {
+        // Two Trackers have different entity IDs, so they are compared by entity name. A placeholder
+        // is not an entity of its own; it is only the name dependencies refer to.
         var byId = entities.ToDictionary(static entity => entity.Id);
         var declarations = new Dictionary<EntityId, Dictionary<string, TrackerSyncDependency>>();
-        foreach (TrackedEntity entity in entities)
+        foreach (TrackedEntity entity in entities.Where(static entity => !entity.IsPlaceholder))
             declarations[entity.Id] = new Dictionary<string, TrackerSyncDependency>(StringComparer.Ordinal);
-        foreach (PersistedDependency edge in resolved)
+        foreach (EntityDependency dependency in dependencies)
         {
-            if (byId.TryGetValue(edge.Edge.DependencyEntityId, out TrackedEntity? target))
-                Put(edge.Edge.DependentEntityId, target.SourceName, edge.Kind);
+            if (byId.TryGetValue(dependency.DependencyEntityId, out TrackedEntity? target) &&
+                declarations.TryGetValue(dependency.DependentEntityId, out var owner))
+                owner[Key(target.SourceName)] = new TrackerSyncDependency(target.SourceName);
         }
-        foreach (PersistedUnresolvedDependency edge in unresolved)
-            Put(edge.Dependency.DependentEntityId, edge.Dependency.DependencySourceName, edge.Kind);
-        foreach (ManualDependencyOverride item in overrides)
-        {
-            string key = Key(item.DependencySourceName);
-            if (!declarations.TryGetValue(item.DependentEntityId, out var owner)) continue;
-            if (item.Action == ManualDependencyOverrideAction.Suppress) owner.Remove(key);
-            else owner[key] = new TrackerSyncDependency(item.DependencySourceName, ImportedDependencyKind.Mandatory);
-        }
-        return new TrackerSyncStructure(entities
+        return new TrackerSyncStructure(entities.Where(static entity => !entity.IsPlaceholder)
             .OrderBy(static entity => Key(entity.SourceName), StringComparer.Ordinal)
             .Select(entity => new TrackerSyncEntity(
                 entity.SourceName,
@@ -41,12 +33,6 @@ public static class TrackerSyncPlanner
                     .OrderBy(static dependency => Key(dependency.Name), StringComparer.Ordinal).ToArray(),
                 entity.FilterActive))
             .ToArray());
-
-        void Put(EntityId ownerId, string targetName, ImportedDependencyKind kind)
-        {
-            if (declarations.TryGetValue(ownerId, out var owner))
-                owner[Key(targetName)] = new TrackerSyncDependency(targetName, kind);
-        }
     }
 
     public static TrackerSyncReview CreateReview(
@@ -108,7 +94,7 @@ public static class TrackerSyncPlanner
                 bd.TryGetValue(target, out TrackerSyncDependency? bv);
                 oldAd.TryGetValue(target, out TrackerSyncDependency? oldAv);
                 oldBd.TryGetValue(target, out TrackerSyncDependency? oldBv);
-                // Every dependency is mandatory now, so only whether it exists matters.
+                // A dependency has no kind, so only whether it exists matters.
                 if (!Different(hasBaseline, av is not null, bv is not null, oldAv is not null, oldBv is not null))
                     continue;
                 string targetName = av?.Name ?? bv?.Name ?? oldAv?.Name ?? oldBv!.Name;
@@ -140,7 +126,7 @@ public static class TrackerSyncPlanner
                 // Active on one side only: the chosen side gives the whole entity. Taking the source's
                 // archived state archives the copy's entity but keeps its own details.
                 bool useSource = Pick(TrackerSyncChangeKind.Entity, "", true, false);
-                if (useSource && ae?.Active == true) result.Add(ae with { Dependencies = Mandatory(ae.Dependencies) });
+                if (useSource && ae?.Active == true) result.Add(ae);
                 else if (useSource) result.Add(be! with { Active = false });
                 else if (be is not null) result.Add(be);
                 continue;
@@ -161,9 +147,7 @@ public static class TrackerSyncPlanner
                 bd.TryGetValue(target, out TrackerSyncDependency? bv);
                 TrackerSyncDependency? selected = Pick(TrackerSyncChangeKind.Dependency, target, av, bv);
                 if (selected is not null)
-                    dependencies.Add(ReferenceEquals(selected, av) && !ReferenceEquals(av, bv)
-                        ? selected with { Kind = ImportedDependencyKind.Mandatory }
-                        : selected);
+                    dependencies.Add(selected);
             }
             result.Add(new TrackerSyncEntity(name, active, priority, group, dependencies, filterActive));
 
@@ -189,9 +173,6 @@ public static class TrackerSyncPlanner
 
     /// <summary>The value of a dependency row on the side that does not have the dependency.</summary>
     public const string Absent = "Absent";
-
-    private static IReadOnlyList<TrackerSyncDependency> Mandatory(IReadOnlyList<TrackerSyncDependency> dependencies) =>
-        dependencies.Select(static dependency => dependency with { Kind = ImportedDependencyKind.Mandatory }).ToArray();
 
     private static Dictionary<string, TrackerSyncEntity> Map(TrackerSyncStructure? structure) =>
         (structure?.Entities ?? []).ToDictionary(static entity => Key(entity.Name), StringComparer.Ordinal);

@@ -1,5 +1,4 @@
 using EntityTracker.Application.Dependencies;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
@@ -285,7 +284,6 @@ public sealed class ManualEntityCreationViewModelTests
         ManualEntityCreationService service = new(
             new StubEntityRepository(entities, pendingEntities),
             new StubDependencyRepository(),
-            new StubManualDependencyOverrideRepository(),
             new DependencyRanker(),
             new EffectiveDependencyResolver(),
             store);
@@ -342,20 +340,6 @@ public sealed class ManualEntityCreationViewModelTests
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
             TrackerId trackerId,
             CancellationToken cancellationToken = default) => pendingEntities ?? Task.FromResult(entities);
-
-    }
-
-    private sealed class StubDependencyRepository : IDependencyRepository
-    {
-        public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<PersistedDependency>>([]);
-
-        public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<PersistedUnresolvedDependency>>([]);
 
     }
 

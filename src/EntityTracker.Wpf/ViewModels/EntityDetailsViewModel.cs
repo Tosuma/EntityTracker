@@ -2,7 +2,7 @@ using System.Globalization;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-using EntityTracker.Application.Importing;
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 using Domain = EntityTracker.Domain;
@@ -187,13 +187,10 @@ public sealed class EntityDetailsViewModel : INotifyPropertyChanged
 
     private static EntityDetailListItem CreateBlockerItem(DependencyBlocker blocker)
     {
-        string dependencyKind = blocker.DependencyKind == ImportedDependencyKind.Mandatory
-            ? "Mandatory"
-            : "Optional";
         string reason = blocker.Kind == DependencyBlockerKind.Unresolved
             ? "Unresolved reference"
             : $"Not yet implemented · {FormatStatus(blocker.DevelopmentStatus)}";
-        return new EntityDetailListItem(blocker.SourceName, $"{dependencyKind} · {reason}");
+        return new EntityDetailListItem(blocker.SourceName, reason);
     }
 
     private static string FormatPriority(int? priority) =>

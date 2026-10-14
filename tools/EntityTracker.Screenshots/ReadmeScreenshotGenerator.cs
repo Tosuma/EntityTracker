@@ -243,46 +243,46 @@ internal sealed class ReadmeScreenshotGenerator
                 .Single(developer => developer.Initials == "PT");
             ITrackedStateStore responsibilityStore = provider.GetRequiredService<ITrackedStateStore>();
             await responsibilityStore.ApplyAsync(tracker.Id,
-                new TrackedStateChangeSet([], [], [], [], [], [],
+                new TrackedStateChangeSet([], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
                         [alice.Id])]), cancellationToken);
             captureTime.Advance(TimeSpan.FromMinutes(1));
             await responsibilityStore.ApplyAsync(tracker.Id,
-                new TrackedStateChangeSet([], [], [], [], [], [],
+                new TrackedStateChangeSet([], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
                         [alice.Id, platform.Id])]), cancellationToken);
             captureTime.Advance(TimeSpan.FromMinutes(1));
             await responsibilityStore.ApplyAsync(tracker.Id,
-                new TrackedStateChangeSet([], [], [], [], [], [],
+                new TrackedStateChangeSet([], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
                         [platform.Id])]), cancellationToken);
 
             captureTime.Advance(TimeSpan.FromMinutes(1));
             await responsibilityStore.ApplyAsync(tracker.Id,
-                new TrackedStateChangeSet([], [], [], [], [], [],
+                new TrackedStateChangeSet([], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
                         [alice.Id, platform.Id])]), cancellationToken);
             captureTime.Advance(TimeSpan.FromMinutes(1));
             await responsibilityStore.ApplyAsync(tracker.Id,
-                new TrackedStateChangeSet([], [], [], [], [], [],
+                new TrackedStateChangeSet([], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
                         [platform.Id])]), cancellationToken);
 
             captureTime.Advance(TimeSpan.FromMinutes(1));
             await responsibilityStore.ApplyAsync(tracker.Id,
-                new TrackedStateChangeSet([], [], [], [], [], [],
+                new TrackedStateChangeSet([], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
                         [alice.Id, platform.Id])]), cancellationToken);
             captureTime.Advance(TimeSpan.FromMinutes(1));
             await responsibilityStore.ApplyAsync(tracker.Id,
-                new TrackedStateChangeSet([], [], [], [], [], [],
+                new TrackedStateChangeSet([], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
                         [platform.Id])]), cancellationToken);
 
             // Show two separate current Developers in the overview and filter screenshots.
             captureTime.Advance(TimeSpan.FromMinutes(1));
             await responsibilityStore.ApplyAsync(tracker.Id,
-                new TrackedStateChangeSet([], [], [], [], [], [],
+                new TrackedStateChangeSet([], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(featuredEntity,
                         [alice.Id, platform.Id])]), cancellationToken);
 
@@ -363,12 +363,9 @@ internal sealed class ReadmeScreenshotGenerator
         await provider.GetRequiredService<ITrackedStateStore>().ApplyAsync(source.Id,
             new TrackedStateChangeSet([reminder], [], [], [reminder.Id],
                 [
-                    new PersistedDependency(new DependencyEdge(reminder.Id, customer.Id),
-                        EntityTracker.Application.Importing.ImportedDependencyKind.Mandatory),
-                    new PersistedDependency(new DependencyEdge(reminder.Id, currency.Id),
-                        EntityTracker.Application.Importing.ImportedDependencyKind.Mandatory)
+                    new EntityDependency(reminder.Id, customer.Id),
+                    new EntityDependency(reminder.Id, currency.Id)
                 ],
-                [],
                 entitiesWithProgressToUpdate: [customer],
                 entitiesWithRequestedPriorityToUpdate: [customer],
                 entitiesWithGroupNameToUpdate: [customer]),
@@ -683,7 +680,8 @@ internal sealed class ReadmeScreenshotGenerator
         HashSet<EntityId> dependencyTargets = (await dependencyRepository.GetAllAsync(
                 tracker.Id,
                 cancellationToken))
-            .Select(static dependency => dependency.Edge.DependencyEntityId)
+            .Where(static dependency => dependency.DependencyEntityId is not null)
+            .Select(static dependency => dependency.DependencyEntityId!)
             .ToHashSet();
         TrackedEntity leaf = entities
             .Where(static entity => entity.LifecycleState == EntityLifecycleState.Active)
@@ -695,7 +693,7 @@ internal sealed class ReadmeScreenshotGenerator
                 .ListAsync(tracker.ProjectId, cancellationToken))
             .Single(developer => developer.Initials == "PT");
         await provider.GetRequiredService<ITrackedStateStore>().ApplyAsync(tracker.Id,
-            new TrackedStateChangeSet([], [], [], [], [], [],
+            new TrackedStateChangeSet([], [], [],
                 responsibilitySelections: [new ResponsibilitySelection(leaf.Id, [platform.Id])]),
             cancellationToken);
 

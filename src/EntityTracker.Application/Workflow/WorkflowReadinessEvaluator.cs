@@ -1,5 +1,4 @@
 using EntityTracker.Application.Dependencies;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Domain;
 
@@ -45,7 +44,6 @@ public sealed class WorkflowReadinessEvaluator
                 new DependencyBlocker(
                     target.SourceName,
                     DependencyBlockerKind.Incomplete,
-                    dependency.Kind,
                     target.Id,
                     target.Status));
         }
@@ -64,8 +62,7 @@ public sealed class WorkflowReadinessEvaluator
                 EntitySourceKey.From(dependency.Dependency.DependencySourceName),
                 new DependencyBlocker(
                     dependency.Dependency.DependencySourceName,
-                    DependencyBlockerKind.Unresolved,
-                    dependency.Kind));
+                    DependencyBlockerKind.Unresolved));
         }
 
         return blockers.ToDictionary(

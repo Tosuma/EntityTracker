@@ -2,7 +2,6 @@ using System.IO;
 
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.ManualOverrides;
@@ -1066,7 +1065,6 @@ public sealed class ShellViewModelTests
             SqliteTrackerRepository trackers = new(database);
             SqliteEntityRepository entities = new(database);
             SqliteDependencyRepository dependencies = new(database);
-            SqliteManualDependencyOverrideRepository overrides = new(database);
             SqliteTrackedStateStore stateStore = new(database);
             SqliteProgressHistoryRepository history = new(database);
             SqliteProjectTrackerStore catalogStore = new(database);
@@ -1082,7 +1080,6 @@ public sealed class ShellViewModelTests
             EntityDependencyEditorService editor = new(
                 entities,
                 dependencies,
-                overrides,
                 resolver,
                 ranker,
                 stateStore,
@@ -1092,7 +1089,6 @@ public sealed class ShellViewModelTests
                 entities,
                 new SqliteEntityAuditReader(database),
                 dependencies,
-                overrides,
                 ranker,
                 resolver,
                 new WorkflowReadinessEvaluator(),
@@ -1102,7 +1098,6 @@ public sealed class ShellViewModelTests
                 trackers,
                 entities,
                 dependencies,
-                overrides,
                 catalogStore,
                 resolver,
                 snapshots);
@@ -1112,14 +1107,12 @@ public sealed class ShellViewModelTests
                 trackers,
                 entities,
                 dependencies,
-                overrides,
                 history,
                 resolver,
                 snapshots);
             ProgressHistoryInitializer historyInitializer = new(
                 entities,
                 dependencies,
-                overrides,
                 stateStore,
                 resolver,
                 snapshots);
@@ -1145,13 +1138,11 @@ public sealed class ShellViewModelTests
                 new BulkStatusUpdateService(
                     entities,
                     dependencies,
-                    overrides,
                     resolver,
                     stateStore),
                 new ManualEntityCreationService(
                     entities,
                     dependencies,
-                    overrides,
                     ranker,
                     resolver,
                     stateStore),
@@ -1159,7 +1150,6 @@ public sealed class ShellViewModelTests
                 new EntityLifecycleService(
                     entities,
                     dependencies,
-                    overrides,
                     stateStore,
                     resolver,
                     ranker),
@@ -1174,8 +1164,7 @@ public sealed class ShellViewModelTests
                 portfolio,
                 projects,
                 trackers,
-                new TrackerSyncService(projects, trackers, entities, dependencies, overrides,
-                    stateStore, resolver, snapshots, (IDependencyRankingService)ranker));
+                new TrackerSyncService(projects, trackers, entities, dependencies, stateStore, resolver, snapshots, (IDependencyRankingService)ranker));
             AppearanceViewModel appearance = new(
                 settings,
                 new TestThemeService());
@@ -1212,7 +1201,7 @@ public sealed class ShellViewModelTests
         {
             TrackedEntity entity = (await Entities.GetAllAsync(trackerId)).Single(item => item.SourceName == name);
             entity.ChangeFilterActive(filterActive);
-            await _stateStore.ApplyAsync(trackerId, new TrackedStateChangeSet([], [], [], [], [], [],
+            await _stateStore.ApplyAsync(trackerId, new TrackedStateChangeSet([], [], [],
                 entitiesWithProgressToUpdate: [entity]));
         }
 
@@ -1245,14 +1234,19 @@ public sealed class ShellViewModelTests
         {
             EntityId id = EntityId.New();
             await _stateStore.ApplyAsync(trackerId, new TrackedStateChangeSet(
-                [new TrackedEntity(id, trackerId, name)], [], [], [], [], [],
+                [new TrackedEntity(id, trackerId, name)], [], [],
                 progressSnapshotAfterChanges: new ProgressSnapshotState(1, 0, 0, 0, 0, 0)));
             return id;
         }
 
-        public Task AddDependencyByNameAsync(TrackerId trackerId, EntityId owner, string dependencyName) =>
-            _stateStore.ApplyAsync(trackerId, new TrackedStateChangeSet([], [], [], [], [], [],
-                [owner], [new ManualDependencyOverride(owner, dependencyName, ManualDependencyOverrideAction.Add)]));
+        public async Task AddDependencyByNameAsync(TrackerId trackerId, EntityId owner, string dependencyName)
+        {
+            TrackedEntity target = (await new SqliteEntityRepository(
+                    new SqliteDatabase(Path.Combine(_directory, "entity-tracker.db"))).GetAllAsync(trackerId))
+                .Single(entity => entity.SourceName == dependencyName);
+            await _stateStore.ApplyAsync(trackerId, new TrackedStateChangeSet([], [], [],
+                [owner], [new EntityDependency(owner, target.Id)]));
+        }
 
         public Task AddEntityAsync(TrackerId trackerId, string name, string notes = "", string filterActive = "",
             string sharedNotes = "") =>
@@ -1261,7 +1255,7 @@ public sealed class ShellViewModelTests
                 new TrackedStateChangeSet(
                     [new TrackedEntity(EntityId.New(), trackerId, name, notes: notes, filterActive: filterActive,
                         sharedNotes: sharedNotes)],
-                    [], [], [], [], [],
+                    [], [],
                     progressSnapshotAfterChanges:
                         new ProgressSnapshotState(1, 0, 0, 0, 0, 0)));
 

@@ -43,35 +43,16 @@ internal static class TestTrackerExtensions
             entity,
             cancellationToken);
 
-    internal static Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
+    internal static Task<IReadOnlyList<EntityDependency>> GetAllAsync(
         this SqliteDependencyRepository repository,
         CancellationToken cancellationToken = default) =>
         repository.GetAllAsync(repository.Database.GetTrackerId(), cancellationToken);
-
-    internal static Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
-        this SqliteDependencyRepository repository,
-        CancellationToken cancellationToken = default) =>
-        repository.GetAllUnresolvedAsync(repository.Database.GetTrackerId(), cancellationToken);
 
     internal static Task SaveAsync(
         this SqliteDependencyRepository repository,
-        PersistedDependency dependency,
+        EntityDependency dependency,
         CancellationToken cancellationToken = default) =>
         repository.SaveAsync(repository.Database.GetTrackerId(), dependency, cancellationToken);
-
-    internal static Task SaveUnresolvedAsync(
-        this SqliteDependencyRepository repository,
-        PersistedUnresolvedDependency dependency,
-        CancellationToken cancellationToken = default) =>
-        repository.SaveUnresolvedAsync(
-            repository.Database.GetTrackerId(),
-            dependency,
-            cancellationToken);
-
-    internal static Task<IReadOnlyList<ManualDependencyOverride>> GetAllAsync(
-        this SqliteManualDependencyOverrideRepository repository,
-        CancellationToken cancellationToken = default) =>
-        repository.GetAllAsync(repository.Database.GetTrackerId(), cancellationToken);
 
     internal static Task ApplyAsync(
         this SqliteTrackedStateStore store,

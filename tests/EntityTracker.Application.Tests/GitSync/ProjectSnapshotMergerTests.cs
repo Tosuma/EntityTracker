@@ -1,5 +1,6 @@
 using EntityTracker.Application.GitSync;
 using EntityTracker.Application.Snapshots;
+using EntityTracker.Domain;
 using EntityTracker.Domain.Collaboration;
 
 namespace EntityTracker.Application.Tests.GitSync;
@@ -216,6 +217,7 @@ public sealed class ProjectSnapshotMergerTests
                 Entities = [entity with { Notes = "Local note" }, added]
             }]
         };
+        SnapshotEntity external = Placeholder(tracker.Id, "External");
         ProjectSnapshot remote = basis with
         {
             Trackers = [tracker with
@@ -223,22 +225,116 @@ public sealed class ProjectSnapshotMergerTests
                 Entities = [entity with
                 {
                     ResponsibleDeveloper = "Remote developer",
-                    UnresolvedDependencies = [new SnapshotUnresolvedDependency(
-                        entity.Id, "External", "Mandatory", Time, Time)]
-                }]
+                    Dependencies = [new SnapshotDependency(external.Id, Time, Time)]
+                }, external]
             }]
         };
 
         ProjectMergeResult result = new ProjectSnapshotMerger().Merge(basis, local, remote);
 
         Assert.Empty(result.Conflicts);
-        Assert.Equal(2, result.Snapshot.Trackers[0].Entities.Count);
+        Assert.Equal(3, result.Snapshot.Trackers[0].Entities.Count);
         SnapshotEntity merged = result.Snapshot.Trackers[0].Entities.Single(e => e.Id == entity.Id);
         Assert.Equal("Local note", merged.Notes);
         SnapshotResponsibilityPeriod assignment = Assert.Single(merged.ResponsibilityPeriods!);
         Assert.Equal("Remote developer", Assert.Single(result.Snapshot.Developers!).Initials);
         Assert.Equal(assignment.DeveloperId, Assert.Single(result.Snapshot.Developers!).Id);
-        Assert.Single(merged.UnresolvedDependencies);
+        Assert.Equal(external.Id, Assert.Single(merged.Dependencies).DependencyEntityId);
+    }
+
+    [Fact]
+    public void APlaceholderIsFoldedIntoTheEntityTheOtherSideAddedWithItsName()
+    {
+        ProjectSnapshot basis = Snapshot();
+        SnapshotTracker tracker = basis.Trackers[0];
+        SnapshotEntity entity = tracker.Entities[0];
+        SnapshotEntity customer = Entity(Guid.NewGuid(), tracker.Id, "Customer");
+        SnapshotEntity placeholder = Placeholder(tracker.Id, "CUSTOMER");
+        // Local adds the entity; remote, not having it yet, adds a dependency on its name.
+        ProjectSnapshot local = basis with { Trackers = [tracker with { Entities = [entity, customer] }] };
+        ProjectSnapshot remote = basis with
+        {
+            Trackers = [tracker with
+            {
+                Entities = [entity with { Dependencies = [new SnapshotDependency(placeholder.Id, Time, Time)] },
+                    placeholder]
+            }]
+        };
+
+        ProjectMergeResult result = new ProjectSnapshotMerger().Merge(basis, local, remote);
+
+        Assert.Empty(result.Conflicts);
+        IReadOnlyList<SnapshotEntity> merged = result.Snapshot.Trackers[0].Entities;
+        Assert.Equal(new[] { entity.Id, customer.Id }.Order(), merged.Select(e => e.Id).Order());
+        Assert.Equal(customer.Id,
+            Assert.Single(merged.Single(e => e.Id == entity.Id).Dependencies).DependencyEntityId);
+        ProjectSnapshotValidator.Validate(result.Snapshot);
+    }
+
+    [Fact]
+    public void ThePlaceholderBothSidesCreatedForANameMergesToOne()
+    {
+        ProjectSnapshot basis = Snapshot();
+        SnapshotTracker tracker = basis.Trackers[0];
+        SnapshotEntity first = tracker.Entities[0];
+        SnapshotEntity second = Entity(Guid.NewGuid(), tracker.Id, "Second");
+        basis = basis with { Trackers = [tracker with { Entities = [first, second] }] };
+        SnapshotEntity localPlaceholder = Placeholder(tracker.Id, "Future", Time.AddHours(1));
+        SnapshotEntity remotePlaceholder = Placeholder(tracker.Id, "future", Time.AddHours(2));
+        ProjectSnapshot local = basis with
+        {
+            Trackers = [tracker with
+            {
+                Entities = [first with { Dependencies = [new SnapshotDependency(localPlaceholder.Id, Time, Time)] },
+                    second, localPlaceholder]
+            }]
+        };
+        ProjectSnapshot remote = basis with
+        {
+            Trackers = [tracker with
+            {
+                Entities = [first, second with
+                {
+                    Dependencies = [new SnapshotDependency(remotePlaceholder.Id, Time, Time)]
+                }, remotePlaceholder]
+            }]
+        };
+
+        ProjectMergeResult result = new ProjectSnapshotMerger().Merge(basis, local, remote);
+
+        Assert.Empty(result.Conflicts);
+        SnapshotEntity placeholder = Assert.Single(result.Snapshot.Trackers[0].Entities,
+            e => e.LifecycleState == "Placeholder");
+        Assert.Equal(localPlaceholder.Id, placeholder.Id);
+        Assert.All(result.Snapshot.Trackers[0].Entities.Where(e => e.LifecycleState != "Placeholder"),
+            e => Assert.Equal(placeholder.Id, Assert.Single(e.Dependencies).DependencyEntityId));
+        ProjectSnapshotValidator.Validate(result.Snapshot);
+    }
+
+    [Fact]
+    public void ADependencyOnAnEntityTheOtherSideDeletedKeepsItAsAPlaceholder()
+    {
+        ProjectSnapshot basis = Snapshot();
+        SnapshotTracker tracker = basis.Trackers[0];
+        SnapshotEntity owner = tracker.Entities[0];
+        SnapshotEntity customer = Entity(Guid.NewGuid(), tracker.Id, "Customer") with { LifecycleState = "Archived" };
+        basis = basis with { Trackers = [tracker with { Entities = [owner, customer] }] };
+        ProjectSnapshot local = basis with { Trackers = [tracker with { Entities = [owner] }] };
+        ProjectSnapshot remote = basis with
+        {
+            Trackers = [tracker with
+            {
+                Entities = [owner with { Dependencies = [new SnapshotDependency(customer.Id, Time, Time)] }, customer]
+            }]
+        };
+
+        ProjectMergeResult result = new ProjectSnapshotMerger().Merge(basis, local, remote);
+
+        Assert.Empty(result.Conflicts);
+        SnapshotEntity kept = Assert.Single(result.Snapshot.Trackers[0].Entities, e => e.Id == customer.Id);
+        Assert.Equal("Placeholder", kept.LifecycleState);
+        Assert.Equal("Customer", kept.SourceName);
+        ProjectSnapshotValidator.Validate(result.Snapshot);
     }
 
     [Fact]
@@ -350,16 +446,20 @@ public sealed class ProjectSnapshotMergerTests
         ProjectSnapshot basis = Snapshot();
         SnapshotTracker tracker = basis.Trackers[0];
         SnapshotEntity entity = tracker.Entities[0];
-        SnapshotUnresolvedDependency dependency = new(entity.Id, "External", "Optional", Time, Time);
-        basis = EditEntity(basis, e => e with { UnresolvedDependencies = [dependency] });
+        SnapshotEntity external = Placeholder(tracker.Id, "External");
+        SnapshotDependency dependency = new(external.Id, Time, Time);
+        basis = basis with
+        {
+            Trackers = [tracker with { Entities = [entity with { Dependencies = [dependency] }, external] }]
+        };
         ProjectSnapshot local = EditEntity(basis, e => e with
         {
-            UnresolvedDependencies = [],
+            Dependencies = [],
             LifecycleState = "Archived"
         });
         ProjectSnapshot remote = EditEntity(basis, e => e with
         {
-            UnresolvedDependencies = [dependency with { Kind = "Mandatory" }]
+            Dependencies = [dependency with { UpdatedAtUtc = Time.AddDays(1) }]
         });
         ProjectMergeResult proposal = new ProjectSnapshotMerger().Merge(basis, local, remote);
         ProjectMergeConflict relationship = Assert.Single(proposal.Conflicts,
@@ -485,17 +585,26 @@ public sealed class ProjectSnapshotMergerTests
         return new ProjectSnapshot(ProjectSnapshot.CurrentFormatVersion,
             new SnapshotProject(projectId, "Project", "Active", Time, Time, null),
             [new SnapshotTracker(trackerId, projectId, "Tracker", "Active",
-                Time, Time, null, null, [entity], [], [], null)], []);
+                Time, Time, null, null, [entity], [], [])], []);
     }
 
     private static SnapshotEntity Entity(Guid id, Guid trackerId, string name) =>
-        new(id, trackerId, name, "NotStarted", "", "Active", "Imported",
-            null, "", "", Time, Time, Time, [], [], []);
+        new(id, trackerId, name, "NotStarted", "", "Active", "Manual",
+            null, "", "", Time, Time, Time, []);
 
+    private static SnapshotEntity Placeholder(Guid trackerId, string name, DateTimeOffset? createdAtUtc = null) =>
+        new(TrackedEntity.PlaceholderId(new TrackerId(trackerId), name).Value, trackerId, name, "NotStarted", "",
+            "Placeholder", "Manual", null, "", "", createdAtUtc ?? Time, createdAtUtc ?? Time,
+            createdAtUtc ?? Time, [], []);
+
+    /// <summary>Edits the first entity of the first Tracker; the other entities stay.</summary>
     private static ProjectSnapshot EditEntity(ProjectSnapshot snapshot,
         Func<SnapshotEntity, SnapshotEntity> edit)
     {
         SnapshotTracker tracker = snapshot.Trackers[0];
-        return snapshot with { Trackers = [tracker with { Entities = [edit(tracker.Entities[0])] }] };
+        return snapshot with
+        {
+            Trackers = [tracker with { Entities = [edit(tracker.Entities[0]), .. tracker.Entities.Skip(1)] }]
+        };
     }
 }

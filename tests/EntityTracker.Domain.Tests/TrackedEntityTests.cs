@@ -19,7 +19,7 @@ public sealed class TrackedEntityTests
         Assert.Equal(string.Empty, entity.FilterActive);
         Assert.Equal(string.Empty, entity.SharedNotes);
         Assert.Equal(EntityLifecycleState.Active, entity.LifecycleState);
-        Assert.Equal(EntityProvenance.Imported, entity.Provenance);
+        Assert.Equal(EntityProvenance.Manual, entity.Provenance);
         Assert.Null(entity.RequestedPriority);
         Assert.Equal(string.Empty, entity.ResponsibleDeveloper);
         Assert.Equal(string.Empty, entity.GroupName);
@@ -198,46 +198,13 @@ public sealed class TrackedEntityTests
     }
 
     [Fact]
-    public void ManualOnlyProvenance_CanTransitionToManualAndImported()
-    {
-        TrackedEntity entity = new(
-            EntityId.New(),
-            TestTrackerId,
-            "sales.Customer",
-            provenance: EntityProvenance.ManualOnly);
-
-        entity.ChangeProvenance(EntityProvenance.ManualAndImported);
-
-        Assert.Equal(EntityProvenance.ManualAndImported, entity.Provenance);
-    }
-
-    [Fact]
-    public void CopiedProvenance_CanTransitionToCopiedAndImported()
-    {
-        TrackedEntity entity = new(
-            EntityId.New(),
-            TestTrackerId,
-            "sales.Customer",
-            provenance: EntityProvenance.Copied);
-
-        entity.ChangeProvenance(EntityProvenance.CopiedAndImported);
-
-        Assert.Equal(EntityProvenance.CopiedAndImported, entity.Provenance);
-    }
-
-    [Fact]
-    public void Provenance_RejectsUndefinedOrInvalidTransitions()
+    public void Provenance_RejectsUndefinedValues()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new TrackedEntity(
             EntityId.New(),
             TestTrackerId,
             "sales.Customer",
             provenance: (EntityProvenance)999));
-
-        TrackedEntity imported = new(EntityId.New(), TestTrackerId, "sales.Customer");
-        Assert.Throws<InvalidOperationException>(() =>
-            imported.ChangeProvenance(EntityProvenance.ManualAndImported));
-        Assert.Equal(EntityProvenance.Imported, imported.Provenance);
     }
 
     [Theory]

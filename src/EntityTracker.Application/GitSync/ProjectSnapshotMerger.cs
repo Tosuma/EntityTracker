@@ -192,9 +192,7 @@ public sealed class ProjectSnapshotMerger
             SyncBaselineJson = Field(path + "/SyncBaselineJson", b.SyncBaselineJson,
                 l.SyncBaselineJson, r.SyncBaselineJson),
             Entities = ThreeWayMerge.Keyed(path + "/Entity", b.Entities, l.Entities, r.Entities,
-                e => e.Id, MergeEntity),
-            ImportSummary = Object(path + "/ImportSummary", b.ImportSummary,
-                l.ImportSummary, r.ImportSummary, ProjectConflictKind.Field)
+                e => e.Id, MergeEntity)
         };
         merged = merged with
         {
@@ -219,7 +217,7 @@ public sealed class ProjectSnapshotMerger
                 return latest is null ? entity : entity with { DevelopmentStatus = latest.NewStatus };
             }).ToArray()
         };
-        return merged;
+        return MergedPlaceholders.Normalize(merged, b, l, r);
     }
 
     private SnapshotEntity? MergeEntity(string path, SnapshotEntity? b,
@@ -228,6 +226,7 @@ public sealed class ProjectSnapshotMerger
         if (Same(l, r)) return l;
         if (Same(l, b)) return r;
         if (Same(r, b)) return l;
+        if (MergedPlaceholders.Settle(b, l, r) is { } settled) return settled;
         if (l is null || r is null || b is null)
             return Object(path, b, l, r, b is null ? ProjectConflictKind.Addition : ProjectConflictKind.Deletion);
         return l with
@@ -252,16 +251,10 @@ public sealed class ProjectSnapshotMerger
                 l.SchemaUpdatedAtUtc : r.SchemaUpdatedAtUtc,
             ProgressUpdatedAtUtc = l.ProgressUpdatedAtUtc > r.ProgressUpdatedAtUtc ?
                 l.ProgressUpdatedAtUtc : r.ProgressUpdatedAtUtc,
+            // A dependency added on one side and another removed on the other both take effect.
             Dependencies = ThreeWayMerge.Keyed(path + "/Dependency", b.Dependencies,
-                l.Dependencies, r.Dependencies, d => d.DependencyEntityId,
-                (p, prior, own, other) => Object(p, prior, own, other, ProjectConflictKind.Relationship)),
-            UnresolvedDependencies = ThreeWayMerge.Keyed(path + "/Unresolved", b.UnresolvedDependencies,
-                l.UnresolvedDependencies, r.UnresolvedDependencies,
-                d => d.DependencySourceName.ToUpperInvariant(),
-                (p, prior, own, other) => Object(p, prior, own, other, ProjectConflictKind.Relationship)),
-            ManualOverrides = ThreeWayMerge.Keyed(path + "/Override", b.ManualOverrides,
-                l.ManualOverrides, r.ManualOverrides,
-                d => d.DependencySourceName.ToUpperInvariant(),
+                l.Dependencies, r.Dependencies,
+                d => d.DependencyEntityId.ToString("D"),
                 (p, prior, own, other) => Object(p, prior, own, other, ProjectConflictKind.Relationship))
         };
     }

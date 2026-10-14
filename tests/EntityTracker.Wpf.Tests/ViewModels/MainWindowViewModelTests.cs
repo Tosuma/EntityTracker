@@ -1,7 +1,6 @@
 using System.IO;
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.ManualOverrides;
@@ -871,13 +870,13 @@ public sealed class MainWindowViewModelTests
     public async Task Overview_ShowsManualProvenance()
     {
         MainWindowViewModel viewModel = CreateViewModel(
-            [Entity(1, "Planned", provenance: EntityProvenance.ManualOnly)],
+            [Entity(1, "Planned", provenance: EntityProvenance.Manual)],
             [],
             out _);
 
         await viewModel.InitializeAsync();
 
-        Assert.Equal("Manual only", Assert.Single(viewModel.OverviewItems).Provenance);
+        Assert.Equal("Manual", Assert.Single(viewModel.OverviewItems).Provenance);
     }
 
     [Fact]
@@ -897,7 +896,7 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(MainWindowTab.Overview, viewModel.SelectedTab);
         EntityOverviewRow row = Assert.Single(viewModel.OverviewItems);
         Assert.Equal("NewManualEntity", row.SourceName);
-        Assert.Equal("Manual only", row.Provenance);
+        Assert.Equal("Manual", row.Provenance);
         Assert.Equal("Not started", row.Status);
         Assert.Equal(row.EntityId, revealedEntityId);
         Assert.Equal(row.EntityId, viewModel.SelectedEntityDetails?.EntityId);
@@ -1091,18 +1090,15 @@ public sealed class MainWindowViewModelTests
         OverviewExportSettingsViewModel? overviewExportSettings = null,
         NotificationCenter? notifications = null)
     {
-        StubEntityRepository entityRepository = new(entities);
+        StubEntityRepository entityRepository = new(TestDependencies.WithPlaceholders(entities, unresolvedDependencies));
         StubDependencyRepository dependencyRepository = new(
-            dependencies,
-            unresolvedDependencies ?? []);
+            TestDependencies.Named(entities, dependencies, unresolvedDependencies));
         DependencyRanker ranker = new();
         EffectiveDependencyResolver resolver = new();
-        StubManualDependencyOverrideRepository overrideRepository = new();
         store = new StubStateStore(entityRepository);
         EntityDependencyEditorService editorService = new(
             entityRepository,
             dependencyRepository,
-            overrideRepository,
             resolver,
             ranker,
             store,
@@ -1113,7 +1109,6 @@ public sealed class MainWindowViewModelTests
                 entityRepository,
                 entityRepository,
                 dependencyRepository,
-                overrideRepository,
                 ranker,
                 resolver,
                 new WorkflowReadinessEvaluator(),
@@ -1121,13 +1116,11 @@ public sealed class MainWindowViewModelTests
             new BulkStatusUpdateService(
                 entityRepository,
                 dependencyRepository,
-                overrideRepository,
                 resolver,
                 store),
             new ManualEntityCreationService(
                 entityRepository,
                 dependencyRepository,
-                overrideRepository,
                 ranker,
                 resolver,
                 store),
@@ -1135,7 +1128,6 @@ public sealed class MainWindowViewModelTests
             new EntityLifecycleService(
                 entityRepository,
                 dependencyRepository,
-                overrideRepository,
                 store,
                 resolver,
                 ranker),
@@ -1179,7 +1171,7 @@ public sealed class MainWindowViewModelTests
         string name,
         DevelopmentStatus status = DevelopmentStatus.NotStarted,
         string notes = "",
-        EntityProvenance provenance = EntityProvenance.Imported,
+        EntityProvenance provenance = EntityProvenance.Manual,
         EntityLifecycleState lifecycle = EntityLifecycleState.Active,
         int? requestedPriority = null,
         string? responsibleDeveloper = null,
@@ -1197,14 +1189,13 @@ public sealed class MainWindowViewModelTests
             groupName);
 
     private static PersistedDependency Dependency(TrackedEntity owner, TrackedEntity target) =>
-        new(new DependencyEdge(owner.Id, target.Id), ImportedDependencyKind.Mandatory);
+        new(new DependencyEdge(owner.Id, target.Id));
 
     private static PersistedUnresolvedDependency Unresolved(
         TrackedEntity owner,
         string dependencySourceName) =>
         new(
-            new UnresolvedDependency(owner.Id, dependencySourceName),
-            ImportedDependencyKind.Mandatory);
+            new UnresolvedDependency(owner.Id, dependencySourceName));
 
     private sealed class StubEntityRepository : IEntityRepository, IEntityAuditReader
     {
@@ -1283,22 +1274,6 @@ public sealed class MainWindowViewModelTests
             CallCount++;
             return Result;
         }
-    }
-
-    private sealed class StubDependencyRepository(
-        IReadOnlyList<PersistedDependency> dependencies,
-        IReadOnlyList<PersistedUnresolvedDependency> unresolvedDependencies)
-        : IDependencyRepository
-    {
-        public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) => Task.FromResult(dependencies);
-
-        public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(unresolvedDependencies);
-
     }
 
     private sealed class StubStateStore(StubEntityRepository entityRepository)

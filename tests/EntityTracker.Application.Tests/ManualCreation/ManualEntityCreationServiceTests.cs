@@ -1,6 +1,5 @@
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
@@ -246,13 +245,12 @@ public sealed class ManualEntityCreationServiceTests
         Assert.Equal("NewEntity", added.SourceName);
         Assert.Equal(DevelopmentStatus.NotStarted, added.Status);
         Assert.Equal(EntityLifecycleState.Active, added.LifecycleState);
-        Assert.Equal(EntityProvenance.ManualOnly, added.Provenance);
+        Assert.Equal(EntityProvenance.Manual, added.Provenance);
         Assert.Equal("Platform Team", added.ResponsibleDeveloper);
         Assert.Equal("Core Data", added.GroupName);
         Assert.Null(added.RequestedPriority);
         Assert.Equal(added.Id, result.CreatedEntityId);
-        Assert.Empty(store.LastChangeSet.ResolvedDependencies);
-        Assert.Empty(store.LastChangeSet.UnresolvedDependencies);
+        Assert.Empty(store.LastChangeSet.Dependencies);
         ProgressSnapshotState snapshot = Assert.IsType<ProgressSnapshotState>(
             store.LastChangeSet.ProgressSnapshotAfterChanges);
         Assert.Equal(1, snapshot.ReadyCount);
@@ -296,7 +294,7 @@ public sealed class ManualEntityCreationServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_WithResolvedAndUnknownDependencies_PreservesBothAsMandatory()
+    public async Task CreateAsync_WithResolvedAndUnknownDependencies_PreservesBoth()
     {
         TrackedEntity known = Entity(1, "Known");
         ManualEntityCreationService service = Service([known], [], [], out RecordingStore store);
@@ -313,28 +311,23 @@ public sealed class ManualEntityCreationServiceTests
         Assert.Contains(result.Diagnostics, diagnostic =>
             diagnostic.Code == ManualEntityCreationDiagnosticCode.UnresolvedDependency &&
             diagnostic.Severity == ManualEntityCreationDiagnosticSeverity.Warning);
-        TrackedEntity added = Assert.Single(store.LastChangeSet!.EntitiesToAdd);
-        Assert.Empty(store.LastChangeSet.ResolvedDependencies);
-        Assert.Empty(store.LastChangeSet.UnresolvedDependencies);
-        ManualDependencyOverride[] overrides =
-            store.LastChangeSet.ManualDependencyOverrides.ToArray();
-        Assert.Contains(overrides, item =>
-            item.DependentEntityId == added.Id &&
-            item.DependencySourceName == known.SourceName &&
-            item.Action == ManualDependencyOverrideAction.Add);
-        Assert.Contains(overrides, item =>
-            item.DependentEntityId == added.Id &&
-            item.DependencySourceName == "Future" &&
-            item.Action == ManualDependencyOverrideAction.Add);
+        // The unknown name gets a placeholder entity, added with the new entity.
+        TrackedEntity added = store.LastChangeSet!.EntitiesToAdd.Single(entity => entity.SourceName == "Owner");
+        TrackedEntity future = store.LastChangeSet.EntitiesToAdd.Single(entity => entity.IsPlaceholder);
+        Assert.Equal("Future", future.SourceName);
+        Assert.Equal(TrackedEntity.PlaceholderId(TestTrackerId, "Future"), future.Id);
+        Assert.Equal(added.Id, Assert.Single(store.LastChangeSet.DependencyOwnerIds));
+        Assert.Equal(
+            [new EntityDependency(added.Id, known.Id), new EntityDependency(added.Id, future.Id)],
+            store.LastChangeSet.Dependencies.Where(item => item.DependentEntityId == added.Id));
     }
 
     [Fact]
-    public async Task CreateAsync_ResolvesMatchingUnresolvedReferencesElsewhere()
+    public async Task CreateAsync_TurnsThePlaceholderWithTheNameIntoTheNewEntity()
     {
         TrackedEntity owner = Entity(1, "Owner");
         PersistedUnresolvedDependency existing = new(
-            new UnresolvedDependency(owner.Id, " Future "),
-            ImportedDependencyKind.Optional);
+            new UnresolvedDependency(owner.Id, " Future "));
         ManualEntityCreationService service = Service(
             [owner],
             [],
@@ -344,17 +337,19 @@ public sealed class ManualEntityCreationServiceTests
         ManualEntityCreationResult result = await service.CreateAsync(
             new ManualEntityCreationRequest("future", []));
 
+        // The new entity takes the placeholder's ID, so the owner's dependency on it, unchanged,
+        // now refers to the new entity.
         Assert.True(result.IsSuccess);
         TrackedEntity created = Assert.Single(store.LastChangeSet!.EntitiesToAdd);
-        Assert.Contains(owner.Id, store.LastChangeSet.ReconciledOwnerIds);
-        PersistedDependency resolved = Assert.Single(
-            store.LastChangeSet.ResolvedDependencies,
-            dependency => dependency.Edge.DependentEntityId == owner.Id);
-        Assert.Equal(created.Id, resolved.Edge.DependencyEntityId);
-        Assert.Equal(ImportedDependencyKind.Optional, resolved.Kind);
-        Assert.DoesNotContain(
-            store.LastChangeSet.UnresolvedDependencies,
-            dependency => dependency.Dependency.DependentEntityId == owner.Id);
+        Assert.Equal(TrackedEntity.PlaceholderId(TestTrackerId, "Future"), created.Id);
+        Assert.Equal(EntityLifecycleState.Active, created.LifecycleState);
+        Assert.Equal("future", created.SourceName);
+        Assert.Equal(created.Id, Assert.Single(store.LastChangeSet.DependencyOwnerIds));
+        Assert.Empty(store.LastChangeSet.Dependencies);
+        ProgressSnapshotState snapshot = Assert.IsType<ProgressSnapshotState>(
+            store.LastChangeSet.ProgressSnapshotAfterChanges);
+        Assert.Equal(1, snapshot.ReadyCount);
+        Assert.Equal(1, snapshot.BlockedCount);
     }
 
     [Fact]
@@ -371,12 +366,8 @@ public sealed class ManualEntityCreationServiceTests
         Assert.True(result.IsSuccess);
         Assert.DoesNotContain(result.Diagnostics, diagnostic =>
             diagnostic.Code == ManualEntityCreationDiagnosticCode.UnresolvedDependency);
-        ManualDependencyOverride dependencyOverride = Assert.Single(
-            store.LastChangeSet!.ManualDependencyOverrides);
-        Assert.Equal(ManualDependencyOverrideAction.Add, dependencyOverride.Action);
-        Assert.Equal("Known", dependencyOverride.DependencySourceName);
-        Assert.Empty(store.LastChangeSet.ResolvedDependencies);
-        Assert.Empty(store.LastChangeSet.UnresolvedDependencies);
+        EntityDependency dependency = Assert.Single(store.LastChangeSet!.Dependencies);
+        Assert.Equal(known.Id, dependency.DependencyEntityId);
     }
 
     [Theory]
@@ -492,8 +483,7 @@ public sealed class ManualEntityCreationServiceTests
     {
         TrackedEntity a = Entity(1, "A");
         PersistedUnresolvedDependency aToB = new(
-            new UnresolvedDependency(a.Id, "B"),
-            ImportedDependencyKind.Mandatory);
+            new UnresolvedDependency(a.Id, "B"));
         ManualEntityCreationService service = Service(
             [a],
             [],
@@ -519,9 +509,8 @@ public sealed class ManualEntityCreationServiceTests
     {
         store = new RecordingStore();
         return new ManualEntityCreationService(
-            new StubEntityRepository(entities),
-            new StubDependencyRepository(dependencies, unresolved),
-            new StubManualDependencyOverrideRepository(),
+            new StubEntityRepository(TestDependencies.WithPlaceholders(entities, unresolved)),
+            new StubDependencyRepository(TestDependencies.Named(entities, dependencies, unresolved)),
             new DependencyRanker(),
             new EffectiveDependencyResolver(),
             store);
@@ -551,20 +540,6 @@ public sealed class ManualEntityCreationServiceTests
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
             TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(entities);
-
-    }
-
-    private sealed class StubDependencyRepository(
-        IReadOnlyList<PersistedDependency> dependencies,
-        IReadOnlyList<PersistedUnresolvedDependency> unresolved) : IDependencyRepository
-    {
-        public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) => Task.FromResult(dependencies);
-
-        public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) => Task.FromResult(unresolved);
 
     }
 

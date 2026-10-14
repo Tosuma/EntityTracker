@@ -1,6 +1,6 @@
-using EntityTracker.Application.Importing;
+using EntityTracker.Application.Dependencies;
 
-namespace EntityTracker.Application.Tests.Importing;
+namespace EntityTracker.Application.Tests.Dependencies;
 
 public sealed class EntitySourceKeyTests
 {

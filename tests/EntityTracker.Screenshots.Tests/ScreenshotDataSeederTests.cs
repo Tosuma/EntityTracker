@@ -41,16 +41,15 @@ public sealed class ScreenshotDataSeederTests
 
         IReadOnlyList<TrackedEntity> entities =
             await provider.GetRequiredService<IEntityRepository>().GetAllAsync(tracker.Id);
-        Assert.Equal(125, entities.Count);
+        // 125 entities, and a placeholder for each of the 6 names they depend on that no entity has.
+        Assert.Equal(125, entities.Count(static entity => !entity.IsPlaceholder));
+        Assert.Equal(6, entities.Count(static entity => entity.IsPlaceholder));
         Assert.Equal(
             Enum.GetValues<DevelopmentStatus>().Order(),
             entities.Select(static entity => entity.Status).Distinct().Order());
         IDependencyRepository dependencies = provider.GetRequiredService<IDependencyRepository>();
         EffectiveDependencyState dependencyState = provider.GetRequiredService<EffectiveDependencyResolver>()
-            .Resolve(entities,
-                await dependencies.GetAllAsync(tracker.Id),
-                await dependencies.GetAllUnresolvedAsync(tracker.Id),
-                await provider.GetRequiredService<IManualDependencyOverrideRepository>().GetAllAsync(tracker.Id));
+            .Resolve(entities, await dependencies.GetAllAsync(tracker.Id));
         Assert.Equal(10, dependencyState.UnresolvedDependencies.Count);
         Assert.Contains(
             entities,

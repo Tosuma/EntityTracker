@@ -1,4 +1,3 @@
-using EntityTracker.Application.Persistence;
 using EntityTracker.Domain;
 
 namespace EntityTracker.Application.Tracking;
@@ -8,15 +7,11 @@ public static class TrackerStateValidator
     public static void EnsureOwned(
         TrackerId trackerId,
         IEnumerable<TrackedEntity> entities,
-        IEnumerable<PersistedDependency> resolvedDependencies,
-        IEnumerable<PersistedUnresolvedDependency> unresolvedDependencies,
-        IEnumerable<ManualDependencyOverride> manualOverrides)
+        IEnumerable<EntityDependency> dependencies)
     {
         ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(entities);
-        ArgumentNullException.ThrowIfNull(resolvedDependencies);
-        ArgumentNullException.ThrowIfNull(unresolvedDependencies);
-        ArgumentNullException.ThrowIfNull(manualOverrides);
+        ArgumentNullException.ThrowIfNull(dependencies);
 
         TrackedEntity[] entityArray = entities.ToArray();
         if (entityArray.Any(entity => entity.TrackerId != trackerId))
@@ -25,20 +20,10 @@ public static class TrackerStateValidator
         }
 
         HashSet<EntityId> entityIds = entityArray.Select(static entity => entity.Id).ToHashSet();
-        if (resolvedDependencies.Any(dependency =>
-                !entityIds.Contains(dependency.Edge.DependentEntityId)))
+        if (dependencies.Any(dependency => !entityIds.Contains(dependency.DependentEntityId)))
         {
             throw new InvalidDataException(
-                "A resolved dependency is owned by an entity outside the tracker.");
-        }
-
-        if (unresolvedDependencies.Any(dependency =>
-                !entityIds.Contains(dependency.Dependency.DependentEntityId)) ||
-            manualOverrides.Any(dependencyOverride =>
-                !entityIds.Contains(dependencyOverride.DependentEntityId)))
-        {
-            throw new InvalidDataException(
-                "A dependency declaration is owned by an entity outside the tracker.");
+                "A dependency is owned by an entity outside the tracker.");
         }
     }
 }

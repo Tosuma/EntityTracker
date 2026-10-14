@@ -38,14 +38,12 @@ internal sealed class ProjectMergeConflictPresenter(
                     ? NameOnSides(part, key) : id));
             }
             else if (part is "ResponsibilityPeriod" or "Progress" or "Dependency" or
-                     "Unresolved" or "Override" or "ResponsibilityOverlap" && index + 1 < parts.Length)
+                     "ResponsibilityOverlap" && index + 1 < parts.Length)
             {
                 string value = parts[++index];
                 labels.Add(part switch
                 {
-                    "Dependency" when Guid.TryParse(value, out Guid entityId) =>
-                        "Dependency: " + NameOnSides("Entity", entityId),
-                    "Unresolved" or "Override" => "Dependency: " + DependencyName(value),
+                    "Dependency" => "Dependency: " + DependencyName(value),
                     "ResponsibilityOverlap" when Guid.TryParse(value, out Guid developerId) =>
                         "Overlapping responsibility: " + NameOnSides("Developer", developerId),
                     _ => Humanize(part)
@@ -68,24 +66,9 @@ internal sealed class ProjectMergeConflictPresenter(
         return left ?? right ?? Name(basis, type, id) ?? id.ToString("D");
     }
 
-    private string DependencyName(string value)
-    {
-        foreach (ProjectSnapshot? snapshot in new[] { local, remote, basis })
-        {
-            if (snapshot is null) continue;
-            string? unresolved = snapshot.Trackers.SelectMany(t => t.Entities)
-                .SelectMany(e => e.UnresolvedDependencies)
-                .FirstOrDefault(d => d.DependencySourceName.Equals(value,
-                    StringComparison.OrdinalIgnoreCase))?.DependencySourceName;
-            if (unresolved is not null) return unresolved;
-            string? manual = snapshot.Trackers.SelectMany(t => t.Entities)
-                .SelectMany(e => e.ManualOverrides)
-                .FirstOrDefault(d => d.DependencySourceName.Equals(value,
-                    StringComparison.OrdinalIgnoreCase))?.DependencySourceName;
-            if (manual is not null) return manual;
-        }
-        return value;
-    }
+    /// <summary>A dependency's key is its target entity's ID.</summary>
+    private string DependencyName(string value) =>
+        Guid.TryParse(value, out Guid id) ? NameOnSides("Entity", id) : value;
 
     private static string? Name(ProjectSnapshot? snapshot, string type, Guid id) => type switch
     {
@@ -101,8 +84,7 @@ internal sealed class ProjectMergeConflictPresenter(
     {
         string?[] raw = [conflict.BaseValue, conflict.LocalValue, conflict.RemoteValue];
         ProjectSnapshot?[] snapshots = [basis, local, remote];
-        if (conflict.Kind is ProjectConflictKind.Field or ProjectConflictKind.Lifecycle &&
-            !conflict.Path.EndsWith("/ImportSummary", StringComparison.Ordinal) ||
+        if (conflict.Kind is ProjectConflictKind.Field or ProjectConflictKind.Lifecycle ||
             !raw.Any(IsStructured))
             return raw.Select((value, index) => Scalar(value, conflict.Path.Split('/').Last(),
                 snapshots[index])).ToArray();
@@ -226,10 +208,8 @@ internal sealed class ProjectMergeConflictPresenter(
             "Entities" => "Entity: " + (name ?? "Unnamed entity"),
             "Developers" => "Developer: " + DeveloperName(Property(item, "Initials"),
                 Property(item, "DisplayName")),
-            "Dependencies" => "Dependency: " + ReferenceName(snapshot, "Entity",
-                Property(item, "DependencyEntityId")),
-            "UnresolvedDependencies" or "ManualOverrides" =>
-                "Dependency: " + (Property(item, "DependencySourceName") ?? "Unnamed dependency"),
+            "Dependencies" => "Dependency: " + (Property(item, "DependencyEntityId") is { } target
+                ? ReferenceName(snapshot, "Entity", target) : "Unnamed dependency"),
             "ResponsibilityPeriods" or "Periods" => "Responsibility: " +
                 ReferenceName(snapshot, "Developer", Property(item, "DeveloperId")),
             "StatusHistory" or "Items" when Property(item, "NewStatus") is { } status =>
@@ -322,7 +302,6 @@ internal sealed class ProjectMergeConflictPresenter(
         "FilterActive" => "Filter active",
         "Notes" => "Internal notes",
         "SharedNotes" => "Shared notes",
-        "ImportSummary" => "Import summary",
         _ => Humanize(value.Replace("Utc", "", StringComparison.Ordinal))
     };
 

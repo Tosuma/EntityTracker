@@ -11,7 +11,6 @@ public sealed class TrackerSyncService(
     ITrackerRepository trackerRepository,
     IEntityRepository entityRepository,
     IDependencyRepository dependencyRepository,
-    IManualDependencyOverrideRepository overrideRepository,
     ITrackerSyncStore store,
     EffectiveDependencyResolver resolver,
     ProgressSnapshotCalculator snapshotCalculator,
@@ -26,8 +25,8 @@ public sealed class TrackerSyncService(
         await RequireActiveAsync(sourceId, cancellationToken);
         string sourceFingerprint = await store.FingerprintAsync(sourceId, cancellationToken);
         string destinationFingerprint = await store.FingerprintAsync(destinationId, cancellationToken);
-        (TrackerSyncStructure source, _, _, _, _) = await ReadStructureAsync(sourceId, cancellationToken);
-        (TrackerSyncStructure target, _, _, _, _) = await ReadStructureAsync(destinationId, cancellationToken);
+        (TrackerSyncStructure source, _, _) = await ReadStructureAsync(sourceId, cancellationToken);
+        (TrackerSyncStructure target, _, _) = await ReadStructureAsync(destinationId, cancellationToken);
         TrackerSyncBaseline? baseline = await store.ReadBaselineAsync(destinationId, cancellationToken);
         if (sourceFingerprint != await store.FingerprintAsync(sourceId, cancellationToken) ||
             destinationFingerprint != await store.FingerprintAsync(destinationId, cancellationToken))
@@ -61,12 +60,10 @@ public sealed class TrackerSyncService(
         await RequireActiveAsync(review.SourceTrackerId, cancellationToken);
 
         TrackerSyncStructure selected = TrackerSyncPlanner.Resolve(review);
-        (_, TrackedEntity[] existing, PersistedDependency[] existingResolved,
-            PersistedUnresolvedDependency[] existingUnresolved,
-            ManualDependencyOverride[] existingOverrides) =
+        (_, TrackedEntity[] existing, EntityDependency[] existingDependencies) =
             await ReadStructureAsync(review.DestinationTrackerId, cancellationToken);
         ProgressSnapshotState currentProgress = snapshotCalculator.Calculate(existing,
-            resolver.Resolve(existing, existingResolved, existingUnresolved, existingOverrides));
+            resolver.Resolve(existing, existingDependencies));
         var existingByKey = existing.ToDictionary(static entity => TrackerSyncPlanner.Key(entity.SourceName));
         var currentByKey = review.Destination.Entities.ToDictionary(
             static entity => TrackerSyncPlanner.Key(entity.Name));
@@ -81,14 +78,16 @@ public sealed class TrackerSyncService(
         foreach (TrackerSyncEntity wanted in selected.Entities)
         {
             string key = TrackerSyncPlanner.Key(wanted.Name);
-            if (!existingByKey.TryGetValue(key, out TrackedEntity? entity))
+            existingByKey.TryGetValue(key, out TrackedEntity? entity);
+            if (entity is null or { IsPlaceholder: true })
             {
                 if (!wanted.Active) continue;
-                entity = new TrackedEntity(EntityId.New(), review.DestinationTrackerId,
+                // A placeholder with the name becomes the entity, keeping its ID.
+                entity = new TrackedEntity(entity?.Id ?? EntityId.New(), review.DestinationTrackerId,
                     wanted.Name, provenance: EntityProvenance.Copied,
                     requestedPriority: wanted.RequestedPriority, groupName: wanted.GroupName,
                     filterActive: wanted.FilterActive ?? "");
-                existingByKey.Add(key, entity);
+                existingByKey[key] = entity;
                 additions.Add(entity);
                 continue;
             }
@@ -114,11 +113,10 @@ public sealed class TrackerSyncService(
             }
         }
 
+        // An entity whose dependencies the sync changes gets exactly the selected list.
         List<EntityId> reconciled = [];
-        List<PersistedDependency> desiredResolved = [];
-        List<PersistedUnresolvedDependency> desiredUnresolved = [];
-        List<ManualDependencyOverride> desiredOverrides = [];
-        var existingById = existing.ToDictionary(static entity => entity.Id);
+        List<EntityDependency> desiredDependencies = [];
+        DependencyTargets targets = new(review.DestinationTrackerId, existingByKey.Values);
         foreach (TrackerSyncEntity wanted in selected.Entities.Where(static item => item.Active))
         {
             string key = TrackerSyncPlanner.Key(wanted.Name);
@@ -127,71 +125,22 @@ public sealed class TrackerSyncService(
                 continue;
             EntityId ownerId = existingByKey[key].Id;
             reconciled.Add(ownerId);
-            var wantedTargets = wanted.Dependencies.ToDictionary(
-                static item => TrackerSyncPlanner.Key(item.Name));
-            ManualDependencyOverride[] retainedOverrides = existingOverrides
-                .Where(item => item.DependentEntityId == ownerId)
-                .Where(item =>
-                {
-                    bool present = wantedTargets.TryGetValue(
-                        TrackerSyncPlanner.Key(item.DependencySourceName), out TrackerSyncDependency? dependency);
-                    return item.Action == ManualDependencyOverrideAction.Add
-                        ? present && dependency!.Kind == Importing.ImportedDependencyKind.Mandatory
-                        : !present;
-                }).ToArray();
-            desiredOverrides.AddRange(retainedOverrides);
-            HashSet<string> manuallyAdded = retainedOverrides
-                .Where(static item => item.Action == ManualDependencyOverrideAction.Add)
-                .Select(static item => TrackerSyncPlanner.Key(item.DependencySourceName))
-                .ToHashSet();
-            HashSet<string> manuallySuppressed = retainedOverrides
-                .Where(static item => item.Action == ManualDependencyOverrideAction.Suppress)
-                .Select(static item => TrackerSyncPlanner.Key(item.DependencySourceName))
-                .ToHashSet();
-            foreach (TrackerSyncDependency dependency in wanted.Dependencies)
-            {
-                string targetKey = TrackerSyncPlanner.Key(dependency.Name);
-                if (manuallyAdded.Contains(targetKey)) continue;
-                if (selectedByKey.TryGetValue(targetKey, out TrackerSyncEntity? target) &&
-                    target.Active && existingByKey.TryGetValue(targetKey, out TrackedEntity? targetEntity))
-                {
-                    desiredResolved.Add(new PersistedDependency(
-                        new DependencyEdge(ownerId, targetEntity.Id), dependency.Kind));
-                }
-                else
-                {
-                    desiredUnresolved.Add(new PersistedUnresolvedDependency(
-                        new UnresolvedDependency(ownerId, dependency.Name), dependency.Kind));
-                }
-            }
-            desiredResolved.AddRange(existingResolved.Where(item =>
-                item.Edge.DependentEntityId == ownerId &&
-                existingById.TryGetValue(item.Edge.DependencyEntityId, out TrackedEntity? target) &&
-                manuallySuppressed.Contains(TrackerSyncPlanner.Key(target.SourceName))));
-            desiredUnresolved.AddRange(existingUnresolved.Where(item =>
-                item.Dependency.DependentEntityId == ownerId &&
-                manuallySuppressed.Contains(TrackerSyncPlanner.Key(
-                    item.Dependency.DependencySourceName))));
+            desiredDependencies.AddRange(wanted.Dependencies.Select(dependency =>
+                new EntityDependency(ownerId, targets.For(dependency.Name).Id)));
         }
+        additions.AddRange(targets.NewPlaceholders);
         HashSet<EntityId> reconciledIds = reconciled.ToHashSet();
-        var finalResolved = existingResolved.Where(item =>
-                !reconciledIds.Contains(item.Edge.DependentEntityId))
-            .Concat(desiredResolved).ToArray();
-        var finalUnresolved = existingUnresolved.Where(item =>
-                !reconciledIds.Contains(item.Dependency.DependentEntityId))
-            .Concat(desiredUnresolved).ToArray();
-        var finalOverrides = existingOverrides.Where(item =>
-            !reconciledIds.Contains(item.DependentEntityId))
-            .Concat(desiredOverrides).ToArray();
-        TrackedEntity[] candidate = existingByKey.Values.ToArray();
+        EntityDependency[] finalDependencies = existingDependencies
+            .Where(item => !reconciledIds.Contains(item.DependentEntityId))
+            .Concat(desiredDependencies).ToArray();
+        TrackedEntity[] candidate = [.. existingByKey.Values, .. targets.NewPlaceholders];
         foreach (TrackedEntity entity in candidate)
         {
             string key = TrackerSyncPlanner.Key(entity.SourceName);
             if (selectedByKey.TryGetValue(key, out TrackerSyncEntity? wanted))
                 entity.ChangeLifecycleState(wanted.Active ? EntityLifecycleState.Active : EntityLifecycleState.Archived);
         }
-        EffectiveDependencyState effective = resolver.Resolve(candidate,
-            finalResolved, finalUnresolved, finalOverrides);
+        EffectiveDependencyState effective = resolver.Resolve(candidate, finalDependencies);
         var ranking = ranker.Rank(candidate.Where(static item => item.LifecycleState == EntityLifecycleState.Active),
             effective.ResolvedDependencies.Select(static item => item.Edge),
             effective.UnresolvedDependencies.Select(static item => item.Dependency));
@@ -200,8 +149,7 @@ public sealed class TrackerSyncService(
                 ranking.Diagnostics.Select(static item => item.Message)));
         var snapshot = snapshotCalculator.Calculate(candidate, effective);
         TrackedStateChangeSet changes = new(additions, [], archives,
-            reconciled, desiredResolved, desiredUnresolved,
-            reconciled, desiredOverrides, entitiesWithProgressToUpdate: filterActiveUpdates,
+            reconciled, desiredDependencies, entitiesWithProgressToUpdate: filterActiveUpdates,
             entityIdsToRestore: restores,
             progressSnapshotAfterChanges: snapshot,
             entitiesWithRequestedPriorityToUpdate: priorityUpdates,
@@ -227,22 +175,16 @@ public sealed class TrackerSyncService(
         return tracker;
     }
 
-    private async Task<(TrackerSyncStructure, TrackedEntity[], PersistedDependency[],
-        PersistedUnresolvedDependency[], ManualDependencyOverride[])> ReadStructureAsync(
+    private async Task<(TrackerSyncStructure, TrackedEntity[], EntityDependency[])> ReadStructureAsync(
         TrackerId id, CancellationToken cancellationToken)
     {
         TrackedEntity[] entities = (await entityRepository.GetAllAsync(id, cancellationToken)).ToArray();
-        PersistedDependency[] resolved = (await dependencyRepository.GetAllAsync(id, cancellationToken)).ToArray();
-        PersistedUnresolvedDependency[] unresolved =
-            (await dependencyRepository.GetAllUnresolvedAsync(id, cancellationToken)).ToArray();
-        ManualDependencyOverride[] overrides = (await overrideRepository.GetAllAsync(id, cancellationToken)).ToArray();
-        return (TrackerSyncPlanner.Capture(entities, resolved, unresolved, overrides),
-            entities, resolved, unresolved, overrides);
+        EntityDependency[] dependencies = (await dependencyRepository.GetAllAsync(id, cancellationToken)).ToArray();
+        return (TrackerSyncPlanner.Capture(entities, dependencies), entities, dependencies);
     }
 
     private static bool SameDependencies(
         IReadOnlyList<TrackerSyncDependency> a, IReadOnlyList<TrackerSyncDependency> b) =>
         a.Count == b.Count && a.All(item => b.Any(other =>
-            TrackerSyncPlanner.Key(other.Name) == TrackerSyncPlanner.Key(item.Name) &&
-            other.Kind == item.Kind));
+            TrackerSyncPlanner.Key(other.Name) == TrackerSyncPlanner.Key(item.Name)));
 }

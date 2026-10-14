@@ -1,4 +1,4 @@
-using EntityTracker.Application.Importing;
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Domain;
 
 namespace EntityTracker.Application.ManualCreation;

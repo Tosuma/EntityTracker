@@ -59,8 +59,6 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<IEntityRepository, SqliteEntityRepository>();
         services.AddSingleton<IEntityAuditReader, SqliteEntityAuditReader>();
         services.AddSingleton<IDependencyRepository, SqliteDependencyRepository>();
-        services.AddSingleton<IManualDependencyOverrideRepository,
-            SqliteManualDependencyOverrideRepository>();
         services.AddSingleton<SqliteTrackedStateStore>();
         services.AddSingleton<ITrackedStateStore>(static provider =>
             provider.GetRequiredService<SqliteTrackedStateStore>());

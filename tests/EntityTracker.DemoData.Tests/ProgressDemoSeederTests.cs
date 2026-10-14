@@ -1,4 +1,4 @@
-using EntityTracker.Application.Importing;
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Domain;
@@ -25,7 +25,7 @@ public sealed class ProgressDemoSeederTests
                 notes: index == 2 ? "Keep this internal note" : ""))
             .ToArray();
         await new SqliteTrackedStateStore(database).ApplyAsync(tracker.Id,
-            new TrackedStateChangeSet(active, [], [], [], [], []));
+            new TrackedStateChangeSet(active, [], []));
 
         await new ProgressDemoSeeder().SeedAsync(file.DatabasePath, new ProgressDemoOptions(
             days: 30, seed: 7, endDate: new DateOnly(2026, 3, 31), timeZone: TimeZoneInfo.Utc, demoNotes: true));
@@ -60,8 +60,8 @@ public sealed class ProgressDemoSeederTests
                     : DevelopmentStatus.InProgress,
                 $"Keep note {index}",
                 provenance: index == 10
-                    ? EntityProvenance.ManualOnly
-                    : EntityProvenance.Imported))
+                    ? EntityProvenance.Manual
+                    : EntityProvenance.Manual))
             .ToArray();
         TrackedEntity archived = new(
             new EntityId(Guid.Parse("20000000-0000-0000-0000-000000000001")),
@@ -70,37 +70,25 @@ public sealed class ProgressDemoSeederTests
             DevelopmentStatus.Reconciled,
             "Keep archived note",
             EntityLifecycleState.Archived,
-            EntityProvenance.Imported);
-        PersistedDependency resolved = new(
-            new DependencyEdge(active[1].Id, active[0].Id),
-            ImportedDependencyKind.Mandatory);
-        PersistedUnresolvedDependency unresolved = new(
-            new UnresolvedDependency(active[2].Id, "Missing target"),
-            ImportedDependencyKind.Mandatory);
-        ManualDependencyOverride dependencyOverride = new(
-            active[3].Id,
-            active[0].SourceName,
-            ManualDependencyOverrideAction.Add);
+            EntityProvenance.Manual);
+        TrackedEntity missing = TrackedEntity.Placeholder(tracker.Id, "Missing target");
         await new SqliteTrackedStateStore(database).ApplyAsync(tracker.Id, new TrackedStateChangeSet(
-            [.. active, archived],
+            [.. active, archived, missing],
             [],
             [],
-            [active[1].Id, active[2].Id],
-            [resolved],
-            [unresolved],
-            reconciledOverrideOwnerIds: [active[3].Id],
-            manualDependencyOverrides: [dependencyOverride]));
+            [active[1].Id, active[2].Id, active[3].Id],
+            [
+                new EntityDependency(active[1].Id, active[0].Id),
+                new EntityDependency(active[2].Id, missing.Id),
+                new EntityDependency(active[3].Id, active[0].Id)
+            ]));
 
         EntityProjection[] expectedEntities = (await new SqliteEntityRepository(database)
                 .GetAllAsync(tracker.Id))
             .Select(EntityProjection.From)
             .ToArray();
-        PersistedDependency[] expectedResolved =
+        EntityDependency[] expectedDependencies =
             (await new SqliteDependencyRepository(database).GetAllAsync(tracker.Id)).ToArray();
-        PersistedUnresolvedDependency[] expectedUnresolved =
-            (await new SqliteDependencyRepository(database).GetAllUnresolvedAsync(tracker.Id)).ToArray();
-        ManualDependencyOverride[] expectedOverrides =
-            (await new SqliteManualDependencyOverrideRepository(database).GetAllAsync(tracker.Id)).ToArray();
 
         ProgressDemoOptions options = new(
             days: 90,
@@ -119,16 +107,8 @@ public sealed class ProgressDemoSeederTests
             (await new SqliteEntityRepository(seededDatabase).GetAllAsync(seededTracker.Id)).ToArray();
         Assert.Equal(expectedEntities, seededEntities.Select(EntityProjection.From));
         Assert.Equal(
-            expectedResolved,
+            expectedDependencies,
             await new SqliteDependencyRepository(seededDatabase).GetAllAsync(seededTracker.Id));
-        Assert.Equal(
-            expectedUnresolved,
-            await new SqliteDependencyRepository(seededDatabase).GetAllUnresolvedAsync(
-                seededTracker.Id));
-        Assert.Equal(
-            expectedOverrides,
-            await new SqliteManualDependencyOverrideRepository(seededDatabase).GetAllAsync(
-                seededTracker.Id));
 
         TrackedEntity seededArchived = Assert.Single(
             seededEntities,
@@ -177,7 +157,7 @@ public sealed class ProgressDemoSeederTests
             "Archived",
             lifecycleState: EntityLifecycleState.Archived);
         await new SqliteTrackedStateStore(database).ApplyAsync(tracker.Id, new TrackedStateChangeSet(
-            [archived], [], [], [], [], []));
+            [archived], [], []));
         SqliteConnection.ClearAllPools();
         byte[] original = await File.ReadAllBytesAsync(file.DatabasePath);
 

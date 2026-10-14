@@ -1,6 +1,5 @@
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Ranking;
@@ -30,8 +29,7 @@ public sealed class EntityLifecycleServiceTests
             Assert.IsType<ProgressSnapshotState>(changeSet.ProgressSnapshotAfterChanges)
                 .TotalActiveCount);
         Assert.Empty(changeSet.EntitiesToUpdate);
-        Assert.Empty(changeSet.ReconciledOwnerIds);
-        Assert.Empty(changeSet.ReconciledOverrideOwnerIds);
+        Assert.Empty(changeSet.DependencyOwnerIds);
     }
 
     [Fact]
@@ -60,7 +58,7 @@ public sealed class EntityLifecycleServiceTests
             DevelopmentStatus.Reconciled,
             "Keep notes",
             EntityLifecycleState.Archived,
-            EntityProvenance.ManualAndImported);
+            EntityProvenance.Copied);
         RecordingStore store = new();
         EntityLifecycleService service = CreateService([archivedEntity], store);
 
@@ -109,8 +107,8 @@ public sealed class EntityLifecycleServiceTests
         TrackedEntity active = new(EntityId.New(), TestTrackerId, "Active");
         PersistedDependency[] dependencies =
         [
-            new(new DependencyEdge(archived.Id, active.Id), ImportedDependencyKind.Mandatory),
-            new(new DependencyEdge(active.Id, archived.Id), ImportedDependencyKind.Mandatory)
+            new(new DependencyEdge(archived.Id, active.Id)),
+            new(new DependencyEdge(active.Id, archived.Id))
         ];
         RecordingStore store = new();
         EntityLifecycleService service = CreateService([archived, active], store, dependencies);
@@ -127,12 +125,10 @@ public sealed class EntityLifecycleServiceTests
         IReadOnlyList<TrackedEntity> entities,
         RecordingStore store,
         IReadOnlyList<PersistedDependency>? dependencies = null,
-        IReadOnlyList<PersistedUnresolvedDependency>? unresolved = null,
-        IReadOnlyList<ManualDependencyOverride>? overrides = null) =>
+        IReadOnlyList<PersistedUnresolvedDependency>? unresolved = null) =>
         new(
-            new StubEntityRepository(entities),
-            new StubDependencyRepository(dependencies ?? [], unresolved ?? []),
-            new StubOverrideRepository(overrides ?? []),
+            new StubEntityRepository(TestDependencies.WithPlaceholders(entities, unresolved)),
+            new StubDependencyRepository(TestDependencies.Named(entities, dependencies, unresolved)),
             store,
             new EffectiveDependencyResolver(),
             new DependencyRanker());
@@ -150,28 +146,6 @@ public sealed class EntityLifecycleServiceTests
             TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(entities);
 
-    }
-
-    private sealed class StubDependencyRepository(
-        IReadOnlyList<PersistedDependency> dependencies,
-        IReadOnlyList<PersistedUnresolvedDependency> unresolved) : IDependencyRepository
-    {
-        public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) => Task.FromResult(dependencies);
-
-        public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) => Task.FromResult(unresolved);
-
-    }
-
-    private sealed class StubOverrideRepository(IReadOnlyList<ManualDependencyOverride> overrides)
-        : IManualDependencyOverrideRepository
-    {
-        public Task<IReadOnlyList<ManualDependencyOverride>> GetAllAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) => Task.FromResult(overrides);
     }
 
     private sealed class RecordingStore : ITrackedStateStore

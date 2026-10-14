@@ -10,7 +10,6 @@ public sealed class PortfolioQueryService(
     ITrackerRepository trackerRepository,
     IEntityRepository entityRepository,
     IDependencyRepository dependencyRepository,
-    IManualDependencyOverrideRepository overrideRepository,
     IProgressHistoryRepository progressHistoryRepository,
     EffectiveDependencyResolver effectiveDependencyResolver,
     ProgressSnapshotCalculator snapshotCalculator)
@@ -93,26 +92,18 @@ public sealed class PortfolioQueryService(
     {
         Task<IReadOnlyList<TrackedEntity>> entityTask =
             entityRepository.GetAllAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<PersistedDependency>> dependencyTask =
+        Task<IReadOnlyList<EntityDependency>> dependenciesTask =
             dependencyRepository.GetAllAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
-            dependencyRepository.GetAllUnresolvedAsync(trackerId, cancellationToken);
-        Task<IReadOnlyList<ManualDependencyOverride>> overrideTask =
-            overrideRepository.GetAllAsync(trackerId, cancellationToken);
         Task<ProgressSnapshot?> latestSnapshotTask =
             progressHistoryRepository.GetLatestProgressSnapshotAsync(trackerId, cancellationToken);
         await Task.WhenAll(
             entityTask,
-            dependencyTask,
-            unresolvedTask,
-            overrideTask,
+            dependenciesTask,
             latestSnapshotTask);
 
         EffectiveDependencyState effective = effectiveDependencyResolver.Resolve(
             await entityTask,
-            await dependencyTask,
-            await unresolvedTask,
-            await overrideTask);
+            await dependenciesTask);
         ProgressSnapshotState state = snapshotCalculator.Calculate(await entityTask, effective);
         return TrackerProgressSummary.From(
             state,

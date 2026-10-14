@@ -1,6 +1,5 @@
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Persistence;
@@ -72,7 +71,7 @@ public sealed class EntityDependencyEditorViewModelTests
         await WaitUntilAsync(() => viewModel.Dependencies.Count == 1);
         EntityDependencyEditRow dependency = Assert.Single(viewModel.Dependencies);
         Assert.Equal(target.SourceName, dependency.SourceName);
-        Assert.Equal("Manual addition", dependency.Origin);
+        Assert.Equal("Resolved", dependency.Resolution);
         Assert.Equal(string.Empty, viewModel.DependencyQuery);
         Assert.False(viewModel.IsDependencySuggestionsOpen);
         Assert.Empty(viewModel.Errors);
@@ -96,7 +95,7 @@ public sealed class EntityDependencyEditorViewModelTests
         Assert.Empty(viewModel.Suggestions);
         Assert.False(viewModel.CanAddAsUnresolved);
 
-        viewModel.RemoveManualCommand.Execute(viewModel.Dependencies[0]);
+        viewModel.RemoveDependencyCommand.Execute(viewModel.Dependencies[0]);
         await WaitUntilAsync(() => viewModel.Dependencies.Count == 0);
         viewModel.DependencyQuery = "target";
         await WaitUntilAsync(() => viewModel.Suggestions.Count == 1);
@@ -106,7 +105,7 @@ public sealed class EntityDependencyEditorViewModelTests
     [Fact]
     public async Task Name_StartsAsTheEntityNameAndARenameMakesTheFormDirty()
     {
-        TrackedEntity owner = Entity(1, "custmer", EntityProvenance.ManualOnly);
+        TrackedEntity owner = Entity(1, "custmer", EntityProvenance.Manual);
         EntityDependencyEditorViewModel viewModel = ViewModel([owner]);
         List<string?> changed = [];
         viewModel.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
@@ -151,7 +150,7 @@ public sealed class EntityDependencyEditorViewModelTests
 
     [Theory]
     [InlineData(EntityProvenance.Copied)]
-    [InlineData(EntityProvenance.CopiedAndImported)]
+    [InlineData(EntityProvenance.Copied)]
     public async Task Name_WarnsWhenTheCopySourceStillUsesTheOldName(EntityProvenance provenance)
     {
         TrackedEntity owner = Entity(1, "custmer", provenance);
@@ -172,12 +171,10 @@ public sealed class EntityDependencyEditorViewModelTests
     {
         StubEntityRepository entityRepository = new(entities);
         StubDependencyRepository dependencyRepository = new();
-        StubManualDependencyOverrideRepository overrideRepository = new();
         StubStore store = new();
         EntityDependencyEditorService editorService = new(
             entityRepository,
             dependencyRepository,
-            overrideRepository,
             new EffectiveDependencyResolver(),
             new DependencyRanker(),
             store,
@@ -188,7 +185,6 @@ public sealed class EntityDependencyEditorViewModelTests
             new EntityLifecycleService(
                 entityRepository,
                 dependencyRepository,
-                overrideRepository,
                 store,
                 new EffectiveDependencyResolver(),
                 new DependencyRanker()),
@@ -205,7 +201,7 @@ public sealed class EntityDependencyEditorViewModelTests
     private static TrackedEntity Entity(
         int id,
         string name,
-        EntityProvenance provenance = EntityProvenance.Imported) => new(
+        EntityProvenance provenance = EntityProvenance.Manual) => new(
         new EntityId(new Guid(id, 0, 0, new byte[8])),
         TestTrackerId,
         name,
@@ -222,27 +218,6 @@ public sealed class EntityDependencyEditorViewModelTests
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
             TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(entities);
-    }
-
-    private sealed class StubDependencyRepository : IDependencyRepository
-    {
-        public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<PersistedDependency>>([]);
-
-        public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<PersistedUnresolvedDependency>>([]);
-    }
-
-    private sealed class StubManualDependencyOverrideRepository : IManualDependencyOverrideRepository
-    {
-        public Task<IReadOnlyList<ManualDependencyOverride>> GetAllAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<ManualDependencyOverride>>([]);
     }
 
     private sealed class StubStore : ITrackedStateStore

@@ -253,9 +253,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
                 await _responsibilityPeriods.GetByEntityAsync(details.EntityId);
             bool assigned = periods.Any(period => period.IsCurrent && period.DeveloperId == developer.Id);
             await _trackedState.ApplyAsync(_trackerId, assigned
-                ? new TrackedStateChangeSet([], [], [], [], [], [], responsibilityRemovals:
+                ? new TrackedStateChangeSet([], [], [], responsibilityRemovals:
                     [new ResponsibilityRemoval(details.EntityId, developer.Id)])
-                : new TrackedStateChangeSet([], [], [], [], [], [], responsibilityAdditions:
+                : new TrackedStateChangeSet([], [], [], responsibilityAdditions:
                     [new ResponsibilityAddition(details.EntityId, developer.Id)]));
             await LoadOverviewAndProgressAsync(CancellationToken.None);
             EntityOverviewRow? row = ActiveTable.SourceItems.FirstOrDefault(item =>
@@ -1203,11 +1203,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     private static string FormatProvenance(EntityProvenance provenance) => provenance switch
     {
-        EntityProvenance.Imported => "CSV",
-        EntityProvenance.ManualOnly => "Manual only",
-        EntityProvenance.ManualAndImported => "Manual + CSV",
+        EntityProvenance.Manual => "Manual",
         EntityProvenance.Copied => "Copied",
-        EntityProvenance.CopiedAndImported => "Copied + CSV",
         _ => throw new ArgumentOutOfRangeException(nameof(provenance), provenance, null)
     };
 

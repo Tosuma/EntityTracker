@@ -1,5 +1,4 @@
 using EntityTracker.Application.Dependencies;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
@@ -20,17 +19,17 @@ public sealed class WorkflowReadinessEvaluatorTests
             DevelopmentStatus.DevelopmentCompleted);
         TrackedEntity reconciled = Entity(5, "Reconciled", DevelopmentStatus.Reconciled);
         TrackedEntity rework = Entity(6, "Rework", DevelopmentStatus.ReworkNeeded);
-        EffectiveDependencyState dependencies = new EffectiveDependencyResolver().Resolve(
-            [owner, notStarted, inProgress, developmentCompleted, reconciled, rework],
-            [
-                Dependency(owner, notStarted, ImportedDependencyKind.Optional),
-                Dependency(owner, inProgress, ImportedDependencyKind.Mandatory),
-                Dependency(owner, developmentCompleted, ImportedDependencyKind.Mandatory),
-                Dependency(owner, reconciled, ImportedDependencyKind.Optional),
-                Dependency(owner, rework, ImportedDependencyKind.Mandatory)
-            ],
-            [Unresolved(owner, "Missing", ImportedDependencyKind.Optional)],
-            []);
+        TrackedEntity[] entities = [owner, notStarted, inProgress, developmentCompleted, reconciled, rework];
+        EffectiveDependencyState dependencies = TestDependencies.Resolve(
+                entities,
+                [
+                    Dependency(owner, notStarted),
+                    Dependency(owner, inProgress),
+                    Dependency(owner, developmentCompleted),
+                    Dependency(owner, reconciled),
+                    Dependency(owner, rework)
+                ],
+                [Unresolved(owner, "Missing")]);
 
         EntityReadiness readiness = new WorkflowReadinessEvaluator()
             .Evaluate(
@@ -56,11 +55,8 @@ public sealed class WorkflowReadinessEvaluatorTests
     {
         TrackedEntity direct = Entity(1, "Direct");
         TrackedEntity owner = Entity(2, "Owner");
-        EffectiveDependencyState dependencies = new EffectiveDependencyResolver().Resolve(
-            [owner, direct],
-            [Dependency(owner, direct, ImportedDependencyKind.Mandatory)],
-            [Unresolved(direct, "RootCause", ImportedDependencyKind.Mandatory)],
-            []);
+        EffectiveDependencyState dependencies = TestDependencies.Resolve(
+            [owner, direct], [Dependency(owner, direct)], [Unresolved(direct, "RootCause")]);
 
         IReadOnlyDictionary<EntityId, EntityReadiness> result =
             new WorkflowReadinessEvaluator().Evaluate([owner, direct], dependencies);
@@ -77,11 +73,8 @@ public sealed class WorkflowReadinessEvaluatorTests
         WorkflowReadinessEvaluator evaluator = new();
         TrackedEntity ready = Entity(1, "Ready");
         TrackedEntity blocked = Entity(2, "Blocked");
-        EffectiveDependencyState effectiveState = new EffectiveDependencyResolver().Resolve(
-            [ready, blocked],
-            [],
-            [Unresolved(blocked, "Missing", ImportedDependencyKind.Mandatory)],
-            []);
+        EffectiveDependencyState effectiveState = TestDependencies.Resolve(
+            [ready, blocked], [], [Unresolved(blocked, "Missing")]);
         IReadOnlyDictionary<EntityId, EntityReadiness> readiness =
             evaluator.Evaluate([ready, blocked], effectiveState);
         EntityReadiness noBlockers = readiness[ready.Id];
@@ -121,12 +114,9 @@ public sealed class WorkflowReadinessEvaluatorTests
         TrackedEntity pendingRework = Entity(12, "Pending rework", DevelopmentStatus.ReworkNeeded);
         TrackedEntity activeRework = Entity(13, "Active rework", DevelopmentStatus.Reworking);
         TrackedEntity[] entities = [owner, manualBlock, pendingRework, activeRework];
-        EffectiveDependencyState effective = new EffectiveDependencyResolver().Resolve(
-            entities,
-            [Dependency(owner, manualBlock, ImportedDependencyKind.Mandatory),
-             Dependency(owner, pendingRework, ImportedDependencyKind.Mandatory),
-             Dependency(owner, activeRework, ImportedDependencyKind.Mandatory)],
-            [], []);
+        EffectiveDependencyState effective = TestDependencies.Resolve(entities, [Dependency(owner, manualBlock),
+             Dependency(owner, pendingRework),
+             Dependency(owner, activeRework)], []);
 
         WorkflowReadinessEvaluator evaluator = new();
         IReadOnlyDictionary<EntityId, EntityReadiness> readiness = evaluator.Evaluate(entities, effective);
@@ -149,11 +139,9 @@ public sealed class WorkflowReadinessEvaluatorTests
 
     private static PersistedDependency Dependency(
         TrackedEntity owner,
-        TrackedEntity target,
-        ImportedDependencyKind kind) => new(new DependencyEdge(owner.Id, target.Id), kind);
+        TrackedEntity target) => new(new DependencyEdge(owner.Id, target.Id));
 
     private static PersistedUnresolvedDependency Unresolved(
         TrackedEntity owner,
-        string targetName,
-        ImportedDependencyKind kind) => new(new UnresolvedDependency(owner.Id, targetName), kind);
+        string targetName) => new(new UnresolvedDependency(owner.Id, targetName));
 }

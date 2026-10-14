@@ -1357,7 +1357,7 @@
                         <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Add entity" />
                         <TextBlock Margin="0,3,0,0"
                                    Foreground="{DynamicResource Brush.Text.Secondary}"
-                                   Text="Add a new entity and its initial mandatory dependencies. Unknown names are kept as unresolved warnings."
+                                   Text="Add a new entity and its initial dependencies. A name no entity has yet is kept as an unresolved reference, and is connected when an entity with that name is added."
                                    TextWrapping="Wrap" />
                     </StackPanel>
 
@@ -1880,7 +1880,7 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="Created" />
                             <TextBlock Grid.Column="1" Text="{Binding CreatedAt}" TextWrapping="Wrap" />
-                            <TextBlock Grid.Row="1" Margin="0,5,0,0" Text="Schema/lifecycle updated" TextWrapping="Wrap" />
+                            <TextBlock Grid.Row="1" Margin="0,5,0,0" Text="Name/lifecycle updated" TextWrapping="Wrap" />
                             <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,5,0,0" Text="{Binding SchemaUpdatedAt}" TextWrapping="Wrap" />
                             <TextBlock Grid.Row="2" Margin="0,5,0,0" Text="Status/notes updated" TextWrapping="Wrap" />
                             <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,5,0,0" Text="{Binding ProgressUpdatedAt}" TextWrapping="Wrap" />
@@ -2273,7 +2273,7 @@
 
                                 </StackPanel>
 
-                                <TextBlock Margin="0,6,0,7" FontWeight="SemiBold" Text="Dependencies and overrides" />
+                                <TextBlock Margin="0,6,0,7" FontWeight="SemiBold" Text="Dependencies" />
                                 <ItemsControl ItemsSource="{Binding Editor.Dependencies}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
@@ -2283,27 +2283,14 @@
                                                                 Orientation="Horizontal"
                                                                 Visibility="{Binding DataContext.Editor.ShowDependencyEditor, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BooleanToVisibilityConverter}}">
                                                         <Button Margin="6,0,0,0"
-                                                                Command="{Binding DataContext.Editor.SuppressCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                Command="{Binding DataContext.Editor.RemoveDependencyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                 CommandParameter="{Binding}"
-                                                                Content="Suppress imported"
-                                                                Style="{StaticResource SecondaryButtonStyle}"
-                                                                Visibility="{Binding CanSuppress, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                                        <Button Margin="6,0,0,0"
-                                                                Command="{Binding DataContext.Editor.RemoveManualCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                                CommandParameter="{Binding}"
-                                                                Content="Remove manual addition"
-                                                                Style="{StaticResource SecondaryButtonStyle}"
-                                                                Visibility="{Binding CanRemoveManual, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                                        <Button Margin="6,0,0,0"
-                                                                Command="{Binding DataContext.Editor.RestoreCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                                CommandParameter="{Binding}"
-                                                                Content="Restore imported"
-                                                                Style="{StaticResource SecondaryButtonStyle}"
-                                                                Visibility="{Binding CanRestore, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                                Content="Remove"
+                                                                AutomationProperties.Name="{Binding SourceName, StringFormat=Remove dependency {0}}"
+                                                                Style="{StaticResource SecondaryButtonStyle}" />
                                                     </StackPanel>
                                                     <StackPanel>
                                                         <TextBlock FontWeight="SemiBold" Text="{Binding SourceName}" />
-                                                        <TextBlock Margin="0,2,0,0" Foreground="{DynamicResource Brush.Text.Secondary}" Text="{Binding Origin}" />
                                                         <TextBlock Margin="0,2,0,0" Foreground="{DynamicResource Brush.Text.Secondary}" Text="{Binding Resolution}" />
                                                     </StackPanel>
                                                 </DockPanel>

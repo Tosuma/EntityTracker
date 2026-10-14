@@ -1,6 +1,5 @@
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.ManualOverrides;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Planning;
@@ -12,74 +11,51 @@ namespace EntityTracker.Application.Tests.ManualOverrides;
 public sealed class EntityDependencyEditorServiceTests
 {
     [Fact]
-    public async Task LoadAsync_DescribesImportedDependencyWithoutCreatingOverride()
+    public async Task LoadAsync_DescribesTheEntitysDependencies()
     {
         TrackedEntity owner = Entity(1, "Owner");
         TrackedEntity target = Entity(2, "Target");
+        TrackedEntity missing = TrackedEntity.Placeholder(TestTrackerId, "Missing");
         EntityDependencyEditorService service = Service(
-            [owner, target],
-            [Dependency(owner, target)],
-            [],
-            [],
+            [owner, target, missing],
+            [new EntityDependency(owner.Id, target.Id), new EntityDependency(owner.Id, missing.Id)],
             out _);
 
         EntityDependencyEditPlan plan = await service.LoadAsync(owner.Id);
 
-        EntityDependencyEditItem dependency = Assert.Single(plan.Dependencies);
-        Assert.Equal(DependencyEditOrigin.Imported, dependency.Origin);
-        Assert.True(dependency.IsResolved);
-        Assert.Empty(plan.DesiredOverrides);
+        Assert.Equal(
+            [("Missing", false), ("Target", true)],
+            plan.Dependencies.Select(static item => (item.DependencySourceName, item.IsResolved)));
+        Assert.Equal(2, plan.DesiredDependencies.Count);
         Assert.True(plan.IsValid);
     }
 
     [Fact]
-    public void CreatePlan_SuppressesImportedFactWithoutRemovingRawDependency()
+    public void CreatePlan_RemovingADependencyTakesItOutOfTheGraph()
     {
         TrackedEntity owner = Entity(1, "Owner");
         TrackedEntity target = Entity(2, "Target");
-        PersistedDependency imported = Dependency(owner, target);
-        EntityDependencyEditorService service = Service(
-            [owner, target],
-            [imported],
-            [],
-            [],
-            out _);
+        EntityDependency dependency = new EntityDependency(owner.Id, target.Id);
+        EntityDependencyEditorService service = Service([owner, target], [dependency], out _);
 
-        EntityDependencyEditPlan plan = service.CreatePlan(
-            owner.Id,
-            [owner, target],
-            [imported],
-            [],
-            [],
-            [new ManualDependencyOverride(
-                owner.Id,
-                target.SourceName,
-                ManualDependencyOverrideAction.Suppress)]);
+        EntityDependencyEditPlan plan = service.CreatePlan(owner.Id, [owner, target], [dependency], []);
 
         Assert.True(plan.IsValid);
-        Assert.Equal(
-            DependencyEditOrigin.SuppressedImported,
-            Assert.Single(plan.Dependencies).Origin);
+        Assert.Empty(plan.Dependencies);
         Assert.Empty(plan.EffectiveState.ResolvedDependencies);
-        Assert.Equal(new DependencyEdge(owner.Id, target.Id), imported.Edge);
     }
 
     [Fact]
-    public void CreatePlan_UnknownManualAdditionIsAValidUnresolvedWarning()
+    public void CreatePlan_UnknownNameIsAValidUnresolvedWarning()
     {
         TrackedEntity owner = Entity(1, "Owner");
-        EntityDependencyEditorService service = Service([owner], [], [], [], out _);
+        EntityDependencyEditorService service = Service([owner], [], out _);
 
         EntityDependencyEditPlan plan = service.CreatePlan(
             owner.Id,
             [owner],
             [],
-            [],
-            [],
-            [new ManualDependencyOverride(
-                owner.Id,
-                "Future",
-                ManualDependencyOverrideAction.Add)]);
+            [DependencyTarget.Named("Future")]);
 
         Assert.True(plan.IsValid);
         Assert.NotEmpty(plan.Warnings);
@@ -90,27 +66,40 @@ public sealed class EntityDependencyEditorServiceTests
     }
 
     [Fact]
+    public void CreatePlan_ArchivedTargetAndSelfDependencyAreErrors()
+    {
+        TrackedEntity owner = Entity(1, "Owner");
+        TrackedEntity archived = new(
+            Id(2),
+            TestTrackerId,
+            "Archived",
+            lifecycleState: EntityLifecycleState.Archived);
+        EntityDependencyEditorService service = Service([owner, archived], [], out _);
+
+        EntityDependencyEditPlan plan = service.CreatePlan(
+            owner.Id,
+            [owner, archived],
+            [],
+            [DependencyTarget.Named("Archived"), DependencyTarget.Named("owner")]);
+
+        Assert.False(plan.IsValid);
+        Assert.Contains("'Archived' exists but is archived.", plan.Errors);
+        Assert.Contains("An entity cannot depend on itself.", plan.Errors);
+    }
+
+    [Fact]
     public void CreatePlan_CycleIsRejectedImmediately()
     {
         TrackedEntity a = Entity(1, "A");
         TrackedEntity b = Entity(2, "B");
-        EntityDependencyEditorService service = Service(
-            [a, b],
-            [Dependency(a, b)],
-            [],
-            [],
-            out _);
+        EntityDependency aOnB = new EntityDependency(a.Id, b.Id);
+        EntityDependencyEditorService service = Service([a, b], [aOnB], out _);
 
         EntityDependencyEditPlan plan = service.CreatePlan(
             b.Id,
             [a, b],
-            [Dependency(a, b)],
-            [],
-            [],
-            [new ManualDependencyOverride(
-                b.Id,
-                a.SourceName,
-                ManualDependencyOverrideAction.Add)]);
+            [aOnB],
+            [DependencyTarget.Named("A")]);
 
         Assert.False(plan.IsValid);
         Assert.Contains(plan.CandidateRanking.Diagnostics, diagnostic =>
@@ -118,20 +107,15 @@ public sealed class EntityDependencyEditorServiceTests
     }
 
     [Fact]
-    public async Task SaveAsync_ReconcilesOnlySelectedOwnersOverrides()
+    public async Task SaveAsync_ReplacesOnlyTheEditedEntitysDependencies()
     {
         TrackedEntity owner = Entity(1, "Owner");
-        EntityDependencyEditorService service = Service([owner], [], [], [], out StubStore store);
+        EntityDependencyEditorService service = Service([owner], [], out StubStore store);
         EntityDependencyEditPlan plan = service.CreatePlan(
             owner.Id,
             [owner],
             [],
-            [],
-            [],
-            [new ManualDependencyOverride(
-                owner.Id,
-                "Future",
-                ManualDependencyOverrideAction.Add)]);
+            [DependencyTarget.Named("Future")]);
 
         await service.SaveAsync(
             plan,
@@ -143,33 +127,29 @@ public sealed class EntityDependencyEditorServiceTests
 
         TrackedStateChangeSet changeSet = Assert.IsType<TrackedStateChangeSet>(
             store.LastChangeSet);
-        Assert.Equal(owner.Id, Assert.Single(changeSet.ReconciledOverrideOwnerIds));
+        Assert.Equal(owner.Id, Assert.Single(changeSet.DependencyOwnerIds));
         Assert.Equal(
             1,
             Assert.IsType<ProgressSnapshotState>(changeSet.ProgressSnapshotAfterChanges)
                 .BlockedCount);
-        Assert.Single(changeSet.ManualDependencyOverrides);
-        Assert.Empty(changeSet.ReconciledOwnerIds);
-        Assert.Empty(changeSet.ResolvedDependencies);
-        Assert.Empty(changeSet.UnresolvedDependencies);
+        // The unknown name gets a placeholder entity, added with the edit.
+        TrackedEntity future = Assert.Single(changeSet.EntitiesToAdd);
+        Assert.True(future.IsPlaceholder);
+        Assert.Equal("Future", future.SourceName);
+        Assert.Equal(new EntityDependency(owner.Id, future.Id), Assert.Single(changeSet.Dependencies));
         Assert.Empty(changeSet.EntitiesWithProgressToUpdate);
     }
 
     [Fact]
-    public async Task SaveAsync_StatusNotesAndOverridesShareOneChangeSet()
+    public async Task SaveAsync_StatusNotesAndDependenciesShareOneChangeSet()
     {
         TrackedEntity owner = Entity(1, "Owner", "Core Team");
-        EntityDependencyEditorService service = Service([owner], [], [], [], out StubStore store);
+        EntityDependencyEditorService service = Service([owner], [], out StubStore store);
         EntityDependencyEditPlan plan = service.CreatePlan(
             owner.Id,
             [owner],
             [],
-            [],
-            [],
-            [new ManualDependencyOverride(
-                owner.Id,
-                "Future",
-                ManualDependencyOverrideAction.Add)]);
+            [DependencyTarget.Named("Future")]);
 
         await service.SaveAsync(
             plan,
@@ -190,8 +170,8 @@ public sealed class EntityDependencyEditorServiceTests
                 .ReconciledCount);
         Assert.Equal("Verified notes", progress.Notes);
         Assert.Equal("Core Team", progress.ResponsibleDeveloper);
-        Assert.Equal(owner.Id, Assert.Single(changeSet.ReconciledOverrideOwnerIds));
-        Assert.Single(changeSet.ManualDependencyOverrides);
+        Assert.Equal(owner.Id, Assert.Single(changeSet.DependencyOwnerIds));
+        Assert.Single(changeSet.Dependencies);
     }
 
     [Theory]
@@ -203,7 +183,7 @@ public sealed class EntityDependencyEditorServiceTests
         string expected)
     {
         TrackedEntity owner = Entity(1, "Owner", existing);
-        EntityDependencyEditorService service = Service([owner], [], [], [], out StubStore store);
+        EntityDependencyEditorService service = Service([owner], [], out StubStore store);
         EntityDependencyEditPlan plan = await service.LoadAsync(owner.Id);
 
         await service.SaveAsync(
@@ -226,7 +206,7 @@ public sealed class EntityDependencyEditorServiceTests
     public async Task SaveAsync_EquivalentNormalizedResponsibleDeveloperIsNotUpdated()
     {
         TrackedEntity owner = Entity(1, "Owner", "Platform Team");
-        EntityDependencyEditorService service = Service([owner], [], [], [], out StubStore store);
+        EntityDependencyEditorService service = Service([owner], [], out StubStore store);
         EntityDependencyEditPlan plan = await service.LoadAsync(owner.Id);
 
         await service.SaveAsync(
@@ -250,7 +230,7 @@ public sealed class EntityDependencyEditorServiceTests
         string expected)
     {
         TrackedEntity owner = Entity(1, "Owner", groupName: existing);
-        EntityDependencyEditorService service = Service([owner], [], [], [], out StubStore store);
+        EntityDependencyEditorService service = Service([owner], [], out StubStore store);
         EntityDependencyEditPlan plan = await service.LoadAsync(owner.Id);
 
         await service.SaveAsync(
@@ -270,7 +250,7 @@ public sealed class EntityDependencyEditorServiceTests
     }
 
     [Fact]
-    public async Task LoadArchivedDetailsAsync_ReturnsPreservedFactsAndOverridesReadOnlyProjection()
+    public async Task LoadArchivedDetailsAsync_ReturnsTheArchivedEntityAndItsDependencies()
     {
         TrackedEntity owner = new(
             new EntityId(new Guid(1, 0, 0, new byte[8])),
@@ -281,14 +261,10 @@ public sealed class EntityDependencyEditorServiceTests
             EntityLifecycleState.Archived,
             responsibleDeveloper: "Legacy Team");
         TrackedEntity target = Entity(2, "Target");
+        TrackedEntity missing = TrackedEntity.Placeholder(TestTrackerId, "ManualMissing");
         EntityDependencyEditorService service = Service(
-            [owner, target],
-            [Dependency(owner, target, ImportedDependencyKind.Optional)],
-            [],
-            [new ManualDependencyOverride(
-                owner.Id,
-                "ManualMissing",
-                ManualDependencyOverrideAction.Add)],
+            [owner, target, missing],
+            [new EntityDependency(owner.Id, target.Id), new EntityDependency(owner.Id, missing.Id)],
             out _);
 
         ArchivedEntityDetails details = await service.LoadArchivedDetailsAsync(owner.Id);
@@ -313,7 +289,7 @@ public sealed class EntityDependencyEditorServiceTests
             "ArchivedTarget",
             lifecycleState: EntityLifecycleState.Archived);
         EntityDependencyEditorService service = Service(
-            [owner, active, archived], [], [], [], out _);
+            [owner, active, archived], [], out _);
 
         var result = await service.SearchDependenciesAsync(owner.Id, "target");
 
@@ -333,7 +309,7 @@ public sealed class EntityDependencyEditorServiceTests
             lifecycleState: EntityLifecycleState.Archived,
             groupName: "Legacy Team");
         EntityDependencyEditorService service = Service(
-            [owner, archived], [], [], [], out _);
+            [owner, archived], [], out _);
 
         IReadOnlyList<string> suggestions = await service.SearchGroupNamesAsync("team");
 
@@ -345,14 +321,9 @@ public sealed class EntityDependencyEditorServiceTests
     {
         TrackedEntity prerequisite = Entity(1, "Prerequisite");
         TrackedEntity owner = Entity(2, "Owner");
-        PersistedDependency dependency = new(
-            new DependencyEdge(owner.Id, prerequisite.Id),
-            ImportedDependencyKind.Mandatory);
         EntityDependencyEditorService service = Service(
             [owner, prerequisite],
-            [dependency],
-            [],
-            [],
+            [new EntityDependency(owner.Id, prerequisite.Id)],
             out StubStore store);
         EntityDependencyEditPlan plan = await service.LoadAsync(owner.Id);
 
@@ -383,8 +354,8 @@ public sealed class EntityDependencyEditorServiceTests
     public async Task SaveAsync_RenameUpdatesTheEntityAndKeepsItsProgress()
     {
         TrackedEntity owner = Entity(1, "custmer_account", groupName: "Billing");
-        EntityDependencyEditorService service = Service([owner], [], [], [], out StubStore store);
-        EntityDependencyEditPlan plan = service.CreatePlan(owner.Id, [owner], [], [], [], []);
+        EntityDependencyEditorService service = Service([owner], [], out StubStore store);
+        EntityDependencyEditPlan plan = service.CreatePlan(owner.Id, [owner], [], []);
 
         await Save(service, plan, owner, "  customer_account ");
 
@@ -399,8 +370,8 @@ public sealed class EntityDependencyEditorServiceTests
     public async Task SaveAsync_WithoutRenameDoesNotUpdateTheEntity()
     {
         TrackedEntity owner = Entity(1, "Owner");
-        EntityDependencyEditorService service = Service([owner], [], [], [], out StubStore store);
-        EntityDependencyEditPlan plan = service.CreatePlan(owner.Id, [owner], [], [], [], []);
+        EntityDependencyEditorService service = Service([owner], [], out StubStore store);
+        EntityDependencyEditPlan plan = service.CreatePlan(owner.Id, [owner], [], []);
 
         await Save(service, plan, owner, "Owner");
 
@@ -408,22 +379,46 @@ public sealed class EntityDependencyEditorServiceTests
     }
 
     [Fact]
-    public async Task SaveAsync_RenameMovesOtherEntitiesHandAddedDependenciesToTheNewName()
+    public async Task SaveAsync_RenameOntoAPlaceholdersNameTakesOverItsDependencies()
     {
         TrackedEntity target = Entity(1, "custmer");
         TrackedEntity other = Entity(2, "invoice");
-        ManualDependencyOverride byName = new(other.Id, "CUSTMER", ManualDependencyOverrideAction.Add);
-        ManualDependencyOverride unrelated = new(other.Id, "Future", ManualDependencyOverrideAction.Add);
-        EntityDependencyEditorService service = Service([target, other], [], [], [byName, unrelated], out StubStore store);
-        EntityDependencyEditPlan plan = service.CreatePlan(target.Id, [target, other], [], [], [byName, unrelated], []);
+        TrackedEntity third = Entity(3, "payment");
+        TrackedEntity future = TrackedEntity.Placeholder(TestTrackerId, "Future");
+        TrackedEntity waiting = TrackedEntity.Placeholder(TestTrackerId, "customer");
+        TrackedEntity[] entities = [target, other, third, future, waiting];
+        EntityDependency[] all =
+        [
+            new EntityDependency(other.Id, target.Id),
+            new EntityDependency(other.Id, future.Id),
+            new EntityDependency(third.Id, waiting.Id)
+        ];
+        EntityDependencyEditorService service = Service(entities, all, out StubStore store);
+        EntityDependencyEditPlan plan = service.CreatePlan(target.Id, entities, all, []);
 
+        Assert.Null(await service.FindNameConflictAsync(TestTrackerId, target.Id, "CUSTOMER"));
         await Save(service, plan, target, "customer");
 
+        // The dependency on the entity's ID needs no change; the dependency on the placeholder with the
+        // new name moves to the entity, so the placeholder, no longer referred to, goes.
         TrackedStateChangeSet changeSet = Assert.IsType<TrackedStateChangeSet>(store.LastChangeSet);
-        Assert.True(changeSet.ReconciledOverrideOwnerIds.ToHashSet().SetEquals([target.Id, other.Id]));
-        Assert.Equal(["customer", "Future"],
-            changeSet.ManualDependencyOverrides.Select(static item => item.DependencySourceName).Order());
-        Assert.All(changeSet.ManualDependencyOverrides, item => Assert.Equal(other.Id, item.DependentEntityId));
+        Assert.True(changeSet.DependencyOwnerIds.ToHashSet().SetEquals([target.Id, third.Id]));
+        Assert.Equal(new EntityDependency(third.Id, target.Id), Assert.Single(changeSet.Dependencies));
+        Assert.Equal(2, Assert.IsType<ProgressSnapshotState>(changeSet.ProgressSnapshotAfterChanges).BlockedCount);
+    }
+
+    [Fact]
+    public void CreatePlan_StoresANameAnEntityHasAsADependencyOnItsId()
+    {
+        TrackedEntity owner = Entity(1, "Owner");
+        TrackedEntity target = Entity(2, "Target");
+        EntityDependencyEditorService service = Service([owner, target], [], out _);
+
+        EntityDependencyEditPlan plan = service.CreatePlan(
+            owner.Id, [owner, target], [], [DependencyTarget.Named(" target ")]);
+
+        Assert.Equal(new EntityDependency(owner.Id, target.Id), Assert.Single(plan.DesiredDependencies));
+        Assert.Equal("Target", Assert.Single(plan.Dependencies).DependencySourceName);
     }
 
     [Theory]
@@ -433,8 +428,8 @@ public sealed class EntityDependencyEditorServiceTests
     {
         TrackedEntity owner = Entity(1, "Owner");
         TrackedEntity other = Entity(2, "invoice");
-        EntityDependencyEditorService service = Service([owner, other], [], [], [], out StubStore store);
-        EntityDependencyEditPlan plan = service.CreatePlan(owner.Id, [owner, other], [], [], [], []);
+        EntityDependencyEditorService service = Service([owner, other], [], out StubStore store);
+        EntityDependencyEditPlan plan = service.CreatePlan(owner.Id, [owner, other], [], []);
 
         Assert.Equal("invoice", await service.FindNameConflictAsync(TestTrackerId, owner.Id, name));
         InvalidOperationException error =
@@ -447,7 +442,7 @@ public sealed class EntityDependencyEditorServiceTests
     public async Task FindNameConflictAsync_IgnoresTheEntityItselfAndCaseOnlyRenames()
     {
         TrackedEntity owner = Entity(1, "customer");
-        EntityDependencyEditorService service = Service([owner], [], [], [], out _);
+        EntityDependencyEditorService service = Service([owner], [], out _);
 
         Assert.Null(await service.FindNameConflictAsync(TestTrackerId, owner.Id, "Customer"));
     }
@@ -469,16 +464,13 @@ public sealed class EntityDependencyEditorServiceTests
 
     private static EntityDependencyEditorService Service(
         IReadOnlyList<TrackedEntity> entities,
-        IReadOnlyList<PersistedDependency> resolved,
-        IReadOnlyList<PersistedUnresolvedDependency> unresolved,
-        IReadOnlyList<ManualDependencyOverride> overrides,
+        IReadOnlyList<EntityDependency> dependencies,
         out StubStore store)
     {
         store = new StubStore();
         return new EntityDependencyEditorService(
             new StubEntityRepository(entities),
-            new StubDependencyRepository(resolved, unresolved),
-            new StubManualDependencyOverrideRepository(overrides),
+            new StubDependencyRepository(dependencies),
             new EffectiveDependencyResolver(),
             new DependencyRanker(),
             store,
@@ -499,12 +491,6 @@ public sealed class EntityDependencyEditorServiceTests
 
     private static EntityId Id(int id) => new(new Guid(id, 0, 0, new byte[8]));
 
-    private static PersistedDependency Dependency(
-        TrackedEntity owner,
-        TrackedEntity target,
-        ImportedDependencyKind kind = ImportedDependencyKind.Mandatory) =>
-        new(new DependencyEdge(owner.Id, target.Id), kind);
-
     private sealed class StubEntityRepository(IReadOnlyList<TrackedEntity> entities)
         : IEntityRepository
     {
@@ -517,20 +503,6 @@ public sealed class EntityDependencyEditorServiceTests
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
             TrackerId trackerId,
             CancellationToken cancellationToken = default) => Task.FromResult(entities);
-
-    }
-
-    private sealed class StubDependencyRepository(
-        IReadOnlyList<PersistedDependency> resolved,
-        IReadOnlyList<PersistedUnresolvedDependency> unresolved) : IDependencyRepository
-    {
-        public Task<IReadOnlyList<PersistedDependency>> GetAllAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) => Task.FromResult(resolved);
-
-        public Task<IReadOnlyList<PersistedUnresolvedDependency>> GetAllUnresolvedAsync(
-            TrackerId trackerId,
-            CancellationToken cancellationToken = default) => Task.FromResult(unresolved);
 
     }
 

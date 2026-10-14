@@ -4,7 +4,7 @@ using EntityTracker.Domain;
 namespace EntityTracker.Application.Persistence;
 
 /// <summary>
-/// Describes a complete atomic mutation of tracked entities and their schema dependencies.
+/// Describes a complete atomic mutation of tracked entities and their dependencies.
 /// </summary>
 public sealed class TrackedStateChangeSet
 {
@@ -12,11 +12,8 @@ public sealed class TrackedStateChangeSet
         IEnumerable<TrackedEntity> entitiesToAdd,
         IEnumerable<TrackedEntity> entitiesToUpdate,
         IEnumerable<EntityId> entityIdsToArchive,
-        IEnumerable<EntityId> reconciledOwnerIds,
-        IEnumerable<PersistedDependency> resolvedDependencies,
-        IEnumerable<PersistedUnresolvedDependency> unresolvedDependencies,
-        IEnumerable<EntityId>? reconciledOverrideOwnerIds = null,
-        IEnumerable<ManualDependencyOverride>? manualDependencyOverrides = null,
+        IEnumerable<EntityId>? dependencyOwnerIds = null,
+        IEnumerable<EntityDependency>? dependencies = null,
         IEnumerable<TrackedEntity>? entitiesWithProgressToUpdate = null,
         IEnumerable<EntityId>? entityIdsToRestore = null,
         ProgressSnapshotState? progressSnapshotAfterChanges = null,
@@ -32,11 +29,8 @@ public sealed class TrackedStateChangeSet
         EntitiesToAdd = entitiesToAdd.ToArray();
         EntitiesToUpdate = entitiesToUpdate.ToArray();
         EntityIdsToArchive = entityIdsToArchive.ToArray();
-        ReconciledOwnerIds = reconciledOwnerIds.ToArray();
-        ResolvedDependencies = resolvedDependencies.ToArray();
-        UnresolvedDependencies = unresolvedDependencies.ToArray();
-        ReconciledOverrideOwnerIds = (reconciledOverrideOwnerIds ?? []).ToArray();
-        ManualDependencyOverrides = (manualDependencyOverrides ?? []).ToArray();
+        DependencyOwnerIds = (dependencyOwnerIds ?? []).ToArray();
+        Dependencies = (dependencies ?? []).ToArray();
         EntitiesWithProgressToUpdate = (entitiesWithProgressToUpdate ?? []).ToArray();
         EntityIdsToRestore = (entityIdsToRestore ?? []).ToArray();
         ProgressSnapshotAfterChanges = progressSnapshotAfterChanges;
@@ -59,15 +53,11 @@ public sealed class TrackedStateChangeSet
 
     public IReadOnlyList<EntityId> EntityIdsToArchive { get; }
 
-    public IReadOnlyList<EntityId> ReconciledOwnerIds { get; }
+    /// <summary>The entities whose dependency lists are replaced by <see cref="Dependencies"/>.</summary>
+    public IReadOnlyList<EntityId> DependencyOwnerIds { get; }
 
-    public IReadOnlyList<PersistedDependency> ResolvedDependencies { get; }
-
-    public IReadOnlyList<PersistedUnresolvedDependency> UnresolvedDependencies { get; }
-
-    public IReadOnlyList<EntityId> ReconciledOverrideOwnerIds { get; }
-
-    public IReadOnlyList<ManualDependencyOverride> ManualDependencyOverrides { get; }
+    /// <summary>The complete dependency lists of <see cref="DependencyOwnerIds"/>.</summary>
+    public IReadOnlyList<EntityDependency> Dependencies { get; }
 
     public IReadOnlyList<TrackedEntity> EntitiesWithProgressToUpdate { get; }
 
@@ -91,8 +81,7 @@ public sealed class TrackedStateChangeSet
         EntitiesToAdd.Count > 0 ||
         EntitiesToUpdate.Count > 0 ||
         EntityIdsToArchive.Count > 0 ||
-        ReconciledOwnerIds.Count > 0 ||
-        ReconciledOverrideOwnerIds.Count > 0 ||
+        DependencyOwnerIds.Count > 0 ||
         EntitiesWithProgressToUpdate.Count > 0 ||
         EntityIdsToRestore.Count > 0 ||
             EntitiesWithRequestedPriorityToUpdate.Count > 0 ||

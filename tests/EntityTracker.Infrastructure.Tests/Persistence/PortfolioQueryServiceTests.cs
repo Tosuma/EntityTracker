@@ -1,6 +1,5 @@
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Overview;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Planning;
@@ -25,7 +24,6 @@ public sealed class PortfolioQueryServiceTests
         SqliteTrackerRepository trackers = new(database);
         SqliteEntityRepository entities = new(database);
         SqliteDependencyRepository dependencies = new(database);
-        SqliteManualDependencyOverrideRepository overrides = new(database);
         SqliteTrackedStateStore state = new(database);
         ProjectManagementService projectManagement = new(
             projects,
@@ -52,12 +50,12 @@ public sealed class PortfolioQueryServiceTests
         await state.ApplyAsync(
             defaultTracker.Id,
             new TrackedStateChangeSet(
-                [completed, pending, archived], [], [], [], [], [],
+                [completed, pending, archived], [], [],
                 progressSnapshotAfterChanges: new ProgressSnapshotState(1, 0, 0, 0, 1, 0)));
         await state.ApplyAsync(
             emptyTracker.Id,
             new TrackedStateChangeSet(
-                [secondCompleted], [], [], [], [], [],
+                [secondCompleted], [], [],
                 progressSnapshotAfterChanges: new ProgressSnapshotState(0, 0, 0, 0, 0, 1)));
 
         PortfolioQueryService query = new(
@@ -65,7 +63,6 @@ public sealed class PortfolioQueryServiceTests
             trackers,
             entities,
             dependencies,
-            overrides,
             new SqliteProgressHistoryRepository(database),
             new EffectiveDependencyResolver(),
             new ProgressSnapshotCalculator());
@@ -101,7 +98,6 @@ public sealed class PortfolioQueryServiceTests
         SqliteTrackerRepository trackers = new(database);
         SqliteEntityRepository entities = new(database);
         SqliteDependencyRepository dependencies = new(database);
-        SqliteManualDependencyOverrideRepository overrides = new(database);
         SqliteTrackedStateStore state = new(database);
         ProjectManagementService projectManagement = new(
             projects,
@@ -120,12 +116,12 @@ public sealed class PortfolioQueryServiceTests
         TrackedEntity alphaArchived = new(
             EntityId.New(), alpha.Id, "Archived only",
             lifecycleState: EntityLifecycleState.Archived);
+        TrackedEntity alphaMissing = TrackedEntity.Placeholder(alpha.Id, "Missing target");
         await state.ApplyAsync(alpha.Id, new TrackedStateChangeSet(
-            [alphaCommon, alphaOnly, alphaAttention, alphaStable, alphaArchived],
-            [], [], [alphaAttention.Id], [],
-            [new PersistedUnresolvedDependency(
-                new UnresolvedDependency(alphaAttention.Id, "Missing target"),
-                ImportedDependencyKind.Mandatory)]));
+            [alphaCommon, alphaOnly, alphaAttention, alphaStable, alphaArchived, alphaMissing],
+            [], [],
+            [alphaAttention.Id],
+            [new EntityDependency(alphaAttention.Id, alphaMissing.Id)]));
 
         TrackedEntity zuluCommon = new(
             EntityId.New(), zulu.Id, "customer", DevelopmentStatus.DevelopmentCompleted);
@@ -134,13 +130,12 @@ public sealed class PortfolioQueryServiceTests
             EntityId.New(), zulu.Id, "Attention", DevelopmentStatus.Reconciled);
         TrackedEntity zuluStable = new(EntityId.New(), zulu.Id, "stable");
         await state.ApplyAsync(zulu.Id, new TrackedStateChangeSet(
-            [zuluCommon, zuluOnly, zuluAttention, zuluStable], [], [], [], [], []));
+            [zuluCommon, zuluOnly, zuluAttention, zuluStable], [], []));
 
         EntityOverviewService overview = new(
             entities,
             new SqliteEntityAuditReader(database),
             dependencies,
-            overrides,
             new DependencyRanker(),
             new EffectiveDependencyResolver(),
             new WorkflowReadinessEvaluator(),
@@ -198,7 +193,7 @@ public sealed class PortfolioQueryServiceTests
             tracker.Id,
             new TrackedStateChangeSet(
                 [new TrackedEntity(EntityId.New(), tracker.Id, "One")],
-                [], [], [], [], []));
+                [], []));
         await trackerManagement.RecycleAsync(tracker.Id);
         await projectManagement.RecycleAsync(project.Id);
 
@@ -223,7 +218,6 @@ public sealed class PortfolioQueryServiceTests
         new SqliteTrackerRepository(database),
         new SqliteEntityRepository(database),
         new SqliteDependencyRepository(database),
-        new SqliteManualDependencyOverrideRepository(database),
         new SqliteProjectTrackerStore(database),
         new EffectiveDependencyResolver(),
         new ProgressSnapshotCalculator());

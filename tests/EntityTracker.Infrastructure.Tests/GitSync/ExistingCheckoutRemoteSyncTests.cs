@@ -600,16 +600,16 @@ public sealed class ExistingCheckoutRemoteSyncTests
         Assert.Throws<InvalidDataException>(() => codec.TryDecodeTombstone(invalid, out _));
         Assert.Throws<ProjectSnapshotFormatVersionException>(() => codec.EncodeTombstone(tombstone with
         {
-            FormatVersion = 6
+            FormatVersion = ProjectSnapshot.CurrentFormatVersion + 1
         }));
         Dictionary<string, byte[]> newerManifest = encoded.Files.ToDictionary(pair => pair.Key, pair => pair.Value);
         newerManifest[".entitytracker/manifest.json"] = System.Text.Encoding.UTF8.GetBytes(
-            $"{{\"formatVersion\":6,\"projectId\":\"{tombstone.ProjectId:D}\"}}");
+            $"{{\"formatVersion\":{ProjectSnapshot.CurrentFormatVersion + 1},\"projectId\":\"{tombstone.ProjectId:D}\"}}");
         ProjectSnapshotFormatVersionException versionError =
             Assert.Throws<ProjectSnapshotFormatVersionException>(() =>
                 codec.TryDecodeTombstone(newerManifest, out _));
         Assert.Equal(ProjectSnapshot.CurrentFormatVersion, versionError.ApplicationFormatVersion);
-        Assert.Equal(6, versionError.ProjectFormatVersion);
+        Assert.Equal(ProjectSnapshot.CurrentFormatVersion + 1, versionError.ProjectFormatVersion);
     }
 
     [Theory]
@@ -730,6 +730,7 @@ public sealed class ExistingCheckoutRemoteSyncTests
         string path = Path.Combine(workspace.Root, "migration.db");
         SqliteDatabase database = new(path);
         await database.InitializeAsync();
+        await EntityTracker.Infrastructure.Tests.Persistence.VersionTwentySchema.RevertAsync(path);
         await using (SqliteConnection connection = new($"Data Source={path}"))
         {
             await connection.OpenAsync();
@@ -865,8 +866,9 @@ public sealed class ExistingCheckoutRemoteSyncTests
         ProjectGitSyncService sync = catalog.Sync(checkout);
         string manifestPath = Path.Combine(checkout, ".entitytracker", "manifest.json");
         string manifest = File.ReadAllText(manifestPath);
-        Assert.Contains("\"formatVersion\":5", manifest);
-        File.WriteAllText(manifestPath, manifest.Replace("\"formatVersion\":5", "\"formatVersion\":99"));
+        string current = $"\"formatVersion\":{ProjectSnapshot.CurrentFormatVersion}";
+        Assert.Contains(current, manifest);
+        File.WriteAllText(manifestPath, manifest.Replace(current, "\"formatVersion\":99"));
         workspace.Git(checkout, "add", ".entitytracker");
         workspace.Git(checkout, "commit", "-m", "Unsupported version");
         ProjectSnapshotFormatVersionException versionError =
@@ -1127,26 +1129,25 @@ public sealed class ExistingCheckoutRemoteSyncTests
         Guid copiedEntityId = Derive(id, 5);
         Guid firstEvent = Derive(id, 6);
         SnapshotEntity entity = new(entityId, trackerId, "Orders", "InProgress", "Keep notes",
-            "Active", "ManualAndImported", 2, "", "Core", time, later, later,
-            [new SnapshotDependency(entityId, dependencyId, "Mandatory", time, later)],
-            [new SnapshotUnresolvedDependency(entityId, "External", "Optional", time, later)],
-            [new SnapshotOverride(entityId, "External", "Suppress", time, later)],
+            "Active", "Manual", 2, "", "Core", time, later, later,
+            [new SnapshotDependency(dependencyId, time, later), new SnapshotDependency(Derive(id, 16), time, later)],
             [new SnapshotResponsibilityPeriod(Derive(id, 12), entityId, Derive(id, 14), later, null)]);
         SnapshotEntity dependency = new(dependencyId, trackerId, "Customers", "Reconciled", "Archived notes",
-            "Archived", "Imported", 4, "", "Legacy", time, later, later, [], [], [],
+            "Archived", "Manual", 4, "", "Legacy", time, later, later, [],
             [new SnapshotResponsibilityPeriod(Derive(id, 13), dependencyId, Derive(id, 15), later, null)]);
         SnapshotEntity copied = new(copiedEntityId, recycledTrackerId, "Copied entity", "NotStarted", "",
-            "Active", "Copied", null, "", "", time, later, later, [], [], []);
+            "Active", "Copied", null, "", "", time, later, later, []);
+        SnapshotEntity external = new(Derive(id, 16), trackerId, "External", "NotStarted", "",
+            "Placeholder", "Manual", null, "", "", time, time, time, [], []);
         SnapshotTracker tracker = new(trackerId, id, "Delivery", "Active", time, later, null, null,
-            [entity, dependency],
+            [entity, dependency, external],
             [new SnapshotStatusEvent(firstEvent, entityId, null, null, "NotStarted", "Created", time, 0),
              new SnapshotStatusEvent(Derive(id, 7), dependencyId, null, null, "Reconciled", "Baseline", time, 1),
              new SnapshotStatusEvent(Derive(id, 8), entityId, firstEvent, "NotStarted", "InProgress", "Transition", later, 2)],
             [new SnapshotProgress(Derive(id, 9), time, 1, 0, 0, 0, 0, 1, 0),
-             new SnapshotProgress(Derive(id, 10), later, 0, 0, 1, 0, 0, 1, 1)],
-            new SnapshotImportSummary(later, "schema.csv", "Partial", 1, 2, 3, 4, 5));
+             new SnapshotProgress(Derive(id, 10), later, 0, 0, 1, 0, 0, 1, 1)]);
         SnapshotTracker recycled = new(recycledTrackerId, id, "Archive", "Recycled", time, later, later,
-            trackerId, [copied], [], [new SnapshotProgress(Derive(id, 11), later, 1, 0, 0, 0, 0, 0, 0)], null);
+            trackerId, [copied], [], [new SnapshotProgress(Derive(id, 11), later, 1, 0, 0, 0, 0, 0, 0)]);
         return new ProjectSnapshot(ProjectSnapshot.CurrentFormatVersion,
             new SnapshotProject(id, name, "Active", time, later, null),
             [tracker, recycled],

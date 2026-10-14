@@ -1,4 +1,4 @@
-namespace EntityTracker.Application.Importing;
+namespace EntityTracker.Application.Dependencies;
 
 public sealed record EntitySourceKey
 {

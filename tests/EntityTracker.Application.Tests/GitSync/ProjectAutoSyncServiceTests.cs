@@ -7,7 +7,7 @@ namespace EntityTracker.Application.Tests.GitSync;
 public sealed class ProjectAutoSyncServiceTests
 {
     [Theory]
-    [InlineData(6, "behind")]
+    [InlineData(ProjectSnapshot.CurrentFormatVersion + 1, "behind")]
     [InlineData(0, "ahead")]
     public void UnsupportedProjectFormat_ReportsBothVersionsAndDirection(
         int projectVersion, string direction)

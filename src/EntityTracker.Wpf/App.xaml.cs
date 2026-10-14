@@ -6,7 +6,6 @@ using System.Windows;
 using EntityTracker.Application.Diagnostics;
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.ManualOverrides;
@@ -274,8 +273,6 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IResponsibilityPeriodRepository, SqliteResponsibilityPeriodRepository>();
         services.AddSingleton<IEntityAuditReader, SqliteEntityAuditReader>();
         services.AddSingleton<IDependencyRepository, SqliteDependencyRepository>();
-        services.AddSingleton<IManualDependencyOverrideRepository,
-            SqliteManualDependencyOverrideRepository>();
         services.AddSingleton<SqliteTrackedStateStore>();
         services.AddSingleton<ITrackedStateStore>(static provider =>
             provider.GetRequiredService<SqliteTrackedStateStore>());

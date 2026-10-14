@@ -1,5 +1,5 @@
 using EntityTracker.Application.History;
-using EntityTracker.Application.Importing;
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
@@ -108,6 +108,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
                     entity,
                     timestamp,
                     cancellationToken);
+                if (entity.IsPlaceholder) continue;
                 await InsertStatusHistoryAsync(
                     connection,
                     transaction,
@@ -118,6 +119,33 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
                     timestamp,
                     cancellationToken);
             }
+
+            // Dependencies change before entities are updated: a rename onto a placeholder's name
+            // needs the placeholder's dependents moved, and the placeholder gone, first.
+            foreach (EntityId ownerId in changeSet.DependencyOwnerIds)
+            {
+                EntityDependency[] desired = changeSet.Dependencies
+                    .Where(item => item.DependentEntityId == ownerId)
+                    .ToArray();
+
+                await DeleteRemovedDependenciesAsync(
+                    connection,
+                    transaction,
+                    ownerId,
+                    desired,
+                    cancellationToken);
+                foreach (EntityDependency dependency in desired)
+                {
+                    await UpsertDependencyAsync(
+                        connection,
+                        transaction,
+                        dependency,
+                        timestamp,
+                        cancellationToken);
+                }
+            }
+
+            await DeleteUnreferencedPlaceholdersAsync(connection, transaction, trackerId, cancellationToken);
 
             foreach (ResponsibilitySelection selection in changeSet.ResponsibilitySelections)
                 await SqliteResponsibilityWriter.ApplySelectionAsync(connection, transaction,
@@ -195,75 +223,6 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
                     cancellationToken);
             }
 
-            foreach (EntityId ownerId in changeSet.ReconciledOwnerIds)
-            {
-                PersistedDependency[] desiredResolved = changeSet.ResolvedDependencies
-                    .Where(dependency => dependency.Edge.DependentEntityId == ownerId)
-                    .ToArray();
-                PersistedUnresolvedDependency[] desiredUnresolved =
-                    changeSet.UnresolvedDependencies
-                        .Where(dependency =>
-                            dependency.Dependency.DependentEntityId == ownerId)
-                        .ToArray();
-
-                await DeleteRemovedResolvedAsync(
-                    connection,
-                    transaction,
-                    ownerId,
-                    desiredResolved,
-                    cancellationToken);
-                await DeleteRemovedUnresolvedAsync(
-                    connection,
-                    transaction,
-                    ownerId,
-                    desiredUnresolved,
-                    cancellationToken);
-
-                foreach (PersistedDependency dependency in desiredResolved)
-                {
-                    await UpsertResolvedAsync(
-                        connection,
-                        transaction,
-                        dependency,
-                        timestamp,
-                        cancellationToken);
-                }
-
-                foreach (PersistedUnresolvedDependency dependency in desiredUnresolved)
-                {
-                    await UpsertUnresolvedAsync(
-                        connection,
-                        transaction,
-                        dependency,
-                        timestamp,
-                        cancellationToken);
-                }
-            }
-
-            foreach (EntityId ownerId in changeSet.ReconciledOverrideOwnerIds)
-            {
-                ManualDependencyOverride[] desiredOverrides =
-                    changeSet.ManualDependencyOverrides
-                        .Where(item => item.DependentEntityId == ownerId)
-                        .ToArray();
-
-                await DeleteRemovedOverridesAsync(
-                    connection,
-                    transaction,
-                    ownerId,
-                    desiredOverrides,
-                    cancellationToken);
-                foreach (ManualDependencyOverride dependencyOverride in desiredOverrides)
-                {
-                    await UpsertOverrideAsync(
-                        connection,
-                        transaction,
-                        dependencyOverride,
-                        timestamp,
-                        cancellationToken);
-                }
-            }
-
             foreach (EntityId entityId in changeSet.EntityIdsToPurge)
             {
                 await PurgeArchivedEntityAsync(
@@ -273,6 +232,8 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
                     entityId,
                     cancellationToken);
             }
+
+            await DeleteUnreferencedPlaceholdersAsync(connection, transaction, trackerId, cancellationToken);
 
             if (changeSet.ProgressSnapshotAfterChanges is not null)
             {
@@ -319,9 +280,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
         [
             "SELECT id, project_id, lifecycle_state, copied_from_tracker_id FROM trackers WHERE id = $id ORDER BY id;",
             "SELECT id, source_name, development_status, notes, filter_active, shared_notes, lifecycle_state, provenance, requested_priority, group_name, schema_updated_at_utc, progress_updated_at_utc FROM tracked_entities WHERE tracker_id = $id ORDER BY id;",
-            "SELECT d.dependent_entity_id, d.dependency_entity_id, d.dependency_kind, d.updated_at_utc FROM schema_dependencies d JOIN tracked_entities e ON e.id = d.dependent_entity_id WHERE e.tracker_id = $id ORDER BY d.dependent_entity_id, d.dependency_entity_id;",
-            "SELECT d.dependent_entity_id, d.dependency_source_key, d.dependency_kind, d.updated_at_utc FROM unresolved_schema_dependencies d JOIN tracked_entities e ON e.id = d.dependent_entity_id WHERE e.tracker_id = $id ORDER BY d.dependent_entity_id, d.dependency_source_key;",
-            "SELECT d.dependent_entity_id, d.dependency_source_key, d.override_action, d.updated_at_utc FROM manual_dependency_overrides d JOIN tracked_entities e ON e.id = d.dependent_entity_id WHERE e.tracker_id = $id ORDER BY d.dependent_entity_id, d.dependency_source_key;",
+            "SELECT d.dependent_entity_id, d.dependency_entity_id, d.updated_at_utc FROM entity_dependencies d JOIN tracked_entities e ON e.id = d.dependent_entity_id WHERE e.tracker_id = $id ORDER BY d.dependent_entity_id, d.dependency_entity_id;",
             "SELECT baseline_json FROM tracker_sync_baselines WHERE tracker_id = $id;",
             "SELECT p.id, p.entity_id, p.developer_id, p.started_at_utc, p.ended_at_utc FROM responsibility_periods p JOIN tracked_entities e ON e.id = p.entity_id WHERE e.tracker_id = $id ORDER BY p.id;"
         ];
@@ -669,11 +628,48 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
                 $id, $trackerId, $sourceKey, $sourceName, $developmentStatus, $notes, $filterActive, $sharedNotes,
                 $lifecycleState, $provenance, $requestedPriority, $groupName,
                 $timestamp, $timestamp, $timestamp
-            );
+            )
+            -- Adding an entity with a placeholder's ID turns the placeholder into it, so the
+            -- dependencies on the placeholder now refer to the new entity.
+            ON CONFLICT (id) DO UPDATE SET
+                source_key = excluded.source_key,
+                source_name = excluded.source_name,
+                development_status = excluded.development_status,
+                notes = excluded.notes,
+                filter_active = excluded.filter_active,
+                shared_notes = excluded.shared_notes,
+                lifecycle_state = excluded.lifecycle_state,
+                provenance = excluded.provenance,
+                requested_priority = excluded.requested_priority,
+                group_name = excluded.group_name,
+                created_at_utc = excluded.created_at_utc,
+                schema_updated_at_utc = excluded.schema_updated_at_utc,
+                progress_updated_at_utc = excluded.progress_updated_at_utc
+            WHERE tracked_entities.lifecycle_state = 'Placeholder'
+              AND tracked_entities.tracker_id = excluded.tracker_id;
             """);
         AddEntityParameters(command, entity);
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
         command.Parameters.AddWithValue("$timestamp", timestamp);
+        if (await command.ExecuteNonQueryAsync(cancellationToken) != 1)
+            throw new InvalidOperationException("An entity with this ID already exists.");
+    }
+
+    /// <summary>A placeholder only exists while a dependency refers to it.</summary>
+    private static async Task DeleteUnreferencedPlaceholdersAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        TrackerId trackerId,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = CreateCommand(connection, transaction, """
+            DELETE FROM tracked_entities
+            WHERE tracker_id = $trackerId
+              AND lifecycle_state = 'Placeholder'
+              AND NOT EXISTS (SELECT 1 FROM entity_dependencies dependency
+                              WHERE dependency.dependency_entity_id = tracked_entities.id);
+            """);
+        command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -752,15 +748,32 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
         history.Parameters.AddWithValue("$entityId", SqlitePersistenceValues.Format(entityId));
         await history.ExecuteNonQueryAsync(cancellationToken);
 
+        // An entity other entities depend on becomes a placeholder: it keeps its ID and name, so their
+        // dependencies stay as unresolved references, and loses everything else.
         using SqliteCommand entity = CreateCommand(connection, transaction, """
+            DELETE FROM responsibility_periods WHERE entity_id = $entityId
+              AND EXISTS (SELECT 1 FROM entity_dependencies WHERE dependency_entity_id = $entityId);
+            DELETE FROM entity_dependencies WHERE dependent_entity_id = $entityId
+              AND EXISTS (SELECT 1 FROM entity_dependencies WHERE dependency_entity_id = $entityId);
+            UPDATE tracked_entities
+            SET lifecycle_state = 'Placeholder', development_status = 'NotStarted', notes = '',
+                filter_active = '', shared_notes = '', provenance = 'Manual',
+                requested_priority = NULL, group_name = ''
+            WHERE id = $entityId
+              AND tracker_id = $trackerId
+              AND lifecycle_state = 'Archived'
+              AND EXISTS (SELECT 1 FROM entity_dependencies WHERE dependency_entity_id = $entityId);
             DELETE FROM tracked_entities
             WHERE id = $entityId
               AND tracker_id = $trackerId
               AND lifecycle_state = 'Archived';
+            SELECT changes() + (SELECT COUNT(*) FROM tracked_entities
+                                WHERE id = $entityId AND lifecycle_state = 'Placeholder');
             """);
         entity.Parameters.AddWithValue("$entityId", SqlitePersistenceValues.Format(entityId));
         entity.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
-        if (await entity.ExecuteNonQueryAsync(cancellationToken) != 1)
+        if (Convert.ToInt64(await entity.ExecuteScalarAsync(cancellationToken),
+                System.Globalization.CultureInfo.InvariantCulture) != 1)
         {
             throw new InvalidOperationException(
                 "Only an archived entity in this tracker can be permanently deleted.");
@@ -829,163 +842,40 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private static async Task DeleteRemovedResolvedAsync(
+    private static async Task DeleteRemovedDependenciesAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
         EntityId ownerId,
-        IReadOnlyList<PersistedDependency> desired,
+        IReadOnlyList<EntityDependency> desired,
         CancellationToken cancellationToken)
     {
         string keepClause = AddKeepParameters(
             "dependency_entity_id",
-            desired.Select(static dependency =>
-                SqlitePersistenceValues.Format(dependency.Edge.DependencyEntityId)),
+            desired.Select(static item => SqlitePersistenceValues.Format(item.DependencyEntityId)),
             out string[] values);
         using SqliteCommand command = CreateCommand(
             connection,
             transaction,
-            $"DELETE FROM schema_dependencies WHERE dependent_entity_id = $ownerId{keepClause};");
+            $"DELETE FROM entity_dependencies WHERE dependent_entity_id = $ownerId{keepClause};");
         command.Parameters.AddWithValue("$ownerId", SqlitePersistenceValues.Format(ownerId));
         AddKeepValues(command, values);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private static async Task DeleteRemovedUnresolvedAsync(
+    private static async Task UpsertDependencyAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
-        EntityId ownerId,
-        IReadOnlyList<PersistedUnresolvedDependency> desired,
-        CancellationToken cancellationToken)
-    {
-        string keepClause = AddKeepParameters(
-            "dependency_source_key",
-            desired.Select(static dependency => EntitySourceKey.From(
-                dependency.Dependency.DependencySourceName).Value),
-            out string[] values);
-        using SqliteCommand command = CreateCommand(
-            connection,
-            transaction,
-            $"DELETE FROM unresolved_schema_dependencies WHERE dependent_entity_id = $ownerId{keepClause};");
-        command.Parameters.AddWithValue("$ownerId", SqlitePersistenceValues.Format(ownerId));
-        AddKeepValues(command, values);
-        await command.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    private static async Task UpsertResolvedAsync(
-        SqliteConnection connection,
-        SqliteTransaction transaction,
-        PersistedDependency dependency,
+        EntityDependency dependency,
         string timestamp,
         CancellationToken cancellationToken)
     {
         using SqliteCommand command = CreateCommand(connection, transaction, """
-            INSERT INTO schema_dependencies
-            (
-                dependent_entity_id, dependency_entity_id, dependency_kind,
-                created_at_utc, updated_at_utc
-            )
-            VALUES ($ownerId, $targetId, $kind, $timestamp, $timestamp)
-            ON CONFLICT (dependent_entity_id, dependency_entity_id)
-            DO UPDATE SET dependency_kind = excluded.dependency_kind,
-                          updated_at_utc = excluded.updated_at_utc
-            WHERE dependency_kind <> excluded.dependency_kind;
+            INSERT INTO entity_dependencies
+            (dependent_entity_id, dependency_entity_id, created_at_utc, updated_at_utc)
+            VALUES ($dependentEntityId, $targetId, $timestamp, $timestamp)
+            ON CONFLICT (dependent_entity_id, dependency_entity_id) DO NOTHING;
             """);
-        command.Parameters.AddWithValue(
-            "$ownerId",
-            SqlitePersistenceValues.Format(dependency.Edge.DependentEntityId));
-        command.Parameters.AddWithValue(
-            "$targetId",
-            SqlitePersistenceValues.Format(dependency.Edge.DependencyEntityId));
-        command.Parameters.AddWithValue("$kind", dependency.Kind.ToString());
-        command.Parameters.AddWithValue("$timestamp", timestamp);
-        await command.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    private static async Task UpsertUnresolvedAsync(
-        SqliteConnection connection,
-        SqliteTransaction transaction,
-        PersistedUnresolvedDependency dependency,
-        string timestamp,
-        CancellationToken cancellationToken)
-    {
-        using SqliteCommand command = CreateCommand(connection, transaction, """
-            INSERT INTO unresolved_schema_dependencies
-            (
-                dependent_entity_id, dependency_source_key, dependency_source_name,
-                dependency_kind, created_at_utc, updated_at_utc
-            )
-            VALUES ($ownerId, $targetKey, $targetName, $kind, $timestamp, $timestamp)
-            ON CONFLICT (dependent_entity_id, dependency_source_key)
-            DO UPDATE SET dependency_source_name = excluded.dependency_source_name,
-                          dependency_kind = excluded.dependency_kind,
-                          updated_at_utc = excluded.updated_at_utc
-            WHERE dependency_source_name <> excluded.dependency_source_name
-               OR dependency_kind <> excluded.dependency_kind;
-            """);
-        command.Parameters.AddWithValue(
-            "$ownerId",
-            SqlitePersistenceValues.Format(dependency.Dependency.DependentEntityId));
-        command.Parameters.AddWithValue(
-            "$targetKey",
-            EntitySourceKey.From(dependency.Dependency.DependencySourceName).Value);
-        command.Parameters.AddWithValue(
-            "$targetName",
-            dependency.Dependency.DependencySourceName);
-        command.Parameters.AddWithValue("$kind", dependency.Kind.ToString());
-        command.Parameters.AddWithValue("$timestamp", timestamp);
-        await command.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    private static async Task DeleteRemovedOverridesAsync(
-        SqliteConnection connection,
-        SqliteTransaction transaction,
-        EntityId ownerId,
-        IReadOnlyList<ManualDependencyOverride> desired,
-        CancellationToken cancellationToken)
-    {
-        string keepClause = AddKeepParameters(
-            "dependency_source_key",
-            desired.Select(static item =>
-                EntitySourceKey.From(item.DependencySourceName).Value),
-            out string[] values);
-        using SqliteCommand command = CreateCommand(
-            connection,
-            transaction,
-            $"DELETE FROM manual_dependency_overrides WHERE dependent_entity_id = $ownerId{keepClause};");
-        command.Parameters.AddWithValue("$ownerId", SqlitePersistenceValues.Format(ownerId));
-        AddKeepValues(command, values);
-        await command.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    private static async Task UpsertOverrideAsync(
-        SqliteConnection connection,
-        SqliteTransaction transaction,
-        ManualDependencyOverride dependencyOverride,
-        string timestamp,
-        CancellationToken cancellationToken)
-    {
-        using SqliteCommand command = CreateCommand(connection, transaction, """
-            INSERT INTO manual_dependency_overrides
-            (
-                dependent_entity_id, dependency_source_key, dependency_source_name,
-                override_action, created_at_utc, updated_at_utc
-            )
-            VALUES ($ownerId, $targetKey, $targetName, $action, $timestamp, $timestamp)
-            ON CONFLICT (dependent_entity_id, dependency_source_key)
-            DO UPDATE SET dependency_source_name = excluded.dependency_source_name,
-                          override_action = excluded.override_action,
-                          updated_at_utc = excluded.updated_at_utc
-            WHERE dependency_source_name <> excluded.dependency_source_name
-               OR override_action <> excluded.override_action;
-            """);
-        command.Parameters.AddWithValue(
-            "$ownerId",
-            SqlitePersistenceValues.Format(dependencyOverride.DependentEntityId));
-        command.Parameters.AddWithValue(
-            "$targetKey",
-            EntitySourceKey.From(dependencyOverride.DependencySourceName).Value);
-        command.Parameters.AddWithValue("$targetName", dependencyOverride.DependencySourceName);
-        command.Parameters.AddWithValue("$action", dependencyOverride.Action.ToString());
+        SqliteDependencyValues.Add(command, dependency);
         command.Parameters.AddWithValue("$timestamp", timestamp);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -1068,12 +958,9 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
         referencedIds.UnionWith(changeSet.EntitiesWithGroupNameToUpdate.Select(static entity => entity.Id));
         referencedIds.UnionWith(changeSet.EntityIdsToArchive);
         referencedIds.UnionWith(changeSet.EntityIdsToRestore);
-        referencedIds.UnionWith(changeSet.ReconciledOwnerIds);
-        referencedIds.UnionWith(changeSet.ReconciledOverrideOwnerIds);
-        referencedIds.UnionWith(changeSet.ResolvedDependencies.Select(static item => item.Edge.DependentEntityId));
-        referencedIds.UnionWith(changeSet.ResolvedDependencies.Select(static item => item.Edge.DependencyEntityId));
-        referencedIds.UnionWith(changeSet.UnresolvedDependencies.Select(static item => item.Dependency.DependentEntityId));
-        referencedIds.UnionWith(changeSet.ManualDependencyOverrides.Select(static item => item.DependentEntityId));
+        referencedIds.UnionWith(changeSet.DependencyOwnerIds);
+        referencedIds.UnionWith(changeSet.Dependencies.Select(static item => item.DependentEntityId));
+        referencedIds.UnionWith(changeSet.Dependencies.Select(static item => item.DependencyEntityId));
         referencedIds.UnionWith(changeSet.ResponsibilityAdditions.Select(static item => item.EntityId));
         referencedIds.UnionWith(changeSet.ResponsibilityRemovals.Select(static item => item.EntityId));
         referencedIds.ExceptWith(addedIds);

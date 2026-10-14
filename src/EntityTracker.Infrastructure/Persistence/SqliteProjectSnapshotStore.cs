@@ -1,5 +1,5 @@
 using System.Globalization;
-using EntityTracker.Application.Importing;
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Snapshots;
 using EntityTracker.Domain;
 using Microsoft.Data.Sqlite;
@@ -43,20 +43,8 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
             WHERE tracker.project_id = $projectId;
             """, id, cancellationToken);
         List<Row> dependencies = await RowsAsync(connection, transaction, """
-            SELECT dependency.* FROM schema_dependencies dependency
+            SELECT dependency.* FROM entity_dependencies dependency
             JOIN tracked_entities entity ON entity.id = dependency.dependent_entity_id
-            JOIN trackers tracker ON tracker.id = entity.tracker_id
-            WHERE tracker.project_id = $projectId;
-            """, id, cancellationToken);
-        List<Row> unresolved = await RowsAsync(connection, transaction, """
-            SELECT dependency.* FROM unresolved_schema_dependencies dependency
-            JOIN tracked_entities entity ON entity.id = dependency.dependent_entity_id
-            JOIN trackers tracker ON tracker.id = entity.tracker_id
-            WHERE tracker.project_id = $projectId;
-            """, id, cancellationToken);
-        List<Row> overrides = await RowsAsync(connection, transaction, """
-            SELECT item.* FROM manual_dependency_overrides item
-            JOIN tracked_entities entity ON entity.id = item.dependent_entity_id
             JOIN trackers tracker ON tracker.id = entity.tracker_id
             WHERE tracker.project_id = $projectId;
             """, id, cancellationToken);
@@ -73,11 +61,6 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
             WHERE tracker.project_id = $projectId
             ORDER BY snapshot.recorded_at_utc, snapshot.id;
             """, id, cancellationToken);
-        List<Row> summaries = await RowsAsync(connection, transaction, """
-            SELECT summary.* FROM schema_import_summary summary
-            JOIN trackers tracker ON tracker.id = summary.tracker_id
-            WHERE tracker.project_id = $projectId;
-            """, id, cancellationToken);
         List<Row> syncBaselines = await RowsAsync(connection, transaction, """
             SELECT baseline.* FROM tracker_sync_baselines baseline
             JOIN trackers tracker ON tracker.id = baseline.tracker_id
@@ -88,11 +71,8 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         var entitiesByTracker = entityRows.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
         var responsibilityByEntity = responsibilityRows.ToLookup(row => row.Str("entity_id"), StringComparer.Ordinal);
         var dependenciesByEntity = dependencies.ToLookup(row => row.Str("dependent_entity_id"), StringComparer.Ordinal);
-        var unresolvedByEntity = unresolved.ToLookup(row => row.Str("dependent_entity_id"), StringComparer.Ordinal);
-        var overridesByEntity = overrides.ToLookup(row => row.Str("dependent_entity_id"), StringComparer.Ordinal);
         var historyByTracker = history.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
         var progressByTracker = progress.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
-        var summariesByTracker = summaries.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
         var baselinesByTracker = syncBaselines.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
 
         SnapshotProject projectModel = new(project.Guid("id"), canonicalName ?? project.Str("name"),
@@ -112,17 +92,9 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                         entity.Time("created_at_utc"), entity.Time("schema_updated_at_utc"),
                         entity.Time("progress_updated_at_utc"),
                         dependenciesByEntity[entityId]
-                            .Select(d => new SnapshotDependency(d.Guid("dependent_entity_id"),
-                                d.Guid("dependency_entity_id"), d.Str("dependency_kind"),
-                                d.Time("created_at_utc"), d.Time("updated_at_utc"))).ToArray(),
-                        unresolvedByEntity[entityId]
-                            .Select(d => new SnapshotUnresolvedDependency(d.Guid("dependent_entity_id"),
-                                d.Str("dependency_source_name"), d.Str("dependency_kind"),
-                                d.Time("created_at_utc"), d.Time("updated_at_utc"))).ToArray(),
-                        overridesByEntity[entityId]
-                            .Select(d => new SnapshotOverride(d.Guid("dependent_entity_id"),
-                                d.Str("dependency_source_name"), d.Str("override_action"),
-                                d.Time("created_at_utc"), d.Time("updated_at_utc"))).ToArray(),
+                            .Select(d => new SnapshotDependency(d.Guid("dependency_entity_id"),
+                                d.Time("created_at_utc"), d.Time("updated_at_utc")))
+                            .OrderBy(d => d.DependencyEntityId).ToArray(),
                         responsibilityByEntity[entityId]
                             .Select(d => new SnapshotResponsibilityPeriod(d.Guid("id"),
                                 d.Guid("entity_id"), d.Guid("developer_id"),
@@ -130,7 +102,6 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                             .OrderBy(d => d.StartedAtUtc).ThenBy(d => d.Id).ToArray(),
                         entity.Str("filter_active"), entity.Str("shared_notes"));
                 }).ToArray();
-            Row? summary = summariesByTracker[trackerId].SingleOrDefault();
             return new SnapshotTracker(tracker.Guid("id"), tracker.Guid("project_id"),
                 tracker.Str("name"), tracker.Str("lifecycle_state"),
                 tracker.Time("created_at_utc"), tracker.Time("updated_at_utc"),
@@ -146,11 +117,6 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                         p.Int("rework_needed_count"), p.Int("development_completed_count"),
                         p.Int("reconciled_count"), order, p.Int("manually_blocked_count"),
                         p.Int("reworking_count"))).ToArray(),
-                summary is null ? null : new SnapshotImportSummary(summary.Time("applied_at_utc"),
-                    summary.Str("source_file_name"), summary.Str("import_mode"),
-                    summary.Int("new_entity_count"), summary.Int("changed_entity_count"),
-                    summary.Int("archived_entity_count"), summary.Int("unchanged_entity_count"),
-                    summary.Int("unresolved_entity_count")),
                 baselinesByTracker[trackerId].SingleOrDefault()?.Str("baseline_json"));
         }).ToArray();
         SnapshotDeveloper[] developers = developerRows.Select(row => new SnapshotDeveloper(
@@ -279,20 +245,10 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         foreach (SnapshotEntity entity in tracker.Entities)
         {
             foreach (SnapshotDependency dependency in entity.Dependencies)
-                await InsertAsync(connection, transaction, "schema_dependencies",
-                    ["dependent_entity_id", "dependency_entity_id", "dependency_kind", "created_at_utc", "updated_at_utc"],
-                    [Id(entity.Id), Id(dependency.DependencyEntityId), dependency.Kind,
-                     Time(dependency.CreatedAtUtc), Time(dependency.UpdatedAtUtc)], cancellationToken);
-            foreach (SnapshotUnresolvedDependency dependency in entity.UnresolvedDependencies)
-                await InsertAsync(connection, transaction, "unresolved_schema_dependencies",
-                    ["dependent_entity_id", "dependency_source_key", "dependency_source_name", "dependency_kind", "created_at_utc", "updated_at_utc"],
-                    [Id(entity.Id), Key(dependency.DependencySourceName), dependency.DependencySourceName,
-                     dependency.Kind, Time(dependency.CreatedAtUtc), Time(dependency.UpdatedAtUtc)], cancellationToken);
-            foreach (SnapshotOverride item in entity.ManualOverrides)
-                await InsertAsync(connection, transaction, "manual_dependency_overrides",
-                    ["dependent_entity_id", "dependency_source_key", "dependency_source_name", "override_action", "created_at_utc", "updated_at_utc"],
-                    [Id(entity.Id), Key(item.DependencySourceName), item.DependencySourceName,
-                     item.Action, Time(item.CreatedAtUtc), Time(item.UpdatedAtUtc)], cancellationToken);
+                await InsertAsync(connection, transaction, "entity_dependencies",
+                    ["dependent_entity_id", "dependency_entity_id", "created_at_utc", "updated_at_utc"],
+                    [Id(entity.Id), Id(dependency.DependencyEntityId), Time(dependency.CreatedAtUtc),
+                     Time(dependency.UpdatedAtUtc)], cancellationToken);
         }
         foreach (SnapshotStatusEvent entry in tracker.StatusHistory.OrderBy(e => e.Order))
             await InsertAsync(connection, transaction, "entity_status_history",
@@ -307,12 +263,6 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                  progress.BlockedCount, progress.InProgressCount, progress.ReworkNeededCount,
                  progress.DevelopmentCompletedCount, progress.ReconciledCount, Id(progress.SnapshotId),
                  progress.ManuallyBlockedCount, progress.ReworkingCount], cancellationToken);
-        if (tracker.ImportSummary is { } summary)
-            await InsertAsync(connection, transaction, "schema_import_summary",
-                ["tracker_id", "applied_at_utc", "source_file_name", "import_mode", "new_entity_count", "changed_entity_count", "archived_entity_count", "unchanged_entity_count", "unresolved_entity_count"],
-                [Id(tracker.Id), Time(summary.AppliedAtUtc), summary.SourceFileName, summary.Mode,
-                 summary.NewEntityCount, summary.ChangedEntityCount, summary.ArchivedEntityCount,
-                 summary.UnchangedEntityCount, summary.UnresolvedEntityCount], cancellationToken);
         if (tracker.SyncBaselineJson is { } baselineJson)
             await InsertAsync(connection, transaction, "tracker_sync_baselines",
                 ["tracker_id", "baseline_json"],
@@ -329,7 +279,6 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         {
             $"DELETE FROM entity_status_history WHERE entity_id IN ({entityIds});",
             $"DELETE FROM progress_snapshots WHERE tracker_id IN ({trackerIds});",
-            $"DELETE FROM schema_import_summary WHERE tracker_id IN ({trackerIds});",
             $"DELETE FROM tracked_entities WHERE tracker_id IN ({trackerIds});",
             "DELETE FROM trackers WHERE project_id = $projectId;",
             "DELETE FROM projects WHERE id = $projectId;"
@@ -354,7 +303,6 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
               AND (SELECT COUNT(*) FROM trackers) = 1
               AND (SELECT COUNT(*) FROM tracked_entities) = 0
               AND (SELECT COUNT(*) FROM entity_status_history) = 0
-              AND (SELECT COUNT(*) FROM schema_import_summary) = 0
               AND (SELECT COUNT(*) FROM progress_snapshots) <= 1
               AND (SELECT COUNT(*) FROM progress_snapshots
                    WHERE ready_count <> 0 OR blocked_count <> 0 OR in_progress_count <> 0

@@ -29,10 +29,10 @@ public sealed class ResponsibilityPeriodTests
         TrackedEntity entity = new(EntityId.New(), tracker.Id, "Feature");
         SqliteTrackedStateStore store = new(database);
         SqliteResponsibilityPeriodRepository periods = new(database);
-        await store.ApplyAsync(tracker.Id, new TrackedStateChangeSet([entity], [], [], [], [], [],
+        await store.ApplyAsync(tracker.Id, new TrackedStateChangeSet([entity], [], [],
             responsibilitySelections: [new ResponsibilitySelection(entity.Id, [alice.Id, bob.Id])]));
         time.Advance(TimeSpan.FromHours(1));
-        TrackedStateChangeSet remove = new([], [], [], [], [], [], responsibilityRemovals:
+        TrackedStateChangeSet remove = new([], [], [], responsibilityRemovals:
             [new ResponsibilityRemoval(entity.Id, alice.Id)]);
         await store.ApplyAsync(tracker.Id, remove);
         await store.ApplyAsync(tracker.Id, remove);
@@ -41,7 +41,7 @@ public sealed class ResponsibilityPeriodTests
         Assert.True(after.Single(period => period.DeveloperId == bob.Id).IsCurrent);
 
         time.Advance(TimeSpan.FromHours(1));
-        await store.ApplyAsync(tracker.Id, new TrackedStateChangeSet([], [], [], [], [], [],
+        await store.ApplyAsync(tracker.Id, new TrackedStateChangeSet([], [], [],
             responsibilityAdditions: [new ResponsibilityAddition(entity.Id, alice.Id)]));
         ResponsibilityPeriod[] alicePeriods = (await periods.GetByEntityAsync(entity.Id))
             .Where(period => period.DeveloperId == alice.Id).ToArray();
@@ -64,10 +64,10 @@ public sealed class ResponsibilityPeriodTests
         TrackedEntity entity = new(EntityId.New(), tracker.Id, "Feature");
         SqliteTrackedStateStore store = new(database);
         SqliteResponsibilityPeriodRepository periods = new(database);
-        await store.ApplyAsync(tracker.Id, new TrackedStateChangeSet([entity], [], [], [], [], [],
+        await store.ApplyAsync(tracker.Id, new TrackedStateChangeSet([entity], [], [],
             responsibilitySelections: [new ResponsibilitySelection(entity.Id, [alice.Id])]));
         time.Advance(TimeSpan.FromHours(1));
-        TrackedStateChangeSet addBob = new([], [], [], [], [], [], responsibilityAdditions:
+        TrackedStateChangeSet addBob = new([], [], [], responsibilityAdditions:
             [new ResponsibilityAddition(entity.Id, bob.Id)]);
         await store.ApplyAsync(tracker.Id, addBob);
         await store.ApplyAsync(tracker.Id, addBob);
@@ -80,9 +80,9 @@ public sealed class ResponsibilityPeriodTests
         await developers.SetRetiredAsync(tracker.ProjectId, bob.Id, true);
         await Assert.ThrowsAsync<InvalidOperationException>(() => store.ApplyAsync(tracker.Id, addBob));
         await store.ApplyAsync(tracker.Id,
-            new TrackedStateChangeSet([], [], [entity.Id], [], [], []));
+            new TrackedStateChangeSet([], [], [entity.Id]));
         await Assert.ThrowsAsync<InvalidOperationException>(() => store.ApplyAsync(tracker.Id,
-            new TrackedStateChangeSet([], [], [], [], [], [], responsibilityAdditions:
+            new TrackedStateChangeSet([], [], [], responsibilityAdditions:
                 [new ResponsibilityAddition(entity.Id, alice.Id)])));
     }
 
@@ -102,17 +102,16 @@ public sealed class ResponsibilityPeriodTests
         TrackedEntity blank = new(EntityId.New(), tracker.Id, "Blank");
         SqliteTrackedStateStore store = new(database);
         await store.ApplyAsync(tracker.Id, new TrackedStateChangeSet(
-            [active, archived, blank], [], [], [], [], [],
+            [active, archived, blank], [], [],
             responsibilitySelections:
             [new ResponsibilitySelection(active.Id, [alice.Id, bob.Id]),
              new ResponsibilitySelection(archived.Id, [bob.Id])]));
         await store.ApplyAsync(tracker.Id,
-            new TrackedStateChangeSet([], [], [archived.Id], [], [], []));
+            new TrackedStateChangeSet([], [], [archived.Id]));
 
         EntityOverviewService overview = new(
             new SqliteEntityRepository(database), new SqliteEntityAuditReader(database),
-            new SqliteDependencyRepository(database),
-            new SqliteManualDependencyOverrideRepository(database), new DependencyRanker(),
+            new SqliteDependencyRepository(database), new DependencyRanker(),
             new EffectiveDependencyResolver(), new WorkflowReadinessEvaluator(),
             new PriorityPlanningService(), new SqliteResponsibilityPeriodRepository(database),
             developers);
@@ -179,10 +178,10 @@ public sealed class ResponsibilityPeriodTests
         Guid[] periodIds = initial.Select(p => p.Id)
             .Concat((await periods.GetByEntityAsync(entity.Id)).Select(p => p.Id))
             .Distinct().Order().ToArray();
-        await store.ApplyAsync(tracker.Id, new TrackedStateChangeSet([], [], [entity.Id], [], [], []));
+        await store.ApplyAsync(tracker.Id, new TrackedStateChangeSet([], [], [entity.Id]));
         Assert.Equal(periodIds, (await periods.GetByEntityAsync(entity.Id))
             .Select(p => p.Id).Order().ToArray());
-        await store.ApplyAsync(tracker.Id, new TrackedStateChangeSet([], [], [], [], [], [],
+        await store.ApplyAsync(tracker.Id, new TrackedStateChangeSet([], [], [],
             entityIdsToRestore: [entity.Id]));
         Assert.Equal(periodIds, (await periods.GetByEntityAsync(entity.Id))
             .Select(p => p.Id).Order().ToArray());
@@ -243,7 +242,8 @@ public sealed class ResponsibilityPeriodTests
                 null, null,
                 [new SnapshotEntity(entityId, trackerId, "Legacy", "NotStarted", "",
                     "Active", "Imported", null, "AL, BO, al", "", created, created,
-                    created, [], [], [])], [], [], null)], []);
+                    created, [], LegacyDependencies: [], LegacyUnresolvedDependencies: [],
+                    LegacyOverrides: [])], [], [])], []);
         ProjectSnapshotJsonCodec codec = new();
         ProjectSnapshot decoded = codec.Decode(codec.Encode(older).Files);
         await new SqliteProjectSnapshotStore(database).ApplyAsync(decoded, 0);
@@ -273,6 +273,6 @@ public sealed class ResponsibilityPeriodTests
 
     private static TrackedStateChangeSet Change(IReadOnlyList<TrackedEntity> added,
         EntityId entityId, IReadOnlyList<DeveloperId> developers) =>
-        new(added, [], [], [], [], [],
+        new(added, [], [],
             responsibilitySelections: [new ResponsibilitySelection(entityId, developers)]);
 }

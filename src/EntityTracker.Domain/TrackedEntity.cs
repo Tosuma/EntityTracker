@@ -9,7 +9,7 @@ public sealed class TrackedEntity
         DevelopmentStatus status = DevelopmentStatus.NotStarted,
         string notes = "",
         EntityLifecycleState lifecycleState = EntityLifecycleState.Active,
-        EntityProvenance provenance = EntityProvenance.Imported,
+        EntityProvenance provenance = EntityProvenance.Manual,
         int? requestedPriority = null,
         string? responsibleDeveloper = null,
         string? groupName = null,
@@ -41,6 +41,30 @@ public sealed class TrackedEntity
         ResponsibleDeveloper = NormalizeResponsibleDeveloper(responsibleDeveloper);
         GroupName = NormalizeGroupName(groupName);
     }
+
+    /// <summary>
+    /// A placeholder for <paramref name="sourceName"/>, for a dependency on a name no entity has yet. Its ID
+    /// comes from the Tracker and the name, so colleagues who create the same placeholder agree on it.
+    /// </summary>
+    public static TrackedEntity Placeholder(TrackerId trackerId, string sourceName)
+    {
+        ArgumentNullException.ThrowIfNull(trackerId);
+        ValidateSourceName(sourceName);
+        return new TrackedEntity(PlaceholderId(trackerId, sourceName), trackerId, sourceName.Trim(),
+            lifecycleState: EntityLifecycleState.Placeholder);
+    }
+
+    /// <summary>The ID <see cref="Placeholder"/> gives a placeholder for this name in this Tracker.</summary>
+    public static EntityId PlaceholderId(TrackerId trackerId, string sourceName)
+    {
+        ArgumentNullException.ThrowIfNull(trackerId);
+        ArgumentNullException.ThrowIfNull(sourceName);
+        byte[] hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(
+            $"placeholder:{trackerId.Value:D}:{sourceName.Trim().ToUpperInvariant()}"));
+        return new EntityId(new Guid(hash.AsSpan(0, 16)));
+    }
+
+    public bool IsPlaceholder => LifecycleState == EntityLifecycleState.Placeholder;
 
     public EntityId Id { get; }
 
@@ -101,24 +125,6 @@ public sealed class TrackedEntity
     {
         EnsureDefinedLifecycleState(lifecycleState);
         LifecycleState = lifecycleState;
-    }
-
-    public void ChangeProvenance(EntityProvenance provenance)
-    {
-        EnsureDefinedProvenance(provenance);
-
-        bool validTransition =
-            Provenance == EntityProvenance.ManualOnly &&
-            provenance == EntityProvenance.ManualAndImported ||
-            Provenance == EntityProvenance.Copied &&
-            provenance == EntityProvenance.CopiedAndImported;
-        if (!validTransition)
-        {
-            throw new InvalidOperationException(
-                "Entity provenance may only transition when CSV confirms manual or copied structure.");
-        }
-
-        Provenance = provenance;
     }
 
     public void ChangeRequestedPriority(int? requestedPriority)

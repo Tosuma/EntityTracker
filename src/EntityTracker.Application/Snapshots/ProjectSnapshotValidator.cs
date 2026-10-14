@@ -4,10 +4,17 @@ namespace EntityTracker.Application.Snapshots;
 
 public static class ProjectSnapshotValidator
 {
+    /// <summary>Entity origins that formats 1–5 could record; format 6 has only Manual and Copied.</summary>
+    internal static readonly string[] LegacyProvenances =
+        ["Imported", "ManualOnly", "ManualAndImported", "Copied", "CopiedAndImported"];
+
+    /// <summary>The dependency kinds of formats 1–5; both now mean an ordinary dependency.</summary>
+    private static readonly string[] LegacyDependencyKinds = ["Mandatory", "Optional"];
+
     public static void Validate(ProjectSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        if (snapshot.FormatVersion is not (1 or 2 or 3 or 4 or ProjectSnapshot.CurrentFormatVersion))
+        if (!ProjectSnapshot.IsSupportedFormat(snapshot.FormatVersion))
         {
             throw new ProjectSnapshotFormatVersionException(snapshot.FormatVersion);
         }
@@ -41,6 +48,7 @@ public static class ProjectSnapshotValidator
         HashSet<Guid> allEventIds = [];
         HashSet<Guid> allProgressIds = [];
         HashSet<Guid> allPeriodIds = [];
+        bool legacy = snapshot.FormatVersion < ProjectSnapshot.CurrentFormatVersion;
         foreach (SnapshotTracker tracker in snapshot.Trackers)
         {
             if (tracker is null || tracker.Id == Guid.Empty ||
@@ -61,14 +69,21 @@ public static class ProjectSnapshotValidator
                     entity.FilterActive is null || entity.SharedNotes is null ||
                     entity.ResponsibleDeveloper is null || entity.GroupName is null ||
                     !names.Add(entity.SourceName.Trim()) ||
-                    entity.Dependencies is null || entity.UnresolvedDependencies is null ||
-                    entity.ManualOverrides is null)
+                    entity.Dependencies is null || !HasDependencyListsOf(snapshot.FormatVersion, entity))
                 {
                     throw new InvalidDataException("The snapshot has invalid or duplicate entity IDs or names.");
                 }
                 EnumValue<DevelopmentStatus>(entity.DevelopmentStatus);
                 EnumValue<EntityLifecycleState>(entity.LifecycleState);
-                EnumValue<EntityProvenance>(entity.Provenance);
+                if (legacy)
+                {
+                    if (!LegacyProvenances.Contains(entity.Provenance, StringComparer.Ordinal))
+                        throw new InvalidDataException($"Unsupported snapshot value '{entity.Provenance}'.");
+                }
+                else
+                {
+                    EnumValue<EntityProvenance>(entity.Provenance);
+                }
                 if (entity.RequestedPriority is < 1 or > 5)
                 {
                     throw new InvalidDataException("An entity priority is invalid.");
@@ -103,42 +118,8 @@ public static class ProjectSnapshotValidator
             }
             foreach (SnapshotEntity entity in tracker.Entities)
             {
-                HashSet<Guid> targets = [];
-                foreach (SnapshotDependency dependency in entity.Dependencies)
-                {
-                    if (dependency is null || dependency.DependentEntityId != entity.Id ||
-                        !entityIds.Contains(dependency.DependencyEntityId) ||
-                        dependency.DependencyEntityId == entity.Id || !targets.Add(dependency.DependencyEntityId))
-                    {
-                        throw new InvalidDataException("A resolved dependency has an invalid reference.");
-                    }
-                    EnumValue<EntityTracker.Application.Importing.ImportedDependencyKind>(dependency.Kind);
-                    Utc(dependency.CreatedAtUtc); Utc(dependency.UpdatedAtUtc);
-                }
-                HashSet<string> unresolved = new(StringComparer.OrdinalIgnoreCase);
-                foreach (SnapshotUnresolvedDependency dependency in entity.UnresolvedDependencies)
-                {
-                    if (dependency is null || dependency.DependentEntityId != entity.Id ||
-                        string.IsNullOrWhiteSpace(dependency.DependencySourceName) ||
-                        !unresolved.Add(dependency.DependencySourceName.Trim()))
-                    {
-                        throw new InvalidDataException("An unresolved dependency is invalid.");
-                    }
-                    EnumValue<EntityTracker.Application.Importing.ImportedDependencyKind>(dependency.Kind);
-                    Utc(dependency.CreatedAtUtc); Utc(dependency.UpdatedAtUtc);
-                }
-                HashSet<string> overrides = new(StringComparer.OrdinalIgnoreCase);
-                foreach (SnapshotOverride item in entity.ManualOverrides)
-                {
-                    if (item is null || item.DependentEntityId != entity.Id ||
-                        string.IsNullOrWhiteSpace(item.DependencySourceName) ||
-                        !overrides.Add(item.DependencySourceName.Trim()))
-                    {
-                        throw new InvalidDataException("A manual dependency override is invalid.");
-                    }
-                    EnumValue<ManualDependencyOverrideAction>(item.Action);
-                    Utc(item.CreatedAtUtc); Utc(item.UpdatedAtUtc);
-                }
+                if (legacy) ValidateLegacyDependencies(entity, entityIds);
+                else ValidateDependencies(entity, entityIds);
             }
 
             Dictionary<Guid, SnapshotStatusEvent> events = [];
@@ -208,7 +189,9 @@ public static class ProjectSnapshotValidator
                 !tracker.ProgressHistory.OrderBy(p => p.Order).Select(p => p.RecordedAtUtc)
                     .SequenceEqual(tracker.ProgressHistory.Select(p => p.RecordedAtUtc).Order()))
                 throw new InvalidDataException("Progress history order is invalid.");
-            if (tracker.ImportSummary is { } summary)
+            if (!legacy && tracker.LegacyImportSummary is not null)
+                throw new InvalidDataException("A current snapshot cannot contain a schema import summary.");
+            if (tracker.LegacyImportSummary is { } summary)
             {
                 Utc(summary.AppliedAtUtc);
                 if (summary.Mode is not ("Complete" or "Partial") ||
@@ -221,6 +204,73 @@ public static class ProjectSnapshotValidator
         }
         if (snapshot.Trackers.Select(t => t.Name.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() != snapshot.Trackers.Count)
             throw new InvalidDataException("Tracker names must be unique within a Project.");
+    }
+
+    private static bool HasDependencyListsOf(int formatVersion, SnapshotEntity entity) =>
+        formatVersion < ProjectSnapshot.CurrentFormatVersion
+            ? entity.Dependencies.Count == 0 && entity.LegacyDependencies is not null &&
+              entity.LegacyUnresolvedDependencies is not null && entity.LegacyOverrides is not null
+            : entity.LegacyDependencies is null or { Count: 0 } &&
+              entity.LegacyUnresolvedDependencies is null or { Count: 0 } &&
+              entity.LegacyOverrides is null or { Count: 0 };
+
+    /// <summary>
+    /// Each dependency refers to another entity of the same Tracker by ID, never twice. A placeholder
+    /// (an unresolved reference) has no dependencies or responsibility of its own.
+    /// </summary>
+    private static void ValidateDependencies(SnapshotEntity entity, HashSet<Guid> entityIds)
+    {
+        if (entity.LifecycleState == nameof(EntityLifecycleState.Placeholder) &&
+            (entity.Dependencies.Count > 0 || entity.ResponsibilityPeriods is { Count: > 0 }))
+            throw new InvalidDataException("A placeholder entity cannot have dependencies or responsibility.");
+        HashSet<Guid> targets = [];
+        foreach (SnapshotDependency dependency in entity.Dependencies)
+        {
+            if (dependency is null || dependency.DependencyEntityId == entity.Id ||
+                !entityIds.Contains(dependency.DependencyEntityId) || !targets.Add(dependency.DependencyEntityId))
+                throw new InvalidDataException("A dependency is invalid or duplicated.");
+            Utc(dependency.CreatedAtUtc); Utc(dependency.UpdatedAtUtc);
+        }
+    }
+
+    private static void ValidateLegacyDependencies(SnapshotEntity entity, HashSet<Guid> entityIds)
+    {
+        HashSet<Guid> targets = [];
+        foreach (SnapshotLegacyDependency dependency in entity.LegacyDependencies!)
+        {
+            if (dependency is null || dependency.DependentEntityId != entity.Id ||
+                !entityIds.Contains(dependency.DependencyEntityId) ||
+                dependency.DependencyEntityId == entity.Id || !targets.Add(dependency.DependencyEntityId) ||
+                !LegacyDependencyKinds.Contains(dependency.Kind, StringComparer.Ordinal))
+            {
+                throw new InvalidDataException("A resolved dependency has an invalid reference.");
+            }
+            Utc(dependency.CreatedAtUtc); Utc(dependency.UpdatedAtUtc);
+        }
+        HashSet<string> unresolved = new(StringComparer.OrdinalIgnoreCase);
+        foreach (SnapshotLegacyUnresolvedDependency dependency in entity.LegacyUnresolvedDependencies!)
+        {
+            if (dependency is null || dependency.DependentEntityId != entity.Id ||
+                string.IsNullOrWhiteSpace(dependency.DependencySourceName) ||
+                !unresolved.Add(dependency.DependencySourceName.Trim()) ||
+                !LegacyDependencyKinds.Contains(dependency.Kind, StringComparer.Ordinal))
+            {
+                throw new InvalidDataException("An unresolved dependency is invalid.");
+            }
+            Utc(dependency.CreatedAtUtc); Utc(dependency.UpdatedAtUtc);
+        }
+        HashSet<string> overrides = new(StringComparer.OrdinalIgnoreCase);
+        foreach (SnapshotLegacyOverride item in entity.LegacyOverrides!)
+        {
+            if (item is null || item.DependentEntityId != entity.Id ||
+                string.IsNullOrWhiteSpace(item.DependencySourceName) ||
+                !overrides.Add(item.DependencySourceName.Trim()) ||
+                item.Action is not ("Add" or "Suppress"))
+            {
+                throw new InvalidDataException("A manual dependency override is invalid.");
+            }
+            Utc(item.CreatedAtUtc); Utc(item.UpdatedAtUtc);
+        }
     }
 
     private static void ValidateCatalog(string name, string state, DateTimeOffset created,

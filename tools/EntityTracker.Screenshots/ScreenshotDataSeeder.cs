@@ -111,7 +111,7 @@ internal static class ScreenshotDataSeeder
             ProjectDeveloper platform = await provider.GetRequiredService<ProjectDeveloperService>()
                 .CreateAsync(tracker.ProjectId, "PT", "Platform Team", cancellationToken);
             await provider.GetRequiredService<ITrackedStateStore>().ApplyAsync(tracker.Id,
-                new TrackedStateChangeSet([], [], [], [], [], [],
+                new TrackedStateChangeSet([], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(noteEntity.Id, [platform.Id])]),
                 cancellationToken);
         }

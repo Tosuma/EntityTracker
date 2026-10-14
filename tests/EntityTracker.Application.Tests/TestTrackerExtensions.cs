@@ -1,4 +1,4 @@
-using EntityTracker.Application.Importing;
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.ManualOverrides;
@@ -66,18 +66,9 @@ internal static class TestTrackerExtensions
         this EntityDependencyEditorService service,
         EntityId ownerId,
         IEnumerable<TrackedEntity> entities,
-        IEnumerable<PersistedDependency> importedResolvedDependencies,
-        IEnumerable<PersistedUnresolvedDependency> importedUnresolvedDependencies,
-        IEnumerable<ManualDependencyOverride> allOverrides,
-        IEnumerable<ManualDependencyOverride> desiredOwnerOverrides) =>
-        service.CreatePlan(
-            TestTrackerId,
-            ownerId,
-            entities,
-            importedResolvedDependencies,
-            importedUnresolvedDependencies,
-            allOverrides,
-            desiredOwnerOverrides);
+        IEnumerable<EntityDependency> allDependencies,
+        IEnumerable<DependencyTarget> desiredTargets) =>
+        service.CreatePlan(TestTrackerId, ownerId, entities, allDependencies, desiredTargets);
 
     internal static Task SaveAsync(
         this EntityDependencyEditorService service,

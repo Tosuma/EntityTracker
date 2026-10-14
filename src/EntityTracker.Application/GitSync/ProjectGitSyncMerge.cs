@@ -2,7 +2,6 @@ using System.Security.Cryptography;
 using System.Text;
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
-using EntityTracker.Application.Importing;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Snapshots;
 using EntityTracker.Domain;
@@ -388,14 +387,12 @@ public sealed partial class ProjectGitSyncService
     {
         List<string> deleted = [$"Project {snapshot.Project.Id:D}"];
         deleted.AddRange((snapshot.Developers ?? []).Select(d => $"Developer {d.Id:D}"));
-        foreach (SnapshotTracker tracker in snapshot.Trackers)
+        foreach (SnapshotTracker tracker in snapshot.Trackers.Select(ProjectSnapshotUpgrade.ToCurrentDependencies))
         {
             deleted.Add($"Tracker {tracker.Id:D}");
             deleted.AddRange(tracker.Entities.Select(e => $"Entity {e.Id:D}"));
             deleted.AddRange(tracker.StatusHistory.Select(e => $"Status event {e.EventId:D}"));
             deleted.AddRange(tracker.ProgressHistory.Select(e => $"Progress record {e.SnapshotId:D}"));
-            if (tracker.ImportSummary is not null)
-                deleted.Add($"Import summary {tracker.Id:D}");
             foreach (SnapshotEntity entity in tracker.Entities)
                 deleted.AddRange(RelationshipDeletions(entity));
         }
@@ -428,16 +425,7 @@ public sealed partial class ProjectGitSyncService
                 e.ResponsibleDeveloper, e.GroupName, e.FilterActive, e.SharedNotes)).ToArray();
             EffectiveDependencyState dependencies = new EffectiveDependencyResolver().Resolve(
                 entities,
-                tracker.Entities.SelectMany(e => e.Dependencies).Select(d =>
-                    new PersistedDependency(new DependencyEdge(new EntityId(d.DependentEntityId),
-                        new EntityId(d.DependencyEntityId)), Enum.Parse<ImportedDependencyKind>(d.Kind))),
-                tracker.Entities.SelectMany(e => e.UnresolvedDependencies).Select(d =>
-                    new PersistedUnresolvedDependency(new UnresolvedDependency(
-                        new EntityId(d.DependentEntityId), d.DependencySourceName),
-                        Enum.Parse<ImportedDependencyKind>(d.Kind))),
-                tracker.Entities.SelectMany(e => e.ManualOverrides).Select(d =>
-                    new ManualDependencyOverride(new EntityId(d.DependentEntityId),
-                        d.DependencySourceName, Enum.Parse<ManualDependencyOverrideAction>(d.Action))));
+                tracker.Entities.SelectMany(e => e.Dependencies.Select(d => d.ToEntityDependency(e.Id))));
             ProgressSnapshotState counts = new ProgressSnapshotCalculator().Calculate(entities, dependencies);
             SnapshotProgress next = new(id, time,
                 counts.ReadyCount, counts.BlockedCount, counts.InProgressCount,

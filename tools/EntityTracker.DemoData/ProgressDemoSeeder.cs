@@ -220,27 +220,20 @@ public sealed class ProgressDemoSeeder
         }
 
         SqliteDependencyRepository dependencyRepository = new(database);
-        SqliteManualDependencyOverrideRepository overrideRepository = new(database);
         SqliteTrackedStateStore store = new(database);
         EffectiveDependencyResolver dependencyResolver = new();
         ProgressSnapshotCalculator snapshotCalculator = new();
 
         Task<IReadOnlyList<TrackedEntity>> entitiesTask =
             entityRepository.GetAllAsync(tracker.Id, cancellationToken);
-        Task<IReadOnlyList<PersistedDependency>> resolvedTask =
+        Task<IReadOnlyList<EntityDependency>> dependenciesTask =
             dependencyRepository.GetAllAsync(tracker.Id, cancellationToken);
-        Task<IReadOnlyList<PersistedUnresolvedDependency>> unresolvedTask =
-            dependencyRepository.GetAllUnresolvedAsync(tracker.Id, cancellationToken);
-        Task<IReadOnlyList<ManualDependencyOverride>> overridesTask =
-            overrideRepository.GetAllAsync(tracker.Id, cancellationToken);
-        await Task.WhenAll(entitiesTask, resolvedTask, unresolvedTask, overridesTask);
+        await Task.WhenAll(entitiesTask, dependenciesTask);
 
         TrackedEntity[] entities = (await entitiesTask).ToArray();
         EffectiveDependencyState effectiveDependencies = dependencyResolver.Resolve(
             entities,
-            await resolvedTask,
-            await unresolvedTask,
-            await overridesTask);
+            await dependenciesTask);
         timeProvider.SetUtcNow(timeline.BaselineAtUtc);
         await store.EnsureHistoryBaselineAsync(
             tracker.Id,
@@ -265,9 +258,6 @@ public sealed class ProgressDemoSeeder
             await store.ApplyAsync(
                 tracker.Id,
                 new TrackedStateChangeSet(
-                    [],
-                    [],
-                    [],
                     [],
                     [],
                     [],

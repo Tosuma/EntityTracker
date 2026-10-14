@@ -1,5 +1,5 @@
 using EntityTracker.Application.History;
-using EntityTracker.Application.Importing;
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Persistence;
@@ -72,6 +72,59 @@ public sealed class ProjectTrackerMigrationTests
     }
 
     [Fact]
+    public async Task InitializeAsync_NamesNoEntityHasBecomePlaceholdersWithTheSharedStableId()
+    {
+        await using TemporarySqliteFile file = new();
+        await CreatePopulatedVersionElevenDatabaseAsync(file.DatabasePath);
+        await using (SqliteConnection connection = new($"Data Source={file.DatabasePath}"))
+        {
+            await connection.OpenAsync();
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO unresolved_schema_dependencies VALUES
+                ($activeId, 'FUTURE', 'Future', 'Optional',
+                 '2025-01-02T00:00:00.0000000+00:00', '2025-01-03T00:00:00.0000000+00:00');
+                INSERT INTO manual_dependency_overrides VALUES
+                ($archivedId, 'EXTERNAL', 'External', 'Add',
+                 '2025-01-02T00:00:00.0000000+00:00', '2025-01-03T00:00:00.0000000+00:00');
+                """;
+            command.Parameters.AddWithValue("$activeId", ActiveId.Value.ToString("D"));
+            command.Parameters.AddWithValue("$archivedId", ArchivedId.Value.ToString("D"));
+            await command.ExecuteNonQueryAsync();
+        }
+        SqliteDatabase database = new(file.DatabasePath);
+
+        await database.InitializeAsync();
+
+        Tracker tracker = Assert.Single(await new SqliteTrackerRepository(database).GetAllAsync());
+        TrackedEntity[] entities = (await new SqliteEntityRepository(database).GetAllAsync(tracker.Id)).ToArray();
+        TrackedEntity[] placeholders = entities.Where(entity => entity.IsPlaceholder).ToArray();
+        Assert.Equal(["External", "Future"], placeholders.Select(entity => entity.SourceName).Order());
+        Assert.All(placeholders, entity =>
+            Assert.Equal(TrackedEntity.PlaceholderId(tracker.Id, entity.SourceName), entity.Id));
+        Assert.Equal(
+            new[]
+            {
+                (ActiveId.Value, ArchivedId.Value),
+                (ActiveId.Value, TrackedEntity.PlaceholderId(tracker.Id, "Future").Value),
+                (ArchivedId.Value, TrackedEntity.PlaceholderId(tracker.Id, "External").Value)
+            }.Order(),
+            (await new SqliteDependencyRepository(database).GetAllAsync(tracker.Id))
+                .Select(item => (item.DependentEntityId.Value, item.DependencyEntityId.Value)).Order());
+        Assert.DoesNotContain(await new SqliteProgressHistoryRepository(database).GetStatusHistoryAsync(tracker.Id),
+            entry => placeholders.Any(placeholder => placeholder.Id == entry.EntityId));
+        await using SqliteConnection migrated = new($"Data Source={file.DatabasePath}");
+        await migrated.OpenAsync();
+        using SqliteCommand tables = migrated.CreateCommand();
+        tables.CommandText = """
+            SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN
+            ('schema_dependencies', 'unresolved_schema_dependencies', 'manual_dependency_overrides',
+             'schema_import_summary');
+            """;
+        Assert.Equal(0L, await tables.ExecuteScalarAsync());
+    }
+
+    [Fact]
     public async Task InitializeAsync_VersionElevenPreservesCompleteStateInDefaultTracker()
     {
         await using TemporarySqliteFile file = new();
@@ -92,7 +145,7 @@ public sealed class ProjectTrackerMigrationTests
         Assert.Equal(DevelopmentStatus.InProgress, active.Status);
         Assert.Equal("Preserved notes", active.Notes);
         Assert.Equal(EntityLifecycleState.Active, active.LifecycleState);
-        Assert.Equal(EntityProvenance.ManualAndImported, active.Provenance);
+        Assert.Equal(EntityProvenance.Manual, active.Provenance);
         Assert.Equal(4, active.RequestedPriority);
         Assert.Equal(string.Empty, active.ResponsibleDeveloper);
         ResponsibilityPeriod migratedAssignment = Assert.Single(
@@ -107,21 +160,12 @@ public sealed class ProjectTrackerMigrationTests
         Assert.Equal(EntityLifecycleState.Archived, archived.LifecycleState);
         Assert.Equal(DevelopmentStatus.Reconciled, archived.Status);
 
-        PersistedDependency resolved = Assert.Single(
+        // The Optional dependency on the archived entity stays, as an ordinary one; the suppressed
+        // "Missing Entity" was not in effect, so it is gone.
+        EntityDependency dependency = Assert.Single(
             await new SqliteDependencyRepository(database).GetAllAsync(tracker.Id));
-        Assert.Equal(ActiveId, resolved.Edge.DependentEntityId);
-        Assert.Equal(ArchivedId, resolved.Edge.DependencyEntityId);
-        Assert.Equal(ImportedDependencyKind.Optional, resolved.Kind);
-        PersistedUnresolvedDependency unresolved = Assert.Single(
-            await new SqliteDependencyRepository(database).GetAllUnresolvedAsync(tracker.Id));
-        Assert.Equal(ActiveId, unresolved.Dependency.DependentEntityId);
-        Assert.Equal("Missing Entity", unresolved.Dependency.DependencySourceName);
-        Assert.Equal(ImportedDependencyKind.Mandatory, unresolved.Kind);
-        ManualDependencyOverride dependencyOverride = Assert.Single(
-            await new SqliteManualDependencyOverrideRepository(database).GetAllAsync(tracker.Id));
-        Assert.Equal(ActiveId, dependencyOverride.DependentEntityId);
-        Assert.Equal("Missing Entity", dependencyOverride.DependencySourceName);
-        Assert.Equal(ManualDependencyOverrideAction.Suppress, dependencyOverride.Action);
+        Assert.Equal(ActiveId, dependency.DependentEntityId);
+        Assert.Equal(ArchivedId, dependency.DependencyEntityId);
 
         SqliteProgressHistoryRepository history = new(database);
         IReadOnlyList<EntityStatusHistoryEntry> entries = await history.GetStatusHistoryAsync(tracker.Id);
@@ -157,7 +201,7 @@ public sealed class ProjectTrackerMigrationTests
         Assert.Equal(7, snapshot.State.ReconciledCount);
 
         await using SqliteConnection connection = await OpenAsync(file.DatabasePath);
-        Assert.Equal(20L, await ScalarInt64Async(connection, "PRAGMA user_version;"));
+        Assert.Equal(21L, await ScalarInt64Async(connection, "PRAGMA user_version;"));
         // Shared notes arrive empty on entities that existed before the column.
         Assert.Equal(0L, await ScalarInt64Async(connection, "SELECT COUNT(*) FROM tracked_entities WHERE shared_notes <> '';"));
         using SqliteCommand command = connection.CreateCommand();
