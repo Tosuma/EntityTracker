@@ -72,17 +72,15 @@ Tracker
   Reports
 
 Manage
-  Schema synchronization
   Add entity
 
 Utilities
-  Help & SQL
+  Help
   Settings
 ```
 
 Ready and Blocked remain Work-status filters within Overview. They are not separate destinations.
-Import CSV and Add Entity remain focused destinations rather than shortcuts on the Overview page.
-The SQL query remains independently available and is never a prerequisite for importing.
+Add Entity remains a focused destination rather than a shortcut on the Overview page.
 
 The obsolete SharePoint Connections page and configuration are removed. The shell does not expose
 a remote connection, repository, or Sync control before a separately approved synchronization

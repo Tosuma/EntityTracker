@@ -68,7 +68,7 @@ Status colors are deliberately shared by the overview, progress dashboard, and P
 | Reconciled | Green 100% | Fully implemented/reconciled; use White text over the color |
 | Ready | Green 40% | Dependency-ready work (as Not started); use Dark Green text. The exported report uses Green 20% |
 | Blocked/error/destructive | Coral | Always add a label, icon, or explanatory message |
-| Unresolved import warning | Warning palette | Retained non-fatal references in synchronization review only |
+| Unresolved reference warning | Warning palette | Dependencies on names no entity has yet, in the Overview, entity details and the dependency graph |
 
 ### Colour scheme
 

@@ -103,7 +103,7 @@ It must not reference:
 It contains implementations for:
 
 - SQLite
-- CSV reading
+- file export (CSV and Excel)
 - filesystem access
 - future SharePoint integration
 
@@ -145,10 +145,10 @@ ViewModels must not:
 
 - calculate dependency rankings
 - execute SQL directly
-- parse CSV rows directly
+- write export files directly
 - manage SQLite connections
 - decide whether an entity is ready for implementation
-- implement import synchronization rules
+- implement Git synchronization or merge rules
 
 Views should contain no meaningful business logic in code-behind.
 
@@ -163,9 +163,9 @@ The Domain project represents concepts that exist independently of storage and U
 Likely domain concepts include:
 
 - tracked database entity/table
-- dependency relationship
+- dependency relationship (always between entity IDs)
 - development status
-- manual dependency override
+- placeholder entity for a dependency on a name no entity has yet
 - status transition
 - entity lifecycle state
 
@@ -263,32 +263,26 @@ The relationship remains true; only the blocker state changes.
 
 ---
 
-## 9. Imported data vs manual overrides
+## 9. Dependencies refer to entities by ID
 
-Database exports are not guaranteed to contain every real dependency.
+An entity's dependencies are one list, and each dependency refers to the entity it depends on by
+its ID, never by its name. A name is a display value that can change; a rename must not break or
+move a dependency.
 
-Therefore imported facts and manual corrections must remain distinguishable.
+A dependency on a name no entity has yet is a dependency on a placeholder entity
+(`EntityLifecycleState.Placeholder`) with that name:
 
-Conceptually:
+- a placeholder is not shown as an entity; it is resolved as an unresolved reference to its name;
+- adding an entity with the name turns the placeholder into that entity, keeping its ID, so every
+  dependency on it connects;
+- renaming an entity to a placeholder's name moves the placeholder's dependents to the entity;
+- a placeholder nothing depends on is removed;
+- permanently deleting an entity others depend on turns it back into a placeholder;
+- a placeholder's ID is derived from its Tracker and name, so independent collaborators create the
+  same placeholder, and a Git merge folds a placeholder into an entity with the same name.
 
-```text
-Imported Dependencies
-        +
-Manual Overrides
-        =
-Effective Dependency Graph
-```
-
-A future CSV import must not silently overwrite valid manual corrections.
-
-Manual corrections may include:
-
-- adding a missing dependency
-- suppressing an incorrect imported dependency
-- correcting metadata
-- adjusting display information
-
-The exact override model should be introduced only when that milestone is implemented.
+The effective dependency graph is the dependencies of the active entities, resolved against the
+active entities: a dependency on an archived entity or a placeholder is unresolved.
 
 ---
 
@@ -346,50 +340,15 @@ Avoid service-locator patterns.
 
 ---
 
-## 12. CSV import rules
-
-CSV is an external input format.
-
-The CSV parser must:
-
-- validate required columns
-- return structured diagnostics
-- avoid silently guessing malformed input
-- remain independent of WPF
-- remain independent of SQLite
-
-The import process should eventually support:
-
-```text
-CSV
- ↓
-Parse
- ↓
-Validate
- ↓
-Compare with current state
- ↓
-Review changes
- ↓
-Commit
-```
-
-The SQL-query helper is not part of this pipeline.
-
-It is a separate convenience feature.
-
----
-
-## 13. Error handling
+## 12. Error handling
 
 Expected failures should be represented as application results or diagnostics where practical.
 
 Examples:
 
-- invalid CSV
 - dependency cycle
 - unknown dependency
-- import conflict
+- sync conflict
 - missing file
 
 Exceptions are appropriate for unexpected failures.
@@ -398,7 +357,7 @@ Do not use exceptions for ordinary validation flow.
 
 ---
 
-## 14. Testing expectations
+## 13. Testing expectations
 
 Business logic should be testable without:
 
@@ -413,15 +372,14 @@ High-value tests include:
 - ranking tie-breaking
 - cycle detection
 - readiness calculation
-- schema diffing
-- manual override behavior
+- placeholder behavior (adding, renaming, purging, and merging)
 - persistence integration tests
 
 Prefer behavior-focused tests over testing implementation details.
 
 ---
 
-## 15. Avoid premature abstraction
+## 14. Avoid premature abstraction
 
 Do not introduce:
 
@@ -441,7 +399,7 @@ Keep it boring where boring is sufficient.
 
 ---
 
-## 16. Agent behavior
+## 15. Agent behavior
 
 Coding agents working on this repository should:
 
@@ -458,7 +416,7 @@ Coding agents working on this repository should:
 
 ---
 
-## 17. Definition of done for every milestone
+## 16. Definition of done for every milestone
 
 A milestone is not complete unless:
 
@@ -480,7 +438,7 @@ No milestone should leave deliberately broken intermediate architecture.
 
 ---
 
-## 18. Provider startup and storage
+## 17. Provider startup and storage
 
 The WPF composition root composes SQLite. Application exposes the small
 `IPersistenceInitializer` startup seam so the UI does not initialize `SqliteDatabase` directly.

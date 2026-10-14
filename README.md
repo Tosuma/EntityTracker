@@ -7,34 +7,33 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 EntityTracker is a Windows desktop application for planning database implementation work in
-dependency-safe order. It imports PostgreSQL schema relationships, keeps progress attached to
-stable entities, highlights blockers, and turns implementation history into useful progress
-reports.
+dependency-safe order. It keeps the entities you add and their dependencies, keeps progress
+attached to stable entities, highlights blockers, and turns implementation history into useful
+progress reports.
 
 ![EntityTracker portfolio showing projects and implementation progress](images/light/portfolio.png)
 
 ## Why EntityTracker?
 
 Large database schemas are rarely implemented safely in alphabetical order. Tables depend on
-other tables, exported schemas may contain unknown references, and re-importing a changing schema
-must not erase project-management data.
+other tables, and the plan has to keep up while names change and new entities appear.
 
 EntityTracker keeps those concerns separate:
 
-- imported schema facts describe what depends on what;
-- manual overrides capture real-world corrections without being lost on the next import;
+- each entity's dependencies say what it depends on, by the entity's stable identity, so renames never
+  break them;
+- a dependency on a name no entity has yet stays visible as an unresolved reference, and connects
+  by itself when an entity with that name is added;
 - stable entity identities retain status, notes, lifecycle, and history;
-- ranking and readiness are recalculated from the effective dependency graph;
+- ranking and readiness are recalculated from the dependency graph;
 - unresolved and unfinished dependencies remain visible as actionable blockers.
 
 ## Highlights
 
-- **Safe schema synchronization** — preview Complete or Partial PostgreSQL CSV imports before
-  applying additions, dependency changes, or archives.
 - **Dependency-aware planning** — rank entities so dependencies appear before the entities that
-  use them, while preserving unknown references as unresolved dependencies.
-- **Manual tracking and correction** — create entities, add or suppress dependencies, update notes
-  and progress, and archive or restore entities.
+  use them, while keeping references to names no entity has yet as unresolved dependencies.
+- **Entity tracking** — create and rename entities, add or remove dependencies, update notes and
+  progress, and archive or restore entities.
 - **Workflow visibility** — combine Excel-style filters on Responsible dev, Group, Status, and
   Work status; sort workflow statuses in their defined order; and search by entity or dependency
   name.
@@ -43,22 +42,22 @@ EntityTracker keeps those concerns separate:
   entity in one offline web page; copy or save charts as PNG files.
 - **Project portfolio** — compare entity-weighted Project/Tracker progress, persisted trends, and
   normalized entity differences without opening another window or database.
-- **Safe catalog management** — create blank, CSV-backed, or copied Trackers and rename, recycle,
-  restore, or guardedly purge Projects and Trackers.
+- **Safe catalog management** — create blank or copied Trackers and rename, recycle, restore, or
+  guardedly purge Projects and Trackers.
 - **Local-first reliability** — SQLite persistence, automatic daily and pre-migration backups,
   rolling logs, and documented recovery procedures.
 - **Accessible Fluent workflow** — built-in .NET 10 WPF Fluent controls, Light/Dark/System themes,
   keyboard-safe dialogs, visible focus, labeled status, and automation names for repeated actions.
 - **Replaceable core** — Domain, Application, and Reporting remain independent of WPF, SQLite,
-  CSV libraries, and future synchronization infrastructure.
+  and future synchronization infrastructure.
 
 ## How it works
 
-1. Run the built-in PostgreSQL extraction query and export its result as a semicolon-delimited CSV.
-2. Choose Complete or Partial synchronization and review every actionable difference.
-3. Apply the reviewed schema while EntityTracker preserves stable progress, notes, and history.
-4. Use dependency-safe rank, readiness, blockers, filters, and search to choose the next work item.
-5. Update development status and share a Project report to communicate delivery trends.
+1. Add the entities you need to build, each with the entities it depends on. A dependency on a name
+   that is not an entity yet is kept as an unresolved reference.
+2. Use dependency-safe rank, readiness, blockers, filters, and search to choose the next work item.
+3. Update development status as work progresses; renames keep progress, history, and dependencies.
+4. Share a Project report to communicate delivery trends.
 
 ## Screenshots
 
@@ -97,9 +96,9 @@ archived entities, without deleting their history.
   </tr>
   <tr>
     <td width="50%">
-      <strong>Review schema synchronization</strong><br />
-      Compare a complete or partial PostgreSQL snapshot before changing tracked state.<br /><br />
-      <img src="images/light/schema-synchronization.png" alt="Schema Synchronization page with Complete and Partial import choices" />
+      <strong>Create tracked entities</strong><br />
+      Add entities with dependencies on existing entities, or on names that are not entities yet.<br /><br />
+      <img src="images/light/add-entity.png" alt="Add Entity page for creating a tracked entity and selecting dependencies" />
     </td>
     <td width="50%">
       <strong>Report progress to the client</strong><br />
@@ -109,14 +108,14 @@ archived entities, without deleting their history.
   </tr>
   <tr>
     <td width="50%">
-      <strong>Create tracked entities</strong><br />
-      Add manual entities with resolved or deliberately unresolved dependencies.<br /><br />
-      <img src="images/light/add-entity.png" alt="Add Entity page for creating a tracked entity and selecting dependencies" />
+      <strong>Edit and rename entities</strong><br />
+      Rename an entity to fix a typo, and update development status, internal and shared notes, lifecycle, and dependencies. A rename keeps the entity's progress, history and dependencies.<br /><br />
+      <img src="images/light/edit-entity.png" alt="Edit Entity modal with name, status, notes, dependencies, and archive controls" />
     </td>
     <td width="50%">
-      <strong>Edit without losing imported facts</strong><br />
-      Rename an entity to fix a typo, and update development status, internal and shared notes, lifecycle, and manual dependency corrections. A rename keeps the entity's progress, history and dependencies.<br /><br />
-      <img src="images/light/edit-entity.png" alt="Edit Entity modal with name, status, notes, dependencies, and archive controls" />
+      <strong>Find your way with Help</strong><br />
+      Read how Portfolio, Projects, Trackers, statuses, blockers, reports, and lifecycle actions work.<br /><br />
+      <img src="images/light/help.png" alt="EntityTracker Help page" />
     </td>
   </tr>
 </table>
@@ -180,8 +179,8 @@ The sidebar notification center shows the current sync phase. A completed sync d
 a short display time. A sync that needs attention stays visible with a contextual action; the
 Project card also retains its detailed status. Notifications are kept for the current session.
 
-The notification center is also where every other action reports its outcome: applied imports,
-bulk status updates, chart and SQL copies, saved exports, and any failure to load a page, save a
+The notification center is also where every other action reports its outcome: imported Projects,
+bulk status updates, chart copies, saved exports, and any failure to load a page, save a
 setting, archive or delete an entity, or change developers. Successes disappear after a short
 display time; failures stay until you dismiss them. Only input checks, such as an invalid date
 range or a search with no matches, and errors inside an open dialog appear next to the controls.
@@ -282,9 +281,11 @@ Every entity has two kinds of notes. **Internal notes** are only for the team an
 a client report. **Shared notes** are meant for the client and appear in both client and internal
 Project reports. Both are synchronized with the Project's Git repository.
 
-The Add Entity and edit workflows use searchable Fluent suggestion controls. Unknown dependency
-names are added only through the explicit **Add as unresolved** action, while archive remains a
-separate reversible action with confirmation.
+The Add Entity and edit workflows use searchable Fluent suggestion controls. A dependency on a name
+that is not an entity yet is added only through the explicit **Add as unresolved** action. It stays
+an unresolved reference, and when an entity with that name is added, or an entity is renamed to it,
+every dependency on the name connects to that entity. Archive remains a separate reversible action
+with confirmation.
 
 ![EntityTracker read-only entity details pane](images/light/overview-details.png)
 
@@ -303,7 +304,9 @@ separate reversible action with confirmation.
 Entities with unresolved references—or dependencies that are themselves unresolved—are marked
 directly in the overview. Selecting the warning icon explains the graph state and lists the
 unresolved names affecting that entity, while the Blockers column shows unresolved or not-yet-
-implemented direct dependencies.
+implemented direct dependencies. A dependency on an archived entity is unresolved until the entity
+is restored. Permanently deleting an entity others still depend on keeps its name as an unresolved
+reference for them.
 
 ![EntityTracker overview showing dependency warning icons, missing dependencies, and details for an upstream-unresolved entity](images/light/overview-missing-entities-as-dependencies.png)
 
@@ -397,35 +400,6 @@ any browser.
 
 ![Project report page with Tracker selection, audience and progress period](images/light/project-report.png)
 
-### Import review details
-
-Changed entities show dependency additions and removals directly, with any required progress choice
-kept beside the affected entity before Apply becomes available.
-
-![Schema synchronization review showing dependency additions, removals, and progress-impact choices](images/light/schema-synchronization-changed-entities.png)
-
-Complete imports make potentially removed entities explicit before anything is saved. Entities
-missing from the new snapshot are proposed for soft-archiving, while their progress and notes are
-preserved.
-
-![Schema synchronization review showing entities missing from a Complete snapshot and proposed for soft-archiving](images/light/schema-synchronization-import-csv-with-missing-entities.png)
-
-Unknown dependency references do not make an otherwise valid import fail. EntityTracker retains
-them as unresolved dependencies, shows exactly which entities are affected, and keeps them blocked
-until matching entities become available.
-
-![Schema synchronization review showing retained unresolved dependencies and their missing entity names](images/light/schema-synchronization-unresolved-dependencies.png)
-
-### Extract a PostgreSQL schema
-
-Help & SQL explains Portfolio, Project, and Tracker context; statuses and blockers; import modes;
-the Project report; and lifecycle actions. It also provides the versioned PostgreSQL query used to produce a
-compatible schema CSV without requiring a live database connection inside EntityTracker.
-
-![EntityTracker Help and SQL guidance](images/light/help-and-sql.png)
-
-![EntityTracker PostgreSQL schema extraction query helper](images/light/sql-query.png)
-
 ## Project status
 
 Product Milestones 1–12, PF-01 through PF-05, and UX-01 through UX-08 are complete. EntityTracker uses
@@ -458,7 +432,7 @@ See the [milestone status](docs/milestones/milestone_status.md) and complete
 
 ## Technology and architecture
 
-EntityTracker targets .NET 10 and uses WPF, SQLite, CsvHelper, and LiveCharts. The solution keeps
+EntityTracker targets .NET 10 and uses WPF, SQLite, and LiveCharts. The solution keeps
 dependencies pointing inward:
 
 ```text
@@ -491,14 +465,13 @@ computers; the app checks for updates and guides them through rebuilding when on
 ![Required app update blocking the workspace](images/light/app-update-required.png)
 
 The [development guide](docs/DEVELOPMENT.md) contains complete instructions for publishing, CI,
-screenshots, schema import details, and locating local application data.
+screenshots, and locating local application data.
 
 ## Documentation
 
 - [Getting started](docs/GETTING_STARTED.md)
 - [Development, build, and run guide](docs/DEVELOPMENT.md)
 - [Design and color guide](docs/design/DESIGN_GUIDE.md)
-- [PostgreSQL schema CSV contract](docs/importing/schema-csv-contract-v1.md)
 - [Local backup, logs, and recovery](docs/operations/RECOVERY.md)
 - [Architecture rules](docs/architecture/ARCHITECTURE.md)
 - [Roadmap and milestones](docs/milestones/00_README.md)

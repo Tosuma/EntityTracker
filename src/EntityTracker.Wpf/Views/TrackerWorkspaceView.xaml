@@ -1461,7 +1461,7 @@
                                     <TextBlock FontSize="16" FontWeight="SemiBold" Text="Dependencies" />
                                     <TextBlock Margin="0,3,0,12"
                                                Foreground="{DynamicResource Brush.Text.Secondary}"
-                                               Text="Choose an active entity, or deliberately retain an unknown source name as unresolved."
+                                               Text="Choose an active entity, or add a name that is not an entity yet as unresolved."
                                                TextWrapping="Wrap" />
                                     <Grid>
                                         <Grid.ColumnDefinitions>
@@ -2235,10 +2235,10 @@
                                 <StackPanel>
                                 <TextBlock Margin="0,0,0,12" FontSize="16" FontWeight="SemiBold" Text="Dependencies" />
                                 <StackPanel Visibility="{Binding Editor.ShowDependencyEditor, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <TextBlock FontWeight="SemiBold" Text="Add a manual dependency" />
+                                <TextBlock FontWeight="SemiBold" Text="Add a dependency" />
                                 <TextBlock Margin="0,3,0,7"
                                            Foreground="{DynamicResource Brush.Text.Secondary}"
-                                           Text="Search active entities, or deliberately retain an unknown name as unresolved."
+                                           Text="Search active entities, or add a name that is not an entity yet as unresolved."
                                            TextWrapping="Wrap" />
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -2247,7 +2247,7 @@
                                     </Grid.ColumnDefinitions>
                                     <controls:SuggestionComboBox x:Name="EditorDependencyComboBox"
                                                                  AutomationProperties.HelpText="Open the dropdown to browse active entities, or type to search. Choose an entity to add it."
-                                                                 AutomationProperties.Name="Manual dependency"
+                                                                 AutomationProperties.Name="Dependency"
                                                                  IsEditable="True"
                                                                  IsTextSearchEnabled="False"
                                                                  DisplayMemberPath="SourceName"
