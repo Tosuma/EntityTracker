@@ -201,12 +201,12 @@ public sealed class ProjectTrackerMigrationTests
         Assert.Equal(7, snapshot.State.ReconciledCount);
 
         await using SqliteConnection connection = await OpenAsync(file.DatabasePath);
-        Assert.Equal(21L, await ScalarInt64Async(connection, "PRAGMA user_version;"));
+        Assert.Equal(22L, await ScalarInt64Async(connection, "PRAGMA user_version;"));
         // Shared notes arrive empty on entities that existed before the column.
         Assert.Equal(0L, await ScalarInt64Async(connection, "SELECT COUNT(*) FROM tracked_entities WHERE shared_notes <> '';"));
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT source_key, created_at_utc, schema_updated_at_utc, progress_updated_at_utc
+            SELECT source_name, created_at_utc, schema_updated_at_utc, progress_updated_at_utc
             FROM tracked_entities
             WHERE id = $id AND tracker_id = $trackerId;
             """;
@@ -214,7 +214,7 @@ public sealed class ProjectTrackerMigrationTests
         command.Parameters.AddWithValue("$trackerId", tracker.Id.Value.ToString("D"));
         await using SqliteDataReader reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
-        Assert.Equal("ACTIVE ENTITY", reader.GetString(0));
+        Assert.Equal("Active Entity", reader.GetString(0));
         Assert.Equal("2025-01-01T00:00:00.0000000+00:00", reader.GetString(1));
         Assert.Equal("2025-01-02T00:00:00.0000000+00:00", reader.GetString(2));
         Assert.Equal("2025-01-03T00:00:00.0000000+00:00", reader.GetString(3));

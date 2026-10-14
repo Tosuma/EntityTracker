@@ -6,7 +6,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    internal const int CurrentSchemaVersion = 21;
+    internal const int CurrentSchemaVersion = 22;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -538,8 +538,8 @@ public sealed class SqliteDatabase
             return;
         }
 
-        // Versions 16 and 21 rebuild tables that other tables reference.
-        bool requiresForeignKeyRebuild = schemaVersion < 21;
+        // Versions 16, 21 and 22 rebuild tables that other tables reference.
+        bool requiresForeignKeyRebuild = schemaVersion < 22;
         bool rebuildWorkflowTrackedEntities = schemaVersion is > 0 and < 7;
         if (requiresForeignKeyRebuild)
         {
@@ -978,6 +978,9 @@ public sealed class SqliteDatabase
             if (schemaVersion < 21)
                 await MigrateToOneDependencyListAsync(connection, transaction, cancellationToken);
 
+            if (schemaVersion < 22)
+                await SqliteNormalFormMigration.MigrateAsync(connection, transaction, cancellationToken);
+
             if (newDatabase && StartNewDatabaseWithoutProjects)
             {
                 // The Project/Tracker migration (version 12) moves entities from before Projects
@@ -1321,6 +1324,7 @@ public sealed class SqliteDatabase
         try
         {
             await connection.OpenAsync(cancellationToken);
+            EntityNameCollation.Register(connection);
             using SqliteCommand busy = connection.CreateCommand();
             busy.CommandText = "PRAGMA busy_timeout = 5000;";
             await busy.ExecuteNonQueryAsync(cancellationToken);

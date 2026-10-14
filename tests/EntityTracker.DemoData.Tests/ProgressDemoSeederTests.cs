@@ -128,7 +128,7 @@ public sealed class ProgressDemoSeederTests
             (await historyRepository.GetStatusHistoryAsync(seededTracker.Id)).ToArray();
         ProgressSnapshot[] snapshots =
             (await historyRepository.GetProgressSnapshotsAsync(seededTracker.Id)).ToArray();
-        Assert.Equal(seededEntities.Length + result.TransitionCount, history.Length);
+        Assert.Equal(seededEntities.Count(static entity => !entity.IsPlaceholder) + result.TransitionCount, history.Length);
         Assert.Equal(result.SnapshotCount, snapshots.Length);
         Assert.True(snapshots.Select(static snapshot => snapshot.RecordedAtUtc.Date).Distinct().Count() > 10);
         Assert.Equal(

@@ -29,12 +29,14 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
             await _database.OpenConnectionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT entity_id, previous_status, new_status, occurred_at_utc, entry_kind,
-                   event_id, previous_event_id
+            SELECT history.entity_id, previous.new_status, history.new_status, history.occurred_at_utc,
+                   history.entry_kind, history.event_id, history.previous_event_id
             FROM entity_status_history history
             INNER JOIN tracked_entities entity ON entity.id = history.entity_id
+            -- An event's previous status is the new status of the event it follows.
+            LEFT JOIN entity_status_history previous ON previous.event_id = history.previous_event_id
             WHERE entity.tracker_id = $trackerId
-            ORDER BY history.occurred_at_utc, history.id;
+            ORDER BY history.occurred_at_utc, history.sequence;
             """;
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
 
@@ -77,7 +79,7 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
                    manually_blocked_count, reworking_count
             FROM progress_snapshots
             WHERE tracker_id = $trackerId
-            ORDER BY recorded_at_utc, id;
+            ORDER BY recorded_at_utc, sequence;
             """;
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
 
@@ -114,7 +116,7 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
                    manually_blocked_count, reworking_count
             FROM progress_snapshots
             WHERE tracker_id = $trackerId
-            ORDER BY recorded_at_utc DESC, id DESC
+            ORDER BY recorded_at_utc DESC, sequence DESC
             LIMIT 1;
             """;
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));

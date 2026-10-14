@@ -200,6 +200,7 @@ public sealed class ResponsibilityPeriodTests
         TrackedEntity entity = new(EntityId.New(), tracker.Id, "Legacy",
             responsibleDeveloper: " AL, BO, al, , CC ");
         Assert.True(await new SqliteEntityRepository(database).TryAddAsync(tracker.Id, entity));
+        await VersionTwentySchema.RevertAsync(file.DatabasePath);
         await using (SqliteConnection connection = new($"Data Source={file.DatabasePath}"))
         {
             await connection.OpenAsync();

@@ -30,10 +30,12 @@ public sealed class SqliteEntityRepository : IEntityRepository
             await _database.OpenConnectionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, tracker_id, source_name, development_status, notes, lifecycle_state, provenance,
-                   requested_priority, group_name, filter_active, shared_notes
-            FROM tracked_entities
-            WHERE tracker_id = $trackerId AND id = $id;
+            SELECT entity.id, entity.tracker_id, entity.source_name, status.development_status, entity.notes,
+                   entity.lifecycle_state, entity.provenance, entity.requested_priority, entity.group_name,
+                   entity.filter_active, entity.shared_notes
+            FROM tracked_entities entity
+            JOIN entity_current_status status ON status.entity_id = entity.id
+            WHERE entity.tracker_id = $trackerId AND entity.id = $id;
             """;
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
         command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(id));
@@ -53,11 +55,13 @@ public sealed class SqliteEntityRepository : IEntityRepository
             await _database.OpenConnectionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, tracker_id, source_name, development_status, notes, lifecycle_state, provenance,
-                   requested_priority, group_name, filter_active, shared_notes
-            FROM tracked_entities
-            WHERE tracker_id = $trackerId
-            ORDER BY source_name COLLATE NOCASE, id;
+            SELECT entity.id, entity.tracker_id, entity.source_name, status.development_status, entity.notes,
+                   entity.lifecycle_state, entity.provenance, entity.requested_priority, entity.group_name,
+                   entity.filter_active, entity.shared_notes
+            FROM tracked_entities entity
+            JOIN entity_current_status status ON status.entity_id = entity.id
+            WHERE entity.tracker_id = $trackerId
+            ORDER BY entity.source_name COLLATE NOCASE, entity.id;
             """;
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
 
@@ -88,15 +92,15 @@ public sealed class SqliteEntityRepository : IEntityRepository
             _database.TimeProvider.GetUtcNow());
         await using SqliteConnection connection =
             await _database.OpenConnectionAsync(cancellationToken);
+        await using SqliteTransaction transaction = connection.BeginTransaction();
         using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = """
             INSERT INTO tracked_entities
             (
                 id,
                 tracker_id,
-                source_key,
                 source_name,
-                development_status,
                 notes,
                 filter_active,
                 shared_notes,
@@ -112,9 +116,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
             (
                 $id,
                 $trackerId,
-                $sourceKey,
                 $sourceName,
-                $developmentStatus,
                 $notes,
                 $filterActive,
                 $sharedNotes,
@@ -134,7 +136,14 @@ public sealed class SqliteEntityRepository : IEntityRepository
         command.Parameters.AddWithValue("$schemaUpdatedAtUtc", timestamp);
         command.Parameters.AddWithValue("$progressUpdatedAtUtc", timestamp);
 
-        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        if (await command.ExecuteNonQueryAsync(cancellationToken) != 1) return false;
+        // The status is the entity's status history: with no events it is Not started, so only another
+        // status needs an event. A placeholder has none.
+        if (!entity.IsPlaceholder && entity.Status != DevelopmentStatus.NotStarted)
+            await SqliteStatusEvents.AppendAsync(connection, transaction, entity.Id, entity.Status,
+                StatusHistoryEntryKind.Baseline, timestamp, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
     }
 
     internal async Task<bool> UpdateSchemaMetadataAsync(
@@ -154,15 +163,13 @@ public sealed class SqliteEntityRepository : IEntityRepository
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText = """
             UPDATE tracked_entities
-            SET source_key = $sourceKey,
-                source_name = $sourceName,
+            SET source_name = $sourceName,
                 provenance = $provenance,
                 schema_updated_at_utc = $schemaUpdatedAtUtc
             WHERE tracker_id = $trackerId AND id = $id;
             """;
         command.Parameters.AddWithValue("$trackerId", SqlitePersistenceValues.Format(trackerId));
         command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
-        command.Parameters.AddWithValue("$sourceKey", EntitySourceKey.From(entity.SourceName).Value);
         command.Parameters.AddWithValue("$sourceName", entity.SourceName);
         command.Parameters.AddWithValue("$provenance", entity.Provenance.ToString());
         command.Parameters.AddWithValue(
@@ -186,9 +193,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
         TrackedEntity entity)
     {
         command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
-        command.Parameters.AddWithValue("$sourceKey", EntitySourceKey.From(entity.SourceName).Value);
         command.Parameters.AddWithValue("$sourceName", entity.SourceName);
-        command.Parameters.AddWithValue("$developmentStatus", entity.Status.ToString());
         command.Parameters.AddWithValue("$notes", entity.Notes);
         command.Parameters.AddWithValue("$filterActive", entity.FilterActive);
         command.Parameters.AddWithValue("$sharedNotes", entity.SharedNotes);

@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Text.Json;
+using EntityTracker.Application.Tracking;
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Snapshots;
 using EntityTracker.Domain;
@@ -17,7 +19,7 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         string id = SqlitePersistenceValues.Format(projectId);
         long revision = await RevisionAsync(connection, transaction, id, cancellationToken);
         Row? project = (await RowsAsync(connection, transaction,
-            "SELECT * FROM projects WHERE id = $projectId;", id, cancellationToken)).SingleOrDefault();
+            "SELECT *, CASE WHEN recycled_at_utc IS NULL THEN 'Active' ELSE 'Recycled' END AS lifecycle_state FROM projects WHERE id = $projectId;", id, cancellationToken)).SingleOrDefault();
         if (project is null)
         {
             await transaction.CommitAsync(cancellationToken);
@@ -27,12 +29,13 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         string? canonicalName = await CanonicalNameAsync(connection, transaction, id, cancellationToken);
 
         List<Row> trackerRows = await RowsAsync(connection, transaction,
-            "SELECT * FROM trackers WHERE project_id = $projectId;", id, cancellationToken);
+            "SELECT *, CASE WHEN recycled_at_utc IS NULL THEN 'Active' ELSE 'Recycled' END AS lifecycle_state FROM trackers WHERE project_id = $projectId;", id, cancellationToken);
         List<Row> developerRows = await RowsAsync(connection, transaction,
             "SELECT * FROM project_developers WHERE project_id = $projectId ORDER BY id;",
             id, cancellationToken);
         List<Row> entityRows = await RowsAsync(connection, transaction, """
-            SELECT entity.* FROM tracked_entities entity
+            SELECT entity.*, status.development_status FROM tracked_entities entity
+            JOIN entity_current_status status ON status.entity_id = entity.id
             JOIN trackers tracker ON tracker.id = entity.tracker_id
             WHERE tracker.project_id = $projectId;
             """, id, cancellationToken);
@@ -49,23 +52,28 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
             WHERE tracker.project_id = $projectId;
             """, id, cancellationToken);
         List<Row> history = await RowsAsync(connection, transaction, """
-            SELECT entry.*, entity.tracker_id FROM entity_status_history entry
+            SELECT entry.*, entity.tracker_id, previous.new_status AS previous_status
+            FROM entity_status_history entry
             JOIN tracked_entities entity ON entity.id = entry.entity_id
             JOIN trackers tracker ON tracker.id = entity.tracker_id
+            LEFT JOIN entity_status_history previous ON previous.event_id = entry.previous_event_id
             WHERE tracker.project_id = $projectId
-            ORDER BY entry.occurred_at_utc, entry.id;
+            ORDER BY entry.occurred_at_utc, entry.sequence;
             """, id, cancellationToken);
         List<Row> progress = await RowsAsync(connection, transaction, """
             SELECT snapshot.* FROM progress_snapshots snapshot
             JOIN trackers tracker ON tracker.id = snapshot.tracker_id
             WHERE tracker.project_id = $projectId
-            ORDER BY snapshot.recorded_at_utc, snapshot.id;
+            ORDER BY snapshot.recorded_at_utc, snapshot.sequence;
             """, id, cancellationToken);
-        List<Row> syncBaselines = await RowsAsync(connection, transaction, """
-            SELECT baseline.* FROM tracker_sync_baselines baseline
-            JOIN trackers tracker ON tracker.id = baseline.tracker_id
-            WHERE tracker.project_id = $projectId;
-            """, id, cancellationToken);
+        // The snapshot keeps a Tracker's sync baseline as one JSON document.
+        Dictionary<string, string> baselineJson = new(StringComparer.Ordinal);
+        foreach (Row tracker in trackerRows)
+        {
+            if (await SqliteSyncBaselineRows.ReadAsync(connection, transaction, tracker.Str("id"),
+                    cancellationToken) is { } baseline)
+                baselineJson[tracker.Str("id")] = JsonSerializer.Serialize(baseline);
+        }
         await transaction.CommitAsync(cancellationToken);
 
         var entitiesByTracker = entityRows.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
@@ -73,7 +81,6 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         var dependenciesByEntity = dependencies.ToLookup(row => row.Str("dependent_entity_id"), StringComparer.Ordinal);
         var historyByTracker = history.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
         var progressByTracker = progress.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
-        var baselinesByTracker = syncBaselines.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
 
         SnapshotProject projectModel = new(project.Guid("id"), canonicalName ?? project.Str("name"),
             project.Str("lifecycle_state"), project.Time("created_at_utc"),
@@ -117,7 +124,7 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                         p.Int("rework_needed_count"), p.Int("development_completed_count"),
                         p.Int("reconciled_count"), order, p.Int("manually_blocked_count"),
                         p.Int("reworking_count"))).ToArray(),
-                baselinesByTracker[trackerId].SingleOrDefault()?.Str("baseline_json"));
+                baselineJson.GetValueOrDefault(trackerId));
         }).ToArray();
         SnapshotDeveloper[] developers = developerRows.Select(row => new SnapshotDeveloper(
             row.Guid("id"), row.Guid("project_id"), row.Str("initials"),
@@ -162,24 +169,23 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
             connection, transaction, storedName, projectId, cancellationToken);
         await DeleteProjectAsync(connection, transaction, projectId, cancellationToken);
         await InsertAsync(connection, transaction, "projects",
-            ["id", "name_key", "name", "lifecycle_state", "created_at_utc", "updated_at_utc", "recycled_at_utc"],
-            [projectId, Key(storedName), storedName, snapshot.Project.LifecycleState,
-             Time(snapshot.Project.CreatedAtUtc), Time(snapshot.Project.UpdatedAtUtc),
+            ["id", "name", "created_at_utc", "updated_at_utc", "recycled_at_utc"],
+            [projectId, storedName, Time(snapshot.Project.CreatedAtUtc), Time(snapshot.Project.UpdatedAtUtc),
              TimeOrNull(snapshot.Project.RecycledAtUtc)], cancellationToken);
         if (!string.Equals(storedName, snapshot.Project.Name, StringComparison.Ordinal))
             await InsertAsync(connection, transaction, "project_snapshot_names",
                 ["project_id", "canonical_name"], [projectId, snapshot.Project.Name], cancellationToken);
         foreach (SnapshotDeveloper developer in snapshot.Developers ?? [])
             await InsertAsync(connection, transaction, "project_developers",
-                ["id", "project_id", "initials_key", "initials", "display_name", "is_retired"],
-                [Id(developer.Id), projectId, developer.Initials.ToUpperInvariant(),
-                 developer.Initials, developer.DisplayName, developer.IsRetired ? 1 : 0],
+                ["id", "project_id", "initials", "display_name", "is_retired"],
+                [Id(developer.Id), projectId, developer.Initials, developer.DisplayName,
+                 developer.IsRetired ? 1 : 0],
                 cancellationToken);
         foreach (SnapshotTracker tracker in snapshot.Trackers)
         {
             await InsertAsync(connection, transaction, "trackers",
-                ["id", "project_id", "name_key", "name", "lifecycle_state", "created_at_utc", "updated_at_utc", "recycled_at_utc", "copied_from_tracker_id"],
-                [Id(tracker.Id), projectId, Key(tracker.Name), tracker.Name, tracker.LifecycleState,
+                ["id", "project_id", "name", "created_at_utc", "updated_at_utc", "recycled_at_utc", "copied_from_tracker_id"],
+                [Id(tracker.Id), projectId, tracker.Name,
                  Time(tracker.CreatedAtUtc), Time(tracker.UpdatedAtUtc), TimeOrNull(tracker.RecycledAtUtc),
                  tracker.CopiedFromTrackerId is { } origin ? Id(origin) : null], cancellationToken);
         }
@@ -187,9 +193,9 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         foreach (SnapshotEntity entity in tracker.Entities)
         {
             await InsertAsync(connection, transaction, "tracked_entities",
-                ["id", "tracker_id", "source_key", "source_name", "development_status", "notes", "filter_active", "shared_notes", "lifecycle_state", "provenance", "requested_priority", "group_name", "created_at_utc", "schema_updated_at_utc", "progress_updated_at_utc"],
-                [Id(entity.Id), Id(tracker.Id), EntitySourceKey.From(entity.SourceName).Value,
-                 entity.SourceName, entity.DevelopmentStatus, entity.Notes, entity.FilterActive, entity.SharedNotes, entity.LifecycleState,
+                ["id", "tracker_id", "source_name", "notes", "filter_active", "shared_notes", "lifecycle_state", "provenance", "requested_priority", "group_name", "created_at_utc", "schema_updated_at_utc", "progress_updated_at_utc"],
+                [Id(entity.Id), Id(tracker.Id),
+                 entity.SourceName, entity.Notes, entity.FilterActive, entity.SharedNotes, entity.LifecycleState,
                  entity.Provenance, entity.RequestedPriority, entity.GroupName,
                  Time(entity.CreatedAtUtc), Time(entity.SchemaUpdatedAtUtc), Time(entity.ProgressUpdatedAtUtc)], cancellationToken);
         }
@@ -217,9 +223,10 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         if (await RevisionAsync(connection, transaction, id, cancellationToken) != expectedRevision)
             throw new InvalidOperationException("The Project changed before permanent deletion.");
         using SqliteCommand state = Command(connection, transaction,
-            "SELECT lifecycle_state FROM projects WHERE id = $projectId;");
+            "SELECT recycled_at_utc IS NOT NULL FROM projects WHERE id = $projectId;");
         state.Parameters.AddWithValue("$projectId", id);
-        if ((string?)await state.ExecuteScalarAsync(cancellationToken) != "Recycled")
+        if (Convert.ToInt64(await state.ExecuteScalarAsync(cancellationToken) ?? 0L,
+                System.Globalization.CultureInfo.InvariantCulture) != 1)
             throw new InvalidOperationException("Only a recycled Project can be permanently deleted.");
         await DeleteProjectAsync(connection, transaction, id, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -250,23 +257,34 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                     [Id(entity.Id), Id(dependency.DependencyEntityId), Time(dependency.CreatedAtUtc),
                      Time(dependency.UpdatedAtUtc)], cancellationToken);
         }
+        // The status is the history (its previous statuses follow from the events they follow), and the
+        // sequence keeps the snapshot's order.
         foreach (SnapshotStatusEvent entry in tracker.StatusHistory.OrderBy(e => e.Order))
             await InsertAsync(connection, transaction, "entity_status_history",
-                ["entity_id", "previous_status", "new_status", "entry_kind", "occurred_at_utc", "event_id", "previous_event_id"],
-                [Id(entry.EntityId), entry.PreviousStatus, entry.NewStatus, entry.Kind,
-                 Time(entry.OccurredAtUtc), Id(entry.EventId),
-                 entry.PreviousEventId is { } prior ? Id(prior) : null], cancellationToken);
+                ["event_id", "entity_id", "sequence", "previous_event_id", "new_status", "entry_kind", "occurred_at_utc"],
+                [Id(entry.EventId), Id(entry.EntityId), await NextSequenceAsync("entity_status_history"),
+                 entry.PreviousEventId is { } prior ? Id(prior) : null, entry.NewStatus, entry.Kind,
+                 Time(entry.OccurredAtUtc)], cancellationToken);
         foreach (SnapshotProgress progress in tracker.ProgressHistory.OrderBy(p => p.Order))
             await InsertAsync(connection, transaction, "progress_snapshots",
-                ["tracker_id", "recorded_at_utc", "ready_count", "blocked_count", "in_progress_count", "rework_needed_count", "development_completed_count", "reconciled_count", "snapshot_id", "manually_blocked_count", "reworking_count"],
-                [Id(tracker.Id), Time(progress.RecordedAtUtc), progress.ReadyCount,
+                ["tracker_id", "sequence", "recorded_at_utc", "ready_count", "blocked_count", "in_progress_count", "rework_needed_count", "development_completed_count", "reconciled_count", "snapshot_id", "manually_blocked_count", "reworking_count"],
+                [Id(tracker.Id), await NextSequenceAsync("progress_snapshots"), Time(progress.RecordedAtUtc), progress.ReadyCount,
                  progress.BlockedCount, progress.InProgressCount, progress.ReworkNeededCount,
                  progress.DevelopmentCompletedCount, progress.ReconciledCount, Id(progress.SnapshotId),
                  progress.ManuallyBlockedCount, progress.ReworkingCount], cancellationToken);
         if (tracker.SyncBaselineJson is { } baselineJson)
-            await InsertAsync(connection, transaction, "tracker_sync_baselines",
-                ["tracker_id", "baseline_json"],
-                [Id(tracker.Id), baselineJson], cancellationToken);
+            await SqliteSyncBaselineRows.WriteAsync(connection, transaction, Id(tracker.Id),
+                JsonSerializer.Deserialize<TrackerSyncBaseline>(baselineJson)
+                ?? throw new InvalidDataException("A Tracker sync baseline is invalid."),
+                cancellationToken);
+
+        async Task<long> NextSequenceAsync(string table)
+        {
+            using SqliteCommand command = Command(connection, transaction,
+                $"SELECT COALESCE(MAX(sequence), 0) + 1 FROM {table};");
+            return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken),
+                System.Globalization.CultureInfo.InvariantCulture);
+        }
     }
 
     private static async Task DeleteProjectAsync(
@@ -293,12 +311,12 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         if (Key(incomingName) != "DEFAULT PROJECT") return;
         using SqliteCommand command = Command(connection, transaction, """
             SELECT project.id FROM projects project
-            WHERE project.name_key = 'DEFAULT PROJECT' AND project.id <> $projectId
-              AND project.lifecycle_state = 'Active'
+            WHERE project.name = 'Default project' AND project.id <> $projectId
+              AND project.recycled_at_utc IS NULL
               AND (SELECT COUNT(*) FROM projects) = 1
               AND (SELECT COUNT(*) FROM trackers tracker
                    WHERE tracker.project_id = project.id AND tracker.name = 'Default tracker'
-                     AND tracker.lifecycle_state = 'Active'
+                     AND tracker.recycled_at_utc IS NULL
                      AND tracker.copied_from_tracker_id IS NULL) = 1
               AND (SELECT COUNT(*) FROM trackers) = 1
               AND (SELECT COUNT(*) FROM tracked_entities) = 0

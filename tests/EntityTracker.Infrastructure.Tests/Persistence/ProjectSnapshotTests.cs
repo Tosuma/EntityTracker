@@ -242,6 +242,8 @@ public sealed class ProjectSnapshotTests
                 {
                     Id = id,
                     SourceName = $"Extra entity {index:D3}",
+                    // No status history, so Not started.
+                    DevelopmentStatus = "NotStarted",
                     Dependencies =
                     [
                         new SnapshotDependency(tracker.Entities[1].Id, T0, T1),
@@ -377,6 +379,7 @@ public sealed class ProjectSnapshotTests
         string entityId = snapshot.Trackers[0].Entities[0].Id.ToString("D");
         await using SqliteConnection connection = new($"Data Source={file.DatabasePath}");
         await connection.OpenAsync();
+        EntityNameCollation.Register(connection);
         using (SqliteCommand mode = connection.CreateCommand())
         {
             mode.CommandText = "PRAGMA journal_mode;";

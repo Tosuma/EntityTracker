@@ -154,6 +154,8 @@ public static class ProjectSnapshotValidator
                     throw new InvalidDataException("A status event predecessor is invalid.");
                 }
             }
+            if (!legacy)
+                ValidateStatusHistoryIsTheStatus(tracker, events);
             foreach (IGrouping<Guid, SnapshotStatusEvent> group in tracker.StatusHistory.GroupBy(e => e.EntityId))
             {
                 HashSet<Guid?> successors = [];
@@ -204,6 +206,33 @@ public static class ProjectSnapshotValidator
         }
         if (snapshot.Trackers.Select(t => t.Name.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() != snapshot.Trackers.Count)
             throw new InvalidDataException("Tracker names must be unique within a Project.");
+    }
+
+    /// <summary>
+    /// Format 6: the status history is the record of each entity's status. A transition follows the
+    /// event it names, and its previous status is that event's new status; an entity's status is its
+    /// newest event's, or Not started when it has none.
+    /// </summary>
+    private static void ValidateStatusHistoryIsTheStatus(
+        SnapshotTracker tracker, IReadOnlyDictionary<Guid, SnapshotStatusEvent> events)
+    {
+        foreach (SnapshotStatusEvent entry in tracker.StatusHistory)
+        {
+            bool transition = entry.Kind == nameof(StatusHistoryEntryKind.Transition);
+            if (transition != entry.PreviousEventId is not null ||
+                (entry.PreviousEventId is { } predecessor && events[predecessor].NewStatus != entry.PreviousStatus))
+                throw new InvalidDataException("A status event does not follow the event it names.");
+        }
+        Dictionary<Guid, SnapshotStatusEvent> newest = tracker.StatusHistory
+            .GroupBy(e => e.EntityId)
+            .ToDictionary(g => g.Key, g => g.MaxBy(e => e.Order)!);
+        foreach (SnapshotEntity entity in tracker.Entities)
+        {
+            string expected = newest.TryGetValue(entity.Id, out SnapshotStatusEvent? last)
+                ? last.NewStatus : nameof(DevelopmentStatus.NotStarted);
+            if (entity.DevelopmentStatus != expected)
+                throw new InvalidDataException("An entity's status is not its newest status event's.");
+        }
     }
 
     private static bool HasDependencyListsOf(int formatVersion, SnapshotEntity entity) =>

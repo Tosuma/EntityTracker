@@ -30,7 +30,7 @@ public sealed class TrackedEntity
 
         Id = id;
         TrackerId = trackerId;
-        SourceName = sourceName;
+        SourceName = sourceName.Trim();
         Status = status;
         Notes = notes;
         FilterActive = filterActive;
@@ -94,7 +94,7 @@ public sealed class TrackedEntity
     public void ChangeSourceName(string sourceName)
     {
         ValidateSourceName(sourceName);
-        SourceName = sourceName;
+        SourceName = sourceName.Trim();
     }
 
     public void ChangeStatus(DevelopmentStatus status)

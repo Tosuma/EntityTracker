@@ -6,14 +6,14 @@ public sealed class TrackedEntityTests
         new(new Guid("10000000-0000-0000-0000-000000000001"));
 
     [Fact]
-    public void Constructor_PreservesIdentityAndSourceNameAndDefaultsStatus()
+    public void Constructor_PreservesIdentityTrimsTheSourceNameAndDefaultsStatus()
     {
         EntityId id = EntityId.New();
 
         TrackedEntity entity = new(id, TestTrackerId, " sales.Customer ");
 
         Assert.Same(id, entity.Id);
-        Assert.Equal(" sales.Customer ", entity.SourceName);
+        Assert.Equal("sales.Customer", entity.SourceName);
         Assert.Equal(DevelopmentStatus.NotStarted, entity.Status);
         Assert.Equal(string.Empty, entity.Notes);
         Assert.Equal(string.Empty, entity.FilterActive);

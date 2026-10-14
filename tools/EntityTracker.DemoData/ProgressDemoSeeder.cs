@@ -370,6 +370,7 @@ public sealed class ProgressDemoSeeder
         };
         await using SqliteConnection connection = new(connectionString.ToString());
         await connection.OpenAsync(cancellationToken);
+        EntityNameCollation.Register(connection);
         await using SqliteTransaction transaction =
             (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
         for (int index = 0; index < candidates.Length; index++)
@@ -405,20 +406,36 @@ public sealed class ProgressDemoSeeder
         };
         await using SqliteConnection connection = new(connectionString.ToString());
         await connection.OpenAsync(cancellationToken);
+        EntityNameCollation.Register(connection);
         await using SqliteTransaction transaction =
             (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
         using SqliteCommand command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
+            -- The status is the status history. Archived entities keep theirs as a new baseline.
+            CREATE TEMP TABLE kept_status AS
+                SELECT status.entity_id, status.development_status
+                FROM entity_current_status status
+                JOIN tracked_entities entity ON entity.id = status.entity_id
+                WHERE entity.tracker_id = $trackerId AND entity.lifecycle_state = 'Archived';
             DELETE FROM entity_status_history
             WHERE entity_id IN (
                 SELECT id FROM tracked_entities WHERE tracker_id = $trackerId);
+            INSERT INTO entity_status_history
+            (event_id, entity_id, sequence, previous_event_id, new_status, entry_kind, occurred_at_utc)
+            SELECT lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)), 2) ||
+                         '-a' || substr(hex(randomblob(2)), 2) || '-' || hex(randomblob(6))),
+                   entity_id,
+                   (SELECT COALESCE(MAX(sequence), 0) FROM entity_status_history) + row_number() OVER (ORDER BY entity_id),
+                   NULL, development_status, 'Baseline', $baselineTimestamp
+            FROM temp.kept_status;
+            DROP TABLE temp.kept_status;
             DELETE FROM progress_snapshots
             WHERE tracker_id = $trackerId;
 
+            -- With no status history, every entity is Not started.
             UPDATE tracked_entities
-            SET development_status = 'NotStarted',
-                progress_updated_at_utc = $baselineTimestamp
+            SET progress_updated_at_utc = $baselineTimestamp
             WHERE tracker_id = $trackerId
               AND lifecycle_state = 'Active';
             """;
@@ -463,9 +480,10 @@ public sealed class ProgressDemoSeeder
             (await historyRepository.GetStatusHistoryAsync(trackerId, cancellationToken)).ToArray();
         ProgressSnapshot[] snapshots =
             (await historyRepository.GetProgressSnapshotsAsync(trackerId, cancellationToken)).ToArray();
-        if (history.Length != entities.Length + timeline.Changes.Count ||
-            history.Count(static entry => entry.Kind == StatusHistoryEntryKind.Baseline) !=
-            entities.Length ||
+        // Placeholders are only unresolved references and have no status history.
+        int tracked = entities.Count(static entity => !entity.IsPlaceholder);
+        if (history.Length != tracked + timeline.Changes.Count ||
+            history.Count(static entry => entry.Kind == StatusHistoryEntryKind.Baseline) != tracked ||
             history.Count(static entry => entry.Kind == StatusHistoryEntryKind.Transition) !=
             timeline.Changes.Count)
         {

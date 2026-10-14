@@ -23,7 +23,10 @@ public static class ProjectSnapshotUpgrade
 
         List<SnapshotDeveloper> developers = (snapshot.Developers ?? []).ToList();
         IReadOnlyList<SnapshotDeveloper> reference = identityReference?.Developers ?? [];
-        SnapshotTracker[] trackers = snapshot.Trackers.Select(ToCurrentDependencies).Select(tracker => tracker with
+        SnapshotTracker[] trackers = snapshot.Trackers.Select(ToCurrentDependencies)
+            .Select(tracker => snapshot.FormatVersion < ProjectSnapshot.CurrentFormatVersion
+                ? ToCurrentStatusHistory(tracker) : tracker)
+            .Select(tracker => tracker with
         {
             Entities = tracker.Entities.Select(entity =>
             {
@@ -60,6 +63,60 @@ public static class ProjectSnapshotUpgrade
             trackers, developers);
         ProjectSnapshotValidator.Validate(result);
         return result;
+    }
+
+    /// <summary>
+    /// Makes a format 1–5 Tracker's status history the record of its entities' statuses, as format 6
+    /// requires: every transition names the event it follows (the entity's preceding event, or it
+    /// becomes a baseline when there is none), its previous status is that event's new status, and an
+    /// entity whose status is not its newest event's gets an event for it. The added event's ID comes
+    /// from the entity and its history, so everyone converting the same snapshot gets the same event.
+    /// </summary>
+    internal static SnapshotTracker ToCurrentStatusHistory(SnapshotTracker tracker)
+    {
+        List<SnapshotStatusEvent> events = [];
+        Dictionary<Guid, SnapshotStatusEvent> byId = [];
+        Dictionary<Guid, SnapshotStatusEvent> latest = [];
+        foreach (SnapshotStatusEvent original in tracker.StatusHistory.OrderBy(e => e.Order))
+        {
+            latest.TryGetValue(original.EntityId, out SnapshotStatusEvent? prior);
+            SnapshotStatusEvent entry = original;
+            if (original.Kind == "Transition")
+            {
+                Guid? link = original.PreviousEventId ?? prior?.EventId;
+                entry = link is { } predecessor && byId.TryGetValue(predecessor, out SnapshotStatusEvent? previous)
+                    ? original with { PreviousEventId = predecessor, PreviousStatus = previous.NewStatus }
+                    : original with { Kind = "Baseline", PreviousEventId = null, PreviousStatus = null };
+            }
+            else
+            {
+                entry = original with { PreviousEventId = null, PreviousStatus = null };
+            }
+            events.Add(entry);
+            byId[entry.EventId] = entry;
+            latest[entry.EntityId] = entry;
+        }
+
+        foreach (SnapshotEntity entity in tracker.Entities.Where(e => e.LifecycleState != "Placeholder"))
+        {
+            latest.TryGetValue(entity.Id, out SnapshotStatusEvent? last);
+            if ((last?.NewStatus ?? "NotStarted") == entity.DevelopmentStatus) continue;
+            DateTimeOffset time = last is not null && last.OccurredAtUtc > entity.ProgressUpdatedAtUtc
+                ? last.OccurredAtUtc : entity.ProgressUpdatedAtUtc;
+            events.Add(new SnapshotStatusEvent(
+                StableId($"status:{entity.Id:D}:{last?.EventId:D}:{entity.DevelopmentStatus}"),
+                entity.Id, last?.EventId, last?.NewStatus, entity.DevelopmentStatus,
+                last is null ? "Baseline" : "Transition", time, events.Count));
+        }
+
+        return tracker with
+        {
+            StatusHistory = events
+                .Select((entry, index) => (Entry: entry, Index: index))
+                .OrderBy(item => item.Entry.OccurredAtUtc).ThenBy(item => item.Index)
+                .Select((item, order) => item.Entry with { Order = order })
+                .ToArray()
+        };
     }
 
     /// <summary>
