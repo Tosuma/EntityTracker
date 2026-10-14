@@ -330,6 +330,10 @@ backups\             automatic SQLite backups
 logs\                daily application logs
 ```
 
+Name columns use the `ENTITY_NAME` collation, which the app registers on every connection. Other
+SQLite tools can read the database, but writing to tables with names needs that collation (for
+example `EntityNameCollation.Register` on a `Microsoft.Data.Sqlite` connection).
+
 Running from source and running a published ZIP use the same Local Application Data database for
 the same Windows user. They therefore show the same tracked data unless one process is run under a
 different user profile or its data path is deliberately changed in code.

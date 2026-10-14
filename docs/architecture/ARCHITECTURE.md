@@ -317,6 +317,29 @@ public interface IEntityRepository
 
 Do not prematurely create generic repository frameworks.
 
+### Database normal form
+
+The SQLite schema is in Boyce-Codd normal form (and so also in 4NF and 5NF, as no table holds
+independent multi-valued facts). Keep it there:
+
+- **No derived columns.** A column must not be computable from other columns of its row. Names are
+  compared with the `ENTITY_NAME` collation (trimmed, culture-invariant upper case, ordinal — the
+  app's `EntitySourceKey` rule), so `UNIQUE (tracker_id, source_name)` enforces the rule without a
+  separate key column. A Project or Tracker is recycled exactly when `recycled_at_utc` is set.
+- **One record of each fact.** An entity's development status is its newest status event
+  (view `entity_current_status`); changing the status appends an event. An event's previous status
+  is the new status of the event it follows (`previous_event_id`).
+- **Identity by ID.** Every table is keyed by its GUID; status events and progress snapshots keep
+  their recording order in an explicit `sequence`. Dependencies refer to entities by ID.
+- **Atomic values.** The Tracker sync baseline is stored as rows, not a JSON document.
+- **Deliberate exception.** `trackers.copied_from_tracker_id` is not a foreign key: it can name a
+  Tracker in another Project that is not on this machine.
+
+The Git snapshot is a document format, not a database: it may carry values the database derives
+(an entity's status, an event's previous status, the baseline as JSON). The snapshot store converts
+between the two, and `ProjectSnapshotValidator` requires such values to agree with what they derive
+from.
+
 Prefer interfaces shaped around actual application needs.
 
 ---
