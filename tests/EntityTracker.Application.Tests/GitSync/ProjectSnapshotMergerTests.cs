@@ -337,6 +337,48 @@ public sealed class ProjectSnapshotMergerTests
         ProjectSnapshotValidator.Validate(result.Snapshot);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PurgeAgainstDependencyEditRequiresWholeEntityChoice(bool purgeRemote)
+    {
+        ProjectSnapshot basis = Snapshot();
+        SnapshotTracker tracker = basis.Trackers[0];
+        SnapshotEntity original = tracker.Entities[0];
+        SnapshotEntity dependent = Entity(Guid.NewGuid(), tracker.Id, "Dependent") with
+        {
+            Dependencies = [new SnapshotDependency(original.Id, Time, Time)]
+        };
+        SnapshotEntity target = Entity(Guid.NewGuid(), tracker.Id, "Target");
+        basis = basis with { Trackers = [tracker with { Entities = [original, dependent, target] }] };
+        ProjectSnapshot purged = EditEntity(basis,
+            entity => entity with { LifecycleState = "Placeholder" });
+        ProjectSnapshot edited = EditEntity(basis, entity => entity with
+        {
+            Dependencies = [new SnapshotDependency(target.Id, Time, Time)]
+        });
+        ProjectSnapshot local = purgeRemote ? edited : purged;
+        ProjectSnapshot remote = purgeRemote ? purged : edited;
+
+        ProjectMergeResult proposal = new ProjectSnapshotMerger().Merge(basis, local, remote);
+
+        ProjectMergeConflict conflict = Assert.Single(proposal.Conflicts);
+        Assert.Equal(ProjectConflictKind.Lifecycle, conflict.Kind);
+        Assert.Equal($"Tracker/{tracker.Id:D}/Entity/{original.Id:D}", conflict.Path);
+        foreach (MergeSide side in new[] { MergeSide.Local, MergeSide.Remote })
+        {
+            ProjectSnapshot resolved = new ProjectSnapshotMerger(new Dictionary<string, MergeSide>
+            {
+                [conflict.Path] = side
+            }).Merge(basis, local, remote).Snapshot;
+            SnapshotEntity selected = (side == MergeSide.Local ? local : remote).Trackers[0].Entities[0];
+            SnapshotEntity actual = resolved.Trackers[0].Entities.Single(entity => entity.Id == original.Id);
+            Assert.Equal(selected.LifecycleState, actual.LifecycleState);
+            Assert.Equal(selected.Dependencies, actual.Dependencies);
+            ProjectSnapshotValidator.Validate(resolved);
+        }
+    }
+
     [Fact]
     public void IdenticalEditsCollapseAndCompetingEditsRequireChoice()
     {

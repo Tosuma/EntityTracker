@@ -132,6 +132,42 @@ public sealed class ProjectTrackerOperationsTests
     }
 
     [Fact]
+    public async Task TrackerSync_DependencyOnAbsentArchivedEntityRemainsAPromotablePlaceholder()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        Tracker source = Assert.Single(await new SqliteTrackerRepository(database).GetAllAsync());
+        Tracker copy = await CreateTrackerService(database).CopyAsync(
+            source.Id, source.ProjectId, "Copy before additions");
+        TrackedEntity owner = new(EntityId.New(), source.Id, "Owner");
+        TrackedEntity archived = new(EntityId.New(), source.Id, "Archived target",
+            lifecycleState: EntityLifecycleState.Archived);
+        SqliteTrackedStateStore store = new(database);
+        await store.ApplyAsync(source.Id, new TrackedStateChangeSet(
+            [owner, archived], [], [], [owner.Id], [new EntityDependency(owner.Id, archived.Id)]));
+        TrackerSyncService sync = CreateSyncService(database);
+        TrackerSyncReview review = await sync.ReviewAsync(copy.Id);
+        Assert.All(review.Changes, change => change.Choice = TrackerSyncChoice.Source);
+
+        TrackerSyncPreview preview = await sync.PreviewAsync(review);
+        Assert.Equal(1, preview.UnresolvedDependencyCount);
+        await sync.ApplyAsync(review);
+
+        SqliteEntityRepository entities = new(database);
+        TrackedEntity[] copied = (await entities.GetAllAsync(copy.Id)).ToArray();
+        TrackedEntity placeholder = Assert.Single(copied, entity => entity.SourceName == archived.SourceName);
+        Assert.True(placeholder.IsPlaceholder);
+        SqliteProgressHistoryRepository history = new(database);
+        Assert.DoesNotContain(await history.GetStatusHistoryAsync(copy.Id), entry => entry.EntityId == placeholder.Id);
+        TrackedEntity real = new(placeholder.Id, copy.Id, placeholder.SourceName);
+        await store.ApplyAsync(copy.Id, Add(real));
+        Assert.Equal(EntityLifecycleState.Active, (await entities.GetAsync(copy.Id, placeholder.Id))!.LifecycleState);
+        Assert.Equal(placeholder.Id, Assert.Single(await new SqliteDependencyRepository(database)
+            .GetAllAsync(copy.Id)).DependencyEntityId);
+    }
+
+    [Fact]
     public async Task TrackerSync_IgnoredRemovalDoesNotRepeatAndStaleReviewIsRejected()
     {
         await using TemporarySqliteFile file = new();

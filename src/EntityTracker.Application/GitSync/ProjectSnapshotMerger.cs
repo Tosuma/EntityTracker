@@ -229,6 +229,10 @@ public sealed class ProjectSnapshotMerger
         if (MergedPlaceholders.Settle(b, l, r) is { } settled) return settled;
         if (l is null || r is null || b is null)
             return Object(path, b, l, r, b is null ? ProjectConflictKind.Addition : ProjectConflictKind.Deletion);
+        // Purging a real entity leaves a placeholder when it still has dependents. Treat a
+        // concurrent edit as a whole-entity choice so its fields cannot leak into the placeholder.
+        if (MergedPlaceholders.IsPlaceholder(l) != MergedPlaceholders.IsPlaceholder(r))
+            return Object(path, b, l, r, ProjectConflictKind.Lifecycle);
         return l with
         {
             SourceName = Field(path + "/SourceName", b.SourceName, l.SourceName, r.SourceName),

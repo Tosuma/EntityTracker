@@ -83,6 +83,38 @@ public sealed class PlaceholderEntityTests
     }
 
     [Fact]
+    public async Task HistoryInitializationSkipsPlaceholdersAndAllowsLastDependencyRemoval()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        TrackerId tracker = database.GetTrackerId();
+        TrackedEntity owner = new(EntityId.New(), tracker, "Owner");
+        TrackedEntity placeholder = TrackedEntity.Placeholder(tracker, "Future");
+        SqliteEntityRepository entities = new(database);
+        SqliteDependencyRepository dependencies = new(database);
+        // Older trackers have entities and dependencies but no progress history yet.
+        Assert.True(await entities.TryAddAsync(owner));
+        Assert.True(await entities.TryAddAsync(placeholder));
+        await dependencies.SaveAsync(tracker, new EntityDependency(owner.Id, placeholder.Id));
+        SqliteTrackedStateStore store = new(database);
+        ProgressHistoryInitializer initializer = new(entities, dependencies, store,
+            new EffectiveDependencyResolver(), new ProgressSnapshotCalculator());
+
+        await initializer.EnsureInitializedAsync(tracker);
+        await initializer.EnsureInitializedAsync(tracker);
+
+        SqliteProgressHistoryRepository history = new(database);
+        EntityStatusHistoryEntry baseline = Assert.Single(await history.GetStatusHistoryAsync(tracker));
+        Assert.Equal(owner.Id, baseline.EntityId);
+        Assert.Equal(StatusHistoryEntryKind.Baseline, baseline.Kind);
+        Assert.Single(await history.GetProgressSnapshotsAsync(tracker));
+        await store.ApplyAsync(tracker, new TrackedStateChangeSet([], [], [], [owner.Id], []));
+        Assert.Null(await entities.GetAsync(placeholder.Id));
+        Assert.Empty(await dependencies.GetAllAsync(tracker));
+    }
+
+    [Fact]
     public async Task PurgingAnEntityOthersDependOnLeavesAPlaceholderWithItsIdAndName()
     {
         await using TemporarySqliteFile file = new();

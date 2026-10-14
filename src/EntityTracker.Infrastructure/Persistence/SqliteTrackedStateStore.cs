@@ -335,6 +335,9 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
             entityArray,
             cancellationToken);
 
+        // Unresolved references have no progress of their own and must remain removable.
+        entityArray = entityArray.Where(static entity => !entity.IsPlaceholder).ToArray();
+
         long historyCount = await CountAsync(
             connection,
             transaction,

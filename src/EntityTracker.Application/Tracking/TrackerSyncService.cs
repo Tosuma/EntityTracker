@@ -136,6 +136,7 @@ public sealed class TrackerSyncService(
         TrackedEntity[] candidate = [.. existingByKey.Values, .. targets.NewPlaceholders];
         foreach (TrackedEntity entity in candidate)
         {
+            if (entity.IsPlaceholder) continue;
             string key = TrackerSyncPlanner.Key(entity.SourceName);
             if (selectedByKey.TryGetValue(key, out TrackerSyncEntity? wanted))
                 entity.ChangeLifecycleState(wanted.Active ? EntityLifecycleState.Active : EntityLifecycleState.Archived);
