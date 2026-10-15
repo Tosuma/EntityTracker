@@ -105,7 +105,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
             SnapshotEntity[] entities = files.Keys.Where(p => p.StartsWith(prefix + "entities/", StringComparison.Ordinal))
                 .Order(StringComparer.Ordinal).Select(p => manifest.FormatVersion switch
                 {
-                    >= 6 => Read<SnapshotEntityV6>(files, p).ToSnapshotEntity(),
+                    >= 6 => ReadEntityV6(files, p, manifest.FormatVersion),
                     >= 3 => Read<SnapshotEntityV3>(files, p).ToSnapshotEntity(manifest.FormatVersion >= 4, manifest.FormatVersion >= 5),
                     _ => Read<SnapshotEntityLegacy>(files, p).ToSnapshotEntity()
                 }).ToArray();
@@ -203,6 +203,15 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
         {
             throw new InvalidDataException("A Tracker sync baseline is invalid.", error);
         }
+    }
+
+    private static SnapshotEntity ReadEntityV6(IReadOnlyDictionary<string, byte[]> files, string path,
+        int formatVersion)
+    {
+        SnapshotEntityV6 entity = Read<SnapshotEntityV6>(files, path);
+        if (formatVersion >= 7 && entity.Provenance is not null)
+            throw new InvalidDataException($"The snapshot document {path} is malformed.");
+        return entity.ToSnapshotEntity();
     }
 
     private static T Read<T>(IReadOnlyDictionary<string, byte[]> files, string path)
@@ -330,7 +339,11 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
         IReadOnlyList<SnapshotResponsibilityPeriod> ResponsibilityPeriods,
         string FilterActive,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        string? SharedNotes = null)
+        string? SharedNotes = null,
+        // Written by format 6 versions from before provenance was removed (app-v2.0.0). It is read and
+        // ignored, and never written; format 7 files must not have it.
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? Provenance = null)
     {
         // Empty Shared notes are left out, as in format 5.
         public static SnapshotEntityV6 From(SnapshotEntity entity) => new(

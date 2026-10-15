@@ -293,6 +293,33 @@ public sealed class ProjectSnapshotTests
             JsonSerializer.Serialize(decoded.Trackers[0].SyncBaseline));
     }
 
+    [Theory]
+    [InlineData(6, true)]
+    [InlineData(7, false)]
+    public void EntityProvenance_FromVersionsBefore2_0_IsReadAndIgnoredOnlyInFormat6(int formatVersion, bool reads)
+    {
+        // Format 6 versions before app-v2.0.0 wrote each entity's provenance.
+        ProjectSnapshot snapshot = CompleteSnapshot() with { FormatVersion = formatVersion };
+        ProjectSnapshotJsonCodec codec = new();
+        Dictionary<string, byte[]> files = codec.Encode(snapshot).Files.ToDictionary(pair => pair.Key, pair =>
+        {
+            if (!pair.Key.Contains("/entities/", StringComparison.Ordinal)) return pair.Value;
+            JsonObject entity = JsonNode.Parse(pair.Value)!.AsObject();
+            Assert.False(entity.ContainsKey("provenance"));
+            entity["provenance"] = "Manual";
+            return Encoding.UTF8.GetBytes(entity.ToJsonString());
+        });
+
+        if (!reads)
+        {
+            Assert.Throws<InvalidDataException>(() => codec.Decode(files));
+            return;
+        }
+        ProjectSnapshot withoutProvenance = codec.Decode(codec.Encode(snapshot).Files);
+        ProjectSnapshot decoded = codec.Decode(files);
+        Assert.Equal(JsonSerializer.Serialize(withoutProvenance), JsonSerializer.Serialize(decoded));
+    }
+
     [Fact]
     public void Format6_UpgradesToFormat7WithoutChangingItsHistory()
     {
