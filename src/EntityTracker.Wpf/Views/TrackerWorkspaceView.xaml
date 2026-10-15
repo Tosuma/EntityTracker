@@ -2040,7 +2040,6 @@
                                                    TextWrapping="Wrap" />
                                         <TextBox MinHeight="64"
                                                  AutomationProperties.Name="Internal notes"
-                                                 controls:Placeholder.Text="Notes for your team; never in client reports"
                                                  AutomationProperties.HelpText="Never shown in client report"
                                                  Margin="0,5,0,0"
                                                  Padding="8"
@@ -2055,7 +2054,6 @@
                                                    TextWrapping="Wrap" />
                                         <TextBox MinHeight="64"
                                                  AutomationProperties.Name="Shared notes"
-                                                 controls:Placeholder.Text="Notes shared with the client in Project reports"
                                                  AutomationProperties.HelpText="Shared with the client in Project reports."
                                                  Margin="0,5,0,0"
                                                  Padding="8"

@@ -217,6 +217,8 @@ public sealed class PresentationConfigurationTests
                     element.Name.LocalName == "SuggestionComboBox" ||
                     (element.Name.LocalName == "ComboBox" && (string?)element.Attribute("IsEditable") == "True"))
                 .Where(element => string.IsNullOrWhiteSpace((string?)element.Attribute(PlaceholderText)))
+                // The notes fields are explained by their label and help line, so they stay empty.
+                .Where(element => (string?)element.Attribute("AutomationProperties.Name") is not ("Internal notes" or "Shared notes"))
                 .Select(element => $"{Path.GetFileName(path)}: " +
                     ((string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) ??
                      (string?)element.Attribute("AutomationProperties.Name"))))
