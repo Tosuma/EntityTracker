@@ -866,9 +866,9 @@ public sealed class ExistingCheckoutRemoteSyncTests
         ProjectGitSyncService sync = catalog.Sync(checkout);
         string manifestPath = Path.Combine(checkout, ".entitytracker", "manifest.json");
         string manifest = File.ReadAllText(manifestPath);
-        string current = $"\"formatVersion\":{ProjectSnapshot.CurrentFormatVersion}";
+        string current = $"\"formatVersion\": {ProjectSnapshot.CurrentFormatVersion}";
         Assert.Contains(current, manifest);
-        File.WriteAllText(manifestPath, manifest.Replace(current, "\"formatVersion\":99"));
+        File.WriteAllText(manifestPath, manifest.Replace(current, "\"formatVersion\": 99"));
         workspace.Git(checkout, "add", ".entitytracker");
         workspace.Git(checkout, "commit", "-m", "Unsupported version");
         ProjectSnapshotFormatVersionException versionError =

@@ -15,7 +15,10 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = false,
+        // Indented with "\n" on every OS, so each file reads well in a Git diff and is byte-for-byte the
+        // same wherever it was written.
+        WriteIndented = true,
+        NewLine = "\n",
         RespectRequiredConstructorParameters = true,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
     };
@@ -42,7 +45,8 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                 new TrackerDocument(tracker.Id, tracker.ProjectId, tracker.Name,
                     tracker.LifecycleState, tracker.CreatedAtUtc, tracker.UpdatedAtUtc,
                     tracker.RecycledAtUtc, tracker.CopiedFromTrackerId,
-                    BaselineText(tracker.SyncBaseline)), JsonOptions);
+                    snapshot.FormatVersion >= 7 ? tracker.SyncBaseline?.Normalize() : null,
+                    snapshot.FormatVersion >= 7 ? null : BaselineText(tracker.SyncBaseline)), JsonOptions);
             foreach (SnapshotEntity entity in tracker.Entities.OrderBy(e => e.Id))
             {
                 SnapshotEntity ordered = entity with
@@ -114,7 +118,9 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                 ? Read<SnapshotImportSummary>(files, summaryPath) : null;
             trackers.Add(new SnapshotTracker(doc.Id, doc.ProjectId, doc.Name, doc.LifecycleState,
                 doc.CreatedAtUtc, doc.UpdatedAtUtc, doc.RecycledAtUtc, doc.CopiedFromTrackerId,
-                entities, events, progress, ReadBaselineText(doc.SyncBaselineJson), summary));
+                entities, events, progress,
+                manifest.FormatVersion >= 7 ? doc.SyncBaseline?.Normalize() : ReadBaselineText(doc.SyncBaselineJson),
+                summary));
         }
         SnapshotDeveloper[]? developers = manifest.FormatVersion >= 2
             ? files.Keys.Where(p => p.StartsWith(Root + "developers/", StringComparison.Ordinal))
@@ -177,12 +183,12 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
             throw new InvalidDataException("The Project tombstone is invalid or unsupported.");
     }
 
-    /// <summary>The baseline as the JSON text tracker.json keeps it in.</summary>
+    /// <summary>The baseline as the JSON text tracker.json kept it in before format 7.</summary>
     private static string? BaselineText(TrackerSyncBaseline? baseline) =>
         baseline is null ? null : JsonSerializer.Serialize(baseline.Normalize());
 
     /// <summary>
-    /// Reads a baseline kept as JSON text. Baselines saved before dependency kinds were removed carry a
+    /// Reads a baseline kept as JSON text (formats 1–6). Baselines saved before dependency kinds were removed carry a
     /// "Kind" per dependency, which is ignored.
     /// </summary>
     private static TrackerSyncBaseline? ReadBaselineText(string? text)
@@ -345,6 +351,10 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
         Guid Id, Guid ProjectId, string Name, string LifecycleState,
         DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc,
         DateTimeOffset? RecycledAtUtc, Guid? CopiedFromTrackerId,
+        // Format 7: the baseline as nested JSON.
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        TrackerSyncBaseline? SyncBaseline = null,
+        // Formats 1–6: the baseline as one JSON string.
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         string? SyncBaselineJson = null);
 }

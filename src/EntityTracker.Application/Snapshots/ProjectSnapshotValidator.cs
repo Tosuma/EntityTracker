@@ -48,7 +48,7 @@ public static class ProjectSnapshotValidator
         HashSet<Guid> allEventIds = [];
         HashSet<Guid> allProgressIds = [];
         HashSet<Guid> allPeriodIds = [];
-        bool legacy = snapshot.FormatVersion < ProjectSnapshot.CurrentFormatVersion;
+        bool legacy = snapshot.FormatVersion < ProjectSnapshot.FirstCurrentModelFormatVersion;
         foreach (SnapshotTracker tracker in snapshot.Trackers)
         {
             if (tracker is null || tracker.Id == Guid.Empty ||
@@ -231,7 +231,7 @@ public static class ProjectSnapshotValidator
     }
 
     private static bool HasDependencyListsOf(int formatVersion, SnapshotEntity entity) =>
-        formatVersion < ProjectSnapshot.CurrentFormatVersion
+        formatVersion < ProjectSnapshot.FirstCurrentModelFormatVersion
             ? entity.Dependencies.Count == 0 && entity.LegacyDependencies is not null &&
               entity.LegacyUnresolvedDependencies is not null && entity.LegacyOverrides is not null
             : entity.LegacyDependencies is null or { Count: 0 } &&

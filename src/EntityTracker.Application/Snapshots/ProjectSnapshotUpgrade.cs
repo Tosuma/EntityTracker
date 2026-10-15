@@ -24,7 +24,7 @@ public static class ProjectSnapshotUpgrade
         List<SnapshotDeveloper> developers = (snapshot.Developers ?? []).ToList();
         IReadOnlyList<SnapshotDeveloper> reference = identityReference?.Developers ?? [];
         SnapshotTracker[] trackers = snapshot.Trackers.Select(ToCurrentDependencies)
-            .Select(tracker => snapshot.FormatVersion < ProjectSnapshot.CurrentFormatVersion
+            .Select(tracker => snapshot.FormatVersion < ProjectSnapshot.FirstCurrentModelFormatVersion
                 ? ToCurrentStatusHistory(tracker) : tracker)
             .Select(tracker => tracker with
         {
