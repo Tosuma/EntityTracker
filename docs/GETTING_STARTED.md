@@ -11,10 +11,11 @@ To install and use EntityTracker:
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) or
   [Rancher Desktop](https://rancherdesktop.io/) with the Docker engine (dockerd/moby) and Linux
   containers, running when you install or update
-- Network access to `mcr.microsoft.com` and `nuget.org` (for the build image and packages)
+- Network access to Docker Hub, `mcr.microsoft.com` and `nuget.org` (for the Git and build images
+  and the packages), and to the app's GitHub repository
 
-You don't need .NET to install or use EntityTracker: the installer builds the app inside the official
-.NET SDK container.
+You don't need .NET to install or use EntityTracker: the installer fetches and builds the app inside
+Docker containers.
 
 To work on the code, you also need the [.NET SDK 10.0.400](https://dotnet.microsoft.com/download/dotnet/10.0)
 (pinned by `global.json`). Verify your SDK version:
@@ -32,36 +33,44 @@ cd EntityTracker
 .\scripts\Install-EntityTracker.ps1
 ```
 
-The script builds the newest approved `app-vX.Y.Z` release on your computer, installs it at
-`%LOCALAPPDATA%\Programs\EntityTracker`, creates a **Start Menu** shortcut, and opens it. Keep
-the source clone: it is used to check and build later releases. Git access must work on this
-computer.
+The script installs the newest approved `app-vX.Y.Z` release at
+`%LOCALAPPDATA%\Programs\EntityTracker`, creates a **Start Menu** shortcut, and opens it. Keep the
+source clone: the installer reads its origin to find releases, and the app uses it to check for
+updates.
 
-The build runs in Docker, in the .NET SDK image the release pins (`mcr.microsoft.com/dotnet/sdk`).
-The first install downloads that image (about 1 GB); later updates reuse it and keep NuGet packages
-in the Docker volume `entitytracker-nuget`. The container only builds: its result is written to the
-installer's folder under `%LOCALAPPDATA%` and installed exactly as a local build would be, and the
-container is removed afterwards. If you have the .NET SDK and prefer to build without Docker, run
-`.\scripts\Install-EntityTracker.ps1 -BuildWith Local`.
+Everything runs in Docker and reports to the terminal in five numbered steps:
 
-If the install or an update says Docker is not running, start Docker Desktop or Rancher Desktop and
-try again. Docker must use Linux containers and be allowed to share your user folder (both are the
+1. **Checking Docker:** Docker must be running with Linux containers.
+2. **Fetching:** a small Git container reads the release tags from the clone's origin, fetches the
+   release, and checks it is exactly the tag origin lists. It reads the repository without
+   credentials (an SSH origin is read over HTTPS), so it must allow anonymous read access.
+3. **Building:** the .NET SDK container the release pins (`mcr.microsoft.com/dotnet/sdk`) builds it.
+   The first install downloads that image (about 1 GB); later updates reuse it and keep NuGet
+   packages in the Docker volume `entitytracker-nuget`.
+4. **Saving:** a container copies the build next to the install folder.
+5. **Installing:** Windows swaps the new version in, updates the shortcut and opens the app.
+
+The release's source and build live in a temporary Docker volume that is removed afterwards. If the
+install or an update says Docker is not running, start Docker Desktop or Rancher Desktop and try
+again. Docker must use Linux containers and be allowed to share your user folder (both are the
 defaults).
 
 The app checks for new releases at startup, every 15 minutes, and before each Project Git sync.
-When an update is available, finish any open edit and choose **Close and update**. The updater
-window shows build progress and reopens the app when complete. If the build fails, use **Retry
-update** or exit; the older app remains blocked. If the release check is unavailable, local work
-continues but Project Git sync pauses until a check succeeds.
+When an update is available, finish any open edit and choose **Close and update**. A terminal window
+shows the same five steps, reopens the app when complete, and closes itself after a few seconds. If
+the update fails, it stays open with the error: press **R** to retry or any other key to exit; the
+older app remains blocked. If the release check is unavailable, local work continues but Project Git
+sync pauses until a check succeeds.
 
-If restore fails with `NU1100` errors, check network access to NuGet, then retry:
+If restore fails with `NU1100` errors, check network access to NuGet, then clear the package cache
+and retry:
 
 ```powershell
-dotnet nuget locals all --clear
+docker volume rm entitytracker-nuget
 .\scripts\Install-EntityTracker.ps1
 ```
 
-If an installed app closes for an update but does not reopen, close any updater window and run the
+If an installed app closes for an update but does not reopen, close any update terminal and run the
 installer from an up-to-date source checkout in an open PowerShell terminal:
 
 ```powershell
@@ -70,7 +79,7 @@ git pull --ff-only
 .\scripts\Install-EntityTracker.ps1
 ```
 
-This builds the newest approved release using the checkout's installer script. The application
+This installs the newest approved release using the checkout's installer script. The application
 database remains under `%LOCALAPPDATA%\EntityTracker`; reinstalling does not replace it. In
 particular, `app-v1.0.0` bundled an installer that could wait for a hidden prompt during an in-app
 update, so use this manual path to move from `app-v1.0.0` to `app-v1.0.1` or later.
@@ -86,15 +95,16 @@ Close EntityTracker, then run from your clone:
 ```
 
 It asks before removing the app from `%LOCALAPPDATA%\Programs\EntityTracker`, the **Start Menu**
-shortcut, and any temporary build folders left by an update. Your data stays in
+shortcut, and any temporary build folders an older version's update left. Your data stays in
 `%LOCALAPPDATA%\EntityTracker`, so installing again picks up your Projects and settings. The
 source clone is not changed.
 
 - `-RemoveData` also deletes your data: every Project and Tracker on this computer, with settings,
   backups and logs. It asks again first. Projects linked to a Git repository can be imported again
   from it; anything else is gone.
-- `-RemoveDockerCache` also deletes the Docker volume `entitytracker-nuget` that speeds up builds.
-  The .NET SDK build images stay in Docker, since other tools may use them.
+- `-RemoveDockerCache` also deletes the Docker volume `entitytracker-nuget` that speeds up builds,
+  and any build volume an interrupted install left. The Git and .NET SDK images stay in Docker,
+  since other tools may use them.
 - `-Force` skips the questions.
 
 ## Run from source for development
@@ -182,7 +192,7 @@ dotnet test EntityTracker.slnx --no-build --no-restore
 | Build fails on WPF projects | Confirm you are on Windows; WPF is not supported on other platforms |
 | Application opens but shows no data | Data is per-user; check `%LOCALAPPDATA%\EntityTracker\entity-tracker.db` exists |
 | Installer reports no approved release | Ask the developer to publish the first `app-vX.Y.Z` tag |
-| Update build fails | Use the updater's error log; restore source-clone access and NuGet connectivity, then retry |
+| Update fails | Read the error in the update terminal; start Docker or restore network access, then press **R** to retry |
 | App closes for an update but does not reopen | Run the installer from the updated source checkout as shown above |
 | Local work opens but Project sync is paused | Restore access to the app source clone and its Git origin, then select **Retry check** |
 
