@@ -627,6 +627,7 @@
                             </Grid.ColumnDefinitions>
 
                             <TextBox x:Name="OverviewSearchTextBox"
+                                     controls:Placeholder.Text="Search active entities"
                                      AutomationProperties.Name="Search active entities"
                                      MinWidth="280"
                                      Padding="9,7"
@@ -990,6 +991,7 @@
                         <!-- Searches like the dependency search: word-aware suggestions, arrow keys,
                              Enter to choose (or find the best match), Esc to close the list. -->
                         <controls:SuggestionComboBox x:Name="DependencyGraphSearchBox"
+                                                     controls:Placeholder.Text="Find an entity (Ctrl+F)"
                                                      Width="240" Margin="0,0,8,6" VerticalAlignment="Center"
                                                      AutomationProperties.Name="Find entity in dependency graph"
                                                      AutomationProperties.HelpText="Type part of a name; words in spaced, snake_case, PascalCase and camelCase names match. Use the arrow keys and Enter to choose."
@@ -1160,6 +1162,7 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <TextBox x:Name="ArchivedSearchTextBox"
+                                     controls:Placeholder.Text="Search archived entities"
                                      AutomationProperties.Name="Search archived entities"
                                      MinWidth="280"
                                      Padding="9,7"
@@ -1378,6 +1381,7 @@
 
                                     <Label Target="{Binding ElementName=ManualEntityNameTextBox}" Content="Entity name" />
                                     <TextBox x:Name="ManualEntityNameTextBox"
+                                             controls:Placeholder.Text="Name of the entity, e.g. customer_account"
                                              Margin="0,4,0,12"
                                              Padding="9,7"
                                              AutomationProperties.Name="Entity name"
@@ -1387,6 +1391,7 @@
                                     <TextBlock Margin="0,3,0,5" Text="Select one or more Project developers." />
                                     <TextBox Margin="0,0,0,5" Padding="9,7"
                                              AutomationProperties.Name="Search Project developers"
+                                             controls:Placeholder.Text="Search developers by initials or name"
                                              Text="{Binding ManualCreation.DeveloperPicker.Query, UpdateSourceTrigger=PropertyChanged}" />
                                     <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto"
                                                   CanContentScroll="False">
@@ -1425,6 +1430,7 @@
                                         <StackPanel>
                                             <Label Target="{Binding ElementName=ManualGroupComboBox}" Content="Group" />
                                             <controls:SuggestionComboBox x:Name="ManualGroupComboBox"
+                                                      controls:Placeholder.Text="Type or choose a group"
                                                       Margin="0,4,0,0"
                                                       AutomationProperties.HelpText="Type a new group or choose an existing group."
                                                       AutomationProperties.Name="Group"
@@ -1469,6 +1475,7 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <controls:SuggestionComboBox x:Name="ManualDependencyComboBox"
+                                                                     controls:Placeholder.Text="Type an entity name to add a dependency"
                                                                      AutomationProperties.HelpText="Open the dropdown to browse active entities, or type to search. Choose an entity to add it."
                                                                      AutomationProperties.Name="Dependency"
                                                                      IsEditable="True"
@@ -1991,6 +1998,7 @@
                                         <Label x:Name="EditorNameLabel" Padding="0" FontSize="16" FontWeight="SemiBold" Content="Name"
                                                Target="{Binding ElementName=EditorNameTextBox}" />
                                         <TextBox x:Name="EditorNameTextBox" Margin="0,6,0,0" Padding="8"
+                                                 controls:Placeholder.Text="Name of the entity"
                                                  AutomationProperties.LabeledBy="{Binding ElementName=EditorNameLabel}"
                                                  IsEnabled="{Binding Editor.CanEditName}"
                                                  Text="{Binding Editor.EditedName, UpdateSourceTrigger=PropertyChanged}" />
@@ -2056,6 +2064,7 @@
                                         <TextBlock Margin="0,12,0,0" FontWeight="SemiBold" Text="Filter active" />
                                         <TextBox MinHeight="64"
                                                  AutomationProperties.Name="Filter active"
+                                                 controls:Placeholder.Text="How active rows are filtered"
                                                  Margin="0,5,0,0"
                                                  Padding="8"
                                                  AcceptsReturn="True"
@@ -2080,17 +2089,10 @@
                                                 Command="{Binding Editor.OpenIdentitySettingsCommand}"
                                                 Style="{StaticResource SecondaryButtonStyle}" />
                                     </StackPanel>
-                                    <Grid DockPanel.Dock="Top" Margin="0,5,0,5">
-                                        <TextBox x:Name="EditorDeveloperSearchBox" Padding="8,6"
-                                                 AutomationProperties.Name="Search Project developers"
-                                                 Text="{Binding Editor.DeveloperPicker.Query, UpdateSourceTrigger=PropertyChanged}" />
-                                        <TextBlock Margin="10,0,10,0" VerticalAlignment="Center"
-                                                   Foreground="{DynamicResource Brush.Text.Secondary}"
-                                                   IsHitTestVisible="False" Focusable="False"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   Text="Search developers by initials or name"
-                                                   Visibility="{Binding Editor.DeveloperPicker.IsQueryEmpty, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                    </Grid>
+                                    <TextBox x:Name="EditorDeveloperSearchBox" DockPanel.Dock="Top" Margin="0,5,0,5" Padding="8,6"
+                                             controls:Placeholder.Text="Search developers by initials or name"
+                                             AutomationProperties.Name="Search Project developers"
+                                             Text="{Binding Editor.DeveloperPicker.Query, UpdateSourceTrigger=PropertyChanged}" />
                                     <TextBlock DockPanel.Dock="Bottom" Margin="0,7,0,0"
                                                Foreground="{DynamicResource Brush.Text.Secondary}"
                                                Text="No available developers. Add one from Project → Developers."
@@ -2127,6 +2129,7 @@
                                 <StackPanel Margin="0,0,0,12">
                                     <TextBlock FontWeight="SemiBold" Text="Group" />
                                     <controls:SuggestionComboBox x:Name="EditorGroupComboBox"
+                                              controls:Placeholder.Text="Type or choose a group"
                                               Margin="0,5,0,0"
                                               AutomationProperties.HelpText="Type a new group or choose an existing group."
                                               AutomationProperties.Name="Group"
@@ -2240,6 +2243,7 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <controls:SuggestionComboBox x:Name="EditorDependencyComboBox"
+                                                                 controls:Placeholder.Text="Type an entity name to add a dependency"
                                                                  AutomationProperties.HelpText="Open the dropdown to browse active entities, or type to search. Choose an entity to add it."
                                                                  AutomationProperties.Name="Dependency"
                                                                  IsEditable="True"
@@ -2430,6 +2434,7 @@
                                            Text="Type the exact entity name to continue:"
                                            TextWrapping="Wrap" />
                                 <TextBox x:Name="PurgeConfirmationTextBox"
+                                         controls:Placeholder.Text="Type the entity name to confirm"
                                          AutomationProperties.Name="Exact entity name confirmation"
                                          Text="{Binding Editor.TypedPurgeConfirmation, UpdateSourceTrigger=PropertyChanged}" />
                                 <StackPanel Margin="0,20,0,0"

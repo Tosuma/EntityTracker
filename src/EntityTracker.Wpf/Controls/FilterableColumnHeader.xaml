@@ -1,6 +1,7 @@
 <UserControl x:Class="EntityTracker.Wpf.Controls.FilterableColumnHeader"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:EntityTracker.Wpf.Controls"
              x:Name="Root"
              Focusable="False">
     <UserControl.Resources>
@@ -127,6 +128,7 @@
                     </StackPanel>
 
                     <TextBox x:Name="FilterSearchTextBox"
+                             controls:Placeholder.Text="Search values"
                              Grid.Row="2"
                              Margin="0,0,0,8"
                              Padding="7,5"

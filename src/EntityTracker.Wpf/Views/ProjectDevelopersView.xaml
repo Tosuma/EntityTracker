@@ -1,6 +1,7 @@
 <UserControl x:Class="EntityTracker.Wpf.Views.ProjectDevelopersView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:EntityTracker.Wpf.Controls"
              xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels">
     <Grid>
         <Grid>
@@ -38,6 +39,7 @@
                             <Label FontSize="18" FontWeight="SemiBold" Padding="0" Margin="0,0,0,8"
                                    Target="{Binding ElementName=DeveloperSearchBox}" Content="Search developers" />
                             <TextBox x:Name="DeveloperSearchBox" Padding="9,7"
+                                     controls:Placeholder.Text="Search by initials or display name"
                                      AutomationProperties.Name="Search developers by initials or display name"
                                      ToolTip="Search initials or display names"
                                      Text="{Binding Developers.SearchQuery, UpdateSourceTrigger=PropertyChanged}" />
@@ -91,10 +93,12 @@
                                    TextWrapping="Wrap" />
                         <Label Margin="0,16,0,0" Target="{Binding ElementName=DeveloperInitialsBox}" Content="Initials" />
                         <TextBox x:Name="DeveloperInitialsBox" Margin="0,4,0,0" Padding="9,7"
+                                 controls:Placeholder.Text="Initials, e.g. AB"
                                  AutomationProperties.Name="Developer initials"
                                  Text="{Binding Developers.Initials, UpdateSourceTrigger=PropertyChanged}" />
                         <Label Margin="0,12,0,0" Target="{Binding ElementName=DeveloperDisplayNameBox}" Content="Display name (optional)" />
                         <TextBox x:Name="DeveloperDisplayNameBox" Margin="0,4,0,0" Padding="9,7"
+                                 controls:Placeholder.Text="Full name (optional)"
                                  AutomationProperties.Name="Developer display name"
                                  Text="{Binding Developers.DisplayName, UpdateSourceTrigger=PropertyChanged}" />
                         <WrapPanel Margin="0,16,0,0">
@@ -124,6 +128,7 @@
                     <TextBlock Margin="0,12,0,12" TextWrapping="Wrap"
                                Text="{Binding Developers.PendingRetirementInitials, StringFormat=Type the exact initials {0} to retire this developer.}" />
                     <TextBox x:Name="RetirementConfirmationBox"
+                             controls:Placeholder.Text="Type the initials to confirm"
                              AutomationProperties.Name="Exact developer initials confirmation"
                              Text="{Binding Developers.RetirementConfirmation, UpdateSourceTrigger=PropertyChanged}" />
                     <StackPanel Margin="0,16,0,0" Orientation="Horizontal">

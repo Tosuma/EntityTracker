@@ -23,16 +23,15 @@ public sealed class DeveloperPickerViewModelTests
 
         await picker.LoadAsync([alice.Id]);
         Assert.True(picker.HasAvailableDevelopers);
-        Assert.True(picker.IsQueryEmpty);
+        Assert.Empty(picker.Query);
         Assert.Equal(alice.Id, Assert.Single(picker.SelectedIds));
         picker.Query = "alice";
-        Assert.False(picker.IsQueryEmpty);
         Assert.Equal("AL — Alice", Assert.Single(picker.FilteredChoices).Label);
         Assert.DoesNotContain(picker.Choices, choice => choice.Developer.IsRetired);
         Assert.DoesNotContain(picker.Choices, choice => choice.Developer.Initials == "OT");
         picker.ClearSelection();
         Assert.Empty(picker.SelectedIds);
-        Assert.True(picker.IsQueryEmpty);
+        Assert.Empty(picker.Query);
         Assert.Equal(2, (await service.ListAsync(project)).Count);
     }
 
