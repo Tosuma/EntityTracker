@@ -22,7 +22,27 @@ public sealed record TrackerSyncStructure(IReadOnlyList<TrackerSyncEntity> Entit
 
 public sealed record TrackerSyncBaseline(
     TrackerSyncStructure Source,
-    TrackerSyncStructure Destination);
+    TrackerSyncStructure Destination)
+{
+    /// <summary>
+    /// The same baseline with entities, and each entity's dependencies, in name-key order. Baselines
+    /// read back from the database come in its own name order, so they are normalized before they are
+    /// written to a snapshot or compared in a merge.
+    /// </summary>
+    public TrackerSyncBaseline Normalize() => new(Normalize(Source), Normalize(Destination));
+
+    private static TrackerSyncStructure Normalize(TrackerSyncStructure structure) => new(structure.Entities
+        .OrderBy(static entity => TrackerSyncPlanner.Key(entity.Name), StringComparer.Ordinal)
+        .ThenBy(static entity => entity.Name, StringComparer.Ordinal)
+        .Select(static entity => entity with
+        {
+            Dependencies = entity.Dependencies
+                .OrderBy(static dependency => TrackerSyncPlanner.Key(dependency.Name), StringComparer.Ordinal)
+                .ThenBy(static dependency => dependency.Name, StringComparer.Ordinal)
+                .ToArray()
+        })
+        .ToArray());
+}
 
 public sealed record TrackerSyncPreview(
     ProgressSnapshotState CurrentProgress,

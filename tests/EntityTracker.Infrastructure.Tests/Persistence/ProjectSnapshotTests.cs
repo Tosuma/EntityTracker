@@ -1,4 +1,6 @@
 using System.Text;
+using System.Text.Json;
+using EntityTracker.Application.Tracking;
 using EntityTracker.Application.Snapshots;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Persistence;
@@ -205,22 +207,28 @@ public sealed class ProjectSnapshotTests
         SqliteDatabase targetDb = new(targetFile.DatabasePath);
         await sourceDb.InitializeAsync();
         await targetDb.InitializeAsync();
-        const string baseline = "{\"Source\":{\"Entities\":[]},\"Destination\":{\"Entities\":[]}}";
+        // Out of order on purpose: the database and the snapshot keep it in name order.
+        TrackerSyncBaseline baseline = new(
+            new TrackerSyncStructure([
+                new TrackerSyncEntity("order", true, 2, "Sales", [new TrackerSyncDependency("customer")], "Open only"),
+                new TrackerSyncEntity("customer", false, null, "", [])]),
+            new TrackerSyncStructure([new TrackerSyncEntity("customer", true, null, "Mine", [])]));
         ProjectSnapshot seed = CompleteSnapshot();
         seed = seed with { Trackers = seed.Trackers.Select((tracker, index) =>
-            index == 0 ? tracker with { SyncBaselineJson = baseline } : tracker).ToArray() };
+            index == 0 ? tracker with { SyncBaseline = baseline } : tracker).ToArray() };
+        string expected = JsonSerializer.Serialize(baseline.Normalize());
         SqliteProjectSnapshotStore source = new(sourceDb);
         SqliteProjectSnapshotStore target = new(targetDb);
         await source.ApplyAsync(seed, 0);
         ProjectSnapshot exported = Assert.IsType<ProjectSnapshot>(
             (await source.ReadAsync(new ProjectId(seed.Project.Id))).Snapshot);
-        Assert.Equal(baseline, exported.Trackers[0].SyncBaselineJson);
+        Assert.Equal(expected, JsonSerializer.Serialize(exported.Trackers[0].SyncBaseline));
         ProjectSnapshotJsonCodec codec = new();
         ProjectSnapshot decoded = codec.Decode(codec.Encode(exported).Files);
         await target.ApplyAsync(decoded, 0);
         ProjectSnapshot imported = Assert.IsType<ProjectSnapshot>(
             (await target.ReadAsync(new ProjectId(seed.Project.Id))).Snapshot);
-        Assert.Equal(baseline, imported.Trackers[0].SyncBaselineJson);
+        Assert.Equal(expected, JsonSerializer.Serialize(imported.Trackers[0].SyncBaseline));
     }
 
     [Fact]

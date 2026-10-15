@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Snapshots;
@@ -66,13 +65,12 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
             WHERE tracker.project_id = $projectId
             ORDER BY snapshot.recorded_at_utc, snapshot.sequence;
             """, id, cancellationToken);
-        // The snapshot keeps a Tracker's sync baseline as one JSON document.
-        Dictionary<string, string> baselineJson = new(StringComparer.Ordinal);
+        Dictionary<string, TrackerSyncBaseline> baselines = new(StringComparer.Ordinal);
         foreach (Row tracker in trackerRows)
         {
             if (await SqliteSyncBaselineRows.ReadAsync(connection, transaction, tracker.Str("id"),
                     cancellationToken) is { } baseline)
-                baselineJson[tracker.Str("id")] = JsonSerializer.Serialize(baseline);
+                baselines[tracker.Str("id")] = baseline.Normalize();
         }
         await transaction.CommitAsync(cancellationToken);
 
@@ -124,7 +122,7 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                         p.Int("rework_needed_count"), p.Int("development_completed_count"),
                         p.Int("reconciled_count"), order, p.Int("manually_blocked_count"),
                         p.Int("reworking_count"))).ToArray(),
-                baselineJson.GetValueOrDefault(trackerId));
+                baselines.GetValueOrDefault(trackerId));
         }).ToArray();
         SnapshotDeveloper[] developers = developerRows.Select(row => new SnapshotDeveloper(
             row.Guid("id"), row.Guid("project_id"), row.Str("initials"),
@@ -272,11 +270,9 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                  progress.BlockedCount, progress.InProgressCount, progress.ReworkNeededCount,
                  progress.DevelopmentCompletedCount, progress.ReconciledCount, Id(progress.SnapshotId),
                  progress.ManuallyBlockedCount, progress.ReworkingCount], cancellationToken);
-        if (tracker.SyncBaselineJson is { } baselineJson)
+        if (tracker.SyncBaseline is { } baseline)
             await SqliteSyncBaselineRows.WriteAsync(connection, transaction, Id(tracker.Id),
-                JsonSerializer.Deserialize<TrackerSyncBaseline>(baselineJson)
-                ?? throw new InvalidDataException("A Tracker sync baseline is invalid."),
-                cancellationToken);
+                baseline, cancellationToken);
 
         async Task<long> NextSequenceAsync(string table)
         {

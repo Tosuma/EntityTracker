@@ -1,5 +1,6 @@
 using EntityTracker.Application.GitSync;
 using EntityTracker.Application.Snapshots;
+using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
 using EntityTracker.Domain.Collaboration;
 
@@ -617,6 +618,121 @@ public sealed class ProjectSnapshotMergerTests
             [conflict.Path] = MergeSide.Remote
         }).Merge(basis, local, remote);
         Assert.Equal("Alice C", Assert.Single(result.Snapshot.Developers!).DisplayName);
+    }
+
+    [Fact]
+    public void SyncBaseline_InADifferentOrderIsTheSameAndNeverAConflict()
+    {
+        TrackerSyncBaseline ordered = Baseline(("alpha", "A"), ("beta", "B"));
+        TrackerSyncBaseline reversed = new(
+            new TrackerSyncStructure(ordered.Source.Entities.Reverse().ToArray()), ordered.Destination);
+        ProjectSnapshot basis = WithBaseline(Snapshot(), Baseline(("alpha", "Old")));
+
+        ProjectMergeResult result = new ProjectSnapshotMerger().Merge(basis,
+            WithBaseline(basis, ordered), WithBaseline(basis, reversed));
+
+        Assert.Empty(result.Conflicts);
+        Assert.Equal(["alpha", "beta"], Names(result).Source);
+    }
+
+    [Fact]
+    public void SyncBaseline_ChangesToDifferentEntitiesAreBothKept()
+    {
+        ProjectSnapshot basis = WithBaseline(Snapshot(), Baseline(("alpha", "A"), ("beta", "B")));
+        ProjectSnapshot local = WithBaseline(basis, Baseline(("alpha", "A2"), ("beta", "B")));
+        ProjectSnapshot remote = WithBaseline(basis, Baseline(("alpha", "A"), ("beta", "B2"), ("gamma", "C")));
+
+        ProjectMergeResult result = new ProjectSnapshotMerger().Merge(basis, local, remote);
+
+        Assert.Empty(result.Conflicts);
+        TrackerSyncBaseline merged = result.Snapshot.Trackers[0].SyncBaseline!;
+        Assert.Equal(["A2", "B2", "C"], merged.Source.Entities.Select(entity => entity.GroupName));
+        Assert.Equal(["A2", "B2", "C"], merged.Destination.Entities.Select(entity => entity.GroupName));
+    }
+
+    [Fact]
+    public void SyncBaseline_AnEntityBothSidesChangedDifferentlyIsLeftOutSoItIsAskedAgain()
+    {
+        ProjectSnapshot basis = WithBaseline(Snapshot(), Baseline(("alpha", "A"), ("beta", "B")));
+        ProjectSnapshot local = WithBaseline(basis, Baseline(("alpha", "Local"), ("beta", "B")));
+        ProjectSnapshot remote = WithBaseline(basis, Baseline(("alpha", "Remote"), ("beta", "B")));
+
+        ProjectMergeResult result = new ProjectSnapshotMerger().Merge(basis, local, remote);
+
+        Assert.Empty(result.Conflicts);
+        (string[] source, string[] destination) = Names(result);
+        Assert.Equal(["beta"], source);
+        Assert.Equal(["beta"], destination);
+    }
+
+    [Fact]
+    public void SyncBaseline_AnEntityChangedOnOneSideAndRemovedOnTheOtherIsLeftOut()
+    {
+        ProjectSnapshot basis = WithBaseline(Snapshot(), Baseline(("alpha", "A"), ("beta", "B")));
+        ProjectSnapshot local = WithBaseline(basis, Baseline(("alpha", "A2"), ("beta", "B")));
+        ProjectSnapshot remote = WithBaseline(basis, Baseline(("beta", "B")));
+
+        ProjectMergeResult result = new ProjectSnapshotMerger().Merge(basis, local, remote);
+
+        Assert.Empty(result.Conflicts);
+        Assert.Equal(["beta"], Names(result).Source);
+    }
+
+    [Fact]
+    public void SyncBaseline_OneSideUnchangedTakesTheOther()
+    {
+        ProjectSnapshot basis = WithBaseline(Snapshot(), Baseline(("alpha", "A")));
+        ProjectSnapshot remote = WithBaseline(basis, Baseline(("alpha", "A2")));
+
+        ProjectMergeResult result = new ProjectSnapshotMerger().Merge(basis, basis, remote);
+
+        Assert.Empty(result.Conflicts);
+        Assert.Equal("A2", Assert.Single(result.Snapshot.Trackers[0].SyncBaseline!.Source.Entities).GroupName);
+    }
+
+    [Fact]
+    public void SyncBaseline_WithoutABaseKeepsOnlyWhatBothSidesAgreeOn()
+    {
+        // The Tracker had no baseline in the common base, and both sides then ran Sync from source.
+        ProjectSnapshot basis = Snapshot();
+        ProjectSnapshot local = WithBaseline(basis, Baseline(("alpha", "A"), ("beta", "Local")));
+        ProjectSnapshot remote = WithBaseline(basis, Baseline(("alpha", "A"), ("beta", "Remote"), ("gamma", "C")));
+
+        ProjectMergeResult result = new ProjectSnapshotMerger().Merge(basis, local, remote);
+
+        Assert.Empty(result.Conflicts);
+        Assert.Equal(["alpha"], Names(result).Source);
+    }
+
+    [Fact]
+    public void SyncBaseline_RemovedOnOneSideAndChangedOnTheOtherStartsOver()
+    {
+        ProjectSnapshot basis = WithBaseline(Snapshot(), Baseline(("alpha", "A")));
+        ProjectSnapshot local = WithBaseline(basis, null);
+        ProjectSnapshot remote = WithBaseline(basis, Baseline(("alpha", "A2")));
+
+        ProjectMergeResult result = new ProjectSnapshotMerger().Merge(basis, local, remote);
+
+        Assert.Empty(result.Conflicts);
+        Assert.Null(result.Snapshot.Trackers[0].SyncBaseline);
+    }
+
+    /// <summary>A baseline where each entity has the same group on the source and the copy.</summary>
+    private static TrackerSyncBaseline Baseline(params (string Name, string Group)[] entities)
+    {
+        TrackerSyncStructure structure = new(entities.Select(entity =>
+            new TrackerSyncEntity(entity.Name, true, null, entity.Group, [])).ToArray());
+        return new TrackerSyncBaseline(structure, structure);
+    }
+
+    private static ProjectSnapshot WithBaseline(ProjectSnapshot snapshot, TrackerSyncBaseline? baseline) =>
+        snapshot with { Trackers = [snapshot.Trackers[0] with { SyncBaseline = baseline }] };
+
+    private static (string[] Source, string[] Destination) Names(ProjectMergeResult result)
+    {
+        TrackerSyncBaseline baseline = result.Snapshot.Trackers[0].SyncBaseline!;
+        return (baseline.Source.Entities.Select(entity => entity.Name).ToArray(),
+            baseline.Destination.Entities.Select(entity => entity.Name).ToArray());
     }
 
     private static ProjectSnapshot Snapshot()

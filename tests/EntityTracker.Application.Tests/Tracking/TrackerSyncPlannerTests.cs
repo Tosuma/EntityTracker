@@ -116,6 +116,21 @@ public sealed class TrackerSyncPlannerTests
     }
 
     [Fact]
+    public void AnEntityLeftOutOfTheBaselineIsAskedAboutAgain()
+    {
+        // A Project merge leaves an entity out of the baseline when both sides changed it differently.
+        TrackerSyncStructure copy = new([Entity("order", group: "Mine"), Entity("customer", group: "Mine")]);
+        TrackerSyncStructure source = new([Entity("order", group: "Theirs"), Entity("customer", group: "Theirs")]);
+        TrackerSyncBaseline merged = new(new([Entity("customer", group: "Theirs")]),
+            new([Entity("customer", group: "Mine")]));
+
+        TrackerSyncChange change = Assert.Single(
+            TrackerSyncPlanner.CreateReview(SourceId, CopyId, source, copy, merged, "a", "b").Changes);
+
+        Assert.Equal((TrackerSyncChangeKind.Group, "order"), (change.Kind, change.EntityName));
+    }
+
+    [Fact]
     public void ABaselineFromBeforeFilterActiveWasSyncedAsksAboutItOnce()
     {
         TrackerSyncStructure copy = new([Entity("order", filterActive: "Mine")]);

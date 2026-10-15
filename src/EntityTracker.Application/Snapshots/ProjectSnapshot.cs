@@ -1,3 +1,5 @@
+using EntityTracker.Application.Tracking;
+
 namespace EntityTracker.Application.Snapshots;
 
 public sealed record ProjectSnapshot(
@@ -33,7 +35,8 @@ public sealed record SnapshotTracker(
     IReadOnlyList<SnapshotEntity> Entities,
     IReadOnlyList<SnapshotStatusEvent> StatusHistory,
     IReadOnlyList<SnapshotProgress> ProgressHistory,
-    string? SyncBaselineJson = null,
+    // What the Tracker and its source looked like at the last Sync from source (copies only).
+    TrackerSyncBaseline? SyncBaseline = null,
     // Formats 1–5 only: the last CSV import, which format 6 no longer keeps.
     SnapshotImportSummary? LegacyImportSummary = null);
 

@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using EntityTracker.Application.Snapshots;
 using EntityTracker.Application.GitSync;
+using EntityTracker.Application.Tracking;
 
 namespace EntityTracker.Infrastructure.Snapshots;
 
@@ -41,7 +42,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                 new TrackerDocument(tracker.Id, tracker.ProjectId, tracker.Name,
                     tracker.LifecycleState, tracker.CreatedAtUtc, tracker.UpdatedAtUtc,
                     tracker.RecycledAtUtc, tracker.CopiedFromTrackerId,
-                    tracker.SyncBaselineJson), JsonOptions);
+                    BaselineText(tracker.SyncBaseline)), JsonOptions);
             foreach (SnapshotEntity entity in tracker.Entities.OrderBy(e => e.Id))
             {
                 SnapshotEntity ordered = entity with
@@ -113,7 +114,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                 ? Read<SnapshotImportSummary>(files, summaryPath) : null;
             trackers.Add(new SnapshotTracker(doc.Id, doc.ProjectId, doc.Name, doc.LifecycleState,
                 doc.CreatedAtUtc, doc.UpdatedAtUtc, doc.RecycledAtUtc, doc.CopiedFromTrackerId,
-                entities, events, progress, doc.SyncBaselineJson, summary));
+                entities, events, progress, ReadBaselineText(doc.SyncBaselineJson), summary));
         }
         SnapshotDeveloper[]? developers = manifest.FormatVersion >= 2
             ? files.Keys.Where(p => p.StartsWith(Root + "developers/", StringComparison.Ordinal))
@@ -174,6 +175,28 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
             tombstone.BaseSnapshotHash.Length != 64 ||
             !tombstone.BaseSnapshotHash.All(Uri.IsHexDigit))
             throw new InvalidDataException("The Project tombstone is invalid or unsupported.");
+    }
+
+    /// <summary>The baseline as the JSON text tracker.json keeps it in.</summary>
+    private static string? BaselineText(TrackerSyncBaseline? baseline) =>
+        baseline is null ? null : JsonSerializer.Serialize(baseline.Normalize());
+
+    /// <summary>
+    /// Reads a baseline kept as JSON text. Baselines saved before dependency kinds were removed carry a
+    /// "Kind" per dependency, which is ignored.
+    /// </summary>
+    private static TrackerSyncBaseline? ReadBaselineText(string? text)
+    {
+        if (text is null) return null;
+        try
+        {
+            return (JsonSerializer.Deserialize<TrackerSyncBaseline>(text) ??
+                    throw new InvalidDataException("A Tracker sync baseline is empty.")).Normalize();
+        }
+        catch (JsonException error)
+        {
+            throw new InvalidDataException("A Tracker sync baseline is invalid.", error);
+        }
     }
 
     private static T Read<T>(IReadOnlyDictionary<string, byte[]> files, string path)
