@@ -202,6 +202,29 @@ public sealed class PresentationConfigurationTests
         Assert.Empty(offenders);
     }
 
+    private static readonly XName PlaceholderText = XName.Get("Placeholder.Text", "clr-namespace:EntityTracker.Wpf.Controls");
+
+    [Fact]
+    public void EveryEditableTextFieldExplainsWhatToTypeWithAPlaceholder()
+    {
+        string[] offenders = Directory.EnumerateFiles(Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory),
+                "src", "EntityTracker.Wpf"), "*.xaml", SearchOption.AllDirectories)
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}") &&
+                           !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
+            .SelectMany(path => XDocument.Load(path).Descendants()
+                .Where(element =>
+                    (element.Name.LocalName == "TextBox" && (string?)element.Attribute("IsReadOnly") != "True") ||
+                    element.Name.LocalName == "SuggestionComboBox" ||
+                    (element.Name.LocalName == "ComboBox" && (string?)element.Attribute("IsEditable") == "True"))
+                .Where(element => string.IsNullOrWhiteSpace((string?)element.Attribute(PlaceholderText)))
+                .Select(element => $"{Path.GetFileName(path)}: " +
+                    ((string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) ??
+                     (string?)element.Attribute("AutomationProperties.Name"))))
+            .ToArray();
+
+        Assert.Empty(offenders);
+    }
+
     [Fact]
     public void DependencyGraphSearchSuggestsLikeTheDependencySearchAndOpensWithCtrlF()
     {
@@ -1035,10 +1058,9 @@ public sealed class PresentationConfigurationTests
         XElement dependencies = Assert.Single(document.Descendants(), element =>
             (string?)element.Attribute(x + "Name") == "EditorDependenciesSection");
         Assert.Equal("16", (string?)dependencies.Attribute("Padding"));
-        Assert.Contains(card.Descendants(), element =>
-            (string?)element.Attribute("Text") == "Search developers by initials or name" &&
-            ((string?)element.Attribute("Visibility"))?.Contains("IsQueryEmpty", StringComparison.Ordinal) == true &&
-            (string?)element.Attribute("IsHitTestVisible") == "False");
+        XElement developerSearch = Assert.Single(card.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "EditorDeveloperSearchBox");
+        Assert.Equal("Search developers by initials or name", (string?)developerSearch.Attribute(PlaceholderText));
         Assert.DoesNotContain(document.Descendants(), element =>
             (string?)element.Attribute("Content") == "Create developer" ||
             ((string?)element.Attribute("Text"))?.Contains("DeveloperPicker.NewInitials", StringComparison.Ordinal) == true);

@@ -1,6 +1,7 @@
 <UserControl x:Class="EntityTracker.Wpf.Views.CatalogModalView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:EntityTracker.Wpf.Controls">
     <Grid Background="{DynamicResource Brush.Overlay.Strong}"
           IsVisibleChanged="OnIsVisibleChanged"
           FocusManager.IsFocusScope="True"
@@ -23,12 +24,14 @@
                             <StackPanel Visibility="{Binding IsNameDialog, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <Label x:Name="CatalogNameLabel" Content="Name" />
                                 <TextBox x:Name="CatalogNameTextBox" AutomationProperties.LabeledBy="{Binding ElementName=CatalogNameLabel}"
+                                         controls:Placeholder.Text="Name"
                                          Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
                             </StackPanel>
 
                             <StackPanel Visibility="{Binding IsTrackerCreation, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <Label x:Name="TrackerNameLabel" Content="Tracker name" />
                             <TextBox x:Name="TrackerNameTextBox" AutomationProperties.LabeledBy="{Binding ElementName=TrackerNameLabel}"
+                                     controls:Placeholder.Text="Name of the new Tracker"
                                      Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
                             <TextBlock Margin="0,18,0,6" FontWeight="SemiBold" Text="Starting point" />
                             <StackPanel Orientation="Horizontal">
@@ -151,6 +154,7 @@
                             <TextBlock Margin="0,10,0,0" Text="{Binding PurgeImpactSummary}" TextWrapping="Wrap" />
                             <TextBlock Margin="0,14,0,4" Text="{Binding PendingItemName, StringFormat=Type the exact name {0} to continue:}" TextWrapping="Wrap" />
                             <TextBox x:Name="PurgeConfirmationTextBox" AutomationProperties.Name="Exact name confirmation"
+                                     controls:Placeholder.Text="Type the name to confirm"
                                      Text="{Binding TypedConfirmation, UpdateSourceTrigger=PropertyChanged}" />
                             </StackPanel>
                         </Grid>

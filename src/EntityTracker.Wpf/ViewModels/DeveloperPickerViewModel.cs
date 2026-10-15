@@ -22,7 +22,6 @@ public sealed class DeveloperPickerViewModel : INotifyPropertyChanged
     public event EventHandler? SelectionChanged;
     public ObservableCollection<DeveloperChoice> Choices { get; } = [];
     public ObservableCollection<DeveloperChoice> FilteredChoices { get; } = [];
-    public bool IsQueryEmpty => string.IsNullOrEmpty(Query);
     public bool HasAvailableDevelopers => Choices.Count > 0;
     public string Query
     {
@@ -30,7 +29,6 @@ public sealed class DeveloperPickerViewModel : INotifyPropertyChanged
         set
         {
             if (!Set(ref _query, value ?? string.Empty)) return;
-            OnPropertyChanged(nameof(IsQueryEmpty));
             Filter();
         }
     }
