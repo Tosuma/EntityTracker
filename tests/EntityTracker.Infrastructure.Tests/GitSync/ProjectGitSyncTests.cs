@@ -202,6 +202,33 @@ public sealed class ProjectGitSyncTests
     }
 
     [Fact]
+    public async Task AnUnfinishedManualGitMergeIsExplainedAndLeftAlone()
+    {
+        using TestRepository repo = new();
+        repo.Init();
+        repo.Write("notes.txt", "base");
+        repo.Git("add", "notes.txt");
+        repo.Git("commit", "-m", "Base");
+        repo.Git("switch", "-c", "other");
+        repo.Write("notes.txt", "other");
+        repo.Git("commit", "-am", "Other");
+        repo.Git("switch", "main");
+        repo.Write("notes.txt", "main");
+        repo.Git("commit", "-am", "Main");
+        // Someone merged with Git by hand and left the conflict.
+        Assert.Throws<InvalidOperationException>(() => repo.Git("merge", "other"));
+        string head = repo.Git("rev-parse", "HEAD");
+
+        ProjectSyncConfigurationException error = await Assert.ThrowsAsync<ProjectSyncConfigurationException>(
+            () => new SystemGitTransport().InspectAsync(repo.Root));
+
+        Assert.Contains("A Git merge is in progress", error.Message, StringComparison.Ordinal);
+        Assert.Contains("git merge --abort", error.Message, StringComparison.Ordinal);
+        Assert.Equal(head, repo.Git("rev-parse", "HEAD"));
+        Assert.True(File.Exists(Path.Combine(repo.Root, ".git", "MERGE_HEAD")));
+    }
+
+    [Fact]
     public async Task MatchingSnapshotLinksWithoutCommitAndInvalidSnapshotIsRejected()
     {
         using TestRepository repo = new();

@@ -81,6 +81,19 @@ public sealed class SystemGitTransport : ILocalGitTransport
             throw new ProjectSyncConfigurationException("Linked worktrees and submodules are unsupported. Relink a regular repository root.");
         if ((await RunAsync(root, ["rev-parse", "--is-bare-repository"], cancellationToken)).Trim() != "false")
             throw new InvalidOperationException("A non-bare working tree is required.");
+        // A merge or rebase someone started with Git by hand, which may have left conflicts in the
+        // snapshot. EntityTracker merges Project snapshots itself, so say how to get back to a state it
+        // can sync from. Checked before the branch, since a rebase detaches HEAD.
+        string gitDirectory = Path.Combine(root, ".git");
+        if (File.Exists(Path.Combine(gitDirectory, "MERGE_HEAD")))
+            throw new ProjectSyncConfigurationException(
+                "A Git merge is in progress in this repository. Abort it with \"git merge --abort\" " +
+                "(EntityTracker merges Project snapshots itself), or finish it outside EntityTracker, then retry Project sync.");
+        if (Directory.Exists(Path.Combine(gitDirectory, "rebase-merge")) ||
+            Directory.Exists(Path.Combine(gitDirectory, "rebase-apply")))
+            throw new ProjectSyncConfigurationException(
+                "A Git rebase is in progress in this repository. Abort it with \"git rebase --abort\" " +
+                "(EntityTracker merges Project snapshots itself), or finish it outside EntityTracker, then retry Project sync.");
         string branch = (await RunAsync(root, ["symbolic-ref", "--quiet", "--short", "HEAD"], cancellationToken)).Trim();
         if (string.IsNullOrWhiteSpace(branch)) throw new ProjectSyncConfigurationException("Check out the linked branch with Git outside EntityTracker, then retry.");
         if (string.IsNullOrWhiteSpace((await RunAsync(root, ["config", "--get", "user.name"], cancellationToken)).Trim()) ||
