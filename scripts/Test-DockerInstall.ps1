@@ -14,6 +14,7 @@ $localData = Join-Path $testRoot 'local app data'
 $startMenu = Join-Path $testRoot 'start menu'
 $programs = Join-Path $localData 'Programs'
 $log = Join-Path $testRoot 'docker.log'
+$windowsPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 New-Item -ItemType Directory -Path $fakeBin, (Join-Path $source '.git'), $localData | Out-Null
 Set-Content -LiteralPath (Join-Path $source '.git\config') -Value @(
     '[core]', "`tbare = false",
@@ -87,7 +88,7 @@ function Invoke-Install {
     # failing cases, so it must not stop this test.
     $ErrorActionPreference = 'Continue'
     try {
-        $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -SourcePath $source `
+        $output = & $windowsPowerShell -NoProfile -ExecutionPolicy Bypass -File $installer -SourcePath $source `
             -LocalAppDataPath $localData -StartMenuPath $startMenu -NoStart @Arguments 2>&1
     }
     finally { $ErrorActionPreference = 'Stop' }
@@ -132,8 +133,9 @@ function Assert-Fails {
 $originalPath = $env:PATH
 $env:FAKE_DOCKER_LOG = $log
 try {
-    # No docker at all.
-    $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot\System32\WindowsPowerShell\v1.0"
+    # No docker at all. CI's Windows runners have a real docker on the system PATH, so this case
+    # leaves nothing on PATH.
+    $env:PATH = Join-Path $testRoot 'empty'
     Assert-Fails (Invoke-Install) 'Docker was not found'
     $env:PATH = "$fakeBin;$originalPath"
 
