@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param()
 
-# Checks that the installer and updater report which version of the scripts is running.
+# Checks that the installer reports which version of the scripts is running.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $installer = Join-Path $PSScriptRoot 'Install-EntityTracker.ps1'
@@ -28,18 +28,7 @@ try {
         throw "The installer did not read its version from the checkout: '$($byHand.Lines[0])'."
     }
 
-    # The updater window must hand its version to the installer it starts.
-    $tokens = $null
-    $parseErrors = $null
-    $ast = [System.Management.Automation.Language.Parser]::ParseFile(
-        (Join-Path $PSScriptRoot 'Update-EntityTracker.ps1'), [ref]$tokens, [ref]$parseErrors)
-    $call = $ast.Find({ param($node)
-            $node -is [System.Management.Automation.Language.CommandAst] -and
-            $node.GetCommandName() -eq 'Start-InstallWorker' }, $true)
-    if (-not $call -or $call.Extent.Text -notmatch "'-UpdaterVersion'") {
-        throw 'Update-EntityTracker.ps1 does not pass -UpdaterVersion to the installer.'
-    }
-
+    # Test-Updater.ps1 checks that the updater hands its version to the installer.
     Write-Host 'Installer version tests passed.'
     # The installer runs above exit non-zero on purpose; without this the leftover $LASTEXITCODE
     # fails a CI step that otherwise passed.

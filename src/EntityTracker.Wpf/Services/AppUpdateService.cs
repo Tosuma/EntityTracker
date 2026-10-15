@@ -235,8 +235,8 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
 
     /// <summary>
     /// Builds the updater command line. It names the updater's own version, which is the release
-    /// being installed or, after a fallback, the version installed now, so the updater window and
-    /// install log show which updater ran.
+    /// being installed or, after a fallback, the version installed now, so the update terminal and
+    /// the installer's first line show which updater ran.
     /// </summary>
     internal IReadOnlyList<string> UpdaterArguments(UpdaterStaging staging, string tag, int appProcessId)
     {

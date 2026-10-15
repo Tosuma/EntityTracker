@@ -39,17 +39,17 @@ jobs:
         shell: pwsh
         run: .\scripts\Test-InstallSwap.ps1
 
-      - name: Test updater exit code
+      - name: Test updater
         shell: pwsh
-        run: .\scripts\Test-UpdaterExitCode.ps1
+        run: .\scripts\Test-Updater.ps1
 
       - name: Test installer version
         shell: pwsh
         run: .\scripts\Test-InstallerVersion.ps1
 
-      - name: Test Docker build script
+      - name: Test Docker install script
         shell: pwsh
-        run: .\scripts\Test-DockerBuild.ps1
+        run: .\scripts\Test-DockerInstall.ps1
 
       - name: Test uninstall script
         shell: pwsh
@@ -68,8 +68,8 @@ jobs:
         run: dotnet test EntityTracker.slnx --configuration Release --no-build --no-restore
 
   docker_build:
-    # The installer builds the app in the Linux .NET SDK container. Windows runners can't run Linux
-    # containers, so this runs the installer's own Docker build script on Linux.
+    # The installer fetches, builds and saves the app in Linux containers. Windows runners can't run
+    # Linux containers, so this runs the installer's own container steps on Linux.
     name: Build in Docker as the installer does
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -82,7 +82,31 @@ jobs:
 
       - name: Build in the .NET SDK container
         shell: pwsh
-        run: ./scripts/Invoke-DockerBuild.ps1 -SourcePath . -Version 0.0.0
+        run: |
+          . ./scripts/Install-Common.ps1
+          Assert-DockerReady
+          $sdkVersion = Get-SdkVersion (Get-Content -LiteralPath global.json -Raw)
+          Invoke-ContainerBuild -SdkVersion $sdkVersion -SourceMount "$($PWD.Path):/src" -WorkingDirectory /src -Version 0.0.0
+
+      - name: Install the newest release with the installer's containers
+        shell: pwsh
+        run: |
+          # Fetch, build and save as Install-EntityTracker.ps1 does; only the Windows swap is left out.
+          . ./scripts/Install-Common.ps1
+          $origin = 'https://github.com/${{ github.repository }}.git'
+          $volume = 'entitytracker-build-ci'
+          $programs = Join-Path $env:RUNNER_TEMP 'Programs'
+          $release = Select-ReleaseTag (Get-ReleaseRefs $origin)
+          $sdkVersion = Invoke-ReleaseFetch $origin $release $volume
+          Invoke-ContainerBuild -SdkVersion $sdkVersion -SourceMount "${volume}:/work" -WorkingDirectory /work/source `
+            -Version $release.Tag.Substring('app-v'.Length)
+          Save-ContainerBuild $sdkVersion $volume $programs 'EntityTracker.new.ci' (@{ Version = $release.Tag } | ConvertTo-Json)
+          $saved = Join-Path $programs 'EntityTracker.new.ci'
+          if (-not (Test-Path -LiteralPath (Join-Path $saved 'EntityTracker.Wpf.exe'))) { throw 'The release was not saved.' }
+          if ((Get-Content -LiteralPath (Join-Path $saved 'app-install.json') -Raw | ConvertFrom-Json).Version -ne $release.Tag) {
+            throw 'The saved app-install.json is wrong.'
+          }
+          Write-Host "Installed $($release.Tag) through the containers."
 
       - name: Check the build output
         shell: pwsh

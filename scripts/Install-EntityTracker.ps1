@@ -5,18 +5,22 @@ param(
     [int]$WaitForProcess = 0,
     # Set by the updater; when run by hand the version is read from the source checkout.
     [string]$UpdaterVersion = '',
-    # Docker (default) builds in the .NET SDK container, so the machine needs no .NET; Local builds
-    # with the .NET SDK installed on this machine. Either way the app is installed the same way.
-    [ValidateSet('Docker', 'Local')]
-    [string]$BuildWith = 'Docker'
+
+    # Where the app is installed and its shortcut created; only changed by tests.
+    [string]$LocalAppDataPath = [Environment]::GetFolderPath('LocalApplicationData'),
+    [string]$StartMenuPath = (Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'Microsoft\Windows\Start Menu\Programs'),
+    # Install without starting the app; used by tests.
+    [switch]$NoStart
 )
 
+# Installs an approved release with Docker: a Git container fetches the release tag from the source
+# clone's origin and checks it, the .NET SDK container the release pins builds it, and the same
+# image saves the build next to the install folder. Windows then swaps it in, creates the Start Menu
+# shortcut and starts the app. Nothing is built or checked out on this computer itself.
 . (Join-Path $PSScriptRoot 'Install-Common.ps1')
 $ErrorActionPreference = 'Stop'
-$env:GIT_TERMINAL_PROMPT = '0'
-$env:GCM_INTERACTIVE = 'never'
 
-if (-not $UpdaterVersion) {
+if (-not $UpdaterVersion -and (Get-Command git -ErrorAction SilentlyContinue)) {
     try {
         $described = & git -C $PSScriptRoot describe --tags --match 'app-v*' --always --dirty 2>$null
         if ($LASTEXITCODE -eq 0 -and $described) { $UpdaterVersion = "$described (source checkout)" }
@@ -27,95 +31,81 @@ if (-not $UpdaterVersion) { $UpdaterVersion = 'unknown version' }
 Write-Host "EntityTracker installer $UpdaterVersion"
 
 $SourcePath = [IO.Path]::GetFullPath($SourcePath)
-$actualRoot = (& git -C $SourcePath rev-parse --show-toplevel 2>$null)
-if ($LASTEXITCODE -ne 0 -or -not $actualRoot -or
-    [IO.Path]::GetFullPath($actualRoot).TrimEnd('\', '/') -ne $SourcePath.TrimEnd('\', '/')) {
-    throw 'SourcePath must be the root of an existing app source checkout.'
-}
-
-if (-not $Tag) { $Tag = Get-StableReleaseTag $SourcePath }
-if ($Tag -notmatch '^app-v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') {
+$originUrl = ConvertTo-AnonymousUrl (Get-OriginUrl $SourcePath)
+if ($Tag -and $Tag -notmatch '^app-v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') {
     throw 'The release tag must be app-vX.Y.Z.'
 }
-$version = "$($Matches[1]).$($Matches[2]).$($Matches[3])"
 
-$remoteRef = & git -C $SourcePath ls-remote --refs --tags origin "refs/tags/$Tag"
-if ($LASTEXITCODE -ne 0 -or @($remoteRef).Count -ne 1 -or
-    $remoteRef -notmatch "^[0-9a-fA-F]{40}\s+refs/tags/$([regex]::Escape($Tag))$") {
-    throw "The approved release tag $Tag was not found on origin."
-}
-$remoteHash = ($remoteRef -split '\s+')[0]
-Invoke-RequiredCommand git @('-C', $SourcePath, 'fetch', '--no-tags', 'origin',
-    "refs/tags/${Tag}:refs/tags/${Tag}")
-$localHash = & git -C $SourcePath rev-parse "refs/tags/$Tag"
-if ($LASTEXITCODE -ne 0 -or $localHash -ne $remoteHash) {
-    throw "The local $Tag tag differs from origin. Refusing to install."
-}
-
-$localData = [Environment]::GetFolderPath('LocalApplicationData')
-$installParent = Join-Path $localData 'Programs'
+$installParent = Join-Path $LocalAppDataPath 'Programs'
 $installPath = Join-Path $installParent 'EntityTracker'
-$dataPath = Join-Path $localData 'EntityTracker'
-$workRoot = Join-Path $dataPath ('updater\' + [guid]::NewGuid().ToString('N'))
-$archivePath = Join-Path $workRoot 'source.tar'
-$sourceStage = Join-Path $workRoot 'source'
-$newInstall = Join-Path $installParent ('EntityTracker.new.' + [guid]::NewGuid().ToString('N'))
-$oldInstall = Join-Path $installParent ('EntityTracker.old.' + [guid]::NewGuid().ToString('N'))
-foreach ($path in @($workRoot, $sourceStage)) { Assert-ChildPath $dataPath $path }
+$runId = [guid]::NewGuid().ToString('N')
+$newName = "EntityTracker.new.$runId"
+$newInstall = Join-Path $installParent $newName
+$oldInstall = Join-Path $installParent "EntityTracker.old.$runId"
 foreach ($path in @($newInstall, $oldInstall, $installPath)) { Assert-ChildPath $installParent $path }
-New-Item -ItemType Directory -Path $sourceStage -Force | Out-Null
-New-Item -ItemType Directory -Path $installParent -Force | Out-Null
+# The release's source and build live in this volume, removed when the install ends.
+$workVolume = "entitytracker-build-$runId"
+
+function Write-Step {
+    param([int]$Number, [string]$Text)
+    Write-Host ''
+    Write-Host "[$Number/5] $Text" -ForegroundColor Cyan
+}
 
 try {
-    Write-Host "Preparing approved release $Tag..."
-    Invoke-RequiredCommand git @('-C', $SourcePath, 'archive', "--output=$archivePath", $Tag)
-    Invoke-RequiredCommand tar @('-xf', $archivePath, '-C', $sourceStage)
-    if ($BuildWith -eq 'Docker') {
-        Write-Host "Building EntityTracker $version in Docker..."
-        & (Join-Path $sourceStage 'scripts\Invoke-DockerBuild.ps1') -SourcePath $sourceStage -Version $version
-    }
-    else {
-        Write-Host "Building EntityTracker $version locally..."
-        & (Join-Path $sourceStage 'scripts\Publish-Windows.ps1') -Version $version
-        if ($LASTEXITCODE -ne 0) { throw 'The app build failed.' }
-    }
-    $publish = Join-Path $sourceStage 'artifacts\publish\win-x64'
-    if (-not (Test-Path -LiteralPath (Join-Path $publish 'EntityTracker.Wpf.exe') -PathType Leaf)) {
-        throw 'The app build did not produce EntityTracker.Wpf.exe.'
-    }
-    Copy-Item -LiteralPath $publish -Destination $newInstall -Recurse
-    [pscustomobject]@{ SourcePath = $SourcePath; Version = $Tag } |
-        ConvertTo-Json | Set-Content -LiteralPath (Join-Path $newInstall 'app-install.json') -Encoding UTF8
+    Write-Step 1 'Checking Docker'
+    Assert-DockerReady
+    Assert-DockerImage $script:GitImage 'the Git image'
 
+    $releaseName = if ($Tag) { $Tag } else { 'the newest release' }
+    Write-Step 2 "Fetching $releaseName from $originUrl"
+    $release = Select-ReleaseTag (Get-ReleaseRefs $originUrl) $Tag
+    $Tag = $release.Tag
+    $version = $Tag.Substring('app-v'.Length)
+    $sdkVersion = Invoke-ReleaseFetch $originUrl $release $workVolume
+    Write-Host "  Fetched $Tag; it builds with .NET SDK $sdkVersion."
+
+    Write-Step 3 "Building EntityTracker $version"
+    Invoke-ContainerBuild -SdkVersion $sdkVersion -SourceMount "${workVolume}:/work" `
+        -WorkingDirectory '/work/source' -Version $version
+
+    Write-Step 4 "Saving the app to $installParent"
+    $manifest = [pscustomobject]@{ SourcePath = $SourcePath; Version = $Tag } | ConvertTo-Json
+    Save-ContainerBuild $sdkVersion $workVolume $installParent $newName $manifest
+    if (-not (Test-Path -LiteralPath (Join-Path $newInstall 'EntityTracker.Wpf.exe') -PathType Leaf)) {
+        throw "Docker saved the app, but it is not in $newInstall. Allow Docker Desktop or Rancher Desktop to share this drive, then run the install or update again."
+    }
+
+    Write-Step 5 "Installing EntityTracker $Tag"
     if ($WaitForProcess -gt 0) {
-        Write-Host 'Waiting for EntityTracker to close...'
         $oldProcess = Get-Process -Id $WaitForProcess -ErrorAction SilentlyContinue
-        if ($oldProcess) { $oldProcess.WaitForExit() }
+        if ($oldProcess) {
+            Write-Host '  Waiting for EntityTracker to close...'
+            $oldProcess.WaitForExit()
+        }
     }
 
     Invoke-InstallSwap $installParent $installPath $newInstall $oldInstall {
         param($installedPath)
-        $shortcutDirectory = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'Microsoft\Windows\Start Menu\Programs'
-        New-Item -ItemType Directory -Path $shortcutDirectory -Force | Out-Null
-        $shortcutPath = Join-Path $shortcutDirectory 'EntityTracker.lnk'
+        $executable = Join-Path $installedPath 'EntityTracker.Wpf.exe'
+        New-Item -ItemType Directory -Path $StartMenuPath -Force | Out-Null
         $shell = New-Object -ComObject WScript.Shell
-        $shortcut = $shell.CreateShortcut($shortcutPath)
-        $shortcut.TargetPath = Join-Path $installedPath 'EntityTracker.Wpf.exe'
+        $shortcut = $shell.CreateShortcut((Join-Path $StartMenuPath 'EntityTracker.lnk'))
+        $shortcut.TargetPath = $executable
         $shortcut.WorkingDirectory = $installedPath
-        $shortcut.IconLocation = (Join-Path $installedPath 'EntityTracker.Wpf.exe') + ',0'
+        $shortcut.IconLocation = $executable + ',0'
         $shortcut.Save()
-        Start-Process -FilePath (Join-Path $installedPath 'EntityTracker.Wpf.exe') -WorkingDirectory $installedPath
+        if (-not $NoStart) { Start-Process -FilePath $executable -WorkingDirectory $installedPath }
     }
-    Write-Host "Installed EntityTracker $Tag at $installPath"
+    Write-Host "  Installed EntityTracker $Tag at $installPath" -ForegroundColor Green
 }
 finally {
     if (Test-Path -LiteralPath $newInstall) {
         Assert-ChildPath $installParent $newInstall
-        Remove-Item -LiteralPath $newInstall -Recurse -Force
+        Remove-Item -LiteralPath $newInstall -Recurse -Force -ErrorAction SilentlyContinue
     }
-    if (Test-Path -LiteralPath $workRoot) {
-        Assert-ChildPath $dataPath $workRoot
-        Remove-Item -LiteralPath $workRoot -Recurse -Force
+    if (Get-Command docker -ErrorAction SilentlyContinue) {
+        $null = Get-DockerOutput @('volume', 'rm', '--force', $workVolume) -Quiet
     }
 }
 
