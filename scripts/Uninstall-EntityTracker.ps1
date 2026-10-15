@@ -106,7 +106,7 @@ if ($RemoveDockerCache) {
     else {
         Write-Warning 'Docker was not found, so the Docker volume entitytracker-nuget was not removed.'
     }
-    Write-Host 'The .NET SDK and Git images are left in Docker, since other tools may use them. List them with: docker image ls mcr.microsoft.com/dotnet/sdk; docker image ls alpine/git'
+    Write-Host 'The .NET SDK build images are left in Docker, since other tools may use them. List them with: docker image ls mcr.microsoft.com/dotnet/sdk'
 }
 
 Write-Host 'EntityTracker was uninstalled. Your source clone was not changed; delete it yourself if you no longer need it.'

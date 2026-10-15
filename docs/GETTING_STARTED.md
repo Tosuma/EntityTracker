@@ -11,8 +11,8 @@ To install and use EntityTracker:
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) or
   [Rancher Desktop](https://rancherdesktop.io/) with the Docker engine (dockerd/moby) and Linux
   containers, running when you install or update
-- Network access to Docker Hub, `mcr.microsoft.com` and `nuget.org` (for the Git and build images
-  and the packages), and to the app's GitHub repository
+- Network access to `mcr.microsoft.com` and `nuget.org` (for the .NET SDK image and packages), and
+  to the app's GitHub repository
 
 You don't need .NET to install or use EntityTracker: the installer fetches and builds the app inside
 Docker containers.
@@ -41,7 +41,7 @@ updates.
 Everything runs in Docker and reports to the terminal in five numbered steps:
 
 1. **Checking Docker:** Docker must be running with Linux containers.
-2. **Fetching:** a small Git container reads the release tags from the clone's origin, fetches the
+2. **Fetching:** a .NET SDK container reads the release tags from the clone's origin, fetches the
    release, and checks it is exactly the tag origin lists. It reads the repository without
    credentials (an SSH origin is read over HTTPS), so it must allow anonymous read access.
 3. **Building:** the .NET SDK container the release pins (`mcr.microsoft.com/dotnet/sdk`) builds it.
@@ -103,8 +103,8 @@ source clone is not changed.
   backups and logs. It asks again first. Projects linked to a Git repository can be imported again
   from it; anything else is gone.
 - `-RemoveDockerCache` also deletes the Docker volume `entitytracker-nuget` that speeds up builds,
-  and any build volume an interrupted install left. The Git and .NET SDK images stay in Docker,
-  since other tools may use them.
+  and any build volume an interrupted install left. The .NET SDK images stay in Docker, since
+  other tools may use them.
 - `-Force` skips the questions.
 
 ## Run from source for development

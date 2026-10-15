@@ -57,14 +57,17 @@ function Invoke-InstallSwap {
 }
 
 # ---------------------------------------------------------------------------------------------
-# Docker. Installing and updating run in containers: a Git container fetches and checks the
-# release, and the .NET SDK container the release pins builds it and saves the result to the
-# install folder. Only what a Linux container cannot do happens on Windows: waiting for the app to
+# Docker. Installing and updating run in .NET SDK containers from mcr.microsoft.com, so Docker is
+# the only requirement: one fetches and checks the release, and the SDK image the release pins
+# builds it and saves the result to the install folder. Only what a Linux container cannot do happens on Windows: waiting for the app to
 # close, swapping the install folders, the Start Menu shortcut and starting the app.
 # ---------------------------------------------------------------------------------------------
 
-# A small Git image, pinned by digest so every install uses exactly this one.
-$script:GitImage = 'alpine/git:2.54.0@sha256:ce84fd6a057b4dc5cf5009da2dd832f1c6d096c1984bf50496cf3c256402264d'
+# The image that fetches the release; the SDK images include git. The release's own SDK version
+# is only known after the fetch, so this is pinned here. Test-DockerInstall.ps1 keeps it equal to
+# global.json, so it is the image the build then uses and nothing extra is downloaded.
+$script:FetchSdkVersion = '10.0.400'
+$script:FetchImage = "mcr.microsoft.com/dotnet/sdk:$script:FetchSdkVersion"
 $script:NuGetVolume = 'entitytracker-nuget'
 $script:DockerHelp = 'EntityTracker installs with Docker. Start Docker Desktop or Rancher Desktop (with the ' +
     'Docker engine and Linux containers), then run the install or update again.'
@@ -208,7 +211,7 @@ function Get-SdkVersion {
 # The release tags on origin, as `git ls-remote --refs --tags` lists them.
 function Get-ReleaseRefs {
     param([string]$OriginUrl)
-    $refs = Invoke-ContainerScript -Image $script:GitImage -Step 'tags' -Capture `
+    $refs = Invoke-ContainerScript -Image $script:FetchImage -Step 'tags' -Capture `
         -Environment @{ ET_ORIGIN = $OriginUrl } `
         -Script "git ls-remote --refs --tags `"`$ET_ORIGIN`" 'app-v*'"
     if ($refs.ExitCode -ne 0) {
@@ -223,7 +226,7 @@ function Get-ReleaseRefs {
 # `git archive`, the source is kept without its .git folder.
 function Invoke-ReleaseFetch {
     param([string]$OriginUrl, $Release, [string]$Volume)
-    $fetched = Invoke-ContainerScript -Image $script:GitImage -Step 'fetch' -Capture `
+    $fetched = Invoke-ContainerScript -Image $script:FetchImage -Step 'fetch' -Capture `
         -Volumes @("${Volume}:/work") `
         -Environment @{ ET_ORIGIN = $OriginUrl; ET_TAG = $Release.Tag; ET_HASH = $Release.Hash } `
         -Script @'

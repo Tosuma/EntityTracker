@@ -13,7 +13,7 @@ param(
     [switch]$NoStart
 )
 
-# Installs an approved release with Docker: a Git container fetches the release tag from the source
+# Installs an approved release with Docker: a .NET SDK container fetches the release tag from the source
 # clone's origin and checks it, the .NET SDK container the release pins builds it, and the same
 # image saves the build next to the install folder. Windows then swaps it in, creates the Start Menu
 # shortcut and starts the app. Nothing is built or checked out on this computer itself.
@@ -55,7 +55,7 @@ function Write-Step {
 try {
     Write-Step 1 'Checking Docker'
     Assert-DockerReady
-    Assert-DockerImage $script:GitImage 'the Git image'
+    Assert-DockerImage $script:FetchImage ".NET SDK $script:FetchSdkVersion (about 1 GB)"
 
     $releaseName = if ($Tag) { $Tag } else { 'the newest release' }
     Write-Step 2 "Fetching $releaseName from $originUrl"

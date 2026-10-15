@@ -8,7 +8,10 @@ using EntityTracker from source.
 - Windows 10 or Windows 11
 - PowerShell
 - Git
-- The .NET SDK version selected by [`global.json`](../global.json), currently `10.0.400`
+- The .NET SDK version selected by [`global.json`](../global.json), currently `10.0.400`. When you
+  change it, set `FetchSdkVersion` in `scripts/Install-Common.ps1` to the same version, so the
+  installer fetches with the image it then builds with; `Test-DockerInstall.ps1` fails until they
+  match
 
 Visual Studio is optional. All required workflows are available from PowerShell and the .NET CLI.
 
@@ -136,9 +139,11 @@ steps to the terminal, with each container's output below its step:
    - The origin URL is read from the clone's `.git/config`, so no Git is needed on Windows. It is
      read anonymously: an SSH origin is read over HTTPS, and any user name or token in the URL is
      left out.
-   - A Git container (`alpine/git`, pinned by digest in `Install-Common.ps1`) lists the `app-vX.Y.Z`
-     tags and picks the newest, or `-Tag`.
-   - A second Git container fetches that tag at depth 1 into a per-run volume
+   - A container lists the `app-vX.Y.Z` tags and picks the newest, or `-Tag`. It uses the .NET SDK
+     image, which includes Git, so every image comes from `mcr.microsoft.com` and Docker is the only
+     requirement. The release's SDK version is only known after the fetch, so this image's version
+     is pinned in `Install-Common.ps1` (`FetchSdkVersion`).
+   - A second container fetches that tag at depth 1 into a per-run volume
      `entitytracker-build-<id>`. It refuses to continue unless the fetched tag has the hash origin
      listed.
    - It keeps the source without `.git`, as `git archive` used to, and returns the SDK version the

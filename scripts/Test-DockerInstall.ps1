@@ -133,6 +133,15 @@ function Assert-Fails {
 $originalPath = $env:PATH
 $env:FAKE_DOCKER_LOG = $log
 try {
+    # The image that fetches must be the one the repository builds with, so an install downloads
+    # one image.
+    $pinned = [regex]::Match((Get-Content -LiteralPath (Join-Path $PSScriptRoot 'Install-Common.ps1') -Raw),
+        "FetchSdkVersion = '([^']+)'").Groups[1].Value
+    $repositorySdk = (Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\global.json') -Raw | ConvertFrom-Json).sdk.version
+    if ($pinned -ne $repositorySdk) {
+        throw "Install-Common.ps1 fetches with .NET SDK $pinned but global.json pins $repositorySdk. Update FetchSdkVersion to match."
+    }
+
     # No docker at all. CI's Windows runners have a real docker on the system PATH, so this case
     # leaves nothing on PATH.
     $env:PATH = Join-Path $testRoot 'empty'
@@ -154,11 +163,10 @@ try {
     $installed = Invoke-Install
     if ($installed.ExitCode -ne 0) { throw "The install failed: $($installed.Text)" }
     $volume = [regex]::Match(($installed.Calls -join "`n"), 'entitytracker-build-[0-9a-f]{32}').Value
-    $gitImage = 'alpine/git:2.54.0@sha256:'
     $sdkImage = 'mcr.microsoft.com/dotnet/sdk:10.0.400'
     # The SSH origin is read anonymously over HTTPS, and the newest stable tag is chosen.
-    Assert-Contains (Get-Run $installed 'tags') @("[$gitImage", '[ET_ORIGIN=https://github.com/Example/EntityTracker.git]')
-    Assert-Contains (Get-Run $installed 'fetch') @("[$gitImage", "[-v] [${volume}:/work]",
+    Assert-Contains (Get-Run $installed 'tags') @("[$sdkImage]", '[ET_ORIGIN=https://github.com/Example/EntityTracker.git]')
+    Assert-Contains (Get-Run $installed 'fetch') @("[$sdkImage]", "[-v] [${volume}:/work]",
         '[ET_TAG=app-v1.10.0]', "[ET_HASH=$($hashes['app-v1.10.0'])]")
     Assert-Contains (Get-Run $installed 'build') @("[-v] [${volume}:/work]", '[-v] [entitytracker-nuget:/root/.nuget/packages]',
         '[-w] [/work/source]', "[$sdkImage] [pwsh]", '[scripts/Publish-Windows.ps1] [-Version] [1.10.0]')
@@ -184,6 +192,9 @@ try {
         throw 'The exact release was not installed.'
     }
 
+    # Everything comes from mcr.microsoft.com: the fetch and the build use one SDK image.
+    $otherImages = @($installed.Calls | Where-Object { $_.StartsWith('[run]') -and -not $_.Contains("[$sdkImage]") })
+    if ($otherImages.Count -gt 0) { throw "A container used another image than $sdkImage`: $($otherImages[0])" }
     Write-Host 'Docker install tests passed.'
     # The failing cases above leave a non-zero $LASTEXITCODE that would fail the CI step.
     exit 0
