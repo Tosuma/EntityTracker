@@ -4,7 +4,8 @@ param(
     # settings, backups and logs. Without it the data stays, and a later install picks it up again.
     [switch]$RemoveData,
 
-    # Also delete the Docker volume that keeps NuGet packages between builds (entitytracker-nuget).
+    # Also delete the Docker volume that keeps NuGet packages between builds (entitytracker-nuget),
+    # and any build volume an interrupted install left (entitytracker-build-*).
     [switch]$RemoveDockerCache,
 
     # Don't ask for confirmation.
@@ -16,7 +17,7 @@ param(
 )
 
 # Removes EntityTracker as Install-EntityTracker.ps1 installed it: the app folder, its Start Menu
-# shortcut and the updater's temporary build folders. The source clone is never touched.
+# shortcut and the build folders older versions of the updater left. The source clone is never touched.
 . (Join-Path $PSScriptRoot 'Install-Common.ps1')
 $ErrorActionPreference = 'Stop'
 
@@ -74,7 +75,7 @@ if ($installed) {
 else {
     Write-Host "EntityTracker is not installed in $installPath."
 }
-# Temporary build folders left by an interrupted install or update.
+# Build folders left by an interrupted install or update of an older version, which built on Windows.
 Remove-Folder $dataPath $updaterPath
 
 if ($RemoveData) {
@@ -94,12 +95,13 @@ elseif (Test-Path -LiteralPath $dataPath) {
 
 if ($RemoveDockerCache) {
     if (Get-Command docker -ErrorAction SilentlyContinue) {
-        $previous = $ErrorActionPreference
-        $ErrorActionPreference = 'Continue'
-        try { & docker volume rm entitytracker-nuget 2>&1 | ForEach-Object { Write-Host $_ } }
-        finally { $ErrorActionPreference = $previous }
-        if ($LASTEXITCODE -eq 0) { Write-Host 'Removed the Docker volume entitytracker-nuget.' }
-        else { Write-Warning 'The Docker volume entitytracker-nuget could not be removed (Docker may not be running, or it is already gone).' }
+        $buildVolumes = Get-DockerOutput @('volume', 'ls', '--quiet', '--filter', 'name=entitytracker-build-') -Quiet
+        $volumes = @('entitytracker-nuget') + @($buildVolumes.Lines | Where-Object { $_ -match '^entitytracker-build-[0-9a-f]{32}$' })
+        foreach ($volume in $volumes) {
+            $removed = Get-DockerOutput @('volume', 'rm', $volume)
+            if ($removed.ExitCode -eq 0) { Write-Host "Removed the Docker volume $volume." }
+            else { Write-Warning "The Docker volume $volume could not be removed (Docker may not be running, or it is already gone)." }
+        }
     }
     else {
         Write-Warning 'Docker was not found, so the Docker volume entitytracker-nuget was not removed.'

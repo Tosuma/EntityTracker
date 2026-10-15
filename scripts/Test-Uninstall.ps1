@@ -2,7 +2,7 @@
 param()
 
 # Checks Uninstall-EntityTracker.ps1 against a fake install in a temporary folder: what it removes,
-# that data stays unless asked for, and that it refuses while the app is running.
+# that data stays unless asked for, that it refuses while the app is running, and its Docker clean-up.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $script = Join-Path $PSScriptRoot 'Uninstall-EntityTracker.ps1'
@@ -69,6 +69,28 @@ try {
         Assert-Exists $install $true 'The app (while running)'
     }
     finally { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue; $process.WaitForExit() }
+
+    # -RemoveDockerCache removes the NuGet volume and the build volumes interrupted installs left,
+    # and nothing else (docker's name filter matches anywhere in the name).
+    $fakeBin = Join-Path $testRoot 'bin'
+    $dockerLog = Join-Path $testRoot 'docker.log'
+    $buildVolume = 'entitytracker-build-' + [guid]::NewGuid().ToString('N')
+    New-Item -ItemType Directory -Path $fakeBin -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $fakeBin 'fake-docker.ps1') -Value @(
+        'Add-Content -LiteralPath $env:FAKE_DOCKER_LOG -Value (($args | ForEach-Object { "[$_]" }) -join " ")',
+        "if (`$args[1] -eq 'ls') { Write-Output '$buildVolume'; Write-Output 'other-entitytracker-build-volume' }",
+        'exit 0')
+    Set-Content -LiteralPath (Join-Path $fakeBin 'docker.cmd') -Value '@powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0fake-docker.ps1" %*'
+    $originalPath = $env:PATH
+    $env:PATH = "$fakeBin;$originalPath"
+    $env:FAKE_DOCKER_LOG = $dockerLog
+    try { $result = Invoke-Uninstall @('-Force', '-RemoveDockerCache') }
+    finally { $env:PATH = $originalPath; Remove-Item env:FAKE_DOCKER_LOG }
+    if ($result.ExitCode -ne 0) { throw "The uninstall with -RemoveDockerCache failed: $($result.Text)" }
+    $removed = @(Get-Content -LiteralPath $dockerLog | Where-Object { $_.StartsWith('[volume] [rm]') })
+    if (($removed -join '; ') -ne "[volume] [rm] [entitytracker-nuget]; [volume] [rm] [$buildVolume]") {
+        throw "The uninstall removed the wrong Docker volumes: $($removed -join '; ')"
+    }
 
     Write-Host 'Uninstall tests passed.'
     exit 0

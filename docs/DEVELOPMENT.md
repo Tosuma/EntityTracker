@@ -8,7 +8,10 @@ using EntityTracker from source.
 - Windows 10 or Windows 11
 - PowerShell
 - Git
-- The .NET SDK version selected by [`global.json`](../global.json), currently `10.0.400`
+- The .NET SDK version selected by [`global.json`](../global.json), currently `10.0.400`. When you
+  change it, set `FetchSdkVersion` in `scripts/Install-Common.ps1` to the same version, so the
+  installer fetches with the image it then builds with; `Test-DockerInstall.ps1` fails until they
+  match
 
 Visual Studio is optional. All required workflows are available from PowerShell and the .NET CLI.
 
@@ -126,51 +129,93 @@ format version, because a release can appear while an older process is finishing
 and they are released as a major version (see [Choose the version number](#choose-the-version-number)).
 
 Colleagues clone the app repository once and run `.\scripts\Install-EntityTracker.ps1`. The
-script fetches an approved tag into that existing clone, archives its source without switching
-branches or touching local edits, builds a self-contained app, and installs it under
-`%LOCALAPPDATA%\Programs\EntityTracker` with a Start Menu shortcut.
+installer works through Docker: it needs Docker Desktop or Rancher Desktop with Linux containers, but
+no .NET, and it never checks out, builds or changes anything in the clone. It prints five numbered
+steps to the terminal, with each container's output below its step:
 
-The build runs in Docker by default (`scripts/Invoke-DockerBuild.ps1`), so colleagues need Docker
-Desktop or Rancher Desktop but no .NET:
+1. **Docker check:** `docker` exists, the engine runs, and it uses Linux containers; otherwise it stops
+   with a plain message.
+2. **Fetch:**
+   - The origin URL is read from the clone's `.git/config`, so no Git is needed on Windows. It is
+     read anonymously: an SSH origin is read over HTTPS, and any user name or token in the URL is
+     left out.
+   - A container lists the `app-vX.Y.Z` tags and picks the newest, or `-Tag`. It uses the .NET SDK
+     image, which includes Git, so every image comes from `mcr.microsoft.com` and Docker is the only
+     requirement. The release's SDK version is only known after the fetch, so this image's version
+     is pinned in `Install-Common.ps1` (`FetchSdkVersion`).
+   - A second container fetches that tag at depth 1 into a per-run volume
+     `entitytracker-build-<id>`. It refuses to continue unless the fetched tag has the hash origin
+     listed.
+   - It keeps the source without `.git`, as `git archive` used to, and returns the SDK version the
+     release's `global.json` pins.
+3. **Build:** the release's `scripts/Publish-Windows.ps1` runs in `mcr.microsoft.com/dotnet/sdk:<pinned>`
+   on the work volume. It is a Linux container, building the WPF app for Windows with
+   `EnableWindowsTargeting`; NuGet packages stay in the `entitytracker-nuget` volume.
+4. **Save:** the same image copies `artifacts/publish/win-x64` and `app-install.json` to
+   `%LOCALAPPDATA%\Programs\EntityTracker.new.<id>` through a bind mount. A write probe runs first;
+   when Docker can't write there, it gives the "allow Docker to share this drive" message.
+5. **Install:** this runs on Windows, because a Linux container can't do it:
+   - wait for the app to exit;
+   - swap the folders with `Invoke-InstallSwap`, which restores the previous install on failure;
+   - write the Start Menu shortcut and start the app.
 
-- **Image:** the staged release's `global.json` selects the image `mcr.microsoft.com/dotnet/sdk:<version>`.
-  It is a Linux container, building the WPF app for Windows with `EnableWindowsTargeting`.
-- **Build:** the staged source folder under `%LOCALAPPDATA%\EntityTracker\updater` is mounted at
-  `/src`, and the container runs `scripts/Publish-Windows.ps1` there. The output lands in
-  `artifacts/publish/win-x64` exactly as a local build's would, and the installer installs it as
-  before. The container is removed afterwards; NuGet packages stay in the `entitytracker-nuget`
-  volume.
-- **Checks first:** the script stops with a plain message when Docker isn't running, uses Windows
-  containers, or can't write to the folder.
-- **Without Docker:** `-BuildWith Local` builds with the .NET SDK on the machine instead.
+   Whatever the outcome, the work volume and any staged folder are then removed.
 
-`.\scripts\Uninstall-EntityTracker.ps1` removes what the installer created: the app folder, any
-`EntityTracker.new.*`/`EntityTracker.old.*` folders, the Start Menu shortcut and the updater's build
-folders. It keeps `%LOCALAPPDATA%\EntityTracker` unless run with `-RemoveData`, refuses while the app
-is running, and never touches the source clone. `.\scripts\Test-Uninstall.ps1` checks it against a
-fake install; CI also runs it.
+Container scripts reach the container as base64 environment variables, not as arguments, because
+Windows PowerShell 5.1 breaks native arguments that contain quotes. Each `docker run` carries an
+`ET_STEP` variable naming its step.
 
-`Publish-Windows.ps1` therefore runs both on Windows and in that Linux container. CI checks the
-container build in its Linux job, and `.\scripts\Test-DockerBuild.ps1` checks the script against a
-fake `docker`. An exact release can be
-selected with `-Tag app-v1.0.0` for recovery. The app's update notification uses the same installer
-through a separate updater window after the app closes. Neither script clones or initializes a
-repository, configures Git, or manages credentials.
+`.\scripts\Test-DockerInstall.ps1` drives the whole installer against a fake `docker` that tells the
+containers apart by `ET_STEP`. It checks the failure messages, the images, volumes and mounts, the
+swap and the clean-up.
+
+CI's Linux job runs the real containers: it builds the checkout, then fetches, builds and saves the
+newest release with the same `Install-Common.ps1` functions. `Publish-Windows.ps1` runs both there
+and on Windows, so it must keep working in both.
+
+An exact release can be selected with `-Tag app-v1.0.0` for recovery. Neither script clones or
+initializes a repository, configures Git, or manages credentials.
+
+`.\scripts\Uninstall-EntityTracker.ps1` removes what the installer created:
+- the app folder and any `EntityTracker.new.*`/`EntityTracker.old.*` folders;
+- the Start Menu shortcut;
+- the build folders older versions left under `%LOCALAPPDATA%\EntityTracker\updater`;
+- with `-RemoveDockerCache`, also the `entitytracker-nuget` volume and any leftover
+  `entitytracker-build-*` volumes.
+
+It keeps `%LOCALAPPDATA%\EntityTracker` unless run with `-RemoveData`, refuses while the app is
+running, and never touches the source clone. `.\scripts\Test-Uninstall.ps1` checks it against a fake
+install; CI also runs it.
+
+The app's update notification starts `Update-EntityTracker.ps1` in a visible Windows PowerShell
+console after the app closes:
+- It runs the installer in that same console, so the steps show live.
+- After a successful install the installer reopens the app, and the console closes itself a few
+  seconds later.
+- After a failure the console stays open: **R** retries, and any other key exits with the install's
+  exit code.
+- With redirected input, as in tests, it never waits for a key.
 
 The updater scripts (`Update-EntityTracker.ps1`, `Install-EntityTracker.ps1` and
-`Install-Common.ps1`) are read from the release being installed, not from the installed app: the
+`Install-Common.ps1`) are read from the release being installed, not from the installed app. The
 app verifies the tag against origin the same way the installer does and runs that tag's
-`scripts/` copies. A fix to the updater therefore applies on the update that ships it. If the
-release cannot be read, the app falls back to the scripts installed with the current version.
-Apps from before this change still run their installed updater once, for the update to the first
-release that contains it. Run `.\scripts\Test-UpdaterExitCode.ps1` to check that the updater
-reads the install's exit code under Windows PowerShell; CI also runs it.
+`scripts/` copies, so a fix to the updater applies on the update that ships it.
+- **Fallback:** if the release cannot be read, the app runs the scripts installed with the current
+  version.
+- **Older apps:** apps from before this change still run their installed updater once, for the
+  update to the first release that contains it.
+- **Compatibility:** all installer logic lives in those three files. The updater must keep accepting
+  the parameters the app passes (`-SourcePath`, `-Tag`, `-WaitForProcess`, `-UpdaterVersion`,
+  `-UpdaterSource`), so already installed apps can run newer updaters.
 
-The updater window shows which version of the updater is running and whether it came from the
-release being installed or, after a fallback, from the current app. The installer's first output
-line names the same version; run by hand from a clone, it reports `git describe` for the checkout,
-for example `EntityTracker installer app-v1.5.0 (source checkout)`. CI checks both with
-`.\scripts\Test-InstallerVersion.ps1`.
+Run `.\scripts\Test-Updater.ps1` to check, under Windows PowerShell, that the updater passes these
+on, shows the installer's output and reports its exit code; CI also runs it.
+
+The updater prints which version of the updater is running, and whether it came from the release
+being installed or, after a fallback, from the current app. The installer's first output line names
+the same version. Run by hand from a clone, the installer reports `git describe` for the checkout
+when Git is available, for example `EntityTracker installer app-v1.5.0 (source checkout)`. CI checks
+this with `.\scripts\Test-InstallerVersion.ps1`.
 
 The ZIP includes EntityTracker's `LICENSE.txt`, the runtime dependency inventory in
 `THIRD-PARTY-NOTICES.txt`, common license texts, and the upstream .NET and native graphics

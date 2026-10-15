@@ -9,191 +9,52 @@ param(
     [ValidateSet('', 'Release', 'Installed')][string]$UpdaterSource = ''
 )
 
-# Which version of the updater scripts is running, shown in the window and the install log.
+# The app starts this in a console window after it closes. It runs the installer in the same
+# console, so Docker's progress shows as it happens, then reopens the app and closes itself. On a
+# failure it stays open and offers a retry.
+$ErrorActionPreference = 'Stop'
+
+# Which version of the updater scripts is running, shown here and in the installer's first line.
 $scriptVersion = if (-not $UpdaterVersion) { 'unknown version' }
     elseif ($UpdaterSource -eq 'Release') { "$UpdaterVersion (from the release being installed)" }
     elseif ($UpdaterSource -eq 'Installed') { "$UpdaterVersion (installed with the current app)" }
     else { $UpdaterVersion }
 
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-[System.Windows.Forms.Application]::EnableVisualStyles()
+# Tests run the updater with redirected input; it then never waits for a key.
+$interactive = -not [Console]::IsInputRedirected
+try { $Host.UI.RawUI.WindowTitle = "EntityTracker update to $Tag" } catch { }
 
-$form = New-Object System.Windows.Forms.Form
-$form.Text = 'EntityTracker update'
-$form.Size = New-Object System.Drawing.Size(640, 390)
-$form.StartPosition = 'CenterScreen'
-$form.FormBorderStyle = 'FixedDialog'
-$form.MaximizeBox = $false
-$form.MinimizeBox = $false
+Write-Host "Updating EntityTracker to $Tag" -ForegroundColor Cyan
+Write-Host "Updater $scriptVersion"
 
-$heading = New-Object System.Windows.Forms.Label
-$heading.Text = "Building $Tag on this computer"
-$heading.Font = New-Object System.Drawing.Font('Segoe UI', 13,
-    [System.Drawing.FontStyle]::Bold)
-$heading.Location = New-Object System.Drawing.Point(20, 18)
-$heading.Size = New-Object System.Drawing.Size(590, 32)
-$form.Controls.Add($heading)
+$installer = Join-Path $PSScriptRoot 'Install-EntityTracker.ps1'
+# A trailing backslash would escape the closing quote Windows PowerShell adds around the path.
+$SourcePath = [IO.Path]::GetFullPath((Join-Path $SourcePath '.'))
+$installArguments = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $installer,
+    '-SourcePath', $SourcePath, '-Tag', $Tag, '-WaitForProcess', $WaitForProcess,
+    '-UpdaterVersion', $scriptVersion)
 
-$description = New-Object System.Windows.Forms.Label
-$description.Text = 'EntityTracker will reopen when the update is ready.'
-$description.Location = New-Object System.Drawing.Point(20, 56)
-$description.Size = New-Object System.Drawing.Size(590, 24)
-$form.Controls.Add($description)
+while ($true) {
+    Write-Host ''
+    # A separate Windows PowerShell keeps the installer's errors and exit code its own, and its
+    # output goes straight to this console.
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { & powershell.exe @installArguments; $code = $LASTEXITCODE }
+    finally { $ErrorActionPreference = $previous }
 
-$progress = New-Object System.Windows.Forms.ProgressBar
-$progress.Style = 'Marquee'
-$progress.Location = New-Object System.Drawing.Point(20, 91)
-$progress.Size = New-Object System.Drawing.Size(584, 12)
-$form.Controls.Add($progress)
-
-$log = New-Object System.Windows.Forms.TextBox
-$log.Multiline = $true
-$log.AcceptsReturn = $true
-$log.ReadOnly = $true
-$log.ScrollBars = 'Vertical'
-$log.Location = New-Object System.Drawing.Point(20, 120)
-$log.Size = New-Object System.Drawing.Size(584, 180)
-$form.Controls.Add($log)
-
-$retry = New-Object System.Windows.Forms.Button
-$retry.Text = 'Retry update'
-$retry.Location = New-Object System.Drawing.Point(402, 314)
-$retry.Size = New-Object System.Drawing.Size(100, 30)
-$retry.Enabled = $false
-$form.Controls.Add($retry)
-
-$exit = New-Object System.Windows.Forms.Button
-$exit.Text = 'Exit'
-$exit.Location = New-Object System.Drawing.Point(510, 314)
-$exit.Size = New-Object System.Drawing.Size(94, 30)
-$exit.Add_Click({ $form.Close() })
-$form.Controls.Add($exit)
-
-function New-UpdaterVersionLabel {
-    $label = New-Object System.Windows.Forms.Label
-    $label.Text = "Updater $scriptVersion"
-    $label.ForeColor = [System.Drawing.SystemColors]::GrayText
-    $label.Location = New-Object System.Drawing.Point(20, 321)
-    $label.Size = New-Object System.Drawing.Size(370, 20)
-    return $label
-}
-$form.Controls.Add((New-UpdaterVersionLabel))
-
-$successPage = New-Object System.Windows.Forms.Panel
-$successPage.Location = New-Object System.Drawing.Point(0, 0)
-$successPage.Size = $form.ClientSize
-$successPage.Visible = $false
-$form.Controls.Add($successPage)
-
-$successHeading = New-Object System.Windows.Forms.Label
-$successHeading.Text = 'Update complete'
-$successHeading.Font = New-Object System.Drawing.Font('Segoe UI', 13,
-    [System.Drawing.FontStyle]::Bold)
-$successHeading.Location = New-Object System.Drawing.Point(20, 18)
-$successHeading.Size = New-Object System.Drawing.Size(590, 32)
-$successPage.Controls.Add($successHeading)
-
-$successDescription = New-Object System.Windows.Forms.Label
-$successDescription.Text = "EntityTracker was updated to $Tag and is ready to use."
-$successDescription.Location = New-Object System.Drawing.Point(20, 56)
-$successDescription.Size = New-Object System.Drawing.Size(590, 48)
-$successPage.Controls.Add($successDescription)
-
-$finish = New-Object System.Windows.Forms.Button
-$finish.Text = 'Finish'
-$finish.Location = New-Object System.Drawing.Point(510, 314)
-$finish.Size = New-Object System.Drawing.Size(94, 30)
-$finish.Add_Click({ $form.Close() })
-$successPage.Controls.Add($finish)
-$successPage.Controls.Add((New-UpdaterVersionLabel))
-
-# Starts the hidden install. Kept free of window code so Test-UpdaterExitCode.ps1 can run it.
-function Start-InstallWorker {
-    param(
-        [string]$InstallScript,
-        [string[]]$InstallArguments,
-        [string]$WorkingDirectory,
-        [string]$StdoutPath,
-        [string]$StderrPath
-    )
-    $worker = Start-Process -FilePath 'powershell.exe' -PassThru -WindowStyle Hidden `
-        -WorkingDirectory $WorkingDirectory `
-        -ArgumentList (@('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
-            ('"' + $InstallScript + '"')) + $InstallArguments) `
-        -RedirectStandardOutput $StdoutPath -RedirectStandardError $StderrPath
-    # Windows PowerShell only reports ExitCode for a process whose handle was opened while it ran.
-    # Without this a finished install reads as $null, so a successful update showed "Update failed".
-    $null = $worker.Handle
-    return $worker
-}
-
-$script:worker = $null
-$script:stdoutPath = $null
-$script:stderrPath = $null
-$script:attempt = 0
-
-function Start-UpdateAttempt {
-    $script:attempt++
-    $retry.Enabled = $false
-    $progress.Style = 'Marquee'
-    $heading.Text = "Building $Tag on this computer"
-    $log.Text = 'Preparing update...'
-    $script:stdoutPath = Join-Path $PSScriptRoot "update-$($script:attempt).out.log"
-    $script:stderrPath = Join-Path $PSScriptRoot "update-$($script:attempt).err.log"
-    try {
-        $script:worker = Start-InstallWorker -InstallScript (Join-Path $PSScriptRoot 'Install-EntityTracker.ps1') `
-            -InstallArguments @('-SourcePath', ('"' + $SourcePath + '"'), '-Tag', $Tag,
-                '-WaitForProcess', $WaitForProcess, '-UpdaterVersion', ('"' + $scriptVersion + '"')) `
-            -WorkingDirectory $PSScriptRoot -StdoutPath $script:stdoutPath -StderrPath $script:stderrPath
+    Write-Host ''
+    if ($code -eq 0) {
+        Write-Host "Update complete: EntityTracker $Tag is starting. This window closes in 5 seconds." -ForegroundColor Green
+        if ($interactive) { Start-Sleep -Seconds 5 }
+        exit 0
     }
-    catch {
-        $progress.Style = 'Blocks'
-        $heading.Text = 'Update failed'
-        $log.Text = $_.Exception.Message
-        $retry.Enabled = $true
-    }
+
+    Write-Host "The update failed (exit code $code). The installed app was not changed." -ForegroundColor Red
+    if (-not $interactive) { exit $code }
+    Write-Host 'Press R to retry, any other key to exit.'
+    $key = [Console]::ReadKey($true)
+    if ($key.Key -ne [ConsoleKey]::R) { exit $code }
+    # The app has closed by now, so the retry doesn't wait for it again.
+    $installArguments[[array]::IndexOf($installArguments, '-WaitForProcess') + 1] = 0
 }
-
-$timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = 400
-$timer.Add_Tick({
-    if (-not $script:worker) { return }
-    $output = if (Test-Path -LiteralPath $script:stdoutPath) {
-        Get-Content -LiteralPath $script:stdoutPath -Raw -ErrorAction SilentlyContinue
-    } else { '' }
-    $errors = if (Test-Path -LiteralPath $script:stderrPath) {
-        Get-Content -LiteralPath $script:stderrPath -Raw -ErrorAction SilentlyContinue
-    } else { '' }
-    $log.Text = ($output + [Environment]::NewLine + $errors).TrimEnd()
-    $log.SelectionStart = $log.TextLength
-    $log.ScrollToCaret()
-    if ($script:worker.HasExited) {
-        $code = $script:worker.ExitCode
-        $script:worker.Dispose()
-        $script:worker = $null
-        if ($code -eq 0) {
-            $timer.Stop()
-            $heading.Visible = $false
-            $description.Visible = $false
-            $progress.Visible = $false
-            $log.Visible = $false
-            $retry.Visible = $false
-            $exit.Visible = $false
-            $successPage.Visible = $true
-            $successPage.BringToFront()
-            $form.AcceptButton = $finish
-        } else {
-            $progress.Style = 'Blocks'
-            $heading.Text = 'Update failed'
-            if (-not $log.Text) { $log.Text = "Build failed with exit code $code." }
-            $retry.Enabled = $true
-        }
-    }
-})
-
-$retry.Add_Click({ Start-UpdateAttempt })
-$form.Add_Shown({ Start-UpdateAttempt; $timer.Start() })
-[void][System.Windows.Forms.Application]::Run($form)
-$timer.Dispose()
-$form.Dispose()
