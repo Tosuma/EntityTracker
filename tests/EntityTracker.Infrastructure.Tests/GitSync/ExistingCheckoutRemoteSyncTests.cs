@@ -410,6 +410,27 @@ public sealed class ExistingCheckoutRemoteSyncTests
     }
 
     [Fact]
+    public async Task ImportReportsEachStepForItsProgressNotice()
+    {
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        string checkout = workspace.CreateRemoteCheckout("project", Snapshot(id, "Project"));
+        await using TestCatalog catalog = await TestCatalog.CreateAsync(workspace, "catalog");
+        List<ProjectSyncPhase> phases = [];
+
+        await catalog.Sync(checkout).ImportAsync(checkout, progress: new Recorder(phases));
+
+        Assert.Equal([ProjectSyncPhase.Inspecting, ProjectSyncPhase.Fetching, ProjectSyncPhase.Validating,
+            ProjectSyncPhase.Applying], phases);
+    }
+
+    /// <summary>Records reported values at once, unlike <see cref="Progress{T}"/>, which posts them.</summary>
+    private sealed class Recorder(List<ProjectSyncPhase> phases) : IProgress<ProjectSyncPhase>
+    {
+        public void Report(ProjectSyncPhase value) => phases.Add(value);
+    }
+
+    [Fact]
     public async Task AFormat6RepositoryLastSyncedByAnOlderVersionSyncsAndIsRewrittenAsFormat7()
     {
         using GitWorkspace workspace = new();
