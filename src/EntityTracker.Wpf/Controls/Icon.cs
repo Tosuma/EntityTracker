@@ -49,8 +49,13 @@ public class Icon : FrameworkElement
     {
         if (Geometry is null) return;
         double scale = Size / SourceSize;
+        // Centred in the space the icon is given, so a rotation about its centre (the turning sync
+        // icon) keeps it in place even when that space is larger than the icon.
+        drawingContext.PushTransform(new TranslateTransform(
+            Math.Max(0, (ActualWidth - Size) / 2), Math.Max(0, (ActualHeight - Size) / 2)));
         drawingContext.PushTransform(new ScaleTransform(scale, scale));
         drawingContext.DrawGeometry(Foreground, null, Geometry);
+        drawingContext.Pop();
         drawingContext.Pop();
     }
 }

@@ -23,6 +23,8 @@ public sealed class ProjectSyncIndicators(IProjectSyncLinkStore links, IProjectS
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private readonly ILogger _logger = logger ?? NullLogger<ProjectSyncIndicators>.Instance;
     private readonly SemaphoreSlim _refreshing = new(1, 1);
+    // Set when a refresh is asked for while one runs; that one then reads everything again.
+    private volatile bool _refreshAgain;
     private IReadOnlyDictionary<Guid, ProjectSyncIndicator> _indicators = new Dictionary<Guid, ProjectSyncIndicator>();
 
     public event EventHandler? Changed;
@@ -32,26 +34,20 @@ public sealed class ProjectSyncIndicators(IProjectSyncLinkStore links, IProjectS
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
-        // A refresh already running reads the latest state anyway.
-        if (!await _refreshing.WaitAsync(0, cancellationToken)) return;
+        // A refresh already running may have read the state before this change, so it goes again.
+        if (!await _refreshing.WaitAsync(0, cancellationToken))
+        {
+            _refreshAgain = true;
+            return;
+        }
         try
         {
-            Dictionary<Guid, ProjectSyncIndicator> next = [];
-            DateTimeOffset now = _clock.GetUtcNow();
-            foreach (ProjectSyncLink link in await links.ReadAllAsync(cancellationToken))
+            do
             {
-                ProjectId projectId = new(link.ProjectId);
-                ProjectSyncState state = autoSync?.GetState(projectId) is { Kind: not ProjectSyncStateKind.Unlinked } known
-                    ? known
-                    : ProjectAutoSyncService.FromLink(link);
-                long revision = await snapshots.GetRevisionAsync(projectId, cancellationToken);
-                next[link.ProjectId] = ProjectSyncIndicator.From(link, state, revision, now);
+                _refreshAgain = false;
+                await ReadAsync(cancellationToken);
             }
-            if (next.Count == _indicators.Count &&
-                next.All(pair => _indicators.TryGetValue(pair.Key, out ProjectSyncIndicator? old) && old == pair.Value))
-                return;
-            _indicators = next;
-            Changed?.Invoke(this, EventArgs.Empty);
+            while (_refreshAgain);
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {
@@ -62,5 +58,27 @@ public sealed class ProjectSyncIndicators(IProjectSyncLinkStore links, IProjectS
         {
             _refreshing.Release();
         }
+        // Asked for again between the last read and the release.
+        if (_refreshAgain) await RefreshAsync(cancellationToken);
+    }
+
+    private async Task ReadAsync(CancellationToken cancellationToken)
+    {
+        Dictionary<Guid, ProjectSyncIndicator> next = [];
+        DateTimeOffset now = _clock.GetUtcNow();
+        foreach (ProjectSyncLink link in await links.ReadAllAsync(cancellationToken))
+        {
+            ProjectId projectId = new(link.ProjectId);
+            ProjectSyncState state = autoSync?.GetState(projectId) is { Kind: not ProjectSyncStateKind.Unlinked } known
+                ? known
+                : ProjectAutoSyncService.FromLink(link);
+            long revision = await snapshots.GetRevisionAsync(projectId, cancellationToken);
+            next[link.ProjectId] = ProjectSyncIndicator.From(link, state, revision, now);
+        }
+        if (next.Count == _indicators.Count &&
+            next.All(pair => _indicators.TryGetValue(pair.Key, out ProjectSyncIndicator? old) && old == pair.Value))
+            return;
+        _indicators = next;
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 }

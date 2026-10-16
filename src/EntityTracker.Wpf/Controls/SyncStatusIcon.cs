@@ -78,7 +78,7 @@ public sealed class SyncStatusIcon : Icon
     {
         ProjectSyncIndicatorKind.Synced => ("Icon.CheckmarkCircle", "Brush.SyncState.Synced"),
         ProjectSyncIndicatorKind.Unsynced => ("Icon.CloudArrowUp", "Brush.SyncState.Unsynced"),
-        ProjectSyncIndicatorKind.Syncing => ("Icon.ArrowSync", "Brush.SyncState.Syncing"),
+        ProjectSyncIndicatorKind.Syncing => ("Icon.ArrowSync", "AccentFillColorDefaultBrush"),
         ProjectSyncIndicatorKind.NeedsAttention => ("Icon.Warning", "Brush.SyncState.NeedsAttention"),
         ProjectSyncIndicatorKind.Paused => ("Icon.PauseCircle", "Brush.Text.Secondary"),
         _ => (string.Empty, string.Empty)

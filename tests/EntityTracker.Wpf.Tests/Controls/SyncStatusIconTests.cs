@@ -101,7 +101,8 @@ public sealed class SyncStatusIconTests
         {
             (string iconKey, string brushKey) = SyncStatusIcon.Look(kind);
             Assert.Contains(iconKey, icons);
-            Assert.StartsWith("Brush.", brushKey, StringComparison.Ordinal);
+            // FluentThemeKeys checks that each colour exists.
+            Assert.NotEqual(string.Empty, brushKey);
         }
     }
 
