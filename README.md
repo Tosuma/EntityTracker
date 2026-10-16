@@ -175,6 +175,16 @@ the application keeps its validation and remote recheck steps in order.
 
 ![Illustrative Project dashboard with an upstream Git link, last sync timing, and manual Sync now control](images/light/project-git-repository.png)
 
+**Sync state at a glance.** A linked Project shows its sync state as one icon, the same next to its
+name in the header, on its Portfolio card and on the Project dashboard. Hover over it for details.
+- **Green check:** synced.
+- **Amber cloud with an arrow:** changes on this computer that are not synced yet.
+- **Turning arrows:** syncing.
+- **Red warning:** sync needs attention.
+- **Pause:** sync waits until EntityTracker is updated.
+
+Click the header icon to sync now, or, when the sync needs attention, to open the Project dashboard.
+
 The sidebar notification center shows the current sync phase. A completed sync disappears after
 a short display time. A sync that needs attention stays visible with a contextual action; the
 Project card also retains its detailed status. Notifications are kept for the current session.
