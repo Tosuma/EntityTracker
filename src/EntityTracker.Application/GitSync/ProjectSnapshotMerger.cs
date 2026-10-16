@@ -1,5 +1,6 @@
 using System.Text.Json;
 using EntityTracker.Application.Snapshots;
+using EntityTracker.Application.Tracking;
 using EntityTracker.Domain.Collaboration;
 
 namespace EntityTracker.Application.GitSync;
@@ -189,8 +190,7 @@ public sealed class ProjectSnapshotMerger
                 l.RecycledAtUtc, r.RecycledAtUtc, ProjectConflictKind.Lifecycle),
             CopiedFromTrackerId = Field(path + "/CopiedFromTrackerId", b.CopiedFromTrackerId,
                 l.CopiedFromTrackerId, r.CopiedFromTrackerId),
-            SyncBaselineJson = Field(path + "/SyncBaselineJson", b.SyncBaselineJson,
-                l.SyncBaselineJson, r.SyncBaselineJson),
+            SyncBaseline = MergeBaseline(b.SyncBaseline, l.SyncBaseline, r.SyncBaseline),
             Entities = ThreeWayMerge.Keyed(path + "/Entity", b.Entities, l.Entities, r.Entities,
                 e => e.Id, MergeEntity)
         };
@@ -358,6 +358,75 @@ public sealed class ProjectSnapshotMerger
         Dictionary<Guid, SnapshotStatusEvent> all = superset.ToDictionary(e => e.EventId);
         return subset.All(e => all.TryGetValue(e.EventId, out SnapshotStatusEvent? match) &&
                                Same(e with { Order = 0 }, match with { Order = 0 }));
+    }
+
+    /// <summary>
+    /// Merges a Tracker's Sync from source baseline without asking: it is bookkeeping of what both
+    /// Trackers looked like at the last Sync from source, not something a person decides. Entities
+    /// changed on only one side are taken from that side. An entity both sides changed differently is
+    /// left out of the baseline, so the next Sync from source treats it as new and asks about any
+    /// difference again: a wrong guess could hide a difference, while leaving it out can at most ask
+    /// a question twice.
+    /// </summary>
+    private TrackerSyncBaseline? MergeBaseline(TrackerSyncBaseline? basis,
+        TrackerSyncBaseline? local, TrackerSyncBaseline? remote)
+    {
+        basis = _twoWay ? null : basis?.Normalize();
+        local = local?.Normalize();
+        remote = remote?.Normalize();
+        if (Same(local, remote)) return local;
+        if (!_twoWay && Same(local, basis)) return remote;
+        if (!_twoWay && Same(remote, basis)) return local;
+        // One side has no baseline while the other changed it: start over, so everything is asked.
+        if (local is null || remote is null) return null;
+
+        HashSet<string> dropped = new(StringComparer.Ordinal);
+        Dictionary<string, TrackerSyncEntity> source = MergeBaselineSide(
+            basis?.Source, local.Source, remote.Source, dropped);
+        Dictionary<string, TrackerSyncEntity> destination = MergeBaselineSide(
+            basis?.Destination, local.Destination, remote.Destination, dropped);
+        return new TrackerSyncBaseline(Kept(source), Kept(destination)).Normalize();
+
+        TrackerSyncStructure Kept(Dictionary<string, TrackerSyncEntity> entities) =>
+            new(entities.Where(pair => !dropped.Contains(pair.Key)).Select(pair => pair.Value).ToArray());
+    }
+
+    /// <summary>
+    /// Merges one side of a baseline by entity name. Without a base, only entities both sides agree on
+    /// are kept. Names that can't be merged are added to <paramref name="dropped"/>.
+    /// </summary>
+    private static Dictionary<string, TrackerSyncEntity> MergeBaselineSide(TrackerSyncStructure? basis,
+        TrackerSyncStructure local, TrackerSyncStructure remote, HashSet<string> dropped)
+    {
+        Dictionary<string, TrackerSyncEntity> b = ByName(basis);
+        Dictionary<string, TrackerSyncEntity> l = ByName(local);
+        Dictionary<string, TrackerSyncEntity> r = ByName(remote);
+        Dictionary<string, TrackerSyncEntity> merged = new(StringComparer.Ordinal);
+        foreach (string key in b.Keys.Union(l.Keys).Union(r.Keys))
+        {
+            l.TryGetValue(key, out TrackerSyncEntity? lv);
+            r.TryGetValue(key, out TrackerSyncEntity? rv);
+            b.TryGetValue(key, out TrackerSyncEntity? bv);
+            TrackerSyncEntity? kept;
+            if (Same(lv, rv)) kept = lv;
+            else if (basis is not null && Same(lv, bv)) kept = rv;
+            else if (basis is not null && Same(rv, bv)) kept = lv;
+            else
+            {
+                dropped.Add(key);
+                continue;
+            }
+            if (kept is not null) merged[key] = kept;
+        }
+        return merged;
+
+        static Dictionary<string, TrackerSyncEntity> ByName(TrackerSyncStructure? structure)
+        {
+            Dictionary<string, TrackerSyncEntity> byName = new(StringComparer.Ordinal);
+            foreach (TrackerSyncEntity entity in structure?.Entities ?? [])
+                byName.TryAdd(TrackerSyncPlanner.Key(entity.Name), entity);
+            return byName;
+        }
     }
 
     private T Field<T>(string path, T basis, T local, T remote,

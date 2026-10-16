@@ -81,6 +81,19 @@ public sealed class SystemGitTransport : ILocalGitTransport
             throw new ProjectSyncConfigurationException("Linked worktrees and submodules are unsupported. Relink a regular repository root.");
         if ((await RunAsync(root, ["rev-parse", "--is-bare-repository"], cancellationToken)).Trim() != "false")
             throw new InvalidOperationException("A non-bare working tree is required.");
+        // A merge or rebase someone started with Git by hand, which may have left conflicts in the
+        // snapshot. EntityTracker merges Project snapshots itself, so say how to get back to a state it
+        // can sync from. Checked before the branch, since a rebase detaches HEAD.
+        string gitDirectory = Path.Combine(root, ".git");
+        if (File.Exists(Path.Combine(gitDirectory, "MERGE_HEAD")))
+            throw new ProjectSyncConfigurationException(
+                "A Git merge is in progress in this repository. Abort it with \"git merge --abort\" " +
+                "(EntityTracker merges Project snapshots itself), or finish it outside EntityTracker, then retry Project sync.");
+        if (Directory.Exists(Path.Combine(gitDirectory, "rebase-merge")) ||
+            Directory.Exists(Path.Combine(gitDirectory, "rebase-apply")))
+            throw new ProjectSyncConfigurationException(
+                "A Git rebase is in progress in this repository. Abort it with \"git rebase --abort\" " +
+                "(EntityTracker merges Project snapshots itself), or finish it outside EntityTracker, then retry Project sync.");
         string branch = (await RunAsync(root, ["symbolic-ref", "--quiet", "--short", "HEAD"], cancellationToken)).Trim();
         if (string.IsNullOrWhiteSpace(branch)) throw new ProjectSyncConfigurationException("Check out the linked branch with Git outside EntityTracker, then retry.");
         if (string.IsNullOrWhiteSpace((await RunAsync(root, ["config", "--get", "user.name"], cancellationToken)).Trim()) ||
@@ -524,11 +537,29 @@ public sealed class SystemGitTransport : ILocalGitTransport
         while (true)
         {
             int read = await stream.ReadAsync(buffer, token);
-            if (read == 0) return output.ToArray();
+            if (read == 0) return WithUnixLineEndings(output.ToArray());
             if (output.Length + read > MaxSnapshotFileBytes || output.Length + read > remaining)
                 throw new InvalidDataException("The repository snapshot exceeds the supported size.");
             output.Write(buffer, 0, read);
         }
+    }
+
+    /// <summary>
+    /// Snapshot files are written with "\n" line breaks, but Git on Windows usually checks text
+    /// files out with "\r\n" (core.autocrlf), so the copy on disk is turned back into what Git
+    /// stores. This loses nothing: the JSON writer escapes line breaks inside values, so a raw "\r" in a
+    /// snapshot file can only come from that conversion.
+    /// </summary>
+    internal static byte[] WithUnixLineEndings(byte[] bytes)
+    {
+        if (Array.IndexOf(bytes, (byte)'\r') < 0) return bytes;
+        using MemoryStream output = new(bytes.Length);
+        for (int i = 0; i < bytes.Length; i++)
+        {
+            if (bytes[i] == (byte)'\r' && i + 1 < bytes.Length && bytes[i + 1] == (byte)'\n') continue;
+            output.WriteByte(bytes[i]);
+        }
+        return output.ToArray();
     }
 
     private static string[] SplitNull(byte[] bytes) => Encoding.UTF8.GetString(bytes)

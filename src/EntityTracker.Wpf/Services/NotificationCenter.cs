@@ -102,6 +102,17 @@ public sealed class NotificationCenter : INotifyPropertyChanged
         ProjectSyncPhase.Rechecking => "Checking the latest upstream state…",
         _ => "Synchronizing Project…"
     };
+
+    /// <summary>The step of a Project import (Portfolio › Import Project), for its progress notice.</summary>
+    public static string DescribeProjectImportPhase(ProjectSyncPhase phase) => phase switch
+    {
+        ProjectSyncPhase.Inspecting => "Checking the selected checkout…",
+        ProjectSyncPhase.Fetching => "Fetching upstream changes…",
+        ProjectSyncPhase.Validating => "Reading the Project snapshot…",
+        ProjectSyncPhase.Reviewing => "Reviewing differences with the Project on this computer…",
+        ProjectSyncPhase.Applying => "Backing up and importing the Project…",
+        _ => "Importing the Project…"
+    };
     private readonly TimeProvider _timeProvider;
     private readonly TimeSpan _displayTime;
     private readonly TimeSpan _exitDuration;

@@ -30,6 +30,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private readonly TrackerWorkspaceViewModelFactory _workspaceFactory;
     private readonly IContextDiscardConfirmation _discardConfirmation;
     private readonly ProjectGitSyncService? _gitSync;
+    // A Project import waiting for a local name; its retry continues this notice.
+    private NotificationItem? _importNotice;
     private readonly ProjectAutoSyncService? _autoSync;
     private readonly WpfProjectUnsavedEditsGate? _syncEditGate;
     private readonly ILogger<ShellViewModel> _logger;
@@ -509,16 +511,60 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    /// <summary>
+    /// Imports a Project from a Git checkout. A progress notice follows each step and ends as a success
+    /// or with the failure, which is then thrown on. When the Project's name is taken, the notice waits
+    /// while a local name is chosen: a retry with that name continues it, and
+    /// <see cref="StopProjectImport"/> ends it when none is chosen.
+    /// </summary>
     public async Task<ProjectSyncLink> ImportProjectAsync(string repositoryPath, string? localName = null)
     {
         if (_gitSync is null) throw new InvalidOperationException("Project import is unavailable.");
-        ProjectSyncLink link = await _gitSync.ImportAsync(repositoryPath, localName);
-        await ReloadCatalogAsync(CancellationToken.None);
-        if (Projects.Any(project => project.Id.Value == link.ProjectId))
-            await OpenProjectAsync(new ProjectId(link.ProjectId));
-        Notifications.Show("Project imported", "Imported the existing Project checkout.",
-            NotificationKind.Success);
-        return link;
+        NotificationItem notice;
+        if (_importNotice is { } waiting)
+        {
+            notice = waiting;
+            Notifications.Restart(notice, NotificationCenter.DescribeProjectImportPhase(ProjectSyncPhase.Inspecting));
+        }
+        else
+        {
+            notice = Notifications.BeginProgress("Project import",
+                NotificationCenter.DescribeProjectImportPhase(ProjectSyncPhase.Inspecting));
+        }
+        _importNotice = null;
+        IProgress<ProjectSyncPhase> progress = new ProjectSyncProgressReporter(phase =>
+            Notifications.Progress(notice, NotificationCenter.DescribeProjectImportPhase(phase)));
+        try
+        {
+            ProjectSyncLink link = await _gitSync.ImportAsync(repositoryPath, localName, progress: progress);
+            await ReloadCatalogAsync(CancellationToken.None);
+            string? name = Projects.FirstOrDefault(project => project.Id.Value == link.ProjectId)?.Name;
+            if (name is not null) await OpenProjectAsync(new ProjectId(link.ProjectId));
+            Notifications.Complete(notice, name is null
+                ? "Imported the Project from the checkout."
+                : $"Imported “{name}” from the checkout.");
+            return link;
+        }
+        catch (ProjectNameCollisionException collision)
+        {
+            Notifications.Progress(notice,
+                $"A Project here is already named “{collision.ConflictingName}”. Choose a local name to continue.");
+            _importNotice = notice;
+            throw;
+        }
+        catch (Exception error)
+        {
+            Notifications.Complete(notice, error.Message, NotificationKind.Failure);
+            throw;
+        }
+    }
+
+    /// <summary>Ends a Project import that waited for a local name, when none was chosen.</summary>
+    public void StopProjectImport()
+    {
+        if (_importNotice is not { } notice) return;
+        _importNotice = null;
+        Notifications.Complete(notice, "Import stopped: no local name was chosen.", NotificationKind.Information);
     }
 
     public Task PublishPendingDeletionAsync(ProjectSyncLink link) =>

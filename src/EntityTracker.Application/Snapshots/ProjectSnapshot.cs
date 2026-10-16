@@ -1,3 +1,5 @@
+using EntityTracker.Application.Tracking;
+
 namespace EntityTracker.Application.Snapshots;
 
 public sealed record ProjectSnapshot(
@@ -11,8 +13,16 @@ public sealed record ProjectSnapshot(
     /// a placeholder entity (lifecycle Placeholder). Formats 1–5 stored imported
     /// dependencies (by entity ID or name, with a kind) and manual Add/Suppress corrections; they are
     /// read into the Legacy fields and converted by <see cref="ProjectSnapshotUpgrade"/>.
+    /// Format 7 writes indented JSON, so changes are readable in Git, and keeps a Tracker's Sync from
+    /// source baseline as nested JSON in tracker.json instead of one escaped JSON string.
     /// </summary>
-    public const int CurrentFormatVersion = 6;
+    public const int CurrentFormatVersion = 7;
+
+    /// <summary>
+    /// The first format with today's entities and dependencies (format 6). Older snapshots are legacy:
+    /// they are read into the Legacy fields and converted.
+    /// </summary>
+    public const int FirstCurrentModelFormatVersion = 6;
 
     public static bool IsSupportedFormat(int formatVersion) =>
         formatVersion is >= 1 and <= CurrentFormatVersion;
@@ -33,7 +43,8 @@ public sealed record SnapshotTracker(
     IReadOnlyList<SnapshotEntity> Entities,
     IReadOnlyList<SnapshotStatusEvent> StatusHistory,
     IReadOnlyList<SnapshotProgress> ProgressHistory,
-    string? SyncBaselineJson = null,
+    // What the Tracker and its source looked like at the last Sync from source (copies only).
+    TrackerSyncBaseline? SyncBaseline = null,
     // Formats 1–5 only: the last CSV import, which format 6 no longer keeps.
     SnapshotImportSummary? LegacyImportSummary = null);
 

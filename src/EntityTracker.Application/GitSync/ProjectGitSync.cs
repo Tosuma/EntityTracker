@@ -255,13 +255,18 @@ public sealed partial class ProjectGitSyncService(
         return link;
     }
 
-    /// <summary>Loads a Project from an existing Git checkout (Portfolio › Import Project).</summary>
+    /// <summary>
+    /// Loads a Project from an existing Git checkout (Portfolio › Import Project), reporting each step to
+    /// <paramref name="progress"/>.
+    /// </summary>
     public Task<ProjectSyncLink> ImportAsync(string path, string? localName = null,
-        CancellationToken token = default) =>
-        LoggedAsync("Import", $"the checkout {path}", () => ImportCoreAsync(path, localName, token), Describe);
+        CancellationToken token = default, IProgress<ProjectSyncPhase>? progress = null) =>
+        LoggedAsync("Import", $"the checkout {path}", () => ImportCoreAsync(path, localName, token, progress), Describe);
 
-    private async Task<ProjectSyncLink> ImportCoreAsync(string path, string? localName, CancellationToken token)
+    private async Task<ProjectSyncLink> ImportCoreAsync(string path, string? localName, CancellationToken token,
+        IProgress<ProjectSyncPhase>? progress)
     {
+        progress?.Report(ProjectSyncPhase.Inspecting);
         if (versionGate is not null) await versionGate.EnsureSyncAllowedAsync(token);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         if (projects is null || backup is null)
@@ -280,6 +285,7 @@ public sealed partial class ProjectGitSyncService(
             throw new InvalidOperationException("This Project is already linked. Unlink it before selecting another repository.");
         if (state.UpstreamIdentity is not null)
         {
+            progress?.Report(ProjectSyncPhase.Fetching);
             GitRemoteState remote = await git.FetchAsync(path, token);
             if (state.Head != remote.Head)
             {
@@ -303,6 +309,7 @@ public sealed partial class ProjectGitSyncService(
         }
         if (state.SnapshotFiles.Count == 0)
             throw new InvalidOperationException("The selected checkout has no Project snapshot to import.");
+        progress?.Report(ProjectSyncPhase.Validating);
         ProjectSnapshot incoming = codec.Decode(state.SnapshotFiles);
         ProjectId projectId = new(incoming.Project.Id);
         _log.LogInformation(
@@ -319,7 +326,10 @@ public sealed partial class ProjectGitSyncService(
                                           link.SyncStatus != "RemoteDeletedLocalKept"))
                 throw new InvalidOperationException("This Project is already linked. Unlink it before selecting another repository.");
             if (codec.Encode(current.Snapshot).Sha256 != hash)
+            {
+                progress?.Report(ProjectSyncPhase.Reviewing);
                 current = await ReviewTwoWayAsync(projectId, current, incoming, state, token);
+            }
             ProjectSyncLink matching = NewLink(projectId, state, current.Revision, hash);
             await links.SaveAsync(matching, token);
             return matching;
@@ -337,6 +347,7 @@ public sealed partial class ProjectGitSyncService(
         ProjectSnapshotRead latest = await snapshots.ReadAsync(projectId, token);
         if (latest.Revision != current.Revision || latest.Snapshot is not null)
             throw new InvalidOperationException("The Project changed during import. Retry.");
+        progress?.Report(ProjectSyncPhase.Applying);
         await backup.CreatePreApplyBackupAsync(token);
         long revision = await snapshots.ApplyAsync(incoming, current.Revision, displayName, token);
         _log.LogInformation("Imported as the new Project {ProjectName} at revision {Revision}.", displayName, revision);
@@ -590,7 +601,12 @@ public sealed partial class ProjectGitSyncService(
             if (repositorySnapshot.Project.Id != projectId.Value)
                 throw new InvalidOperationException("The repository belongs to another Project.");
             ProjectSnapshotPackage basePackage = codec.Encode(repositorySnapshot);
-            if (link.LastSnapshotHash != basePackage.Sha256)
+            // HEAD is the commit of the last sync and the checkout is clean, so the files are the ones
+            // that sync wrote. In an older format, a different hash only means this version encodes
+            // them differently (for example without the provenance versions before 2.0.0 wrote);
+            // the sync then rewrites them in the current format.
+            if (link.LastSnapshotHash != basePackage.Sha256 &&
+                repositorySnapshot.FormatVersion == ProjectSnapshot.CurrentFormatVersion)
                 throw new InvalidOperationException("The repository snapshot changed since linking. Conflict review is required.");
             IReadOnlyList<string> deletions = FindDeletions(repositorySnapshot, read.Snapshot!);
             if (deletions.Count > 0)

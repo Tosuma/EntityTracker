@@ -347,6 +347,42 @@ colleagues who refer to the same missing name create the same placeholder, and a
 one. When a merge meets a placeholder and a real entity with the same name, it folds the
 placeholder into the entity.
 
+## Project snapshots in Git
+
+A linked Project is stored in its repository under `.entitytracker/`, one JSON file per document:
+- the manifest and the Project;
+- each developer;
+- each Tracker (`tracker.json`), with one file per entity, status history event and progress record
+  under it.
+
+`ProjectSnapshotJsonCodec` writes them; `ProjectSnapshot.CurrentFormatVersion` is the format.
+- **Format 7:**
+  - files are indented JSON with `\n` line breaks, so a change shows up in a Git diff as the lines
+    that changed;
+  - a Tracker's Sync from source baseline is nested JSON in `tracker.json` (`syncBaseline`).
+    Formats up to 6 kept it as one escaped JSON string (`syncBaselineJson`), which is still read.
+- **Line endings:** Git for Windows usually checks text files out with `\r\n` (`core.autocrlf`).
+  `SystemGitTransport` therefore reads the files on disk back with `\n`. Comparing them byte for byte
+  with what the app writes would otherwise see every file as changed. This loses nothing, because
+  the JSON writer escapes line breaks inside values.
+- **Formats 1–5:** they are read into the snapshot's Legacy fields and converted by
+  `ProjectSnapshotUpgrade` (`ProjectSnapshot.FirstCurrentModelFormatVersion` is 6). A newer format
+  that only changes the layout, like 7, needs no conversion.
+
+**Git never merges the content of these files.** A sync fast-forwards (`merge --ff-only`) when only
+one side moved on. When both did, it reads the common base, the local and the remote snapshot,
+merges them field by field (`ProjectSnapshotMerger`) and writes the merge commit itself
+(`write-tree`, `commit-tree`, `update-ref`):
+- **Real conflicts go to the user:** only fields both sides changed differently become conflicts,
+  for the **Review Project merge** dialog.
+- **The baseline is merged automatically:** it is bookkeeping of the last Sync from source, never
+  asked about. An entity both sides changed differently is left out of it, so the next Sync from
+  source asks about that entity again rather than possibly hiding a difference.
+- **A manual merge or rebase stops sync:** if someone ran `git merge` or `git rebase` by hand and
+  left it unfinished, sync stops and says to abort it (`git merge --abort` / `git rebase --abort`).
+- **Other files changed:** if files outside `.entitytracker` changed on both sides, sync stops and
+  asks for command-line Git.
+
 ## Settings and current storage behavior
 
 The **Settings** destination controls System, Light, or Dark appearance. The local

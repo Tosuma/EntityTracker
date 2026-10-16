@@ -1,4 +1,7 @@
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using EntityTracker.Application.Tracking;
 using EntityTracker.Application.Snapshots;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Persistence;
@@ -205,23 +208,154 @@ public sealed class ProjectSnapshotTests
         SqliteDatabase targetDb = new(targetFile.DatabasePath);
         await sourceDb.InitializeAsync();
         await targetDb.InitializeAsync();
-        const string baseline = "{\"Source\":{\"Entities\":[]},\"Destination\":{\"Entities\":[]}}";
+        // Out of order on purpose: the database and the snapshot keep it in name order.
+        TrackerSyncBaseline baseline = new(
+            new TrackerSyncStructure([
+                new TrackerSyncEntity("order", true, 2, "Sales", [new TrackerSyncDependency("customer")], "Open only"),
+                new TrackerSyncEntity("customer", false, null, "", [])]),
+            new TrackerSyncStructure([new TrackerSyncEntity("customer", true, null, "Mine", [])]));
         ProjectSnapshot seed = CompleteSnapshot();
         seed = seed with { Trackers = seed.Trackers.Select((tracker, index) =>
-            index == 0 ? tracker with { SyncBaselineJson = baseline } : tracker).ToArray() };
+            index == 0 ? tracker with { SyncBaseline = baseline } : tracker).ToArray() };
+        string expected = JsonSerializer.Serialize(baseline.Normalize());
         SqliteProjectSnapshotStore source = new(sourceDb);
         SqliteProjectSnapshotStore target = new(targetDb);
         await source.ApplyAsync(seed, 0);
         ProjectSnapshot exported = Assert.IsType<ProjectSnapshot>(
             (await source.ReadAsync(new ProjectId(seed.Project.Id))).Snapshot);
-        Assert.Equal(baseline, exported.Trackers[0].SyncBaselineJson);
+        Assert.Equal(expected, JsonSerializer.Serialize(exported.Trackers[0].SyncBaseline));
         ProjectSnapshotJsonCodec codec = new();
         ProjectSnapshot decoded = codec.Decode(codec.Encode(exported).Files);
         await target.ApplyAsync(decoded, 0);
         ProjectSnapshot imported = Assert.IsType<ProjectSnapshot>(
             (await target.ReadAsync(new ProjectId(seed.Project.Id))).Snapshot);
-        Assert.Equal(baseline, imported.Trackers[0].SyncBaselineJson);
+        Assert.Equal(expected, JsonSerializer.Serialize(imported.Trackers[0].SyncBaseline));
     }
+
+    [Fact]
+    public void Format7_WritesIndentedFilesWithTheBaselineAsNestedJson()
+    {
+        ProjectSnapshot snapshot = WithBaseline(CompleteSnapshot());
+        ProjectSnapshotJsonCodec codec = new();
+        ProjectSnapshotPackage package = codec.Encode(snapshot);
+
+        Assert.Equal(7, ProjectSnapshot.CurrentFormatVersion);
+        foreach ((string path, byte[] bytes) in package.Files)
+        {
+            string text = Encoding.UTF8.GetString(bytes);
+            Assert.False(text.Contains('\r'), $"{path} has Windows line endings.");
+            Assert.True(text.Contains("\n  \""), $"{path} is not indented.");
+        }
+        string tracker = Encoding.UTF8.GetString(package.Files[TrackerPath(snapshot.Trackers[0].Id)]);
+        Assert.Contains("\"syncBaseline\": {", tracker);
+        Assert.Contains("\"name\": \"customer\"", tracker);
+        Assert.DoesNotContain("syncBaselineJson", tracker);
+        Assert.DoesNotContain("\\\"", tracker);
+
+        ProjectSnapshot decoded = codec.Decode(package.Files);
+        Assert.Equal(JsonSerializer.Serialize(snapshot.Trackers[0].SyncBaseline!.Normalize()),
+            JsonSerializer.Serialize(decoded.Trackers[0].SyncBaseline));
+        Assert.Equal(package.Sha256, codec.Encode(decoded).Sha256);
+    }
+
+    [Fact]
+    public void Format7_FilesWrittenOnOneLineStillRead()
+    {
+        ProjectSnapshot snapshot = WithBaseline(CompleteSnapshot());
+        ProjectSnapshotJsonCodec codec = new();
+        ProjectSnapshotPackage package = codec.Encode(snapshot);
+        Dictionary<string, byte[]> oneLine = package.Files.ToDictionary(pair => pair.Key,
+            pair => Encoding.UTF8.GetBytes(JsonNode.Parse(pair.Value)!.ToJsonString()));
+
+        Assert.Equal(package.Sha256, codec.Encode(codec.Decode(oneLine)).Sha256);
+    }
+
+    [Fact]
+    public void Format6_BaselineTextWithDependencyKindsReadsAsTheSameBaseline()
+    {
+        ProjectSnapshot current = WithBaseline(CompleteSnapshot());
+        ProjectSnapshotJsonCodec codec = new();
+        Dictionary<string, byte[]> files = codec.Encode(current with { FormatVersion = 6 }).Files
+            .ToDictionary(pair => pair.Key, pair => pair.Value);
+        string trackerPath = TrackerPath(current.Trackers[0].Id);
+        JsonObject tracker = JsonNode.Parse(files[trackerPath])!.AsObject();
+        Assert.False(tracker.ContainsKey("syncBaseline"));
+        // As an older version wrote it: one JSON string, with a kind on each dependency.
+        tracker["syncBaselineJson"] = """
+            {"Source":{"Entities":[{"Name":"order","Active":true,"RequestedPriority":2,"GroupName":"Sales","Dependencies":[{"Name":"customer","Kind":0}],"FilterActive":"Open only"},{"Name":"customer","Active":false,"RequestedPriority":null,"GroupName":"","Dependencies":[]}]},"Destination":{"Entities":[{"Name":"customer","Active":true,"RequestedPriority":null,"GroupName":"Mine","Dependencies":[]}]}}
+            """;
+        files[trackerPath] = Encoding.UTF8.GetBytes(tracker.ToJsonString());
+
+        ProjectSnapshot decoded = codec.Decode(files);
+
+        Assert.Equal(6, decoded.FormatVersion);
+        Assert.Equal(JsonSerializer.Serialize(current.Trackers[0].SyncBaseline!.Normalize()),
+            JsonSerializer.Serialize(decoded.Trackers[0].SyncBaseline));
+    }
+
+    [Theory]
+    [InlineData(6, true)]
+    [InlineData(7, false)]
+    public void EntityProvenance_FromVersionsBefore2_0_IsReadAndIgnoredOnlyInFormat6(int formatVersion, bool reads)
+    {
+        // Format 6 versions before app-v2.0.0 wrote each entity's provenance.
+        ProjectSnapshot snapshot = CompleteSnapshot() with { FormatVersion = formatVersion };
+        ProjectSnapshotJsonCodec codec = new();
+        Dictionary<string, byte[]> files = codec.Encode(snapshot).Files.ToDictionary(pair => pair.Key, pair =>
+        {
+            if (!pair.Key.Contains("/entities/", StringComparison.Ordinal)) return pair.Value;
+            JsonObject entity = JsonNode.Parse(pair.Value)!.AsObject();
+            Assert.False(entity.ContainsKey("provenance"));
+            entity["provenance"] = "Manual";
+            return Encoding.UTF8.GetBytes(entity.ToJsonString());
+        });
+
+        if (!reads)
+        {
+            Assert.Throws<InvalidDataException>(() => codec.Decode(files));
+            return;
+        }
+        ProjectSnapshot withoutProvenance = codec.Decode(codec.Encode(snapshot).Files);
+        ProjectSnapshot decoded = codec.Decode(files);
+        Assert.Equal(JsonSerializer.Serialize(withoutProvenance), JsonSerializer.Serialize(decoded));
+    }
+
+    [Fact]
+    public void Format6_UpgradesToFormat7WithoutChangingItsHistory()
+    {
+        ProjectSnapshot format6 = WithBaseline(CompleteSnapshot()) with { FormatVersion = 6 };
+
+        ProjectSnapshot upgraded = ProjectSnapshotUpgrade.ToCurrent(format6, T2);
+
+        Assert.Equal(7, upgraded.FormatVersion);
+        // The format 1–5 conversions must not run again on a format 6 snapshot.
+        Assert.Equal(Serialized(format6), Serialized(upgraded));
+
+        static string Serialized(ProjectSnapshot snapshot) => JsonSerializer.Serialize(snapshot.Trackers.Select(
+            tracker => new
+            {
+                tracker.StatusHistory,
+                Dependencies = tracker.Entities.Select(entity => entity.Dependencies),
+                tracker.SyncBaseline
+            }));
+    }
+
+    private static ProjectSnapshot WithBaseline(ProjectSnapshot snapshot) => snapshot with
+    {
+        Trackers = snapshot.Trackers.Select((tracker, index) => index == 0
+            ? tracker with
+            {
+                SyncBaseline = new TrackerSyncBaseline(
+                    new TrackerSyncStructure([
+                        new TrackerSyncEntity("order", true, 2, "Sales", [new TrackerSyncDependency("customer")], "Open only"),
+                        new TrackerSyncEntity("customer", false, null, "", [])]),
+                    new TrackerSyncStructure([new TrackerSyncEntity("customer", true, null, "Mine", [])]))
+            }
+            : tracker).ToArray()
+    };
+
+    private static string TrackerPath(Guid trackerId) =>
+        $".entitytracker/trackers/{trackerId:D}/tracker.json";
 
     [Fact]
     public async Task LargerSnapshotExportPreservesEntityRelationshipsAndCanonicalHash()

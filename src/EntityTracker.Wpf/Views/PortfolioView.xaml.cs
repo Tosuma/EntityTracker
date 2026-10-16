@@ -60,6 +60,7 @@ public partial class PortfolioView : UserControl
     {
         string? path = new ProjectRepositoryFolderPicker().Pick();
         if (path is null) return;
+        // The import's progress notice shows each step and how it ended, failures included.
         try { await Shell.ImportProjectAsync(path); }
         catch (ProjectNameCollisionException collision)
         {
@@ -68,19 +69,18 @@ public partial class PortfolioView : UserControl
             if (name is null)
             {
                 Logger.LogInformation("Import was stopped: no local name was chosen.");
+                Shell.StopProjectImport();
                 return;
             }
             try { await Shell.ImportProjectAsync(path, name); }
             catch (Exception error)
             {
                 Logger.LogHandled(error, "Importing the Project under a local name failed.");
-                Shell.ShowNotification(error.Message);
             }
         }
         catch (Exception error)
         {
             Logger.LogHandled(error, "Importing the Project failed.");
-            Shell.ShowNotification(error.Message);
         }
     }
 

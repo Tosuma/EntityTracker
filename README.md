@@ -190,7 +190,9 @@ range or a search with no matches, and errors inside an open dialog appear next 
 ![Project sync action needed in the sidebar notification center](images/light/project-sync-action-needed.png)
 
 The merge review shows each conflicting object with its base, local, and remote values. Choose a
-side for each conflict or apply one choice to all, then confirm the resolved Project state.
+side for each conflict or apply one choice to all, then confirm the resolved Project state. Only
+changes both sides made differently are asked about; everything else, including what Sync from
+source remembers about earlier syncs, is merged automatically.
 
 ![Project merge review with base, local, and remote values and per-conflict choices](images/light/project-merge-review.png)
 

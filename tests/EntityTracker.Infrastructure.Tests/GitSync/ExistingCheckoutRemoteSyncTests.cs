@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json.Nodes;
 using EntityTracker.Application.GitSync;
 using EntityTracker.Application.Snapshots;
 using EntityTracker.Domain;
@@ -406,6 +407,61 @@ public sealed class ExistingCheckoutRemoteSyncTests
         Assert.Empty(approval.Calls);
         Assert.Equal(head, workspace.Git(checkout, "rev-parse", "HEAD"));
         Assert.Single((await catalog.Snapshots.ReadAsync(projectId)).Snapshot!.Trackers);
+    }
+
+    [Fact]
+    public async Task ImportReportsEachStepForItsProgressNotice()
+    {
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        string checkout = workspace.CreateRemoteCheckout("project", Snapshot(id, "Project"));
+        await using TestCatalog catalog = await TestCatalog.CreateAsync(workspace, "catalog");
+        List<ProjectSyncPhase> phases = [];
+
+        await catalog.Sync(checkout).ImportAsync(checkout, progress: new Recorder(phases));
+
+        Assert.Equal([ProjectSyncPhase.Inspecting, ProjectSyncPhase.Fetching, ProjectSyncPhase.Validating,
+            ProjectSyncPhase.Applying], phases);
+    }
+
+    /// <summary>Records reported values at once, unlike <see cref="Progress{T}"/>, which posts them.</summary>
+    private sealed class Recorder(List<ProjectSyncPhase> phases) : IProgress<ProjectSyncPhase>
+    {
+        public void Report(ProjectSyncPhase value) => phases.Add(value);
+    }
+
+    [Fact]
+    public async Task AFormat6RepositoryLastSyncedByAnOlderVersionSyncsAndIsRewrittenAsFormat7()
+    {
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        string checkout = workspace.CreateRemoteCheckout("project",
+            Snapshot(id, "Project") with { FormatVersion = 6 });
+        // As a version before 2.0.0 wrote it: every entity with its provenance.
+        string entities = Path.Combine(checkout, ".entitytracker", "trackers");
+        foreach (string path in Directory.EnumerateFiles(entities, "*.json", SearchOption.AllDirectories)
+                     .Where(path => path.Contains($"{Path.DirectorySeparatorChar}entities{Path.DirectorySeparatorChar}", StringComparison.Ordinal)))
+        {
+            JsonObject entity = JsonNode.Parse(File.ReadAllBytes(path))!.AsObject();
+            entity["provenance"] = "Manual";
+            File.WriteAllText(path, entity.ToJsonString());
+        }
+        workspace.Git(checkout, "commit", "-am", "Snapshot by an older version");
+        workspace.Git(checkout, "push");
+        await using TestCatalog catalog = await TestCatalog.CreateAsync(workspace, "catalog");
+        ProjectGitSyncService sync = catalog.Sync(checkout);
+        ProjectSyncLink link = await sync.ImportAsync(checkout);
+        // The older version recorded the hash of the files as it wrote them, provenance included.
+        await catalog.Links.SaveAsync(link with { LastSnapshotHash = new string('0', 64) });
+
+        ProjectSyncLink synced = await sync.SyncNowAsync(new ProjectId(id));
+
+        Assert.Equal("Current", synced.SyncStatus);
+        Assert.Contains("\"formatVersion\": 7",
+            File.ReadAllText(Path.Combine(checkout, ".entitytracker", "manifest.json")), StringComparison.Ordinal);
+        Assert.DoesNotContain(Directory.EnumerateFiles(entities, "*.json", SearchOption.AllDirectories),
+            path => File.ReadAllText(path).Contains("provenance", StringComparison.Ordinal));
+        Assert.Equal(workspace.Git(checkout, "rev-parse", "HEAD"), workspace.Git(checkout, "rev-parse", "origin/main"));
     }
 
     [Fact]
@@ -866,9 +922,9 @@ public sealed class ExistingCheckoutRemoteSyncTests
         ProjectGitSyncService sync = catalog.Sync(checkout);
         string manifestPath = Path.Combine(checkout, ".entitytracker", "manifest.json");
         string manifest = File.ReadAllText(manifestPath);
-        string current = $"\"formatVersion\":{ProjectSnapshot.CurrentFormatVersion}";
+        string current = $"\"formatVersion\": {ProjectSnapshot.CurrentFormatVersion}";
         Assert.Contains(current, manifest);
-        File.WriteAllText(manifestPath, manifest.Replace(current, "\"formatVersion\":99"));
+        File.WriteAllText(manifestPath, manifest.Replace(current, "\"formatVersion\": 99"));
         workspace.Git(checkout, "add", ".entitytracker");
         workspace.Git(checkout, "commit", "-m", "Unsupported version");
         ProjectSnapshotFormatVersionException versionError =

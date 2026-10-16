@@ -231,7 +231,6 @@ internal sealed class ProjectMergeConflictPresenter(
         if (property is "DeveloperId" or "DependencyEntityId" or "CopiedFromTrackerId")
             return ReferenceName(snapshot, property == "DeveloperId" ? "Developer" :
                 property == "DependencyEntityId" ? "Entity" : "Tracker", value);
-        if (property == "SyncBaselineJson") return Baseline(value);
         if (property == "IsRetired") return value.Equals("true", StringComparison.OrdinalIgnoreCase)
             ? "Retired" : "Available";
         if (value.Equals("true", StringComparison.OrdinalIgnoreCase) ||
@@ -252,39 +251,6 @@ internal sealed class ProjectMergeConflictPresenter(
             ? Name(snapshot, type, id) ?? NameOnSides(type, id)
             : "Unknown " + type;
 
-    private static string Baseline(string value)
-    {
-        try
-        {
-            using JsonDocument document = JsonDocument.Parse(value);
-            string Section(string name)
-            {
-                if (!document.RootElement.TryGetProperty(name, out JsonElement section) ||
-                    !section.TryGetProperty("Entities", out JsonElement entities)) return "none";
-                string[] descriptions = entities.EnumerateArray().Select(entity =>
-                {
-                    string entityName = Property(entity, "Name") ?? "Unnamed entity";
-                    string state = Property(entity, "Active") == "True" ? "active" : "inactive";
-                    string group = Property(entity, "GroupName") ?? "";
-                    string priority = Property(entity, "RequestedPriority") ?? "";
-                    string dependencies = entity.TryGetProperty("Dependencies", out JsonElement items)
-                        ? string.Join(", ", items.EnumerateArray().Select(dependency =>
-                            (Property(dependency, "Name") ?? "Unnamed dependency") + " (" +
-                            (Property(dependency, "Kind") ?? "unknown") + ")")) : "";
-                    return $"{entityName} ({state}; group: {group}; priority: {priority}; " +
-                           $"dependencies: {dependencies})";
-                }).ToArray();
-                return descriptions.Length == 0 ? "none" : string.Join(", ", descriptions);
-            }
-            return $"Source entities: {Section("Source")}; destination entities: {Section("Destination")}";
-        }
-        catch (Exception error) when (error is JsonException or InvalidOperationException)
-        {
-            Logger.LogWarning(error, "A Sync from source baseline could not be described for the merge review.");
-            return "Sync from source baseline";
-        }
-    }
-
     private static string DeveloperName(string? initials, string? displayName) =>
         string.IsNullOrWhiteSpace(displayName) ? initials ?? "Unnamed Developer" :
         $"{displayName} ({initials})";
@@ -297,7 +263,6 @@ internal sealed class ProjectMergeConflictPresenter(
         "SourceName" => "Name",
         "LifecycleState" => "State",
         "IsRetired" => "Availability",
-        "SyncBaselineJson" => "Sync from source baseline",
         "ResponsibleDeveloper" => "Responsible Developer",
         "FilterActive" => "Filter active",
         "Notes" => "Internal notes",

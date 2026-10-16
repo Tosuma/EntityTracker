@@ -175,6 +175,60 @@ public sealed class ProjectGitSyncTests
     }
 
     [Fact]
+    public async Task SnapshotFilesCheckedOutWithWindowsLineEndingsReadAsWritten()
+    {
+        using TestRepository repo = new();
+        repo.Init();
+        // Git for Windows' usual setting: text files are checked out with "\r\n".
+        repo.Git("config", "core.autocrlf", "true");
+        ProjectSnapshotPackage package = new ProjectSnapshotJsonCodec().Encode(Snapshot(Guid.NewGuid()));
+        foreach ((string relative, byte[] bytes) in package.Files)
+        {
+            string full = Path.Combine(repo.Root, relative.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            File.WriteAllBytes(full, bytes);
+        }
+        repo.Git("add", ".entitytracker");
+        repo.Git("commit", "-m", "Snapshot");
+        Directory.Delete(Path.Combine(repo.Root, ".entitytracker"), true);
+        repo.Git("checkout", "--", ".entitytracker");
+        Assert.Contains("\r\n", File.ReadAllText(Path.Combine(repo.Root, ".entitytracker", "manifest.json")));
+
+        GitWorkingTreeState state = await new SystemGitTransport().InspectAsync(repo.Root);
+
+        Assert.Equal(package.Files.Keys.Order(StringComparer.Ordinal), state.SnapshotFiles.Keys.Order(StringComparer.Ordinal));
+        foreach ((string relative, byte[] bytes) in package.Files)
+            Assert.True(bytes.AsSpan().SequenceEqual(state.SnapshotFiles[relative]), $"{relative} was not read as written.");
+    }
+
+    [Fact]
+    public async Task AnUnfinishedManualGitMergeIsExplainedAndLeftAlone()
+    {
+        using TestRepository repo = new();
+        repo.Init();
+        repo.Write("notes.txt", "base");
+        repo.Git("add", "notes.txt");
+        repo.Git("commit", "-m", "Base");
+        repo.Git("switch", "-c", "other");
+        repo.Write("notes.txt", "other");
+        repo.Git("commit", "-am", "Other");
+        repo.Git("switch", "main");
+        repo.Write("notes.txt", "main");
+        repo.Git("commit", "-am", "Main");
+        // Someone merged with Git by hand and left the conflict.
+        Assert.Throws<InvalidOperationException>(() => repo.Git("merge", "other"));
+        string head = repo.Git("rev-parse", "HEAD");
+
+        ProjectSyncConfigurationException error = await Assert.ThrowsAsync<ProjectSyncConfigurationException>(
+            () => new SystemGitTransport().InspectAsync(repo.Root));
+
+        Assert.Contains("A Git merge is in progress", error.Message, StringComparison.Ordinal);
+        Assert.Contains("git merge --abort", error.Message, StringComparison.Ordinal);
+        Assert.Equal(head, repo.Git("rev-parse", "HEAD"));
+        Assert.True(File.Exists(Path.Combine(repo.Root, ".git", "MERGE_HEAD")));
+    }
+
+    [Fact]
     public async Task MatchingSnapshotLinksWithoutCommitAndInvalidSnapshotIsRejected()
     {
         using TestRepository repo = new();

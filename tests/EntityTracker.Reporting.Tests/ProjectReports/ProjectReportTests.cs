@@ -93,7 +93,7 @@ public sealed class ProjectReportTests
     {
         string html = ProjectReportHtmlWriter.Write(Report());
 
-        Assert.Contains("<main id=\"report\" data-creator=\"Tobias S. Madsen\">", html, StringComparison.Ordinal);
+        Assert.Contains("<main id=\"report\" data-creator=\"Tobias Surland\">", html, StringComparison.Ordinal);
         Assert.Contains("\", created by \" + creator", html, StringComparison.Ordinal);
     }
 

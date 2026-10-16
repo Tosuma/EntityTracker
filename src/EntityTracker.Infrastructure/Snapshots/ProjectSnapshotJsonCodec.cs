@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using EntityTracker.Application.Snapshots;
 using EntityTracker.Application.GitSync;
+using EntityTracker.Application.Tracking;
 
 namespace EntityTracker.Infrastructure.Snapshots;
 
@@ -14,7 +15,10 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = false,
+        // Indented with "\n" on every OS, so each file reads well in a Git diff and is byte-for-byte the
+        // same wherever it was written.
+        WriteIndented = true,
+        NewLine = "\n",
         RespectRequiredConstructorParameters = true,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
     };
@@ -41,7 +45,8 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                 new TrackerDocument(tracker.Id, tracker.ProjectId, tracker.Name,
                     tracker.LifecycleState, tracker.CreatedAtUtc, tracker.UpdatedAtUtc,
                     tracker.RecycledAtUtc, tracker.CopiedFromTrackerId,
-                    tracker.SyncBaselineJson), JsonOptions);
+                    snapshot.FormatVersion >= 7 ? tracker.SyncBaseline?.Normalize() : null,
+                    snapshot.FormatVersion >= 7 ? null : BaselineText(tracker.SyncBaseline)), JsonOptions);
             foreach (SnapshotEntity entity in tracker.Entities.OrderBy(e => e.Id))
             {
                 SnapshotEntity ordered = entity with
@@ -76,7 +81,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                 files[prefix + "schema-import-summary.json"] =
                     JsonSerializer.SerializeToUtf8Bytes(summary, JsonOptions);
         }
-        return new ProjectSnapshotPackage(files, Hash(files));
+        return new ProjectSnapshotPackage(files, ContentHash(files));
     }
 
     public ProjectSnapshot Decode(IReadOnlyDictionary<string, byte[]> files)
@@ -100,7 +105,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
             SnapshotEntity[] entities = files.Keys.Where(p => p.StartsWith(prefix + "entities/", StringComparison.Ordinal))
                 .Order(StringComparer.Ordinal).Select(p => manifest.FormatVersion switch
                 {
-                    >= 6 => Read<SnapshotEntityV6>(files, p).ToSnapshotEntity(),
+                    >= 6 => ReadEntityV6(files, p, manifest.FormatVersion),
                     >= 3 => Read<SnapshotEntityV3>(files, p).ToSnapshotEntity(manifest.FormatVersion >= 4, manifest.FormatVersion >= 5),
                     _ => Read<SnapshotEntityLegacy>(files, p).ToSnapshotEntity()
                 }).ToArray();
@@ -113,7 +118,9 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                 ? Read<SnapshotImportSummary>(files, summaryPath) : null;
             trackers.Add(new SnapshotTracker(doc.Id, doc.ProjectId, doc.Name, doc.LifecycleState,
                 doc.CreatedAtUtc, doc.UpdatedAtUtc, doc.RecycledAtUtc, doc.CopiedFromTrackerId,
-                entities, events, progress, doc.SyncBaselineJson, summary));
+                entities, events, progress,
+                manifest.FormatVersion >= 7 ? doc.SyncBaseline?.Normalize() : ReadBaselineText(doc.SyncBaselineJson),
+                summary));
         }
         SnapshotDeveloper[]? developers = manifest.FormatVersion >= 2
             ? files.Keys.Where(p => p.StartsWith(Root + "developers/", StringComparison.Ordinal))
@@ -143,7 +150,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                 new Manifest(tombstone.FormatVersion, tombstone.ProjectId), JsonOptions),
             [Root + "deleted-project.json"] = JsonSerializer.SerializeToUtf8Bytes(tombstone, JsonOptions)
         };
-        return new ProjectSnapshotPackage(files, Hash(files));
+        return new ProjectSnapshotPackage(files, ContentHash(files));
     }
 
     public bool TryDecodeTombstone(IReadOnlyDictionary<string, byte[]> files,
@@ -174,6 +181,37 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
             tombstone.BaseSnapshotHash.Length != 64 ||
             !tombstone.BaseSnapshotHash.All(Uri.IsHexDigit))
             throw new InvalidDataException("The Project tombstone is invalid or unsupported.");
+    }
+
+    /// <summary>The baseline as the JSON text tracker.json kept it in before format 7.</summary>
+    private static string? BaselineText(TrackerSyncBaseline? baseline) =>
+        baseline is null ? null : JsonSerializer.Serialize(baseline.Normalize());
+
+    /// <summary>
+    /// Reads a baseline kept as JSON text (formats 1–6). Baselines saved before dependency kinds were removed carry a
+    /// "Kind" per dependency, which is ignored.
+    /// </summary>
+    private static TrackerSyncBaseline? ReadBaselineText(string? text)
+    {
+        if (text is null) return null;
+        try
+        {
+            return (JsonSerializer.Deserialize<TrackerSyncBaseline>(text) ??
+                    throw new InvalidDataException("A Tracker sync baseline is empty.")).Normalize();
+        }
+        catch (JsonException error)
+        {
+            throw new InvalidDataException("A Tracker sync baseline is invalid.", error);
+        }
+    }
+
+    private static SnapshotEntity ReadEntityV6(IReadOnlyDictionary<string, byte[]> files, string path,
+        int formatVersion)
+    {
+        SnapshotEntityV6 entity = Read<SnapshotEntityV6>(files, path);
+        if (formatVersion >= 7 && entity.Provenance is not null)
+            throw new InvalidDataException($"The snapshot document {path} is malformed.");
+        return entity.ToSnapshotEntity();
     }
 
     private static T Read<T>(IReadOnlyDictionary<string, byte[]> files, string path)
@@ -209,6 +247,22 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
     }
 
     private static string TrackerPrefix(Guid id) => Root + $"trackers/{id:D}/";
+
+    /// <summary>
+    /// The hash names the content, not the layout: it is taken over each document written compactly,
+    /// as formats up to 6 wrote the files. Indenting the files (format 7) therefore left the hash of an
+    /// unchanged format 6 snapshot as it was recorded at its last sync.
+    /// </summary>
+    private static string ContentHash(IReadOnlyDictionary<string, byte[]> files) =>
+        Hash(files.ToDictionary(pair => pair.Key, pair => Compact(pair.Value), StringComparer.Ordinal));
+
+    private static byte[] Compact(byte[] json)
+    {
+        using JsonDocument document = JsonDocument.Parse(json);
+        using MemoryStream output = new(json.Length);
+        using (Utf8JsonWriter writer = new(output)) document.WriteTo(writer);
+        return output.ToArray();
+    }
 
     private static string Hash(IReadOnlyDictionary<string, byte[]> files)
     {
@@ -301,7 +355,11 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
         IReadOnlyList<SnapshotResponsibilityPeriod> ResponsibilityPeriods,
         string FilterActive,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        string? SharedNotes = null)
+        string? SharedNotes = null,
+        // Written by format 6 versions from before provenance was removed (app-v2.0.0). It is read and
+        // ignored, and never written; format 7 files must not have it.
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? Provenance = null)
     {
         // Empty Shared notes are left out, as in format 5.
         public static SnapshotEntityV6 From(SnapshotEntity entity) => new(
@@ -322,6 +380,10 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
         Guid Id, Guid ProjectId, string Name, string LifecycleState,
         DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc,
         DateTimeOffset? RecycledAtUtc, Guid? CopiedFromTrackerId,
+        // Format 7: the baseline as nested JSON.
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        TrackerSyncBaseline? SyncBaseline = null,
+        // Formats 1–6: the baseline as one JSON string.
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         string? SyncBaselineJson = null);
 }
