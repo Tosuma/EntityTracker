@@ -6,7 +6,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    internal const int CurrentSchemaVersion = 22;
+    internal const int CurrentSchemaVersion = 23;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -980,6 +980,14 @@ public sealed class SqliteDatabase
 
             if (schemaVersion < 22)
                 await SqliteNormalFormMigration.MigrateAsync(connection, transaction, cancellationToken);
+
+            // A development build of version 22 still kept entity provenance, which the released
+            // version 22 doesn't have. Its NOT NULL column made every new or imported entity fail.
+            if (schemaVersion < 23 &&
+                await ColumnExistsAsync(connection, transaction, "tracked_entities",
+                    "provenance", cancellationToken))
+                await ExecuteAsync(connection, transaction,
+                    "ALTER TABLE tracked_entities DROP COLUMN provenance;", cancellationToken);
 
             if (newDatabase && StartNewDatabaseWithoutProjects)
             {

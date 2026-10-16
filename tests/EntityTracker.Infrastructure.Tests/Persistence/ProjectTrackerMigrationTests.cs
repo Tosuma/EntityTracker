@@ -200,7 +200,7 @@ public sealed class ProjectTrackerMigrationTests
         Assert.Equal(7, snapshot.State.ReconciledCount);
 
         await using SqliteConnection connection = await OpenAsync(file.DatabasePath);
-        Assert.Equal(22L, await ScalarInt64Async(connection, "PRAGMA user_version;"));
+        Assert.Equal((long)SqliteDatabase.CurrentSchemaVersion, await ScalarInt64Async(connection, "PRAGMA user_version;"));
         // Shared notes arrive empty on entities that existed before the column.
         Assert.Equal(0L, await ScalarInt64Async(connection, "SELECT COUNT(*) FROM tracked_entities WHERE shared_notes <> '';"));
         using SqliteCommand command = connection.CreateCommand();

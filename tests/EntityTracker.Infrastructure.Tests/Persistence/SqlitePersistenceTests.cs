@@ -26,7 +26,7 @@ public sealed class SqlitePersistenceTests
         await database.InitializeAsync();
 
         await using SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(22L, await ExecuteScalarInt64Async(connection, "PRAGMA user_version;"));
+        Assert.Equal(SqliteDatabase.CurrentSchemaVersion, await ExecuteScalarInt64Async(connection, "PRAGMA user_version;"));
 
         string[] tableNames = await ReadStringsAsync(
             connection,
@@ -83,7 +83,7 @@ public sealed class SqlitePersistenceTests
         await using (SqliteConnection connection = await OpenConnectionAsync(file.DatabasePath))
         {
             using SqliteCommand command = connection.CreateCommand();
-            command.CommandText = "PRAGMA user_version = 23;";
+            command.CommandText = $"PRAGMA user_version = {SqliteDatabase.CurrentSchemaVersion + 1};";
             await command.ExecuteNonQueryAsync();
         }
 
@@ -92,7 +92,41 @@ public sealed class SqlitePersistenceTests
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => database.InitializeAsync());
         Assert.Contains("newer", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("22", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(SqliteDatabase.CurrentSchemaVersion.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_DropsTheProvenanceColumnAnEarlyVersion22Kept()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        // As a development build of version 22 left it: provenance still there, NOT NULL.
+        await using (SqliteConnection connection = await database.OpenConnectionAsync(CancellationToken.None))
+        {
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                ALTER TABLE tracked_entities ADD COLUMN provenance TEXT NOT NULL DEFAULT 'Manual'
+                    CHECK (provenance IN ('Manual', 'Copied'));
+                PRAGMA user_version = 22;
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        SqliteDatabase upgraded = new(file.DatabasePath);
+        await upgraded.InitializeAsync();
+
+        Assert.Equal(SqliteDatabase.CurrentSchemaVersion, await upgraded.GetStoredSchemaVersionAsync());
+        await using (SqliteConnection connection = await upgraded.OpenConnectionAsync(CancellationToken.None))
+        {
+            using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = "SELECT COUNT(*) FROM pragma_table_info('tracked_entities') WHERE name = 'provenance';";
+            Assert.Equal(0L, (long)(await command.ExecuteScalarAsync())!);
+        }
+        // The insert that failed with "NOT NULL constraint failed: tracked_entities.provenance".
+        TrackedEntity entity = new(EntityId.New(), upgraded.GetTrackerId(), "customer");
+        Assert.True(await new SqliteEntityRepository(upgraded).TryAddAsync(entity));
     }
 
     [Fact]
@@ -125,7 +159,7 @@ public sealed class SqlitePersistenceTests
         TrackedEntity loaded = Assert.IsType<TrackedEntity>(await repository.GetAsync(existing.Id));
         Assert.Equal("Keep notes", loaded.Notes);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(22L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal((long)SqliteDatabase.CurrentSchemaVersion, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
     }
 
     [Fact]
@@ -154,7 +188,7 @@ public sealed class SqlitePersistenceTests
         TrackedEntity loaded = Assert.IsType<TrackedEntity>(await repository.GetAsync(existing.Id));
         Assert.Null(loaded.RequestedPriority);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(22L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal((long)SqliteDatabase.CurrentSchemaVersion, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
         Assert.Contains(
             "requested_priority",
             await ReadStringsAsync(
@@ -187,7 +221,7 @@ public sealed class SqlitePersistenceTests
         TrackedEntity loaded = Assert.IsType<TrackedEntity>(await repository.GetAsync(existing.Id));
         Assert.Equal(string.Empty, loaded.ResponsibleDeveloper);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(22L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal((long)SqliteDatabase.CurrentSchemaVersion, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
         Assert.DoesNotContain(
             "responsible_developer",
             await ReadStringsAsync(
@@ -221,7 +255,7 @@ public sealed class SqlitePersistenceTests
         TrackedEntity loaded = Assert.IsType<TrackedEntity>(await repository.GetAsync(existing.Id));
         Assert.Equal(string.Empty, loaded.GroupName);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(22L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal((long)SqliteDatabase.CurrentSchemaVersion, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
         Assert.Contains(
             "group_name",
             await ReadStringsAsync(
@@ -381,7 +415,7 @@ public sealed class SqlitePersistenceTests
         await using SqliteConnection migratedConnection =
             await OpenConnectionAsync(file.DatabasePath);
         Assert.Equal(
-            22L,
+            (long)SqliteDatabase.CurrentSchemaVersion,
             await ExecuteScalarInt64Async(migratedConnection, "PRAGMA user_version;"));
         Assert.All(
             await entityRepository.GetAllAsync(),
@@ -430,7 +464,7 @@ public sealed class SqlitePersistenceTests
         Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
         Assert.Equal("Keep notes", loaded.Notes);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(22L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal((long)SqliteDatabase.CurrentSchemaVersion, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
     }
 
     [Fact]
@@ -473,7 +507,7 @@ public sealed class SqlitePersistenceTests
         Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
         Assert.Equal("Keep notes", loaded.Notes);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(22L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal((long)SqliteDatabase.CurrentSchemaVersion, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
     }
 
     [Fact]
@@ -540,7 +574,7 @@ public sealed class SqlitePersistenceTests
         Assert.Equal(StatusHistoryEntryKind.Baseline, history[0].Kind);
         Assert.Equal(StatusHistoryEntryKind.Transition, history[1].Kind);
         await using SqliteConnection migrated = await OpenConnectionAsync(file.DatabasePath);
-        Assert.Equal(22L, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
+        Assert.Equal((long)SqliteDatabase.CurrentSchemaVersion, await ExecuteScalarInt64Async(migrated, "PRAGMA user_version;"));
     }
 
     [Fact]
