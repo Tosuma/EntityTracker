@@ -13,22 +13,22 @@ public sealed class AppCreditsTests
     {
         string licence = File.ReadAllText(Path.Combine(RepositoryRoot(), "LICENSE"));
 
-        Assert.Contains($"Copyright (c) {AppCredits.Year} {AppCredits.LongName}", licence, StringComparison.Ordinal);
-        Assert.Equal("© 2026 Tobias Surland Madsen", AppCredits.CopyrightLine);
-        Assert.Equal("Tobias Surland Madsen (Tosuma)", AppCredits.CreatorLine);
-        Assert.Equal("by Tobias S. Madsen", AppCredits.ByLine);
+        Assert.Contains($"Copyright (c) {AppCredits.Year} {AppCredits.FullName}", licence, StringComparison.Ordinal);
+        Assert.Equal("© 2026 Tobias Surland", AppCredits.CopyrightLine);
+        Assert.Equal("Tobias Surland (Tosuma)", AppCredits.CreatorLine);
+        Assert.Equal("by Tobias Surland", AppCredits.ByLine);
     }
 
     [Fact]
     public void ReportsNameTheSameCreatorAsTheApp() =>
-        Assert.Equal(AppCredits.MediumName, ProjectReportHtmlWriter.CreatorName);
+        Assert.Equal(AppCredits.FullName, ProjectReportHtmlWriter.CreatorName);
 
     [Fact]
     public void TheAppsFilePropertiesNameTheCreator()
     {
         Assembly app = typeof(AppCredits).Assembly;
 
-        Assert.Equal(AppCredits.LongName, app.GetCustomAttribute<AssemblyCompanyAttribute>()?.Company);
+        Assert.Equal(AppCredits.FullName, app.GetCustomAttribute<AssemblyCompanyAttribute>()?.Company);
         Assert.Equal(AppCredits.CopyrightLine, app.GetCustomAttribute<AssemblyCopyrightAttribute>()?.Copyright);
         Assert.Equal("EntityTracker", app.GetCustomAttribute<AssemblyProductAttribute>()?.Product);
     }

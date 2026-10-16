@@ -27,7 +27,7 @@ public static partial class ProjectReportHtmlWriter
     };
 
     /// <summary>Gets the creator named in every report's footer; the app's medium name form.</summary>
-    public const string CreatorName = "Tobias S. Madsen";
+    public const string CreatorName = "Tobias Surland";
 
     public static string Write(ProjectReport report)
     {
