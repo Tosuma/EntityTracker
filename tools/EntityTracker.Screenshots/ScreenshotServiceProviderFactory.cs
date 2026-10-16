@@ -104,6 +104,7 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<OverviewExportService>();
         services.AddSingleton<IOverviewExportFilePicker, OverviewExportFilePicker>();
         services.AddSingleton<ProjectRepositoryCardViewModelFactory>();
+        services.AddSingleton<ProjectSyncIndicators>();
 
         services.AddSingleton<IDependencyRankingService, DependencyRanker>();
         services.AddSingleton<EffectiveDependencyResolver>();

@@ -112,6 +112,11 @@ License: MIT, with incorporated third-party components under the licenses in
          licenses/SkiaSharp-HarfBuzzSharp-THIRD-PARTY-NOTICES.txt
 Source: https://github.com/mono/SkiaSharp
 
+Fluent UI System Icons (icon shapes drawn by the app)
+Copyright (c) 2020 Microsoft Corporation
+License: MIT
+Source: https://github.com/microsoft/fluentui-system-icons
+
 .NET 10.0.11 runtime and Windows Desktop runtime
 Copyright (c) .NET Foundation and Contributors
 License: See licenses/DotNet-LICENSE.txt and

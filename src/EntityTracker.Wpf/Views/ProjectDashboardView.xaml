@@ -1,6 +1,7 @@
 <UserControl x:Class="EntityTracker.Wpf.Views.ProjectDashboardView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:EntityTracker.Wpf.Controls"
              xmlns:domain="clr-namespace:EntityTracker.Domain;assembly=EntityTracker.Domain"
              xmlns:projects="clr-namespace:EntityTracker.Application.Projects;assembly=EntityTracker.Application"
              xmlns:workflow="clr-namespace:EntityTracker.Application.Workflow;assembly=EntityTracker.Application"
@@ -225,9 +226,16 @@
                     DataContext="{Binding ProjectReporting.RepositoryCard}">
                 <StackPanel>
                     <TextBlock FontSize="20" FontWeight="SemiBold" Text="Git repository" />
-                    <TextBlock Margin="0,5,0,0" FontWeight="SemiBold"
-                               Text="{Binding SyncStateLabel}"
-                               AutomationProperties.LiveSetting="Polite" />
+                    <!-- The Project's sync state: the same icon as in the header and the Portfolio,
+                         with its sentence beside it. -->
+                    <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
+                        <controls:SyncStatusIcon x:Name="RepositorySyncIcon" Size="18" VerticalAlignment="Center"
+                                                 ProjectId="{Binding ProjectId}" />
+                        <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Text="{Binding Indicator.Label, ElementName=RepositorySyncIcon}"
+                                   Visibility="{Binding Visibility, ElementName=RepositorySyncIcon}" />
+                    </StackPanel>
                     <TextBlock Margin="0,5,0,0" Text="{Binding RepositoryPath}" TextWrapping="Wrap" />
                     <TextBlock Margin="0,4,0,0" Text="{Binding Branch}"
                                Visibility="{Binding IsLinked, Converter={StaticResource BooleanToVisibilityConverter}}" />

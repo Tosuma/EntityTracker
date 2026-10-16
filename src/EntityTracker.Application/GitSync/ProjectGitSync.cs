@@ -15,7 +15,9 @@ namespace EntityTracker.Application.GitSync;
 public sealed record ProjectSyncLink(
     Guid ProjectId, string RepositoryPath, string Branch, string? UpstreamIdentity,
     string? LastCommonCommit, long LastRevision, string? LastSnapshotHash,
-    string LastResult, string SyncStatus, ProjectDeletionIntent? PendingDeletion = null);
+    string LastResult, string SyncStatus, ProjectDeletionIntent? PendingDeletion = null,
+    // When a sync last ended with the repository current; missing in link files from before it was kept.
+    DateTimeOffset? LastSyncedAtUtc = null);
 
 public enum ProjectSyncMode { Manual, Automatic }
 
@@ -135,9 +137,11 @@ public sealed partial class ProjectGitSyncService(
     IProjectMergeReview? mergeReview = null,
     IProjectUnsavedEditsGate? editGate = null,
     IProjectSyncVersionGate? versionGate = null,
-    ILogger<ProjectGitSyncService>? logger = null)
+    ILogger<ProjectGitSyncService>? logger = null,
+    TimeProvider? clock = null)
 {
     private readonly ILogger _log = logger ?? NullLogger<ProjectGitSyncService>.Instance;
+    private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
     /// <summary>
     /// Runs one Git sync operation in its own log scope ("Sync 3f9a1c"), so its Git commands, phases and
@@ -403,6 +407,11 @@ public sealed partial class ProjectGitSyncService(
             ProjectSyncLink result = await LoggedAsync(mode == ProjectSyncMode.Automatic ? "Auto-sync" : "Sync",
                 $"Project {projectId.Value:D}", () => SyncCoreAsync(projectId, localName, token, collector, mode), Describe);
             if (result.SyncStatus is "PendingPush" or "PendingRemote") outcome = "Action needed";
+            if (result.SyncStatus == "Current")
+            {
+                result = result with { LastSyncedAtUtc = _clock.GetUtcNow() };
+                await links.SaveAsync(result, token);
+            }
             return result;
         }
         catch (OperationCanceledException) { outcome = "Cancelled"; throw; }

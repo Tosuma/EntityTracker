@@ -62,6 +62,28 @@ internal sealed class ReadmeScreenshotGenerator
         await provider.GetRequiredService<ProgressHistoryInitializer>()
             .EnsureInitializedAsync(tracker.Id, cancellationToken);
 
+        // The demo Project is linked to an illustrative repository and synced, so the Portfolio and the
+        // header show its sync icon. Presentation fixture only; the folder stays in the workspace.
+        string repositoryFixturePath = Directory.CreateDirectory(
+            Path.Combine(workspace.RootDirectory, "example-repository")).FullName;
+        IProjectSyncLinkStore linkStore = provider.GetRequiredService<IProjectSyncLinkStore>();
+        ProjectSyncIndicators syncIndicators = provider.GetRequiredService<ProjectSyncIndicators>();
+        System.Windows.Application.Current.Resources[ProjectSyncIndicators.ResourceKey] = syncIndicators;
+        DateTimeOffset lastSynced = new(2026, 8, 24, 12, 24, 0, TimeSpan.Zero);
+        async Task<ProjectSyncLink> SyncedLinkAsync() => new(
+            project.Id.Value,
+            repositoryFixturePath,
+            "main",
+            "origin/main:illustrative-upstream",
+            null,
+            await provider.GetRequiredService<EntityTracker.Application.Snapshots.IProjectSnapshotStore>().GetRevisionAsync(project.Id, cancellationToken),
+            null,
+            "Snapshot pushed",
+            "Current",
+            LastSyncedAtUtc: lastSynced);
+        await linkStore.SaveAsync(await SyncedLinkAsync(), cancellationToken);
+        await syncIndicators.RefreshAsync(cancellationToken);
+
         ShellViewModel shell = provider.GetRequiredService<ShellViewModel>();
         MainWindow window = new(shell);
         ConfigureWindow(window);
@@ -129,21 +151,10 @@ internal sealed class ReadmeScreenshotGenerator
 
             shell.ProjectReport!.Audience = EntityTracker.Reporting.ProjectReports.ReportAudience.Client;
             await shell.NavigateAsync(ShellDestination.ProjectDashboard, cancellationToken);
-            // Presentation fixture only. The real folder stays in the disposable workspace.
-            string repositoryFixturePath = Directory.CreateDirectory(
-                Path.Combine(workspace.RootDirectory, "example-repository")).FullName;
-            IProjectSyncLinkStore linkStore = provider.GetRequiredService<IProjectSyncLinkStore>();
-            ProjectSyncLink repositoryFixture = new(
-                project.Id.Value,
-                repositoryFixturePath,
-                "main",
-                "origin/main:illustrative-upstream",
-                null,
-                0,
-                null,
-                "Snapshot pushed",
-                "Current");
+            // Synced as of now, so the card shows the synced icon after the earlier screenshots' edits.
+            ProjectSyncLink repositoryFixture = await SyncedLinkAsync();
             await linkStore.SaveAsync(repositoryFixture, cancellationToken);
+            await syncIndicators.RefreshAsync(cancellationToken);
             await shell.ProjectReporting!.RepositoryCard!.RefreshAsync(cancellationToken);
             shell.ProjectReporting.RepositoryCard.ShowTiming(new ProjectSyncTiming(
                 TimeSpan.FromSeconds(18.4),
@@ -169,6 +180,7 @@ internal sealed class ReadmeScreenshotGenerator
                 LastResult = "Upstream advanced during sync; validation pending",
                 SyncStatus = "PendingRemote"
             }, cancellationToken);
+            await syncIndicators.RefreshAsync(cancellationToken);
             await shell.ProjectReporting.RepositoryCard.RefreshAsync(cancellationToken);
             shell.ProjectReporting.RepositoryCard.ShowTiming(new ProjectSyncTiming(
                 TimeSpan.FromSeconds(21.2),

@@ -67,20 +67,8 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
     public string Branch => !IsLinked ? string.Empty : "Branch: " + _link!.Branch;
     public string Upstream => !IsLinked ? string.Empty : _link!.UpstreamIdentity is null
         ? "Local only (no upstream)" : "Upstream: " + _link.UpstreamIdentity.Split(':', 2)[0];
-    public string SyncStateLabel => CurrentState.Kind switch
-    {
-        ProjectSyncStateKind.Unlinked => "Unlinked",
-        ProjectSyncStateKind.Idle => "Idle",
-        ProjectSyncStateKind.Syncing => "Syncing",
-        ProjectSyncStateKind.UpToDate => "Up to date",
-        ProjectSyncStateKind.LocalPending => "Local pending",
-        ProjectSyncStateKind.DeletionApproval => "Deletion approval needed",
-        ProjectSyncStateKind.Conflict => "Conflict",
-        ProjectSyncStateKind.AuthenticationRequired => "Authentication required",
-        ProjectSyncStateKind.ConfigurationInvalid => "Configuration invalid",
-        ProjectSyncStateKind.UpdatePaused => "Sync paused",
-        _ => "Failed"
-    };
+    /// <summary>The Project whose repository this card shows; its sync icon follows it.</summary>
+    public Guid ProjectId => _projectId.Value;
     private ProjectSyncState CurrentState
     {
         get
@@ -312,8 +300,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
         foreach (string name in new[] { nameof(IsLinked), nameof(IsBusy), nameof(RepositoryPath),
                      nameof(Branch), nameof(Upstream), nameof(LastResult), nameof(LastSyncTiming),
                      nameof(HasLastSyncTiming), nameof(PendingAction),
-                     nameof(HasPendingAction), nameof(CanCancelSync),
-                     nameof(SyncStateLabel) })
+                     nameof(HasPendingAction), nameof(CanCancelSync) })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         _linkCommand.NotifyCanExecuteChanged();
         _syncCommand.NotifyCanExecuteChanged();
