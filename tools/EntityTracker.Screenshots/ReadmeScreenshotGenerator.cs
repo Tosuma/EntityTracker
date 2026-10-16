@@ -100,7 +100,9 @@ internal sealed class ReadmeScreenshotGenerator
                 cancellationToken);
             await ExerciseLiveThemeSwitchAsync(provider, appearance, cancellationToken);
 
-            WpfScreenshotRenderer renderer = new(window, workspace.StagingDirectory);
+            // The fixture's real folder is in the user's temp folder; screenshots show an example path.
+            WpfScreenshotRenderer renderer = new(window, workspace.StagingDirectory,
+                new Dictionary<string, string> { [repositoryFixturePath] = @"C:\Projects\order-platform" });
             await renderer.CaptureAsync("portfolio.png");
 
             await shell.OpenProjectAsync(project.Id);

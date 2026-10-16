@@ -11,9 +11,20 @@ using EntityTracker.Wpf.ViewModels;
 
 namespace EntityTracker.Screenshots;
 
-internal sealed class WpfScreenshotRenderer(Window window, string outputDirectory)
+/// <param name="textReplacements">
+/// Text shown differently in every screenshot, such as a fixture's real folder shown as an example
+/// path. A screenshot never shows the user's profile or temp folder: a capture that would fails.
+/// </param>
+internal sealed class WpfScreenshotRenderer(Window window, string outputDirectory,
+    IReadOnlyDictionary<string, string>? textReplacements = null)
 {
     private const double Dpi = 96;
+
+    private static readonly string[] PrivatePaths =
+    [
+        Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar),
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+    ];
 
     private readonly Window _window = window ?? throw new ArgumentNullException(nameof(window));
     private readonly string _outputDirectory = string.IsNullOrWhiteSpace(outputDirectory)
@@ -27,7 +38,48 @@ internal sealed class WpfScreenshotRenderer(Window window, string outputDirector
         await SettleAsync(settleMilliseconds);
         // The main window is always 1920 × 1080; dialogs keep their own size.
         if (_window is MainWindow) ScreenshotWindowSize.EnsureFullSize(Root);
-        Save(RenderVisual(Root, includePageBackground: true), Path.Combine(_outputDirectory, fileName));
+        using (ReplaceText(fileName))
+            Save(RenderVisual(Root, includePageBackground: true), Path.Combine(_outputDirectory, fileName));
+    }
+
+    /// <summary>
+    /// Shows the replacement text in every rendered label until disposed, then checks that no label
+    /// shows a private folder.
+    /// </summary>
+    private IDisposable ReplaceText(string fileName)
+    {
+        List<(TextBlock Label, string Text)> replaced = [];
+        foreach (TextBlock label in FindVisualDescendants<TextBlock>(Root))
+        {
+            if (textReplacements is not null && textReplacements.TryGetValue(label.Text, out string? shown))
+            {
+                replaced.Add((label, label.Text));
+                label.SetCurrentValue(TextBlock.TextProperty, shown);
+            }
+        }
+        Root.UpdateLayout();
+        TextBlock? leak = FindVisualDescendants<TextBlock>(Root).FirstOrDefault(label =>
+            label.IsVisible && PrivatePaths.Any(path =>
+                label.Text.Contains(path, StringComparison.OrdinalIgnoreCase)));
+        if (leak is not null)
+        {
+            Restore();
+            throw new InvalidOperationException(
+                $"{fileName} would show a local folder: \"{leak.Text}\". Add it to the renderer's text replacements.");
+        }
+        return new Restorer(Restore);
+
+        void Restore()
+        {
+            foreach ((TextBlock label, string text) in replaced)
+                label.SetCurrentValue(TextBlock.TextProperty, text);
+            replaced.Clear();
+        }
+    }
+
+    private sealed class Restorer(Action restore) : IDisposable
+    {
+        public void Dispose() => restore();
     }
 
     internal async Task CaptureWithTextOverrideAsync(
