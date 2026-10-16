@@ -81,7 +81,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                 files[prefix + "schema-import-summary.json"] =
                     JsonSerializer.SerializeToUtf8Bytes(summary, JsonOptions);
         }
-        return new ProjectSnapshotPackage(files, Hash(files));
+        return new ProjectSnapshotPackage(files, ContentHash(files));
     }
 
     public ProjectSnapshot Decode(IReadOnlyDictionary<string, byte[]> files)
@@ -150,7 +150,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                 new Manifest(tombstone.FormatVersion, tombstone.ProjectId), JsonOptions),
             [Root + "deleted-project.json"] = JsonSerializer.SerializeToUtf8Bytes(tombstone, JsonOptions)
         };
-        return new ProjectSnapshotPackage(files, Hash(files));
+        return new ProjectSnapshotPackage(files, ContentHash(files));
     }
 
     public bool TryDecodeTombstone(IReadOnlyDictionary<string, byte[]> files,
@@ -247,6 +247,22 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
     }
 
     private static string TrackerPrefix(Guid id) => Root + $"trackers/{id:D}/";
+
+    /// <summary>
+    /// The hash names the content, not the layout: it is taken over each document written compactly,
+    /// as formats up to 6 wrote the files. Indenting the files (format 7) therefore left the hash of an
+    /// unchanged format 6 snapshot as it was recorded at its last sync.
+    /// </summary>
+    private static string ContentHash(IReadOnlyDictionary<string, byte[]> files) =>
+        Hash(files.ToDictionary(pair => pair.Key, pair => Compact(pair.Value), StringComparer.Ordinal));
+
+    private static byte[] Compact(byte[] json)
+    {
+        using JsonDocument document = JsonDocument.Parse(json);
+        using MemoryStream output = new(json.Length);
+        using (Utf8JsonWriter writer = new(output)) document.WriteTo(writer);
+        return output.ToArray();
+    }
 
     private static string Hash(IReadOnlyDictionary<string, byte[]> files)
     {

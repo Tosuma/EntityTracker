@@ -590,7 +590,12 @@ public sealed partial class ProjectGitSyncService(
             if (repositorySnapshot.Project.Id != projectId.Value)
                 throw new InvalidOperationException("The repository belongs to another Project.");
             ProjectSnapshotPackage basePackage = codec.Encode(repositorySnapshot);
-            if (link.LastSnapshotHash != basePackage.Sha256)
+            // HEAD is the commit of the last sync and the checkout is clean, so the files are the ones
+            // that sync wrote. In an older format, a different hash only means this version encodes
+            // them differently (for example without the provenance versions before 2.0.0 wrote);
+            // the sync then rewrites them in the current format.
+            if (link.LastSnapshotHash != basePackage.Sha256 &&
+                repositorySnapshot.FormatVersion == ProjectSnapshot.CurrentFormatVersion)
                 throw new InvalidOperationException("The repository snapshot changed since linking. Conflict review is required.");
             IReadOnlyList<string> deletions = FindDeletions(repositorySnapshot, read.Snapshot!);
             if (deletions.Count > 0)
