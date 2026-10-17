@@ -315,9 +315,10 @@ public sealed class PresentationConfigurationTests
             element.Name.LocalName == "RadioButton" &&
             (string?)element.Attribute("GroupName") == "AutoSyncInterval"));
         XDocument dashboard = LoadWpfXaml("Views", "ProjectDashboardView.xaml");
+        // The sync state is the shared icon (a polite live region itself), with its sentence beside it.
         Assert.Contains(dashboard.Descendants(), element =>
-            (string?)element.Attribute("Text") == "{Binding SyncStateLabel}" &&
-            (string?)element.Attribute("AutomationProperties.LiveSetting") == "Polite");
+            element.Name.LocalName == "SyncStatusIcon" &&
+            (string?)element.Attribute("ProjectId") == "{Binding ProjectId}");
     }
 
     [Fact]
@@ -329,7 +330,7 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
-    public void Theme_IsSplitIntoPaletteTypographyAndComponentsWithOnlyDangerButtonTemplate()
+    public void Theme_IsSplitIntoPaletteIconsTypographyAndComponentsWithOnlyDangerButtonTemplate()
     {
         XDocument theme = LoadWpfXaml("Themes", "EntityTrackerTheme.xaml");
         string[] sources = theme
@@ -342,6 +343,7 @@ public sealed class PresentationConfigurationTests
         Assert.Equal(
         [
             "EntityTrackerPalette.xaml",
+            "EntityTrackerIcons.xaml",
             "EntityTrackerTypography.xaml",
             "EntityTrackerComponents.xaml"
         ],

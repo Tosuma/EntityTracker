@@ -104,6 +104,7 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<OverviewExportService>();
         services.AddSingleton<IOverviewExportFilePicker, OverviewExportFilePicker>();
         services.AddSingleton<ProjectRepositoryCardViewModelFactory>();
+        services.AddSingleton<ProjectSyncIndicators>();
 
         services.AddSingleton<IDependencyRankingService, DependencyRanker>();
         services.AddSingleton<EffectiveDependencyResolver>();
@@ -115,9 +116,11 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<ProgressHistoryInitializer>();
         services.AddSingleton<ProgressDashboardBuilder>();
         services.AddSingleton<AggregateProgressDashboardBuilder>();
+        // Local, as in the app: the report view model counts days from the local date, and with UTC
+        // the two disagree between local midnight and UTC midnight.
         services.AddSingleton(provider => new ProgressReportingService(
             provider.GetRequiredService<IProgressHistoryRepository>(),
-            TimeZoneInfo.Utc,
+            TimeZoneInfo.Local,
             provider.GetRequiredService<ProgressDashboardBuilder>()));
         services.AddSingleton(provider => new AggregateProgressReportingService(
             provider.GetRequiredService<IProjectRepository>(),

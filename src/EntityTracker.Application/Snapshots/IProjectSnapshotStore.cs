@@ -8,6 +8,13 @@ public interface IProjectSnapshotStore
 {
     Task<ProjectSnapshotRead> ReadAsync(ProjectId projectId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The Project's revision, which every change to it raises. Compared with the revision of the last
+    /// sync, it tells whether there are changes not synced yet.
+    /// </summary>
+    async Task<long> GetRevisionAsync(ProjectId projectId, CancellationToken cancellationToken = default) =>
+        (await ReadAsync(projectId, cancellationToken)).Revision;
+
     Task<long> ApplyAsync(
         ProjectSnapshot snapshot, long expectedRevision,
         CancellationToken cancellationToken = default);

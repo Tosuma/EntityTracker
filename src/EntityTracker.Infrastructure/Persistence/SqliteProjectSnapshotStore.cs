@@ -9,6 +9,18 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProjectSnapshotStore
 {
+    /// <summary>Reads only the revision, without the snapshot; cheap enough to check often.</summary>
+    public async Task<long> GetRevisionAsync(ProjectId projectId, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(projectId);
+        await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        await using SqliteTransaction transaction = connection.BeginTransaction(deferred: true);
+        long revision = await RevisionAsync(connection, transaction, SqlitePersistenceValues.Format(projectId),
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return revision;
+    }
+
     public async Task<ProjectSnapshotRead> ReadAsync(
         ProjectId projectId, CancellationToken cancellationToken = default)
     {

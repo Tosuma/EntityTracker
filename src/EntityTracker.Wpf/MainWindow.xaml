@@ -271,9 +271,26 @@
                             <TextBlock FontSize="12"
                                        Foreground="{DynamicResource Brush.Text.Secondary}"
                                        Text="CURRENT CONTEXT" />
-                            <TextBlock FontSize="18"
-                                       FontWeight="SemiBold"
-                                       Text="{Binding ContextSummary}" />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock FontSize="18"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center"
+                                           Text="{Binding ContextSummary}" />
+                                <!-- The selected Project's sync state; click to sync, or to open the
+                                     Project when it needs attention. -->
+                                <Button x:Name="HeaderSyncButton"
+                                        Margin="8,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Style="{StaticResource IconButtonStyle}"
+                                        Command="{Binding SyncSelectedProjectCommand}"
+                                        ToolTip="{Binding SelectedProjectSyncTooltip}"
+                                        AutomationProperties.Name="{Binding SelectedProjectSyncTooltip}"
+                                        Visibility="{Binding SelectedProjectSyncIndicator.IsShown, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <controls:SyncStatusIcon Size="20"
+                                                             Indicator="{Binding SelectedProjectSyncIndicator}"
+                                                             IsHitTestVisible="False" />
+                                </Button>
+                            </StackPanel>
                         </StackPanel>
                         <StackPanel Grid.Column="1">
                             <Label x:Name="ProjectSelectorLabel" Content="Project" />

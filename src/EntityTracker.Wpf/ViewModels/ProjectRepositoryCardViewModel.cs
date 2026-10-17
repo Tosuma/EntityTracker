@@ -67,20 +67,8 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
     public string Branch => !IsLinked ? string.Empty : "Branch: " + _link!.Branch;
     public string Upstream => !IsLinked ? string.Empty : _link!.UpstreamIdentity is null
         ? "Local only (no upstream)" : "Upstream: " + _link.UpstreamIdentity.Split(':', 2)[0];
-    public string SyncStateLabel => CurrentState.Kind switch
-    {
-        ProjectSyncStateKind.Unlinked => "Unlinked",
-        ProjectSyncStateKind.Idle => "Idle",
-        ProjectSyncStateKind.Syncing => "Syncing",
-        ProjectSyncStateKind.UpToDate => "Up to date",
-        ProjectSyncStateKind.LocalPending => "Local pending",
-        ProjectSyncStateKind.DeletionApproval => "Deletion approval needed",
-        ProjectSyncStateKind.Conflict => "Conflict",
-        ProjectSyncStateKind.AuthenticationRequired => "Authentication required",
-        ProjectSyncStateKind.ConfigurationInvalid => "Configuration invalid",
-        ProjectSyncStateKind.UpdatePaused => "Sync paused",
-        _ => "Failed"
-    };
+    /// <summary>The Project whose repository this card shows; its sync icon follows it.</summary>
+    public Guid ProjectId => _projectId.Value;
     private ProjectSyncState CurrentState
     {
         get
@@ -152,7 +140,8 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
     {
         string? path = _picker.Pick();
         if (path is null) return;
-        await ExecuteAsync(async () => _link = await _service.LinkAsync(_projectId, path));
+        // Git and snapshot work runs on a background thread, so the window keeps redrawing.
+        await ExecuteAsync(async () => _link = await Task.Run(() => _service.LinkAsync(_projectId, path)));
     }
 
     private async Task SyncAsync(NotificationItem? existingNotice = null)
@@ -182,7 +171,9 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
                 new ProjectSyncProgressReporter(phase =>
                     _notifications?.Progress(notice, NotificationCenter.DescribeProjectSyncPhase(phase)));
             IProgress<ProjectSyncTiming> timing = new ProjectSyncTimingReporter(RecordTiming);
-            try { _link = await _service.SyncNowAsync(_projectId, cancellation.Token, progress, timing); }
+            // The sync runs on a background thread, as automatic sync does, so the progress notice and
+            // the turning sync icon keep moving; its dialogs and progress come back to the UI thread.
+            try { _link = await Task.Run(() => _service.SyncNowAsync(_projectId, cancellation.Token, progress, timing)); }
             catch (ProjectNameCollisionException collision)
             {
                 _logger?.LogInformation(collision, "The remote Project's name is already used here; asking for a local name.");
@@ -195,7 +186,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
                         NotificationKind.Information);
                     return;
                 }
-                _link = await _service.SyncNowAsync(_projectId, name, cancellation.Token, progress, timing);
+                _link = await Task.Run(() => _service.SyncNowAsync(_projectId, name, cancellation.Token, progress, timing));
             }
             if (_link is not null) _autoSync?.ReportManual(_projectId,
                 ProjectAutoSyncService.FromLink(_link, DateTimeOffset.UtcNow));
@@ -312,8 +303,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
         foreach (string name in new[] { nameof(IsLinked), nameof(IsBusy), nameof(RepositoryPath),
                      nameof(Branch), nameof(Upstream), nameof(LastResult), nameof(LastSyncTiming),
                      nameof(HasLastSyncTiming), nameof(PendingAction),
-                     nameof(HasPendingAction), nameof(CanCancelSync),
-                     nameof(SyncStateLabel) })
+                     nameof(HasPendingAction), nameof(CanCancelSync) })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         _linkCommand.NotifyCanExecuteChanged();
         _syncCommand.NotifyCanExecuteChanged();

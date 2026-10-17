@@ -410,6 +410,40 @@ public sealed class ExistingCheckoutRemoteSyncTests
     }
 
     [Fact]
+    public async Task AfterASyncTheProjectIsAtTheSyncedRevisionOnBothSides()
+    {
+        // The sync icon shows "not synced" when the Project's revision is above its link's.
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        ProjectId projectId = new(id);
+        string first = workspace.CreateRemoteCheckout("publisher", Snapshot(id, "Project"));
+        string second = workspace.Clone("receiver");
+        await using TestCatalog firstCatalog = await TestCatalog.CreateAsync(workspace, "first");
+        await using TestCatalog secondCatalog = await TestCatalog.CreateAsync(workspace, "second");
+        ProjectGitSyncService firstSync = firstCatalog.Sync(first);
+        ProjectGitSyncService secondSync = secondCatalog.Sync(second);
+        await firstSync.ImportAsync(first);
+        await secondSync.ImportAsync(second);
+
+        ProjectSnapshotRead before = await firstCatalog.Snapshots.ReadAsync(projectId);
+        await firstCatalog.Snapshots.ApplyAsync(before.Snapshot! with
+        {
+            Project = before.Snapshot.Project with { Name = "Renamed project" }
+        }, before.Revision);
+        ProjectSyncLink beforeSync = Assert.Single(await firstCatalog.Links.ReadAllAsync());
+        Assert.True(await firstCatalog.Snapshots.GetRevisionAsync(projectId) > beforeSync.LastRevision);
+
+        ProjectSyncLink pushed = await firstSync.SyncNowAsync(projectId);
+        ProjectSyncLink received = await secondSync.SyncNowAsync(projectId);
+
+        Assert.Equal(await firstCatalog.Snapshots.GetRevisionAsync(projectId), pushed.LastRevision);
+        Assert.Equal(await secondCatalog.Snapshots.GetRevisionAsync(projectId), received.LastRevision);
+        Assert.NotNull(pushed.LastSyncedAtUtc);
+        Assert.NotNull(received.LastSyncedAtUtc);
+        Assert.Equal(pushed.LastSyncedAtUtc, Assert.Single(await firstCatalog.Links.ReadAllAsync()).LastSyncedAtUtc);
+    }
+
+    [Fact]
     public async Task ImportReportsEachStepForItsProgressNotice()
     {
         using GitWorkspace workspace = new();

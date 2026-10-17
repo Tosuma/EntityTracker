@@ -23,6 +23,7 @@ internal static class ScreenshotManifest
         "project-sync-progress.png",
         "project-sync-action-needed.png",
         "project-merge-review.png",
+        "sync-states.png",
         "project-comparison.png",
         "tracker-recycle-confirmation.png",
         "tracker-recycle-bin.png",

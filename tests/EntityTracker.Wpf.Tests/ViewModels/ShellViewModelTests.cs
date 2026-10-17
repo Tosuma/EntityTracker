@@ -1188,7 +1188,8 @@ public sealed class ShellViewModelTests
                 adapters, developers, identity, periods);
             harness.Entities = entities;
             harness.ReportBuilder = new EntityTracker.Reporting.ProjectReports.ProjectReportBuilder(
-                projects, trackers, new ProgressReportingService(history, TimeZoneInfo.Utc),
+                // Local, as in the app: the report view model counts days from the local date.
+                projects, trackers, new ProgressReportingService(history, TimeZoneInfo.Local),
                 aggregateReporting, overview, DependencyGraphReportSectionProvider.AppSections);
             return harness;
         }
