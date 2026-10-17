@@ -599,7 +599,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             Notifications.Progress(notice, NotificationCenter.DescribeProjectImportPhase(phase)));
         try
         {
-            ProjectSyncLink link = await _gitSync.ImportAsync(repositoryPath, localName, progress: progress);
+            // On a background thread, so the window keeps redrawing; see ProjectRepositoryCardViewModel.
+            ProjectSyncLink link = await Task.Run(() => _gitSync.ImportAsync(repositoryPath, localName, progress: progress));
             RefreshSyncIndicators();
             await ReloadCatalogAsync(CancellationToken.None);
             string? name = Projects.FirstOrDefault(project => project.Id.Value == link.ProjectId)?.Name;
@@ -653,8 +654,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 result.GitSnapshotFileCount, result.ReusedSnapshots, result.BlobReadProcesses));
         try
         {
-            await _gitSync.SyncNowAsync(new ProjectId(link.ProjectId), progress: progress,
-                timing: timing);
+            await Task.Run(() => _gitSync.SyncNowAsync(new ProjectId(link.ProjectId), progress: progress,
+                timing: timing));
             Notifications.DismissProjectActions(new ProjectId(link.ProjectId), notice);
             Notifications.Complete(notice, "Project deletion published to the linked repository.");
         }

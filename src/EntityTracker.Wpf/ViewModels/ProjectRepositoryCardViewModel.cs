@@ -140,7 +140,8 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
     {
         string? path = _picker.Pick();
         if (path is null) return;
-        await ExecuteAsync(async () => _link = await _service.LinkAsync(_projectId, path));
+        // Git and snapshot work runs on a background thread, so the window keeps redrawing.
+        await ExecuteAsync(async () => _link = await Task.Run(() => _service.LinkAsync(_projectId, path)));
     }
 
     private async Task SyncAsync(NotificationItem? existingNotice = null)
@@ -170,7 +171,9 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
                 new ProjectSyncProgressReporter(phase =>
                     _notifications?.Progress(notice, NotificationCenter.DescribeProjectSyncPhase(phase)));
             IProgress<ProjectSyncTiming> timing = new ProjectSyncTimingReporter(RecordTiming);
-            try { _link = await _service.SyncNowAsync(_projectId, cancellation.Token, progress, timing); }
+            // The sync runs on a background thread, as automatic sync does, so the progress notice and
+            // the turning sync icon keep moving; its dialogs and progress come back to the UI thread.
+            try { _link = await Task.Run(() => _service.SyncNowAsync(_projectId, cancellation.Token, progress, timing)); }
             catch (ProjectNameCollisionException collision)
             {
                 _logger?.LogInformation(collision, "The remote Project's name is already used here; asking for a local name.");
@@ -183,7 +186,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
                         NotificationKind.Information);
                     return;
                 }
-                _link = await _service.SyncNowAsync(_projectId, name, cancellation.Token, progress, timing);
+                _link = await Task.Run(() => _service.SyncNowAsync(_projectId, name, cancellation.Token, progress, timing));
             }
             if (_link is not null) _autoSync?.ReportManual(_projectId,
                 ProjectAutoSyncService.FromLink(_link, DateTimeOffset.UtcNow));
