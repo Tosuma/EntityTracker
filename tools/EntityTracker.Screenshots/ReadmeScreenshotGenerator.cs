@@ -775,9 +775,6 @@ internal sealed class ReadmeScreenshotGenerator
         legend.Show();
         try
         {
-            foreach (SyncStatusIcon icon in rows.Children.OfType<StackPanel>().Select(row => row.Children.OfType<SyncStatusIcon>().Single()))
-                ((System.Windows.Media.RotateTransform)icon.RenderTransform).BeginAnimation(
-                    System.Windows.Media.RotateTransform.AngleProperty, null);
             await new WpfScreenshotRenderer(legend, outputDirectory).CaptureAsync("sync-states.png", settleMilliseconds: 400);
         }
         finally { legend.Close(); }
