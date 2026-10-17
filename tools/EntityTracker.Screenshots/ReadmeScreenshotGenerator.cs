@@ -228,6 +228,7 @@ internal sealed class ReadmeScreenshotGenerator
                     .CaptureAsync("project-merge-review.png", settleMilliseconds: 900);
             }
             finally { mergeDialog.Close(); }
+            await CaptureSyncStatesAsync(window, workspace.StagingDirectory);
             await renderer.BringNamedElementIntoViewAndCaptureAsync(
                 "ComparisonGrid",
                 "project-comparison.png");
@@ -729,6 +730,57 @@ internal sealed class ReadmeScreenshotGenerator
         await viewModel.Editor.BeginArchivedAsync(archivedRow.EntityId, cancellationToken);
         await renderer.CaptureAsync("archived-entity.png");
         viewModel.Editor.CancelCommand.Execute(null);
+    }
+
+    /// <summary>
+    /// The sync state icons, each with what it means, drawn by the app's own SyncStatusIcon. The
+    /// syncing icon is shown upright, without its turning.
+    /// </summary>
+    private static async Task CaptureSyncStatesAsync(Window owner, string outputDirectory)
+    {
+        (ProjectSyncIndicatorKind Kind, string Meaning)[] states =
+        [
+            (ProjectSyncIndicatorKind.Synced, "Synced"),
+            (ProjectSyncIndicatorKind.Unsynced, "Changes not synced yet"),
+            (ProjectSyncIndicatorKind.Syncing, "Syncing"),
+            (ProjectSyncIndicatorKind.NeedsAttention, "Sync needs attention"),
+            (ProjectSyncIndicatorKind.Paused, "Sync paused until EntityTracker is updated")
+        ];
+        StackPanel rows = new();
+        foreach ((ProjectSyncIndicatorKind kind, string meaning) in states)
+        {
+            SyncStatusIcon icon = new()
+            {
+                Size = 20,
+                VerticalAlignment = VerticalAlignment.Center,
+                Indicator = new ProjectSyncIndicator(kind, meaning)
+            };
+            StackPanel row = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 4) };
+            row.Children.Add(icon);
+            TextBlock label = new() { Text = meaning, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            label.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Primary");
+            row.Children.Add(label);
+            rows.Children.Add(row);
+        }
+        Window legend = new()
+        {
+            Owner = owner,
+            Title = "Sync states",
+            SizeToContent = SizeToContent.WidthAndHeight,
+            ShowInTaskbar = false,
+            ShowActivated = false,
+            Content = new Border { Padding = new Thickness(20, 16, 28, 16), Child = rows }
+        };
+        legend.SetResourceReference(Control.BackgroundProperty, "Brush.Surface.Page");
+        legend.Show();
+        try
+        {
+            foreach (SyncStatusIcon icon in rows.Children.OfType<StackPanel>().Select(row => row.Children.OfType<SyncStatusIcon>().Single()))
+                ((System.Windows.Media.RotateTransform)icon.RenderTransform).BeginAnimation(
+                    System.Windows.Media.RotateTransform.AngleProperty, null);
+            await new WpfScreenshotRenderer(legend, outputDirectory).CaptureAsync("sync-states.png", settleMilliseconds: 400);
+        }
+        finally { legend.Close(); }
     }
 
     private static void ConfigureWindow(MainWindow window)

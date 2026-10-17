@@ -183,6 +183,8 @@ name in the header, on its Portfolio card and on the Project dashboard. Hover ov
 - **Red warning:** sync needs attention.
 - **Pause:** sync waits until EntityTracker is updated.
 
+![The Project sync state icons: synced, changes not synced yet, syncing, sync needs attention, and sync paused](images/light/sync-states.png)
+
 Click the header icon to sync now, or, when the sync needs attention, to open the Project dashboard.
 
 The sidebar notification center shows the current sync phase. A completed sync disappears after
