@@ -47,6 +47,24 @@
         </Style.Triggers>
     </Style>
 
+    <!-- A button that is only an icon (controls:Icon): no frame until hovered. Give it a ToolTip and an
+         AutomationProperties.Name, since the icon carries the meaning. -->
+    <Style x:Key="IconButtonStyle"
+           TargetType="{x:Type Button}"
+           BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="Padding" Value="5" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Brush.Surface.Hover}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
     <Style x:Key="SecondaryButtonStyle"
            TargetType="{x:Type Button}"
            BasedOn="{StaticResource {x:Type Button}}">

@@ -62,6 +62,28 @@ internal sealed class ReadmeScreenshotGenerator
         await provider.GetRequiredService<ProgressHistoryInitializer>()
             .EnsureInitializedAsync(tracker.Id, cancellationToken);
 
+        // The demo Project is linked to an illustrative repository and synced, so the Portfolio and the
+        // header show its sync icon. Presentation fixture only; the folder stays in the workspace.
+        string repositoryFixturePath = Directory.CreateDirectory(
+            Path.Combine(workspace.RootDirectory, "example-repository")).FullName;
+        IProjectSyncLinkStore linkStore = provider.GetRequiredService<IProjectSyncLinkStore>();
+        ProjectSyncIndicators syncIndicators = provider.GetRequiredService<ProjectSyncIndicators>();
+        System.Windows.Application.Current.Resources[ProjectSyncIndicators.ResourceKey] = syncIndicators;
+        DateTimeOffset lastSynced = new(2026, 8, 24, 12, 24, 0, TimeSpan.Zero);
+        async Task<ProjectSyncLink> SyncedLinkAsync() => new(
+            project.Id.Value,
+            repositoryFixturePath,
+            "main",
+            "origin/main:illustrative-upstream",
+            null,
+            await provider.GetRequiredService<EntityTracker.Application.Snapshots.IProjectSnapshotStore>().GetRevisionAsync(project.Id, cancellationToken),
+            null,
+            "Snapshot pushed",
+            "Current",
+            LastSyncedAtUtc: lastSynced);
+        await linkStore.SaveAsync(await SyncedLinkAsync(), cancellationToken);
+        await syncIndicators.RefreshAsync(cancellationToken);
+
         ShellViewModel shell = provider.GetRequiredService<ShellViewModel>();
         MainWindow window = new(shell);
         ConfigureWindow(window);
@@ -78,7 +100,9 @@ internal sealed class ReadmeScreenshotGenerator
                 cancellationToken);
             await ExerciseLiveThemeSwitchAsync(provider, appearance, cancellationToken);
 
-            WpfScreenshotRenderer renderer = new(window, workspace.StagingDirectory);
+            // The fixture's real folder is in the user's temp folder; screenshots show an example path.
+            WpfScreenshotRenderer renderer = new(window, workspace.StagingDirectory,
+                new Dictionary<string, string> { [repositoryFixturePath] = @"C:\Projects\order-platform" });
             await renderer.CaptureAsync("portfolio.png");
 
             await shell.OpenProjectAsync(project.Id);
@@ -129,21 +153,10 @@ internal sealed class ReadmeScreenshotGenerator
 
             shell.ProjectReport!.Audience = EntityTracker.Reporting.ProjectReports.ReportAudience.Client;
             await shell.NavigateAsync(ShellDestination.ProjectDashboard, cancellationToken);
-            // Presentation fixture only. The real folder stays in the disposable workspace.
-            string repositoryFixturePath = Directory.CreateDirectory(
-                Path.Combine(workspace.RootDirectory, "example-repository")).FullName;
-            IProjectSyncLinkStore linkStore = provider.GetRequiredService<IProjectSyncLinkStore>();
-            ProjectSyncLink repositoryFixture = new(
-                project.Id.Value,
-                repositoryFixturePath,
-                "main",
-                "origin/main:illustrative-upstream",
-                null,
-                0,
-                null,
-                "Snapshot pushed",
-                "Current");
+            // Synced as of now, so the card shows the synced icon after the earlier screenshots' edits.
+            ProjectSyncLink repositoryFixture = await SyncedLinkAsync();
             await linkStore.SaveAsync(repositoryFixture, cancellationToken);
+            await syncIndicators.RefreshAsync(cancellationToken);
             await shell.ProjectReporting!.RepositoryCard!.RefreshAsync(cancellationToken);
             shell.ProjectReporting.RepositoryCard.ShowTiming(new ProjectSyncTiming(
                 TimeSpan.FromSeconds(18.4),
@@ -169,6 +182,7 @@ internal sealed class ReadmeScreenshotGenerator
                 LastResult = "Upstream advanced during sync; validation pending",
                 SyncStatus = "PendingRemote"
             }, cancellationToken);
+            await syncIndicators.RefreshAsync(cancellationToken);
             await shell.ProjectReporting.RepositoryCard.RefreshAsync(cancellationToken);
             shell.ProjectReporting.RepositoryCard.ShowTiming(new ProjectSyncTiming(
                 TimeSpan.FromSeconds(21.2),
@@ -214,6 +228,7 @@ internal sealed class ReadmeScreenshotGenerator
                     .CaptureAsync("project-merge-review.png", settleMilliseconds: 900);
             }
             finally { mergeDialog.Close(); }
+            await CaptureSyncStatesAsync(window, workspace.StagingDirectory);
             await renderer.BringNamedElementIntoViewAndCaptureAsync(
                 "ComparisonGrid",
                 "project-comparison.png");
@@ -715,6 +730,57 @@ internal sealed class ReadmeScreenshotGenerator
         await viewModel.Editor.BeginArchivedAsync(archivedRow.EntityId, cancellationToken);
         await renderer.CaptureAsync("archived-entity.png");
         viewModel.Editor.CancelCommand.Execute(null);
+    }
+
+    /// <summary>
+    /// The sync state icons, each with what it means, drawn by the app's own SyncStatusIcon. The
+    /// syncing icon is shown upright, without its turning.
+    /// </summary>
+    private static async Task CaptureSyncStatesAsync(Window owner, string outputDirectory)
+    {
+        (ProjectSyncIndicatorKind Kind, string Meaning)[] states =
+        [
+            (ProjectSyncIndicatorKind.Synced, "Synced"),
+            (ProjectSyncIndicatorKind.Unsynced, "Changes not synced yet"),
+            (ProjectSyncIndicatorKind.Syncing, "Syncing"),
+            (ProjectSyncIndicatorKind.NeedsAttention, "Sync needs attention"),
+            (ProjectSyncIndicatorKind.Paused, "Sync paused until EntityTracker is updated")
+        ];
+        StackPanel rows = new();
+        foreach ((ProjectSyncIndicatorKind kind, string meaning) in states)
+        {
+            SyncStatusIcon icon = new()
+            {
+                Size = 20,
+                VerticalAlignment = VerticalAlignment.Center,
+                Indicator = new ProjectSyncIndicator(kind, meaning)
+            };
+            StackPanel row = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 4) };
+            row.Children.Add(icon);
+            TextBlock label = new() { Text = meaning, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            label.SetResourceReference(TextBlock.ForegroundProperty, "Brush.Text.Primary");
+            row.Children.Add(label);
+            rows.Children.Add(row);
+        }
+        Window legend = new()
+        {
+            Owner = owner,
+            Title = "Sync states",
+            SizeToContent = SizeToContent.WidthAndHeight,
+            ShowInTaskbar = false,
+            ShowActivated = false,
+            Content = new Border { Padding = new Thickness(20, 16, 28, 16), Child = rows }
+        };
+        legend.SetResourceReference(Control.BackgroundProperty, "Brush.Surface.Page");
+        legend.Show();
+        try
+        {
+            foreach (SyncStatusIcon icon in rows.Children.OfType<StackPanel>().Select(row => row.Children.OfType<SyncStatusIcon>().Single()))
+                ((System.Windows.Media.RotateTransform)icon.RenderTransform).BeginAnimation(
+                    System.Windows.Media.RotateTransform.AngleProperty, null);
+            await new WpfScreenshotRenderer(legend, outputDirectory).CaptureAsync("sync-states.png", settleMilliseconds: 400);
+        }
+        finally { legend.Close(); }
     }
 
     private static void ConfigureWindow(MainWindow window)

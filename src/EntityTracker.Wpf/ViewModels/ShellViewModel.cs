@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
+using System.Windows.Threading;
 
 using EntityTracker.Application.History;
 using EntityTracker.Application.GitSync;
@@ -34,6 +35,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private NotificationItem? _importNotice;
     private readonly ProjectAutoSyncService? _autoSync;
     private readonly WpfProjectUnsavedEditsGate? _syncEditGate;
+    private readonly ProjectSyncIndicators? _syncIndicators;
+    // Kept so the refresh timer isn't collected.
+    private readonly DispatcherTimer? _syncIndicatorTimer;
     private readonly ILogger<ShellViewModel> _logger;
     private readonly Dictionary<TrackerId, MainWindowViewModel> _workspaces = [];
     private readonly Dictionary<ProjectId, ProjectDashboardViewModel> _projectDashboards = [];
@@ -79,7 +83,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         DependencyGraphSettingsViewModel? graphSettings = null,
         EntityTracker.Reporting.ProjectReports.ProjectReportBuilder? reportBuilder = null,
         IProjectReportFiles? reportFiles = null,
-        DiagnosticsSettingsViewModel? diagnostics = null)
+        DiagnosticsSettingsViewModel? diagnostics = null,
+        ProjectSyncIndicators? syncIndicators = null)
     {
         Diagnostics = diagnostics;
         _reportBuilder = reportBuilder;
@@ -100,6 +105,17 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         Notifications.NavigateToProjectAsync = OpenProjectAsync;
         if (_autoSync is not null) _autoSync.StateChanged += OnAutoSyncStateChanged;
         _syncEditGate?.Attach(this);
+        _syncIndicators = syncIndicators;
+        if (_syncIndicators is not null)
+        {
+            _syncIndicators.Changed += (_, _) => OnSelectedProjectSyncIndicatorChanged();
+            // Also catches changes made outside a Tracker workspace, such as developers or Trackers,
+            // and keeps "last synced" times current.
+            _syncIndicatorTimer = new DispatcherTimer(TimeSpan.FromSeconds(15), DispatcherPriority.Background,
+                (_, _) => RefreshSyncIndicators(), Dispatcher.CurrentDispatcher);
+            RefreshSyncIndicators();
+        }
+        SyncSelectedProjectCommand = new AsyncCommand(SyncSelectedProjectAsync);
         Catalog = catalogManagement;
         Appearance = appearance;
         AutoSync = autoSyncSettings;
@@ -234,9 +250,55 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(ContextSummary));
                 OnPropertyChanged(nameof(DefaultNamePromptMessage));
                 OnPropertyChanged(nameof(DefaultNamePromptActionLabel));
+                OnSelectedProjectSyncIndicatorChanged();
             }
         }
     }
+
+    /// <summary>The selected Project's sync icon, shown in the header.</summary>
+    public ProjectSyncIndicator SelectedProjectSyncIndicator =>
+        SelectedProject is { } project && _syncIndicators is not null
+            ? _syncIndicators.Get(project.Id.Value)
+            : ProjectSyncIndicator.None;
+
+    /// <summary>The header icon's tooltip: the state, then what a click does.</summary>
+    public string SelectedProjectSyncTooltip => SelectedProjectSyncIndicator.Kind switch
+    {
+        ProjectSyncIndicatorKind.Synced or ProjectSyncIndicatorKind.Unsynced =>
+            SelectedProjectSyncIndicator.Label + " Click to sync now.",
+        ProjectSyncIndicatorKind.NeedsAttention or ProjectSyncIndicatorKind.Paused =>
+            SelectedProjectSyncIndicator.Label + " Click to open the Project.",
+        _ => SelectedProjectSyncIndicator.Label
+    };
+
+    private void OnSelectedProjectSyncIndicatorChanged()
+    {
+        OnPropertyChanged(nameof(SelectedProjectSyncIndicator));
+        OnPropertyChanged(nameof(SelectedProjectSyncTooltip));
+    }
+
+    /// <summary>
+    /// The header's sync icon: syncs the selected Project, or opens it when its sync needs attention or
+    /// is paused, since the Project dashboard explains why.
+    /// </summary>
+    public ICommand SyncSelectedProjectCommand { get; }
+
+    private async Task SyncSelectedProjectAsync()
+    {
+        if (SelectedProject is not { } project) return;
+        ProjectSyncIndicatorKind kind = SelectedProjectSyncIndicator.Kind;
+        if (kind is ProjectSyncIndicatorKind.None or ProjectSyncIndicatorKind.Syncing) return;
+        ICommand? sync = ProjectReporting?.RepositoryCard?.SyncCommand;
+        if (kind is ProjectSyncIndicatorKind.Synced or ProjectSyncIndicatorKind.Unsynced &&
+            sync?.CanExecute(null) == true)
+        {
+            sync.Execute(null);
+            return;
+        }
+        await OpenProjectAsync(project.Id);
+    }
+
+    private void RefreshSyncIndicators() => _ = _syncIndicators?.RefreshAsync();
 
     public Tracker? SelectedTracker
     {
@@ -494,6 +556,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             dispatcher.BeginInvoke(() => OnAutoSyncStateChanged(sender, projectId));
             return;
         }
+        RefreshSyncIndicators();
         ProjectSyncState state = _autoSync!.GetState(projectId);
         if (state.Kind is ProjectSyncStateKind.DeletionApproval or
             ProjectSyncStateKind.Conflict or ProjectSyncStateKind.AuthenticationRequired or
@@ -536,7 +599,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             Notifications.Progress(notice, NotificationCenter.DescribeProjectImportPhase(phase)));
         try
         {
-            ProjectSyncLink link = await _gitSync.ImportAsync(repositoryPath, localName, progress: progress);
+            // On a background thread, so the window keeps redrawing; see ProjectRepositoryCardViewModel.
+            ProjectSyncLink link = await Task.Run(() => _gitSync.ImportAsync(repositoryPath, localName, progress: progress));
+            RefreshSyncIndicators();
             await ReloadCatalogAsync(CancellationToken.None);
             string? name = Projects.FirstOrDefault(project => project.Id.Value == link.ProjectId)?.Name;
             if (name is not null) await OpenProjectAsync(new ProjectId(link.ProjectId));
@@ -589,8 +654,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 result.GitSnapshotFileCount, result.ReusedSnapshots, result.BlobReadProcesses));
         try
         {
-            await _gitSync.SyncNowAsync(new ProjectId(link.ProjectId), progress: progress,
-                timing: timing);
+            await Task.Run(() => _gitSync.SyncNowAsync(new ProjectId(link.ProjectId), progress: progress,
+                timing: timing));
             Notifications.DismissProjectActions(new ProjectId(link.ProjectId), notice);
             Notifications.Complete(notice, "Project deletion published to the linked repository.");
         }
@@ -858,6 +923,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     private async void OnWorkspacePersistedStateChanged(object? sender, EventArgs e)
     {
+        RefreshSyncIndicators();
         try
         {
             await RefreshDashboardsAsync(CancellationToken.None);

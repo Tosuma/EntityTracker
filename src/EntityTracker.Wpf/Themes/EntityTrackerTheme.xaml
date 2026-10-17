@@ -6,6 +6,7 @@
              dictionaries below can refer to it. -->
         <themes:ColorSchemeResources />
         <ResourceDictionary Source="EntityTrackerPalette.xaml" />
+        <ResourceDictionary Source="EntityTrackerIcons.xaml" />
         <ResourceDictionary Source="EntityTrackerTypography.xaml" />
         <ResourceDictionary Source="EntityTrackerComponents.xaml" />
     </ResourceDictionary.MergedDictionaries>

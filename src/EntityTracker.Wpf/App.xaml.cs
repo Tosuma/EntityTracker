@@ -196,6 +196,7 @@ public partial class App : System.Windows.Application
             // Leaving notices stay until the window has slid them out and closed their space.
             services.AddSingleton(new NotificationCenter(exitDuration: EntityTracker.Wpf.MainWindow.NotificationExitDuration));
             services.AddSingleton<ProjectRepositoryCardViewModelFactory>();
+            services.AddSingleton<ProjectSyncIndicators>();
             services.AddSingleton<CatalogManagementViewModel>();
             services.AddSingleton<ShellViewModel>();
 
@@ -222,6 +223,8 @@ public partial class App : System.Windows.Application
                 _logger.LogWarning("Startup warning: {Warning}", warning);
             }
 
+            // Every sync icon (header, Portfolio, Project dashboard) finds the Projects' states here.
+            Resources[ProjectSyncIndicators.ResourceKey] = _serviceProvider.GetRequiredService<ProjectSyncIndicators>();
             ShellViewModel shellViewModel =
                 _serviceProvider.GetRequiredService<ShellViewModel>();
             MainWindow mainWindow = new(shellViewModel,
