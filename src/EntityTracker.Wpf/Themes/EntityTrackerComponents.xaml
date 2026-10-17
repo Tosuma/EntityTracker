@@ -75,6 +75,15 @@
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
     </Style>
 
+    <!-- A secondary button showing only an icon, square and as tall as the text buttons beside it.
+         Give it a ToolTip and AutomationProperties.Name with the words. -->
+    <Style x:Key="SecondaryIconButtonStyle"
+           TargetType="{x:Type Button}"
+           BasedOn="{StaticResource SecondaryButtonStyle}">
+        <Setter Property="MinWidth" Value="{DynamicResource Height.Control}" />
+        <Setter Property="Padding" Value="8,6" />
+    </Style>
+
     <Style x:Key="DangerButtonStyle"
            TargetType="{x:Type Button}"
            BasedOn="{StaticResource {x:Type Button}}">

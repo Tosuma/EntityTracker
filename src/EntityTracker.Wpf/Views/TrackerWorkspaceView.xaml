@@ -274,18 +274,26 @@
                                        Text="{Binding OverviewSearchResultSummary}" />
                             <Button Margin="0,0,8,0"
                                     Command="{Binding ActiveTable.ClearAllFiltersCommand}"
-                                    Content="Clear filters &amp; sort"
-                                    Style="{StaticResource SecondaryButtonStyle}" />
+                                    ToolTip="Clear filters and sort"
+                                    AutomationProperties.Name="Clear filters and sort"
+                                    Style="{StaticResource SecondaryIconButtonStyle}">
+                                <controls:Icon IconKey="Icon.FilterDismiss" />
+                            </Button>
                             <Button Margin="0,0,8,0"
                                     Command="{Binding OpenOverviewSearchCommand}"
                                     Click="OnOpenOverviewSearchClick"
-                                    Content="Search"
                                     ToolTip="Search entities (Ctrl+F)"
-                                    Style="{StaticResource SecondaryButtonStyle}" />
+                                    AutomationProperties.Name="Search entities"
+                                    Style="{StaticResource SecondaryIconButtonStyle}">
+                                <controls:Icon IconKey="Icon.Search" />
+                            </Button>
                             <Button Margin="0,0,8,0"
                                     Command="{Binding RefreshCommand}"
-                                    Content="Refresh"
-                                    Style="{StaticResource SecondaryButtonStyle}" />
+                                    ToolTip="Refresh"
+                                    AutomationProperties.Name="Refresh overview"
+                                    Style="{StaticResource SecondaryIconButtonStyle}">
+                                <controls:Icon IconKey="Icon.ArrowClockwise" />
+                            </Button>
                             <Button x:Name="OverviewExportButton"
                                     Content="Export"
                                     AutomationProperties.Name="Export overview"
@@ -1105,17 +1113,25 @@
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                             <Button Margin="0,0,8,0"
                                     Command="{Binding ArchivedTable.ClearAllFiltersCommand}"
-                                    Content="Clear filters &amp; sort"
-                                    Style="{StaticResource SecondaryButtonStyle}" />
+                                    ToolTip="Clear filters and sort"
+                                    AutomationProperties.Name="Clear archived filters and sort"
+                                    Style="{StaticResource SecondaryIconButtonStyle}">
+                                <controls:Icon IconKey="Icon.FilterDismiss" />
+                            </Button>
                             <Button Margin="0,0,8,0"
                                     Command="{Binding ArchivedTable.OpenSearchCommand}"
                                     Click="OnOpenOverviewSearchClick"
-                                    Content="Search"
                                     ToolTip="Search archived entities (Ctrl+F)"
-                                    Style="{StaticResource SecondaryButtonStyle}" />
+                                    AutomationProperties.Name="Search archived entities"
+                                    Style="{StaticResource SecondaryIconButtonStyle}">
+                                <controls:Icon IconKey="Icon.Search" />
+                            </Button>
                             <Button Command="{Binding RefreshCommand}"
-                                    Content="Refresh"
-                                    Style="{StaticResource SecondaryButtonStyle}" />
+                                    ToolTip="Refresh"
+                                    AutomationProperties.Name="Refresh archived entities"
+                                    Style="{StaticResource SecondaryIconButtonStyle}">
+                                <controls:Icon IconKey="Icon.ArrowClockwise" />
+                            </Button>
                         </StackPanel>
                         <StackPanel>
                             <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Archived" />
@@ -1492,12 +1508,14 @@
                                                 BorderThickness="1">
                                             <DockPanel>
                                                 <Button DockPanel.Dock="Right"
-                                                        Padding="12,5"
-                                                        AutomationProperties.Name="Remove dependency"
+                                                        VerticalAlignment="Center"
+                                                        AutomationProperties.Name="{Binding SourceName, StringFormat=Remove dependency on {0}}"
+                                                        ToolTip="{Binding SourceName, StringFormat=Remove dependency on {0}}"
                                                         Command="{Binding DataContext.ManualCreation.RemoveDependencyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                         CommandParameter="{Binding}"
-                                                        Content="Remove"
-                                                        Style="{StaticResource SecondaryButtonStyle}" />
+                                                        Style="{StaticResource IconButtonStyle}">
+                                                    <controls:Icon IconKey="Icon.Dismiss" />
+                                                </Button>
                                                 <StackPanel>
                                                     <TextBlock FontWeight="SemiBold" Text="{Binding SourceName}" />
                                                     <StackPanel Margin="0,2,0,0" Orientation="Horizontal">
@@ -2264,11 +2282,14 @@
                                                                 Orientation="Horizontal"
                                                                 Visibility="{Binding DataContext.Editor.ShowDependencyEditor, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BooleanToVisibilityConverter}}">
                                                         <Button Margin="6,0,0,0"
+                                                                VerticalAlignment="Center"
                                                                 Command="{Binding DataContext.Editor.RemoveDependencyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                 CommandParameter="{Binding}"
-                                                                Content="Remove"
-                                                                AutomationProperties.Name="{Binding SourceName, StringFormat=Remove dependency {0}}"
-                                                                Style="{StaticResource SecondaryButtonStyle}" />
+                                                                AutomationProperties.Name="{Binding SourceName, StringFormat=Remove dependency on {0}}"
+                                                                ToolTip="{Binding SourceName, StringFormat=Remove dependency on {0}}"
+                                                                Style="{StaticResource IconButtonStyle}">
+                                                            <controls:Icon IconKey="Icon.Dismiss" />
+                                                        </Button>
                                                     </StackPanel>
                                                     <StackPanel>
                                                         <TextBlock FontWeight="SemiBold" Text="{Binding SourceName}" />
