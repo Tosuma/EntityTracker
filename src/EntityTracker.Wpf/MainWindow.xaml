@@ -31,6 +31,18 @@
             <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="AutomationProperties.HelpText"
                     Value="Navigate within EntityTracker" />
+            <!-- Each item names its icon in Tag; the label stays the content, and so the automation name. -->
+            <Setter Property="ContentTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <controls:Icon Margin="0,0,10,0" VerticalAlignment="Center" Size="16"
+                                           IconKey="{Binding Tag, RelativeSource={RelativeSource AncestorType=ToggleButton}}" />
+                            <TextBlock VerticalAlignment="Center" Text="{Binding}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
             <Style.Triggers>
                 <Trigger Property="IsChecked" Value="True">
                     <Setter Property="Background" Value="{DynamicResource Brush.Brand.Green80}" />
@@ -86,11 +98,13 @@
                                 CommandParameter="{x:Static viewModels:ShellDestination.Portfolio}"
                                 IsChecked="{Binding IsPortfolio, Mode=OneWay}"
                                 Content="Portfolio"
+                                Tag="Icon.Grid"
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.ProjectDashboard}"
                                 IsChecked="{Binding IsProjectDashboard, Mode=OneWay}"
                                 Content="Project dashboard"
+                                Tag="Icon.Board"
                                 ToolTip="Select a Project to open its dashboard."
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
 
@@ -102,18 +116,21 @@
                                 CommandParameter="{x:Static viewModels:ShellDestination.Overview}"
                                 IsChecked="{Binding IsOverview, Mode=OneWay}"
                                 Content="Overview"
+                                Tag="Icon.Table"
                                 ToolTip="Select a Tracker to open Overview."
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.DependencyGraph}"
                                 IsChecked="{Binding IsDependencyGraph, Mode=OneWay}"
                                 Content="Dependency graph"
+                                Tag="Icon.Flowchart"
                                 ToolTip="Select a Tracker to view its dependency graph."
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.Archived}"
                                 IsChecked="{Binding IsArchived, Mode=OneWay}"
                                 Content="Archived"
+                                Tag="Icon.Archive"
                                 ToolTip="Select a Tracker to view archived entities."
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
 
@@ -125,6 +142,7 @@
                                 CommandParameter="{x:Static viewModels:ShellDestination.AddEntity}"
                                 IsChecked="{Binding IsAddEntity, Mode=OneWay}"
                                 Content="Add entity"
+                                Tag="Icon.Add"
                                 ToolTip="Select a Tracker before adding an entity."
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
                     </StackPanel>
@@ -139,11 +157,13 @@
                                 CommandParameter="{x:Static viewModels:ShellDestination.Help}"
                                 IsChecked="{Binding IsHelp, Mode=OneWay}"
                                 Content="Help"
+                                Tag="Icon.QuestionCircle"
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.Settings}"
                                 IsChecked="{Binding IsSettings, Mode=OneWay}"
                                 Content="Settings"
+                                Tag="Icon.Settings"
                                 Style="{StaticResource ShellNavigationButtonStyle}" />
                     </StackPanel>
 
