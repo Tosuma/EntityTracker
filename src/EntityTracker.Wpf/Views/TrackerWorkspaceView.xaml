@@ -732,28 +732,7 @@
                                                             </Style.Triggers>
                                                         </Style>
                                                     </Button.Style>
-                                                    <Viewbox Width="18"
-                                                             Height="18"
-                                                             IsHitTestVisible="False">
-                                                        <Canvas Width="24" Height="24">
-                                                            <Ellipse Width="20"
-                                                                     Height="20"
-                                                                     Canvas.Left="2"
-                                                                     Canvas.Top="2"
-                                                                     Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                                                     StrokeThickness="2" />
-                                                            <Path Data="M12,6 L12,14"
-                                                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                                                  StrokeEndLineCap="Round"
-                                                                  StrokeStartLineCap="Round"
-                                                                  StrokeThickness="2" />
-                                                            <Ellipse Width="2.5"
-                                                                     Height="2.5"
-                                                                     Canvas.Left="10.75"
-                                                                     Canvas.Top="17"
-                                                                     Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                                                        </Canvas>
-                                                    </Viewbox>
+                                                    <controls:Icon IconKey="Icon.Warning" Size="18" IsHitTestVisible="False" />
                                                     <Button.ContextMenu>
                                                         <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
                                                             <MenuItem Focusable="False" IsHitTestVisible="False">
@@ -881,13 +860,12 @@
                                                     VerticalAlignment="Center"
                                                     Background="Transparent"
                                                     BorderThickness="0"
-                                                    Content="⋮"
                                                     Cursor="Hand"
-                                                    FontSize="19"
                                                     ToolTip="Entity actions"
                                                     AutomationProperties.Name="{Binding SourceName, StringFormat=Actions for {0}}"
                                                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     Click="OnContextMenuButtonClick">
+                                                <controls:Icon IconKey="Icon.MoreVertical" Size="18" />
                                                 <Button.ContextMenu>
                                                     <ContextMenu>
                                                         <MenuItem Header="View details"
@@ -1280,13 +1258,12 @@
                                                     VerticalAlignment="Center"
                                                     Background="Transparent"
                                                     BorderThickness="0"
-                                                    Content="⋮"
                                                     Cursor="Hand"
-                                                    FontSize="19"
                                                     ToolTip="Archived entity actions"
                                                     AutomationProperties.Name="{Binding SourceName, StringFormat=Archived actions for {0}}"
                                                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                     Click="OnContextMenuButtonClick">
+                                                <controls:Icon IconKey="Icon.MoreVertical" Size="18" />
                                                 <Button.ContextMenu>
                                                     <ContextMenu>
                                                         <MenuItem Header="View details"
@@ -1523,9 +1500,14 @@
                                                         Style="{StaticResource SecondaryButtonStyle}" />
                                                 <StackPanel>
                                                     <TextBlock FontWeight="SemiBold" Text="{Binding SourceName}" />
-                                                    <TextBlock Margin="0,2,0,0"
-                                                               Foreground="{DynamicResource Brush.Text.Secondary}"
-                                                               Text="{Binding ResolutionLabel}" />
+                                                    <StackPanel Margin="0,2,0,0" Orientation="Horizontal">
+                                                        <controls:Icon Margin="0,0,5,0" Size="14" VerticalAlignment="Center"
+                                                                       IconKey="Icon.Warning"
+                                                                       Foreground="{DynamicResource Brush.Caution}"
+                                                                       Visibility="{Binding IsUnresolved, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                                   Text="{Binding ResolutionLabel}" />
+                                                    </StackPanel>
                                                 </StackPanel>
                                             </DockPanel>
                                         </Border>
@@ -1649,9 +1631,10 @@
                                 Padding="0"
                                 AutomationProperties.Name="Close entity details"
                                 Command="{Binding DataContext.CloseEntityDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                Content="✕"
                                 Style="{StaticResource SecondaryButtonStyle}"
-                                ToolTip="Close details (Esc)" />
+                                ToolTip="Close details (Esc)">
+                            <controls:Icon IconKey="Icon.Dismiss" Size="14" />
+                        </Button>
                     </StackPanel>
                     <StackPanel Grid.Row="1">
                         <TextBlock AutomationProperties.HeadingLevel="Level2"
@@ -2289,7 +2272,13 @@
                                                     </StackPanel>
                                                     <StackPanel>
                                                         <TextBlock FontWeight="SemiBold" Text="{Binding SourceName}" />
-                                                        <TextBlock Margin="0,2,0,0" Foreground="{DynamicResource Brush.Text.Secondary}" Text="{Binding Resolution}" />
+                                                        <StackPanel Margin="0,2,0,0" Orientation="Horizontal">
+                                                            <controls:Icon Margin="0,0,5,0" Size="14" VerticalAlignment="Center"
+                                                                           IconKey="Icon.Warning"
+                                                                           Foreground="{DynamicResource Brush.Caution}"
+                                                                           Visibility="{Binding IsUnresolved, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                            <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="{Binding Resolution}" />
+                                                        </StackPanel>
                                                     </StackPanel>
                                                 </DockPanel>
                                             </Border>

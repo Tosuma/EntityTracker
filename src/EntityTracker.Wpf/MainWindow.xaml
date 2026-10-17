@@ -183,10 +183,12 @@
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="22" />
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock FontSize="18" FontWeight="Bold" Text="{Binding Symbol}"
-                                                       AutomationProperties.Name="{Binding Kind}">
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
+                                            <controls:Icon Size="18" VerticalAlignment="Top" HorizontalAlignment="Left"
+                                                           IconKey="{Binding IconKey}"
+                                                           IsSpinning="{Binding IsProgress}"
+                                                           AutomationProperties.Name="{Binding Kind}">
+                                                <controls:Icon.Style>
+                                                    <Style TargetType="controls:Icon">
                                                         <Setter Property="Foreground" Value="{DynamicResource Brush.Notification.Information}" />
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding Kind}" Value="Success">
@@ -200,8 +202,8 @@
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
+                                                </controls:Icon.Style>
+                                            </controls:Icon>
                                             <StackPanel Grid.Column="1">
                                                 <TextBlock FontWeight="SemiBold" FontSize="12"
                                                            Foreground="{DynamicResource Brush.Text.OnDark}"
@@ -222,13 +224,15 @@
                                                         Style="{StaticResource SecondaryButtonStyle}" />
                                             </StackPanel>
                                             <Button Grid.Column="2" Width="20" Height="20" Padding="0"
-                                                    Content="×" FontSize="14"
+                                                    VerticalAlignment="Top"
                                                     Foreground="{DynamicResource Brush.Text.OnDark}"
                                                     Background="Transparent" BorderBrush="Transparent"
                                                     ToolTip="Dismiss notification"
                                                     AutomationProperties.Name="Dismiss notification"
                                                     Command="{Binding DismissCommand}"
-                                                    Visibility="{Binding CanDismiss, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                    Visibility="{Binding CanDismiss, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                <controls:Icon IconKey="Icon.Dismiss" Size="12" />
+                                            </Button>
                                         </Grid>
                                     </Border>
                                     </controls:SmoothHeightDecorator>

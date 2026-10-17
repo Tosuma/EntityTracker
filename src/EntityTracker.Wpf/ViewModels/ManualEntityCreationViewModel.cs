@@ -708,7 +708,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         SelectedDependencies.Add(new ManualDependencyRow(
             selection,
             selection.SourceName,
-            isUnresolved ? "⚠ Missing" : "Resolved",
+            isUnresolved ? "Missing" : "Resolved",
             isUnresolved));
         ClearDependencySearch();
         ClearFatalValidation();

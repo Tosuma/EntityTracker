@@ -436,21 +436,34 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
-    public void TrackerWorkspace_ProvidesNamesForIconOnlyEntityActionButtons()
+    public void Buttons_ShowIconsNotTextSymbolsAndNameEveryIconOnlyButton()
     {
-        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
-        XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        string wpfRoot = Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf");
+        string[] symbols = ["☰", "⋮", "✕", "×", "▼", "↑", "↓", "⚠", "✓", "↻"];
+        List<XElement> iconOnly = [];
 
-        XElement[] actionButtons = document
-            .Descendants(presentation + "Button")
-            .Where(element => (string?)element.Attribute("Content") == "⋮")
-            .ToArray();
-
-        Assert.NotEmpty(actionButtons);
-        Assert.All(actionButtons, button =>
+        foreach (string file in Directory.EnumerateFiles(wpfRoot, "*.xaml", SearchOption.AllDirectories)
+                     .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                         StringComparison.Ordinal) && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
+                         StringComparison.Ordinal)))
         {
-            Assert.False(string.IsNullOrWhiteSpace((string?)button.Attribute("AutomationProperties.Name")));
-            Assert.False(string.IsNullOrWhiteSpace((string?)button.Attribute("ToolTip")));
+            foreach (XElement button in XDocument.Load(file).Descendants()
+                         .Where(element => element.Name.LocalName is "Button" or "ToggleButton"))
+            {
+                string content = ((string?)button.Attribute("Content"))?.Trim() ?? string.Empty;
+                Assert.False(symbols.Contains(content), $"{Path.GetFileName(file)}: a button shows '{content}'; use an icon.");
+
+                XElement[] children = button.Elements().Where(child => !child.Name.LocalName.Contains('.')).ToArray();
+                if (children.Length == 1 && children[0].Name.LocalName == "Icon") iconOnly.Add(button);
+            }
+        }
+
+        // An icon says what the button does; its tooltip and automation name carry the words.
+        Assert.True(iconOnly.Count >= 6);
+        Assert.All(iconOnly, button =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace((string?)button.Attribute("AutomationProperties.Name")), button.ToString());
+            Assert.False(string.IsNullOrWhiteSpace((string?)button.Attribute("ToolTip")), button.ToString());
         });
     }
 
