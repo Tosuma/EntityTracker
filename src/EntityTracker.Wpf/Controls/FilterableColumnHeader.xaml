@@ -20,41 +20,40 @@
                 Cursor="Hand"
                 ToolTip="{Binding Filter.Title, ElementName=Root, StringFormat=Filter {0}}">
             <DockPanel LastChildFill="True">
-                <TextBlock DockPanel.Dock="Right"
-                           Margin="7,0,0,0"
-                           VerticalAlignment="Center"
-                           FontSize="11"
-                           Text="▼">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
+                <!-- The filter icon is coloured while the column is filtered or sorted; the arrow shows the sort. -->
+                <controls:Icon DockPanel.Dock="Right"
+                               Margin="6,0,0,0"
+                               VerticalAlignment="Center"
+                               Size="14"
+                               IconKey="Icon.Filter">
+                    <controls:Icon.Style>
+                        <Style TargetType="controls:Icon">
                             <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Secondary}" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding Filter.IsApplied, ElementName=Root}" Value="True">
                                     <Setter Property="Foreground" Value="{DynamicResource Brush.Brand.Green100}" />
-                                    <Setter Property="FontWeight" Value="Bold" />
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding Filter.IsSorted, ElementName=Root}" Value="True">
                                     <Setter Property="Foreground" Value="{DynamicResource Brush.Brand.Green100}" />
-                                    <Setter Property="FontWeight" Value="Bold" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
-                    </TextBlock.Style>
-                </TextBlock>
-                <TextBlock DockPanel.Dock="Right"
-                           Margin="5,0,0,0"
-                           VerticalAlignment="Center"
-                           FontWeight="Bold"
-                           Foreground="{DynamicResource Brush.Brand.Green100}"
-                           Text="↑"
-                           Visibility="{Binding Filter.IsSortAscending, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                <TextBlock DockPanel.Dock="Right"
-                           Margin="5,0,0,0"
-                           VerticalAlignment="Center"
-                           FontWeight="Bold"
-                           Foreground="{DynamicResource Brush.Brand.Green100}"
-                           Text="↓"
-                           Visibility="{Binding Filter.IsSortDescending, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </controls:Icon.Style>
+                </controls:Icon>
+                <controls:Icon DockPanel.Dock="Right"
+                               Margin="5,0,0,0"
+                               VerticalAlignment="Center"
+                               Size="14"
+                               IconKey="Icon.ArrowUp"
+                               Foreground="{DynamicResource Brush.Brand.Green100}"
+                               Visibility="{Binding Filter.IsSortAscending, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                <controls:Icon DockPanel.Dock="Right"
+                               Margin="5,0,0,0"
+                               VerticalAlignment="Center"
+                               Size="14"
+                               IconKey="Icon.ArrowDown"
+                               Foreground="{DynamicResource Brush.Brand.Green100}"
+                               Visibility="{Binding Filter.IsSortDescending, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 <TextBlock VerticalAlignment="Center"
                            FontWeight="SemiBold"
                            Foreground="{DynamicResource Brush.Text.Primary}"

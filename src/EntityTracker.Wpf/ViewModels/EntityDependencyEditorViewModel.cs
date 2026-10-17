@@ -970,7 +970,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             Dependencies = details.Dependencies.Select(static item =>
                 new EntityDependencyEditRow(
                     item.DependencySourceName,
-                    FormatResolution(item))).ToArray();
+                    FormatResolution(item),
+                    !item.IsResolved)).ToArray();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -1443,7 +1444,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
         Dependencies = plan.Dependencies.Select(static item => new EntityDependencyEditRow(
             item.DependencySourceName,
-            FormatResolution(item))).ToArray();
+            FormatResolution(item),
+            !item.IsResolved)).ToArray();
         Warnings = plan.Warnings;
         Errors = plan.Errors;
         RefreshPriorityPresentation();
@@ -1580,7 +1582,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     }
 
     private static string FormatResolution(EntityDependencyEditItem item) =>
-        item.IsResolved ? "Resolved" : "⚠ Unresolved";
+        item.IsResolved ? "Resolved" : "Unresolved";
 
 
     private static string FormatPriority(int? priority) =>

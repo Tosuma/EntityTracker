@@ -85,14 +85,18 @@
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.Portfolio}"
                                 IsChecked="{Binding IsPortfolio, Mode=OneWay}"
-                                Content="Portfolio"
-                                Style="{StaticResource ShellNavigationButtonStyle}" />
+                                AutomationProperties.Name="Portfolio"
+                                Style="{StaticResource ShellNavigationButtonStyle}">
+                            <controls:IconLabel IconKey="Icon.Grid" Text="Portfolio" />
+                        </ToggleButton>
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.ProjectDashboard}"
                                 IsChecked="{Binding IsProjectDashboard, Mode=OneWay}"
-                                Content="Project dashboard"
+                                AutomationProperties.Name="Project dashboard"
                                 ToolTip="Select a Project to open its dashboard."
-                                Style="{StaticResource ShellNavigationButtonStyle}" />
+                                Style="{StaticResource ShellNavigationButtonStyle}">
+                            <controls:IconLabel IconKey="Icon.Board" Text="Project dashboard" />
+                        </ToggleButton>
 
                         <TextBlock Margin="8,18,0,4"
                                    Foreground="{DynamicResource Brush.Text.OnDarkMuted}"
@@ -101,21 +105,27 @@
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.Overview}"
                                 IsChecked="{Binding IsOverview, Mode=OneWay}"
-                                Content="Overview"
+                                AutomationProperties.Name="Overview"
                                 ToolTip="Select a Tracker to open Overview."
-                                Style="{StaticResource ShellNavigationButtonStyle}" />
+                                Style="{StaticResource ShellNavigationButtonStyle}">
+                            <controls:IconLabel IconKey="Icon.Table" Text="Overview" />
+                        </ToggleButton>
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.DependencyGraph}"
                                 IsChecked="{Binding IsDependencyGraph, Mode=OneWay}"
-                                Content="Dependency graph"
+                                AutomationProperties.Name="Dependency graph"
                                 ToolTip="Select a Tracker to view its dependency graph."
-                                Style="{StaticResource ShellNavigationButtonStyle}" />
+                                Style="{StaticResource ShellNavigationButtonStyle}">
+                            <controls:IconLabel IconKey="Icon.Flowchart" Text="Dependency graph" />
+                        </ToggleButton>
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.Archived}"
                                 IsChecked="{Binding IsArchived, Mode=OneWay}"
-                                Content="Archived"
+                                AutomationProperties.Name="Archived"
                                 ToolTip="Select a Tracker to view archived entities."
-                                Style="{StaticResource ShellNavigationButtonStyle}" />
+                                Style="{StaticResource ShellNavigationButtonStyle}">
+                            <controls:IconLabel IconKey="Icon.Archive" Text="Archived" />
+                        </ToggleButton>
 
                         <TextBlock Margin="8,18,0,4"
                                    Foreground="{DynamicResource Brush.Text.OnDarkMuted}"
@@ -124,9 +134,11 @@
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.AddEntity}"
                                 IsChecked="{Binding IsAddEntity, Mode=OneWay}"
-                                Content="Add entity"
+                                AutomationProperties.Name="Add entity"
                                 ToolTip="Select a Tracker before adding an entity."
-                                Style="{StaticResource ShellNavigationButtonStyle}" />
+                                Style="{StaticResource ShellNavigationButtonStyle}">
+                            <controls:IconLabel IconKey="Icon.Add" Text="Add entity" />
+                        </ToggleButton>
                     </StackPanel>
                 </ScrollViewer>
 
@@ -138,13 +150,17 @@
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.Help}"
                                 IsChecked="{Binding IsHelp, Mode=OneWay}"
-                                Content="Help"
-                                Style="{StaticResource ShellNavigationButtonStyle}" />
+                                AutomationProperties.Name="Help"
+                                Style="{StaticResource ShellNavigationButtonStyle}">
+                            <controls:IconLabel IconKey="Icon.QuestionCircle" Text="Help" />
+                        </ToggleButton>
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.Settings}"
                                 IsChecked="{Binding IsSettings, Mode=OneWay}"
-                                Content="Settings"
-                                Style="{StaticResource ShellNavigationButtonStyle}" />
+                                AutomationProperties.Name="Settings"
+                                Style="{StaticResource ShellNavigationButtonStyle}">
+                            <controls:IconLabel IconKey="Icon.Settings" Text="Settings" />
+                        </ToggleButton>
                     </StackPanel>
 
                 <!-- No padding of its own: all spacing lives in each card's container, so the space
@@ -183,10 +199,12 @@
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="22" />
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock FontSize="18" FontWeight="Bold" Text="{Binding Symbol}"
-                                                       AutomationProperties.Name="{Binding Kind}">
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
+                                            <controls:Icon Size="18" VerticalAlignment="Top" HorizontalAlignment="Left"
+                                                           IconKey="{Binding IconKey}"
+                                                           IsSpinning="{Binding IsProgress}"
+                                                           AutomationProperties.Name="{Binding Kind}">
+                                                <controls:Icon.Style>
+                                                    <Style TargetType="controls:Icon">
                                                         <Setter Property="Foreground" Value="{DynamicResource Brush.Notification.Information}" />
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding Kind}" Value="Success">
@@ -200,8 +218,8 @@
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
+                                                </controls:Icon.Style>
+                                            </controls:Icon>
                                             <StackPanel Grid.Column="1">
                                                 <TextBlock FontWeight="SemiBold" FontSize="12"
                                                            Foreground="{DynamicResource Brush.Text.OnDark}"
@@ -222,13 +240,15 @@
                                                         Style="{StaticResource SecondaryButtonStyle}" />
                                             </StackPanel>
                                             <Button Grid.Column="2" Width="20" Height="20" Padding="0"
-                                                    Content="×" FontSize="14"
+                                                    VerticalAlignment="Top"
                                                     Foreground="{DynamicResource Brush.Text.OnDark}"
                                                     Background="Transparent" BorderBrush="Transparent"
                                                     ToolTip="Dismiss notification"
                                                     AutomationProperties.Name="Dismiss notification"
                                                     Command="{Binding DismissCommand}"
-                                                    Visibility="{Binding CanDismiss, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                    Visibility="{Binding CanDismiss, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                <controls:Icon IconKey="Icon.Dismiss" Size="12" />
+                                            </Button>
                                         </Grid>
                                     </Border>
                                     </controls:SmoothHeightDecorator>

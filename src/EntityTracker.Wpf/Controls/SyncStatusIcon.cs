@@ -2,7 +2,6 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 
 using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels;
@@ -25,13 +24,10 @@ public sealed class SyncStatusIcon : Icon
         nameof(ProjectId), typeof(Guid?), typeof(SyncStatusIcon),
         new PropertyMetadata(null, (element, _) => ((SyncStatusIcon)element).Follow()));
 
-    private readonly RotateTransform _rotation = new();
     private ProjectSyncIndicators? _source;
 
     public SyncStatusIcon()
     {
-        RenderTransformOrigin = new Point(0.5, 0.5);
-        RenderTransform = _rotation;
         AutomationProperties.SetLiveSetting(this, AutomationLiveSetting.Polite);
         ToolTipService.SetInitialShowDelay(this, 250);
         Loaded += (_, _) => Attach();
@@ -101,12 +97,7 @@ public sealed class SyncStatusIcon : Icon
             SetResourceReference(ForegroundProperty, brush);
         }
 
-        // The sync arrows turn while syncing, whatever Windows' animation effects setting (a choice made
-        // for this app: the turning is what shows that a sync is running).
-        if (indicator.Kind == ProjectSyncIndicatorKind.Syncing)
-            _rotation.BeginAnimation(RotateTransform.AngleProperty,
-                new DoubleAnimation(0, 360, TimeSpan.FromSeconds(1.6)) { RepeatBehavior = RepeatBehavior.Forever });
-        else
-            _rotation.BeginAnimation(RotateTransform.AngleProperty, null);
+        // The sync arrows turn while syncing.
+        IsSpinning = indicator.Kind == ProjectSyncIndicatorKind.Syncing;
     }
 }

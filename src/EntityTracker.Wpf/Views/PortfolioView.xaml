@@ -128,13 +128,15 @@
                                     <Button Margin="0,0,8,0" Click="OnOpenProject" Content="Open dashboard"
                                             AutomationProperties.Name="{Binding Name, StringFormat=Open project {0}}"
                                             Style="{StaticResource PrimaryButtonStyle}" />
-                                    <ToggleButton Grid.Column="1" Content="☰" Padding="12,5"
+                                    <ToggleButton Grid.Column="1" Padding="10,5"
                                                   MinHeight="{DynamicResource Height.Control}"
                                                   ToolTip="Project actions"
                                                   AutomationProperties.Name="{Binding Name, StringFormat=Actions for project {0}}"
                                                   AutomationProperties.HelpText="Show project actions"
                                                   Checked="OnProjectActionsChecked"
-                                                  Unchecked="OnProjectActionsUnchecked" />
+                                                  Unchecked="OnProjectActionsUnchecked">
+                                        <controls:Icon IconKey="Icon.MoreHorizontal" Size="18" />
+                                    </ToggleButton>
                                 </Grid>
                             </Grid>
                         </Border>

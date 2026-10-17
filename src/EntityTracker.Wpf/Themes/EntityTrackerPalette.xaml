@@ -20,6 +20,8 @@
     <SolidColorBrush x:Key="Brush.Review.Warning.Text" Color="{DynamicResource TextFillColorPrimary}" />
     <!-- The Project sync state icons: Fluent's status colours, made for icons and readable in both themes.
          Syncing uses the accent, which Fluent has only as a brush (AccentFillColorDefaultBrush). -->
+    <!-- Warning icons outside sync, such as an unresolved dependency. -->
+    <SolidColorBrush x:Key="Brush.Caution" Color="{DynamicResource SystemFillColorCaution}" />
     <SolidColorBrush x:Key="Brush.SyncState.Synced" Color="{DynamicResource SystemFillColorSuccess}" />
     <SolidColorBrush x:Key="Brush.SyncState.Unsynced" Color="{DynamicResource SystemFillColorCaution}" />
     <SolidColorBrush x:Key="Brush.SyncState.NeedsAttention" Color="{DynamicResource SystemFillColorCritical}" />

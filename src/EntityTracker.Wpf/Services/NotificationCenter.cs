@@ -45,13 +45,14 @@ public sealed class NotificationItem : INotifyPropertyChanged
     public bool HasAction => ActionCommand is not null;
     public bool IsActionEnabled { get => _isActionEnabled; internal set => Set(ref _isActionEnabled, value); }
     public bool IsProgress => Kind == NotificationKind.Progress;
-    public string Symbol => Kind switch
+    /// <summary>The notice's icon (Themes/EntityTrackerIcons.xaml); a running notice's icon turns.</summary>
+    public string IconKey => Kind switch
     {
-        NotificationKind.Success => "✓",
-        NotificationKind.Failure => "×",
-        NotificationKind.ActionNeeded => "!",
-        NotificationKind.Progress => "↻",
-        _ => "i"
+        NotificationKind.Success => "Icon.CheckmarkCircle",
+        NotificationKind.Failure => "Icon.DismissCircle",
+        NotificationKind.ActionNeeded => "Icon.Warning",
+        NotificationKind.Progress => "Icon.ArrowSync",
+        _ => "Icon.Info"
     };
     public ICommand DismissCommand { get; }
     public bool CanDismiss { get; internal set; } = true;
@@ -70,7 +71,7 @@ public sealed class NotificationItem : INotifyPropertyChanged
         ActionCommand = action is null ? null : new AsyncCommand(action);
         OnPropertyChanged(nameof(HasAction));
         OnPropertyChanged(nameof(IsProgress));
-        OnPropertyChanged(nameof(Symbol));
+        OnPropertyChanged(nameof(IconKey));
     }
 
     private void Set<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)

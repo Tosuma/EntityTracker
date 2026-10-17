@@ -224,6 +224,14 @@ internal sealed class WpfScreenshotRenderer(Window window, string outputDirector
         await CaptureAsync(fileName, settleMilliseconds: 500);
     }
 
+    // A turning icon (syncing, a running notice) is shown upright, so screenshots stay the same each run.
+    private void StopTurningIcons()
+    {
+        foreach (Icon icon in FindVisualDescendants<Icon>(_window))
+            if (icon.RenderTransform is RotateTransform rotation && rotation.HasAnimatedProperties)
+                rotation.BeginAnimation(RotateTransform.AngleProperty, null);
+    }
+
     internal async Task SettleAsync(int milliseconds = 150)
     {
         await _window.Dispatcher.InvokeAsync(
@@ -238,6 +246,7 @@ internal sealed class WpfScreenshotRenderer(Window window, string outputDirector
         await _window.Dispatcher.InvokeAsync(
             static () => { },
             DispatcherPriority.ApplicationIdle);
+        StopTurningIcons();
         _window.UpdateLayout();
     }
 

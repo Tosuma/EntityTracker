@@ -67,7 +67,8 @@ public sealed class ManualEntityCreationViewModelTests
 
         ManualDependencyRow selected = Assert.Single(viewModel.SelectedDependencies);
         Assert.True(selected.IsUnresolved);
-        Assert.Equal("⚠ Missing", selected.ResolutionLabel);
+        Assert.Equal("Missing", selected.ResolutionLabel);
+        Assert.True(selected.IsUnresolved);
         Assert.True(viewModel.HasWarnings);
 
         viewModel.RemoveDependencyCommand.Execute(selected);
