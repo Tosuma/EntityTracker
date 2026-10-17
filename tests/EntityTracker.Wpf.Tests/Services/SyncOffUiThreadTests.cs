@@ -55,7 +55,8 @@ public sealed class SyncOffUiThreadTests
             while (links.Callers.IsEmpty && DateTime.UtcNow < deadline) await Task.Delay(20);
             await dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
 
-            Thread caller = Assert.Single(links.Callers);
+            // The first read is the sync's; the card's refresh afterwards reads on the UI thread, as it may.
+            Assert.True(links.Callers.TryPeek(out Thread? caller));
             Assert.NotSame(uiThread, caller);
         }
         finally { dispatcher.InvokeShutdown(); }
@@ -77,11 +78,11 @@ public sealed class SyncOffUiThreadTests
 
     private sealed class RecordingLinks(ProjectSyncLink link) : IProjectSyncLinkStore
     {
-        public System.Collections.Concurrent.ConcurrentBag<Thread> Callers { get; } = [];
+        public System.Collections.Concurrent.ConcurrentQueue<Thread> Callers { get; } = [];
 
         public Task<IReadOnlyList<ProjectSyncLink>> ReadAllAsync(CancellationToken cancellationToken = default)
         {
-            Callers.Add(Thread.CurrentThread);
+            Callers.Enqueue(Thread.CurrentThread);
             return Task.FromResult<IReadOnlyList<ProjectSyncLink>>([link]);
         }
 
