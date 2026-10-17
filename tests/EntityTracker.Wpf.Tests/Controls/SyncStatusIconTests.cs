@@ -75,6 +75,32 @@ public sealed class SyncStatusIconTests
     }
 
     [Fact]
+    public void TheSyncingIconTurnsAndStopsWhenTheSyncEnds() => RunSta(() =>
+    {
+        SyncStatusIcon icon = new() { Indicator = new ProjectSyncIndicator(ProjectSyncIndicatorKind.Syncing, "Syncing…") };
+        Window window = new()
+        {
+            Width = 100, Height = 100, Left = -10000, Top = -10000, ShowInTaskbar = false,
+            WindowStyle = WindowStyle.None, ShowActivated = false, Content = icon
+        };
+        window.Show();
+        try
+        {
+            System.Windows.Media.RotateTransform rotation =
+                Assert.IsType<System.Windows.Media.RotateTransform>(icon.RenderTransform);
+            GraphCanvasHost.Pump(0.1);
+            double first = rotation.Angle;
+            GraphCanvasHost.Pump(0.3);
+            Assert.NotEqual(first, rotation.Angle);
+
+            icon.Indicator = new ProjectSyncIndicator(ProjectSyncIndicatorKind.Synced, "Synced.");
+            GraphCanvasHost.Pump(0.1);
+            Assert.Equal(0, rotation.Angle);
+        }
+        finally { window.Close(); }
+    });
+
+    [Fact]
     public void NothingIsShownWithoutARepository() => RunSta(() =>
     {
         SyncStatusIcon icon = new() { Indicator = new ProjectSyncIndicator(ProjectSyncIndicatorKind.Synced, "Synced.") };

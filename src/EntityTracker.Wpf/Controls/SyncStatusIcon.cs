@@ -101,8 +101,9 @@ public sealed class SyncStatusIcon : Icon
             SetResourceReference(ForegroundProperty, brush);
         }
 
-        // The sync arrows turn while syncing, unless Windows' animation effects are off.
-        if (indicator.Kind == ProjectSyncIndicatorKind.Syncing && SystemParameters.ClientAreaAnimation)
+        // The sync arrows turn while syncing, whatever Windows' animation effects setting (a choice made
+        // for this app: the turning is what shows that a sync is running).
+        if (indicator.Kind == ProjectSyncIndicatorKind.Syncing)
             _rotation.BeginAnimation(RotateTransform.AngleProperty,
                 new DoubleAnimation(0, 360, TimeSpan.FromSeconds(1.6)) { RepeatBehavior = RepeatBehavior.Forever });
         else
