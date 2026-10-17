@@ -31,18 +31,6 @@
             <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="AutomationProperties.HelpText"
                     Value="Navigate within EntityTracker" />
-            <!-- Each item names its icon in Tag; the label stays the content, and so the automation name. -->
-            <Setter Property="ContentTemplate">
-                <Setter.Value>
-                    <DataTemplate>
-                        <StackPanel Orientation="Horizontal">
-                            <controls:Icon Margin="0,0,10,0" VerticalAlignment="Center" Size="16"
-                                           IconKey="{Binding Tag, RelativeSource={RelativeSource AncestorType=ToggleButton}}" />
-                            <TextBlock VerticalAlignment="Center" Text="{Binding}" />
-                        </StackPanel>
-                    </DataTemplate>
-                </Setter.Value>
-            </Setter>
             <Style.Triggers>
                 <Trigger Property="IsChecked" Value="True">
                     <Setter Property="Background" Value="{DynamicResource Brush.Brand.Green80}" />
@@ -97,16 +85,18 @@
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.Portfolio}"
                                 IsChecked="{Binding IsPortfolio, Mode=OneWay}"
-                                Content="Portfolio"
-                                Tag="Icon.Grid"
-                                Style="{StaticResource ShellNavigationButtonStyle}" />
+                                AutomationProperties.Name="Portfolio"
+                                Style="{StaticResource ShellNavigationButtonStyle}">
+                            <controls:IconLabel IconKey="Icon.Grid" Text="Portfolio" />
+                        </ToggleButton>
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.ProjectDashboard}"
                                 IsChecked="{Binding IsProjectDashboard, Mode=OneWay}"
-                                Content="Project dashboard"
-                                Tag="Icon.Board"
+                                AutomationProperties.Name="Project dashboard"
                                 ToolTip="Select a Project to open its dashboard."
-                                Style="{StaticResource ShellNavigationButtonStyle}" />
+                                Style="{StaticResource ShellNavigationButtonStyle}">
+                            <controls:IconLabel IconKey="Icon.Board" Text="Project dashboard" />
+                        </ToggleButton>
 
                         <TextBlock Margin="8,18,0,4"
                                    Foreground="{DynamicResource Brush.Text.OnDarkMuted}"
@@ -115,24 +105,27 @@
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.Overview}"
                                 IsChecked="{Binding IsOverview, Mode=OneWay}"
-                                Content="Overview"
-                                Tag="Icon.Table"
+                                AutomationProperties.Name="Overview"
                                 ToolTip="Select a Tracker to open Overview."
-                                Style="{StaticResource ShellNavigationButtonStyle}" />
+                                Style="{StaticResource ShellNavigationButtonStyle}">
+                            <controls:IconLabel IconKey="Icon.Table" Text="Overview" />
+                        </ToggleButton>
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.DependencyGraph}"
                                 IsChecked="{Binding IsDependencyGraph, Mode=OneWay}"
-                                Content="Dependency graph"
-                                Tag="Icon.Flowchart"
+                                AutomationProperties.Name="Dependency graph"
                                 ToolTip="Select a Tracker to view its dependency graph."
-                                Style="{StaticResource ShellNavigationButtonStyle}" />
+                                Style="{StaticResource ShellNavigationButtonStyle}">
+                            <controls:IconLabel IconKey="Icon.Flowchart" Text="Dependency graph" />
+                        </ToggleButton>
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.Archived}"
                                 IsChecked="{Binding IsArchived, Mode=OneWay}"
-                                Content="Archived"
-                                Tag="Icon.Archive"
+                                AutomationProperties.Name="Archived"
                                 ToolTip="Select a Tracker to view archived entities."
-                                Style="{StaticResource ShellNavigationButtonStyle}" />
+                                Style="{StaticResource ShellNavigationButtonStyle}">
+                            <controls:IconLabel IconKey="Icon.Archive" Text="Archived" />
+                        </ToggleButton>
 
                         <TextBlock Margin="8,18,0,4"
                                    Foreground="{DynamicResource Brush.Text.OnDarkMuted}"
@@ -141,10 +134,11 @@
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.AddEntity}"
                                 IsChecked="{Binding IsAddEntity, Mode=OneWay}"
-                                Content="Add entity"
-                                Tag="Icon.Add"
+                                AutomationProperties.Name="Add entity"
                                 ToolTip="Select a Tracker before adding an entity."
-                                Style="{StaticResource ShellNavigationButtonStyle}" />
+                                Style="{StaticResource ShellNavigationButtonStyle}">
+                            <controls:IconLabel IconKey="Icon.Add" Text="Add entity" />
+                        </ToggleButton>
                     </StackPanel>
                 </ScrollViewer>
 
@@ -156,15 +150,17 @@
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.Help}"
                                 IsChecked="{Binding IsHelp, Mode=OneWay}"
-                                Content="Help"
-                                Tag="Icon.QuestionCircle"
-                                Style="{StaticResource ShellNavigationButtonStyle}" />
+                                AutomationProperties.Name="Help"
+                                Style="{StaticResource ShellNavigationButtonStyle}">
+                            <controls:IconLabel IconKey="Icon.QuestionCircle" Text="Help" />
+                        </ToggleButton>
                         <ToggleButton Command="{Binding NavigateCommand}"
                                 CommandParameter="{x:Static viewModels:ShellDestination.Settings}"
                                 IsChecked="{Binding IsSettings, Mode=OneWay}"
-                                Content="Settings"
-                                Tag="Icon.Settings"
-                                Style="{StaticResource ShellNavigationButtonStyle}" />
+                                AutomationProperties.Name="Settings"
+                                Style="{StaticResource ShellNavigationButtonStyle}">
+                            <controls:IconLabel IconKey="Icon.Settings" Text="Settings" />
+                        </ToggleButton>
                     </StackPanel>
 
                 <!-- No padding of its own: all spacing lives in each card's container, so the space

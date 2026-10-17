@@ -1,6 +1,12 @@
 using System.IO;
+using System.Runtime.ExceptionServices;
 using System.Text.RegularExpressions;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using System.Xml.Linq;
+
+using EntityTracker.Wpf.Controls;
 
 using EntityTracker.Wpf.Services;
 
@@ -41,6 +47,46 @@ public sealed partial class IconTests
 
         Assert.Equal(items.Length, items.Select(item => item.IconKey).Distinct().Count());
         Assert.Equal("Icon.ArrowSync", items[3].IconKey);
+    }
+
+    [Fact]
+    public void ADisabledIconAndItsLabelDim() => RunSta(() =>
+    {
+        // Fluent dims a disabled button's text through its template, which content elements do not
+        // inherit, so the icon and label dim themselves.
+        IconLabel label = new() { IconKey = "Icon.Grid", Text = "Portfolio" };
+        Icon icon = (Icon)label.Children[0];
+        icon.Geometry = Geometry.Parse("M0 0L20 0L20 20Z");
+        Border host = new() { Child = label };
+        host.Measure(new Size(200, 40));
+        host.Arrange(new Rect(0, 0, 200, 40));
+        Assert.Equal(1, label.Children[1].Opacity);
+
+        host.IsEnabled = false;
+        host.UpdateLayout();
+        icon.Arrange(new Rect(icon.RenderSize));
+
+        Assert.Equal(Icon.DisabledOpacity, label.Children[1].Opacity);
+        DrawingGroup drawing = VisualTreeHelper.GetDrawing(icon);
+        Assert.Contains(drawing.Children.OfType<DrawingGroup>().SelectMany(Flatten), group =>
+            Math.Abs(group.Opacity - Icon.DisabledOpacity) < 0.001);
+    });
+
+    private static IEnumerable<DrawingGroup> Flatten(DrawingGroup group) =>
+        new[] { group }.Concat(group.Children.OfType<DrawingGroup>().SelectMany(Flatten));
+
+    private static void RunSta(Action test)
+    {
+        Exception? failure = null;
+        Thread thread = new(() =>
+        {
+            try { test(); }
+            catch (Exception exception) { failure = exception; }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
     [GeneratedRegex("\"(Icon\\.[A-Za-z]+)\"")]

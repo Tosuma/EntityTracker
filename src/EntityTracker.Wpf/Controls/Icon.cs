@@ -15,6 +15,12 @@ public class Icon : FrameworkElement
 {
     private const double SourceSize = 20;
 
+    /// <summary>
+    /// How strongly a disabled icon or label shows, close to Fluent's disabled text. Fluent dims a
+    /// disabled button's text through its template, which an icon in the button does not inherit.
+    /// </summary>
+    internal const double DisabledOpacity = 0.4;
+
     public static readonly DependencyProperty GeometryProperty = DependencyProperty.Register(
         nameof(Geometry), typeof(Geometry), typeof(Icon),
         new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
@@ -48,6 +54,7 @@ public class Icon : FrameworkElement
     {
         RenderTransformOrigin = new Point(0.5, 0.5);
         RenderTransform = _rotation;
+        IsEnabledChanged += (_, _) => InvalidateVisual();
     }
 
     public Geometry? Geometry
@@ -104,7 +111,9 @@ public class Icon : FrameworkElement
         drawingContext.PushTransform(new TranslateTransform(
             Math.Max(0, (ActualWidth - Size) / 2), Math.Max(0, (ActualHeight - Size) / 2)));
         drawingContext.PushTransform(new ScaleTransform(scale, scale));
+        drawingContext.PushOpacity(IsEnabled ? 1 : DisabledOpacity);
         drawingContext.DrawGeometry(Foreground, null, Geometry);
+        drawingContext.Pop();
         drawingContext.Pop();
         drawingContext.Pop();
     }
