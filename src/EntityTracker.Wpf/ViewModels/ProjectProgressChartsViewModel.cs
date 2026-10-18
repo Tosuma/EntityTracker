@@ -23,7 +23,7 @@ public sealed record ProgressChartScope(Tracker? Tracker, string Name);
 /// chosen Trackers together or one of them, over the page's progress period. Each chart can be
 /// saved or copied as an image.
 /// </summary>
-public sealed class ProjectProgressChartsViewModel : INotifyPropertyChanged
+public sealed class ProjectProgressChartsViewModel : INotifyPropertyChanged, IChartThemeTarget
 {
     private static readonly ILogger Logger = AppLogging.CreateLogger<ProjectProgressChartsViewModel>();
 
@@ -42,6 +42,7 @@ public sealed class ProjectProgressChartsViewModel : INotifyPropertyChanged
     private readonly AsyncCommand<ProgressChartKind> _copyChartCommand;
     private ProgressChartScope _selectedScope = AllScope;
     private ProgressDashboardReport? _report;
+    private ProgressChartTheme _chartTheme;
     private ProgressChartPresentation? _presentation;
     private CancellationTokenSource? _loading;
     private bool _isBusy;
@@ -89,6 +90,17 @@ public sealed class ProjectProgressChartsViewModel : INotifyPropertyChanged
     {
         get => _presentation;
         private set => SetField(ref _presentation, value);
+    }
+
+    /// <summary>The app theme the on-screen charts are drawn for; saved and copied images stay light.</summary>
+    public ProgressChartTheme ChartTheme
+    {
+        get => _chartTheme;
+        set
+        {
+            if (SetField(ref _chartTheme, value) && _report is { } report)
+                Presentation = _presentationBuilder.Build(report, value);
+        }
     }
 
     public bool IsBusy
@@ -192,7 +204,7 @@ public sealed class ProjectProgressChartsViewModel : INotifyPropertyChanged
     private void Show(ProgressDashboardReport? report)
     {
         _report = report;
-        Presentation = report is null ? null : _presentationBuilder.Build(report);
+        Presentation = report is null ? null : _presentationBuilder.Build(report, ChartTheme);
         OnPropertyChanged(nameof(DateSummary));
         NotifyState();
     }

@@ -31,6 +31,24 @@ public sealed class ProgressChartPresentationBuilderTests
     }
 
     [Fact]
+    public void Build_DrawsAxesLegendsAndTooltipsForTheAppThemeButExportsStayLight()
+    {
+        ProgressDashboardReport report = CreateReport(notStarted: 1, inProgress: 1, rework: 1, completed: 1, reconciled: 1);
+
+        ProgressChartPresentation dark = _builder.Build(report, ProgressChartTheme.Dark);
+        ProgressChartPresentation light = _builder.Build(report);
+        ProgressChartPresentation export = _builder.BuildForExport(report);
+
+        SKColor darkText = SKColor.Parse(ColorScheme.DarkChart.Text);
+        SKColor lightText = SKColor.Parse(ColorScheme.Chart.Text);
+        Assert.Equal(darkText, Assert.IsType<SolidColorPaint>(dark.CountYAxes[0].LabelsPaint).Color);
+        Assert.Equal(darkText, dark.LegendTextPaint!.Color);
+        Assert.Equal(SKColor.Parse(ColorScheme.DarkChart.TooltipBackground), dark.TooltipBackgroundPaint!.Color);
+        Assert.Equal(lightText, Assert.IsType<SolidColorPaint>(light.CountYAxes[0].LabelsPaint).Color);
+        Assert.Equal(lightText, Assert.IsType<SolidColorPaint>(export.CountYAxes[0].LabelsPaint).Color);
+    }
+
+    [Fact]
     public void Build_UsesDocumentedStatusAndTrendPalette()
     {
         ProgressChartPresentation presentation = _builder.Build(CreateReport(

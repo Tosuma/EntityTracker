@@ -71,6 +71,26 @@ public sealed partial class ColorSchemeTests
     }
 
     [Fact]
+    public void EachStatusHasItsOwnColourVisibleOnLightAndDarkPages()
+    {
+        // The Fluent light page and card, and the dark page and card, behind graph nodes and chart slices.
+        string[] pages = ["#FFFFFF", "#F3F3F3", "#202020", "#2D2D2D"];
+        StatusColor[] development =
+        [
+            ColorScheme.Status.NotStarted, ColorScheme.Status.InProgress, ColorScheme.Status.ReworkNeeded,
+            ColorScheme.Status.Reworking, ColorScheme.Status.Blocked, ColorScheme.Status.DevelopmentCompleted,
+            ColorScheme.Status.Reconciled
+        ];
+
+        Assert.Equal(development.Length, development.Select(static color => color.Fill).Distinct().Count());
+        Assert.DoesNotContain(development, color => color.Fill == ColorScheme.WorkStatus.WaitingOnDependencies.Fill);
+        foreach (StatusColor color in development.Append(ColorScheme.WorkStatus.WaitingOnDependencies))
+            foreach (string page in pages)
+                Assert.True(ContrastRatio(color.Fill, page) >= 3,
+                    $"{color.Fill} on {page} is below the 3:1 contrast a graph node or chart slice needs.");
+    }
+
+    [Fact]
     public void EveryStatusHasItsOwnFillAndTextResources() => RunSta(() =>
     {
         ColorSchemeResources resources = new();

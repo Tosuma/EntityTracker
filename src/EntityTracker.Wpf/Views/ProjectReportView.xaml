@@ -2,13 +2,14 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels"
+             xmlns:controls="clr-namespace:EntityTracker.Wpf.Controls"
              xmlns:reporting="clr-namespace:EntityTracker.Reporting;assembly=EntityTracker.Reporting"
              xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel MaxWidth="1100" HorizontalAlignment="Left" DataContext="{Binding ProjectReport}">
+        <StackPanel MaxWidth="1100" HorizontalAlignment="Left" DataContext="{Binding ProjectReport}" controls:ChartThemeFollower.Target="{Binding Charts}">
             <TextBlock Style="{StaticResource PageHeadingTextStyle}">
                 <Hyperlink Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                            CommandParameter="{x:Static viewModels:ShellDestination.ProjectDashboard}"
@@ -143,8 +144,8 @@
                                             CommandParameter="{x:Static reporting:ProgressChartKind.CurrentStatus}"
                                             Style="{StaticResource SecondaryButtonStyle}" />
                                 </Grid>
-                                <Border Grid.Row="1" Margin="0,8,0,0" Background="{DynamicResource Brush.Report.Canvas}">
-                                    <lvc:PieChart AutomationProperties.Name="Entities by development status chart" LegendPosition="Right"
+                                <Border Grid.Row="1" Margin="0,8,0,0" Background="{DynamicResource Brush.Surface.Card}">
+                                    <lvc:PieChart Background="Transparent" LegendTextPaint="{Binding Charts.Presentation.LegendTextPaint}" TooltipTextPaint="{Binding Charts.Presentation.TooltipTextPaint}" TooltipBackgroundPaint="{Binding Charts.Presentation.TooltipBackgroundPaint}" AutomationProperties.Name="Entities by development status chart" LegendPosition="Right"
                                                   Series="{Binding Charts.Presentation.CurrentStatusSeries}" />
                                 </Border>
                             </Grid>
@@ -173,8 +174,8 @@
                                             CommandParameter="{x:Static reporting:ProgressChartKind.ImplementedOverTime}"
                                             Style="{StaticResource SecondaryButtonStyle}" />
                                 </Grid>
-                                <Border Grid.Row="1" Margin="0,8,0,0" Background="{DynamicResource Brush.Report.Canvas}">
-                                    <lvc:CartesianChart AutomationProperties.Name="Implemented entities over time chart" LegendPosition="Top" TooltipPosition="Top"
+                                <Border Grid.Row="1" Margin="0,8,0,0" Background="{DynamicResource Brush.Surface.Card}">
+                                    <lvc:CartesianChart Background="Transparent" LegendTextPaint="{Binding Charts.Presentation.LegendTextPaint}" TooltipTextPaint="{Binding Charts.Presentation.TooltipTextPaint}" TooltipBackgroundPaint="{Binding Charts.Presentation.TooltipBackgroundPaint}" AutomationProperties.Name="Implemented entities over time chart" LegendPosition="Top" TooltipPosition="Top"
                                                         Series="{Binding Charts.Presentation.ImplementedSeries}"
                                                         XAxes="{Binding Charts.Presentation.ImplementedXAxes}"
                                                         YAxes="{Binding Charts.Presentation.CountYAxes}" />
@@ -205,8 +206,8 @@
                                             CommandParameter="{x:Static reporting:ProgressChartKind.ReadyAndBlockedOverTime}"
                                             Style="{StaticResource SecondaryButtonStyle}" />
                                 </Grid>
-                                <Border Grid.Row="1" Margin="0,8,0,0" Background="{DynamicResource Brush.Report.Canvas}">
-                                    <lvc:CartesianChart AutomationProperties.Name="Ready to start versus waiting on dependencies over time chart" LegendPosition="Top" TooltipPosition="Top"
+                                <Border Grid.Row="1" Margin="0,8,0,0" Background="{DynamicResource Brush.Surface.Card}">
+                                    <lvc:CartesianChart Background="Transparent" LegendTextPaint="{Binding Charts.Presentation.LegendTextPaint}" TooltipTextPaint="{Binding Charts.Presentation.TooltipTextPaint}" TooltipBackgroundPaint="{Binding Charts.Presentation.TooltipBackgroundPaint}" AutomationProperties.Name="Ready to start versus waiting on dependencies over time chart" LegendPosition="Top" TooltipPosition="Top"
                                                         Series="{Binding Charts.Presentation.ReadinessSeries}"
                                                         XAxes="{Binding Charts.Presentation.ReadinessXAxes}"
                                                         YAxes="{Binding Charts.Presentation.CountYAxes}" />
@@ -237,8 +238,8 @@
                                             CommandParameter="{x:Static reporting:ProgressChartKind.WeeklyNetImplementedChange}"
                                             Style="{StaticResource SecondaryButtonStyle}" />
                                 </Grid>
-                                <Border Grid.Row="1" Margin="0,8,0,0" Background="{DynamicResource Brush.Report.Canvas}">
-                                    <lvc:CartesianChart AutomationProperties.Name="Weekly net implemented change chart" LegendPosition="Top" TooltipPosition="Top"
+                                <Border Grid.Row="1" Margin="0,8,0,0" Background="{DynamicResource Brush.Surface.Card}">
+                                    <lvc:CartesianChart Background="Transparent" LegendTextPaint="{Binding Charts.Presentation.LegendTextPaint}" TooltipTextPaint="{Binding Charts.Presentation.TooltipTextPaint}" TooltipBackgroundPaint="{Binding Charts.Presentation.TooltipBackgroundPaint}" AutomationProperties.Name="Weekly net implemented change chart" LegendPosition="Top" TooltipPosition="Top"
                                                         Series="{Binding Charts.Presentation.WeeklySeries}"
                                                         XAxes="{Binding Charts.Presentation.WeeklyXAxes}"
                                                         YAxes="{Binding Charts.Presentation.SignedYAxes}" />

@@ -182,7 +182,7 @@
                                     ContentTemplate="{StaticResource ComparisonWorkStatusBadgeTemplate}"
                                     Visibility="{Binding IsPresent, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <TextBlock Margin="0,4,0,0"
-                               Foreground="{DynamicResource Brush.Status.ReworkNeeded}"
+                               Foreground="{DynamicResource Brush.Critical}"
                                Text="{Binding IssueText}"
                                TextTrimming="CharacterEllipsis"
                                ToolTip="{Binding IssueText}"
@@ -422,7 +422,7 @@
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding ProjectReporting.IsBlockedSelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Status.Blocked}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Status.ReworkNeeded}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Status.Blocked}" />
                                             <Setter Property="BorderThickness" Value="2" />
                                             <Setter Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
                                         </DataTrigger>

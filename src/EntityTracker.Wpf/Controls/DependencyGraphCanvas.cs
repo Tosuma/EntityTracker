@@ -60,6 +60,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
 
     private readonly Dictionary<(string Text, bool Bold, bool Dimmed), FormattedText> _labelCache = [];
     private readonly Dictionary<DevelopmentStatus, Brush> _statusBrushes = [];
+    private readonly Dictionary<DevelopmentStatus, Brush> _statusTextBrushes = [];
     private readonly Dictionary<(Brush Brush, double Opacity), Brush> _fadedBrushes = [];
     private readonly Dictionary<(Brush Brush, double Thickness, bool Dashed), Pen> _pens = [];
     private readonly Dictionary<string, FormattedText[]> _treeNames = new(StringComparer.Ordinal);
@@ -402,6 +403,13 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         {
             context.DrawEllipse(Faded(StatusBrush(node.Status), opacity), CachedPen(Faded(edgeBrush, opacity), 1),
                 center, radius, radius);
+            if (node.Status is { } status &&
+                DependencyGraphStatusGlyph.For(status, center, radius) is { } glyph)
+            {
+                Pen glyphPen = CachedPen(Faded(StatusTextBrush(status), opacity),
+                    DependencyGraphStatusGlyph.Thickness(radius));
+                context.DrawGeometry(null, glyphPen, glyph);
+            }
         }
 
         if (graph.IsSelected(node))
@@ -851,6 +859,9 @@ public sealed class DependencyGraphCanvas : FrameworkElement
             case Key.Escape when Graph?.HasSelection == true:
                 Graph.SelectedNode = null;
                 break;
+            case Key.Enter when Graph?.SelectedNode is { IsPlaceholder: false } selected:
+                Graph.OpenDetails(selected);
+                break;
             case Key.OemPlus or Key.Add:
                 ZoomAt(center, 1.2);
                 break;
@@ -875,6 +886,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         // A theme change swaps the brushes, so everything derived from them is rebuilt.
         _labelCache.Clear();
         _statusBrushes.Clear();
+        _statusTextBrushes.Clear();
         _fadedBrushes.Clear();
         _pens.Clear();
         _treeNames.Clear();
@@ -1086,6 +1098,15 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         }
 
         return null;
+    }
+
+    /// <summary>Gets the colour of text and marks on a status colour, cached like the status colours.</summary>
+    private Brush StatusTextBrush(DevelopmentStatus status)
+    {
+        if (_statusTextBrushes.TryGetValue(status, out Brush? cached)) return cached;
+        Brush brush = TryFindResource($"Brush.Status.{status}.Text") as Brush ?? Brushes.Black;
+        _statusTextBrushes[status] = brush;
+        return brush;
     }
 
     private Brush StatusBrush(DevelopmentStatus? nullableStatus)

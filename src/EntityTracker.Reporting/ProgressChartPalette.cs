@@ -16,6 +16,20 @@ internal static class ProgressChartPalette
     internal static readonly SKColor Increase = From(ColorScheme.Chart.Increase);
     internal static readonly SKColor Decrease = From(ColorScheme.Chart.Decrease);
 
+    /// <summary>Gets the text colour of axes, legends and tooltips on the theme's canvas.</summary>
+    internal static SKColor TextFor(ProgressChartTheme theme) =>
+        From(theme == ProgressChartTheme.Dark ? ColorScheme.DarkChart.Text : ColorScheme.Chart.Text);
+
+    /// <summary>Gets the grid line colour on the theme's canvas.</summary>
+    internal static SKColor GridFor(ProgressChartTheme theme) =>
+        From(theme == ProgressChartTheme.Dark ? ColorScheme.DarkChart.Grid : ColorScheme.Chart.Grid);
+
+    /// <summary>Gets the tooltip background on the theme's canvas.</summary>
+    internal static SKColor TooltipBackgroundFor(ProgressChartTheme theme) =>
+        From(theme == ProgressChartTheme.Dark
+            ? ColorScheme.DarkChart.TooltipBackground
+            : ColorScheme.Chart.TooltipBackground);
+
     internal static SKColor From(string hex) => SKColor.Parse(hex);
 
     /// <summary>Gets a development status's colour (and the colour of a label on it).</summary>

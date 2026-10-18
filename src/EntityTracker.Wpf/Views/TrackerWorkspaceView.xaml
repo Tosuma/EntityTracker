@@ -1071,8 +1071,9 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type viewModels:DependencyGraphLegendItem}">
                                     <StackPanel Margin="12,0,0,0" Orientation="Horizontal">
-                                        <controls:DependencyGraphLegendSwatch Width="10" Height="10" VerticalAlignment="Center"
+                                        <controls:DependencyGraphLegendSwatch Width="14" Height="14" VerticalAlignment="Center"
                                                                               BrushKey="{Binding BrushKey}"
+                                                                              Status="{Binding Status}"
                                                                               IsPlaceholder="{Binding IsPlaceholder}" />
                                         <TextBlock Margin="5,0,0,0" FontSize="12"
                                                    Foreground="{DynamicResource Brush.Text.Secondary}"
@@ -1083,15 +1084,83 @@
                         </ItemsControl>
                     </DockPanel>
 
-                    <Border Grid.Row="3"
-                            BorderBrush="{DynamicResource Brush.Border.Default}"
+                    <Grid Grid.Row="3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <!-- The selected entity's links as a list: Tab moves from the map into it, and each row
+                         selects that entity on the map or opens its details. -->
+                    <Border x:Name="DependencyGraphRelationshipsPanel"
+                            Grid.Column="1"
+                            Width="260"
+                            Margin="12,0,0,0"
+                            Padding="12"
+                            Style="{StaticResource EntityTrackerCardStyle}"
+                            Visibility="{Binding HasSelection, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Style="{StaticResource SectionHeadingTextStyle}"
+                                       Text="{Binding SelectedNode.Label}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock DockPanel.Dock="Top" Margin="0,4,0,10"
+                                       AutomationProperties.LiveSetting="Polite"
+                                       Style="{StaticResource PageDescriptionTextStyle}"
+                                       Text="{Binding SelectionSummary}" />
+                            <ListBox AutomationProperties.Name="Linked entities"
+                                     BorderThickness="0" Background="Transparent"
+                                     HorizontalContentAlignment="Stretch"
+                                     ItemsSource="{Binding Relationships}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                                        <Setter Property="AutomationProperties.Name">
+                                            <Setter.Value>
+                                                <MultiBinding StringFormat="{}{0} {1}, {2}">
+                                                    <Binding Path="Relation" />
+                                                    <Binding Path="Label" />
+                                                    <Binding Path="Description" />
+                                                </MultiBinding>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <DockPanel>
+                                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                                <Button Command="{Binding DataContext.SelectRelationshipCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                        CommandParameter="{Binding}"
+                                                        ToolTip="Select on the map"
+                                                        AutomationProperties.Name="{Binding Label, StringFormat=Select {0} on the map}"
+                                                        Style="{StaticResource IconButtonStyle}">
+                                                    <controls:Icon IconKey="Icon.Flowchart" Size="14" />
+                                                </Button>
+                                                <Button Command="{Binding DataContext.OpenRelationshipDetailsCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                        CommandParameter="{Binding}"
+                                                        ToolTip="Open details"
+                                                        AutomationProperties.Name="{Binding Label, StringFormat=Open details of {0}}"
+                                                        Style="{StaticResource IconButtonStyle}">
+                                                    <controls:Icon IconKey="Icon.Info" Size="14" />
+                                                </Button>
+                                            </StackPanel>
+                                            <StackPanel>
+                                                <TextBlock FontSize="11" Foreground="{DynamicResource Brush.Text.Secondary}" Text="{Binding Relation}" />
+                                                <TextBlock FontWeight="SemiBold" Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock FontSize="12" Foreground="{DynamicResource Brush.Text.Secondary}" Text="{Binding Description}" />
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </DockPanel>
+                    </Border>
+                    <Border BorderBrush="{DynamicResource Brush.Border.Default}"
                             BorderThickness="1"
                             CornerRadius="6"
                             ClipToBounds="True">
                         <Grid>
                             <controls:DependencyGraphCanvas x:Name="DependencyGraphCanvas"
                                                             AutomationProperties.Name="Dependency graph"
-                                                            AutomationProperties.HelpText="Click an entity to highlight its dependencies. Double-click to open details. Escape clears the selection."
+                                                            AutomationProperties.HelpText="Click an entity to highlight its dependencies. Double-click or press Enter to open details. Tab to the list of its linked entities. Escape clears the selection."
                                                             Graph="{Binding}"
                                                             Background="{DynamicResource Brush.Surface.Card}"
                                                             LabelBrush="{DynamicResource Brush.Text.Primary}"
@@ -1122,6 +1191,7 @@
                             </Border>
                         </Grid>
                     </Border>
+                    </Grid>
                 </Grid>
             </TabItem>
 
