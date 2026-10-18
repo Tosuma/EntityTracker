@@ -41,12 +41,63 @@ public partial class MainWindow : Window
         Closing += OnClosing;
         Closed += OnClosed;
         PreviewMouseWheel += OnPreviewMouseWheel;
+        PreviewMouseDown += OnPreviewMouseDownLeaveTextField;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         if (_updates is not null) _updates.StateChanged += OnUpdateStateChanged;
         _editTimer.Tick += (_, _) => RefreshUpdateBlock();
         ((System.Collections.Specialized.INotifyCollectionChanged)_viewModel.Notifications.Items)
             .CollectionChanged += OnNotificationsChanged;
     }
+
+    /// <summary>
+    /// Clicking outside a text field leaves it, as elsewhere in Windows. WPF keeps the focus in the field
+    /// when the click lands on something that takes none (a page background, a heading, a card), so after
+    /// such a click the focus moves to the nearest focusable element around the click, or is cleared.
+    /// </summary>
+    private void OnPreviewMouseDownLeaveTextField(object sender, MouseButtonEventArgs e)
+    {
+        if (Keyboard.FocusedElement is not DependencyObject focused ||
+            e.OriginalSource is not DependencyObject source ||
+            TextFieldOf(focused) is not { } field ||
+            IsWithin(source, field))
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+        {
+            if (Keyboard.FocusedElement is not DependencyObject still || !IsWithin(still, field)) return;
+            for (DependencyObject? current = source; current is not null; current = ParentOf(current))
+            {
+                if (current is UIElement { Focusable: true, IsEnabled: true, IsVisible: true } target &&
+                    !IsWithin(target, field) && target.Focus())
+                {
+                    return;
+                }
+            }
+            if (!_viewModel.IsModalOpen) Keyboard.ClearFocus();
+        });
+    }
+
+    private static FrameworkElement? TextFieldOf(DependencyObject focused)
+    {
+        if (focused is ComboBox { IsEditable: true } editable) return editable;
+        if (focused is not System.Windows.Controls.Primitives.TextBoxBase box) return null;
+        // An editable ComboBox's text box belongs to the ComboBox: its drop-down button is part of the field.
+        return box.TemplatedParent as ComboBox ?? (FrameworkElement)box;
+    }
+
+    private static bool IsWithin(DependencyObject element, DependencyObject ancestor)
+    {
+        for (DependencyObject? current = element; current is not null; current = ParentOf(current))
+            if (ReferenceEquals(current, ancestor)) return true;
+        return false;
+    }
+
+    // Logical parent first, so a click in a field's popup (a suggestion list) counts as inside the field.
+    private static DependencyObject? ParentOf(DependencyObject element) =>
+        LogicalTreeHelper.GetParent(element) ??
+        (element is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(element) : null);
 
     private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e) =>
         _mouseWheelRouter.Route(e);

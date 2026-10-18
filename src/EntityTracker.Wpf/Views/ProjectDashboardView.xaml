@@ -252,80 +252,84 @@
 
             <Border Margin="0,0,0,18" Padding="16" Style="{StaticResource EntityTrackerCardStyle}"
                     DataContext="{Binding ProjectReporting.RepositoryCard}">
-                <Grid>
-                <!-- Synced and nothing to do: one status row, so the Trackers come first on the page. -->
-                <DockPanel x:Name="CompactRepositoryRow"
-                           Visibility="{Binding IsCompact, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                        <Button Margin="0,0,8,0" Content="Sync now" Command="{Binding SyncCommand}"
-                                AutomationProperties.HelpText="Commit the project snapshot and sync it with the repository now"
-                                Style="{StaticResource PrimaryButtonStyle}" />
-                        <Button Content="Details" Command="{Binding ToggleDetailsCommand}"
-                                AutomationProperties.HelpText="Show the repository path, branch, upstream and actions" />
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" Text="Git repository" />
-                        <controls:SyncStatusIcon Margin="12,0,0,0" Size="18" VerticalAlignment="Center"
-                                                 x:Name="CompactRepositorySyncIcon"
-                                                 ProjectId="{Binding ProjectId}" />
-                        <TextBlock Margin="6,0,0,0" VerticalAlignment="Center"
-                                   Foreground="{DynamicResource Brush.Text.Secondary}"
-                                   Text="{Binding Indicator.Label, ElementName=CompactRepositorySyncIcon}" />
-                    </StackPanel>
-                </DockPanel>
+                <!-- One header row in both modes, so the card keeps its title and buttons in place.
+                     Synced with nothing to do: the status sits in the header and the details are folded. -->
                 <StackPanel>
-                    <StackPanel.Style>
-                        <Style TargetType="StackPanel">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsCompact}" Value="True">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </StackPanel.Style>
-                    <DockPanel>
+                    <DockPanel MinHeight="{DynamicResource Height.Control}">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"
+                                    Visibility="{Binding IsCompact, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <Button Margin="0,0,8,0" Content="Cancel sync" Command="{Binding CancelSyncCommand}"
+                                    AutomationProperties.HelpText="Cancel a waiting or running project sync"
+                                    Visibility="{Binding CanCancelSync, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <Button Margin="0,0,8,0" Content="Sync now" Command="{Binding SyncCommand}"
+                                    AutomationProperties.HelpText="Commit the project snapshot and sync it with the repository now"
+                                    Style="{StaticResource PrimaryButtonStyle}" />
+                            <Button Content="Details" Command="{Binding ToggleDetailsCommand}"
+                                    AutomationProperties.HelpText="Show the repository path, branch, upstream and actions" />
+                        </StackPanel>
                         <Button DockPanel.Dock="Right" VerticalAlignment="Center" Content="Hide details"
                                 Command="{Binding ToggleDetailsCommand}"
                                 Visibility="{Binding CanHideDetails, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                        <TextBlock FontSize="20" FontWeight="SemiBold" Text="Git repository" />
+                        <StackPanel x:Name="CompactRepositoryRow" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" Text="Git repository" />
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                        Visibility="{Binding IsCompact, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <controls:SyncStatusIcon Margin="12,0,0,0" Size="18" VerticalAlignment="Center"
+                                                         x:Name="CompactRepositorySyncIcon"
+                                                         ProjectId="{Binding ProjectId}" />
+                                <TextBlock Margin="6,0,0,0" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource Brush.Text.Secondary}"
+                                           Text="{Binding Indicator.Label, ElementName=CompactRepositorySyncIcon}" />
+                            </StackPanel>
+                        </StackPanel>
                     </DockPanel>
-                    <!-- The Project's sync state: the same icon as in the header and the Portfolio,
-                         with its sentence beside it. -->
-                    <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
-                        <controls:SyncStatusIcon x:Name="RepositorySyncIcon" Size="18" VerticalAlignment="Center"
-                                                 ProjectId="{Binding ProjectId}" />
-                        <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap"
+                    <StackPanel>
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsCompact}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <!-- The Project's sync state: the same icon as in the header and the Portfolio,
+                             with its sentence beside it. -->
+                        <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
+                            <controls:SyncStatusIcon x:Name="RepositorySyncIcon" Size="18" VerticalAlignment="Center"
+                                                     ProjectId="{Binding ProjectId}" />
+                            <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource Brush.Text.Secondary}"
+                                       Text="{Binding Indicator.Label, ElementName=RepositorySyncIcon}"
+                                       Visibility="{Binding Visibility, ElementName=RepositorySyncIcon}" />
+                        </StackPanel>
+                        <TextBlock Margin="0,5,0,0" Text="{Binding RepositoryPath}" TextWrapping="Wrap" />
+                        <TextBlock Margin="0,4,0,0" Text="{Binding Branch}"
+                                   Visibility="{Binding IsLinked, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <TextBlock Margin="0,4,0,0" Text="{Binding Upstream}"
+                                   Visibility="{Binding IsLinked, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <TextBlock Margin="0,6,0,0" Text="{Binding LastResult}" TextWrapping="Wrap" />
+                        <TextBlock Margin="0,4,0,0" Text="{Binding LastSyncTiming}" TextWrapping="Wrap"
                                    Foreground="{DynamicResource Brush.Text.Secondary}"
-                                   Text="{Binding Indicator.Label, ElementName=RepositorySyncIcon}"
-                                   Visibility="{Binding Visibility, ElementName=RepositorySyncIcon}" />
-                    </StackPanel>
-                    <TextBlock Margin="0,5,0,0" Text="{Binding RepositoryPath}" TextWrapping="Wrap" />
-                    <TextBlock Margin="0,4,0,0" Text="{Binding Branch}"
-                               Visibility="{Binding IsLinked, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <TextBlock Margin="0,4,0,0" Text="{Binding Upstream}"
-                               Visibility="{Binding IsLinked, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <TextBlock Margin="0,6,0,0" Text="{Binding LastResult}" TextWrapping="Wrap" />
-                    <TextBlock Margin="0,4,0,0" Text="{Binding LastSyncTiming}" TextWrapping="Wrap"
-                               Foreground="{DynamicResource Brush.Text.Secondary}"
-                               Visibility="{Binding HasLastSyncTiming, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <TextBlock Margin="0,4,0,0" Text="{Binding PendingAction}" TextWrapping="Wrap"
-                               Foreground="{DynamicResource Brush.Text.Secondary}"
-                               Visibility="{Binding HasPendingAction, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
-                        <Button Margin="0,0,8,0" Content="Link repository" Command="{Binding LinkCommand}"
-                                AutomationProperties.HelpText="Link an existing Git repository to this project" />
-                        <Button Margin="0,0,8,0" Content="Sync now" Command="{Binding SyncCommand}"
-                                AutomationProperties.HelpText="Commit the project snapshot and sync it with the repository now"
-                                Style="{StaticResource PrimaryButtonStyle}" />
-                        <Button Content="Unlink" Command="{Binding UnlinkCommand}"
-                                AutomationProperties.Name="Unlink Git repository" />
-                        <Button Margin="8,0,0,0" Content="Cancel sync"
-                                Command="{Binding CancelSyncCommand}"
-                                IsEnabled="{Binding CanCancelSync}"
-                                AutomationProperties.HelpText="Cancel a waiting or running project sync" />
+                                   Visibility="{Binding HasLastSyncTiming, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <TextBlock Margin="0,4,0,0" Text="{Binding PendingAction}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Visibility="{Binding HasPendingAction, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
+                            <Button Margin="0,0,8,0" Content="Link repository" Command="{Binding LinkCommand}"
+                                    AutomationProperties.HelpText="Link an existing Git repository to this project" />
+                            <Button Margin="0,0,8,0" Content="Sync now" Command="{Binding SyncCommand}"
+                                    AutomationProperties.HelpText="Commit the project snapshot and sync it with the repository now"
+                                    Style="{StaticResource PrimaryButtonStyle}" />
+                            <Button Content="Unlink" Command="{Binding UnlinkCommand}"
+                                    AutomationProperties.Name="Unlink Git repository" />
+                            <Button Margin="8,0,0,0" Content="Cancel sync"
+                                    Command="{Binding CancelSyncCommand}"
+                                    IsEnabled="{Binding CanCancelSync}"
+                                    AutomationProperties.HelpText="Cancel a waiting or running project sync" />
+                        </StackPanel>
                     </StackPanel>
                 </StackPanel>
-                </Grid>
             </Border>
 
             <TextBlock Margin="0,0,0,10" FontSize="20" FontWeight="SemiBold" Text="Trackers" />

@@ -65,12 +65,13 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
 
     /// <summary>
     /// Whether the card shows one status row instead of the repository's details: while it is linked and
-    /// nothing needs doing. An unlinked Project, a pending action or a running sync shows the details.
+    /// nothing needs doing, also during a sync. An unlinked Project or a pending action shows the details,
+    /// and a failed sync opens them as Details would.
     /// </summary>
-    public bool IsCompact => IsLinked && !HasPendingAction && !CanCancelSync && !_showDetails;
+    public bool IsCompact => IsLinked && !HasPendingAction && !_showDetails;
 
     /// <summary>Whether the details can be folded back into the status row.</summary>
-    public bool CanHideDetails => IsLinked && !HasPendingAction && !CanCancelSync && _showDetails;
+    public bool CanHideDetails => IsLinked && !HasPendingAction && _showDetails;
 
     /// <summary>Shows or hides the repository's details while the card would be compact.</summary>
     public ICommand ToggleDetailsCommand => _toggleDetailsCommand ??= new RelayCommand(() =>
@@ -245,6 +246,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
             _logger?.LogHandled(error, "Sync of Project {ProjectId} failed.", _projectId.Value);
             _autoSync?.ReportManual(_projectId,
                 ProjectAutoSyncService.FromError(error, DateTimeOffset.UtcNow));
+            _showDetails = true;
             try { _link = await _service.GetLinkAsync(_projectId); }
             catch (Exception linkError)
             {
