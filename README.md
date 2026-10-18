@@ -98,7 +98,7 @@ archived entities, without deleting their history.
     <td width="50%">
       <strong>Create tracked entities</strong><br />
       Add entities with dependencies on existing entities, or on names that are not entities yet.<br /><br />
-      <img src="images/light/add-entity.png" alt="Add Entity page for creating a tracked entity and selecting dependencies" />
+      <img src="images/light/add-entity.png" alt="New entity dialog for creating a tracked entity and selecting dependencies" />
     </td>
     <td width="50%">
       <strong>Report progress to the client</strong><br />
@@ -295,7 +295,7 @@ Every entity has two kinds of notes. **Internal notes** are only for the team an
 a client report. **Shared notes** are meant for the client and appear in both client and internal
 Project reports. Both are synchronized with the Project's Git repository.
 
-The Add Entity and edit workflows use searchable Fluent suggestion controls. A dependency on a name
+The New entity and edit workflows use searchable Fluent suggestion controls. A dependency on a name
 that is not an entity yet is added only through the explicit **Add as unresolved** action. It stays
 an unresolved reference, and when an entity with that name is added, or an entity is renamed to it,
 every dependency on the name connects to that entity. Archive remains a separate reversible action

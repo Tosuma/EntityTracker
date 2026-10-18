@@ -50,6 +50,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private readonly IContextDiscardConfirmation _discardConfirmation;
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly AsyncCommand _refreshCommand;
+    private readonly RelayCommand _openCreateEntityCommand;
     private readonly AsyncCommand _applyBulkStatusCommand;
     private readonly RelayCommand<EntityOverviewRow> _openEntityDetailsCommand;
     private readonly RelayCommand _closeEntityDetailsCommand;
@@ -126,10 +127,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             manualEntityCreationService,
             OnManualEntityCreatedAsync,
             OpenArchivedFromCreationAsync,
-            () => SelectedTab = MainWindowTab.Overview,
+            () => { },
             () => !IsBusy,
             effectiveLoggerFactory.CreateLogger<ManualEntityCreationViewModel>(),
-            developers is null ? null : new DeveloperPickerViewModel(trackerId, developers));
+            developers is null ? null : new DeveloperPickerViewModel(trackerId, developers),
+            () => discardConfirmation.ConfirmDiscard("The new entity has unfinished changes."));
         ManualCreation.PropertyChanged += OnManualCreationPropertyChanged;
         Editor = new EntityDependencyEditorViewModel(
             trackerId,
@@ -147,7 +149,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         Editor.PropertyChanged += OnEditorPropertyChanged;
         _refreshCommand = new AsyncCommand(
             () => RefreshAsync(),
-            () => !IsBusy && !ManualCreation.IsBusy && !Editor.IsOpen);
+            () => !IsBusy && !ManualCreation.IsBusy && !ManualCreation.IsOpen && !Editor.IsOpen);
+        _openCreateEntityCommand = new RelayCommand(
+            ManualCreation.Open,
+            () => !IsBusy && !ManualCreation.IsOpen && !Editor.IsOpen);
         _exportOverviewCommand = new AsyncCommand<OverviewExportFormat>(ExportOverviewAsync,
             _ => !_isExporting && !IsBusy && !Editor.IsOpen && ActiveTable.SourceItems.Count > 0);
         _applyBulkStatusCommand = new AsyncCommand(
@@ -573,6 +578,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public ICommand RefreshCommand => _refreshCommand;
 
+    /// <summary>Opens the New entity overlay for this Tracker (Ctrl+N).</summary>
+    public ICommand OpenCreateEntityCommand => _openCreateEntityCommand;
+
     public ICommand ApplyBulkStatusCommand => _applyBulkStatusCommand;
 
     public ICommand OpenEntityDetailsCommand => _openEntityDetailsCommand;
@@ -812,6 +820,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     {
         _exportOverviewCommand.NotifyCanExecuteChanged();
         _refreshCommand.NotifyCanExecuteChanged();
+        _openCreateEntityCommand.NotifyCanExecuteChanged();
         _applyBulkStatusCommand.NotifyCanExecuteChanged();
         _openEntityDetailsCommand.NotifyCanExecuteChanged();
         _assignMeCommand.NotifyCanExecuteChanged();
@@ -857,9 +866,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         return $"{changed} to {FormatStatus(targetStatus)}; {unchanged}.";
     }
 
+    /// <summary>
+    /// Reloads after a creation and shows the new entity where the user is: its row on Overview, its node
+    /// on the dependency graph. While "Create and add another" keeps the overlay open, nothing moves.
+    /// </summary>
     private async Task OnManualEntityCreatedAsync(EntityId createdEntityId)
     {
-        SelectedTab = MainWindowTab.Overview;
         IsBusy = true;
         BusyMessage = "Recomputing dependency ranking…";
         try
@@ -875,10 +887,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
                     row => row.EntityId == createdEntityId);
             }
 
-            if (createdRow is not null)
+            if (createdRow is not null && !ManualCreation.IsOpen)
             {
                 SelectedEntityDetails = new EntityDetailsViewModel(createdRow);
-                EntityRevealRequested?.Invoke(createdEntityId);
+                if (SelectedTab == MainWindowTab.DependencyGraph)
+                    DependencyGraph.ShowEntity(createdEntityId);
+                else
+                    EntityRevealRequested?.Invoke(createdEntityId);
             }
 
             PersistedStateChanged?.Invoke(this, EventArgs.Empty);
@@ -1077,6 +1092,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     private async Task OpenArchivedFromCreationAsync(EntityId entityId)
     {
+        ManualCreation.Reset();
         SelectedTab = MainWindowTab.Archived;
         await Editor.BeginArchivedAsync(entityId);
     }
@@ -1085,7 +1101,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         object? sender,
         PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(ManualEntityCreationViewModel.IsBusy))
+        if (e.PropertyName is nameof(ManualEntityCreationViewModel.IsBusy) or
+            nameof(ManualEntityCreationViewModel.IsOpen))
         {
             NotifyCommandsChanged();
         }

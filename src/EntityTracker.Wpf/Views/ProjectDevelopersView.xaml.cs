@@ -19,7 +19,7 @@ public partial class ProjectDevelopersView : UserControl
         if (e.NewValue is true)
         {
             _focusBeforeRetirementDialog = Keyboard.FocusedElement;
-            Dispatcher.BeginInvoke(() => RetirementConfirmationBox.Focus(), DispatcherPriority.Input);
+            Dispatcher.BeginInvoke(() => CancelRetirementButton.Focus(), DispatcherPriority.Input);
         }
         else if (_focusBeforeRetirementDialog is UIElement previous)
         {

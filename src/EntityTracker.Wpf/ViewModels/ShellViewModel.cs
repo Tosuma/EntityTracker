@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Threading;
 
@@ -134,21 +135,39 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         PortfolioReporting = dashboardFactory.CreatePortfolio();
         NavigationItems =
         [
-            new(ShellDestination.Portfolio, string.Empty, "Portfolio", false, false),
-            new(ShellDestination.ProjectDashboard, string.Empty, "Project dashboard", true, false),
-            new(ShellDestination.Developers, string.Empty, "Developers", true, false),
-            new(ShellDestination.ProjectReport, string.Empty, "Project report", true, false),
-            new(ShellDestination.Overview, "Tracker", "Overview", true, true),
-            new(ShellDestination.DependencyGraph, "Tracker", "Dependency graph", true, true),
-            new(ShellDestination.Archived, "Tracker", "Archived", true, true),
-            new(ShellDestination.AddEntity, "Manage", "Add entity", true, true),
-            new(ShellDestination.Help, "Utilities", "Help", false, false),
-            new(ShellDestination.Settings, "Utilities", "Settings", false, false)
+            new(ShellDestination.Portfolio, string.Empty, "Portfolio", false, false,
+                IconKey: "Icon.Grid"),
+            new(ShellDestination.ProjectDashboard, string.Empty, "Project dashboard", true, false,
+                IconKey: "Icon.Board", DisabledHint: "Select a Project to open its dashboard."),
+            new(ShellDestination.Developers, string.Empty, "Developers", true, false, InSidebar: false),
+            new(ShellDestination.ProjectReport, string.Empty, "Project report", true, false, InSidebar: false),
+            new(ShellDestination.Overview, "Tracker", "Overview", true, true,
+                IconKey: "Icon.Table", DisabledHint: "Select a Tracker to open Overview.", Shortcut: "Ctrl+1"),
+            new(ShellDestination.DependencyGraph, "Tracker", "Dependency graph", true, true,
+                IconKey: "Icon.Flowchart", DisabledHint: "Select a Tracker to view its dependency graph.",
+                Shortcut: "Ctrl+2"),
+            new(ShellDestination.Archived, "Tracker", "Archived", true, true,
+                IconKey: "Icon.Archive", DisabledHint: "Select a Tracker to view archived entities.",
+                Shortcut: "Ctrl+3"),
+            new(ShellDestination.Help, "Utilities", "Help", false, false, IconKey: "Icon.QuestionCircle"),
+            new(ShellDestination.Settings, "Utilities", "Settings", false, false, IconKey: "Icon.Settings")
         ];
+        SidebarItems = NavigationItems
+            .Where(static item => item.InSidebar && item.Group != "Utilities")
+            .Select(static item => new ShellNavigationEntry(item))
+            .ToArray();
+        SidebarGroups = new ListCollectionView(SidebarItems.ToList());
+        SidebarGroups.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ShellNavigationEntry.Group)));
+        UtilityItems = NavigationItems
+            .Where(static item => item.InSidebar && item.Group == "Utilities")
+            .Select(static item => new ShellNavigationEntry(item))
+            .ToArray();
         _navigateCommand = new AsyncCommand<ShellDestination>(
             NavigateFromCommandAsync,
             destination => CanNavigate(NavigationItems.Single(item => item.Destination == destination)));
+        RefreshNavigationEntries();
         Catalog.Changed += OnCatalogChanged;
+        Catalog.PropertyChanged += OnModalSourceChanged;
         Catalog.SelectionRequested += OnCatalogSelectionRequested;
     }
 
@@ -159,6 +178,32 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public ObservableCollection<Tracker> Trackers { get; }
 
     public IReadOnlyList<ShellNavigationItem> NavigationItems { get; }
+
+    /// <summary>The sidebar's main list: Portfolio, Project dashboard and the Tracker pages.</summary>
+    public IReadOnlyList<ShellNavigationEntry> SidebarItems { get; }
+
+    /// <summary><see cref="SidebarItems"/> grouped by section, for the sidebar's headings.</summary>
+    public ListCollectionView SidebarGroups { get; }
+
+    /// <summary>The sidebar's list pinned to the bottom: Help and Settings.</summary>
+    public IReadOnlyList<ShellNavigationEntry> UtilityItems { get; }
+
+    /// <summary>
+    /// The main list's current location; Developers and Project report show the Project dashboard.
+    /// Choosing another entry navigates there, and the list goes back if navigation is refused.
+    /// </summary>
+    public ShellNavigationEntry? SelectedSidebarEntry
+    {
+        get => SidebarItems.FirstOrDefault(static entry => entry.IsSelected);
+        set => ChooseSidebarEntry(value);
+    }
+
+    /// <summary>The utilities list's current location, if any.</summary>
+    public ShellNavigationEntry? SelectedUtilityEntry
+    {
+        get => UtilityItems.FirstOrDefault(static entry => entry.IsSelected);
+        set => ChooseSidebarEntry(value);
+    }
     public IReadOnlyList<ProjectSyncLink> PendingProjectDeletions => _pendingProjectDeletions;
 
     public string AppVersion => AppVersionFormatter.ForAssembly(typeof(App).Assembly);
@@ -211,7 +256,44 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public ProjectDevelopersViewModel? Developers
     {
         get => _developers;
-        private set => SetField(ref _developers, value);
+        private set
+        {
+            ProjectDevelopersViewModel? previous = _developers;
+            if (!SetField(ref _developers, value)) return;
+            if (previous is not null) previous.PropertyChanged -= OnModalSourceChanged;
+            if (value is not null) value.PropertyChanged += OnModalSourceChanged;
+            OnModalStateChanged();
+        }
+    }
+
+    /// <summary>
+    /// Whether a dialog is open on the current page: the catalog dialogs, the entity editor or New entity
+    /// overlay on a Tracker page, or a Developers dialog. While one is, the sidebar and header are dimmed
+    /// and can't be used, so the dialog is finished or cancelled before anything else happens.
+    /// </summary>
+    public bool IsModalOpen =>
+        Catalog.IsOpen ||
+        IsTrackerWorkspace && (CurrentWorkspace!.Editor.IsOpen || CurrentWorkspace.ManualCreation.IsOpen) ||
+        IsDevelopers && (Developers?.IsRetirementOpen == true || Developers?.IsRetiredDialogOpen == true);
+
+    /// <summary>
+    /// Whether a dialog on the page itself is open. The page dims its own content; the shell then dims
+    /// the sidebar and header to match. The catalog dialogs already cover the whole window.
+    /// </summary>
+    public bool IsPageDialogOpen => IsModalOpen && !Catalog.IsOpen;
+
+    private void OnModalSourceChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(CatalogManagementViewModel.IsOpen) or
+            nameof(ProjectDevelopersViewModel.IsRetirementOpen) or
+            nameof(ProjectDevelopersViewModel.IsRetiredDialogOpen))
+            OnModalStateChanged();
+    }
+
+    private void OnModalStateChanged()
+    {
+        OnPropertyChanged(nameof(IsModalOpen));
+        OnPropertyChanged(nameof(IsPageDialogOpen));
     }
 
     public PortfolioDashboard? Portfolio
@@ -262,12 +344,13 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             : ProjectSyncIndicator.None;
 
     /// <summary>The header icon's tooltip: the state, then what a click does.</summary>
+    /// <remarks>It names the Project, because the icon stays the same on that Project's Tracker pages.</remarks>
     public string SelectedProjectSyncTooltip => SelectedProjectSyncIndicator.Kind switch
     {
         ProjectSyncIndicatorKind.Synced or ProjectSyncIndicatorKind.Unsynced =>
-            SelectedProjectSyncIndicator.Label + " Click to sync now.",
+            $"{ProjectContextName}: {SelectedProjectSyncIndicator.Label} Click to sync the project now.",
         ProjectSyncIndicatorKind.NeedsAttention or ProjectSyncIndicatorKind.Paused =>
-            SelectedProjectSyncIndicator.Label + " Click to open the Project.",
+            $"{ProjectContextName}: {SelectedProjectSyncIndicator.Label} Click to open the project dashboard.",
         _ => SelectedProjectSyncIndicator.Label
     };
 
@@ -321,10 +404,22 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         get => _currentWorkspace;
         private set
         {
+            MainWindowViewModel? previous = _currentWorkspace;
             if (SetField(ref _currentWorkspace, value))
             {
+                if (previous is not null)
+                {
+                    previous.Editor.PropertyChanged -= OnModalSourceChanged;
+                    previous.ManualCreation.PropertyChanged -= OnModalSourceChanged;
+                }
+                if (value is not null)
+                {
+                    value.Editor.PropertyChanged += OnModalSourceChanged;
+                    value.ManualCreation.PropertyChanged += OnModalSourceChanged;
+                }
                 OnPropertyChanged(nameof(HasWorkspace));
                 OnPropertyChanged(nameof(IsTrackerWorkspace));
+                OnModalStateChanged();
             }
         }
     }
@@ -343,10 +438,11 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(IsOverview));
                 OnPropertyChanged(nameof(IsDependencyGraph));
                 OnPropertyChanged(nameof(IsArchived));
-                OnPropertyChanged(nameof(IsAddEntity));
                 OnPropertyChanged(nameof(IsHelp));
                 OnPropertyChanged(nameof(IsSettings));
                 OnPropertyChanged(nameof(IsTrackerWorkspace));
+                OnModalStateChanged();
+                RefreshNavigationEntries();
             }
         }
     }
@@ -359,6 +455,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             if (SetField(ref _isBusy, value))
             {
                 _navigateCommand.NotifyCanExecuteChanged();
+                RefreshNavigationEntries();
             }
         }
     }
@@ -416,7 +513,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public bool IsOverview => SelectedDestination == ShellDestination.Overview;
     public bool IsDependencyGraph => SelectedDestination == ShellDestination.DependencyGraph;
     public bool IsArchived => SelectedDestination == ShellDestination.Archived;
-    public bool IsAddEntity => SelectedDestination == ShellDestination.AddEntity;
     public bool IsHelp => SelectedDestination == ShellDestination.Help;
     public bool IsSettings => SelectedDestination == ShellDestination.Settings;
 
@@ -843,6 +939,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             }
 
             _navigateCommand.NotifyCanExecuteChanged();
+            RefreshNavigationEntries();
             return true;
         }
         catch (Exception exception)
@@ -881,7 +978,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 ShellDestination.Overview => MainWindowTab.Overview,
                 ShellDestination.DependencyGraph => MainWindowTab.DependencyGraph,
                 ShellDestination.Archived => MainWindowTab.Archived,
-                ShellDestination.AddEntity => MainWindowTab.AddEntity,
                 _ => CurrentWorkspace.SelectedTab
             };
         }
@@ -948,7 +1044,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             MainWindowTab.Overview => ShellDestination.Overview,
             MainWindowTab.DependencyGraph => ShellDestination.DependencyGraph,
             MainWindowTab.Archived => ShellDestination.Archived,
-            MainWindowTab.AddEntity => ShellDestination.AddEntity,
             _ => SelectedDestination
         };
 
@@ -1079,8 +1174,40 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private static bool IsTrackerDestination(ShellDestination destination) => destination is
         ShellDestination.Overview or
         ShellDestination.DependencyGraph or
-        ShellDestination.Archived or
-        ShellDestination.AddEntity;
+        ShellDestination.Archived;
+
+    private void ChooseSidebarEntry(ShellNavigationEntry? entry)
+    {
+        if (entry is null || entry.IsSelected) return;
+        _ = ChooseSidebarEntryAsync(entry);
+    }
+
+    private async Task ChooseSidebarEntryAsync(ShellNavigationEntry entry)
+    {
+        // A refused navigation (busy, or unfinished work kept) leaves the destination as it was; tell the
+        // lists again so they show the current location instead of the refused choice.
+        if (!await NavigateAsync(entry.Destination))
+        {
+            OnPropertyChanged(nameof(SelectedSidebarEntry));
+            OnPropertyChanged(nameof(SelectedUtilityEntry));
+        }
+    }
+
+    /// <summary>Updates which sidebar entries can be opened and which one is the current location.</summary>
+    private void RefreshNavigationEntries()
+    {
+        if (SidebarItems is null || UtilityItems is null) return;
+        ShellDestination location = SelectedDestination is ShellDestination.Developers or ShellDestination.ProjectReport
+            ? ShellDestination.ProjectDashboard
+            : SelectedDestination;
+        foreach (ShellNavigationEntry entry in SidebarItems.Concat(UtilityItems))
+        {
+            entry.IsEnabled = CanNavigate(entry.Item);
+            entry.IsSelected = entry.Destination == location;
+        }
+        OnPropertyChanged(nameof(SelectedSidebarEntry));
+        OnPropertyChanged(nameof(SelectedUtilityEntry));
+    }
 
     private static void Replace<T>(ObservableCollection<T> collection, IEnumerable<T> items)
     {

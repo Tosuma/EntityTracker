@@ -158,6 +158,13 @@ public partial class ProjectDashboardView : UserControl
         if (Shell.SelectedProject is not null) Shell.Catalog.OpenCreateTracker(Shell.SelectedProject);
     }
 
+    private void OnProjectActionsClick(object sender, RoutedEventArgs e)
+    {
+        if (ProjectActionsButton.ContextMenu is not { } menu) return;
+        menu.PlacementTarget = ProjectActionsButton;
+        menu.IsOpen = true;
+    }
+
     private void OnRenameProject(object sender, RoutedEventArgs e)
     {
         if (Shell.SelectedProject is not null) Shell.Catalog.OpenRenameProject(Shell.SelectedProject);

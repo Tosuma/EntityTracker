@@ -50,18 +50,58 @@ public partial class MainWindow : Window
     private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e) =>
         _mouseWheelRouter.Route(e);
 
+    /// <summary>
+    /// The Tracker page shortcuts: Ctrl+F search, Ctrl+1 to 3 for Overview, Dependency graph and Archived,
+    /// Ctrl+N for a new entity, Ctrl+E for the export menu and F5 to refresh. None of them act while a
+    /// dialog is open, the app is busy or an update is required.
+    /// </summary>
     private void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.F &&
-            (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control &&
-            UpdateBlock.Visibility != Visibility.Visible &&
-            !_viewModel.IsBusy &&
-            !_viewModel.Catalog.IsOpen &&
-            _viewModel.IsTrackerWorkspace &&
-            WorkspaceView.TryOpenCurrentSearch())
+        if (UpdateBlock.Visibility == Visibility.Visible || _viewModel.IsBusy || _viewModel.IsModalOpen ||
+            !_viewModel.IsTrackerWorkspace || _viewModel.CurrentWorkspace is not { } workspace)
         {
-            e.Handled = true;
+            return;
         }
+
+        Key key = e.Key == Key.System ? e.SystemKey : e.Key;
+        bool control = Keyboard.Modifiers == ModifierKeys.Control;
+        switch (key)
+        {
+            case Key.F when control:
+                e.Handled = WorkspaceView.TryOpenCurrentSearch();
+                break;
+            case Key.D1 or Key.NumPad1 when control:
+                e.Handled = Navigate(ShellDestination.Overview);
+                break;
+            case Key.D2 or Key.NumPad2 when control:
+                e.Handled = Navigate(ShellDestination.DependencyGraph);
+                break;
+            case Key.D3 or Key.NumPad3 when control:
+                e.Handled = Navigate(ShellDestination.Archived);
+                break;
+            case Key.N when control:
+                e.Handled = Execute(workspace.OpenCreateEntityCommand);
+                break;
+            case Key.E when control:
+                e.Handled = WorkspaceView.TryOpenExportMenu();
+                break;
+            case Key.F5 when Keyboard.Modifiers == ModifierKeys.None:
+                e.Handled = Execute(workspace.RefreshCommand);
+                break;
+        }
+    }
+
+    private bool Navigate(ShellDestination destination)
+    {
+        _ = _viewModel.NavigateAsync(destination);
+        return true;
+    }
+
+    private static bool Execute(ICommand command)
+    {
+        if (!command.CanExecute(null)) return false;
+        command.Execute(null);
+        return true;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -129,7 +169,7 @@ public partial class MainWindow : Window
         }
         if (_updates?.IsRequired != true) return;
         bool editing = _viewModel.CurrentWorkspace?.HasUnsavedWork == true;
-        bool catalogOpen = _viewModel.Catalog.IsOpen;
+        bool catalogOpen = _viewModel.IsModalOpen;
         bool operationRunning = _viewModel.HasActiveProjectSync || _viewModel.IsBusy ||
             _viewModel.CurrentWorkspace?.IsBusy == true;
         bool showOverlay = !editing && !catalogOpen;
@@ -193,7 +233,7 @@ public partial class MainWindow : Window
         _viewModel.HasActiveProjectSync ||
         _viewModel.CurrentWorkspace?.IsBusy == true ||
         _viewModel.CurrentWorkspace?.HasUnsavedWork == true ||
-        _viewModel.Catalog.IsOpen;
+        _viewModel.IsModalOpen;
 
     private void SetUnderlyingUiForUpdate(bool allowWorkspaceEdit)
     {

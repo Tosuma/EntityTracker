@@ -9,10 +9,15 @@
     </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <StackPanel MaxWidth="1100" HorizontalAlignment="Left" DataContext="{Binding ProjectReport}">
-            <Button HorizontalAlignment="Left" Margin="0,0,0,14" Content="Back to project"
-                    Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                    CommandParameter="{x:Static viewModels:ShellDestination.ProjectDashboard}" />
-            <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Project report" />
+            <TextBlock Style="{StaticResource PageHeadingTextStyle}">
+                <Hyperlink Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                           CommandParameter="{x:Static viewModels:ShellDestination.ProjectDashboard}"
+                           AutomationProperties.HelpText="Go back to the project dashboard"
+                           ToolTip="Back to the project dashboard"
+                           Style="{StaticResource BreadcrumbLinkStyle}"><Run Text="{Binding DataContext.ProjectContextName, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=OneWay}" /></Hyperlink>
+                <Run Foreground="{DynamicResource Brush.Text.Secondary}" Text=" › " />
+                <Run Text="Project report" />
+            </TextBlock>
             <TextBlock Margin="0,4,0,18" Style="{StaticResource PageDescriptionTextStyle}" TextWrapping="Wrap"
                        Text="Create a report of this Project to share. It is one web page that works offline: open it in any browser, search it, and print it to PDF if a document is needed." />
 

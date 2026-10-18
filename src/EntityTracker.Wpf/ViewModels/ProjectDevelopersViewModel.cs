@@ -33,7 +33,6 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
     private bool _isBusy;
     private bool _isRetiredDialogOpen;
     private ProjectDeveloper? _pendingRetirement;
-    private string _retirementConfirmation = string.Empty;
 
     public ProjectDevelopersViewModel(ProjectId projectId, ProjectDeveloperService service,
         Func<ProjectId, Task>? onPersisted = null, NotificationCenter? notifications = null)
@@ -49,8 +48,7 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
         RetireCommand = new RelayCommand<ProjectDeveloper>(BeginRetirement,
             developer => !IsBusy && !developer.IsRetired);
         _confirmRetireCommand = new AsyncCommand(ConfirmRetirementAsync,
-            () => !IsBusy && _pendingRetirement is not null &&
-                  RetirementConfirmation == _pendingRetirement.Initials);
+            () => !IsBusy && _pendingRetirement is not null);
         CancelRetirementCommand = new RelayCommand(CancelRetirement,
             () => IsRetirementOpen && !IsBusy);
         OpenRetiredCommand = new RelayCommand(OpenRetired, () => !IsBusy);
@@ -80,12 +78,12 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
     public bool HasError { get => _hasError; private set => Set(ref _hasError, value); }
     public bool IsRetirementOpen => _pendingRetirement is not null;
     public string PendingRetirementInitials => _pendingRetirement?.Initials ?? string.Empty;
-    public string RetirementConfirmation
-    {
-        get => _retirementConfirmation;
-        set { if (Set(ref _retirementConfirmation, value ?? string.Empty))
-                _confirmRetireCommand.NotifyCanExecuteChanged(); }
-    }
+    /// <summary>
+    /// What retiring does: it can be undone, so it is confirmed once instead of by typing the initials.
+    /// </summary>
+    public string PendingRetirementMessage => _pendingRetirement is not { } developer ? string.Empty :
+        $"{DeveloperLabel(developer)} will no longer be offered when assigning developers. Entities already " +
+        "assigned to them keep the assignment and its history. You can restore them from Retired developers.";
     public string EditorTitle => _editingId is null ? "Add developer" : "Edit developer";
     public string SaveLabel => IsEditing ? "Save changes" : "Save developer";
     public string ResetLabel => IsEditing ? "Cancel edit" : "Clear";
@@ -198,9 +196,9 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
     {
         if (IsBusy || developer.IsRetired) return;
         _pendingRetirement = developer;
-        RetirementConfirmation = string.Empty;
         OnPropertyChanged(nameof(IsRetirementOpen));
         OnPropertyChanged(nameof(PendingRetirementInitials));
+        OnPropertyChanged(nameof(PendingRetirementMessage));
         NotifyCommands();
     }
 
@@ -208,11 +206,16 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
     {
         if (_pendingRetirement is null) return;
         _pendingRetirement = null;
-        RetirementConfirmation = string.Empty;
         OnPropertyChanged(nameof(IsRetirementOpen));
         OnPropertyChanged(nameof(PendingRetirementInitials));
+        OnPropertyChanged(nameof(PendingRetirementMessage));
         NotifyCommands();
     }
+
+    private static string DeveloperLabel(ProjectDeveloper developer) =>
+        string.IsNullOrWhiteSpace(developer.DisplayName)
+            ? developer.Initials
+            : $"{developer.Initials} — {developer.DisplayName}";
 
     public void OpenRetired() => IsRetiredDialogOpen = true;
 
@@ -221,7 +224,7 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
     public async Task ConfirmRetirementAsync()
     {
         ProjectDeveloper? developer = _pendingRetirement;
-        if (developer is null || IsBusy || RetirementConfirmation != developer.Initials) return;
+        if (developer is null || IsBusy) return;
         await SetRetiredAsync(developer, true);
         if (!HasError)
         {

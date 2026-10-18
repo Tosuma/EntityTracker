@@ -4,6 +4,5 @@ public enum MainWindowTab
 {
     Overview,
     DependencyGraph,
-    Archived,
-    AddEntity
+    Archived
 }

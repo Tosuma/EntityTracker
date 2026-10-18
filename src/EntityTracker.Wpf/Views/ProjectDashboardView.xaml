@@ -200,12 +200,24 @@
     <!-- The header stays put while the page below it scrolls. -->
     <DockPanel x:Name="PageHeader" Grid.Row="0" Margin="0,0,0,18">
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-            <Button Margin="0,0,8,0" Click="OnRenameProject" Content="Rename project" />
+            <!-- The Project's pages, then its less frequent actions in "…", then the main action. -->
             <Button Margin="0,0,8,0" Click="OnOpenProjectReport" Content="Project report"
-                    AutomationProperties.HelpText="Create a report of this project to share" />
+                    AutomationProperties.HelpText="Open the page that creates a report of this project to share" />
             <Button Margin="0,0,8,0" Click="OnOpenDevelopers" Content="Developers"
-                    AutomationProperties.HelpText="Manage the developers in this project" />
-            <Button Margin="0,0,8,0" Click="OnOpenRecycleBin" Content="Tracker recycle bin" />
+                    AutomationProperties.HelpText="Open the page that manages the developers in this project" />
+            <Button x:Name="ProjectActionsButton" Margin="0,0,8,0" Click="OnProjectActionsClick"
+                    ToolTip="More project actions"
+                    AutomationProperties.Name="More project actions"
+                    Style="{StaticResource SecondaryIconButtonStyle}">
+                <controls:Icon IconKey="Icon.MoreHorizontal" />
+                <Button.ContextMenu>
+                    <ContextMenu Placement="Bottom">
+                        <MenuItem Header="_Rename project…" Click="OnRenameProject" />
+                        <MenuItem Header="Recycle _bin…" Click="OnOpenRecycleBin"
+                                  ToolTip="Recycled trackers of this project, to restore or permanently delete" />
+                    </ContextMenu>
+                </Button.ContextMenu>
+            </Button>
             <Button Click="OnCreateTracker" Content="Create tracker"
                     Style="{StaticResource PrimaryButtonStyle}" />
         </StackPanel>

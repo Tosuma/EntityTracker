@@ -20,23 +20,77 @@
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
         <services:SidebarNotificationHeightConverter x:Key="SidebarNotificationHeightConverter" />
-        <Style x:Key="ShellNavigationButtonStyle"
-               TargetType="ToggleButton"
-               BasedOn="{StaticResource {x:Type ToggleButton}}">
+        <!-- One destination. Selected shows a fill and a leading pill; a destination that can't be opened yet
+             stays quiet, with its tooltip saying what to select first. -->
+        <Style x:Key="SidebarItemStyle" TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
             <Setter Property="Margin" Value="0,2" />
             <Setter Property="Padding" Value="12,8" />
-            <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.Text.OnDark}" />
+            <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
+            <Setter Property="ToolTip" Value="{Binding ToolTip}" />
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding Label}" />
+            <Setter Property="AutomationProperties.HelpText" Value="{Binding ToolTip}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="ItemSurface"
+                                Background="Transparent"
+                                CornerRadius="4"
+                                SnapsToDevicePixels="True">
+                            <Grid>
+                                <Border x:Name="SelectionPill"
+                                        Width="3"
+                                        Height="16"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        Background="{DynamicResource Brush.Text.OnDark}"
+                                        CornerRadius="1.5"
+                                        Visibility="Collapsed" />
+                                <ContentPresenter Margin="{TemplateBinding Padding}" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ItemSurface" Property="Background" Value="{DynamicResource Brush.Brand.Green90}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemSurface" Property="Background" Value="{DynamicResource Brush.Brand.Green80}" />
+                                <Setter TargetName="SelectionPill" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ItemSurface" Property="Background" Value="Transparent" />
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.OnDarkMuted}" />
+                                <Setter TargetName="ItemSurface" Property="Opacity" Value="0.75" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- The sidebar's lists: no frame or scroll of their own (the sidebar scrolls), one entry per row. -->
+        <Style x:Key="SidebarListStyle" TargetType="ListBox" BasedOn="{StaticResource {x:Type ListBox}}">
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="AutomationProperties.HelpText"
-                    Value="Navigate within EntityTracker" />
-            <Style.Triggers>
-                <Trigger Property="IsChecked" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource Brush.Brand.Green80}" />
-                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green60}" />
-                </Trigger>
-            </Style.Triggers>
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="SelectionMode" Value="Single" />
+            <Setter Property="KeyboardNavigation.TabNavigation" Value="Once" />
+            <Setter Property="KeyboardNavigation.DirectionalNavigation" Value="Contained" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBox">
+                        <ItemsPresenter />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="ItemTemplate">
+                <Setter.Value>
+                    <DataTemplate DataType="{x:Type viewModels:ShellNavigationEntry}">
+                        <controls:IconLabel IconKey="{Binding IconKey}" Text="{Binding Label}" />
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource SidebarItemStyle}" />
         </Style>
     </Window.Resources>
 
@@ -59,6 +113,15 @@
 
             <Grid x:Name="SidebarRoot" Grid.Column="0"
                   Background="{DynamicResource Brush.Surface.Primary}">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsPageDialogOpen}" Value="True">
+                                <Setter Property="IsEnabled" Value="False" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
@@ -82,63 +145,32 @@
                                    Text="{x:Static app:AppCredits.ByLine}"
                                    TextWrapping="Wrap" />
 
-                        <ToggleButton Command="{Binding NavigateCommand}"
-                                CommandParameter="{x:Static viewModels:ShellDestination.Portfolio}"
-                                IsChecked="{Binding IsPortfolio, Mode=OneWay}"
-                                AutomationProperties.Name="Portfolio"
-                                Style="{StaticResource ShellNavigationButtonStyle}">
-                            <controls:IconLabel IconKey="Icon.Grid" Text="Portfolio" />
-                        </ToggleButton>
-                        <ToggleButton Command="{Binding NavigateCommand}"
-                                CommandParameter="{x:Static viewModels:ShellDestination.ProjectDashboard}"
-                                IsChecked="{Binding IsProjectDashboard, Mode=OneWay}"
-                                AutomationProperties.Name="Project dashboard"
-                                ToolTip="Select a Project to open its dashboard."
-                                Style="{StaticResource ShellNavigationButtonStyle}">
-                            <controls:IconLabel IconKey="Icon.Board" Text="Project dashboard" />
-                        </ToggleButton>
-
-                        <TextBlock Margin="8,18,0,4"
-                                   Foreground="{DynamicResource Brush.Text.OnDarkMuted}"
-                                   FontWeight="SemiBold"
-                                   Text="TRACKER" />
-                        <ToggleButton Command="{Binding NavigateCommand}"
-                                CommandParameter="{x:Static viewModels:ShellDestination.Overview}"
-                                IsChecked="{Binding IsOverview, Mode=OneWay}"
-                                AutomationProperties.Name="Overview"
-                                ToolTip="Select a Tracker to open Overview."
-                                Style="{StaticResource ShellNavigationButtonStyle}">
-                            <controls:IconLabel IconKey="Icon.Table" Text="Overview" />
-                        </ToggleButton>
-                        <ToggleButton Command="{Binding NavigateCommand}"
-                                CommandParameter="{x:Static viewModels:ShellDestination.DependencyGraph}"
-                                IsChecked="{Binding IsDependencyGraph, Mode=OneWay}"
-                                AutomationProperties.Name="Dependency graph"
-                                ToolTip="Select a Tracker to view its dependency graph."
-                                Style="{StaticResource ShellNavigationButtonStyle}">
-                            <controls:IconLabel IconKey="Icon.Flowchart" Text="Dependency graph" />
-                        </ToggleButton>
-                        <ToggleButton Command="{Binding NavigateCommand}"
-                                CommandParameter="{x:Static viewModels:ShellDestination.Archived}"
-                                IsChecked="{Binding IsArchived, Mode=OneWay}"
-                                AutomationProperties.Name="Archived"
-                                ToolTip="Select a Tracker to view archived entities."
-                                Style="{StaticResource ShellNavigationButtonStyle}">
-                            <controls:IconLabel IconKey="Icon.Archive" Text="Archived" />
-                        </ToggleButton>
-
-                        <TextBlock Margin="8,18,0,4"
-                                   Foreground="{DynamicResource Brush.Text.OnDarkMuted}"
-                                   FontWeight="SemiBold"
-                                   Text="MANAGE" />
-                        <ToggleButton Command="{Binding NavigateCommand}"
-                                CommandParameter="{x:Static viewModels:ShellDestination.AddEntity}"
-                                IsChecked="{Binding IsAddEntity, Mode=OneWay}"
-                                AutomationProperties.Name="Add entity"
-                                ToolTip="Select a Tracker before adding an entity."
-                                Style="{StaticResource ShellNavigationButtonStyle}">
-                            <controls:IconLabel IconKey="Icon.Add" Text="Add entity" />
-                        </ToggleButton>
+                        <!-- Grouped by section: the top items have no heading, then TRACKER. -->
+                        <ListBox x:Name="SidebarList"
+                                 AutomationProperties.Name="Main navigation"
+                                 ItemsSource="{Binding SidebarGroups}"
+                                 SelectedItem="{Binding SelectedSidebarEntry, Mode=TwoWay}"
+                                 Style="{StaticResource SidebarListStyle}">
+                            <ListBox.GroupStyle>
+                                <GroupStyle>
+                                    <GroupStyle.HeaderTemplate>
+                                        <DataTemplate>
+                                            <TextBlock x:Name="GroupHeading"
+                                                       Margin="8,18,0,4"
+                                                       Foreground="{DynamicResource Brush.Text.OnDarkMuted}"
+                                                       FontWeight="SemiBold"
+                                                       AutomationProperties.HeadingLevel="Level2"
+                                                       Text="{Binding Name, Converter={x:Static services:UpperCaseConverter.Instance}}" />
+                                            <DataTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Name}" Value="">
+                                                    <Setter TargetName="GroupHeading" Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </GroupStyle.HeaderTemplate>
+                                </GroupStyle>
+                            </ListBox.GroupStyle>
+                        </ListBox>
                     </StackPanel>
                 </ScrollViewer>
 
@@ -147,20 +179,11 @@
                                    Foreground="{DynamicResource Brush.Text.OnDarkMuted}"
                                    FontWeight="SemiBold"
                                    Text="UTILITIES" />
-                        <ToggleButton Command="{Binding NavigateCommand}"
-                                CommandParameter="{x:Static viewModels:ShellDestination.Help}"
-                                IsChecked="{Binding IsHelp, Mode=OneWay}"
-                                AutomationProperties.Name="Help"
-                                Style="{StaticResource ShellNavigationButtonStyle}">
-                            <controls:IconLabel IconKey="Icon.QuestionCircle" Text="Help" />
-                        </ToggleButton>
-                        <ToggleButton Command="{Binding NavigateCommand}"
-                                CommandParameter="{x:Static viewModels:ShellDestination.Settings}"
-                                IsChecked="{Binding IsSettings, Mode=OneWay}"
-                                AutomationProperties.Name="Settings"
-                                Style="{StaticResource ShellNavigationButtonStyle}">
-                            <controls:IconLabel IconKey="Icon.Settings" Text="Settings" />
-                        </ToggleButton>
+                        <ListBox x:Name="UtilityList"
+                                 AutomationProperties.Name="Utilities"
+                                 ItemsSource="{Binding UtilityItems}"
+                                 SelectedItem="{Binding SelectedUtilityEntry, Mode=TwoWay}"
+                                 Style="{StaticResource SidebarListStyle}" />
                     </StackPanel>
 
                 <!-- No padding of its own: all spacing lives in each card's container, so the space
@@ -263,6 +286,10 @@
                         </ItemsControl>
                     </ScrollViewer>
                 </Border>
+                <!-- While a dialog on the page is open, the sidebar is dimmed like the page and can't be used. -->
+                <Border x:Name="SidebarDialogScrim" Grid.RowSpan="3" Panel.ZIndex="24"
+                        Background="{DynamicResource Brush.Overlay}"
+                        Visibility="{Binding IsPageDialogOpen, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 <Border x:Name="UpdateSidebarBlock" Grid.RowSpan="2" Panel.ZIndex="25"
                         Background="{DynamicResource Brush.Surface.Primary}"
                         Visibility="Collapsed" />
@@ -280,6 +307,15 @@
                         Background="{DynamicResource Brush.Surface.Card}"
                         BorderBrush="{DynamicResource Brush.Border.Default}"
                         BorderThickness="0,0,0,1">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsPageDialogOpen}" Value="True">
+                                    <Setter Property="IsEnabled" Value="False" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -334,6 +370,9 @@
                     </Grid>
                 </Border>
 
+                <Border x:Name="HeaderDialogScrim" Grid.RowSpan="2" Panel.ZIndex="24"
+                        Background="{DynamicResource Brush.Overlay}"
+                        Visibility="{Binding IsPageDialogOpen, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 <Border x:Name="DefaultPrompt" Grid.Row="1"
                         Margin="18,12,18,0"
                         Padding="12"

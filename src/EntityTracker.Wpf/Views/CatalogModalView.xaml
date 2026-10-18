@@ -113,6 +113,7 @@
                             </StackPanel>
 
                             <StackPanel Visibility="{Binding IsRecycleBin, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <StackPanel Visibility="{Binding ShowsRecycledProjects, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="Recycled projects" />
                             <TextBlock Margin="0,8,0,12" Style="{StaticResource PageDescriptionTextStyle}" Text="No recycled projects."
                                        Visibility="{Binding ShowNoRecycledProjects, Converter={StaticResource BooleanToVisibilityConverter}}" />
@@ -127,6 +128,7 @@
                                     </DockPanel>
                                 </DataTemplate></ItemsControl.ItemTemplate>
                             </ItemsControl>
+                            </StackPanel>
                             <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="Recycled trackers" />
                             <TextBlock Margin="0,8,0,12" Style="{StaticResource PageDescriptionTextStyle}" Text="No recycled trackers in this context."
                                        Visibility="{Binding ShowNoRecycledTrackers, Converter={StaticResource BooleanToVisibilityConverter}}" />
@@ -172,20 +174,32 @@
                     <TextBlock VerticalAlignment="Center" Margin="0,0,12,0" Style="{StaticResource PageDescriptionTextStyle}"
                                Text="{Binding SyncApplyHint}"
                                Visibility="{Binding IsTrackerSync, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <Button x:Name="CancelButton" Margin="0,0,8,0" Command="{Binding CancelCommand}" Content="Cancel" Style="{StaticResource SecondaryButtonStyle}" IsCancel="True" />
-                    <Button Command="{Binding SubmitNameCommand}" Content="Save" Style="{StaticResource PrimaryButtonStyle}"
+                    <!-- Commit first, then Cancel; the recycle bin only lists items, so it is closed instead. -->
+                    <Button Margin="0,0,8,0" Command="{Binding SubmitNameCommand}" Content="Save" Style="{StaticResource PrimaryButtonStyle}"
                             Visibility="{Binding IsNameDialog, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <Button Margin="0,0,8,0" Command="{Binding PrepareTrackerCommand}" Content="{Binding PrepareTrackerLabel}"
                             Visibility="{Binding IsTrackerCreation, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <Button Command="{Binding ApplyTrackerCommand}" Content="Apply and create" Style="{StaticResource PrimaryButtonStyle}"
+                    <Button Margin="0,0,8,0" Command="{Binding ApplyTrackerCommand}" Content="Apply and create" Style="{StaticResource PrimaryButtonStyle}"
                             Visibility="{Binding ShowApplyTracker, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <Button Command="{Binding ApplySyncCommand}" Content="{Binding ApplySyncContent}" Style="{StaticResource PrimaryButtonStyle}"
+                    <Button Margin="0,0,8,0" Command="{Binding ApplySyncCommand}" Content="{Binding ApplySyncContent}" Style="{StaticResource PrimaryButtonStyle}"
                             AutomationProperties.Name="{Binding ApplySyncLabel}"
                             Visibility="{Binding IsTrackerSync, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <Button Command="{Binding ConfirmRecycleCommand}" Content="Recycle" Style="{StaticResource DangerButtonStyle}"
+                    <Button Margin="0,0,8,0" Command="{Binding ConfirmRecycleCommand}" Content="Recycle" Style="{StaticResource DangerButtonStyle}"
                             Visibility="{Binding IsRecycleConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <Button Command="{Binding ConfirmPurgeCommand}" Content="Permanently delete" Style="{StaticResource DangerButtonStyle}"
+                    <Button Margin="0,0,8,0" Command="{Binding ConfirmPurgeCommand}" Content="Permanently delete" Style="{StaticResource DangerButtonStyle}"
                             Visibility="{Binding IsPurgeConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <Button x:Name="CancelButton" Command="{Binding CancelCommand}" IsCancel="True">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
+                                <Setter Property="Content" Value="Cancel" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsRecycleBin}" Value="True">
+                                        <Setter Property="Content" Value="Close" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                 </StackPanel>
             </Grid>
         </Border>

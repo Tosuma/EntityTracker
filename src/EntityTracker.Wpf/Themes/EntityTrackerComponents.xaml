@@ -134,6 +134,22 @@
         </Setter>
     </Style>
 
+    <!-- The first part of a page heading breadcrumb ("Project › Developers"): the parent page as a link
+         inside the heading's TextBlock, quieter than the heading and underlined on hover or focus. -->
+    <Style x:Key="BreadcrumbLinkStyle" TargetType="{x:Type Hyperlink}">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Secondary}" />
+        <Setter Property="TextDecorations" Value="{x:Null}" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                <Setter Property="TextDecorations" Value="Underline" />
+            </Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter Property="TextDecorations" Value="Underline" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
     <Style x:Key="EntityTrackerCardStyle" TargetType="{x:Type Border}">
         <Setter Property="Background" Value="{DynamicResource Brush.Surface.Card}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />

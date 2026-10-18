@@ -68,11 +68,8 @@ Project dashboard
 
 Tracker
   Overview
+  Dependency graph
   Archived
-  Reports
-
-Manage
-  Add entity
 
 Utilities
   Help
@@ -80,7 +77,11 @@ Utilities
 ```
 
 Ready and Blocked remain Work-status filters within Overview. They are not separate destinations.
-Add Entity remains a focused destination rather than a shortcut on the Overview page.
+Creating an entity is a command, not a destination: **New entity** on the Overview and Dependency
+graph toolbars (Ctrl+N) opens a dialog titled with the Tracker it adds to, so the target is never
+implicit. (It was a sidebar destination until the 2026-10-18 UI review; see #90.) Developers and the
+Project report are pages of the Project dashboard: the sidebar keeps Project dashboard selected and
+their headings start with a breadcrumb back to it.
 
 The obsolete SharePoint Connections page and configuration are removed. The shell does not expose
 a remote connection, repository, or Sync control before a separately approved synchronization

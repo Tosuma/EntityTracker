@@ -424,13 +424,19 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
     public bool IsProjectOperation => _pendingProject is not null || DialogKind == CatalogDialogKind.ProjectName;
     public bool IsRename => _projectBeingEdited is not null || _trackerBeingEdited is not null;
+    /// <summary>
+    /// Whether the recycle bin lists recycled Projects: only the Portfolio's does; a Project's recycle bin
+    /// lists that Project's Trackers.
+    /// </summary>
+    public bool ShowsRecycledProjects => IsRecycleBin && _targetProject is null;
+
     public string DialogTitle => DialogKind switch
     {
         CatalogDialogKind.ProjectName => IsRename ? "Rename project" : "Create project",
         CatalogDialogKind.TrackerName => "Rename tracker",
         CatalogDialogKind.TrackerCreation => "Create tracker",
         CatalogDialogKind.TrackerSync => _syncTracker is null ? "Sync tracker" : $"Sync {_syncTracker.Name} from {SyncSourceName}",
-        CatalogDialogKind.RecycleBin => "Recycle bins",
+        CatalogDialogKind.RecycleBin => _targetProject is null ? "Recycle bins" : $"Recycle bin — {_targetProject.Name}",
         CatalogDialogKind.RecycleConfirmation => _pendingProject is null ? "Recycle tracker?" : "Recycle project?",
         CatalogDialogKind.PurgeConfirmation => "Permanently delete?",
         _ => string.Empty
@@ -908,6 +914,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     private void NotifyDialogChanged()
     {
         OnPropertyChanged(nameof(DialogTitle));
+        OnPropertyChanged(nameof(ShowsRecycledProjects));
         OnPropertyChanged(nameof(IsRename));
         OnPropertyChanged(nameof(IsProjectOperation));
         OnPropertyChanged(nameof(PendingItemName));

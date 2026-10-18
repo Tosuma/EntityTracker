@@ -867,25 +867,67 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task ManualCreation_SuccessReturnsToRefreshedOverview()
+    public async Task ManualCreation_SuccessClosesTheOverlayAndRevealsTheRowOnOverview()
     {
         MainWindowViewModel viewModel = CreateViewModel(
             [],
             [],
             out _);
-        viewModel.SelectedTab = MainWindowTab.AddEntity;
         EntityId? revealedEntityId = null;
         viewModel.EntityRevealRequested += id => revealedEntityId = id;
+        viewModel.OpenCreateEntityCommand.Execute(null);
+        Assert.True(viewModel.ManualCreation.IsOpen);
         viewModel.ManualCreation.EntityName = "NewManualEntity";
 
         await viewModel.ManualCreation.CreateAsync();
 
+        Assert.False(viewModel.ManualCreation.IsOpen);
         Assert.Equal(MainWindowTab.Overview, viewModel.SelectedTab);
         EntityOverviewRow row = Assert.Single(viewModel.OverviewItems);
         Assert.Equal("NewManualEntity", row.SourceName);
         Assert.Equal("Not started", row.Status);
         Assert.Equal(row.EntityId, revealedEntityId);
         Assert.Equal(row.EntityId, viewModel.SelectedEntityDetails?.EntityId);
+    }
+
+    [Fact]
+    public async Task ManualCreation_CreateAndAddAnotherKeepsAClearedFormOpen()
+    {
+        MainWindowViewModel viewModel = CreateViewModel([], [], out _);
+        viewModel.OpenCreateEntityCommand.Execute(null);
+        viewModel.ManualCreation.EntityName = "First";
+        Assert.False(viewModel.OpenCreateEntityCommand.CanExecute(null));
+
+        viewModel.ManualCreation.CreateAnotherCommand.Execute(null);
+        await WaitUntilAsync(() => viewModel.OverviewItems.Count == 1 && !viewModel.IsBusy);
+
+        Assert.True(viewModel.ManualCreation.IsOpen);
+        Assert.Equal(string.Empty, viewModel.ManualCreation.EntityName);
+        Assert.Contains("First", viewModel.ManualCreation.OperationMessage, StringComparison.Ordinal);
+        Assert.Null(viewModel.SelectedEntityDetails);
+    }
+
+    [Fact]
+    public void ManualCreation_CancelAsksBeforeDiscardingADraft()
+    {
+        RecordingDiscardConfirmation confirmation = new(false);
+        MainWindowViewModel viewModel = CreateViewModel([], [], out _, discardConfirmation: confirmation);
+        viewModel.OpenCreateEntityCommand.Execute(null);
+        viewModel.ManualCreation.EntityName = "Draft";
+
+        viewModel.ManualCreation.CancelCommand.Execute(null);
+        Assert.True(viewModel.ManualCreation.IsOpen);
+        Assert.Equal("Draft", viewModel.ManualCreation.EntityName);
+
+        confirmation.Result = true;
+        viewModel.ManualCreation.CancelCommand.Execute(null);
+        Assert.False(viewModel.ManualCreation.IsOpen);
+        Assert.Equal(2, confirmation.CallCount);
+
+        viewModel.OpenCreateEntityCommand.Execute(null);
+        viewModel.ManualCreation.CancelCommand.Execute(null);
+        Assert.False(viewModel.ManualCreation.IsOpen);
+        Assert.Equal(2, confirmation.CallCount);
     }
 
     [Fact]
@@ -900,7 +942,7 @@ public sealed class MainWindowViewModelTests
             [],
             out _);
         await viewModel.InitializeAsync();
-        viewModel.SelectedTab = MainWindowTab.AddEntity;
+        viewModel.OpenCreateEntityCommand.Execute(null);
         viewModel.ManualCreation.EntityName = " legacy ";
 
         await viewModel.ManualCreation.CreateAsync();
@@ -908,6 +950,7 @@ public sealed class MainWindowViewModelTests
         await WaitUntilAsync(() => viewModel.Editor.IsOpen);
 
         Assert.Equal(MainWindowTab.Archived, viewModel.SelectedTab);
+        Assert.False(viewModel.ManualCreation.IsOpen);
         Assert.True(viewModel.Editor.IsArchivedMode);
         Assert.Equal("Legacy", viewModel.Editor.SelectedEntityName);
     }
@@ -997,7 +1040,7 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(0, viewModel.SelectedActiveEntityCount);
 
         viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
-        viewModel.SelectedTab = MainWindowTab.AddEntity;
+        viewModel.SelectedTab = MainWindowTab.Archived;
         Assert.Equal(0, viewModel.SelectedActiveEntityCount);
     }
 

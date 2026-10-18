@@ -298,9 +298,9 @@ public sealed class PresentationConfigurationTests
 
         XDocument window = LoadWpfXaml("MainWindow.xaml");
         Assert.Contains(window.Descendants(), element =>
-            element.Name.LocalName == "ToggleButton" &&
-            (string?)element.Attribute("CommandParameter") == "{x:Static viewModels:ShellDestination.DependencyGraph}" &&
-            (string?)element.Attribute("IsChecked") == "{Binding IsDependencyGraph, Mode=OneWay}");
+            element.Name.LocalName == "ListBox" &&
+            (string?)element.Attribute("ItemsSource") == "{Binding SidebarGroups}" &&
+            (string?)element.Attribute("SelectedItem") == "{Binding SelectedSidebarEntry, Mode=TwoWay}");
     }
 
     [Fact]
@@ -492,21 +492,14 @@ public sealed class PresentationConfigurationTests
     {
         XDocument document = LoadWpfXaml("MainWindow.xaml");
         string text = document.ToString(SaveOptions.DisableFormatting);
-        string[] destinations =
-        [
-            "Portfolio",
-            "ProjectDashboard",
-            "Overview",
-            "Archived",
-            "AddEntity",
-            "Help",
-            "Settings"
-        ];
-
-        Assert.All(destinations, destination => Assert.Contains(
-            $"ShellDestination.{destination}",
-            text,
-            StringComparison.Ordinal));
+        // The sidebar lists the shell's navigation entries; ShellViewModelTests checks which they are.
+        Assert.Contains(document.Descendants(), element =>
+            element.Name.LocalName == "ListBox" &&
+            (string?)element.Attribute("ItemsSource") == "{Binding SidebarGroups}");
+        Assert.Contains(document.Descendants(), element =>
+            element.Name.LocalName == "ListBox" &&
+            (string?)element.Attribute("ItemsSource") == "{Binding UtilityItems}");
+        Assert.DoesNotContain(document.Descendants(), element => element.Name.LocalName == "ToggleButton");
         // Progress reporting lives in the Project report, opened from the Project dashboard.
         Assert.DoesNotContain("ShellDestination.Reports", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Connections", text, StringComparison.OrdinalIgnoreCase);
@@ -1317,6 +1310,74 @@ public sealed class PresentationConfigurationTests
             !name.Value.StartsWith('{')), button =>
             Assert.StartsWith((string)button.Attribute("Content")!,
                 (string)button.Attribute("AutomationProperties.Name")!, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("Views", "TrackerWorkspaceView.xaml", "Archive entity", "CancelArchiveButton")]
+    [InlineData("Views", "TrackerWorkspaceView.xaml", "Permanently delete", "CancelPurgeButton")]
+    [InlineData("Views", "OutboundDeletionApprovalDialog.xaml", "Approve deletion", "CancelButton")]
+    [InlineData("Views", "ProjectMergeReviewDialog.xaml", "Apply choices", "CancelButton")]
+    [InlineData("Views", "ProjectDevelopersView.xaml", "_Retire developer", "CancelRetirementButton")]
+    public void DialogFooters_PutTheCommitFirstAndAPlainCancelLast(string folder, string file, string commit, string cancelName)
+    {
+        XDocument document = LoadWpfXaml(folder, file);
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement cancel = Assert.Single(document.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == cancelName);
+        XElement commitButton = Assert.Single(cancel.Parent!.Elements(), element =>
+            (string?)element.Attribute("Content") == commit);
+
+        Assert.True(commitButton.IsBefore(cancel));
+        Assert.NotEqual("{StaticResource PrimaryButtonStyle}", (string?)cancel.Attribute("Style"));
+        Assert.Equal("True", (string?)cancel.Attribute("IsCancel"));
+    }
+
+    [Theory]
+    [InlineData("ProjectDevelopersView.xaml")]
+    [InlineData("ProjectReportView.xaml")]
+    public void ProjectPages_StartTheirHeadingWithABreadcrumbBackToTheDashboard(string view)
+    {
+        XDocument document = LoadWpfXaml("Views", view);
+
+        Assert.DoesNotContain(document.Descendants(), element =>
+            (string?)element.Attribute("Content") == "Back to project");
+        Assert.Contains(document.Descendants(), element =>
+            (string?)element.Attribute("Style") == "{StaticResource BreadcrumbLinkStyle}" &&
+            (string?)element.Attribute("CommandParameter") == "{x:Static viewModels:ShellDestination.ProjectDashboard}");
+    }
+
+    [Fact]
+    public void NewEntity_OpensAnOverlayFromTheOverviewAndGraphToolbars()
+    {
+        XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        Assert.DoesNotContain(workspace.Descendants(), element =>
+            element.Name.LocalName == "TabItem" && (string?)element.Attribute("Header") == "Add entity");
+        XElement overlay = Assert.Single(workspace.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "CreationOverlay");
+        Assert.Equal("{Binding ManualCreation.IsOpen, Converter={StaticResource BooleanToVisibilityConverter}}",
+            (string?)overlay.Attribute("Visibility"));
+        Assert.Equal("Cycle", (string?)overlay.Attribute("KeyboardNavigation.TabNavigation"));
+        Assert.Contains(overlay.Descendants(), element =>
+            (string?)element.Attribute("Command") == "{Binding ManualCreation.CreateAnotherCommand}");
+        Assert.Equal(2, workspace.Descendants().Count(element =>
+            ((string?)element.Attribute("Command"))?.Contains("OpenCreateEntityCommand", StringComparison.Ordinal) == true));
+    }
+
+    [Fact]
+    public void Shell_DimsAndDisablesTheSidebarAndHeaderWhileAPageDialogIsOpen()
+    {
+        XDocument window = LoadWpfXaml("MainWindow.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        foreach (string name in new[] { "SidebarDialogScrim", "HeaderDialogScrim" })
+            Assert.Equal("{Binding IsPageDialogOpen, Converter={StaticResource BooleanToVisibilityConverter}}",
+                (string?)Assert.Single(window.Descendants(), element =>
+                    (string?)element.Attribute(x + "Name") == name).Attribute("Visibility"));
+        Assert.Equal(2, window.Descendants().Count(element =>
+            element.Name.LocalName == "DataTrigger" &&
+            (string?)element.Attribute("Binding") == "{Binding IsPageDialogOpen}"));
     }
 
     private static XDocument LoadWpfXaml(params string[] relativePath)
