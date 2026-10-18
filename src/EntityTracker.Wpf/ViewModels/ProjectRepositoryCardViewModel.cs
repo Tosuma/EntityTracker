@@ -193,7 +193,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
             if (notice is not null)
             {
                 if (_link?.SyncStatus is "PendingPush" or "PendingRemote")
-                    _notifications?.NeedAction(notice, _link.LastResult, "Retry",
+                    _notifications?.NeedAction(notice, _link.LastResult, "Sync now",
                         () => SyncAsync(notice));
                 else
                 {
@@ -238,7 +238,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
                 bool review = error is ProjectSyncReviewRequiredException;
                 bool retry = _link?.SyncStatus is "PendingPush" or "PendingRemote";
                 _notifications?.NeedAction(notice, error.Message,
-                    review ? "Review" : retry ? "Retry" : "Open Project",
+                    review ? "Review" : retry ? "Sync now" : "Open project",
                     review || retry ? () => SyncAsync(notice) : () =>
                         _notifications?.NavigateToProjectAsync?.Invoke(_projectId) ?? Task.CompletedTask);
             }

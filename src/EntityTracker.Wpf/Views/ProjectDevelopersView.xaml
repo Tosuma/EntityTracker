@@ -10,16 +10,23 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <Grid Margin="0,0,0,14">
-                <Button HorizontalAlignment="Left" Content="Back to project"
-                        Command="{Binding NavigateCommand}"
-                        CommandParameter="{x:Static viewModels:ShellDestination.ProjectDashboard}" />
-                <Button HorizontalAlignment="Right" Content="Retired developers"
+            <!-- The breadcrumb's first part goes back to the Project dashboard, which the sidebar shows as
+                 the current location while this page is open. -->
+            <DockPanel Margin="0,0,0,4">
+                <Button DockPanel.Dock="Right" VerticalAlignment="Center" Content="Retired developers"
                         Command="{Binding Developers.OpenRetiredCommand}"
-                        AutomationProperties.Name="Open retired developers" />
-            </Grid>
+                        AutomationProperties.HelpText="Show retired developers, to edit or restore them" />
+                <TextBlock Style="{StaticResource PageHeadingTextStyle}">
+                    <Hyperlink Command="{Binding NavigateCommand}"
+                               CommandParameter="{x:Static viewModels:ShellDestination.ProjectDashboard}"
+                               AutomationProperties.HelpText="Go back to the project dashboard"
+                               ToolTip="Back to the project dashboard"
+                               Style="{StaticResource BreadcrumbLinkStyle}"><Run Text="{Binding ProjectContextName, Mode=OneWay}" /></Hyperlink>
+                    <Run Foreground="{DynamicResource Brush.Text.Secondary}" Text=" › " />
+                    <Run Text="Developers" />
+                </TextBlock>
+            </DockPanel>
             <StackPanel Grid.Row="1" Margin="0,0,0,18">
-                <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Developers" />
                 <TextBlock Margin="0,4,0,0" Style="{StaticResource PageDescriptionTextStyle}"
                            Text="Manage the developers available within this Project." TextWrapping="Wrap" />
             </StackPanel>
@@ -113,7 +120,7 @@
                 </Border>
             </Grid>
         </Grid>
-        <Grid Background="{DynamicResource Brush.Overlay.Strong}"
+        <Grid Background="{DynamicResource Brush.Overlay}"
               Visibility="{Binding Developers.IsRetirementOpen, Converter={StaticResource BooleanToVisibilityConverter}}"
               IsVisibleChanged="OnRetirementDialogVisibilityChanged"
               PreviewKeyDown="OnRetirementDialogPreviewKeyDown"
@@ -124,23 +131,22 @@
                     Background="{DynamicResource Brush.Surface.Page}"
                     Style="{StaticResource EntityTrackerCardStyle}">
                 <StackPanel>
-                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="Confirm retirement" />
-                    <TextBlock Margin="0,12,0,12" TextWrapping="Wrap"
-                               Text="{Binding Developers.PendingRetirementInitials, StringFormat=Type the exact initials {0} to retire this developer.}" />
-                    <TextBox x:Name="RetirementConfirmationBox"
-                             controls:Placeholder.Text="Type the initials to confirm"
-                             AutomationProperties.Name="Exact developer initials confirmation"
-                             Text="{Binding Developers.RetirementConfirmation, UpdateSourceTrigger=PropertyChanged}" />
-                    <StackPanel Margin="0,16,0,0" Orientation="Horizontal">
-                        <Button Content="Confirm retirement" Command="{Binding Developers.ConfirmRetirementCommand}"
+                    <TextBlock FontSize="22" FontWeight="SemiBold" AutomationProperties.HeadingLevel="Level2"
+                               Text="{Binding Developers.PendingRetirementInitials, StringFormat=Retire {0}?}" />
+                    <TextBlock Margin="0,12,0,0" TextWrapping="Wrap"
+                               Text="{Binding Developers.PendingRetirementMessage}" />
+                    <StackPanel Margin="0,20,0,0" HorizontalAlignment="Right" Orientation="Horizontal">
+                        <Button Margin="0,0,8,0" Content="_Retire developer" Command="{Binding Developers.ConfirmRetirementCommand}"
                                 Style="{StaticResource PrimaryButtonStyle}" />
-                        <Button Margin="8,0,0,0" Content="Cancel" Command="{Binding Developers.CancelRetirementCommand}"
+                        <Button x:Name="CancelRetirementButton" Content="Cancel"
+                                Command="{Binding Developers.CancelRetirementCommand}"
+                                IsCancel="True" IsDefault="True"
                                 Style="{StaticResource SecondaryButtonStyle}" />
                     </StackPanel>
                 </StackPanel>
             </Border>
         </Grid>
-        <Grid Background="{DynamicResource Brush.Overlay.Strong}"
+        <Grid Background="{DynamicResource Brush.Overlay}"
               Visibility="{Binding Developers.IsRetiredDialogOpen, Converter={StaticResource BooleanToVisibilityConverter}}"
               IsVisibleChanged="OnRetiredDialogVisibilityChanged"
               PreviewKeyDown="OnRetiredDialogPreviewKeyDown"

@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:configuration="clr-namespace:EntityTracker.Infrastructure.Configuration;assembly=EntityTracker.Infrastructure"
              xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels"
+             xmlns:services="clr-namespace:EntityTracker.Wpf.Services"
              xmlns:app="clr-namespace:EntityTracker.Wpf">
     <UserControl.Resources>
         <!-- Separates groups of cards on a settings page, such as Overview and Dependency graph. -->
@@ -35,7 +36,19 @@
                  Background="Transparent" BorderThickness="0"
                  AutomationProperties.Name="Settings categories"
                  ItemsSource="{Binding SettingsCategories}"
-                 SelectedItem="{Binding SelectedSettingsCategory, Mode=TwoWay}" />
+                 SelectedItem="{Binding SelectedSettingsCategory, Mode=TwoWay}">
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                    <Setter Property="AutomationProperties.Name"
+                            Value="{Binding Converter={x:Static services:SettingsCategoryLabelConverter.Instance}}" />
+                </Style>
+            </ListBox.ItemContainerStyle>
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding Converter={x:Static services:SettingsCategoryLabelConverter.Instance}}" />
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
         <ScrollViewer Grid.Row="1" Grid.Column="1"
                       VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled">
@@ -84,9 +97,11 @@
                             <TextBlock Margin="0,4,0,10" Style="{StaticResource PageDescriptionTextStyle}"
                                        Text="Choose the Developer used by Assign me. This choice stays on this installation and can be changed at any time."
                                        TextWrapping="Wrap" />
-                            <TextBlock FontWeight="SemiBold" Text="Project" />
+                            <TextBlock FontWeight="SemiBold" Text="Configure identity for project" />
+                            <TextBlock Margin="0,2,0,0" Style="{StaticResource PageDescriptionTextStyle}"
+                                       Text="Any of your Projects; it does not change the Project you are working in." />
                             <ComboBox Margin="0,5,0,10" MinWidth="280" HorizontalAlignment="Left"
-                                      AutomationProperties.Name="Project"
+                                      AutomationProperties.Name="Configure identity for project"
                                       AutomationProperties.HelpText="Select the Project whose local settings you want to change."
                                       ItemsSource="{Binding Projects}"
                                       DisplayMemberPath="Name"
@@ -119,6 +134,8 @@
                             </Style.Triggers>
                         </Style>
                     </StackPanel.Style>
+                    <TextBlock Margin="0,0,0,14" Style="{StaticResource PageDescriptionTextStyle}"
+                               Text="These preferences apply to every Tracker on this installation." />
                     <TextBlock Style="{StaticResource SettingsGroupHeadingStyle}" Margin="0,0,0,10" Text="Overview" />
                     <Border Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
                         <StackPanel>

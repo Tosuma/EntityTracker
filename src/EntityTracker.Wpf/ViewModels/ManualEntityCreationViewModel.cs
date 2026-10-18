@@ -23,8 +23,10 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     private readonly Func<EntityId, Task> _onRestoreArchived;
     private readonly Action _onCancelled;
     private readonly Func<bool> _canOperate;
+    private readonly Func<bool>? _confirmDiscard;
     private readonly ILogger<ManualEntityCreationViewModel> _logger;
     private readonly AsyncCommand _createCommand;
+    private readonly AsyncCommand _createAnotherCommand;
     private readonly AsyncCommand _restoreArchivedCommand;
     private readonly RelayCommand<ManualDependencySuggestion> _addExistingCommand;
     private readonly RelayCommand<string> _useGroupSuggestionCommand;
@@ -53,6 +55,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     private bool _isDependencySuggestionsOpen;
     private bool _isGroupSuggestionsOpen;
     private bool _isBusy;
+    private bool _isOpen;
     private ArchivedEntityMatch? _archivedEntityMatch;
 
     public ManualEntityCreationViewModel(
@@ -63,7 +66,8 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         Action onCancelled,
         Func<bool>? canOperate = null,
         ILogger<ManualEntityCreationViewModel>? logger = null,
-        DeveloperPickerViewModel? developerPicker = null)
+        DeveloperPickerViewModel? developerPicker = null,
+        Func<bool>? confirmDiscard = null)
     {
         ArgumentNullException.ThrowIfNull(service);
         ArgumentNullException.ThrowIfNull(onCreated);
@@ -76,6 +80,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         _onRestoreArchived = onRestoreArchived;
         _onCancelled = onCancelled;
         _canOperate = canOperate ?? (() => true);
+        _confirmDiscard = confirmDiscard;
         _logger = logger ?? NullLogger<ManualEntityCreationViewModel>.Instance;
         DeveloperPicker = developerPicker;
         if (DeveloperPicker is not null)
@@ -95,10 +100,10 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             () => !IsBusy && _canOperate() && CanAddAsUnresolved);
         _createCommand = new AsyncCommand(
             () => CreateAsync(),
-            () => !IsBusy &&
-                  _canOperate() &&
-                  !HasFatalValidation &&
-                  !string.IsNullOrWhiteSpace(EntityName));
+            CanCreate);
+        _createAnotherCommand = new AsyncCommand(
+            () => CreateAsync(keepOpen: true),
+            CanCreate);
         _restoreArchivedCommand = new AsyncCommand(
             RestoreArchivedAsync,
             () => !IsBusy && _canOperate() && ArchivedEntityMatch is not null);
@@ -110,6 +115,21 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
     public DeveloperPickerViewModel? DeveloperPicker { get; }
 
+    /// <summary>Whether the New entity overlay is showing.</summary>
+    public bool IsOpen
+    {
+        get => _isOpen;
+        private set => SetField(ref _isOpen, value);
+    }
+
+    /// <summary>Opens the New entity overlay with an empty form.</summary>
+    public void Open()
+    {
+        if (IsOpen || IsBusy) return;
+        ResetCore();
+        IsOpen = true;
+    }
+
     public string EntityName
     {
         get => _entityName;
@@ -119,6 +139,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             {
                 ClearFatalValidation();
                 _createCommand.NotifyCanExecuteChanged();
+                _createAnotherCommand.NotifyCanExecuteChanged();
                 ScheduleSearch();
             }
         }
@@ -311,6 +332,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             if (SetField(ref _hasFatalValidation, value))
             {
                 _createCommand.NotifyCanExecuteChanged();
+                _createAnotherCommand.NotifyCanExecuteChanged();
             }
         }
     }
@@ -326,6 +348,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(ArchivedEntityMessage));
                 _restoreArchivedCommand.NotifyCanExecuteChanged();
                 _createCommand.NotifyCanExecuteChanged();
+                _createAnotherCommand.NotifyCanExecuteChanged();
             }
         }
     }
@@ -345,6 +368,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
             if (SetField(ref _isBusy, value))
             {
                 _createCommand.NotifyCanExecuteChanged();
+                _createAnotherCommand.NotifyCanExecuteChanged();
                 _addUnresolvedCommand.NotifyCanExecuteChanged();
                 _cancelCommand.NotifyCanExecuteChanged();
                 _addExistingCommand.NotifyCanExecuteChanged();
@@ -389,6 +413,9 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     public ICommand AddUnresolvedCommand => _addUnresolvedCommand;
 
     public ICommand CreateCommand => _createCommand;
+
+    /// <summary>Creates the entity and keeps the overlay open with a cleared form for the next one.</summary>
+    public ICommand CreateAnotherCommand => _createAnotherCommand;
 
     public ICommand RestoreArchivedCommand => _restoreArchivedCommand;
 
@@ -507,7 +534,16 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         }
     }
 
-    public async Task CreateAsync(CancellationToken cancellationToken = default)
+    public Task CreateAsync(CancellationToken cancellationToken = default) =>
+        CreateAsync(keepOpen: false, cancellationToken);
+
+    private bool CanCreate() =>
+        !IsBusy &&
+        _canOperate() &&
+        !HasFatalValidation &&
+        !string.IsNullOrWhiteSpace(EntityName);
+
+    private async Task CreateAsync(bool keepOpen, CancellationToken cancellationToken = default)
     {
         if (IsBusy || !_canOperate())
         {
@@ -576,11 +612,15 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         }
 
         EntityId createdEntityId = result.CreatedEntityId!;
+        string createdName = EntityName.Trim();
         ResetCore();
+        IsOpen = keepOpen;
         IsBusy = false;
         try
         {
             await _onCreated(createdEntityId);
+            if (keepOpen)
+                OperationMessage = $"Created '{createdName}'. Add the next entity.";
         }
         catch (Exception exception)
         {
@@ -592,11 +632,13 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         }
     }
 
+    /// <summary>Clears the form and closes the overlay, discarding any unsaved draft.</summary>
     public void Reset()
     {
         if (!IsBusy)
         {
             ResetCore();
+            IsOpen = false;
         }
     }
 
@@ -640,6 +682,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         }
 
         _createCommand.NotifyCanExecuteChanged();
+        _createAnotherCommand.NotifyCanExecuteChanged();
         _addUnresolvedCommand.NotifyCanExecuteChanged();
         _cancelCommand.NotifyCanExecuteChanged();
         _addExistingCommand.NotifyCanExecuteChanged();
@@ -731,7 +774,9 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
 
     private void Cancel()
     {
+        if (IsDirty && _confirmDiscard?.Invoke() == false) return;
         ResetCore();
+        IsOpen = false;
         _onCancelled();
     }
 
@@ -888,6 +933,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         CanAddAsUnresolved = false;
         HasFatalValidation = false;
         _createCommand.NotifyCanExecuteChanged();
+        _createAnotherCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(IsDirty));
     }
 

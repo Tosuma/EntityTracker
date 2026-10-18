@@ -302,6 +302,77 @@ public sealed class ShellViewModelTests
     }
 
     [Fact]
+    public async Task Sidebar_ListsDestinationsAndShowsWhatCanBeOpened()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        using ShellViewModel shell = harness.CreateShell(
+            new EntityTrackerSettings(lastProjectId: harness.DefaultProject.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+
+        Assert.Equal(
+            [ShellDestination.Portfolio, ShellDestination.ProjectDashboard, ShellDestination.Overview,
+             ShellDestination.DependencyGraph, ShellDestination.Archived],
+            shell.SidebarItems.Select(static entry => entry.Destination));
+        Assert.Equal([ShellDestination.Help, ShellDestination.Settings],
+            shell.UtilityItems.Select(static entry => entry.Destination));
+        Assert.Equal(ShellDestination.ProjectDashboard, shell.SelectedSidebarEntry?.Destination);
+        Assert.Null(shell.SelectedUtilityEntry);
+
+        ShellNavigationEntry overview = shell.SidebarItems.Single(entry => entry.Destination == ShellDestination.Overview);
+        Assert.False(overview.IsEnabled);
+        Assert.Equal("Select a Tracker to open Overview.", overview.ToolTip);
+
+        await shell.OpenTrackerAsync(harness.DefaultTracker.Id);
+        Assert.True(overview.IsEnabled);
+        Assert.Equal("Overview (Ctrl+1)", overview.ToolTip);
+        Assert.Same(overview, shell.SelectedSidebarEntry);
+
+        shell.SelectedUtilityEntry = shell.UtilityItems.Single(entry => entry.Destination == ShellDestination.Help);
+        await WaitUntilAsync(() => Task.FromResult(shell.SelectedDestination == ShellDestination.Help));
+        Assert.Null(shell.SelectedSidebarEntry);
+        Assert.Equal(ShellDestination.Help, shell.SelectedUtilityEntry?.Destination);
+    }
+
+    [Fact]
+    public async Task Sidebar_ProjectPagesKeepProjectDashboardSelected()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        using ShellViewModel shell = harness.CreateShell(
+            new EntityTrackerSettings(lastProjectId: harness.DefaultProject.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+
+        Assert.True(await shell.NavigateAsync(ShellDestination.Developers));
+        Assert.Equal(ShellDestination.ProjectDashboard, shell.SelectedSidebarEntry?.Destination);
+    }
+
+    [Fact]
+    public async Task Sidebar_RefusedNavigationKeepsTheCurrentLocation()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        RecordingDiscardConfirmation confirmation = new(false);
+        using ShellViewModel shell = harness.CreateShell(
+            new EntityTrackerSettings(
+                lastProjectId: harness.DefaultProject.Id,
+                lastTrackerId: harness.DefaultTracker.Id),
+            confirmation);
+        await shell.InitializeAsync();
+        MainWindowViewModel workspace = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
+        workspace.OpenCreateEntityCommand.Execute(null);
+        workspace.ManualCreation.EntityName = "Pending entity";
+        Assert.True(shell.IsModalOpen);
+        Assert.True(shell.IsPageDialogOpen);
+
+        shell.SelectedSidebarEntry = shell.SidebarItems.Single(entry => entry.Destination == ShellDestination.Archived);
+        await WaitUntilAsync(() => Task.FromResult(confirmation.CallCount == 1));
+
+        Assert.Equal(ShellDestination.Overview, shell.SelectedDestination);
+        Assert.Equal(ShellDestination.Overview, shell.SelectedSidebarEntry?.Destination);
+        Assert.True(workspace.ManualCreation.IsOpen);
+    }
+
+    [Fact]
     public async Task WorkspaceInitiatedTabChangesKeepShellDestinationInSync()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
@@ -313,11 +384,12 @@ public sealed class ShellViewModelTests
         await shell.InitializeAsync();
         MainWindowViewModel workspace = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
 
-        workspace.SelectedTab = MainWindowTab.AddEntity;
-        Assert.Equal(ShellDestination.AddEntity, shell.SelectedDestination);
+        workspace.SelectedTab = MainWindowTab.Archived;
+        Assert.Equal(ShellDestination.Archived, shell.SelectedDestination);
+        Assert.Same(shell.SidebarItems.Single(entry => entry.Destination == ShellDestination.Archived),
+            shell.SelectedSidebarEntry);
 
-        workspace.ManualCreation.CancelCommand.Execute(null);
-        Assert.Equal(MainWindowTab.Overview, workspace.SelectedTab);
+        workspace.SelectedTab = MainWindowTab.Overview;
         Assert.Equal(ShellDestination.Overview, shell.SelectedDestination);
     }
 
@@ -691,19 +763,21 @@ public sealed class ShellViewModelTests
                 lastTrackerId: harness.DefaultTracker.Id),
             confirmation);
         await shell.InitializeAsync();
-        Assert.True(await shell.NavigateAsync(ShellDestination.AddEntity));
         MainWindowViewModel workspace = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
+        workspace.OpenCreateEntityCommand.Execute(null);
         workspace.ManualCreation.EntityName = "Pending entity";
         Assert.True(workspace.HasUnsavedWork);
 
         Assert.False(await shell.NavigateAsync(ShellDestination.Help));
-        Assert.Equal(ShellDestination.AddEntity, shell.SelectedDestination);
+        Assert.Equal(ShellDestination.Overview, shell.SelectedDestination);
+        Assert.True(workspace.ManualCreation.IsOpen);
         Assert.True(workspace.HasUnsavedWork);
 
         confirmation.Result = true;
         Assert.True(await shell.NavigateAsync(ShellDestination.Help));
         Assert.Equal(ShellDestination.Help, shell.SelectedDestination);
         Assert.False(workspace.HasUnsavedWork);
+        Assert.False(workspace.ManualCreation.IsOpen);
         Assert.Equal(2, confirmation.CallCount);
     }
 

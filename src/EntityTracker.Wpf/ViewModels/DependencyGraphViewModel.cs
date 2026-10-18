@@ -487,6 +487,14 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
         Show(match);
     }
 
+    /// <summary>Selects and centres the entity, as Find does; false when the map doesn't show it.</summary>
+    public bool ShowEntity(EntityId entityId)
+    {
+        if (Model.Find(entityId) is not { } node) return false;
+        Show(node);
+        return true;
+    }
+
     private void Show(DependencyGraphNode node)
     {
         SearchMessage = null;

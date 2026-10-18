@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Media.Media3D;
 
 using EntityTracker.Domain;
+using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels;
 
 namespace EntityTracker.Wpf.Views;
@@ -18,6 +19,7 @@ public partial class TrackerWorkspaceView : UserControl
     private MainWindowViewModel? _viewModel;
     private EntityDetailsViewModel? _observedDetails;
     private IInputElement? _focusBeforeEditor;
+    private IInputElement? _focusBeforeCreation;
     private IInputElement? _focusBeforeDetails;
     private IInputElement? _focusBeforeArchiveConfirmation;
     private IInputElement? _focusBeforePurgeConfirmation;
@@ -37,6 +39,31 @@ public partial class TrackerWorkspaceView : UserControl
         DataContextChanged += OnDataContextChanged;
     }
 
+    private void OnWorkspaceTabChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ReferenceEquals(e.OriginalSource, WorkspaceTabs))
+            Dispatcher.BeginInvoke(new Action(PlaceDetailsPane), System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    private void OnDetailsPaneVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is true) PlaceDetailsPane();
+    }
+
+    /// <summary>
+    /// Puts the details pane's top below the current page's heading row (its toolbar included), so the
+    /// pane covers the page's content but never its commands.
+    /// </summary>
+    private void PlaceDetailsPane()
+    {
+        double top = WorkspaceTabs.SelectedContent is Grid page &&
+                     page.Children.OfType<FrameworkElement>().FirstOrDefault(static child => Grid.GetRow(child) == 0)
+                         is { } header
+            ? header.ActualHeight + header.Margin.Top + header.Margin.Bottom
+            : 0;
+        EntityDetailsPane.Margin = new Thickness(0, top, 0, 0);
+    }
+
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         Attach(DataContext as MainWindowViewModel);
@@ -50,6 +77,16 @@ public partial class TrackerWorkspaceView : UserControl
         OverviewExportPopup.IsOpen = !_exportPopupWasOpenAtPointerDown &&
                                      !OverviewExportPopup.IsOpen;
         _exportPopupWasOpenAtPointerDown = false;
+    }
+
+    /// <summary>Opens the Overview export menu (Ctrl+E); false on other pages or when there is nothing to export.</summary>
+    public bool TryOpenExportMenu()
+    {
+        if (_viewModel is not { SelectedTab: MainWindowTab.Overview } viewModel ||
+            !viewModel.ExportOverviewCommand.CanExecute(OverviewExportFormat.Excel))
+            return false;
+        OverviewExportPopup.IsOpen = true;
+        return true;
     }
 
     private void OnOverviewExportPopupOpened(object sender, EventArgs e) =>
@@ -96,6 +133,7 @@ public partial class TrackerWorkspaceView : UserControl
         viewModel.EntityRevealRequested += OnEntityRevealRequested;
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
         viewModel.Editor.PropertyChanged += OnEditorPropertyChanged;
+        viewModel.ManualCreation.PropertyChanged += OnCreationPropertyChanged;
         ObserveDetails(viewModel.SelectedEntityDetails);
     }
 
@@ -110,6 +148,7 @@ public partial class TrackerWorkspaceView : UserControl
         _viewModel.EntityRevealRequested -= OnEntityRevealRequested;
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         _viewModel.Editor.PropertyChanged -= OnEditorPropertyChanged;
+        _viewModel.ManualCreation.PropertyChanged -= OnCreationPropertyChanged;
         ObserveDetails(null);
         _viewModel = null;
     }
@@ -138,6 +177,43 @@ public partial class TrackerWorkspaceView : UserControl
                 CloseEntityDetailsButton.Focus();
         }));
     }
+
+    /// <summary>
+    /// The New entity overlay takes focus into the name field when it opens, again after "Create and add
+    /// another" clears the form, and gives focus back to what opened it when it closes.
+    /// </summary>
+    private void OnCreationPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        ManualEntityCreationViewModel? creation = _viewModel?.ManualCreation;
+        if (creation is null) return;
+        if (e.PropertyName == nameof(ManualEntityCreationViewModel.IsOpen))
+        {
+            if (creation.IsOpen)
+            {
+                _focusBeforeCreation = Keyboard.FocusedElement;
+                FocusCreationName();
+                return;
+            }
+
+            IInputElement? restoreTarget = _focusBeforeCreation;
+            _focusBeforeCreation = null;
+            if (restoreTarget is not null)
+                Dispatcher.BeginInvoke(new Action(() => Keyboard.Focus(restoreTarget)));
+            return;
+        }
+
+        if (e.PropertyName == nameof(ManualEntityCreationViewModel.EntityName) &&
+            creation.IsOpen && creation.EntityName.Length == 0 && !ManualEntityNameTextBox.IsKeyboardFocusWithin)
+            FocusCreationName();
+    }
+
+    private void FocusCreationName() =>
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            CreationScrollViewer.ScrollToTop();
+            if (!ManualEntityNameTextBox.Focus())
+                CreationSurface.Focus();
+        }));
 
     private void OnEditorPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -231,17 +307,6 @@ public partial class TrackerWorkspaceView : UserControl
             ObserveDetails(_viewModel?.SelectedEntityDetails);
             return;
         }
-        if (e.PropertyName == nameof(MainWindowViewModel.SelectedTab) &&
-            _viewModel?.SelectedTab == MainWindowTab.AddEntity)
-        {
-            Dispatcher.BeginInvoke(new Action(() =>
-            {
-                AddEntityScrollViewer.ScrollToTop();
-                ManualEntityNameTextBox.Focus();
-            }));
-            return;
-        }
-
         if (e.PropertyName != nameof(MainWindowViewModel.IsEntityDetailsOpen))
         {
             return;
@@ -394,9 +459,17 @@ public partial class TrackerWorkspaceView : UserControl
         }
 
         if (_viewModel.Editor.DismissOpenSuggestions() ||
-            (_viewModel.SelectedTab == MainWindowTab.AddEntity &&
+            (_viewModel.ManualCreation.IsOpen &&
              _viewModel.ManualCreation.DismissOpenSuggestions()))
         {
+            e.Handled = true;
+            return;
+        }
+
+        if (_viewModel.ManualCreation.IsOpen)
+        {
+            if (_viewModel.ManualCreation.CancelCommand.CanExecute(null))
+                _viewModel.ManualCreation.CancelCommand.Execute(null);
             e.Handled = true;
             return;
         }
@@ -482,6 +555,7 @@ public partial class TrackerWorkspaceView : UserControl
         if (_viewModel is null ||
             _viewModel.IsBusy ||
             _viewModel.ManualCreation.IsBusy ||
+            _viewModel.ManualCreation.IsOpen ||
             _viewModel.Editor.IsOpen)
         {
             return false;

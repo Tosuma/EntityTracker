@@ -120,8 +120,9 @@ installed app, so close one before opening the other.
 
 1. **Create a Project** — On the Portfolio, click **New project** and give it a name.
 2. **Create a Tracker** — Open the Project dashboard and create a Tracker (e.g. "Core").
-3. **Add entities** — Open **Add entity** in the Tracker and add each entity with the entities it
-   depends on. A dependency on a name that is not an entity yet is kept as an unresolved reference
+3. **Add entities** — On the Tracker's Overview or Dependency graph, choose **New entity** (Ctrl+N)
+   and add each entity with the entities it depends on; **Create and add another** keeps the form
+   open for the next one. A dependency on a name that is not an entity yet is kept as an unresolved reference
    and connects by itself when you add that entity.
 4. **Track progress** — Open the Tracker overview, select entities, and update their
    development status. Use filters and search to find work items.

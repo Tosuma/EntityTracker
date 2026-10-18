@@ -312,11 +312,12 @@ internal sealed class ReadmeScreenshotGenerator
             await CaptureOverviewAsync(viewModel, window, renderer, cancellationToken);
             await CaptureDependencyGraphAsync(shell, viewModel, window, renderer, cancellationToken);
 
-            await shell.NavigateAsync(ShellDestination.AddEntity, cancellationToken);
+            await shell.NavigateAsync(ShellDestination.Overview, cancellationToken);
+            viewModel.OpenCreateEntityCommand.Execute(null);
             await PopulateManualCreationAsync(viewModel, cancellationToken);
             await renderer.CaptureAsync("add-entity.png");
 
-            viewModel.ManualCreation.CancelCommand.Execute(null);
+            viewModel.ManualCreation.Reset();
             await CaptureEditorAsync(shell, viewModel, window, renderer, cancellationToken);
 
             await CaptureArchivedEntityAsync(

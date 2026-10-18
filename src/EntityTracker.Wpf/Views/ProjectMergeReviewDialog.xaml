@@ -67,10 +67,11 @@
             </ItemsControl>
         </ScrollViewer>
         <StackPanel Grid.Row="3" Margin="0,14,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button x:Name="CancelButton" Content="Cancel sync" IsCancel="True" MinWidth="105" />
-            <Button Margin="8,0,0,0" Content="Apply choices" IsDefault="True" MinWidth="105"
+            <Button Margin="0,0,8,0" Content="Apply choices" IsDefault="True" MinWidth="105"
                     IsEnabled="{Binding AllResolved}" Click="OnApply"
-                    AutomationProperties.Name="Apply all reviewed merge choices" />
+                    Style="{StaticResource PrimaryButtonStyle}"
+                    AutomationProperties.HelpText="Apply all reviewed merge choices" />
+            <Button x:Name="CancelButton" Content="Cancel sync" IsCancel="True" MinWidth="105" />
         </StackPanel>
     </Grid>
 </Window>

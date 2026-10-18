@@ -18,7 +18,7 @@
                     <StackPanel>
                         <TextBlock FontWeight="SemiBold" Text="Portfolio, Project, and Tracker" />
                         <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}"
-                                   Text="Portfolio lists Projects. A Project dashboard lists its Trackers and opens the Project Developers directory. Opening a Tracker makes it the active context for Overview, Dependency graph, Archived, and Add entity. Developers can be added, edited, retired, and restored. An entity can have several responsible developers, and its details show who was responsible and when. A Tracker copied from another can use Sync from source on the Project dashboard to take over the source&apos;s later changes; only the copy changes, and progress is never copied." />
+                                   Text="Portfolio lists Projects. A Project dashboard lists its Trackers and opens the Project Developers directory. Opening a Tracker makes it the active context for Overview, Dependency graph and Archived; New entity on Overview or the graph (Ctrl+N) adds an entity to it. Developers can be added, edited, retired, and restored. An entity can have several responsible developers, and its details show who was responsible and when. A Tracker copied from another can use Sync from source on the Project dashboard to take over the source&apos;s later changes; only the copy changes, and progress is never copied." />
                     </StackPanel>
                 </Border>
                 <Border Margin="6,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">

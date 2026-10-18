@@ -71,12 +71,10 @@ public sealed class ProjectDevelopersViewModelTests
         Assert.Empty(viewModel.Available);
         viewModel.SearchQuery = "";
         viewModel.BeginRetirement(developer);
-        Assert.False(viewModel.ConfirmRetirementCommand.CanExecute(null));
-        viewModel.RetirementConfirmation = "wrong";
-        await viewModel.ConfirmRetirementAsync();
-        Assert.Single(viewModel.Available);
-        viewModel.RetirementConfirmation = "AB";
+        // Retirement can be undone, so it is confirmed once, with what it does, and no typing.
         Assert.True(viewModel.ConfirmRetirementCommand.CanExecute(null));
+        Assert.Contains("AB — Alice", viewModel.PendingRetirementMessage, StringComparison.Ordinal);
+        Assert.Contains("restore", viewModel.PendingRetirementMessage, StringComparison.OrdinalIgnoreCase);
         await viewModel.ConfirmRetirementAsync();
         Assert.False(viewModel.IsRetirementOpen);
         Assert.Empty(viewModel.Available);

@@ -217,6 +217,9 @@
                     <DataTrigger Binding="{Binding Editor.IsOpen}" Value="True">
                         <Setter Property="IsHitTestVisible" Value="False" />
                     </DataTrigger>
+                    <DataTrigger Binding="{Binding ManualCreation.IsOpen}" Value="True">
+                        <Setter Property="IsHitTestVisible" Value="False" />
+                    </DataTrigger>
                 </Style.Triggers>
             </Style>
         </DockPanel.Style>
@@ -252,13 +255,15 @@
 
         <!-- The sidebar picks the page through SelectedTab, so the tabs have no height and the TabControl
              draws no frame of its own: each page sits in the work area like every other page. -->
-        <TabControl Focusable="False"
+        <TabControl x:Name="WorkspaceTabs"
+                    Focusable="False"
                     IsTabStop="False"
                     Padding="0"
                     Background="Transparent"
                     BorderThickness="0"
                     SelectedValue="{Binding SelectedTab}"
-                    SelectedValuePath="Tag">
+                    SelectedValuePath="Tag"
+                    SelectionChanged="OnWorkspaceTabChanged">
             <TabItem Header="Overview" Focusable="False" IsTabStop="False" Tag="{x:Static viewModels:MainWindowTab.Overview}">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -293,13 +298,22 @@
                             </Button>
                             <Button Margin="0,0,8,0"
                                     Command="{Binding RefreshCommand}"
-                                    ToolTip="Refresh"
+                                    ToolTip="Refresh (F5)"
                                     AutomationProperties.Name="Refresh overview"
                                     Style="{StaticResource SecondaryIconButtonStyle}">
                                 <controls:Icon IconKey="Icon.ArrowClockwise" />
                             </Button>
+                            <Button x:Name="OverviewNewEntityButton"
+                                    Margin="0,0,8,0"
+                                    Command="{Binding OpenCreateEntityCommand}"
+                                    AutomationProperties.Name="New entity"
+                                    ToolTip="New entity (Ctrl+N)"
+                                    Style="{StaticResource SecondaryButtonStyle}">
+                                <controls:IconLabel IconKey="Icon.Add" Text="New entity" />
+                            </Button>
                             <Button x:Name="OverviewExportButton"
                                     Content="Export"
+                                    ToolTip="Export as Excel or CSV (Ctrl+E)"
                                     AutomationProperties.Name="Export overview"
                                     AutomationProperties.HelpText="Choose Excel or CSV export"
                                     PreviewMouseDown="OnOverviewExportButtonPreviewMouseDown"
@@ -969,9 +983,16 @@
                                     Content="Fit to view"
                                     ToolTip="Fit the whole map in view (0)"
                                     Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Margin="0,0,8,0"
+                                    Command="{Binding DataContext.OpenCreateEntityCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    AutomationProperties.Name="New entity"
+                                    ToolTip="New entity (Ctrl+N)"
+                                    Style="{StaticResource SecondaryButtonStyle}">
+                                <controls:IconLabel IconKey="Icon.Add" Text="New entity" />
+                            </Button>
                             <Button Command="{Binding ExportPngCommand}"
                                     Content="Export PNG"
-                                    AutomationProperties.Name="Export dependency graph as PNG"
+                                    AutomationProperties.HelpText="Save the dependency graph as a PNG image"
                                     Style="{StaticResource PrimaryButtonStyle}" />
                         </StackPanel>
                         <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Dependency graph" />
@@ -1131,7 +1152,7 @@
                                 <controls:Icon IconKey="Icon.Search" />
                             </Button>
                             <Button Command="{Binding RefreshCommand}"
-                                    ToolTip="Refresh"
+                                    ToolTip="Refresh (F5)"
                                     AutomationProperties.Name="Refresh archived entities"
                                     Style="{StaticResource SecondaryIconButtonStyle}">
                                 <controls:Icon IconKey="Icon.ArrowClockwise" />
@@ -1345,275 +1366,16 @@
                 </Grid>
             </TabItem>
 
-            <TabItem Header="Add entity" Focusable="False" IsTabStop="False" Tag="{x:Static viewModels:MainWindowTab.AddEntity}">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <StackPanel Margin="0,0,0,14">
-                        <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Add entity" />
-                        <TextBlock Margin="0,3,0,0"
-                                   Foreground="{DynamicResource Brush.Text.Secondary}"
-                                   Text="Add a new entity and its initial dependencies. A name no entity has yet is kept as an unresolved reference, and is connected when an entity with that name is added."
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
-
-                    <ScrollViewer x:Name="AddEntityScrollViewer"
-                                  Grid.Row="1"
-                                  HorizontalScrollBarVisibility="Disabled"
-                                  VerticalScrollBarVisibility="Auto">
-                        <StackPanel MaxWidth="820" HorizontalAlignment="Left">
-                            <Border Margin="0,0,0,14"
-                                    Padding="16"
-                                    Style="{StaticResource EntityTrackerCardStyle}">
-                                <StackPanel>
-                                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="Identity and planning" />
-                                    <TextBlock Margin="0,3,0,14"
-                                               Foreground="{DynamicResource Brush.Text.Secondary}"
-                                               Text="Name the entity and optionally record ownership, grouping, and its requested priority."
-                                               TextWrapping="Wrap" />
-
-                                    <Label Target="{Binding ElementName=ManualEntityNameTextBox}" Content="Entity name" />
-                                    <TextBox x:Name="ManualEntityNameTextBox"
-                                             controls:Placeholder.Text="Name of the entity, e.g. customer_account"
-                                             Margin="0,4,0,12"
-                                             Padding="9,7"
-                                             AutomationProperties.Name="Entity name"
-                                             Text="{Binding ManualCreation.EntityName, UpdateSourceTrigger=PropertyChanged}" />
-
-                                    <TextBlock FontWeight="SemiBold" Text="Responsible developers" />
-                                    <TextBlock Margin="0,3,0,5" Text="Select one or more Project developers." />
-                                    <TextBox Margin="0,0,0,5" Padding="9,7"
-                                             AutomationProperties.Name="Search Project developers"
-                                             controls:Placeholder.Text="Search developers by initials or name"
-                                             Text="{Binding ManualCreation.DeveloperPicker.Query, UpdateSourceTrigger=PropertyChanged}" />
-                                    <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto"
-                                                  CanContentScroll="False">
-                                        <ItemsControl ItemsSource="{Binding ManualCreation.DeveloperPicker.FilteredChoices}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <CheckBox Margin="2,3" Content="{Binding Label}"
-                                                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                                                              AutomationProperties.Name="{Binding Label}" />
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </ScrollViewer>
-                                    <TextBlock Margin="0,7,0,12"
-                                               Foreground="{DynamicResource Brush.Text.Secondary}"
-                                               Text="No available developers. Add one from Project → Developers."
-                                               TextWrapping="Wrap">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding ManualCreation.DeveloperPicker.HasAvailableDevelopers}" Value="False">
-                                                        <Setter Property="Visibility" Value="Visible" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="16" />
-                                            <ColumnDefinition Width="220" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel>
-                                            <Label Target="{Binding ElementName=ManualGroupComboBox}" Content="Group" />
-                                            <controls:SuggestionComboBox x:Name="ManualGroupComboBox"
-                                                      controls:Placeholder.Text="Type or choose a group"
-                                                      Margin="0,4,0,0"
-                                                      AutomationProperties.HelpText="Type a new group or choose an existing group."
-                                                      AutomationProperties.Name="Group"
-                                                      Style="{StaticResource SuggestionComboBoxStyle}"
-                                                      ItemsSource="{Binding ManualCreation.GroupSuggestions}"
-                                                      ChooseCommand="{Binding ManualCreation.UseGroupSuggestionCommand}"
-                                                      Text="{Binding ManualCreation.GroupName, UpdateSourceTrigger=PropertyChanged}"
-                                                      IsDropDownOpen="{Binding ManualCreation.IsGroupSuggestionsOpen}" />
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="2">
-                                            <Label Target="{Binding ElementName=ManualPriorityComboBox}" Content="Requested priority" />
-                                            <ComboBox x:Name="ManualPriorityComboBox"
-                                                      Margin="0,4,0,0"
-                                                      AutomationProperties.HelpText="Optional priority from one, highest, to five."
-                                                      AutomationProperties.Name="Requested priority"
-                                                      DisplayMemberPath="DisplayName"
-                                                      ItemsSource="{Binding ManualCreation.PriorityOptions}"
-                                                      SelectedValue="{Binding ManualCreation.SelectedRequestedPriority}"
-                                                      SelectedValuePath="Value" />
-                                        </StackPanel>
-                                    </Grid>
-                                    <TextBlock Margin="0,7,0,0"
-                                               Foreground="{DynamicResource Brush.Text.Secondary}"
-                                               Text="{Binding ManualCreation.GroupSearchMessage}"
-                                               TextWrapping="Wrap"
-                                               Visibility="{Binding ManualCreation.HasGroupSearchMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                </StackPanel>
-                            </Border>
-
-                            <Border x:Name="ManualDependenciesSection"
-                                    Padding="16"
-                                    Style="{StaticResource EntityTrackerCardStyle}">
-                                <StackPanel>
-                                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="Dependencies" />
-                                    <TextBlock Margin="0,3,0,12"
-                                               Foreground="{DynamicResource Brush.Text.Secondary}"
-                                               Text="Choose an active entity, or add a name that is not an entity yet as unresolved."
-                                               TextWrapping="Wrap" />
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <controls:SuggestionComboBox x:Name="ManualDependencyComboBox"
-                                                                     controls:Placeholder.Text="Type an entity name to add a dependency"
-                                                                     AutomationProperties.HelpText="Open the dropdown to browse active entities, or type to search. Choose an entity to add it."
-                                                                     AutomationProperties.Name="Dependency"
-                                                                     IsEditable="True"
-                                                                     IsTextSearchEnabled="False"
-                                                                     DisplayMemberPath="SourceName"
-                                                                     TextSearch.TextPath="SourceName"
-                                                                     Style="{StaticResource SuggestionComboBoxStyle}"
-                                                                     ItemsSource="{Binding ManualCreation.Suggestions}"
-                                                                     ChooseCommand="{Binding ManualCreation.AddExistingCommand}"
-                                                                     Text="{Binding ManualCreation.DependencyQuery, UpdateSourceTrigger=PropertyChanged}"
-                                                                     IsDropDownOpen="{Binding ManualCreation.IsDependencySuggestionsOpen}"
-                                                                     RefreshCommand="{Binding ManualCreation.RefreshDependencySuggestionsCommand}" />
-                                        <Button Grid.Column="1"
-                                                Margin="8,0,0,0"
-                                                AutomationProperties.HelpText="Add the typed dependency even though it does not match an active entity."
-                                                Command="{Binding ManualCreation.AddUnresolvedCommand}"
-                                                Content="Add as unresolved"
-                                                Style="{StaticResource SecondaryButtonStyle}" />
-                                    </Grid>
-                                    <TextBlock Margin="0,7,0,0"
-                                               Foreground="{DynamicResource Brush.Text.Secondary}"
-                                               Text="{Binding ManualCreation.SearchMessage}"
-                                               TextWrapping="Wrap"
-                                               Visibility="{Binding ManualCreation.HasSearchMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
-
-                                    <TextBlock Margin="0,16,0,7" FontWeight="SemiBold" Text="Selected dependencies" />
-                                    <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}"
-                                               Text="No dependencies selected."
-                                               Visibility="{Binding ManualCreation.HasNoSelectedDependencies, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                    <ItemsControl ItemsSource="{Binding ManualCreation.SelectedDependencies}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Margin="0,0,0,6"
-                                                Padding="9"
-                                                Background="{DynamicResource Brush.Surface.Card}"
-                                                BorderBrush="{DynamicResource Brush.Border.Default}"
-                                                BorderThickness="1">
-                                            <DockPanel>
-                                                <Button DockPanel.Dock="Right"
-                                                        VerticalAlignment="Center"
-                                                        AutomationProperties.Name="{Binding SourceName, StringFormat=Remove dependency on {0}}"
-                                                        ToolTip="{Binding SourceName, StringFormat=Remove dependency on {0}}"
-                                                        Command="{Binding DataContext.ManualCreation.RemoveDependencyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                        CommandParameter="{Binding}"
-                                                        Style="{StaticResource IconButtonStyle}">
-                                                    <controls:Icon IconKey="Icon.Dismiss" />
-                                                </Button>
-                                                <StackPanel>
-                                                    <TextBlock FontWeight="SemiBold" Text="{Binding SourceName}" />
-                                                    <StackPanel Margin="0,2,0,0" Orientation="Horizontal">
-                                                        <controls:Icon Margin="0,0,5,0" Size="14" VerticalAlignment="Center"
-                                                                       IconKey="Icon.Warning"
-                                                                       Foreground="{DynamicResource Brush.Caution}"
-                                                                       Visibility="{Binding IsUnresolved, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}"
-                                                                   Text="{Binding ResolutionLabel}" />
-                                                    </StackPanel>
-                                                </StackPanel>
-                                            </DockPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Margin="0,12,0,0"
-                                    MaxHeight="110"
-                                    Style="{StaticResource WarningMessageStyle}"
-                                    Visibility="{Binding ManualCreation.HasWarnings, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <DockPanel>
-                                    <controls:Icon DockPanel.Dock="Left" Margin="0,1,8,0" Size="16" VerticalAlignment="Top"
-                                                   IconKey="Icon.Warning"
-                                                   Foreground="{DynamicResource Brush.Caution}"
-                                                   AutomationProperties.Name="Warning" />
-                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                        <ItemsControl ItemsSource="{Binding ManualCreation.Warnings}" />
-                                    </ScrollViewer>
-                                </DockPanel>
-                            </Border>
-
-                            <Border Margin="0,12,0,0"
-                                    Style="{StaticResource InfoMessageStyle}"
-                                    Visibility="{Binding ManualCreation.HasArchivedEntityMatch, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <DockPanel>
-                                    <Button DockPanel.Dock="Right"
-                                            Margin="12,0,0,0"
-                                            Command="{Binding ManualCreation.RestoreArchivedCommand}"
-                                            Content="Restore existing entity"
-                                            Style="{StaticResource SecondaryButtonStyle}" />
-                                    <TextBlock VerticalAlignment="Center"
-                                               Foreground="{DynamicResource Brush.Text.Primary}"
-                                               Text="{Binding ManualCreation.ArchivedEntityMessage}"
-                                               TextWrapping="Wrap" />
-                                </DockPanel>
-                            </Border>
-
-                            <Border Margin="0,12,0,0"
-                                    MaxHeight="110"
-                                    Style="{StaticResource ErrorMessageStyle}"
-                                    Visibility="{Binding ManualCreation.HasErrors, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <DockPanel>
-                                    <controls:Icon DockPanel.Dock="Left" Margin="0,1,8,0" Size="16" VerticalAlignment="Top"
-                                                   IconKey="Icon.DismissCircle"
-                                                   Foreground="{DynamicResource Brush.Critical}"
-                                                   AutomationProperties.Name="Error" />
-                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                        <ItemsControl ItemsSource="{Binding ManualCreation.Errors}" />
-                                    </ScrollViewer>
-                                </DockPanel>
-                            </Border>
-
-                            <TextBlock Margin="0,12,0,0"
-                                       Foreground="{DynamicResource Brush.Text.Primary}"
-                                       Text="{Binding ManualCreation.OperationMessage}"
-                                       Visibility="{Binding ManualCreation.HasOperationMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                        </StackPanel>
-                    </ScrollViewer>
-
-                    <StackPanel Grid.Row="2"
-                                Margin="0,12,0,0"
-                                HorizontalAlignment="Right"
-                                Orientation="Horizontal">
-                        <Button Margin="0,0,8,0"
-                                Command="{Binding ManualCreation.CancelCommand}"
-                                Content="Cancel"
-                                Style="{StaticResource SecondaryButtonStyle}" />
-                        <Button Command="{Binding ManualCreation.CreateCommand}"
-                                Content="Create entity"
-                                Style="{StaticResource PrimaryButtonStyle}" />
-                    </StackPanel>
-                </Grid>
-            </TabItem>
-
         </TabControl>
     </DockPanel>
 
+        <!-- Starts below the page's heading and toolbar (set from code), so Export, search and Fit to view
+             stay usable while it is open. -->
         <Border x:Name="EntityDetailsPane"
                 Width="420"
                 MaxWidth="420"
                 Padding="20"
+                IsVisibleChanged="OnDetailsPaneVisibilityChanged"
                 Panel.ZIndex="50"
                 HorizontalAlignment="Right"
                 VerticalAlignment="Stretch"
@@ -1649,6 +1411,13 @@
                                 CommandParameter="{Binding OverviewRow}"
                                 Style="{StaticResource PrimaryButtonStyle}"
                                 Visibility="{Binding CanEdit, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <Button Margin="0,0,8,0"
+                                Content="Restore…"
+                                AutomationProperties.HelpText="Open the archived entity to restore it, or to delete it permanently"
+                                Command="{Binding DataContext.EditOverviewEntityCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding OverviewRow}"
+                                Style="{StaticResource PrimaryButtonStyle}"
+                                Visibility="{Binding IsArchived, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         <Button x:Name="CloseEntityDetailsButton"
                                 Width="34"
                                 Height="34"
@@ -1689,6 +1458,7 @@
                 </DockPanel>
 
                 <ScrollViewer Grid.Row="1"
+                              Padding="0,0,14,0"
                               HorizontalScrollBarVisibility="Disabled"
                               VerticalScrollBarVisibility="Auto"
                               CanContentScroll="False"
@@ -1911,6 +1681,307 @@
                 </ScrollViewer>
             </Grid>
         </Border>
+
+        <!-- New entity: the same modal surface as the entity editor, over whichever page opened it. -->
+        <Grid x:Name="CreationOverlay"
+              Panel.ZIndex="100"
+              Background="{DynamicResource Brush.Overlay}"
+              FocusManager.IsFocusScope="True"
+              KeyboardNavigation.ControlTabNavigation="Cycle"
+              KeyboardNavigation.DirectionalNavigation="Cycle"
+              KeyboardNavigation.TabNavigation="Cycle"
+              Visibility="{Binding ManualCreation.IsOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Border x:Name="CreationSurface"
+                    MaxWidth="960"
+                    MaxHeight="760"
+                    Margin="24"
+                    Padding="22"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    Background="{DynamicResource Brush.Surface.Page}"
+                    BorderBrush="{DynamicResource Brush.Border.Medium}"
+                    BorderThickness="1"
+                    CornerRadius="7"
+                    Focusable="True">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Margin="0,0,0,14">
+                        <TextBlock FontSize="20"
+                                   AutomationProperties.HeadingLevel="Level2"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.Text.Primary}"
+                                   Text="{Binding DataContext.TrackerContextName, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=New entity in {0}, FallbackValue=New entity}" />
+                        <TextBlock Margin="0,3,0,0"
+                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Text="Add a new entity and its initial dependencies. A name no entity has yet is kept as an unresolved reference, and is connected when an entity with that name is added."
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <ScrollViewer x:Name="CreationScrollViewer"
+                                  Grid.Row="1"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <!-- Identity on the left, dependencies on the right, as in the entity editor. -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="16" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                            <Border Padding="16"
+                                    Style="{StaticResource EntityTrackerCardStyle}">
+                                <StackPanel>
+                                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="Identity and planning" />
+                                    <TextBlock Margin="0,3,0,14"
+                                               Foreground="{DynamicResource Brush.Text.Secondary}"
+                                               Text="Name the entity and optionally record ownership, grouping, and its requested priority."
+                                               TextWrapping="Wrap" />
+
+                                    <Label Target="{Binding ElementName=ManualEntityNameTextBox}" Content="Entity name" />
+                                    <TextBox x:Name="ManualEntityNameTextBox"
+                                             controls:Placeholder.Text="Name of the entity, e.g. customer_account"
+                                             Margin="0,4,0,12"
+                                             Padding="9,7"
+                                             AutomationProperties.Name="Entity name"
+                                             Text="{Binding ManualCreation.EntityName, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <TextBlock FontWeight="SemiBold" Text="Responsible developers" />
+                                    <TextBlock Margin="0,3,0,5" Text="Select one or more Project developers." />
+                                    <TextBox Margin="0,0,0,5" Padding="9,7"
+                                             AutomationProperties.Name="Search Project developers"
+                                             controls:Placeholder.Text="Search developers by initials or name"
+                                             Text="{Binding ManualCreation.DeveloperPicker.Query, UpdateSourceTrigger=PropertyChanged}" />
+                                    <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto"
+                                                  CanContentScroll="False">
+                                        <ItemsControl ItemsSource="{Binding ManualCreation.DeveloperPicker.FilteredChoices}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <CheckBox Margin="2,3" Content="{Binding Label}"
+                                                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                              AutomationProperties.Name="{Binding Label}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                    <TextBlock Margin="0,7,0,12"
+                                               Foreground="{DynamicResource Brush.Text.Secondary}"
+                                               Text="No available developers. Add one from Project → Developers."
+                                               TextWrapping="Wrap">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding ManualCreation.DeveloperPicker.HasAvailableDevelopers}" Value="False">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="16" />
+                                            <ColumnDefinition Width="220" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <Label Target="{Binding ElementName=ManualGroupComboBox}" Content="Group" />
+                                            <controls:SuggestionComboBox x:Name="ManualGroupComboBox"
+                                                      controls:Placeholder.Text="Type or choose a group"
+                                                      Margin="0,4,0,0"
+                                                      AutomationProperties.HelpText="Type a new group or choose an existing group."
+                                                      AutomationProperties.Name="Group"
+                                                      Style="{StaticResource SuggestionComboBoxStyle}"
+                                                      ItemsSource="{Binding ManualCreation.GroupSuggestions}"
+                                                      ChooseCommand="{Binding ManualCreation.UseGroupSuggestionCommand}"
+                                                      Text="{Binding ManualCreation.GroupName, UpdateSourceTrigger=PropertyChanged}"
+                                                      IsDropDownOpen="{Binding ManualCreation.IsGroupSuggestionsOpen}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2">
+                                            <Label Target="{Binding ElementName=ManualPriorityComboBox}" Content="Requested priority" />
+                                            <ComboBox x:Name="ManualPriorityComboBox"
+                                                      Margin="0,4,0,0"
+                                                      AutomationProperties.HelpText="Optional priority from one, highest, to five."
+                                                      AutomationProperties.Name="Requested priority"
+                                                      DisplayMemberPath="DisplayName"
+                                                      ItemsSource="{Binding ManualCreation.PriorityOptions}"
+                                                      SelectedValue="{Binding ManualCreation.SelectedRequestedPriority}"
+                                                      SelectedValuePath="Value" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <TextBlock Margin="0,7,0,0"
+                                               Foreground="{DynamicResource Brush.Text.Secondary}"
+                                               Text="{Binding ManualCreation.GroupSearchMessage}"
+                                               TextWrapping="Wrap"
+                                               Visibility="{Binding ManualCreation.HasGroupSearchMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border x:Name="ManualDependenciesSection"
+                                    Grid.Column="2"
+                                    Padding="16"
+                                    Style="{StaticResource EntityTrackerCardStyle}">
+                                <StackPanel>
+                                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="Dependencies" />
+                                    <TextBlock Margin="0,3,0,12"
+                                               Foreground="{DynamicResource Brush.Text.Secondary}"
+                                               Text="Choose an active entity, or add a name that is not an entity yet as unresolved."
+                                               TextWrapping="Wrap" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <controls:SuggestionComboBox x:Name="ManualDependencyComboBox"
+                                                                     controls:Placeholder.Text="Type an entity name to add a dependency"
+                                                                     AutomationProperties.HelpText="Open the dropdown to browse active entities, or type to search. Choose an entity to add it."
+                                                                     AutomationProperties.Name="Dependency"
+                                                                     IsEditable="True"
+                                                                     IsTextSearchEnabled="False"
+                                                                     DisplayMemberPath="SourceName"
+                                                                     TextSearch.TextPath="SourceName"
+                                                                     Style="{StaticResource SuggestionComboBoxStyle}"
+                                                                     ItemsSource="{Binding ManualCreation.Suggestions}"
+                                                                     ChooseCommand="{Binding ManualCreation.AddExistingCommand}"
+                                                                     Text="{Binding ManualCreation.DependencyQuery, UpdateSourceTrigger=PropertyChanged}"
+                                                                     IsDropDownOpen="{Binding ManualCreation.IsDependencySuggestionsOpen}"
+                                                                     RefreshCommand="{Binding ManualCreation.RefreshDependencySuggestionsCommand}" />
+                                        <Button Grid.Column="1"
+                                                Margin="8,0,0,0"
+                                                AutomationProperties.HelpText="Add the typed dependency even though it does not match an active entity."
+                                                Command="{Binding ManualCreation.AddUnresolvedCommand}"
+                                                Content="Add as unresolved"
+                                                Style="{StaticResource SecondaryButtonStyle}" />
+                                    </Grid>
+                                    <TextBlock Margin="0,7,0,0"
+                                               Foreground="{DynamicResource Brush.Text.Secondary}"
+                                               Text="{Binding ManualCreation.SearchMessage}"
+                                               TextWrapping="Wrap"
+                                               Visibility="{Binding ManualCreation.HasSearchMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+                                    <TextBlock Margin="0,16,0,7" FontWeight="SemiBold" Text="Selected dependencies" />
+                                    <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}"
+                                               Text="No dependencies selected."
+                                               Visibility="{Binding ManualCreation.HasNoSelectedDependencies, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                    <ItemsControl ItemsSource="{Binding ManualCreation.SelectedDependencies}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,0,6"
+                                                Padding="9"
+                                                Background="{DynamicResource Brush.Surface.Card}"
+                                                BorderBrush="{DynamicResource Brush.Border.Default}"
+                                                BorderThickness="1">
+                                            <DockPanel>
+                                                <Button DockPanel.Dock="Right"
+                                                        VerticalAlignment="Center"
+                                                        AutomationProperties.Name="{Binding SourceName, StringFormat=Remove dependency on {0}}"
+                                                        ToolTip="{Binding SourceName, StringFormat=Remove dependency on {0}}"
+                                                        Command="{Binding DataContext.ManualCreation.RemoveDependencyCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        Style="{StaticResource IconButtonStyle}">
+                                                    <controls:Icon IconKey="Icon.Dismiss" />
+                                                </Button>
+                                                <StackPanel>
+                                                    <TextBlock FontWeight="SemiBold" Text="{Binding SourceName}" />
+                                                    <StackPanel Margin="0,2,0,0" Orientation="Horizontal">
+                                                        <controls:Icon Margin="0,0,5,0" Size="14" VerticalAlignment="Center"
+                                                                       IconKey="Icon.Warning"
+                                                                       Foreground="{DynamicResource Brush.Caution}"
+                                                                       Visibility="{Binding IsUnresolved, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                                   Text="{Binding ResolutionLabel}" />
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </DockPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+
+                            </Grid>
+                            <Border Margin="0,12,0,0"
+                                    MaxHeight="110"
+                                    Style="{StaticResource WarningMessageStyle}"
+                                    Visibility="{Binding ManualCreation.HasWarnings, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <DockPanel>
+                                    <controls:Icon DockPanel.Dock="Left" Margin="0,1,8,0" Size="16" VerticalAlignment="Top"
+                                                   IconKey="Icon.Warning"
+                                                   Foreground="{DynamicResource Brush.Caution}"
+                                                   AutomationProperties.Name="Warning" />
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl ItemsSource="{Binding ManualCreation.Warnings}" />
+                                    </ScrollViewer>
+                                </DockPanel>
+                            </Border>
+
+                            <Border Margin="0,12,0,0"
+                                    Style="{StaticResource InfoMessageStyle}"
+                                    Visibility="{Binding ManualCreation.HasArchivedEntityMatch, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right"
+                                            Margin="12,0,0,0"
+                                            Command="{Binding ManualCreation.RestoreArchivedCommand}"
+                                            Content="Restore existing entity"
+                                            Style="{StaticResource SecondaryButtonStyle}" />
+                                    <TextBlock VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Brush.Text.Primary}"
+                                               Text="{Binding ManualCreation.ArchivedEntityMessage}"
+                                               TextWrapping="Wrap" />
+                                </DockPanel>
+                            </Border>
+
+                            <Border Margin="0,12,0,0"
+                                    MaxHeight="110"
+                                    Style="{StaticResource ErrorMessageStyle}"
+                                    Visibility="{Binding ManualCreation.HasErrors, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <DockPanel>
+                                    <controls:Icon DockPanel.Dock="Left" Margin="0,1,8,0" Size="16" VerticalAlignment="Top"
+                                                   IconKey="Icon.DismissCircle"
+                                                   Foreground="{DynamicResource Brush.Critical}"
+                                                   AutomationProperties.Name="Error" />
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl ItemsSource="{Binding ManualCreation.Errors}" />
+                                    </ScrollViewer>
+                                </DockPanel>
+                            </Border>
+
+                            <TextBlock Margin="0,12,0,0"
+                                       Foreground="{DynamicResource Brush.Text.Primary}"
+                                       Text="{Binding ManualCreation.OperationMessage}"
+                                       Visibility="{Binding ManualCreation.HasOperationMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <StackPanel Grid.Row="2"
+                                Margin="0,12,0,0"
+                                HorizontalAlignment="Right"
+                                Orientation="Horizontal">
+                        <Button Margin="0,0,8,0"
+                                Command="{Binding ManualCreation.CreateCommand}"
+                                Content="_Create entity"
+                                Style="{StaticResource PrimaryButtonStyle}" />
+                        <Button Margin="0,0,8,0"
+                                Command="{Binding ManualCreation.CreateAnotherCommand}"
+                                Content="Create and _add another"
+                                AutomationProperties.HelpText="Create this entity and keep the form open for the next one"
+                                Style="{StaticResource SecondaryButtonStyle}" />
+                        <Button x:Name="CancelCreationButton"
+                                Command="{Binding ManualCreation.CancelCommand}"
+                                Content="Cancel"
+                                Style="{StaticResource SecondaryButtonStyle}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
 
         <Grid x:Name="EditorOverlay"
               Panel.ZIndex="100"
@@ -2344,6 +2415,8 @@
                         </StackPanel>
                     </ScrollViewer>
 
+                    <!-- The destructive action stays alone on the left; the commit and Cancel (or Close, for
+                         a read-only archived entity) sit on the right, commit first. -->
                     <DockPanel Grid.Row="2" Margin="0,12,0,0">
                         <Button x:Name="ArchiveEntityButton" DockPanel.Dock="Left"
                                 Command="{Binding Editor.RequestArchiveCommand}"
@@ -2351,28 +2424,35 @@
                                 Style="{StaticResource DangerButtonStyle}"
                                 Visibility="{Binding Editor.CanArchive, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         <Button DockPanel.Dock="Left"
-                                x:Name="RestoreEntityButton"
-                                Margin="8,0,0,0"
-                                Command="{Binding Editor.RestoreEntityCommand}"
-                                Content="Restore entity"
-                                Style="{StaticResource PrimaryButtonStyle}"
-                                Visibility="{Binding Editor.CanRestoreEntity, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                        <Button DockPanel.Dock="Left"
                                 x:Name="PurgeEntityButton"
-                                Margin="8,0,0,0"
                                 Command="{Binding Editor.RequestPurgeCommand}"
                                 Content="Permanently delete entity"
                                 Style="{StaticResource DangerButtonStyle}"
                                 Visibility="{Binding Editor.CanPurgeEntity, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                             <Button Margin="0,0,8,0"
-                                    Command="{Binding Editor.CancelCommand}"
-                                    Content="Cancel"
-                                    Style="{StaticResource SecondaryButtonStyle}" />
-                            <Button Command="{Binding Editor.SaveCommand}"
+                                    Command="{Binding Editor.SaveCommand}"
                                     Content="{Binding Editor.SaveLabel}"
                                     Style="{StaticResource PrimaryButtonStyle}"
                                     Visibility="{Binding Editor.ShowSave, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <Button x:Name="RestoreEntityButton"
+                                    Margin="0,0,8,0"
+                                    Command="{Binding Editor.RestoreEntityCommand}"
+                                    Content="Restore entity"
+                                    Style="{StaticResource PrimaryButtonStyle}"
+                                    Visibility="{Binding Editor.CanRestoreEntity, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <Button Command="{Binding Editor.CancelCommand}">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
+                                        <Setter Property="Content" Value="Cancel" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Editor.IsArchivedMode}" Value="True">
+                                                <Setter Property="Content" Value="Close" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
                         </StackPanel>
                     </DockPanel>
 
@@ -2405,16 +2485,17 @@
                                 <StackPanel Margin="0,20,0,0"
                                             HorizontalAlignment="Right"
                                             Orientation="Horizontal">
-                                    <Button x:Name="CancelArchiveButton"
-                                            Margin="0,0,8,0"
-                                            Command="{Binding Editor.CancelArchiveCommand}"
-                                            Content="Cancel — keep entity"
-                                            IsDefault="True"
-                                            IsCancel="True"
-                                            Style="{StaticResource PrimaryButtonStyle}" />
-                                    <Button Command="{Binding Editor.ConfirmArchiveCommand}"
+                                    <!-- Cancel is the default and starts focused, so Enter and Esc keep the entity. -->
+                                    <Button Margin="0,0,8,0"
+                                            Command="{Binding Editor.ConfirmArchiveCommand}"
                                             Content="Archive entity"
                                             Style="{StaticResource DangerButtonStyle}" />
+                                    <Button x:Name="CancelArchiveButton"
+                                            Command="{Binding Editor.CancelArchiveCommand}"
+                                            Content="Cancel"
+                                            IsDefault="True"
+                                            IsCancel="True"
+                                            Style="{StaticResource SecondaryButtonStyle}" />
                                 </StackPanel>
                             </StackPanel>
                         </Border>
@@ -2457,16 +2538,16 @@
                                 <StackPanel Margin="0,20,0,0"
                                             HorizontalAlignment="Right"
                                             Orientation="Horizontal">
+                                    <Button Margin="0,0,8,0"
+                                            Command="{Binding Editor.ConfirmPurgeCommand}"
+                                            Content="Permanently delete"
+                                            Style="{StaticResource DangerButtonStyle}" />
                                     <Button x:Name="CancelPurgeButton"
-                                            Margin="0,0,8,0"
                                             Command="{Binding Editor.CancelPurgeCommand}"
                                             Content="Cancel"
                                             IsDefault="True"
                                             IsCancel="True"
-                                            Style="{StaticResource PrimaryButtonStyle}" />
-                                    <Button Command="{Binding Editor.ConfirmPurgeCommand}"
-                                            Content="Permanently delete"
-                                            Style="{StaticResource DangerButtonStyle}" />
+                                            Style="{StaticResource SecondaryButtonStyle}" />
                                 </StackPanel>
                             </StackPanel>
                         </Border>

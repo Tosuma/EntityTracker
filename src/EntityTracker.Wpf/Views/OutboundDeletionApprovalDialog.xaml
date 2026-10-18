@@ -28,10 +28,10 @@
         </ListBox>
         <StackPanel Grid.Row="3" Margin="0,14,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
             <!-- Enter must never approve an irreversible deletion: Cancel is the default and starts focused. -->
-            <Button x:Name="CancelButton" Content="Cancel" IsCancel="True" IsDefault="True" MinWidth="100" />
-            <Button Margin="8,0,0,0" Content="Approve deletion" MinWidth="135"
+            <Button Margin="0,0,8,0" Content="Approve deletion" MinWidth="135"
                     Click="OnApprove" Style="{StaticResource DangerButtonStyle}"
                     AutomationProperties.HelpText="Permanently remove these objects from the repository snapshot" />
+            <Button x:Name="CancelButton" Content="Cancel" IsCancel="True" IsDefault="True" MinWidth="100" />
         </StackPanel>
     </Grid>
 </Window>
