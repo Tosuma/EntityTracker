@@ -899,7 +899,9 @@ public sealed class MainWindowViewModelTests
         Assert.False(viewModel.OpenCreateEntityCommand.CanExecute(null));
 
         viewModel.ManualCreation.CreateAnotherCommand.Execute(null);
-        await WaitUntilAsync(() => viewModel.OverviewItems.Count == 1 && !viewModel.IsBusy);
+        // The confirmation is set after the list refresh, so wait for both.
+        await WaitUntilAsync(() => viewModel.OverviewItems.Count == 1 && !viewModel.IsBusy &&
+            viewModel.ManualCreation.OperationMessage?.Contains("First", StringComparison.Ordinal) == true);
 
         Assert.True(viewModel.ManualCreation.IsOpen);
         Assert.Equal(string.Empty, viewModel.ManualCreation.EntityName);
