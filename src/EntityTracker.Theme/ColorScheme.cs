@@ -45,18 +45,6 @@ public static class ColorScheme
         public const string NotificationGreen = "#96E4AD";
         public const string NotificationRed = "#FF9C94";
         public const string NotificationYellow = "#FFD188";
-
-        // Status colours: one hue each, all mid-tones (relative luminance about 0.245), so the dark brand
-        // text reads on every one (about 4.7:1) and each shape stays visible on light and dark pages
-        // (3.2:1 or more), in both themes and in exported images.
-        public const string StatusGrey = "#778C8A";
-        public const string StatusBlue = "#4C8CCB";
-        public const string StatusOrange = "#E65C20";
-        public const string StatusViolet = "#9A77CC";
-        public const string StatusRed = "#E25A66";
-        public const string StatusTeal = "#209888";
-        public const string StatusGreen = "#4D993E";
-        public const string StatusAmber = "#B77B14";
     }
 
     /// <summary>
@@ -64,32 +52,35 @@ public static class ColorScheme
     /// progress charts and the exported report.
     /// </summary>
     /// <remarks>
-    /// Every status has its own colour; the dependency graph also draws a glyph per status, so a status is
-    /// never told by colour alone.
+    /// Brand colours only. In progress and Reworking share one colour: both mean the entity is being worked
+    /// on. Coral, the colour that asks for attention, is kept for Blocked; Rework needed is a calm mint, as
+    /// the entity is done and blocks nothing. The dependency graph also draws a glyph per status, so a status
+    /// is never told by colour alone.
     /// </remarks>
     public static class Status
     {
-        public static readonly StatusColor NotStarted = new(Base.StatusGrey, Base.DarkGreen);
-        public static readonly StatusColor InProgress = new(Base.StatusBlue, Base.DarkGreen);
-        public static readonly StatusColor ReworkNeeded = new(Base.StatusOrange, Base.DarkGreen);
-        public static readonly StatusColor Reworking = new(Base.StatusViolet, Base.DarkGreen);
-        public static readonly StatusColor Blocked = new(Base.StatusRed, Base.DarkGreen);
-        public static readonly StatusColor DevelopmentCompleted = new(Base.StatusTeal, Base.DarkGreen);
-        public static readonly StatusColor Reconciled = new(Base.StatusGreen, Base.DarkGreen);
+        public static readonly StatusColor NotStarted = new(Base.Green40, Base.DarkGreen);
+        public static readonly StatusColor InProgress = new(Base.Green80, Base.White);
+        public static readonly StatusColor ReworkNeeded = new(Base.NotificationGreen, Base.DarkGreen);
+        public static readonly StatusColor Reworking = InProgress;
+        public static readonly StatusColor Blocked = new(Base.Coral, Base.DarkGreen);
+        public static readonly StatusColor DevelopmentCompleted = new(Base.DeepTeal, Base.White);
+        public static readonly StatusColor Reconciled = new(Base.Green100, Base.White);
     }
 
     /// <summary>
     /// Work statuses in the app: the Overview's and the dashboard's work status badges. They share the
-    /// development status colours where the meaning matches; waiting on dependencies has its own amber.
+    /// development status colours where the meaning matches; waiting on dependencies is a soft pale amber,
+    /// visible without competing with Blocked.
     /// </summary>
     public static class WorkStatus
     {
-        public static readonly StatusColor Ready = new(Base.StatusGrey, Base.DarkGreen);
-        public static readonly StatusColor WaitingOnDependencies = new(Base.StatusAmber, Base.DarkGreen);
-        public static readonly StatusColor Blocked = new(Base.StatusRed, Base.DarkGreen);
-        public static readonly StatusColor InProgress = new(Base.StatusBlue, Base.DarkGreen);
-        public static readonly StatusColor Completed = new(Base.StatusTeal, Base.DarkGreen);
-        public static readonly StatusColor Reconciled = new(Base.StatusGreen, Base.DarkGreen);
+        public static readonly StatusColor Ready = Status.NotStarted;
+        public static readonly StatusColor WaitingOnDependencies = new(Base.PaleAmber, Base.DarkGreen);
+        public static readonly StatusColor Blocked = Status.Blocked;
+        public static readonly StatusColor InProgress = Status.InProgress;
+        public static readonly StatusColor Completed = Status.DevelopmentCompleted;
+        public static readonly StatusColor Reconciled = Status.Reconciled;
     }
 
     /// <summary>Work statuses in the exported report's tables: the same colours as in the app.</summary>
@@ -165,8 +156,8 @@ public static class ColorScheme
     }
 
     /// <summary>
-    /// Progress charts: saved as images, in the exported report, and in the app's light theme. The series
-    /// use the mid-tone status colours, which read on light and dark canvases alike.
+    /// Progress charts: saved as images, in the exported report, and in the app's light theme. The trend
+    /// lines use brand colours that read on light and dark canvases alike.
     /// </summary>
     public static class Chart
     {
@@ -175,11 +166,11 @@ public static class ColorScheme
         public const string Grid = Base.Green20;
         public const string SliceBorder = Base.White;
         public const string Entities = Base.Green80;
-        public const string Implemented = Base.StatusTeal;
-        public const string ReadyTrend = Base.StatusGrey;
-        public const string WaitingTrend = Base.StatusAmber;
-        public const string Increase = Base.StatusGreen;
-        public const string Decrease = Base.StatusRed;
+        public const string Implemented = Base.DeepTeal;
+        public const string ReadyTrend = Base.Green60;
+        public const string WaitingTrend = Base.Amber;
+        public const string Increase = Base.Green60;
+        public const string Decrease = Base.Coral;
         public const string NetChange = Base.Green60;
         public const string UnknownStatus = Base.Green40;
         public const string TooltipBackground = Base.White;

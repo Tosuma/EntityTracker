@@ -437,30 +437,20 @@
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
                                        TargetType="Button">
-                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsReworkNeededSummarySelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green100}" />
                                             <Setter Property="BorderThickness" Value="2" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </Button.Style>
                             <StackPanel>
-                                <StackPanel Orientation="Horizontal">
-                                    <Border Width="9"
-                                            Height="9"
-                                            Margin="0,0,6,0"
-                                            VerticalAlignment="Center"
-                                            Background="{DynamicResource Brush.Status.ReworkNeeded}"
-                                            CornerRadius="5" />
-                                    <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Rework needed" />
-                                </StackPanel>
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Rework needed" />
                                 <TextBlock Margin="0,3,0,0"
                                            FontSize="22"
                                            FontWeight="SemiBold"
-                                           Foreground="{DynamicResource Brush.Text.Primary}"
                                            Text="{Binding ReworkNeededCount}" />
                             </StackPanel>
                         </Button>
@@ -494,7 +484,9 @@
                                 CommandParameter="{x:Static domain:DevelopmentStatus.Blocked}"
                                 ToolTip="Show manually blocked entities">
                             <Button.Style>
+                                <!-- Blocked asks for attention: the coral border and dot, as its status colour. -->
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}" TargetType="Button">
+                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsBlockedSummarySelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
@@ -505,7 +497,15 @@
                                 </Style>
                             </Button.Style>
                             <StackPanel>
-                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Blocked" />
+                                <StackPanel Orientation="Horizontal">
+                                    <Border Width="9"
+                                            Height="9"
+                                            Margin="0,0,6,0"
+                                            VerticalAlignment="Center"
+                                            Background="{DynamicResource Brush.Status.Blocked}"
+                                            CornerRadius="5" />
+                                    <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Blocked" />
+                                </StackPanel>
                                 <TextBlock Margin="0,3,0,0" FontSize="22" FontWeight="SemiBold"
                                            Text="{Binding BlockedCount}" />
                             </StackPanel>
