@@ -168,6 +168,8 @@ internal sealed class ReadmeScreenshotGenerator
                 },
                 TimeSpan.FromSeconds(8.2), TimeSpan.FromSeconds(3.5), 142, 1, 0,
                 "Completed"));
+            // A synced card is one status row; its details are what this screenshot shows.
+            shell.ProjectReporting.RepositoryCard.ToggleDetailsCommand.Execute(null);
             await renderer.CaptureWithTextOverrideAsync(
                 "project-git-repository.png", repositoryFixturePath,
                 @"C:\Projects\order-platform", settleMilliseconds: 900);

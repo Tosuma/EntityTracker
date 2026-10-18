@@ -97,6 +97,12 @@ Use a hybrid administration layout:
 - support the minimum window size, common DPI scaling, and wide desktop layouts;
 - use virtualization for long tables and comparison matrices.
 
+Below a window width of 1280 the app uses a compact layout (`Controls/Layout`): the header puts the
+context above the Project and Tracker selectors, page toolbars (`PageToolbarStyle`) move under their
+heading and wrap, two-pane pages (Developers, dashboard charts) stack, and card rows use fewer
+columns. A Git repository card that is synced with nothing to do shows one status row with
+**Sync now** and **Details**; it shows everything when unlinked, syncing or needing an action.
+
 The default active entity table shows manager essentials:
 
 - Priority;
@@ -152,7 +158,9 @@ application theme.
 - Preserve accepted filtering semantics: OR within a column and AND across columns.
 - Keep filter and status-sort actions in Fluent column-header flyouts. Do not add a duplicate filter
   pane or applied-filter chip system.
-- Preserve lazy entity/dependency search and `Ctrl+F`.
+- Preserve lazy entity/dependency search and `Ctrl+F`. Search is a box in the page toolbar
+  (Overview, Archived, Developers) with a search icon; the graph's box finds on Enter, without a
+  separate Find button.
 - Preserve clickable summary cards as status-filter shortcuts.
 - Keep bulk status selection atomic and clear selection when context or projection changes.
 - Keep Complete/Partial synchronization semantics and actionable review behavior unchanged.

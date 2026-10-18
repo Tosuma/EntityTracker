@@ -30,4 +30,23 @@ public sealed class ProjectRepositoryCardTimingTests
         Assert.Equal(first.LastSyncTiming, factory.Create(firstId).LastSyncTiming);
         Assert.False(factory.Create(secondId).HasLastSyncTiming);
     }
+
+    [Fact]
+    public void AnUnlinkedCardShowsItsDetailsAndTheToggleRaisesTheLayout()
+    {
+        ProjectRepositoryCardViewModelFactory factory = new(null!, null!);
+        ProjectRepositoryCardViewModel card = factory.Create(new ProjectId(Guid.NewGuid()));
+        List<string> changed = [];
+        card.PropertyChanged += (_, args) => changed.Add(args.PropertyName!);
+
+        Assert.False(card.IsCompact);
+        Assert.False(card.CanHideDetails);
+
+        card.ToggleDetailsCommand.Execute(null);
+
+        // Linking is what makes a card compact; unlinked, it keeps the Link repository details.
+        Assert.False(card.IsCompact);
+        Assert.Contains(nameof(card.IsCompact), changed);
+        Assert.Contains(nameof(card.CanHideDetails), changed);
+    }
 }

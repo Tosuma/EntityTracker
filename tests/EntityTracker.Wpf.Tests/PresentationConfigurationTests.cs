@@ -60,6 +60,31 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void PageToolbarsWrapUnderTheirHeadingAndSearchIsInline()
+    {
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        foreach (string view in new[] { "PortfolioView.xaml", "ProjectDashboardView.xaml" })
+            Assert.Single(LoadWpfXaml("Views", view).Descendants(), element =>
+                element.Name.LocalName == "WrapPanel" &&
+                (string?)element.Attribute("Style") == "{StaticResource PageToolbarStyle}");
+        XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XElement[] toolbars = workspace.Descendants()
+            .Where(element => (string?)element.Attribute("Style") == "{StaticResource PageToolbarStyle}")
+            .ToArray();
+        Assert.Equal(3, toolbars.Length);
+
+        // Overview and Archived search from a box in the toolbar; the graph's box finds on Enter.
+        Assert.Contains(toolbars[0].Elements(), element =>
+            (string?)element.Attribute(x + "Name") == "OverviewSearchTextBox");
+        Assert.Contains(toolbars[2].Elements(), element =>
+            (string?)element.Attribute(x + "Name") == "ArchivedSearchTextBox");
+        Assert.DoesNotContain(workspace.Descendants(), element =>
+            (string?)element.Attribute("Command") == "{Binding FindCommand}");
+        Assert.DoesNotContain(workspace.Descendants(), element =>
+            ((string?)element.Attribute("Visibility"))?.Contains("SearchOpen", StringComparison.Ordinal) == true);
+    }
+
+    [Fact]
     public void DependencyGraphToolbarCannotResizeAndMoveTheMap()
     {
         // Regression: a selection description above the map wrapped onto a second line when an
@@ -998,13 +1023,13 @@ public sealed class PresentationConfigurationTests
 
         Assert.Equal(
         [
-            "{Binding DataContext.ActiveTable.WorkStatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
-            "{Binding DataContext.ActiveTable.StatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
-            "{Binding DataContext.ActiveTable.ResponsibleDeveloperFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
-            "{Binding DataContext.ActiveTable.GroupFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
-            "{Binding DataContext.ArchivedTable.StatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
-            "{Binding DataContext.ArchivedTable.ResponsibleDeveloperFilter, RelativeSource={RelativeSource AncestorType=UserControl}}",
-            "{Binding DataContext.ArchivedTable.GroupFilter, RelativeSource={RelativeSource AncestorType=UserControl}}"
+            "{Binding Data.ActiveTable.WorkStatusFilter, Source={StaticResource WorkspaceProxy}}",
+            "{Binding Data.ActiveTable.StatusFilter, Source={StaticResource WorkspaceProxy}}",
+            "{Binding Data.ActiveTable.ResponsibleDeveloperFilter, Source={StaticResource WorkspaceProxy}}",
+            "{Binding Data.ActiveTable.GroupFilter, Source={StaticResource WorkspaceProxy}}",
+            "{Binding Data.ArchivedTable.StatusFilter, Source={StaticResource WorkspaceProxy}}",
+            "{Binding Data.ArchivedTable.ResponsibleDeveloperFilter, Source={StaticResource WorkspaceProxy}}",
+            "{Binding Data.ArchivedTable.GroupFilter, Source={StaticResource WorkspaceProxy}}"
         ],
             configuredFilters);
     }

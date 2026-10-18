@@ -23,6 +23,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
     private CancellationTokenSource? _syncCancellation;
     private ProjectSyncLink? _link;
     private bool _busy;
+    private bool _showDetails;
     private ProjectSyncTiming? _lastTiming;
     private readonly AsyncCommand _linkCommand;
     private readonly AsyncCommand _syncCommand;
@@ -61,6 +62,24 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
     public ICommand UnlinkCommand => _unlinkCommand;
     public ICommand CancelSyncCommand => _cancelSyncCommand;
     public bool CanCancelSync => _syncCancellation is not null;
+
+    /// <summary>
+    /// Whether the card shows one status row instead of the repository's details: while it is linked and
+    /// nothing needs doing. An unlinked Project, a pending action or a running sync shows the details.
+    /// </summary>
+    public bool IsCompact => IsLinked && !HasPendingAction && !CanCancelSync && !_showDetails;
+
+    /// <summary>Whether the details can be folded back into the status row.</summary>
+    public bool CanHideDetails => IsLinked && !HasPendingAction && !CanCancelSync && _showDetails;
+
+    /// <summary>Shows or hides the repository's details while the card would be compact.</summary>
+    public ICommand ToggleDetailsCommand => _toggleDetailsCommand ??= new RelayCommand(() =>
+    {
+        _showDetails = !_showDetails;
+        Notify();
+    });
+
+    private RelayCommand? _toggleDetailsCommand;
     public bool IsLinked => _link is not null && _link.SyncStatus != "RemoteDeletedLocalKept";
     public bool IsBusy => _busy;
     public string RepositoryPath => IsLinked ? _link!.RepositoryPath : "No repository linked";
@@ -303,7 +322,8 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
         foreach (string name in new[] { nameof(IsLinked), nameof(IsBusy), nameof(RepositoryPath),
                      nameof(Branch), nameof(Upstream), nameof(LastResult), nameof(LastSyncTiming),
                      nameof(HasLastSyncTiming), nameof(PendingAction),
-                     nameof(HasPendingAction), nameof(CanCancelSync) })
+                     nameof(HasPendingAction), nameof(CanCancelSync), nameof(IsCompact),
+                     nameof(CanHideDetails) })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         _linkCommand.NotifyCanExecuteChanged();
         _syncCommand.NotifyCanExecuteChanged();

@@ -17,6 +17,8 @@
         PreviewKeyDown="OnWorkspacePreviewKeyDown"
         PreviewMouseDown="OnWindowPreviewMouseDown">
     <UserControl.Resources>
+        <!-- Column headers sit outside the view's tree for binding, so they reach the view model through this. -->
+        <controls:BindingProxy x:Key="WorkspaceProxy" Data="{Binding}" />
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
 
         <Style x:Key="SummaryCardStyle" TargetType="Border">
@@ -276,7 +278,7 @@
                     </Grid.RowDefinitions>
 
                     <DockPanel Margin="0,0,0,14">
-                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <WrapPanel Style="{StaticResource PageToolbarStyle}">
                             <TextBlock Margin="0,0,12,0"
                                        VerticalAlignment="Center"
                                        Foreground="{DynamicResource Brush.Text.Secondary}"
@@ -288,14 +290,24 @@
                                     Style="{StaticResource SecondaryIconButtonStyle}">
                                 <controls:Icon IconKey="Icon.FilterDismiss" />
                             </Button>
-                            <Button Margin="0,0,8,0"
-                                    Command="{Binding OpenOverviewSearchCommand}"
-                                    Click="OnOpenOverviewSearchClick"
-                                    ToolTip="Search entities (Ctrl+F)"
-                                    AutomationProperties.Name="Search entities"
-                                    Style="{StaticResource SecondaryIconButtonStyle}">
-                                <controls:Icon IconKey="Icon.Search" />
-                            </Button>
+                            <!-- The page's search: always visible, focused by Ctrl+F; Fluent's clear button
+                                 empties it. The same box is on Archived. -->
+                            <controls:Icon Margin="0,0,6,0" VerticalAlignment="Center" Size="16"
+                                           Foreground="{DynamicResource Brush.Text.Secondary}" IconKey="Icon.Search" />
+                            <TextBox x:Name="OverviewSearchTextBox"
+                                     GotKeyboardFocus="OnSearchBoxFocused"
+                                     Width="240"
+                                     Margin="0,0,8,0"
+                                     VerticalAlignment="Center"
+                                     controls:Placeholder.Text="Search entities (Ctrl+F)"
+                                     AutomationProperties.Name="Search active entities"
+                                     Text="{Binding OverviewSearchQuery, UpdateSourceTrigger=PropertyChanged}" />
+                            <CheckBox Margin="0,0,12,0"
+                                      VerticalAlignment="Center"
+                                      Content="Dependency names"
+                                      ToolTip="Search the names of dependencies instead of entity names"
+                                      IsEnabled="{Binding ActiveTable.CanSearchDependencies}"
+                                      IsChecked="{Binding SearchOverviewDependencies}" />
                             <Button Margin="0,0,8,0"
                                     Command="{Binding RefreshCommand}"
                                     ToolTip="Refresh (F5)"
@@ -312,13 +324,17 @@
                                 <controls:IconLabel IconKey="Icon.Add" Text="New entity" />
                             </Button>
                             <Button x:Name="OverviewExportButton"
-                                    Content="Export"
                                     ToolTip="Export as Excel or CSV (Ctrl+E)"
                                     AutomationProperties.Name="Export overview"
                                     AutomationProperties.HelpText="Choose Excel or CSV export"
                                     PreviewMouseDown="OnOverviewExportButtonPreviewMouseDown"
                                     Click="OnOverviewExportButtonClick"
-                                    Style="{StaticResource PrimaryButtonStyle}" />
+                                    Style="{StaticResource PrimaryButtonStyle}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Export" />
+                                    <controls:Icon Margin="8,0,0,0" Size="12" VerticalAlignment="Center" IconKey="Icon.ArrowDown" />
+                                </StackPanel>
+                            </Button>
                             <Popup x:Name="OverviewExportPopup"
                                    PlacementTarget="{Binding ElementName=OverviewExportButton}"
                                    Placement="Bottom" VerticalOffset="4"
@@ -326,17 +342,24 @@
                                    StaysOpen="False" AllowsTransparency="True"
                                    Opened="OnOverviewExportPopupOpened"
                                    PreviewKeyDown="OnOverviewExportPopupKeyDown">
-                                <Border Padding="6" MinWidth="190"
+                                <Border Padding="8" Width="280"
                                         Background="{DynamicResource Brush.Surface.Page}"
                                         BorderBrush="{DynamicResource Brush.Border.Strong}"
                                         BorderThickness="1" CornerRadius="5">
+                                    <!-- What the export holds, before choosing a format: the rows (as set in
+                                         Settings) and the internal content a client report leaves out. -->
                                     <StackPanel>
+                                        <TextBlock x:Name="OverviewExportScope" Margin="2,0,2,8"
+                                                   Style="{StaticResource PageDescriptionTextStyle}"
+                                                   Text="{Binding ExportScopeSummary, Mode=OneWay}" />
                                         <Button x:Name="OverviewExcelExportButton" Content="Excel workbook (.xlsx)"
+                                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                                 Command="{Binding ExportOverviewCommand}"
                                                 CommandParameter="{x:Static services:OverviewExportFormat.Excel}"
                                                 Click="OnOverviewExportChosen"
                                                 Style="{StaticResource SecondaryButtonStyle}" />
                                         <Button Margin="0,4,0,0" Content="CSV file (.csv)"
+                                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                                 Command="{Binding ExportOverviewCommand}"
                                                 CommandParameter="{x:Static services:OverviewExportFormat.Csv}"
                                                 Click="OnOverviewExportChosen"
@@ -344,7 +367,7 @@
                                     </StackPanel>
                                 </Border>
                             </Popup>
-                        </StackPanel>
+                        </WrapPanel>
                         <StackPanel>
                             <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Overview" />
                             <TextBlock Margin="0,3,0,0"
@@ -633,52 +656,6 @@
                         </Border>
                     </WrapPanel>
 
-                    <Border Grid.Row="2"
-                            Margin="0,0,0,12"
-                            Padding="12"
-                            Background="{DynamicResource Brush.Surface.Card}"
-                            BorderBrush="{DynamicResource Brush.Border.Medium}"
-                            BorderThickness="1"
-                            CornerRadius="4"
-                            Visibility="{Binding IsOverviewSearchOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-
-                            <TextBox x:Name="OverviewSearchTextBox"
-                                     controls:Placeholder.Text="Search active entities"
-                                     AutomationProperties.Name="Search active entities"
-                                     MinWidth="280"
-                                     Padding="9,7"
-                                     ToolTip="Search active entities"
-                                     Text="{Binding OverviewSearchQuery, UpdateSourceTrigger=PropertyChanged}" />
-                            <Button Grid.Column="1"
-                                    Margin="8,0,0,0"
-                                    Command="{Binding ClearOverviewSearchCommand}"
-                                    Content="Clear"
-                                    Style="{StaticResource SecondaryButtonStyle}" />
-                            <Button Grid.Column="2"
-                                    Margin="8,0,0,0"
-                                    Command="{Binding CloseOverviewSearchCommand}"
-                                    Content="Close search"
-                                    Style="{StaticResource SecondaryButtonStyle}" />
-
-                            <CheckBox Grid.Row="1"
-                                      Margin="0,9,0,0"
-                                      VerticalAlignment="Center"
-                                      Content="Search dependency names"
-                                      IsEnabled="{Binding ActiveTable.CanSearchDependencies}"
-                                      IsChecked="{Binding SearchOverviewDependencies}" />
-                        </Grid>
-                    </Border>
-
                     <Border x:Name="BulkStatusToolbar"
                             Grid.Row="3"
                             Margin="0,0,0,12"
@@ -723,7 +700,7 @@
                             <DataGrid.Columns>
                                 <DataGridTextColumn Width="72" Binding="{Binding Priority}" Header="Priority" ElementStyle="{StaticResource CenteredCellTextStyle}" />
                                 <DataGridTextColumn Width="70" Binding="{Binding Rank}" Header="Rank" ElementStyle="{StaticResource CenteredCellTextStyle}" />
-                                <DataGridTemplateColumn Width="2.2*" Header="Entity">
+                                <DataGridTemplateColumn Width="2.2*" MinWidth="180" Header="Entity">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
                                             <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
@@ -794,7 +771,7 @@
                                 </DataGridTemplateColumn>
                                 <DataGridTemplateColumn Width="200">
                                     <DataGridTemplateColumn.Header>
-                                        <controls:FilterableColumnHeader Filter="{Binding DataContext.ActiveTable.WorkStatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                        <controls:FilterableColumnHeader Filter="{Binding Data.ActiveTable.WorkStatusFilter, Source={StaticResource WorkspaceProxy}}" />
                                     </DataGridTemplateColumn.Header>
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
@@ -809,7 +786,7 @@
                                 </DataGridTemplateColumn>
                                 <DataGridTemplateColumn Width="180">
                                     <DataGridTemplateColumn.Header>
-                                        <controls:FilterableColumnHeader Filter="{Binding DataContext.ActiveTable.StatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                        <controls:FilterableColumnHeader Filter="{Binding Data.ActiveTable.StatusFilter, Source={StaticResource WorkspaceProxy}}" />
                                     </DataGridTemplateColumn.Header>
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
@@ -824,7 +801,7 @@
                                 </DataGridTemplateColumn>
                                 <DataGridTemplateColumn Width="150">
                                     <DataGridTemplateColumn.Header>
-                                        <controls:FilterableColumnHeader Filter="{Binding DataContext.ActiveTable.ResponsibleDeveloperFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                        <controls:FilterableColumnHeader Filter="{Binding Data.ActiveTable.ResponsibleDeveloperFilter, Source={StaticResource WorkspaceProxy}}" />
                                     </DataGridTemplateColumn.Header>
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
@@ -865,7 +842,7 @@
                                 <DataGridTextColumn Width="145"
                                                     Binding="{Binding GroupNameDisplay}" ElementStyle="{StaticResource CenteredCellTextStyle}">
                                     <DataGridTextColumn.Header>
-                                        <controls:FilterableColumnHeader Filter="{Binding DataContext.ActiveTable.GroupFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                        <controls:FilterableColumnHeader Filter="{Binding Data.ActiveTable.GroupFilter, Source={StaticResource WorkspaceProxy}}" />
                                     </DataGridTextColumn.Header>
                                 </DataGridTextColumn>
                                 <DataGridTextColumn Width="2.2*"
@@ -964,7 +941,7 @@
                     </Grid.RowDefinitions>
 
                     <DockPanel Margin="0,0,0,12">
-                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+                        <WrapPanel Style="{StaticResource PageToolbarStyle}">
                             <TextBlock Margin="0,0,12,0"
                                        VerticalAlignment="Center"
                                        Foreground="{DynamicResource Brush.Text.Secondary}"
@@ -994,7 +971,7 @@
                                     Content="Export PNG"
                                     AutomationProperties.HelpText="Save the dependency graph as a PNG image"
                                     Style="{StaticResource PrimaryButtonStyle}" />
-                        </StackPanel>
+                        </WrapPanel>
                         <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Dependency graph" />
                     </DockPanel>
 
@@ -1019,10 +996,8 @@
                                                      ChooseCommand="{Binding ChooseSuggestionCommand}"
                                                      SubmitCommand="{Binding FindCommand}"
                                                      RefreshCommand="{Binding RefreshSuggestionsCommand}" />
-                        <Button Margin="0,0,16,6"
-                                Command="{Binding FindCommand}"
-                                Content="Find"
-                                Style="{StaticResource SecondaryButtonStyle}" />
+                        <!-- Enter in the box finds the best match, so the box needs no Find button. -->
+                        <Border Width="8" />
                         <CheckBox Margin="0,0,16,6" VerticalAlignment="Center"
                                   Content="Focus on selection"
                                   AutomationProperties.HelpText="Hide everything except the selected entities and what they highlight."
@@ -1205,7 +1180,7 @@
                     </Grid.RowDefinitions>
 
                     <DockPanel Margin="0,0,0,14">
-                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <WrapPanel Style="{StaticResource PageToolbarStyle}">
                             <Button Margin="0,0,8,0"
                                     Command="{Binding ArchivedTable.ClearAllFiltersCommand}"
                                     ToolTip="Clear filters and sort"
@@ -1213,21 +1188,23 @@
                                     Style="{StaticResource SecondaryIconButtonStyle}">
                                 <controls:Icon IconKey="Icon.FilterDismiss" />
                             </Button>
-                            <Button Margin="0,0,8,0"
-                                    Command="{Binding ArchivedTable.OpenSearchCommand}"
-                                    Click="OnOpenOverviewSearchClick"
-                                    ToolTip="Search archived entities (Ctrl+F)"
-                                    AutomationProperties.Name="Search archived entities"
-                                    Style="{StaticResource SecondaryIconButtonStyle}">
-                                <controls:Icon IconKey="Icon.Search" />
-                            </Button>
+                            <controls:Icon Margin="0,0,6,0" VerticalAlignment="Center" Size="16"
+                                           Foreground="{DynamicResource Brush.Text.Secondary}" IconKey="Icon.Search" />
+                            <TextBox x:Name="ArchivedSearchTextBox"
+                                     GotKeyboardFocus="OnSearchBoxFocused"
+                                     Width="240"
+                                     Margin="0,0,8,0"
+                                     VerticalAlignment="Center"
+                                     controls:Placeholder.Text="Search archived entities (Ctrl+F)"
+                                     AutomationProperties.Name="Search archived entities"
+                                     Text="{Binding ArchivedTable.SearchQuery, UpdateSourceTrigger=PropertyChanged}" />
                             <Button Command="{Binding RefreshCommand}"
                                     ToolTip="Refresh (F5)"
                                     AutomationProperties.Name="Refresh archived entities"
                                     Style="{StaticResource SecondaryIconButtonStyle}">
                                 <controls:Icon IconKey="Icon.ArrowClockwise" />
                             </Button>
-                        </StackPanel>
+                        </WrapPanel>
                         <StackPanel>
                             <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Archived" />
                             <TextBlock Margin="0,3,0,0"
@@ -1235,40 +1212,6 @@
                                        Text="Inspect archived metadata or restore an entity to the active dependency graph." />
                         </StackPanel>
                     </DockPanel>
-
-                    <Border Grid.Row="1"
-                            Margin="0,0,0,12"
-                            Padding="12"
-                            Background="{DynamicResource Brush.Surface.Card}"
-                            BorderBrush="{DynamicResource Brush.Border.Medium}"
-                            BorderThickness="1"
-                            CornerRadius="4"
-                            Visibility="{Binding ArchivedTable.IsSearchOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="ArchivedSearchTextBox"
-                                     controls:Placeholder.Text="Search archived entities"
-                                     AutomationProperties.Name="Search archived entities"
-                                     MinWidth="280"
-                                     Padding="9,7"
-                                     ToolTip="Search archived entities"
-                                     Text="{Binding ArchivedTable.SearchQuery, UpdateSourceTrigger=PropertyChanged}" />
-                            <Button Grid.Column="1"
-                                    Margin="8,0,0,0"
-                                    Command="{Binding ArchivedTable.ClearSearchCommand}"
-                                    Content="Clear"
-                                    Style="{StaticResource SecondaryButtonStyle}" />
-                            <Button Grid.Column="2"
-                                    Margin="8,0,0,0"
-                                    Command="{Binding ArchivedTable.CloseSearchCommand}"
-                                    Content="Close search"
-                                    Style="{StaticResource SecondaryButtonStyle}" />
-                        </Grid>
-                    </Border>
 
                     <StackPanel Grid.Row="2">
                         <TextBlock Margin="0,0,0,8"
@@ -1285,7 +1228,7 @@
                                   SelectionMode="Single"
                                   SelectionUnit="FullRow">
                             <DataGrid.Columns>
-                                <DataGridTemplateColumn Width="2.2*" Header="Entity">
+                                <DataGridTemplateColumn Width="2.2*" MinWidth="180" Header="Entity">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
                                             <Button AutomationProperties.Name="{Binding SourceName, StringFormat=View details for {0}}"
@@ -1301,7 +1244,7 @@
                                 </DataGridTemplateColumn>
                                 <DataGridTemplateColumn Width="180">
                                     <DataGridTemplateColumn.Header>
-                                        <controls:FilterableColumnHeader Filter="{Binding DataContext.ArchivedTable.StatusFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                        <controls:FilterableColumnHeader Filter="{Binding Data.ArchivedTable.StatusFilter, Source={StaticResource WorkspaceProxy}}" />
                                     </DataGridTemplateColumn.Header>
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
@@ -1316,7 +1259,7 @@
                                 </DataGridTemplateColumn>
                                 <DataGridTemplateColumn Width="150">
                                     <DataGridTemplateColumn.Header>
-                                        <controls:FilterableColumnHeader Filter="{Binding DataContext.ArchivedTable.ResponsibleDeveloperFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                        <controls:FilterableColumnHeader Filter="{Binding Data.ArchivedTable.ResponsibleDeveloperFilter, Source={StaticResource WorkspaceProxy}}" />
                                     </DataGridTemplateColumn.Header>
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
@@ -1356,7 +1299,7 @@
                                 </DataGridTemplateColumn>
                                 <DataGridTextColumn Width="145" Binding="{Binding GroupNameDisplay}" ElementStyle="{StaticResource CenteredCellTextStyle}">
                                     <DataGridTextColumn.Header>
-                                        <controls:FilterableColumnHeader Filter="{Binding DataContext.ArchivedTable.GroupFilter, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                        <controls:FilterableColumnHeader Filter="{Binding Data.ArchivedTable.GroupFilter, Source={StaticResource WorkspaceProxy}}" />
                                     </DataGridTextColumn.Header>
                                 </DataGridTextColumn>
                                 <DataGridTemplateColumn Width="76" Header="Actions">
@@ -2128,7 +2071,18 @@
                                                 Command="{Binding ShowArchivedResponsibilityHistoryCommand}"
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 Visibility="{Binding Editor.HasArchivedHiddenResponsibilityHistory, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                        <TextBlock Margin="0,3,0,0" Text="{Binding Editor.EditedGroupName, StringFormat=Group: {0}}" TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,3,0,0" TextWrapping="Wrap">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Text" Value="{Binding Editor.EditedGroupName, StringFormat=Group: {0}}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Editor.EditedGroupName}" Value="">
+                                                            <Setter Property="Text" Value="Group: —" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
                                         <TextBlock Margin="0,3,0,0" Text="{Binding Editor.EffectivePriority, StringFormat=Effective priority: {0}}" />
                                         <TextBlock Margin="0,8,0,0"
                                                    Foreground="{DynamicResource Brush.Text.Secondary}"

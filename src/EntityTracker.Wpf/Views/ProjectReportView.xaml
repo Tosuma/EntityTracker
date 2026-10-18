@@ -119,7 +119,7 @@
                     <TextBlock Margin="0,12,0,0" Style="{StaticResource PageDescriptionTextStyle}"
                                Text="No progress history is available for this selection and period."
                                Visibility="{Binding Charts.ShowNoHistoricalData, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <UniformGrid x:Name="ReportProgressCharts" Margin="0,14,0,0" Columns="2">
+                    <UniformGrid x:Name="ReportProgressCharts" Margin="0,14,0,0" Columns="2" controls:Layout.CompactColumns="1">
                         <Border Height="300" Margin="0,0,6,12" Padding="12" Style="{StaticResource EntityTrackerCardStyle}">
                             <Grid>
                                 <Grid.RowDefinitions>
@@ -133,16 +133,21 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Entities by development status" />
-                                    <Button Grid.Column="1" Margin="8,0,5,0" Padding="10,4" Content="Save image…"
-                                            AutomationProperties.Name="Save image of the development status chart"
-                                            Command="{Binding Charts.SaveChartCommand}"
-                                            CommandParameter="{x:Static reporting:ProgressChartKind.CurrentStatus}"
-                                            Style="{StaticResource SecondaryButtonStyle}" />
-                                    <Button Grid.Column="2" Padding="10,4" Content="Copy image"
-                                            AutomationProperties.Name="Copy image of the development status chart"
-                                            Command="{Binding Charts.CopyChartCommand}"
-                                            CommandParameter="{x:Static reporting:ProgressChartKind.CurrentStatus}"
-                                            Style="{StaticResource SecondaryButtonStyle}" />
+                                    <!-- Save image… and Copy image in one menu, so each chart header has one quiet button. -->
+                                    <Button Grid.Column="2" Margin="8,0,0,0" Click="OnChartActionsClick"
+                                            ToolTip="Save or copy this chart as an image"
+                                            AutomationProperties.Name="Image actions for the development status chart"
+                                            Style="{StaticResource SecondaryIconButtonStyle}">
+                                        <controls:Icon IconKey="Icon.MoreHorizontal" />
+                                        <Button.ContextMenu>
+                                            <ContextMenu Placement="Bottom">
+                                                <MenuItem Header="_Save image…" Command="{Binding Charts.SaveChartCommand}"
+                                                          CommandParameter="{x:Static reporting:ProgressChartKind.CurrentStatus}" />
+                                                <MenuItem Header="_Copy image" Command="{Binding Charts.CopyChartCommand}"
+                                                          CommandParameter="{x:Static reporting:ProgressChartKind.CurrentStatus}" />
+                                            </ContextMenu>
+                                        </Button.ContextMenu>
+                                    </Button>
                                 </Grid>
                                 <Border Grid.Row="1" Margin="0,8,0,0" Background="{DynamicResource Brush.Surface.Card}">
                                     <lvc:PieChart Background="Transparent" LegendTextPaint="{Binding Charts.Presentation.LegendTextPaint}" TooltipTextPaint="{Binding Charts.Presentation.TooltipTextPaint}" TooltipBackgroundPaint="{Binding Charts.Presentation.TooltipBackgroundPaint}" AutomationProperties.Name="Entities by development status chart" LegendPosition="Right"
@@ -163,16 +168,21 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Implemented entities over time" />
-                                    <Button Grid.Column="1" Margin="8,0,5,0" Padding="10,4" Content="Save image…"
-                                            AutomationProperties.Name="Save image of the implemented entities chart"
-                                            Command="{Binding Charts.SaveChartCommand}"
-                                            CommandParameter="{x:Static reporting:ProgressChartKind.ImplementedOverTime}"
-                                            Style="{StaticResource SecondaryButtonStyle}" />
-                                    <Button Grid.Column="2" Padding="10,4" Content="Copy image"
-                                            AutomationProperties.Name="Copy image of the implemented entities chart"
-                                            Command="{Binding Charts.CopyChartCommand}"
-                                            CommandParameter="{x:Static reporting:ProgressChartKind.ImplementedOverTime}"
-                                            Style="{StaticResource SecondaryButtonStyle}" />
+                                    <!-- Save image… and Copy image in one menu, so each chart header has one quiet button. -->
+                                    <Button Grid.Column="2" Margin="8,0,0,0" Click="OnChartActionsClick"
+                                            ToolTip="Save or copy this chart as an image"
+                                            AutomationProperties.Name="Image actions for the implemented entities chart"
+                                            Style="{StaticResource SecondaryIconButtonStyle}">
+                                        <controls:Icon IconKey="Icon.MoreHorizontal" />
+                                        <Button.ContextMenu>
+                                            <ContextMenu Placement="Bottom">
+                                                <MenuItem Header="_Save image…" Command="{Binding Charts.SaveChartCommand}"
+                                                          CommandParameter="{x:Static reporting:ProgressChartKind.ImplementedOverTime}" />
+                                                <MenuItem Header="_Copy image" Command="{Binding Charts.CopyChartCommand}"
+                                                          CommandParameter="{x:Static reporting:ProgressChartKind.ImplementedOverTime}" />
+                                            </ContextMenu>
+                                        </Button.ContextMenu>
+                                    </Button>
                                 </Grid>
                                 <Border Grid.Row="1" Margin="0,8,0,0" Background="{DynamicResource Brush.Surface.Card}">
                                     <lvc:CartesianChart Background="Transparent" LegendTextPaint="{Binding Charts.Presentation.LegendTextPaint}" TooltipTextPaint="{Binding Charts.Presentation.TooltipTextPaint}" TooltipBackgroundPaint="{Binding Charts.Presentation.TooltipBackgroundPaint}" AutomationProperties.Name="Implemented entities over time chart" LegendPosition="Top" TooltipPosition="Top"
@@ -195,16 +205,21 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Ready to start vs waiting on dependencies over time" />
-                                    <Button Grid.Column="1" Margin="8,0,5,0" Padding="10,4" Content="Save image…"
-                                            AutomationProperties.Name="Save image of the readiness chart"
-                                            Command="{Binding Charts.SaveChartCommand}"
-                                            CommandParameter="{x:Static reporting:ProgressChartKind.ReadyAndBlockedOverTime}"
-                                            Style="{StaticResource SecondaryButtonStyle}" />
-                                    <Button Grid.Column="2" Padding="10,4" Content="Copy image"
-                                            AutomationProperties.Name="Copy image of the readiness chart"
-                                            Command="{Binding Charts.CopyChartCommand}"
-                                            CommandParameter="{x:Static reporting:ProgressChartKind.ReadyAndBlockedOverTime}"
-                                            Style="{StaticResource SecondaryButtonStyle}" />
+                                    <!-- Save image… and Copy image in one menu, so each chart header has one quiet button. -->
+                                    <Button Grid.Column="2" Margin="8,0,0,0" Click="OnChartActionsClick"
+                                            ToolTip="Save or copy this chart as an image"
+                                            AutomationProperties.Name="Image actions for the readiness chart"
+                                            Style="{StaticResource SecondaryIconButtonStyle}">
+                                        <controls:Icon IconKey="Icon.MoreHorizontal" />
+                                        <Button.ContextMenu>
+                                            <ContextMenu Placement="Bottom">
+                                                <MenuItem Header="_Save image…" Command="{Binding Charts.SaveChartCommand}"
+                                                          CommandParameter="{x:Static reporting:ProgressChartKind.ReadyAndBlockedOverTime}" />
+                                                <MenuItem Header="_Copy image" Command="{Binding Charts.CopyChartCommand}"
+                                                          CommandParameter="{x:Static reporting:ProgressChartKind.ReadyAndBlockedOverTime}" />
+                                            </ContextMenu>
+                                        </Button.ContextMenu>
+                                    </Button>
                                 </Grid>
                                 <Border Grid.Row="1" Margin="0,8,0,0" Background="{DynamicResource Brush.Surface.Card}">
                                     <lvc:CartesianChart Background="Transparent" LegendTextPaint="{Binding Charts.Presentation.LegendTextPaint}" TooltipTextPaint="{Binding Charts.Presentation.TooltipTextPaint}" TooltipBackgroundPaint="{Binding Charts.Presentation.TooltipBackgroundPaint}" AutomationProperties.Name="Ready to start versus waiting on dependencies over time chart" LegendPosition="Top" TooltipPosition="Top"
@@ -227,16 +242,21 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Weekly net implemented change" />
-                                    <Button Grid.Column="1" Margin="8,0,5,0" Padding="10,4" Content="Save image…"
-                                            AutomationProperties.Name="Save image of the weekly net implemented change chart"
-                                            Command="{Binding Charts.SaveChartCommand}"
-                                            CommandParameter="{x:Static reporting:ProgressChartKind.WeeklyNetImplementedChange}"
-                                            Style="{StaticResource SecondaryButtonStyle}" />
-                                    <Button Grid.Column="2" Padding="10,4" Content="Copy image"
-                                            AutomationProperties.Name="Copy image of the weekly net implemented change chart"
-                                            Command="{Binding Charts.CopyChartCommand}"
-                                            CommandParameter="{x:Static reporting:ProgressChartKind.WeeklyNetImplementedChange}"
-                                            Style="{StaticResource SecondaryButtonStyle}" />
+                                    <!-- Save image… and Copy image in one menu, so each chart header has one quiet button. -->
+                                    <Button Grid.Column="2" Margin="8,0,0,0" Click="OnChartActionsClick"
+                                            ToolTip="Save or copy this chart as an image"
+                                            AutomationProperties.Name="Image actions for the weekly net implemented change chart"
+                                            Style="{StaticResource SecondaryIconButtonStyle}">
+                                        <controls:Icon IconKey="Icon.MoreHorizontal" />
+                                        <Button.ContextMenu>
+                                            <ContextMenu Placement="Bottom">
+                                                <MenuItem Header="_Save image…" Command="{Binding Charts.SaveChartCommand}"
+                                                          CommandParameter="{x:Static reporting:ProgressChartKind.WeeklyNetImplementedChange}" />
+                                                <MenuItem Header="_Copy image" Command="{Binding Charts.CopyChartCommand}"
+                                                          CommandParameter="{x:Static reporting:ProgressChartKind.WeeklyNetImplementedChange}" />
+                                            </ContextMenu>
+                                        </Button.ContextMenu>
+                                    </Button>
                                 </Grid>
                                 <Border Grid.Row="1" Margin="0,8,0,0" Background="{DynamicResource Brush.Surface.Card}">
                                     <lvc:CartesianChart Background="Transparent" LegendTextPaint="{Binding Charts.Presentation.LegendTextPaint}" TooltipTextPaint="{Binding Charts.Presentation.TooltipTextPaint}" TooltipBackgroundPaint="{Binding Charts.Presentation.TooltipBackgroundPaint}" AutomationProperties.Name="Weekly net implemented change chart" LegendPosition="Top" TooltipPosition="Top"

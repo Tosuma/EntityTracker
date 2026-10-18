@@ -30,7 +30,7 @@
                 <TextBlock Margin="0,4,0,0" Style="{StaticResource PageDescriptionTextStyle}"
                            Text="Manage the developers available within this Project." TextWrapping="Wrap" />
             </StackPanel>
-            <Grid Grid.Row="2">
+            <Grid Grid.Row="2" controls:Layout.StackWhenCompact="True">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="2*" />
                     <ColumnDefinition Width="24" />
@@ -41,27 +41,25 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <Border Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
-                        <StackPanel>
-                            <Label FontSize="18" FontWeight="SemiBold" Padding="0" Margin="0,0,0,8"
-                                   Target="{Binding ElementName=DeveloperSearchBox}" Content="Search developers" />
-                            <TextBox x:Name="DeveloperSearchBox" Padding="9,7"
-                                     controls:Placeholder.Text="Search by initials or display name"
-                                     AutomationProperties.Name="Search developers by initials or display name"
-                                     ToolTip="Search initials or display names"
-                                     Text="{Binding Developers.SearchQuery, UpdateSourceTrigger=PropertyChanged}" />
-                            <TextBlock Margin="0,8,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
-                                       Text="Filter by initials or display name." TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Border>
-                    <Border Grid.Row="1" Margin="0,16,0,0" Padding="16"
+                    <Border Grid.Row="1" Padding="16"
                             Style="{StaticResource EntityTrackerCardStyle}">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
-                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Available developers" />
+                            <!-- The list's search sits in its header, as on the Tracker pages. -->
+                            <DockPanel>
+                                <TextBox x:Name="DeveloperSearchBox" DockPanel.Dock="Right" Width="260"
+                                         VerticalAlignment="Center"
+                                         controls:Placeholder.Text="Search by initials or name"
+                                         AutomationProperties.Name="Search developers by initials or display name"
+                                         Text="{Binding Developers.SearchQuery, UpdateSourceTrigger=PropertyChanged}" />
+                                <controls:Icon DockPanel.Dock="Right" Margin="0,0,6,0" VerticalAlignment="Center" Size="16"
+                                               Foreground="{DynamicResource Brush.Text.Secondary}" IconKey="Icon.Search" />
+                                <TextBlock VerticalAlignment="Center" FontSize="18" FontWeight="SemiBold"
+                                           Text="Available developers" />
+                            </DockPanel>
                             <DataGrid Grid.Row="1" Margin="0,12,0,0" AutoGenerateColumns="False"
                                       CanUserAddRows="False" IsReadOnly="True"
                                       VerticalScrollBarVisibility="Auto"

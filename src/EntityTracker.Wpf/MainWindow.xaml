@@ -316,14 +316,19 @@
                             </Style.Triggers>
                         </Style>
                     </Border.Style>
-                    <Grid>
+                    <!-- Compact layout (MainWindow.ArrangeHeader): the context above, the selectors sharing a row. -->
+                    <Grid x:Name="HeaderLayout">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="280" />
                             <ColumnDefinition Width="12" />
                             <ColumnDefinition Width="280" />
                         </Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel x:Name="HeaderContext" VerticalAlignment="Center">
                             <TextBlock FontSize="12"
                                        Foreground="{DynamicResource Brush.Text.Secondary}"
                                        Text="CURRENT CONTEXT" />
@@ -348,7 +353,7 @@
                                 </Button>
                             </StackPanel>
                         </StackPanel>
-                        <StackPanel Grid.Column="1">
+                        <StackPanel x:Name="ProjectSelectorPanel" Grid.Column="1">
                             <Label x:Name="ProjectSelectorLabel" Content="Project" />
                             <ComboBox x:Name="ProjectSelector"
                                       AutomationProperties.LabeledBy="{Binding ElementName=ProjectSelectorLabel}"
@@ -357,7 +362,7 @@
                                       SelectedItem="{Binding SelectedProject, Mode=OneWay}"
                                       SelectionChanged="OnProjectSelectionChanged" />
                         </StackPanel>
-                        <StackPanel Grid.Column="3">
+                        <StackPanel x:Name="TrackerSelectorPanel" Grid.Column="3">
                             <Label x:Name="TrackerSelectorLabel" Content="Tracker" />
                             <ComboBox x:Name="TrackerSelector"
                                       AutomationProperties.LabeledBy="{Binding ElementName=TrackerSelectorLabel}"
@@ -427,10 +432,17 @@
                                    Text="EntityTracker update required" />
                         <TextBlock x:Name="UpdateBlockMessage" Margin="0,14,0,20"
                                    TextWrapping="Wrap" />
-                        <Button x:Name="UpdateActionButton" HorizontalAlignment="Left" Padding="18,8"
-                                Content="Close and update"
-                                Click="OnUpdateClick"
-                                Style="{StaticResource PrimaryButtonStyle}" />
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="UpdateActionButton" Padding="18,8"
+                                    Content="Close and update"
+                                    Click="OnUpdateClick"
+                                    Style="{StaticResource PrimaryButtonStyle}" />
+                            <!-- If the update can't start, the log says why. -->
+                            <Button Margin="8,0,0,0" Padding="18,8"
+                                    Content="Open log folder"
+                                    Command="{Binding Diagnostics.OpenLogFolderCommand}"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
             </Grid>

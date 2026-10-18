@@ -37,6 +37,7 @@ public partial class MainWindow : Window
         _updates = updates;
         DataContext = viewModel;
         Loaded += OnLoaded;
+        SizeChanged += OnWindowSizeChanged;
         Closing += OnClosing;
         Closed += OnClosed;
         PreviewMouseWheel += OnPreviewMouseWheel;
@@ -102,6 +103,32 @@ public partial class MainWindow : Window
         if (!command.CanExecute(null)) return false;
         command.Execute(null);
         return true;
+    }
+
+    private void OnWindowSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        bool compact = Layout.IsCompactWidth(e.NewSize.Width);
+        if (compact == Layout.GetIsCompact(this) && e.PreviousSize.Width > 0) return;
+        Layout.SetIsCompact(this, compact);
+        ArrangeHeader(compact);
+    }
+
+    /// <summary>
+    /// Wide: the context, then the two selectors at a fixed width. Compact: the context on its own row and
+    /// the selectors sharing the row below, so neither clips the context title.
+    /// </summary>
+    private void ArrangeHeader(bool compact)
+    {
+        ColumnDefinitionCollection columns = HeaderLayout.ColumnDefinitions;
+        columns[0].Width = compact ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        columns[1].Width = compact ? new GridLength(1, GridUnitType.Star) : new GridLength(280);
+        columns[3].Width = compact ? new GridLength(1, GridUnitType.Star) : new GridLength(280);
+        Grid.SetColumnSpan(HeaderContext, compact ? 4 : 1);
+        foreach (FrameworkElement selector in new FrameworkElement[] { ProjectSelectorPanel, TrackerSelectorPanel })
+        {
+            Grid.SetRow(selector, compact ? 1 : 0);
+            selector.Margin = compact ? new Thickness(0, 8, 0, 0) : new Thickness(0);
+        }
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)

@@ -147,8 +147,8 @@ public partial class ProjectDashboardView : UserControl
             {
                 Header = comparison.Trackers[index].Name,
                 CellTemplate = new DataTemplate { VisualTree = content },
-                MinWidth = 170,
-                Width = new DataGridLength(190)
+                MinWidth = 210,
+                Width = new DataGridLength(230)
             });
         }
     }

@@ -198,6 +198,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public ICommand AssignMeCommand => _assignMeCommand;
     public ICommand ExportOverviewCommand => _exportOverviewCommand;
 
+    /// <summary>
+    /// What an Overview export holds: the shown or all active entities (the Settings choice), and that it
+    /// includes internal notes and developer names, unlike the Project report's client version.
+    /// </summary>
+    public string ExportScopeSummary
+    {
+        get
+        {
+            bool all = _overviewExportSettings?.Rows == OverviewExportRows.AllActiveEntities;
+            int count = all ? ActiveTable.GetAllItemsInCurrentSortOrder().Count : ActiveTable.Items.Count;
+            string rows = all ? $"All {count} active entities" : $"The {count} shown entities";
+            return $"{rows}, with internal notes and developer names. Change the rows in Settings › " +
+                   "Tracker views; share with a client through the Project report.";
+        }
+    }
+
     private async Task ExportOverviewAsync(OverviewExportFormat format)
     {
         if (_overviewExportService is null || _overviewExportFilePicker is null ||
