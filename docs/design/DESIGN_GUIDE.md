@@ -53,22 +53,42 @@ explanation.
 - The local choice is stored in `settings.json`; it is not Project or Tracker data.
 - Theme changes apply to open application-owned surfaces immediately. Native Windows dialogs and
   chrome may continue to use system-owned presentation.
-- The report palette and PNG output never derive colors from the live application theme.
+- The app's progress charts follow the theme: axes, grid, legends and tooltips use `Chart` colours
+  in Light and `DarkChart` colours in Dark, on the card surface. Saved and copied chart images and the
+  exported report never derive colors from the live application theme; they are always light.
 
 ## Semantic colors
 
-Status colors are deliberately shared by the overview, progress dashboard, and PNG exports:
+Status colors are shared by the overview, dashboards, dependency graph, progress charts, PNG exports
+and the exported report. They use only the official brand colours:
 
-| Meaning | Color | Notes |
+- In progress and Reworking share one colour, since both mean someone is working on the entity; the
+  graph tells them apart by their marks.
+- Coral, the colour that asks for attention, is kept for Blocked.
+- Rework needed is a calm mint: the entity is done but needs changes, and blocks nothing.
+- Waiting on dependencies is a soft pale amber: visible, without competing with Blocked.
+- Completed and Reconciled keep deep teal and the sidebar's Green 100.
+
+Every badge's text reads on its fill (4.5:1 or more). In the dark theme the dark fills (Green 80, deep
+teal, Green 100) would sink into the page, so status badges, legend dots and swatches, and the on-screen
+pie's slices get a thin Green 60 outline there (`Brush.Status.Outline`, set by `ApplicationThemeService`;
+`DarkChart.SliceOutline`). The light theme, saved chart images and the exported report have none.
+
+| Meaning | Color | Graph mark |
 | --- | --- | --- |
-| Not started | Green 40% | Neutral status; use Dark Green text over the color |
-| In progress | Green 80% | Active work; use White text over the color |
-| Rework needed | Coral | Attention state; use Dark Green text over the color |
-| Development completed / Completed | Deep Teal `#0F6455` | Complete but not reconciled; use White text over the color |
-| Reconciled | Green 100% | Fully implemented/reconciled; use White text over the color |
-| Ready | Green 40% | Dependency-ready work (as Not started); use Dark Green text. The exported report uses Green 20% |
-| Blocked/error/destructive | Coral | Always add a label, icon, or explanatory message |
+| Not started / Ready | Green 40 `#A0AFAF` | none |
+| In progress | Green 80 `#41605E` | play triangle |
+| Rework needed | Notification green `#96E4AD` | exclamation bar |
+| Reworking | Green 80 `#41605E` | two triangles |
+| Blocked | Coral `#FF6359` | bar |
+| Development completed / Completed | Deep teal `#0F6455` | check |
+| Reconciled | Green 100 `#123836` | two checks |
+| Waiting on dependencies | Pale amber `#F6D9A8` | (work status only) |
 | Unresolved reference warning | Warning palette | Dependencies on names no entity has yet, in the Overview, entity details and the dependency graph |
+
+A status is never told by colour alone: badges carry their name, and the dependency graph draws the
+mark above inside each node large enough to read, and in its legend. Error text uses the theme's
+critical colour (`Brush.Critical`), not a status colour, since status colours are fills.
 
 ### Colour scheme
 
@@ -80,14 +100,16 @@ appears anywhere else in `src`.
 - `ColorScheme.Base` names each colour once (the brand palette above plus a few supporting tints).
 - The other sections assign a base colour to one part of the application:
   - `Status` and `WorkStatus`: a fill and a text colour per development and work status.
-  - `ReportWorkStatus`: the exported report's work status badges (lighter Ready and Waiting).
+  - `ReportWorkStatus`: the exported report's work status badges (the same colours as the app).
   - `App`: everything else in the app (accent, surfaces, overlays, notifications, review, graph).
-  - `Chart`: the progress charts, in the app, saved as images and in the exported report.
+  - `Chart`: the progress charts saved as images, in the exported report, and in the app's light theme.
+  - `DarkChart`: the text, grid and tooltip of the app's progress charts in the dark theme.
   - `Report`: the exported report's page (text, borders, highlights).
 - To recolour one thing, change its assignment, for example
   `Status.InProgress = new(Base.Coral, Base.DarkGreen)`. To change a colour everywhere it is used,
   change its `Base` value. Rebuild; the app, the charts and the report all follow.
-- Each status's text colour must keep 4.5:1 contrast with its fill; a test checks every pair.
+- Each status's text colour must keep 4.5:1 contrast with its fill, and each status fill 3:1 with the
+  light and dark pages and cards; tests check both, and that no two statuses share a fill.
 
 The app's text, page, card, border and focus colours are not in the scheme: they follow the Windows
 light or dark theme through Fluent resources.

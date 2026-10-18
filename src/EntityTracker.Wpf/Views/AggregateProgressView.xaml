@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:EntityTracker.Wpf.Controls"
              xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF">
-    <StackPanel>
+    <StackPanel controls:ChartThemeFollower.Target="{Binding}">
         <DockPanel Margin="0,0,0,12">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <TextBlock Margin="0,0,7,0"
@@ -45,7 +45,7 @@
                             Style="{StaticResource PrimaryButtonStyle}" />
                 </StackPanel>
                 <TextBlock Margin="0,7,0,0"
-                           Foreground="{DynamicResource Brush.Status.ReworkNeeded}"
+                           Foreground="{DynamicResource Brush.Critical}"
                            Text="{Binding RangeValidationMessage}"
                            Visibility="{Binding HasRangeValidationError, Converter={StaticResource BooleanToVisibilityConverter}}" />
             </StackPanel>
@@ -141,8 +141,8 @@
                     </Grid.RowDefinitions>
                     <TextBlock Margin="0,0,0,8" FontSize="16" FontWeight="SemiBold"
                                Text="Entities by development status" />
-                    <Border Grid.Row="1" Background="{DynamicResource Brush.Report.Canvas}">
-                        <lvc:PieChart AutomationProperties.Name="Aggregate entities by development status chart"
+                    <Border Grid.Row="1" Background="{DynamicResource Brush.Surface.Card}">
+                        <lvc:PieChart Background="Transparent" LegendTextPaint="{Binding Presentation.LegendTextPaint}" TooltipTextPaint="{Binding Presentation.TooltipTextPaint}" TooltipBackgroundPaint="{Binding Presentation.TooltipBackgroundPaint}" AutomationProperties.Name="Aggregate entities by development status chart"
                                       LegendPosition="Right"
                                       Series="{Binding CurrentStatusSeries}" />
                     </Border>
@@ -156,8 +156,8 @@
                     </Grid.RowDefinitions>
                     <TextBlock Margin="0,0,0,8" FontSize="16" FontWeight="SemiBold"
                                Text="Implemented entities over time" />
-                    <Border Grid.Row="1" Background="{DynamicResource Brush.Report.Canvas}">
-                        <lvc:CartesianChart AutomationProperties.Name="Aggregate implemented entities over time chart"
+                    <Border Grid.Row="1" Background="{DynamicResource Brush.Surface.Card}">
+                        <lvc:CartesianChart Background="Transparent" LegendTextPaint="{Binding Presentation.LegendTextPaint}" TooltipTextPaint="{Binding Presentation.TooltipTextPaint}" TooltipBackgroundPaint="{Binding Presentation.TooltipBackgroundPaint}" AutomationProperties.Name="Aggregate implemented entities over time chart"
                                             LegendPosition="Top"
                                             Series="{Binding ImplementedSeries}"
                                             TooltipPosition="Top"

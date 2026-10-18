@@ -367,6 +367,26 @@ public sealed class DependencyGraphViewModelTests
     }
 
     [Fact]
+    public void Relationships_ListTheSelectedEntitysDependenciesMissingNamesAndDependents()
+    {
+        DependencyGraphViewModel graph = CreateGraph();
+        Assert.Empty(graph.Relationships);
+
+        graph.SelectedNode = graph.Model.Find(Rows[2].EntityId); // invoice: order, missing tax
+        Assert.Equal(
+            [("Depends on", "order", "In progress"), ("Missing dependency", "tax", "Not an entity yet")],
+            graph.Relationships.Select(static item => (item.Relation, item.Label, item.Description)));
+        Assert.Contains("invoice: Not started", graph.SelectionSummary, StringComparison.Ordinal);
+        Assert.False(graph.OpenRelationshipDetailsCommand.CanExecute(graph.Relationships[1]));
+
+        graph.SelectedNode = graph.Model.Find(Rows[1].EntityId); // order
+        Assert.Contains(graph.Relationships, item => item is { Relation: "Needed by", Label: "invoice" });
+
+        graph.SelectRelationshipCommand.Execute(graph.Relationships.Single(item => item.Label == "invoice"));
+        Assert.Equal("invoice", graph.SelectedNode?.Label);
+    }
+
+    [Fact]
     public void Selection_HighlightsTransitiveDependenciesButNotDependents()
     {
         DependencyGraphViewModel graph = CreateGraph();

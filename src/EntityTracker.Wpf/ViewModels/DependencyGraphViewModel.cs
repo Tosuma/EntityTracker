@@ -15,7 +15,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace EntityTracker.Wpf.ViewModels;
 
-public sealed record DependencyGraphLegendItem(string Label, string BrushKey, bool IsPlaceholder);
+/// <param name="Status">The status whose graph mark the swatch shows; null for the missing dependency ring.</param>
+public sealed record DependencyGraphLegendItem(string Label, string BrushKey, bool IsPlaceholder,
+    DevelopmentStatus? Status = null);
 
 /// <summary>One entry in the dependency graph's view dropdown.</summary>
 public sealed record DependencyGraphViewOption(DependencyGraphView View, string Label);
@@ -34,6 +36,8 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
     private readonly ILogger _logger;
     private readonly RelayCommand _findCommand;
     private readonly RelayCommand<DependencyGraphNode> _chooseSuggestionCommand;
+    private readonly RelayCommand<DependencyGraphRelationship> _selectRelationshipCommand;
+    private readonly RelayCommand<DependencyGraphRelationship> _openRelationshipDetailsCommand;
     private readonly RelayCommand _refreshSuggestionsCommand;
     private IReadOnlyList<DependencyGraphNode> _suggestions = [];
     private bool _isSuggestionsOpen;
@@ -70,6 +74,11 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
         Layout = new RadialDependencyLayout(_model);
         _findCommand = new RelayCommand(Find, () => !string.IsNullOrWhiteSpace(SearchText) && HasNodes);
         _chooseSuggestionCommand = new RelayCommand<DependencyGraphNode>(ChooseSuggestion, node => node is not null);
+        _selectRelationshipCommand = new RelayCommand<DependencyGraphRelationship>(
+            relationship => Show(relationship.Node), relationship => relationship is not null);
+        _openRelationshipDetailsCommand = new RelayCommand<DependencyGraphRelationship>(
+            relationship => OpenDetails(relationship.Node),
+            relationship => relationship is { Node.IsPlaceholder: false });
         _refreshSuggestionsCommand = new RelayCommand(() => Suggestions = Matches(SearchText.Trim()));
         _clearSelectionCommand = new RelayCommand(() => SelectedNode = null, () => HasSelection);
         _exportPngCommand = new RelayCommand(ExportPng,
@@ -89,13 +98,13 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
 
     private static IReadOnlyList<DependencyGraphLegendItem> SolarLegend { get; } =
     [
-        new("Not started", "Brush.Status.NotStarted", false),
-        new("In progress", "Brush.Status.InProgress", false),
-        new("Rework needed", "Brush.Status.ReworkNeeded", false),
-        new("Reworking", "Brush.Status.Reworking", false),
-        new("Blocked", "Brush.Status.Blocked", false),
-        new("Completed", "Brush.Status.DevelopmentCompleted", false),
-        new("Reconciled", "Brush.Status.Reconciled", false),
+        new("Not started", "Brush.Status.NotStarted", false, DevelopmentStatus.NotStarted),
+        new("In progress", "Brush.Status.InProgress", false, DevelopmentStatus.InProgress),
+        new("Rework needed", "Brush.Status.ReworkNeeded", false, DevelopmentStatus.ReworkNeeded),
+        new("Reworking", "Brush.Status.Reworking", false, DevelopmentStatus.Reworking),
+        new("Blocked", "Brush.Status.Blocked", false, DevelopmentStatus.Blocked),
+        new("Completed", "Brush.Status.DevelopmentCompleted", false, DevelopmentStatus.DevelopmentCompleted),
+        new("Reconciled", "Brush.Status.Reconciled", false, DevelopmentStatus.Reconciled),
         new("Missing dependency (outer ring)", "Brush.Text.Secondary", true)
     ];
 
@@ -159,6 +168,38 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
 
     public bool HasSelection => _selected.Count > 0;
 
+    /// <summary>
+    /// The entity chosen last and what it is linked to, as a list a keyboard or screen reader can walk:
+    /// its dependencies (missing ones included) and the entities that depend on it.
+    /// </summary>
+    public IReadOnlyList<DependencyGraphRelationship> Relationships => SelectedNode is not { } node
+        ? []
+        : [
+            .. Model.Edges.Where(edge => ReferenceEquals(edge.To, node))
+                .Select(static edge => edge.From)
+                .OrderBy(static from => from.Label, StringComparer.OrdinalIgnoreCase)
+                .Select(static from => new DependencyGraphRelationship(from,
+                    from.IsPlaceholder ? "Missing dependency" : "Depends on",
+                    from.IsPlaceholder ? "Not an entity yet" : StatusLabel(from.Status))),
+            .. Model.Edges.Where(edge => ReferenceEquals(edge.From, node))
+                .Select(static edge => edge.To)
+                .OrderBy(static to => to.Label, StringComparer.OrdinalIgnoreCase)
+                .Select(static to => new DependencyGraphRelationship(to, "Needed by", StatusLabel(to.Status)))
+        ];
+
+    /// <summary>A sentence about the entity chosen last, announced when the selection changes.</summary>
+    public string SelectionSummary => SelectedNode is not { } node
+        ? string.Empty
+        : node.IsPlaceholder
+            ? $"{node.Label}: missing dependency, needed by {node.DependentCount}."
+            : $"{node.Label}: {StatusLabel(node.Status)}. Depends on {node.DependencyCount}, needed by {node.DependentCount}.";
+
+    /// <summary>Selects and centres a related entity, as clicking it on the map does.</summary>
+    public ICommand SelectRelationshipCommand => _selectRelationshipCommand;
+
+    /// <summary>Opens a related entity's details; missing dependencies have none.</summary>
+    public ICommand OpenRelationshipDetailsCommand => _openRelationshipDetailsCommand;
+
     public bool IsSelected(DependencyGraphNode node) => _selected.Any(selected => ReferenceEquals(selected, node));
 
     /// <summary>Adds an entity to the selection, or removes it if it is already selected.</summary>
@@ -178,6 +219,8 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(SelectedNodes));
         UpdateHighlight();
         OnPropertyChanged(nameof(HasSelection));
+        OnPropertyChanged(nameof(Relationships));
+        OnPropertyChanged(nameof(SelectionSummary));
         NotifyCommands();
         OnVisualStateChanged();
     }
@@ -360,6 +403,10 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
         _landmarks = FindLandmarks(model);
         Model = model;
         SetSelection(selectedKeys.Select(model.Find).OfType<DependencyGraphNode>().ToList());
+        OnPropertyChanged(nameof(SelectedNode));
+        OnPropertyChanged(nameof(HasSelection));
+        OnPropertyChanged(nameof(Relationships));
+        OnPropertyChanged(nameof(SelectionSummary));
         IsSuggestionsOpen = false;
         Suggestions = [];
         UpdateHighlight();

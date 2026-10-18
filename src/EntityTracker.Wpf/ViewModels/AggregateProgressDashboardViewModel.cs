@@ -13,7 +13,7 @@ using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.ViewModels;
 
-public sealed class AggregateProgressDashboardViewModel : INotifyPropertyChanged
+public sealed class AggregateProgressDashboardViewModel : INotifyPropertyChanged, IChartThemeTarget
 {
     private static readonly ILogger Logger = AppLogging.CreateLogger<AggregateProgressDashboardViewModel>();
 
@@ -25,6 +25,8 @@ public sealed class AggregateProgressDashboardViewModel : INotifyPropertyChanged
     private DateTime? _customFrom = DateTime.Today.AddDays(-29);
     private DateTime? _customTo = DateTime.Today;
     private ProgressDashboardReport? _report;
+    private ProgressChartTheme _chartTheme;
+    private ProgressChartPresentation? _presentation;
     private ISeries[] _currentStatusSeries = [];
     private ISeries[] _implementedSeries = [];
     private Axis[] _implementedXAxes = [];
@@ -130,11 +132,38 @@ public sealed class AggregateProgressDashboardViewModel : INotifyPropertyChanged
         }
     }
 
+    private void ShowPresentation(ProgressChartPresentation presentation)
+    {
+        Presentation = presentation;
+        CurrentStatusSeries = presentation.CurrentStatusSeries;
+        ImplementedSeries = presentation.ImplementedSeries;
+        ImplementedXAxes = presentation.ImplementedXAxes;
+        CountYAxes = presentation.CountYAxes;
+    }
+
     public bool HasReport => Report is not null;
 
     public bool HasHistoricalData => Report?.HasHistoricalData == true;
 
     public bool ShowNoHistoricalData => _hasLoaded && !IsBusy && !HasHistoricalData && !HasError;
+
+    /// <summary>The app theme the charts are drawn for; changing it redraws the current report.</summary>
+    public ProgressChartTheme ChartTheme
+    {
+        get => _chartTheme;
+        set
+        {
+            if (!SetField(ref _chartTheme, value)) return;
+            if (Report is { } report) ShowPresentation(_presentationBuilder.Build(report, value));
+        }
+    }
+
+    /// <summary>The charts' legend and tooltip paints, for the current theme.</summary>
+    public ProgressChartPresentation? Presentation
+    {
+        get => _presentation;
+        private set => SetField(ref _presentation, value);
+    }
 
     public ISeries[] CurrentStatusSeries
     {
@@ -205,11 +234,7 @@ public sealed class AggregateProgressDashboardViewModel : INotifyPropertyChanged
             }
             else
             {
-                ProgressChartPresentation presentation = _presentationBuilder.Build(report);
-                CurrentStatusSeries = presentation.CurrentStatusSeries;
-                ImplementedSeries = presentation.ImplementedSeries;
-                ImplementedXAxes = presentation.ImplementedXAxes;
-                CountYAxes = presentation.CountYAxes;
+                ShowPresentation(_presentationBuilder.Build(report, ChartTheme));
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

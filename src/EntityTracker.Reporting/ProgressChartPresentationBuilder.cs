@@ -15,33 +15,39 @@ public sealed class ProgressChartPresentationBuilder
         Enum.GetValues<ProgressStatusCategory>().ToDictionary(
             static status => status, static status => ProgressChartPalette.From(ProgressChartPalette.Status(status).Fill));
 
-    public ProgressChartPresentation Build(ProgressDashboardReport report) =>
-        Build(report, includeExportPieLabels: false);
+    /// <summary>Builds the charts the app shows, with axes, legends and tooltips readable on the theme.</summary>
+    public ProgressChartPresentation Build(
+        ProgressDashboardReport report,
+        ProgressChartTheme theme = ProgressChartTheme.Light) =>
+        Build(report, includeExportPieLabels: false, theme);
 
+    /// <summary>Builds the charts for a saved or copied image: always light, whatever the app's theme.</summary>
     public ProgressChartPresentation BuildForExport(ProgressDashboardReport report) =>
-        Build(report, includeExportPieLabels: true);
+        Build(report, includeExportPieLabels: true, ProgressChartTheme.Light);
 
     private static ProgressChartPresentation Build(
         ProgressDashboardReport report,
-        bool includeExportPieLabels)
+        bool includeExportPieLabels,
+        ProgressChartTheme theme)
     {
         ArgumentNullException.ThrowIfNull(report);
 
         ISeries[] currentStatusSeries = CreateCurrentStatusSeries(
             report.CurrentStatusCounts,
             StatusFills,
-            includeExportPieLabels);
+            includeExportPieLabels,
+            ProgressChartPalette.SliceOutlineFor(theme));
 
         DateOnly[] implementedDates = report.ImplementedOverTime
             .Select(static point => point.Date)
             .ToArray();
-        Axis[] implementedXAxes = CreateDateAxes(implementedDates);
+        Axis[] implementedXAxes = CreateDateAxes(implementedDates, theme);
         Axis[] readinessXAxes = CreateDateAxes(report.ReadyAndBlockedOverTime
             .Select(static point => point.Date)
-            .ToArray());
+            .ToArray(), theme);
         Axis[] weeklyXAxes = CreateDateAxes(report.WeeklyNetImplementedChange
             .Select(static point => point.WeekStartingMonday)
-            .ToArray());
+            .ToArray(), theme);
 
         ISeries[] implementedSeries =
         [
@@ -114,15 +120,18 @@ public sealed class ProgressChartPresentationBuilder
             {
                 MinLimit = 0,
                 MinStep = 1,
-                LabelsPaint = CreateTextPaint(),
-                SeparatorsPaint = CreateGridPaint()
+                LabelsPaint = CreateTextPaint(theme),
+                SeparatorsPaint = CreateGridPaint(theme)
             }],
             [new Axis
             {
                 MinStep = 1,
-                LabelsPaint = CreateTextPaint(),
-                SeparatorsPaint = CreateGridPaint()
-            }]);
+                LabelsPaint = CreateTextPaint(theme),
+                SeparatorsPaint = CreateGridPaint(theme)
+            }],
+            CreateTextPaint(theme),
+            CreateTextPaint(theme),
+            new SolidColorPaint(ProgressChartPalette.TooltipBackgroundFor(theme)));
     }
 
     public static string GetTitle(ProgressChartKind kind) => kind switch
@@ -146,7 +155,8 @@ public sealed class ProgressChartPresentationBuilder
     private static ISeries[] CreateCurrentStatusSeries(
         IReadOnlyList<ProgressStatusCount> counts,
         IReadOnlyDictionary<ProgressStatusCategory, SKColor> statusColors,
-        bool includeExportPieLabels)
+        bool includeExportPieLabels,
+        SKColor? sliceOutline)
     {
         int total = counts.Sum(static item => item.Count);
         return counts.Select(item =>
@@ -155,7 +165,8 @@ public sealed class ProgressChartPresentationBuilder
             {
                 Name = FormatStatus(item.Status),
                 Values = [item.Count],
-                Fill = new SolidColorPaint(statusColors[item.Status])
+                Fill = new SolidColorPaint(statusColors[item.Status]),
+                Stroke = sliceOutline is { } outline ? new SolidColorPaint(outline, 1) : null
             };
             if (includeExportPieLabels && item.Count > 0 && total > 0)
             {
@@ -179,7 +190,7 @@ public sealed class ProgressChartPresentationBuilder
 
     private static SKColor GetPieLabelColor(ProgressStatusCategory status) => ProgressChartPalette.From(ProgressChartPalette.Status(status).Text);
 
-    private static Axis[] CreateDateAxes(DateOnly[] dates)
+    private static Axis[] CreateDateAxes(DateOnly[] dates, ProgressChartTheme theme)
     {
         string format = dates.Select(static date => date.Year).Distinct().Take(2).Count() > 1
             ? "dd MMM yy"
@@ -191,8 +202,8 @@ public sealed class ProgressChartPresentationBuilder
                 Labeler = value => FormatDateLabel(value, dates, format),
                 LabelsDensity = 1.25f,
                 LabelsRotation = 0,
-                LabelsPaint = CreateTextPaint(),
-                SeparatorsPaint = CreateGridPaint(),
+                LabelsPaint = CreateTextPaint(theme),
+                SeparatorsPaint = CreateGridPaint(theme),
                 MinStep = 1
             }
         ];
@@ -209,9 +220,9 @@ public sealed class ProgressChartPresentationBuilder
             : string.Empty;
     }
 
-    private static SolidColorPaint CreateTextPaint() => new(ProgressChartPalette.Text);
+    private static SolidColorPaint CreateTextPaint(ProgressChartTheme theme) => new(ProgressChartPalette.TextFor(theme));
 
-    private static SolidColorPaint CreateGridPaint() => new(ProgressChartPalette.Grid, 1);
+    private static SolidColorPaint CreateGridPaint(ProgressChartTheme theme) => new(ProgressChartPalette.GridFor(theme), 1);
 
     private static string FormatStatus(ProgressStatusCategory status) => status switch
     {
