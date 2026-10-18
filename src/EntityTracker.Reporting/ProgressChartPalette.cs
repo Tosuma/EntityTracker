@@ -20,6 +20,10 @@ internal static class ProgressChartPalette
     internal static SKColor TextFor(ProgressChartTheme theme) =>
         From(theme == ProgressChartTheme.Dark ? ColorScheme.DarkChart.Text : ColorScheme.Chart.Text);
 
+    /// <summary>Gets the slice outline on the theme's canvas: none on light, a thin light line on dark.</summary>
+    internal static SKColor? SliceOutlineFor(ProgressChartTheme theme) =>
+        theme == ProgressChartTheme.Dark ? From(ColorScheme.DarkChart.SliceOutline) : null;
+
     /// <summary>Gets the grid line colour on the theme's canvas.</summary>
     internal static SKColor GridFor(ProgressChartTheme theme) =>
         From(theme == ProgressChartTheme.Dark ? ColorScheme.DarkChart.Grid : ColorScheme.Chart.Grid);

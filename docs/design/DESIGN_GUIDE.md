@@ -69,7 +69,10 @@ and the exported report. They use only the official brand colours:
 - Waiting on dependencies is a soft pale amber: visible, without competing with Blocked.
 - Completed and Reconciled keep deep teal and the sidebar's Green 100.
 
-Every badge's text reads on its fill (4.5:1 or more).
+Every badge's text reads on its fill (4.5:1 or more). In the dark theme the dark fills (Green 80, deep
+teal, Green 100) would sink into the page, so status badges, legend dots and swatches, and the on-screen
+pie's slices get a thin Green 60 outline there (`Brush.Status.Outline`, set by `ApplicationThemeService`;
+`DarkChart.SliceOutline`). The light theme, saved chart images and the exported report have none.
 
 | Meaning | Color | Graph mark |
 | --- | --- | --- |

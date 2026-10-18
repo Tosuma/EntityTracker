@@ -26,6 +26,9 @@
     <SolidColorBrush x:Key="Brush.Critical" Color="{DynamicResource SystemFillColorCritical}" />
     <!-- An applied filter or sort in a column header: the accent, readable on both themes' headers. -->
     <SolidColorBrush x:Key="Brush.Indicator.Active" Color="{DynamicResource AccentFillColorPrimary}" />
+    <!-- Status badge outline: none in the light theme. ApplicationThemeService replaces it with a thin
+         light line in the dark theme, where the dark status fills would otherwise sink into the page. -->
+    <SolidColorBrush x:Key="Brush.Status.Outline" Color="Transparent" />
     <SolidColorBrush x:Key="Brush.SyncState.Synced" Color="{DynamicResource SystemFillColorSuccess}" />
     <SolidColorBrush x:Key="Brush.SyncState.Unsynced" Color="{DynamicResource SystemFillColorCaution}" />
     <SolidColorBrush x:Key="Brush.SyncState.NeedsAttention" Color="{DynamicResource SystemFillColorCritical}" />
