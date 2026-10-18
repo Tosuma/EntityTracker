@@ -11,8 +11,8 @@
     <!-- The header stays put while the page below it scrolls. -->
     <DockPanel x:Name="PageHeader" Grid.Row="0" Margin="0,0,0,18">
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-            <Button Margin="0,0,8,0" Click="OnImportProject" Content="Import Project"
-                    AutomationProperties.Name="Import Project from existing Git checkout"
+            <Button Margin="0,0,8,0" Click="OnImportProject" Content="Import project"
+                    AutomationProperties.HelpText="Import a project from an existing Git checkout"
                     Style="{StaticResource SecondaryButtonStyle}" />
             <Button Margin="0,0,8,0" Click="OnOpenRecycleBins" Content="Recycle bins"
                     Style="{StaticResource SecondaryButtonStyle}" />

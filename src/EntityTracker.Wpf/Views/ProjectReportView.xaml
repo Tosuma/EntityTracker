@@ -126,20 +126,20 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Entities by current work status" />
+                                    <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Entities by development status" />
                                     <Button Grid.Column="1" Margin="8,0,5,0" Padding="10,4" Content="Save image…"
-                                            AutomationProperties.Name="Save the current work status chart as a PNG image"
+                                            AutomationProperties.Name="Save image of the development status chart"
                                             Command="{Binding Charts.SaveChartCommand}"
                                             CommandParameter="{x:Static reporting:ProgressChartKind.CurrentStatus}"
                                             Style="{StaticResource SecondaryButtonStyle}" />
                                     <Button Grid.Column="2" Padding="10,4" Content="Copy image"
-                                            AutomationProperties.Name="Copy the current work status chart image"
+                                            AutomationProperties.Name="Copy image of the development status chart"
                                             Command="{Binding Charts.CopyChartCommand}"
                                             CommandParameter="{x:Static reporting:ProgressChartKind.CurrentStatus}"
                                             Style="{StaticResource SecondaryButtonStyle}" />
                                 </Grid>
                                 <Border Grid.Row="1" Margin="0,8,0,0" Background="{DynamicResource Brush.Report.Canvas}">
-                                    <lvc:PieChart AutomationProperties.Name="Entities by current work status chart" LegendPosition="Right"
+                                    <lvc:PieChart AutomationProperties.Name="Entities by development status chart" LegendPosition="Right"
                                                   Series="{Binding Charts.Presentation.CurrentStatusSeries}" />
                                 </Border>
                             </Grid>
@@ -158,12 +158,12 @@
                                     </Grid.ColumnDefinitions>
                                     <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Implemented entities over time" />
                                     <Button Grid.Column="1" Margin="8,0,5,0" Padding="10,4" Content="Save image…"
-                                            AutomationProperties.Name="Save the implemented entities chart as a PNG image"
+                                            AutomationProperties.Name="Save image of the implemented entities chart"
                                             Command="{Binding Charts.SaveChartCommand}"
                                             CommandParameter="{x:Static reporting:ProgressChartKind.ImplementedOverTime}"
                                             Style="{StaticResource SecondaryButtonStyle}" />
                                     <Button Grid.Column="2" Padding="10,4" Content="Copy image"
-                                            AutomationProperties.Name="Copy the implemented entities chart image"
+                                            AutomationProperties.Name="Copy image of the implemented entities chart"
                                             Command="{Binding Charts.CopyChartCommand}"
                                             CommandParameter="{x:Static reporting:ProgressChartKind.ImplementedOverTime}"
                                             Style="{StaticResource SecondaryButtonStyle}" />
@@ -190,12 +190,12 @@
                                     </Grid.ColumnDefinitions>
                                     <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Ready to start vs waiting on dependencies over time" />
                                     <Button Grid.Column="1" Margin="8,0,5,0" Padding="10,4" Content="Save image…"
-                                            AutomationProperties.Name="Save the readiness chart as a PNG image"
+                                            AutomationProperties.Name="Save image of the readiness chart"
                                             Command="{Binding Charts.SaveChartCommand}"
                                             CommandParameter="{x:Static reporting:ProgressChartKind.ReadyAndBlockedOverTime}"
                                             Style="{StaticResource SecondaryButtonStyle}" />
                                     <Button Grid.Column="2" Padding="10,4" Content="Copy image"
-                                            AutomationProperties.Name="Copy the readiness chart image"
+                                            AutomationProperties.Name="Copy image of the readiness chart"
                                             Command="{Binding Charts.CopyChartCommand}"
                                             CommandParameter="{x:Static reporting:ProgressChartKind.ReadyAndBlockedOverTime}"
                                             Style="{StaticResource SecondaryButtonStyle}" />
@@ -222,12 +222,12 @@
                                     </Grid.ColumnDefinitions>
                                     <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Weekly net implemented change" />
                                     <Button Grid.Column="1" Margin="8,0,5,0" Padding="10,4" Content="Save image…"
-                                            AutomationProperties.Name="Save the weekly net implemented change chart as a PNG image"
+                                            AutomationProperties.Name="Save image of the weekly net implemented change chart"
                                             Command="{Binding Charts.SaveChartCommand}"
                                             CommandParameter="{x:Static reporting:ProgressChartKind.WeeklyNetImplementedChange}"
                                             Style="{StaticResource SecondaryButtonStyle}" />
                                     <Button Grid.Column="2" Padding="10,4" Content="Copy image"
-                                            AutomationProperties.Name="Copy the weekly net implemented change chart image"
+                                            AutomationProperties.Name="Copy image of the weekly net implemented change chart"
                                             Command="{Binding Charts.CopyChartCommand}"
                                             CommandParameter="{x:Static reporting:ProgressChartKind.WeeklyNetImplementedChange}"
                                             Style="{StaticResource SecondaryButtonStyle}" />

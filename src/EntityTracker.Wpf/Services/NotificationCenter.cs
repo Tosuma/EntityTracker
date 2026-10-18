@@ -104,7 +104,7 @@ public sealed class NotificationCenter : INotifyPropertyChanged
         _ => "Synchronizing Project…"
     };
 
-    /// <summary>The step of a Project import (Portfolio › Import Project), for its progress notice.</summary>
+    /// <summary>The step of a Project import (Portfolio › Import project), for its progress notice.</summary>
     public static string DescribeProjectImportPhase(ProjectSyncPhase phase) => phase switch
     {
         ProjectSyncPhase.Inspecting => "Checking the selected checkout…",

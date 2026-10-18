@@ -828,7 +828,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         _ => "Update name, group, assignment, priority, progress, notes, and dependencies."
     };
 
-    public string SaveLabel => "Save Changes";
+    public string SaveLabel => "Save changes";
 
     public string ArchiveConfirmationMessage => CurrentEditPlan is null
         ? string.Empty

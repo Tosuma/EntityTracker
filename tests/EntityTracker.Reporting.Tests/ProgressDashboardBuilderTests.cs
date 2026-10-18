@@ -53,7 +53,7 @@ public sealed class ProgressDashboardBuilderTests
         Assert.Equal(18, report.ManagerSummary.ImplementedEntityCount);
         Assert.Equal(7, report.ManagerSummary.ReconciledEntityCount);
         Assert.Equal(2, report.ManagerSummary.ReadyEntityCount);
-        Assert.Equal(3, report.ManagerSummary.BlockedEntityCount);
+        Assert.Equal(3, report.ManagerSummary.WaitingOnDependenciesEntityCount);
         Assert.Equal(new DateOnly(2026, 2, 2), report.ManagerSummary.DataAsOfDate);
     }
 
@@ -71,7 +71,8 @@ public sealed class ProgressDashboardBuilderTests
         Assert.Equal(2, Count(report, ProgressStatusCategory.Blocked));
         Assert.Equal(3, Count(report, ProgressStatusCategory.Reworking));
         Assert.Equal(4, report.ManagerSummary.ImplementedEntityCount);
-        Assert.Equal(1, report.ManagerSummary.BlockedEntityCount);
+        Assert.Equal(1, report.ManagerSummary.WaitingOnDependenciesEntityCount);
+        Assert.Equal(2, report.ManagerSummary.ManuallyBlockedEntityCount);
         Assert.Equal(7, report.ManagerSummary.ActiveEntityCount);
     }
 

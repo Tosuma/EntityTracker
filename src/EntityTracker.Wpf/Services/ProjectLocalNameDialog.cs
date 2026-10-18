@@ -18,7 +18,7 @@ internal static class ProjectLocalNameDialog
             ResizeMode = ResizeMode.NoResize,
             Owner = owner
         };
-        Button accept = new() { Content = "Import Project", IsDefault = true, MinWidth = 110 };
+        Button accept = new() { Content = "Import project", IsDefault = true, MinWidth = 110 };
         Button cancel = new() { Content = "Cancel", IsCancel = true, MinWidth = 80, Margin = new Thickness(8, 0, 0, 0) };
         accept.Click += (_, _) =>
         {

@@ -260,7 +260,7 @@ public sealed partial class ProjectGitSyncService(
     }
 
     /// <summary>
-    /// Loads a Project from an existing Git checkout (Portfolio › Import Project), reporting each step to
+    /// Loads a Project from an existing Git checkout (Portfolio › Import project), reporting each step to
     /// <paramref name="progress"/>.
     /// </summary>
     public Task<ProjectSyncLink> ImportAsync(string path, string? localName = null,

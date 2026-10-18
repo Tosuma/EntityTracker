@@ -484,7 +484,7 @@ public sealed class PresentationConfigurationTests
         Assert.DoesNotContain("PostgreSQL", helpText, StringComparison.Ordinal);
         Assert.DoesNotContain("Copy SQL", helpText, StringComparison.Ordinal);
         Assert.DoesNotContain("CSV", helpText, StringComparison.Ordinal);
-        Assert.DoesNotContain("import", helpText.Replace("Import Project", ""), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("import", helpText.Replace("Import project", ""), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -1234,6 +1234,89 @@ public sealed class PresentationConfigurationTests
         Assert.Equal("True", (string?)comparisonGrid.Attribute("VirtualizingPanel.IsVirtualizing"));
         Assert.Equal("Pixel", (string?)comparisonGrid.Attribute("VirtualizingPanel.ScrollUnit"));
         Assert.Equal("Recycling", (string?)comparisonGrid.Attribute("VirtualizingPanel.VirtualizationMode"));
+    }
+
+    [Fact]
+    public void AggregateProgress_SeparatesWaitingOnDependenciesFromManualBlocks()
+    {
+        XDocument document = LoadWpfXaml("Views", "AggregateProgressView.xaml");
+        string xaml = document.ToString(SaveOptions.DisableFormatting);
+
+        Assert.Contains(document.Descendants(), element =>
+            element.Name.LocalName == "UniformGrid" && (string?)element.Attribute("Columns") == "6");
+        Assert.Contains("{Binding Report.ManagerSummary.WaitingOnDependenciesEntityCount}", xaml, StringComparison.Ordinal);
+        Assert.Contains("{Binding Report.ManagerSummary.ManuallyBlockedEntityCount}", xaml, StringComparison.Ordinal);
+        Assert.Contains(document.Descendants(), element =>
+            element.Name.LocalName == "TextBlock" && (string?)element.Attribute("Text") == "Waiting on dependencies");
+        Assert.Contains(document.Descendants(), element =>
+            element.Name.LocalName == "TextBlock" && (string?)element.Attribute("Text") == "Entities by development status");
+    }
+
+    [Fact]
+    public void ColumnHeaders_MarkAppliedFiltersAndSortsWithAThemeAwareBrush()
+    {
+        string header = LoadWpfXaml("Controls", "FilterableColumnHeader.xaml").ToString(SaveOptions.DisableFormatting);
+
+        Assert.DoesNotContain("Brush.Brand.", header, StringComparison.Ordinal);
+        Assert.Contains("{DynamicResource Brush.Indicator.Active}", header, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EntityForms_ShowAllowedWarningsAsWarningsAndErrorsAsErrors()
+    {
+        XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+
+        foreach (string prefix in new[] { "ManualCreation", "Editor" })
+        {
+            Assert.Equal("{StaticResource WarningMessageStyle}", MessageStyle(workspace, $"{prefix}.HasWarnings"));
+            Assert.Equal("{StaticResource ErrorMessageStyle}", MessageStyle(workspace, $"{prefix}.HasErrors"));
+        }
+        Assert.Equal("{StaticResource WarningMessageStyle}", MessageStyle(workspace, "Editor.HasPriorityUnresolvedDependencies"));
+        Assert.Equal("{StaticResource WarningMessageStyle}", MessageStyle(workspace, "HasGraphIssue"));
+
+        static string? MessageStyle(XDocument document, string visibilityPath) =>
+            (string?)Assert.Single(document.Descendants(), element =>
+                element.Name.LocalName == "Border" &&
+                ((string?)element.Attribute("Visibility"))?.StartsWith($"{{Binding {visibilityPath},", StringComparison.Ordinal) == true)
+            .Attribute("Style");
+    }
+
+    [Fact]
+    public void TrackerWorkspace_PagesHaveNoTabFrameOrExtraMargin()
+    {
+        XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XElement tabControl = Assert.Single(workspace.Descendants(), element => element.Name.LocalName == "TabControl");
+
+        Assert.Null(tabControl.Attribute("Margin"));
+        Assert.Equal("0", (string?)tabControl.Attribute("Padding"));
+        Assert.Equal("0", (string?)tabControl.Attribute("BorderThickness"));
+        Assert.Equal("Transparent", (string?)tabControl.Attribute("Background"));
+    }
+
+    [Fact]
+    public void OutboundDeletionApproval_NeverApprovesOnEnter()
+    {
+        XDocument dialog = LoadWpfXaml("Views", "OutboundDeletionApprovalDialog.xaml");
+        XElement approve = Assert.Single(dialog.Descendants(), element =>
+            element.Name.LocalName == "Button" && (string?)element.Attribute("Content") == "Approve deletion");
+        XElement cancel = Assert.Single(dialog.Descendants(), element =>
+            element.Name.LocalName == "Button" && (string?)element.Attribute("Content") == "Cancel");
+
+        Assert.Null(approve.Attribute("IsDefault"));
+        Assert.Equal("True", (string?)cancel.Attribute("IsDefault"));
+    }
+
+    [Fact]
+    public void VisibleButtonLabels_StartTheirAccessibleNames()
+    {
+        XDocument dashboard = LoadWpfXaml("Views", "ProjectDashboardView.xaml");
+
+        Assert.All(dashboard.Descendants().Where(element =>
+            element.Name.LocalName == "Button" && element.Attribute("Content") is { } content &&
+            !content.Value.StartsWith('{') && element.Attribute("AutomationProperties.Name") is { } name &&
+            !name.Value.StartsWith('{')), button =>
+            Assert.StartsWith((string)button.Attribute("Content")!,
+                (string)button.Attribute("AutomationProperties.Name")!, StringComparison.OrdinalIgnoreCase));
     }
 
     private static XDocument LoadWpfXaml(params string[] relativePath)
