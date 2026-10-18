@@ -89,7 +89,15 @@ public partial class TrackerWorkspaceView : UserControl
         return true;
     }
 
-    private void OnOverviewExportPopupOpened(object sender, EventArgs e) =>
+    private void OnOverviewExportPopupOpened(object sender, EventArgs e)
+    {
+        // The rows and their count are worked out as the menu opens, after any search or filter change.
+        System.Windows.Data.BindingOperations.GetBindingExpression(OverviewExportScope, TextBlock.TextProperty)
+            ?.UpdateTarget();
+        FocusFirstExportChoice();
+    }
+
+    private void FocusFirstExportChoice() =>
         OverviewExcelExportButton.Focus();
 
     private void OnOverviewExportPopupKeyDown(object sender, KeyEventArgs e)
@@ -443,9 +451,6 @@ public partial class TrackerWorkspaceView : UserControl
         e.Handled = true;
     }
 
-    private void OnOpenOverviewSearchClick(object sender, RoutedEventArgs e) =>
-        QueueCurrentSearchFocus();
-
     private void OnWorkspacePreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (_viewModel is null)
@@ -587,6 +592,13 @@ public partial class TrackerWorkspaceView : UserControl
         QueueCurrentSearchFocus();
         return true;
     }
+
+    /// <summary>
+    /// Entering a search box starts searching, as Ctrl+F does, so a search in progress carries over to the
+    /// next Tracker.
+    /// </summary>
+    private void OnSearchBoxFocused(object sender, KeyboardFocusChangedEventArgs e) =>
+        GetCurrentEntityTable()?.OpenSearchCommand.Execute(null);
 
     private void QueueCurrentSearchFocus()
     {

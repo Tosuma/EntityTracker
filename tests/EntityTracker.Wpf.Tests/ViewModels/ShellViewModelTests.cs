@@ -710,6 +710,23 @@ public sealed class ShellViewModelTests
     }
 
     [Fact]
+    public async Task OverviewExport_StatesItsRowsAndInternalContentBeforeChoosingAFormat()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "customer");
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "invoice");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        MainWindowViewModel workspace = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
+
+        Assert.StartsWith("The 2 shown entities, with internal notes and developer names.",
+            workspace.ExportScopeSummary, StringComparison.Ordinal);
+        Assert.Contains("Project report", workspace.ExportScopeSummary, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TrackerSwitch_PreservesPerTrackerTableStateClearsSelectionAndGuardsDirtyWork()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();

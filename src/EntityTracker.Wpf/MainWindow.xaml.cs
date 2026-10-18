@@ -37,15 +37,67 @@ public partial class MainWindow : Window
         _updates = updates;
         DataContext = viewModel;
         Loaded += OnLoaded;
+        SizeChanged += OnWindowSizeChanged;
         Closing += OnClosing;
         Closed += OnClosed;
         PreviewMouseWheel += OnPreviewMouseWheel;
+        PreviewMouseDown += OnPreviewMouseDownLeaveTextField;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         if (_updates is not null) _updates.StateChanged += OnUpdateStateChanged;
         _editTimer.Tick += (_, _) => RefreshUpdateBlock();
         ((System.Collections.Specialized.INotifyCollectionChanged)_viewModel.Notifications.Items)
             .CollectionChanged += OnNotificationsChanged;
     }
+
+    /// <summary>
+    /// Clicking outside a text field leaves it, as elsewhere in Windows. WPF keeps the focus in the field
+    /// when the click lands on something that takes none (a page background, a heading, a card), so after
+    /// such a click the focus moves to the nearest focusable element around the click, or is cleared.
+    /// </summary>
+    private void OnPreviewMouseDownLeaveTextField(object sender, MouseButtonEventArgs e)
+    {
+        if (Keyboard.FocusedElement is not DependencyObject focused ||
+            e.OriginalSource is not DependencyObject source ||
+            TextFieldOf(focused) is not { } field ||
+            IsWithin(source, field))
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+        {
+            if (Keyboard.FocusedElement is not DependencyObject still || !IsWithin(still, field)) return;
+            for (DependencyObject? current = source; current is not null; current = ParentOf(current))
+            {
+                if (current is UIElement { Focusable: true, IsEnabled: true, IsVisible: true } target &&
+                    !IsWithin(target, field) && target.Focus())
+                {
+                    return;
+                }
+            }
+            if (!_viewModel.IsModalOpen) Keyboard.ClearFocus();
+        });
+    }
+
+    private static FrameworkElement? TextFieldOf(DependencyObject focused)
+    {
+        if (focused is ComboBox { IsEditable: true } editable) return editable;
+        if (focused is not System.Windows.Controls.Primitives.TextBoxBase box) return null;
+        // An editable ComboBox's text box belongs to the ComboBox: its drop-down button is part of the field.
+        return box.TemplatedParent as ComboBox ?? (FrameworkElement)box;
+    }
+
+    private static bool IsWithin(DependencyObject element, DependencyObject ancestor)
+    {
+        for (DependencyObject? current = element; current is not null; current = ParentOf(current))
+            if (ReferenceEquals(current, ancestor)) return true;
+        return false;
+    }
+
+    // Logical parent first, so a click in a field's popup (a suggestion list) counts as inside the field.
+    private static DependencyObject? ParentOf(DependencyObject element) =>
+        LogicalTreeHelper.GetParent(element) ??
+        (element is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(element) : null);
 
     private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e) =>
         _mouseWheelRouter.Route(e);
@@ -102,6 +154,32 @@ public partial class MainWindow : Window
         if (!command.CanExecute(null)) return false;
         command.Execute(null);
         return true;
+    }
+
+    private void OnWindowSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        bool compact = Layout.IsCompactWidth(e.NewSize.Width);
+        if (compact == Layout.GetIsCompact(this) && e.PreviousSize.Width > 0) return;
+        Layout.SetIsCompact(this, compact);
+        ArrangeHeader(compact);
+    }
+
+    /// <summary>
+    /// Wide: the context, then the two selectors at a fixed width. Compact: the context on its own row and
+    /// the selectors sharing the row below, so neither clips the context title.
+    /// </summary>
+    private void ArrangeHeader(bool compact)
+    {
+        ColumnDefinitionCollection columns = HeaderLayout.ColumnDefinitions;
+        columns[0].Width = compact ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        columns[1].Width = compact ? new GridLength(1, GridUnitType.Star) : new GridLength(280);
+        columns[3].Width = compact ? new GridLength(1, GridUnitType.Star) : new GridLength(280);
+        Grid.SetColumnSpan(HeaderContext, compact ? 4 : 1);
+        foreach (FrameworkElement selector in new FrameworkElement[] { ProjectSelectorPanel, TrackerSelectorPanel })
+        {
+            Grid.SetRow(selector, compact ? 1 : 0);
+            selector.Margin = compact ? new Thickness(0, 8, 0, 0) : new Thickness(0);
+        }
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)

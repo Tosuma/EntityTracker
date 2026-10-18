@@ -2,6 +2,19 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:controls="clr-namespace:EntityTracker.Wpf.Controls">
     <!-- These styles tune density and semantics while retaining .NET's Fluent templates. -->
+
+    <!-- A page's toolbar: beside its heading, or under it and wrapping in the compact layout. -->
+    <Style x:Key="PageToolbarStyle" TargetType="WrapPanel">
+        <Setter Property="DockPanel.Dock" Value="Right" />
+        <Setter Property="Orientation" Value="Horizontal" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding (controls:Layout.IsCompact), RelativeSource={RelativeSource Self}}" Value="True">
+                <Setter Property="DockPanel.Dock" Value="Bottom" />
+                <Setter Property="Margin" Value="0,10,0,0" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
     <Style TargetType="{x:Type Button}"
            BasedOn="{StaticResource {x:Type Button}}">
         <Setter Property="MinHeight" Value="{DynamicResource Height.Control}" />

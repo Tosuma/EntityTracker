@@ -57,7 +57,7 @@
                 Visibility="{Binding HasReport, Converter={StaticResource BooleanToVisibilityConverter}}">
             <!-- Waiting on dependencies and Blocked are different counts: one waits on another entity,
                  the other was set to Blocked by hand. A warning icon marks either when it is not zero. -->
-            <UniformGrid Columns="6">
+            <UniformGrid Columns="6" controls:Layout.CompactColumns="3">
                 <StackPanel Margin="4">
                     <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Active" />
                     <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.ActiveEntityCount}" />
@@ -127,7 +127,7 @@
                    Text="No persisted progress history is available in this range."
                    Visibility="{Binding ShowNoHistoricalData, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
-        <Grid>
+        <Grid controls:Layout.StackWhenCompact="True">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="12" />

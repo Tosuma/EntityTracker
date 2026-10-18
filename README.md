@@ -68,7 +68,7 @@ The deterministic screenshot suite contains matching [`images/light`](images/lig
 for consistency.
 
 From a Project dashboard, select **Developers** to manage that Project's developer directory.
-Search by initials or display name in the left column; the available-developers list scrolls
+Search by initials or display name in the box above the available-developers list, which scrolls
 independently. Use the form on the right to add a developer or edit a selected one.
 Initials are required and unique among available developers in the Project; retired records can
 be restored when their initials are free. Retiring a developer requires entering their exact initials.
