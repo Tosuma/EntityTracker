@@ -88,6 +88,8 @@
                     Padding="12,5"
                     HorizontalAlignment="Left"
                     Background="{DynamicResource Brush.Status.NotStarted}"
+                    BorderBrush="{DynamicResource Brush.Status.Outline}"
+                    BorderThickness="1"
                     CornerRadius="10">
                 <TextBlock x:Name="BadgeText"
                            VerticalAlignment="Center"
@@ -152,37 +154,37 @@
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Ready}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.Ready}" />
-                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="Badge" Property="BorderBrush" Value="{DynamicResource Brush.Status.Outline}" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.Ready.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Ready" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Blocked}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.Blocked}" />
-                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="Badge" Property="BorderBrush" Value="{DynamicResource Brush.Status.Outline}" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.Blocked.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Blocked" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.WaitingOnDependencies}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.WaitingOnDependencies}" />
-                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="Badge" Property="BorderBrush" Value="{DynamicResource Brush.Status.Outline}" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.WaitingOnDependencies.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Waiting on dependencies" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.InProgress}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.InProgress}" />
-                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="Badge" Property="BorderBrush" Value="{DynamicResource Brush.Status.Outline}" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.InProgress.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="In progress" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Completed}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.Completed}" />
-                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="Badge" Property="BorderBrush" Value="{DynamicResource Brush.Status.Outline}" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.Completed.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Completed" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Reconciled}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.Reconciled}" />
-                    <Setter TargetName="Badge" Property="BorderThickness" Value="0" />
+                    <Setter TargetName="Badge" Property="BorderBrush" Value="{DynamicResource Brush.Status.Outline}" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.Reconciled.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Reconciled" />
                 </DataTrigger>
@@ -592,6 +594,8 @@
                                                 Margin="0,0,4,0"
                                                 VerticalAlignment="Center"
                                                 Background="{DynamicResource Brush.Status.DevelopmentCompleted}"
+                                                BorderBrush="{DynamicResource Brush.Status.Outline}"
+                                                BorderThickness="1"
                                                 CornerRadius="4" />
                                         <TextBlock FontSize="11"
                                                    Foreground="{DynamicResource Brush.Text.Secondary}"
@@ -603,6 +607,8 @@
                                                 Margin="0,0,4,0"
                                                 VerticalAlignment="Center"
                                                 Background="{DynamicResource Brush.Status.ReworkNeeded}"
+                                                BorderBrush="{DynamicResource Brush.Status.Outline}"
+                                                BorderThickness="1"
                                                 CornerRadius="4" />
                                         <TextBlock FontSize="11"
                                                    Foreground="{DynamicResource Brush.Text.Secondary}"
@@ -612,6 +618,8 @@
                                         <Border Width="8" Height="8" Margin="0,0,4,0"
                                                 VerticalAlignment="Center"
                                                 Background="{DynamicResource Brush.Status.Reworking}"
+                                                BorderBrush="{DynamicResource Brush.Status.Outline}"
+                                                BorderThickness="1"
                                                 CornerRadius="4" />
                                         <TextBlock FontSize="11"
                                                    Foreground="{DynamicResource Brush.Text.Secondary}"
@@ -623,6 +631,8 @@
                                                 Margin="0,0,4,0"
                                                 VerticalAlignment="Center"
                                                 Background="{DynamicResource Brush.Status.Reconciled}"
+                                                BorderBrush="{DynamicResource Brush.Status.Outline}"
+                                                BorderThickness="1"
                                                 CornerRadius="4" />
                                         <TextBlock FontSize="11"
                                                    Foreground="{DynamicResource Brush.Text.Secondary}"

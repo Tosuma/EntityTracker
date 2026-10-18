@@ -46,6 +46,14 @@ public sealed class ProgressChartPresentationBuilderTests
         Assert.Equal(SKColor.Parse(ColorScheme.DarkChart.TooltipBackground), dark.TooltipBackgroundPaint!.Color);
         Assert.Equal(lightText, Assert.IsType<SolidColorPaint>(light.CountYAxes[0].LabelsPaint).Color);
         Assert.Equal(lightText, Assert.IsType<SolidColorPaint>(export.CountYAxes[0].LabelsPaint).Color);
+
+        // Dark slices (Completed, Reconciled) get a thin light outline on the dark card; light charts and
+        // exports keep plain slices.
+        SKColor outline = SKColor.Parse(ColorScheme.DarkChart.SliceOutline);
+        Assert.All(dark.CurrentStatusSeries, series =>
+            Assert.Equal(outline, Assert.IsType<SolidColorPaint>(Assert.IsType<PieSeries<int>>(series).Stroke).Color));
+        Assert.All(light.CurrentStatusSeries.Concat(export.CurrentStatusSeries), series =>
+            Assert.Null(Assert.IsType<PieSeries<int>>(series).Stroke));
     }
 
     [Fact]

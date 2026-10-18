@@ -35,7 +35,8 @@ public sealed class ProgressChartPresentationBuilder
         ISeries[] currentStatusSeries = CreateCurrentStatusSeries(
             report.CurrentStatusCounts,
             StatusFills,
-            includeExportPieLabels);
+            includeExportPieLabels,
+            ProgressChartPalette.SliceOutlineFor(theme));
 
         DateOnly[] implementedDates = report.ImplementedOverTime
             .Select(static point => point.Date)
@@ -154,7 +155,8 @@ public sealed class ProgressChartPresentationBuilder
     private static ISeries[] CreateCurrentStatusSeries(
         IReadOnlyList<ProgressStatusCount> counts,
         IReadOnlyDictionary<ProgressStatusCategory, SKColor> statusColors,
-        bool includeExportPieLabels)
+        bool includeExportPieLabels,
+        SKColor? sliceOutline)
     {
         int total = counts.Sum(static item => item.Count);
         return counts.Select(item =>
@@ -163,7 +165,8 @@ public sealed class ProgressChartPresentationBuilder
             {
                 Name = FormatStatus(item.Status),
                 Values = [item.Count],
-                Fill = new SolidColorPaint(statusColors[item.Status])
+                Fill = new SolidColorPaint(statusColors[item.Status]),
+                Stroke = sliceOutline is { } outline ? new SolidColorPaint(outline, 1) : null
             };
             if (includeExportPieLabels && item.Count > 0 && total > 0)
             {
