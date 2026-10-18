@@ -209,7 +209,7 @@ public sealed class ProjectReportTests
         [
             new SummarySection("summary", "Summary", ReportVisibility.Everyone,
                 new Dictionary<string, IReadOnlyList<SummaryCard>> { [ReportScope.AllKey] = [new("Active entities", 2)] }),
-            new ChartSection("current-work-status", "Entities by current work status", ReportVisibility.Everyone,
+            new ChartSection("current-work-status", "Entities by development status", ReportVisibility.Everyone,
                 ReportChartType.Donut,
                 new Dictionary<string, ReportChart>
                 {

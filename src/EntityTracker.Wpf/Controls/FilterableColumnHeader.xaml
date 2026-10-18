@@ -31,10 +31,10 @@
                             <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Secondary}" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding Filter.IsApplied, ElementName=Root}" Value="True">
-                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Brand.Green100}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Indicator.Active}" />
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding Filter.IsSorted, ElementName=Root}" Value="True">
-                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Brand.Green100}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Indicator.Active}" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
@@ -45,19 +45,20 @@
                                VerticalAlignment="Center"
                                Size="14"
                                IconKey="Icon.ArrowUp"
-                               Foreground="{DynamicResource Brush.Brand.Green100}"
+                               Foreground="{DynamicResource Brush.Indicator.Active}"
                                Visibility="{Binding Filter.IsSortAscending, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 <controls:Icon DockPanel.Dock="Right"
                                Margin="5,0,0,0"
                                VerticalAlignment="Center"
                                Size="14"
                                IconKey="Icon.ArrowDown"
-                               Foreground="{DynamicResource Brush.Brand.Green100}"
+                               Foreground="{DynamicResource Brush.Indicator.Active}"
                                Visibility="{Binding Filter.IsSortDescending, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 <TextBlock VerticalAlignment="Center"
                            FontWeight="SemiBold"
                            Foreground="{DynamicResource Brush.Text.Primary}"
-                           Text="{Binding Filter.Title, ElementName=Root}" />
+                           Text="{Binding Filter.Title, ElementName=Root}"
+                           TextTrimming="CharacterEllipsis" />
             </DockPanel>
         </Button>
 

@@ -127,7 +127,7 @@ public sealed class ProgressChartPresentationBuilder
 
     public static string GetTitle(ProgressChartKind kind) => kind switch
     {
-        ProgressChartKind.CurrentStatus => "Entities by current work status",
+        ProgressChartKind.CurrentStatus => "Entities by development status",
         ProgressChartKind.ImplementedOverTime => "Implemented entities over time",
         ProgressChartKind.ReadyAndBlockedOverTime => "Ready to start vs waiting on dependencies over time",
         ProgressChartKind.WeeklyNetImplementedChange => "Weekly net implemented change",

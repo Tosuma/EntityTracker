@@ -7,7 +7,7 @@ using EntityTracker.Theme;
 
 namespace EntityTracker.Reporting.ProjectReports;
 
-/// <summary>Headline numbers: active, implemented, reconciled, ready and waiting on dependencies.</summary>
+/// <summary>Headline numbers: active, implemented, reconciled, ready, waiting on dependencies and blocked.</summary>
 public sealed class SummarySectionProvider : IReportSectionProvider
 {
     public ReportSection Build(ReportContext context) => new SummarySection("summary", "Summary",
@@ -20,7 +20,9 @@ public sealed class SummarySectionProvider : IReportSectionProvider
         new("Implemented", summary.ImplementedEntityCount),
         new("Reconciled", summary.ReconciledEntityCount),
         new("Ready to start", summary.ReadyEntityCount),
-        new("Waiting on dependencies", summary.BlockedEntityCount, Attention: summary.BlockedEntityCount > 0)
+        new("Waiting on dependencies", summary.WaitingOnDependenciesEntityCount,
+            Attention: summary.WaitingOnDependenciesEntityCount > 0),
+        new("Blocked", summary.ManuallyBlockedEntityCount, Attention: summary.ManuallyBlockedEntityCount > 0)
     ];
 }
 

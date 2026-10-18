@@ -202,9 +202,9 @@
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
             <Button Margin="0,0,8,0" Click="OnRenameProject" Content="Rename project" />
             <Button Margin="0,0,8,0" Click="OnOpenProjectReport" Content="Project report"
-                    AutomationProperties.Name="Create a report of this project" />
+                    AutomationProperties.HelpText="Create a report of this project to share" />
             <Button Margin="0,0,8,0" Click="OnOpenDevelopers" Content="Developers"
-                    AutomationProperties.Name="Manage project developers" />
+                    AutomationProperties.HelpText="Manage the developers in this project" />
             <Button Margin="0,0,8,0" Click="OnOpenRecycleBin" Content="Tracker recycle bin" />
             <Button Click="OnCreateTracker" Content="Create tracker"
                     Style="{StaticResource PrimaryButtonStyle}" />
@@ -250,16 +250,16 @@
                                Visibility="{Binding HasPendingAction, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
                         <Button Margin="0,0,8,0" Content="Link repository" Command="{Binding LinkCommand}"
-                                AutomationProperties.Name="Link existing Git repository" />
+                                AutomationProperties.HelpText="Link an existing Git repository to this project" />
                         <Button Margin="0,0,8,0" Content="Sync now" Command="{Binding SyncCommand}"
-                                AutomationProperties.Name="Commit Project snapshot now"
+                                AutomationProperties.HelpText="Commit the project snapshot and sync it with the repository now"
                                 Style="{StaticResource PrimaryButtonStyle}" />
                         <Button Content="Unlink" Command="{Binding UnlinkCommand}"
                                 AutomationProperties.Name="Unlink Git repository" />
                         <Button Margin="8,0,0,0" Content="Cancel sync"
                                 Command="{Binding CancelSyncCommand}"
                                 IsEnabled="{Binding CanCancelSync}"
-                                AutomationProperties.Name="Cancel waiting or running Project sync" />
+                                AutomationProperties.HelpText="Cancel a waiting or running project sync" />
                     </StackPanel>
                 </StackPanel>
             </Border>
@@ -492,7 +492,7 @@
                         </ToggleButton>
                         <Button Margin="0,0,8,8"
                                 VerticalAlignment="Center"
-                                AutomationProperties.Name="Clear comparison category filter"
+                                AutomationProperties.HelpText="Clear the comparison category filter"
                                 Command="{Binding ProjectReporting.ClearCategoryCommand}"
                                 Content="Clear filter"
                                 Style="{StaticResource SecondaryButtonStyle}"

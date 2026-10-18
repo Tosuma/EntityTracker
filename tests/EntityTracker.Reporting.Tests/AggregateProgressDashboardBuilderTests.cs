@@ -65,7 +65,7 @@ public sealed class AggregateProgressDashboardBuilderTests
             TimeZoneInfo.Utc);
 
         Assert.Equal(2, report.ManagerSummary.ReadyEntityCount);
-        Assert.Equal(1, report.ManagerSummary.BlockedEntityCount);
+        Assert.Equal(1, report.ManagerSummary.WaitingOnDependenciesEntityCount);
         Assert.Single(report.ImplementedOverTime);
         Assert.False(empty.HasHistoricalData);
         Assert.Equal(ProgressManagerSummary.Empty, empty.ManagerSummary);

@@ -18,7 +18,7 @@
                     <StackPanel>
                         <TextBlock FontWeight="SemiBold" Text="Portfolio, Project, and Tracker" />
                         <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}"
-                                   Text="Portfolio lists Projects. A Project dashboard lists its Trackers and opens the Project Developers directory. Opening a Tracker makes it the active context for Overview, Dependency graph, Archived, and Add entity. Developers can be added, edited, retired, and restored; entity responsibility still uses its existing text field. A Tracker copied from another can use Sync from source on the Project dashboard to take over the source&apos;s later changes; only the copy changes, and progress is never copied." />
+                                   Text="Portfolio lists Projects. A Project dashboard lists its Trackers and opens the Project Developers directory. Opening a Tracker makes it the active context for Overview, Dependency graph, Archived, and Add entity. Developers can be added, edited, retired, and restored. An entity can have several responsible developers, and its details show who was responsible and when. A Tracker copied from another can use Sync from source on the Project dashboard to take over the source&apos;s later changes; only the copy changes, and progress is never copied." />
                     </StackPanel>
                 </Border>
                 <Border Margin="6,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
@@ -48,7 +48,7 @@
                        Text="Project Git synchronization" />
             <Border Margin="0,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
                 <StackPanel>
-                    <TextBlock TextWrapping="Wrap" Text="Install system Git and prepare one dedicated repository per Project outside EntityTracker. Clone an existing remote or initialize a repository, check out a branch, set your Git identity, remote, upstream, and credentials with Git. Then use Import Project on Portfolio or Link repository on the Project dashboard. Select the clean repository root." />
+                    <TextBlock TextWrapping="Wrap" Text="Install system Git and prepare one dedicated repository per Project outside EntityTracker. Clone an existing remote or initialize a repository, check out a branch, set your Git identity, remote, upstream, and credentials with Git. Then use Import project on Portfolio or Link repository on the Project dashboard. Select the clean repository root." />
                     <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Text="Automatic sync is enabled by default and checks linked Projects after startup and at the interval in Settings. It pauses a Project with an unfinished edit until that edit is saved or closed. Sync now remains available at any time. Conflicts and outbound deletions require Sync now for review or approval." />
                     <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Text="If authentication fails, repair credentials with command-line Git outside EntityTracker. If a checkout moved, changed branch or upstream, or became invalid, restore it or unlink and relink its existing root. Check the Project card for the last result. Before inbound SQLite changes, EntityTracker creates a backup in %LOCALAPPDATA%\EntityTracker\backups\v&lt;schema-version&gt;. Close the app before restoring that backup; keep a copy of the current database and repository first." />
                 </StackPanel>

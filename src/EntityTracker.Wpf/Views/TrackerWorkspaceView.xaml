@@ -250,13 +250,17 @@
             </StackPanel>
         </Border>
 
-        <TabControl Margin="18"
-                    Focusable="False"
+        <!-- The sidebar picks the page through SelectedTab, so the tabs have no height and the TabControl
+             draws no frame of its own: each page sits in the work area like every other page. -->
+        <TabControl Focusable="False"
                     IsTabStop="False"
+                    Padding="0"
+                    Background="Transparent"
+                    BorderThickness="0"
                     SelectedValue="{Binding SelectedTab}"
                     SelectedValuePath="Tag">
             <TabItem Header="Overview" Focusable="False" IsTabStop="False" Tag="{x:Static viewModels:MainWindowTab.Overview}">
-                <Grid Margin="12">
+                <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -937,7 +941,7 @@
             </TabItem>
 
             <TabItem Header="Dependency graph" Focusable="False" IsTabStop="False" Tag="{x:Static viewModels:MainWindowTab.DependencyGraph}">
-                <Grid x:Name="DependencyGraphPage" Margin="12" DataContext="{Binding DependencyGraph}">
+                <Grid x:Name="DependencyGraphPage" DataContext="{Binding DependencyGraph}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -1101,7 +1105,7 @@
             </TabItem>
 
             <TabItem Header="Archived" Focusable="False" IsTabStop="False" Tag="{x:Static viewModels:MainWindowTab.Archived}">
-                <Grid Margin="12">
+                <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -1342,7 +1346,7 @@
             </TabItem>
 
             <TabItem Header="Add entity" Focusable="False" IsTabStop="False" Tag="{x:Static viewModels:MainWindowTab.AddEntity}">
-                <Grid Margin="12">
+                <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
@@ -1537,21 +1541,21 @@
 
                             <Border Margin="0,12,0,0"
                                     MaxHeight="110"
-                                    Padding="10"
-                                    Background="{DynamicResource Brush.Surface.Subtle}"
-                                    BorderBrush="{DynamicResource Brush.Accent}"
-                                    BorderThickness="1"
+                                    Style="{StaticResource WarningMessageStyle}"
                                     Visibility="{Binding ManualCreation.HasWarnings, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                    <ItemsControl ItemsSource="{Binding ManualCreation.Warnings}" />
-                                </ScrollViewer>
+                                <DockPanel>
+                                    <controls:Icon DockPanel.Dock="Left" Margin="0,1,8,0" Size="16" VerticalAlignment="Top"
+                                                   IconKey="Icon.Warning"
+                                                   Foreground="{DynamicResource Brush.Caution}"
+                                                   AutomationProperties.Name="Warning" />
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl ItemsSource="{Binding ManualCreation.Warnings}" />
+                                    </ScrollViewer>
+                                </DockPanel>
                             </Border>
 
                             <Border Margin="0,12,0,0"
-                                    Padding="10"
-                                    Background="{DynamicResource Brush.Surface.Subtle}"
-                                    BorderBrush="{DynamicResource Brush.Accent}"
-                                    BorderThickness="1"
+                                    Style="{StaticResource InfoMessageStyle}"
                                     Visibility="{Binding ManualCreation.HasArchivedEntityMatch, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <DockPanel>
                                     <Button DockPanel.Dock="Right"
@@ -1568,14 +1572,17 @@
 
                             <Border Margin="0,12,0,0"
                                     MaxHeight="110"
-                                    Padding="10"
-                                    Background="{DynamicResource Brush.Surface.Alert}"
-                                    BorderBrush="{DynamicResource Brush.Accent}"
-                                    BorderThickness="1"
+                                    Style="{StaticResource ErrorMessageStyle}"
                                     Visibility="{Binding ManualCreation.HasErrors, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                    <ItemsControl ItemsSource="{Binding ManualCreation.Errors}" />
-                                </ScrollViewer>
+                                <DockPanel>
+                                    <controls:Icon DockPanel.Dock="Left" Margin="0,1,8,0" Size="16" VerticalAlignment="Top"
+                                                   IconKey="Icon.DismissCircle"
+                                                   Foreground="{DynamicResource Brush.Critical}"
+                                                   AutomationProperties.Name="Error" />
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl ItemsSource="{Binding ManualCreation.Errors}" />
+                                    </ScrollViewer>
+                                </DockPanel>
                             </Border>
 
                             <TextBlock Margin="0,12,0,0"
@@ -1594,7 +1601,7 @@
                                 Content="Cancel"
                                 Style="{StaticResource SecondaryButtonStyle}" />
                         <Button Command="{Binding ManualCreation.CreateCommand}"
-                                Content="Create Entity"
+                                Content="Create entity"
                                 Style="{StaticResource PrimaryButtonStyle}" />
                     </StackPanel>
                 </Grid>
@@ -1606,7 +1613,6 @@
         <Border x:Name="EntityDetailsPane"
                 Width="420"
                 MaxWidth="420"
-                Margin="18"
                 Padding="20"
                 Panel.ZIndex="50"
                 HorizontalAlignment="Right"
@@ -1790,10 +1796,7 @@
 
                         <Border Margin="0,0,0,16"
                                 Padding="10"
-                                Background="{DynamicResource Brush.Surface.Alert}"
-                                BorderBrush="{DynamicResource Brush.Accent}"
-                                BorderThickness="1"
-                                CornerRadius="4"
+                                Style="{StaticResource WarningMessageStyle}"
                                 Visibility="{Binding HasGraphIssue, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <StackPanel>
                                 <TextBlock FontWeight="SemiBold" Text="{Binding GraphIssueTitle}" />
@@ -2209,9 +2212,7 @@
                                         </ScrollViewer>
                                         <Border Margin="0,7,0,0"
                                                 Padding="8"
-                                                Background="{DynamicResource Brush.Surface.Page}"
-                                                BorderBrush="{DynamicResource Brush.Accent}"
-                                                BorderThickness="1"
+                                                Style="{StaticResource WarningMessageStyle}"
                                                 Visibility="{Binding Editor.HasPriorityUnresolvedDependencies, Converter={StaticResource BooleanToVisibilityConverter}}">
                                             <StackPanel>
                                                 <TextBlock FontWeight="SemiBold"
@@ -2311,26 +2312,32 @@
 
                                 <Border Margin="0,12,0,0"
                                         MaxHeight="110"
-                                        Padding="10"
-                                        Background="{DynamicResource Brush.Surface.Subtle}"
-                                        BorderBrush="{DynamicResource Brush.Accent}"
-                                        BorderThickness="1"
+                                        Style="{StaticResource WarningMessageStyle}"
                                         Visibility="{Binding Editor.HasWarnings, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                        <ItemsControl ItemsSource="{Binding Editor.Warnings}" />
-                                    </ScrollViewer>
+                                    <DockPanel>
+                                        <controls:Icon DockPanel.Dock="Left" Margin="0,1,8,0" Size="16" VerticalAlignment="Top"
+                                                       IconKey="Icon.Warning"
+                                                       Foreground="{DynamicResource Brush.Caution}"
+                                                       AutomationProperties.Name="Warning" />
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                            <ItemsControl ItemsSource="{Binding Editor.Warnings}" />
+                                        </ScrollViewer>
+                                    </DockPanel>
                                 </Border>
 
                                 <Border Margin="0,12,0,0"
                                         MaxHeight="110"
-                                        Padding="10"
-                                        Background="{DynamicResource Brush.Surface.Alert}"
-                                        BorderBrush="{DynamicResource Brush.Accent}"
-                                        BorderThickness="1"
+                                        Style="{StaticResource ErrorMessageStyle}"
                                         Visibility="{Binding Editor.HasErrors, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                        <ItemsControl ItemsSource="{Binding Editor.Errors}" />
-                                    </ScrollViewer>
+                                    <DockPanel>
+                                        <controls:Icon DockPanel.Dock="Left" Margin="0,1,8,0" Size="16" VerticalAlignment="Top"
+                                                       IconKey="Icon.DismissCircle"
+                                                       Foreground="{DynamicResource Brush.Critical}"
+                                                       AutomationProperties.Name="Error" />
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                            <ItemsControl ItemsSource="{Binding Editor.Errors}" />
+                                        </ScrollViewer>
+                                    </DockPanel>
                                 </Border>
 
                             </StackPanel>

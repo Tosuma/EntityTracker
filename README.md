@@ -127,7 +127,7 @@ archived entities, without deleting their history.
 ### Import and synchronize an existing Git checkout
 
 Clone and configure a dedicated Project repository with command-line Git first. On the Portfolio,
-choose **Import Project** and select its clean working-tree root. EntityTracker imports the
+choose **Import project** and select its clean working-tree root. EntityTracker imports the
 snapshot with its stable IDs and history. If its Project name is already used locally, choose a
 private name for this installation; the shared snapshot keeps its original name.
 
@@ -434,7 +434,7 @@ The live badge above reports the current `main` build status.
 
 The [GS-01–GS-05 Git-sync roadmap](docs/milestones/git-sync/00_README.md) now includes portable
 snapshots, local linking, existing-checkout import, collaborative merge, and automatic checks. Prepare
-and configure a clean dedicated repository outside EntityTracker. Use **Import Project** on the
+and configure a clean dedicated repository outside EntityTracker. Use **Import project** on the
 Portfolio for a Project already present in the repository, or **Link repository** on an existing
 Project dashboard. **Sync now** merges independent edits, offers conflict review when needed,
 commits locally, and uses the configured upstream when present. **Unlink** removes only the local
