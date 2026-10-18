@@ -71,23 +71,24 @@ public sealed partial class ColorSchemeTests
     }
 
     [Fact]
-    public void EachStatusHasItsOwnColourVisibleOnLightAndDarkPages()
+    public void StatusColoursFollowTheAgreedBrandRules()
     {
-        // The Fluent light page and card, and the dark page and card, behind graph nodes and chart slices.
-        string[] pages = ["#FFFFFF", "#F3F3F3", "#202020", "#2D2D2D"];
-        StatusColor[] development =
+        // Working on an entity is one colour, whether it is new work or rework.
+        Assert.Equal(ColorScheme.Status.InProgress, ColorScheme.Status.Reworking);
+        // Coral asks for attention, so it marks Blocked and nothing else among the statuses.
+        Assert.Equal(ColorScheme.Base.Coral, ColorScheme.Status.Blocked.Fill);
+        Assert.Equal(ColorScheme.Base.DeepTeal, ColorScheme.Status.DevelopmentCompleted.Fill);
+        Assert.Equal(ColorScheme.Base.Green100, ColorScheme.Status.Reconciled.Fill);
+
+        StatusColor[] distinct =
         [
             ColorScheme.Status.NotStarted, ColorScheme.Status.InProgress, ColorScheme.Status.ReworkNeeded,
-            ColorScheme.Status.Reworking, ColorScheme.Status.Blocked, ColorScheme.Status.DevelopmentCompleted,
-            ColorScheme.Status.Reconciled
+            ColorScheme.Status.Blocked, ColorScheme.Status.DevelopmentCompleted, ColorScheme.Status.Reconciled,
+            ColorScheme.WorkStatus.WaitingOnDependencies
         ];
-
-        Assert.Equal(development.Length, development.Select(static color => color.Fill).Distinct().Count());
-        Assert.DoesNotContain(development, color => color.Fill == ColorScheme.WorkStatus.WaitingOnDependencies.Fill);
-        foreach (StatusColor color in development.Append(ColorScheme.WorkStatus.WaitingOnDependencies))
-            foreach (string page in pages)
-                Assert.True(ContrastRatio(color.Fill, page) >= 3,
-                    $"{color.Fill} on {page} is below the 3:1 contrast a graph node or chart slice needs.");
+        Assert.Equal(distinct.Length, distinct.Select(static color => color.Fill).Distinct().Count());
+        Assert.DoesNotContain(distinct, color => color != ColorScheme.Status.Blocked &&
+            color.Fill == ColorScheme.Base.Coral);
     }
 
     [Fact]

@@ -60,20 +60,27 @@ explanation.
 ## Semantic colors
 
 Status colors are shared by the overview, dashboards, dependency graph, progress charts, PNG exports
-and the exported report. Every status has its own hue. All are mid-tones (relative luminance about
-0.245): Dark Green text reads on each (about 4.7:1), and each stays visible as a graph node or chart
-slice on light and dark pages (3:1 or more). One palette therefore serves both themes and the exports.
+and the exported report. They use only the official brand colours:
+
+- In progress and Reworking share one colour, since both mean someone is working on the entity; the
+  graph tells them apart by their marks.
+- Coral, the colour that asks for attention, is kept for Blocked.
+- Rework needed is a calm mint: the entity is done but needs changes, and blocks nothing.
+- Waiting on dependencies is a soft pale amber: visible, without competing with Blocked.
+- Completed and Reconciled keep deep teal and the sidebar's Green 100.
+
+Every badge's text reads on its fill (4.5:1 or more).
 
 | Meaning | Color | Graph mark |
 | --- | --- | --- |
-| Not started / Ready | Status grey `#778C8A` | none |
-| In progress | Status blue `#4C8CCB` | play triangle |
-| Rework needed | Status orange `#E65C20` | exclamation bar |
-| Reworking | Status violet `#9A77CC` | two triangles |
-| Blocked | Status red `#E25A66` | bar |
-| Development completed / Completed | Status teal `#209888` | check |
-| Reconciled | Status green `#4D993E` | two checks |
-| Waiting on dependencies | Status amber `#B77B14` | (work status only) |
+| Not started / Ready | Green 40 `#A0AFAF` | none |
+| In progress | Green 80 `#41605E` | play triangle |
+| Rework needed | Notification green `#96E4AD` | exclamation bar |
+| Reworking | Green 80 `#41605E` | two triangles |
+| Blocked | Coral `#FF6359` | bar |
+| Development completed / Completed | Deep teal `#0F6455` | check |
+| Reconciled | Green 100 `#123836` | two checks |
+| Waiting on dependencies | Pale amber `#F6D9A8` | (work status only) |
 | Unresolved reference warning | Warning palette | Dependencies on names no entity has yet, in the Overview, entity details and the dependency graph |
 
 A status is never told by colour alone: badges carry their name, and the dependency graph draws the

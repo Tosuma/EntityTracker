@@ -200,8 +200,10 @@ public sealed class ShellViewModelTests
         Assert.Equal(DependencyHighlightMode.Dependencies, workspace.DependencyGraph.HighlightMode);
 
         workspace.DependencyGraph.HighlightMode = DependencyHighlightMode.DirectLinks;
+        // The settings view model takes the mode once the save has finished, after the file is written.
         await WaitUntilAsync(async () =>
-            (await harness.SettingsStore.LoadAsync()).Settings.SolarHighlightMode == DependencyHighlightMode.DirectLinks);
+            (await harness.SettingsStore.LoadAsync()).Settings.SolarHighlightMode == DependencyHighlightMode.DirectLinks &&
+            graphSettings.SolarHighlightMode == DependencyHighlightMode.DirectLinks);
 
         EntityTrackerSettings saved = (await harness.SettingsStore.LoadAsync()).Settings;
         Assert.Equal(DependencyHighlightMode.Dependents, saved.TreeHighlightMode);
