@@ -23,6 +23,13 @@ cd EntityTracker
 dotnet restore EntityTracker.slnx
 ```
 
+The coding-agent instructions (`AGENTS.md`, which `CLAUDE.md` imports) and skills (`.agents/skills/`)
+are shared by Claude Code and Codex. `.claude/skills` is a Git symlink to `.agents/skills`, so clone
+with symbolic links enabled: turn on Windows Developer Mode (or use an elevated shell) and run
+`git config --global core.symlinks true` before cloning, or `git config core.symlinks true` and
+`git checkout -- .claude` afterwards. Without that, the link checks out as a one-line text file and
+Claude Code finds no skills.
+
 ## Build the complete solution
 
 ```powershell
