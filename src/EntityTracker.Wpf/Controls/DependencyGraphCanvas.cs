@@ -521,10 +521,8 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         lines.BeginFigure(points[0], false, false);
         for (int index = 1; index < points.Count; index++)
         {
-            Point from = points[index - 1];
-            Point to = points[index];
-            double middle = (from.Y + to.Y) / 2;
-            lines.BezierTo(new Point(from.X, middle), new Point(to.X, middle), to, true, false);
+            (Point first, Point second) = TreeDependencyLayout.CurveControls(points[index - 1], points[index]);
+            lines.BezierTo(first, second, points[index], true, false);
         }
     }
 

@@ -5,8 +5,9 @@ namespace EntityTracker.Wpf.ViewModels.DependencyGraph;
 /// <summary>
 /// A classical top-to-bottom dependency tree: an entity sits one row below its deepest dependency.
 /// Missing dependencies form the top row, and entities without links get their own section below
-/// the tree. Links spanning several rows bend through invisible waypoints so they pass between
-/// boxes, and each row is ordered to reduce crossing lines.
+/// the tree. Links spanning several rows pass through invisible waypoints between the boxes: they run
+/// straight down through each row they cross and bend only in the gaps between rows, so a line never
+/// passes under a box. Each row is ordered to reduce crossing lines.
 /// </summary>
 public sealed class TreeDependencyLayout
 {
@@ -38,10 +39,24 @@ public sealed class TreeDependencyLayout
 
     public IReadOnlyDictionary<DependencyGraphNode, Rect> Boxes => _boxes;
 
-    /// <summary>Gets the points each drawn link passes: start, any waypoints, end.</summary>
+    /// <summary>
+    /// Gets the points each drawn link passes: its start, the top and bottom of each row it crosses (at the
+    /// waypoint between that row's boxes), and its end.
+    /// </summary>
     public IReadOnlyDictionary<DependencyGraphEdge, IReadOnlyList<Point>> Routes => _routes;
 
     public Rect BoxOf(DependencyGraphNode node) => _boxes.GetValueOrDefault(node, Rect.Empty);
+
+    /// <summary>
+    /// Gets the control points of the curve drawn between two consecutive route points: both at the
+    /// middle height, so the curve leaves and arrives vertically and never leaves the band between the
+    /// two points' heights. The exported report draws the same curve (report.js).
+    /// </summary>
+    public static (Point First, Point Second) CurveControls(Point from, Point to)
+    {
+        double middle = (from.Y + to.Y) / 2;
+        return (new Point(from.X, middle), new Point(to.X, middle));
+    }
 
     public Point CenterOf(DependencyGraphNode node)
     {
@@ -273,7 +288,9 @@ public sealed class TreeDependencyLayout
                 for (int row = from.Row + 1; row < to.Row; row++)
                 {
                     current = current.Below.First(item => ReferenceEquals(item.Edge, edge));
-                    route.Add(new Point(current.X, RowTop(row) + BoxHeight / 2));
+                    // Straight through the row's full height, so the bends stay in the gaps between rows.
+                    route.Add(new Point(current.X, RowTop(row)));
+                    route.Add(new Point(current.X, RowTop(row) + BoxHeight));
                 }
             }
 
