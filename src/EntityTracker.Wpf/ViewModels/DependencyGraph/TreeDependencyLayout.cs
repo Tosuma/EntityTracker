@@ -22,6 +22,7 @@ public sealed class TreeDependencyLayout
     private readonly Dictionary<DependencyGraphNode, Rect> _boxes = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<DependencyGraphEdge, IReadOnlyList<Point>> _routes = new(ReferenceEqualityComparer.Instance);
     private readonly List<List<Item>> _rows = [];
+    private readonly Dictionary<DependencyGraphNode, Item> _items = new(ReferenceEqualityComparer.Instance);
 
     public TreeDependencyLayout(DependencyGraphModel model)
     {
@@ -29,6 +30,7 @@ public sealed class TreeDependencyLayout
         BuildRows(model, out List<DependencyGraphNode> unconnected);
         OrderRows();
         AssignPositions();
+        StraightenLongLinks();
         Record(model);
         PlaceUnconnected(unconnected);
         Bounds = _boxes.Count == 0 ? Rect.Empty : _boxes.Values.Aggregate(Rect.Union);
@@ -93,20 +95,19 @@ public sealed class TreeDependencyLayout
             ? 0
             : node.Level + (hasMissing ? 1 : 0);
 
-        Dictionary<DependencyGraphNode, Item> items = new(ReferenceEqualityComparer.Instance);
         foreach (DependencyGraphNode node in model.Nodes
                      .Where(static node => node.Level != DependencyGraphNode.UnconnectedLevel)
                      .OrderBy(static node => node.Rank ?? int.MaxValue)
                      .ThenBy(static node => node.Label, StringComparer.Ordinal))
         {
             Item item = new(node, null, Row(node));
-            items[node] = item;
+            _items[node] = item;
             RowList(item.Row).Add(item);
         }
 
         foreach (DependencyGraphEdge edge in model.EssentialEdges)
         {
-            if (!items.TryGetValue(edge.From, out Item? from) || !items.TryGetValue(edge.To, out Item? to)) continue;
+            if (!_items.TryGetValue(edge.From, out Item? from) || !_items.TryGetValue(edge.To, out Item? to)) continue;
             if (to.Row <= from.Row) continue; // only a link closing a cycle can point upward; it is drawn straight
             Item upper = from;
             for (int row = from.Row + 1; row < to.Row; row++)
@@ -233,6 +234,75 @@ public sealed class TreeDependencyLayout
                 Spread(row, desired);
             }
         }
+    }
+
+    /// <summary>
+    /// Straightens each long link once the boxes are placed. Its waypoints share one X across as many
+    /// consecutive rows as the boxes allow, so the line runs straight instead of stepping sideways at
+    /// every row, and bends only where it has to move between boxes. A straight run starts at its
+    /// entity's X when it can, so the line drops straight from the entity above without first swinging
+    /// out, and in a narrow gap between two boxes it takes the middle of the gap. Boxes don't move.
+    /// </summary>
+    private void StraightenLongLinks()
+    {
+        Dictionary<DependencyGraphEdge, List<Item>> chains = new(ReferenceEqualityComparer.Instance);
+        foreach (List<Item> row in _rows)
+        {
+            foreach (Item waypoint in row.Where(static item => item.Edge is not null))
+            {
+                if (!chains.TryGetValue(waypoint.Edge!, out List<Item>? chain)) chains[waypoint.Edge!] = chain = [];
+                chain.Add(waypoint);
+            }
+        }
+
+        // The longest links first: they have the most to gain from a straight run.
+        foreach ((DependencyGraphEdge edge, List<Item> chain) in chains.OrderByDescending(static pair => pair.Value.Count))
+        {
+            double from = _items[edge.From].X;
+            double to = _items[edge.To].X;
+            double previous = from;
+            for (int start = 0; start < chain.Count;)
+            {
+                (double low, double high) = Room(chain[start]);
+                int end = start + 1;
+                for (; end < chain.Count; end++)
+                {
+                    (double nextLow, double nextHigh) = Room(chain[end]);
+                    if (Math.Max(low, nextLow) > Math.Min(high, nextHigh)) break;
+                    low = Math.Max(low, nextLow);
+                    high = Math.Min(high, nextHigh);
+                }
+
+                // The first run aims below the entity above, the last at the entity below, and any run
+                // between continues where the previous one ended.
+                double preferred = start == 0 ? from : end == chain.Count ? to : previous;
+                double x = Place(low, high, preferred);
+                for (int index = start; index < end; index++) chain[index].X = x;
+                previous = x;
+                start = end;
+            }
+        }
+    }
+
+    /// <summary>Gets where a waypoint can go without changing its row's order or gaps.</summary>
+    private (double Low, double High) Room(Item item)
+    {
+        List<Item> row = _rows[item.Row];
+        int index = item.Order;
+        double low = index == 0 ? double.NegativeInfinity : row[index - 1].X + Separation(row[index - 1], item);
+        double high = index == row.Count - 1 ? double.PositiveInfinity : row[index + 1].X - Separation(item, row[index + 1]);
+        return (low, high);
+    }
+
+    /// <summary>
+    /// Picks a straight run's X: the middle of a narrow gap, otherwise as close to the preferred X as the
+    /// neighbours allow.
+    /// </summary>
+    private static double Place(double low, double high, double preferred)
+    {
+        if (!double.IsInfinity(low) && !double.IsInfinity(high) && high - low <= BoxWidth)
+            return (low + high) / 2;
+        return Math.Clamp(preferred, low, high);
     }
 
     /// <summary>Moves a row as close to the desired positions as its order and gaps allow.</summary>

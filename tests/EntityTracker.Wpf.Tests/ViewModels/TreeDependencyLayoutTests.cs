@@ -133,6 +133,69 @@ public sealed class TreeDependencyLayoutTests
     }
 
     [Fact]
+    public void ALongLinkWithNothingInTheWayDropsStraightFromTheEntityAbove()
+    {
+        // Regression (#112): a long link stepped sideways at every row, or swung out and back, even
+        // where nothing was in its way.
+        EntityOverviewRow[] rows =
+        [
+            Row(1, "base"),
+            Row(2, "a1"),
+            Row(3, "a2", "a1"),
+            Row(4, "a3", "a2"),
+            Row(5, "deep", "a3", "base")
+        ];
+        DependencyGraphModel model = DependencyGraphBuilder.Build(rows);
+        TreeDependencyLayout tree = new(model);
+        DependencyGraphEdge longLink = model.EssentialEdges.Single(edge => edge.From.Label == "base" && edge.To.Label == "deep");
+
+        double[] columns = tree.Routes[longLink].Skip(1).SkipLast(1).Select(static point => point.X).Distinct().ToArray();
+        Assert.Equal([tree.CenterOf(longLink.From).X], columns);
+    }
+
+    [Fact]
+    public void ALongLinkPassingBesideBoxesStillRunsStraight()
+    {
+        // b2 and b3 stand in the column between base and deep, so the link has to pass beside them,
+        // but it does so in one straight run and as close to them as the gap allows.
+        EntityOverviewRow[] rows =
+        [
+            Row(1, "base"),
+            Row(2, "a1"),
+            Row(3, "a2", "a1"),
+            Row(4, "a3", "a2"),
+            Row(5, "deep", "a3", "base"),
+            Row(6, "b2", "base"),
+            Row(7, "b3", "b2")
+        ];
+        DependencyGraphModel model = DependencyGraphBuilder.Build(rows);
+        TreeDependencyLayout tree = new(model);
+        DependencyGraphEdge longLink = model.EssentialEdges.Single(edge => edge.From.Label == "base" && edge.To.Label == "deep");
+        DependencyGraphNode b2 = model.Nodes.Single(node => node.Label == "b2");
+
+        double column = Assert.Single(tree.Routes[longLink].Skip(1).SkipLast(1).Select(static point => point.X).Distinct());
+        double clearance = Math.Abs(column - tree.CenterOf(b2).X) - TreeDependencyLayout.BoxWidth / 2;
+        Assert.InRange(clearance, 0, TreeDependencyLayout.HorizontalGap);
+    }
+
+    [Fact]
+    public void LongLinksBendOnlyWhereABoxIsInTheWay()
+    {
+        // A straight run ends only because the next row has no room at that X: a box (or another line's
+        // waypoint) sits there. Over a large graph most long links therefore need at most one bend.
+        DependencyGraphModel model = DependencyGraphBuilder.Build(RandomLayeredRows(seed: 3));
+        TreeDependencyLayout tree = new(model);
+
+        int[] bends = tree.Routes.Values.Where(static route => route.Count > 2)
+            .Select(static route => route.Skip(1).SkipLast(1).Select(static point => point.X)
+                .Zip(route.Skip(2).SkipLast(1).Select(static point => point.X))
+                .Count(static pair => Math.Abs(pair.First - pair.Second) > 0.5))
+            .ToArray();
+        Assert.NotEmpty(bends);
+        Assert.True(bends.Average() < 1, $"Long links bend {bends.Average():0.00} times on average.");
+    }
+
+    [Fact]
     public void RowsAreOrderedToAvoidCrossingLines()
     {
         // Sorted by name the children start crossed: a_child needs B and b_child needs A.
