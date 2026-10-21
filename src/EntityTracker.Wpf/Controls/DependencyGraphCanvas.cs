@@ -515,13 +515,13 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         foreach (DependencyGraphNode node in normal) DrawTreeBox(context, graph, node, 1);
     }
 
-    /// <summary>Adds smooth vertical curves through the route points.</summary>
+    /// <summary>Adds one smooth curve through the route points (see <see cref="TreeDependencyLayout.CurveControls"/>).</summary>
     private static void AddTreeRoute(StreamGeometryContext lines, IReadOnlyList<Point> points)
     {
         lines.BeginFigure(points[0], false, false);
         for (int index = 1; index < points.Count; index++)
         {
-            (Point first, Point second) = TreeDependencyLayout.CurveControls(points[index - 1], points[index]);
+            (Point first, Point second) = TreeDependencyLayout.CurveControls(points, index);
             lines.BezierTo(first, second, points[index], true, false);
         }
     }

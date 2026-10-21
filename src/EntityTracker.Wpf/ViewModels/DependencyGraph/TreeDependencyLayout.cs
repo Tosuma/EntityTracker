@@ -30,7 +30,7 @@ public sealed class TreeDependencyLayout
         BuildRows(model, out List<DependencyGraphNode> unconnected);
         OrderRows();
         AssignPositions();
-        StraightenLongLinks();
+        RouteLongLinks();
         Record(model);
         PlaceUnconnected(unconnected);
         Bounds = _boxes.Count == 0 ? Rect.Empty : _boxes.Values.Aggregate(Rect.Union);
@@ -50,14 +50,40 @@ public sealed class TreeDependencyLayout
     public Rect BoxOf(DependencyGraphNode node) => _boxes.GetValueOrDefault(node, Rect.Empty);
 
     /// <summary>
-    /// Gets the control points of the curve drawn between two consecutive route points: both at the
-    /// middle height, so the curve leaves and arrives vertically and never leaves the band between the
-    /// two points' heights. The exported report draws the same curve (report.js).
+    /// Gets the control points of the curve drawn from <c>route[index - 1]</c> to <c>route[index]</c>, for a
+    /// route as <see cref="Routes"/> gives it (start, a top and bottom point per crossed row, end). Inside
+    /// a row the line is straight, so it stays in the room between the boxes. Between rows it curves
+    /// smoothly from the slope of the row above to the slope of the row below, never reaching into a
+    /// row, and never moving back the way it came; it leaves the entity above and reaches the entity below
+    /// vertically, so a link between neighbouring rows keeps its gentle S-curve. The exported report draws
+    /// the same curve (report.js).
     /// </summary>
-    public static (Point First, Point Second) CurveControls(Point from, Point to)
+    public static (Point First, Point Second) CurveControls(IReadOnlyList<Point> route, int index)
     {
-        double middle = (from.Y + to.Y) / 2;
-        return (new Point(from.X, middle), new Point(to.X, middle));
+        ArgumentNullException.ThrowIfNull(route);
+        Point start = route[index - 1];
+        Point end = route[index];
+        if (index % 2 == 0 && index < route.Count - 1)
+            return (start + (end - start) / 3, end - (end - start) / 3);
+        double half = (end.Y - start.Y) / 2;
+        Point first = start + Slope(route, index - 1) * half;
+        Point second = end - Slope(route, index) * half;
+        // Controls beyond the sideways span, or crossing each other, would make the curve swing back.
+        double low = Math.Min(start.X, end.X);
+        double high = Math.Max(start.X, end.X);
+        double firstX = Math.Clamp(first.X, low, high);
+        double secondX = Math.Clamp(second.X, low, high);
+        if ((secondX - firstX) * (end.X - start.X) < 0) firstX = secondX = (firstX + secondX) / 2;
+        return (new Point(firstX, first.Y), new Point(secondX, second.Y));
+    }
+
+    // The direction of the line at a route point, per unit of height: straight down at the two entities,
+    // otherwise along the straight piece through that point's row.
+    private static Vector Slope(IReadOnlyList<Point> route, int index)
+    {
+        if (index == 0 || index == route.Count - 1) return new Vector(0, 1);
+        Vector piece = index % 2 == 1 ? route[index + 1] - route[index] : route[index] - route[index - 1];
+        return piece / piece.Y;
     }
 
     public Point CenterOf(DependencyGraphNode node)
@@ -237,13 +263,13 @@ public sealed class TreeDependencyLayout
     }
 
     /// <summary>
-    /// Straightens each long link once the boxes are placed. Its waypoints share one X across as many
-    /// consecutive rows as the boxes allow, so the line runs straight instead of stepping sideways at
-    /// every row, and bends only where it has to move between boxes. A straight run starts at its
-    /// entity's X when it can, so the line drops straight from the entity above without first swinging
-    /// out, and in a narrow gap between two boxes it takes the middle of the gap. Boxes don't move.
+    /// Routes each long link once the boxes are placed. The line aims for the straight slope from the
+    /// entity above to the entity below, so it moves sideways a little in every row instead of in steps,
+    /// and never swings out and back. In each row it crosses, it enters at the top and leaves at the
+    /// bottom of the row's boxes, as near that slope as the neighbouring boxes allow, so it never passes
+    /// under one; in a narrow gap between two boxes it takes the middle. Boxes don't move.
     /// </summary>
-    private void StraightenLongLinks()
+    private void RouteLongLinks()
     {
         Dictionary<DependencyGraphEdge, List<Item>> chains = new(ReferenceEqualityComparer.Instance);
         foreach (List<Item> row in _rows)
@@ -255,54 +281,44 @@ public sealed class TreeDependencyLayout
             }
         }
 
-        // The longest links first: they have the most to gain from a straight run.
+        // The longest links first: they cross the most rows, so they keep the most room to slope.
         foreach ((DependencyGraphEdge edge, List<Item> chain) in chains.OrderByDescending(static pair => pair.Value.Count))
         {
-            double from = _items[edge.From].X;
-            double to = _items[edge.To].X;
-            double previous = from;
-            for (int start = 0; start < chain.Count;)
+            Item from = _items[edge.From];
+            Item to = _items[edge.To];
+            double startY = RowTop(from.Row) + BoxHeight;
+            double endY = RowTop(to.Row);
+            double SlopeAt(double y) => from.X + (to.X - from.X) * (y - startY) / (endY - startY);
+            foreach (Item waypoint in chain)
             {
-                (double low, double high) = Room(chain[start]);
-                int end = start + 1;
-                for (; end < chain.Count; end++)
+                (double low, double high) = Room(waypoint);
+                double top = RowTop(waypoint.Row);
+                if (!double.IsInfinity(low) && !double.IsInfinity(high) && high - low <= BoxWidth)
                 {
-                    (double nextLow, double nextHigh) = Room(chain[end]);
-                    if (Math.Max(low, nextLow) > Math.Min(high, nextHigh)) break;
-                    low = Math.Max(low, nextLow);
-                    high = Math.Min(high, nextHigh);
+                    waypoint.TopX = waypoint.BottomX = (low + high) / 2;
                 }
-
-                // The first run aims below the entity above, the last at the entity below, and any run
-                // between continues where the previous one ended.
-                double preferred = start == 0 ? from : end == chain.Count ? to : previous;
-                double x = Place(low, high, preferred);
-                for (int index = start; index < end; index++) chain[index].X = x;
-                previous = x;
-                start = end;
+                else
+                {
+                    waypoint.TopX = Math.Clamp(SlopeAt(top), low, high);
+                    waypoint.BottomX = Math.Clamp(SlopeAt(top + BoxHeight), low, high);
+                }
             }
         }
     }
 
-    /// <summary>Gets where a waypoint can go without changing its row's order or gaps.</summary>
+    /// <summary>
+    /// Gets where a waypoint can enter and leave its row without changing the row's order or coming
+    /// closer to a neighbour than the row's gap allows, wherever in the row that neighbour runs.
+    /// </summary>
     private (double Low, double High) Room(Item item)
     {
         List<Item> row = _rows[item.Row];
         int index = item.Order;
-        double low = index == 0 ? double.NegativeInfinity : row[index - 1].X + Separation(row[index - 1], item);
-        double high = index == row.Count - 1 ? double.PositiveInfinity : row[index + 1].X - Separation(item, row[index + 1]);
+        double low = index == 0 ? double.NegativeInfinity
+            : Math.Max(row[index - 1].TopX, row[index - 1].BottomX) + Separation(row[index - 1], item);
+        double high = index == row.Count - 1 ? double.PositiveInfinity
+            : Math.Min(row[index + 1].TopX, row[index + 1].BottomX) - Separation(item, row[index + 1]);
         return (low, high);
-    }
-
-    /// <summary>
-    /// Picks a straight run's X: the middle of a narrow gap, otherwise as close to the preferred X as the
-    /// neighbours allow.
-    /// </summary>
-    private static double Place(double low, double high, double preferred)
-    {
-        if (!double.IsInfinity(low) && !double.IsInfinity(high) && high - low <= BoxWidth)
-            return (low + high) / 2;
-        return Math.Clamp(preferred, low, high);
     }
 
     /// <summary>Moves a row as close to the desired positions as its order and gaps allow.</summary>
@@ -359,8 +375,8 @@ public sealed class TreeDependencyLayout
                 {
                     current = current.Below.First(item => ReferenceEquals(item.Edge, edge));
                     // Straight through the row's full height, so the bends stay in the gaps between rows.
-                    route.Add(new Point(current.X, RowTop(row)));
-                    route.Add(new Point(current.X, RowTop(row) + BoxHeight));
+                    route.Add(new Point(current.TopX, RowTop(row)));
+                    route.Add(new Point(current.BottomX, RowTop(row) + BoxHeight));
                 }
             }
 
@@ -397,6 +413,18 @@ public sealed class TreeDependencyLayout
         public List<Item> Below { get; } = [];
         public int Order { get; set; }
         public double Key { get; set; }
-        public double X { get; set; }
+        public double X
+        {
+            get => _x;
+            set => _x = TopX = BottomX = value;
+        }
+
+        /// <summary>Where a link's waypoint enters its row (a box: its centre).</summary>
+        public double TopX { get; set; }
+
+        /// <summary>Where a link's waypoint leaves its row (a box: its centre).</summary>
+        public double BottomX { get; set; }
+
+        private double _x;
     }
 }

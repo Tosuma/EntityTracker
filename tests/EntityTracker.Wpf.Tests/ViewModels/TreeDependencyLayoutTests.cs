@@ -133,10 +133,11 @@ public sealed class TreeDependencyLayoutTests
     }
 
     [Fact]
-    public void ALongLinkWithNothingInTheWayDropsStraightFromTheEntityAbove()
+    public void ALongLinkMovesSidewaysSteadilyWithoutSwingingOut()
     {
-        // Regression (#112): a long link stepped sideways at every row, or swung out and back, even
-        // where nothing was in its way.
+        // Regression (#112): long links stepped sideways in stairs or swung out and back. The line now
+        // heads along the slope from one entity to the other; where a3 stands near that slope it passes
+        // beside it, but it still only moves one way and stays between the two entities.
         EntityOverviewRow[] rows =
         [
             Row(1, "base"),
@@ -149,50 +150,36 @@ public sealed class TreeDependencyLayoutTests
         TreeDependencyLayout tree = new(model);
         DependencyGraphEdge longLink = model.EssentialEdges.Single(edge => edge.From.Label == "base" && edge.To.Label == "deep");
 
-        double[] columns = tree.Routes[longLink].Skip(1).SkipLast(1).Select(static point => point.X).Distinct().ToArray();
-        Assert.Equal([tree.CenterOf(longLink.From).X], columns);
+        double[] xs = tree.Routes[longLink].Select(static point => point.X).ToArray();
+        int direction = Math.Sign(xs[^1] - xs[0]);
+        Assert.All(xs.Zip(xs.Skip(1)), pair => Assert.True(Math.Sign(pair.Second - pair.First) != -direction,
+            $"The line turns back between x = {pair.First:0} and {pair.Second:0}."));
+        Assert.All(xs, x => Assert.InRange(x, Math.Min(xs[0], xs[^1]), Math.Max(xs[0], xs[^1])));
     }
 
     [Fact]
-    public void ALongLinkPassingBesideBoxesStillRunsStraight()
+    public void ALineNeverSwingsBackBetweenRowsWhenItsSlopeChanges()
     {
-        // b2 and b3 stand in the column between base and deep, so the link has to pass beside them,
-        // but it does so in one straight run and as close to them as the gap allows.
-        EntityOverviewRow[] rows =
-        [
-            Row(1, "base"),
-            Row(2, "a1"),
-            Row(3, "a2", "a1"),
-            Row(4, "a3", "a2"),
-            Row(5, "deep", "a3", "base"),
-            Row(6, "b2", "base"),
-            Row(7, "b3", "b2")
-        ];
-        DependencyGraphModel model = DependencyGraphBuilder.Build(rows);
-        TreeDependencyLayout tree = new(model);
-        DependencyGraphEdge longLink = model.EssentialEdges.Single(edge => edge.From.Label == "base" && edge.To.Label == "deep");
-        DependencyGraphNode b2 = model.Nodes.Single(node => node.Label == "b2");
+        // Regression (#112): where a line's slope changes from one row to the next, the curve between
+        // the rows could swing back before going on (here around x = 45 to 60).
+        Point[] route = [new(0, 81), new(30, 193), new(45, 274), new(60, 386), new(90, 467), new(100, 579)];
 
-        double column = Assert.Single(tree.Routes[longLink].Skip(1).SkipLast(1).Select(static point => point.X).Distinct());
-        double clearance = Math.Abs(column - tree.CenterOf(b2).X) - TreeDependencyLayout.BoxWidth / 2;
-        Assert.InRange(clearance, 0, TreeDependencyLayout.HorizontalGap);
+        for (int index = 1; index < route.Length; index++)
+        {
+            double direction = Math.Sign(route[index].X - route[index - 1].X);
+            double[] xs = SampleSegment(route, index).Select(static point => point.X).ToArray();
+            Assert.All(xs.Zip(xs.Skip(1)), pair => Assert.True((pair.Second - pair.First) * direction >= -1e-9,
+                $"The line moves back between ({route[index - 1].X}, {route[index - 1].Y}) and ({route[index].X}, {route[index].Y})."));
+        }
     }
 
     [Fact]
-    public void LongLinksBendOnlyWhereABoxIsInTheWay()
+    public void ALinkBetweenNeighbouringRowsKeepsItsGentleSCurve()
     {
-        // A straight run ends only because the next row has no room at that X: a box (or another line's
-        // waypoint) sits there. Over a large graph most long links therefore need at most one bend.
-        DependencyGraphModel model = DependencyGraphBuilder.Build(RandomLayeredRows(seed: 3));
-        TreeDependencyLayout tree = new(model);
+        (Point first, Point second) = TreeDependencyLayout.CurveControls([new Point(0, 81), new Point(50, 193)], 1);
 
-        int[] bends = tree.Routes.Values.Where(static route => route.Count > 2)
-            .Select(static route => route.Skip(1).SkipLast(1).Select(static point => point.X)
-                .Zip(route.Skip(2).SkipLast(1).Select(static point => point.X))
-                .Count(static pair => Math.Abs(pair.First - pair.Second) > 0.5))
-            .ToArray();
-        Assert.NotEmpty(bends);
-        Assert.True(bends.Average() < 1, $"Long links bend {bends.Average():0.00} times on average.");
+        Assert.Equal(new Point(0, 137), first);
+        Assert.Equal(new Point(50, 137), second);
     }
 
     [Fact]
@@ -272,21 +259,21 @@ public sealed class TreeDependencyLayoutTests
     }
 
     /// <summary>Points along the drawn curves of a route, as the canvas and the report draw them.</summary>
-    private static IEnumerable<Point> SampleCurve(IReadOnlyList<Point> route)
+    private static IEnumerable<Point> SampleCurve(IReadOnlyList<Point> route) =>
+        Enumerable.Range(1, route.Count - 1).SelectMany(index => SampleSegment(route, index));
+
+    private static IEnumerable<Point> SampleSegment(IReadOnlyList<Point> route, int index)
     {
-        for (int index = 1; index < route.Count; index++)
+        Point start = route[index - 1];
+        Point end = route[index];
+        (Point first, Point second) = TreeDependencyLayout.CurveControls(route, index);
+        for (int step = 0; step <= 40; step++)
         {
-            Point start = route[index - 1];
-            Point end = route[index];
-            (Point first, Point second) = TreeDependencyLayout.CurveControls(start, end);
-            for (int step = 0; step <= 40; step++)
-            {
-                double t = step / 40.0;
-                double u = 1 - t;
-                yield return new Point(
-                    u * u * u * start.X + 3 * u * u * t * first.X + 3 * u * t * t * second.X + t * t * t * end.X,
-                    u * u * u * start.Y + 3 * u * u * t * first.Y + 3 * u * t * t * second.Y + t * t * t * end.Y);
-            }
+            double t = step / 40.0;
+            double u = 1 - t;
+            yield return new Point(
+                u * u * u * start.X + 3 * u * u * t * first.X + 3 * u * t * t * second.X + t * t * t * end.X,
+                u * u * u * start.Y + 3 * u * u * t * first.Y + 3 * u * t * t * second.Y + t * t * t * end.Y);
         }
     }
 
