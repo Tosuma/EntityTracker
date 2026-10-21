@@ -1,6 +1,6 @@
 ---
 name: merge-and-release
-description: Merge an EntityTracker pull request into main and publish an app release, only when the user has asked for it. Check that the PR is up to date and its CI is green, merge it with a merge commit, and wait for main's CI including the package job. Rerun a failure once; if it fails again, open, merge and release a fix PR. Once main is green, choose the version bump, write a user-facing message, tag with New-AppRelease.ps1 from a clean worktree, check the tag's CI and close the linked issues. Handles stacked PRs one at a time, in order. Use for "merge PR #N", "merge it", "merge and release", or a change requested "and merge when done".
+description: Merge an EntityTracker pull request into main and publish an app release, only when the user has asked for it. Check that the PR is up to date and its CI is green, merge it with a merge commit, and wait for main's CI including the package job. Rerun a failure once; if it fails again, open, merge and release a fix PR. Once main is green, choose the version bump, write a user-facing message, tag with New-AppRelease.ps1 from a clean worktree, check the tag's CI and close the linked issues. Skips the release when nothing that installed apps use has changed. Handles stacked PRs one at a time, in order. Use for "merge PR #N", "merge it", "merge and release", or a change requested "and merge when done".
 ---
 
 # Merge a pull request and release
@@ -58,6 +58,16 @@ Keep the merge commit SHA, and don't delete the branch.
 
 ## 4. Release (only once main is green)
 
+0. **Is there anything to release?** A tag makes every installed app offer an update, so release only
+   when the app or its installer changed. Compare with the latest tag:
+   `git diff --stat <latest-tag> origin/main`.
+   - **Skip the release** when only these changed:
+     - agent files (`AGENTS.md`, `CLAUDE.md`, `.agents/`, `.claude/`);
+     - documentation (`docs/`, `README.md`, `CONTRIBUTING.md`) and README screenshots (`images/`);
+     - tests (`tests/`) or CI (`.github/`).
+   - Say in the report that no release was made, and why. The changes ship with the next release.
+   - Changes to `src/`, `scripts/`, `global.json` or the build files need a release. When it isn't
+     clear whether a change reaches installed apps, ask.
 1. **Choose the bump** with the rules in `docs/DEVELOPMENT.md` ("Choose the version number"). Judge
    by what the release asks of users, not by its size:
    - **Major:** someone is forced to update or act (sync format, shared data, removed behaviour, a manual
