@@ -307,4 +307,16 @@ public sealed class ProjectAutoSyncService : IDisposable
 }
 
 public sealed class ProjectSyncAuthenticationException(string message) : InvalidOperationException(message);
-public sealed class ProjectSyncConfigurationException(string message) : InvalidOperationException(message);
+public class ProjectSyncConfigurationException(string message) : InvalidOperationException(message);
+
+/// <summary>
+/// Git has no commit identity (user.name and user.email) for the repository. The values that are set,
+/// if any, come with it, so the user can be asked only for what is missing.
+/// </summary>
+public sealed class ProjectSyncIdentityRequiredException(string message, string repositoryPath,
+    string? currentName, string? currentEmail) : ProjectSyncConfigurationException(message)
+{
+    public string RepositoryPath { get; } = repositoryPath;
+    public string? CurrentName { get; } = currentName;
+    public string? CurrentEmail { get; } = currentEmail;
+}

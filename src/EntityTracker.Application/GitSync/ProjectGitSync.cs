@@ -61,8 +61,16 @@ public interface IProjectSyncLinkStore
     Task RemoveAsync(Guid projectId, CancellationToken cancellationToken = default);
 }
 
+/// <summary>Where a Git setting is saved: for every repository of the user, or for one repository.</summary>
+public enum GitConfigScope { Global, Local }
+
 public interface ILocalGitTransport
 {
+    /// <summary>Saves the commit identity Git records with each commit, in the given scope.</summary>
+    Task SetCommitIdentityAsync(string path, string name, string email, GitConfigScope scope,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Git configuration is unavailable.");
+
     Task<IAsyncDisposable> LockAsync(string path, CancellationToken cancellationToken = default);
     Task<GitWorkingTreeState> InspectAsync(string path, CancellationToken cancellationToken = default);
     Task<string> CommitSnapshotAsync(string path, IReadOnlyDictionary<string, byte[]> oldFiles,
@@ -127,8 +135,10 @@ public interface IProjectSyncVersionGate
 public sealed class ProjectSyncUpdateRequiredException(string version)
     : InvalidOperationException($"EntityTracker {version} is required before Project sync.");
 
-public sealed class ProjectSyncVersionCheckUnavailableException()
-    : InvalidOperationException("Project sync is paused until EntityTracker can check for app updates.");
+/// <summary>The update check failed; <paramref name="reason"/> says why and what to do, when known.</summary>
+public sealed class ProjectSyncVersionCheckUnavailableException(string? reason = null)
+    : InvalidOperationException("Project sync is paused until EntityTracker can check for app updates." +
+                                (string.IsNullOrWhiteSpace(reason) ? "" : " " + reason));
 
 public sealed partial class ProjectGitSyncService(
     IProjectSyncLinkStore links, ILocalGitTransport git, IProjectSnapshotStore snapshots,
@@ -173,6 +183,7 @@ public sealed partial class ProjectGitSyncService(
             throw;
         }
         catch (Exception exception) when (exception is ProjectSyncUpdateRequiredException
+                                              or ProjectSyncIdentityRequiredException
                                               or ProjectSyncVersionCheckUnavailableException
                                               or ProjectSyncReviewRequiredException
                                               or ProjectSyncDeletionApprovalRequiredException)
@@ -766,6 +777,30 @@ public sealed partial class ProjectGitSyncService(
             await links.SaveAsync(updated, token);
         }
         return updated;
+    }
+
+    /// <summary>
+    /// Saves the Git commit identity that import and sync need, for every repository
+    /// (<see cref="GitConfigScope.Global"/>) or only the one at <paramref name="path"/>. Portfolio ›
+    /// Import project asks for it when Git has none.
+    /// </summary>
+    public Task SetCommitIdentityAsync(string path, string name, string email, GitConfigScope scope,
+        CancellationToken token = default) =>
+        LoggedAsync("Set Git identity", $"the checkout {path}, {scope.ToString().ToLowerInvariant()} configuration", async () =>
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(path);
+            string trimmedName = RequireIdentityValue(name, "name");
+            string trimmedEmail = RequireIdentityValue(email, "email");
+            await git.SetCommitIdentityAsync(path, trimmedName, trimmedEmail, scope, token);
+            return true;
+        }, static _ => "user.name and user.email were saved");
+
+    private static string RequireIdentityValue(string value, string what)
+    {
+        string trimmed = value?.Trim() ?? "";
+        if (trimmed.Length == 0 || trimmed.StartsWith('-') || trimmed.Any(char.IsControl))
+            throw new ArgumentException($"Enter a valid Git {what}.", what);
+        return trimmed;
     }
 
     public Task UnlinkAsync(ProjectId projectId, CancellationToken token = default) =>

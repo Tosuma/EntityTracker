@@ -107,6 +107,38 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void OverviewExportShowsTheExportIconBeforeItsLabel()
+    {
+        // Regression (#119): a down arrow after "Export" read as a drop-down, not as exporting.
+        XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XElement button = workspace.Descendants().Single(element =>
+            (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "OverviewExportButton");
+        XElement label = Assert.Single(button.Elements());
+
+        Assert.Equal("IconLabel", label.Name.LocalName);
+        Assert.Equal("Icon.ArrowExportUp", (string?)label.Attribute("IconKey"));
+        Assert.Equal("Export", (string?)label.Attribute("Text"));
+    }
+
+    [Fact]
+    public void TheGitIdentityDialogsCancelButtonFitsBothLabelsWithoutResizing()
+    {
+        // #125: Cancel turns into "Confirm cancel"; both labels share one cell, the second hidden
+        // rather than collapsed, so the button is always as wide as the longer one.
+        XDocument dialog = LoadWpfXaml("Views", "GitIdentityDialog.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement button = dialog.Descendants().Single(element => (string?)element.Attribute(x + "Name") == "CancelButton");
+        XElement cell = Assert.Single(button.Elements(), element => element.Name.LocalName == "Grid");
+        XElement[] labels = cell.Elements().Where(element => element.Name.LocalName == "TextBlock").ToArray();
+
+        Assert.Equal(["Cancel", "Confirm cancel"], labels.Select(label => (string?)label.Attribute("Text")));
+        Assert.DoesNotContain(dialog.Descendants(), element => element.Attributes().Any(attribute =>
+            attribute.Name.LocalName == "Value" && attribute.Value == "Collapsed") &&
+            labels.Contains(element.Ancestors().FirstOrDefault(ancestor => ancestor.Name.LocalName == "TextBlock")));
+        Assert.Equal("True", (string?)button.Attribute("IsCancel"));
+    }
+
+    [Fact]
     public void ClosingTheWindowWaitsForARunningProjectSync()
     {
         string code = File.ReadAllText(Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory),

@@ -96,9 +96,7 @@ public sealed class SystemGitTransport : ILocalGitTransport
                 "(EntityTracker merges Project snapshots itself), or finish it outside EntityTracker, then retry Project sync.");
         string branch = (await RunAsync(root, ["symbolic-ref", "--quiet", "--short", "HEAD"], cancellationToken)).Trim();
         if (string.IsNullOrWhiteSpace(branch)) throw new ProjectSyncConfigurationException("Check out the linked branch with Git outside EntityTracker, then retry.");
-        if (string.IsNullOrWhiteSpace((await RunAsync(root, ["config", "--get", "user.name"], cancellationToken)).Trim()) ||
-            string.IsNullOrWhiteSpace((await RunAsync(root, ["config", "--get", "user.email"], cancellationToken)).Trim()))
-            throw new ProjectSyncConfigurationException("Configure Git commit identity outside EntityTracker before syncing.");
+        await RequireCommitIdentityAsync(root, cancellationToken);
         byte[] status = await RunBytesAsync(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], cancellationToken);
         if (status.Length > 0) throw new InvalidOperationException("The working tree must be clean before linking or syncing.");
         byte[] tracked = await RunBytesAsync(root, ["ls-files", "-z"], cancellationToken);
@@ -562,6 +560,39 @@ public sealed class SystemGitTransport : ILocalGitTransport
         return output.ToArray();
     }
 
+    /// <summary>
+    /// Requires the Git commit identity that sync commits are made with. <c>git config --get</c> fails when
+    /// a setting is missing, so the failure is allowed and reported as the missing setting, with the
+    /// commands that set it.
+    /// </summary>
+    private async Task RequireCommitIdentityAsync(string root, CancellationToken cancellationToken)
+    {
+        string name = (await RunAsync(root, ["config", "--get", "user.name"], cancellationToken, allowFailure: true)).Trim();
+        string email = (await RunAsync(root, ["config", "--get", "user.email"], cancellationToken, allowFailure: true)).Trim();
+        List<string> missing = [];
+        if (name.Length == 0) missing.Add("user.name");
+        if (email.Length == 0) missing.Add("user.email");
+
+        if (missing.Count == 0) return;
+        string settings = string.Join(" and ", missing);
+        string commands = string.Join(" and ", missing.Select(static setting => setting == "user.name"
+            ? "git config --global user.name \"Your Name\""
+            : "git config --global user.email \"you@example.com\""));
+        throw new ProjectSyncIdentityRequiredException(
+            $"Git has no {settings} set, which EntityTracker needs to commit Project changes. " +
+            $"Set {(missing.Count == 1 ? "it" : "them")} with {commands} in a terminal, then retry.",
+            root, name.Length == 0 ? null : name, email.Length == 0 ? null : email);
+    }
+
+    public async Task SetCommitIdentityAsync(string path, string name, string email, GitConfigScope scope,
+        CancellationToken cancellationToken = default)
+    {
+        string root = Path.GetFullPath(path);
+        string where = scope == GitConfigScope.Global ? "--global" : "--local";
+        await RunAsync(root, ["config", where, "user.name", name], cancellationToken);
+        await RunAsync(root, ["config", where, "user.email", email], cancellationToken);
+    }
+
     private static string[] SplitNull(byte[] bytes) => Encoding.UTF8.GetString(bytes)
         .Split('\0', StringSplitOptions.RemoveEmptyEntries);
 
@@ -645,8 +676,12 @@ public sealed class SystemGitTransport : ILocalGitTransport
             LogRedaction.Redact(message));
     }
 
-    /// <summary>Gets the command as it is logged, such as "fetch --prune origin", with secrets removed.</summary>
-    private static string Describe(string[] args) => LogRedaction.Redact(string.Join(' ', args));
+    /// <summary>
+    /// Gets the command as it is logged, such as "fetch --prune origin", with secrets removed. A value
+    /// being set (a name or email) is left out.
+    /// </summary>
+    private static string Describe(string[] args) => LogRedaction.Redact(string.Join(' ',
+        args is ["config", "--global" or "--local", _, _] ? args[..3].Append("<value>") : args));
 
     private static readonly HashSet<string> AllowedVerbs = new(StringComparer.Ordinal)
     {
@@ -667,7 +702,7 @@ public sealed class SystemGitTransport : ILocalGitTransport
     {
         if (args.Count == 0 || !AllowedVerbs.Contains(args[0]) ||
             args.Any(arg => arg is "--force" or "--force-with-lease" or "-f" or "--no-ff") ||
-            (args[0] == "config" && (args.Count < 2 || args[1] != "--get")) ||
+            (args[0] == "config" && !IsAllowedConfig(args)) ||
             (args[0] == "fetch" && (args.Count != 4 || args[1] != "--no-tags" || args[2] != "--")) ||
             (args[0] == "push" && (args.Count != 4 || args[1] != "--" ||
                                     !args[3].StartsWith("HEAD:refs/heads/", StringComparison.Ordinal))) ||
@@ -684,6 +719,12 @@ public sealed class SystemGitTransport : ILocalGitTransport
                 !args[1].StartsWith("refs/heads/", StringComparison.Ordinal))))
             throw new InvalidOperationException("This Git command is outside the Project sync transport boundary.");
     }
+
+    // Reading any setting, or saving the commit identity (Portfolio › Import project asks for it).
+    private static bool IsAllowedConfig(IReadOnlyList<string> args) =>
+        (args.Count >= 2 && args[1] == "--get") ||
+        (args.Count == 4 && args[1] is "--global" or "--local" && args[2] is "user.name" or "user.email" &&
+         args[3].Trim().Length > 0 && !args[3].StartsWith('-'));
 
     private static async Task<byte[]> ReadBoundedAsync(Stream stream, CancellationToken token)
     {

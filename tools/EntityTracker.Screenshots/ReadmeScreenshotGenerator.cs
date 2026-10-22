@@ -230,6 +230,7 @@ internal sealed class ReadmeScreenshotGenerator
                     .CaptureAsync("project-merge-review.png", settleMilliseconds: 900);
             }
             finally { mergeDialog.Close(); }
+            await CaptureGitIdentityDialogAsync(window, workspace.StagingDirectory);
             await CaptureSyncStatesAsync(window, workspace.StagingDirectory);
             await renderer.BringNamedElementIntoViewAndCaptureAsync(
                 "ComparisonGrid",
@@ -443,6 +444,24 @@ internal sealed class ReadmeScreenshotGenerator
             "The Tracker restore did not return to the Project dashboard.",
             cancellationToken);
         await renderer.CaptureAsync("project-dashboard-tracker-restored.png");
+    }
+
+    /// <summary>
+    /// Import's Git name and email dialog, as it opens with the name already set, and after Cancel was
+    /// pressed once.
+    /// </summary>
+    private static async Task CaptureGitIdentityDialogAsync(MainWindow window, string outputDirectory)
+    {
+        GitIdentityDialog dialog = new("Alice Brown", null) { Owner = window };
+        dialog.Show();
+        try
+        {
+            WpfScreenshotRenderer renderer = new(dialog, outputDirectory);
+            await renderer.CaptureAsync("git-identity.png", settleMilliseconds: 500);
+            ((GitIdentityDialogViewModel)dialog.DataContext).RequestCancel();
+            await renderer.CaptureAsync("git-identity-confirm-cancel.png", settleMilliseconds: 300);
+        }
+        finally { dialog.Close(); }
     }
 
     private static async Task CaptureOverviewAsync(

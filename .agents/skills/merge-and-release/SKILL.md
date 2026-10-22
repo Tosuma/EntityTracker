@@ -23,7 +23,8 @@ polling in the foreground.
    - Merge `origin/main` into the branch with a merge commit; never rebase a shared branch.
    - Resolve conflicts. Regenerated screenshots take the branch's version, then regenerate them if the
      content changed.
-   - Push. Use a separate worktree when the main checkout is busy or on another branch.
+   - Push. Switch branches in the main checkout; only when it is busy, use a worktree under
+     `.worktrees/` (see `AGENTS.md`).
 3. **Green on the current head:**
    - `gh pr checks <N>`: "Build and test" and "Build in Docker as the installer does" pass.
    - The run's `headSha` equals `gh pr view <N> --json headRefOid`. After any push, wait again.
@@ -77,12 +78,15 @@ Keep the merge commit SHA, and don't delete the branch.
 2. **Write the message** for users, in the style of earlier tags (`git tag -n9 <latest-tag>`):
    - Start with a short headline sentence, then say what changed and where to find it.
    - Leave out code, internal names and pull-request numbers.
-3. **Tag from a clean worktree of `main`.** The release script refuses a working tree with untracked
-   files, and the user keeps untracked files locally (`docs/review/`, …). Never delete or commit those.
+3. **Tag from a clean `main`.** The release script refuses a working tree with untracked files, and
+   the user may keep untracked files locally (`docs/review/`, …). Never delete or commit those.
+   - If `git status --porcelain` is empty on an up-to-date `main` in the main checkout, tag there.
+   - Otherwise, tag from the worktree `.worktrees/release` inside the repository, never from a folder
+     beside it:
 
    ```powershell
-   git worktree add ../EntityTracker-release main      # or reuse it, then: git -C ../EntityTracker-release pull --ff-only
-   Set-Location ../EntityTracker-release
+   git worktree add .worktrees/release main      # or reuse it, then: git -C .worktrees/release pull --ff-only
+   Set-Location .worktrees/release
    .\scripts\New-AppRelease.ps1 -Bump <Major|Minor|Patch> -Message "<message>" -MainCiPassed
    ```
 
@@ -90,7 +94,7 @@ Keep the merge commit SHA, and don't delete the branch.
    tag. Never move or reuse a pushed tag.
 4. **Wait for the tag's CI:** `gh run list --branch app-vX.Y.Z`. All jobs must pass, including the
    package job. If it fails, report it: the tag is already visible to installed apps.
-5. Remove the worktree when the series is finished (`git worktree remove ../EntityTracker-release`).
+5. Remove the worktree, if you made one, when the series is finished (`git worktree remove .worktrees/release`).
 
 ## 5. Close out
 

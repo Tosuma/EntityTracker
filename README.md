@@ -131,6 +131,15 @@ choose **Import project** and select its clean working-tree root. EntityTracker 
 snapshot with its stable IDs and history. If its Project name is already used locally, choose a
 private name for this installation; the shared snapshot keeps its original name.
 
+If Git has no name or email for your commits yet, import asks for them, with any value already set
+filled in. **Save to global Git configuration** is on by default; clear it to save them
+only in this repository. **Save and import** carries on with the import. Cancel needs a
+second press, **Confirm cancel**, since the Project is then not imported.
+
+![Import asking for the Git name and email, with the name already filled in and the email still to enter](images/light/git-identity.png)
+
+![The Git name and email dialog after pressing Cancel once: Confirm cancel, and a line saying the Project won't be imported](images/light/git-identity-confirm-cancel.png)
+
 The Project dashboard shows the linked repository, checked-out branch, upstream, current sync
 state, last result, and the latest sync duration for this session. **Sync now** fetches
 and applies upstream changes, merges independent Project edits,
@@ -138,8 +147,8 @@ and asks you to review competing changes before committing and pushing. It waits
 edit to be saved or closed before applying incoming data. A checkout without an upstream keeps
 local commits only. Permanent deletion of a linked Project publishes a tombstone; a member with
 concurrent local changes can keep the Project locally as an unlinked copy. Unlinking by itself
-leaves both the repository and SQLite data in place. EntityTracker does not clone repositories,
-configure Git, or manage credentials. Automatic sync is enabled by default: it checks linked
+leaves both the repository and SQLite data in place. EntityTracker does not clone repositories or
+manage credentials, and the only Git settings it changes are that commit name and email. Automatic sync is enabled by default: it checks linked
 Projects after startup and every five minutes. In **Settings**, choose 1, 5, 15, 30, or 60 minutes,
 or turn it off while keeping **Sync now** available. A Project with an unfinished edit waits until
 the edit is saved or closed; other Projects continue. Conflict and deletion review still require

@@ -58,6 +58,7 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
     private Task? _loop;
     private AppReleaseVersion _installedVersion;
     private string? _requiredTag;
+    private string? _offlineReason;
     private volatile AppUpdateState _state;
 
     public AppUpdateService(ApplicationDataPaths dataPaths, TimeProvider? clock = null)
@@ -118,6 +119,9 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
     public bool IsRequired => State == AppUpdateState.Required;
     public bool IsManagedInstall => _install is not null;
 
+    /// <summary>Why the last update check failed and what to do about it, while <see cref="State"/> is Offline.</summary>
+    public string? OfflineReason => State == AppUpdateState.Offline ? Volatile.Read(ref _offlineReason) : null;
+
     public void Start()
     {
         if (_install is null || _loop is not null) return;
@@ -148,7 +152,7 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
         await CheckAsync(cancellationToken);
         if (IsRequired) throw new ProjectSyncUpdateRequiredException(RequiredTag!);
         if (State != AppUpdateState.Current)
-            throw new ProjectSyncVersionCheckUnavailableException();
+            throw new ProjectSyncVersionCheckUnavailableException(OfflineReason);
     }
 
     public async Task CheckAsync(CancellationToken cancellationToken = default)
@@ -170,9 +174,14 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
                 }
                 else
                 {
-                    (int exitCode, byte[] result) = await RunGitAsync(
+                    (int exitCode, byte[] result, string gitError) = await RunGitAsync(
                         ["ls-remote", "--refs", "--tags", "origin", "app-v*"], timeout.Token);
-                    if (exitCode != 0) throw new IOException("Release check failed.");
+                    if (exitCode != 0)
+                    {
+                        Logger.LogWarning("Git ls-remote in {SourcePath} failed with exit code {ExitCode}: {GitError}",
+                            _install.SourcePath, exitCode, LogRedaction.Redact(Truncate(gitError.Trim())));
+                        throw new ReleaseCheckException(DescribeCheckFailure(gitError, _install.SourcePath));
+                    }
                     output = System.Text.Encoding.UTF8.GetString(result);
                 }
                 AppReleaseVersion? newest = FindLatest(output);
@@ -192,12 +201,56 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
             catch (Exception error) when (error is not OperationCanceledException ||
                                           !cancellationToken.IsCancellationRequested)
             {
-                Logger.LogWarning(error, "The update check failed; EntityTracker treats the source as offline.");
+                string reason = error switch
+                {
+                    ReleaseCheckException check => check.Message,
+                    OperationCanceledException => Unreachable,
+                    System.ComponentModel.Win32Exception => "Git could not be started. Install Git, then retry.",
+                    InvalidDataException => "No EntityTracker release was found where EntityTracker was installed from.",
+                    _ => UnknownFailure
+                };
+                Volatile.Write(ref _offlineReason, reason);
+                Logger.LogWarning(error, "The update check failed; EntityTracker treats the source as offline: {Reason}", reason);
                 if (!IsRequired) ChangeState(AppUpdateState.Offline);
             }
         }
         finally { _checkLock.Release(); }
     }
+
+    private const string Unreachable =
+        "EntityTracker could not reach the repository it was installed from. Check the network connection, then retry.";
+    private const string UnknownFailure =
+        "Git could not list EntityTracker's releases; the application log has Git's message.";
+
+    /// <summary>
+    /// Turns Git's error output from the release check into what went wrong and what to do. Git's output
+    /// itself is only logged: it can hold URLs and credentials.
+    /// </summary>
+    internal static string DescribeCheckFailure(string gitError, string sourcePath)
+    {
+        bool Has(params string[] fragments) =>
+            fragments.Any(fragment => gitError.Contains(fragment, StringComparison.OrdinalIgnoreCase));
+
+        if (Has("dubious ownership"))
+            return "Git does not trust the folder EntityTracker was installed from. Run git config --global --add " +
+                   $"safe.directory \"{sourcePath.Replace('\\', '/')}\" in a terminal, then retry.";
+        if (Has("not a git repository", "does not appear to be a git repository"))
+            return $"The folder EntityTracker was installed from ({sourcePath}) is no longer a Git checkout with " +
+                   "its origin remote. Install EntityTracker again.";
+        if (Has("authentication failed", "permission denied", "could not read username", "terminal prompts disabled",
+                "publickey", "access denied", "invalid credentials", "repository not found"))
+            return "Git could not sign in to the repository EntityTracker was installed from. Run git fetch in " +
+                   $"{sourcePath} in a terminal to sign in, then retry.";
+        if (Has("could not resolve host", "failed to connect", "unable to access", "timed out", "connection refused",
+                "could not connect", "network is unreachable", "connection was reset"))
+            return Unreachable;
+        return UnknownFailure;
+    }
+
+    private static string Truncate(string text) => text.Length > 2000 ? text[..2000] + " [...]" : text;
+
+    /// <summary>The release check's Git command failed; the message is <see cref="DescribeCheckFailure"/>'s.</summary>
+    private sealed class ReleaseCheckException(string reason) : IOException(reason);
 
     public static AppReleaseVersion? FindLatest(string lsRemoteOutput)
     {
@@ -278,23 +331,23 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
         timeout.CancelAfter(TimeSpan.FromSeconds(60));
         try
         {
-            (int lsExit, byte[] lsOutput) = await RunGitAsync(
+            (int lsExit, byte[] lsOutput, _) = await RunGitAsync(
                 ["ls-remote", "--refs", "--tags", "origin", $"refs/tags/{tag}"], timeout.Token);
             string[] remote = System.Text.Encoding.UTF8.GetString(lsOutput)
                 .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             if (lsExit != 0 || remote.Length != 1) return false;
             string remoteHash = remote[0].Split('\t')[0];
 
-            (int fetchExit, _) = await RunGitAsync(
+            (int fetchExit, _, _) = await RunGitAsync(
                 ["fetch", "--no-tags", "origin", $"refs/tags/{tag}:refs/tags/{tag}"], timeout.Token);
-            (int revExit, byte[] revOutput) = await RunGitAsync(["rev-parse", $"refs/tags/{tag}"], timeout.Token);
+            (int revExit, byte[] revOutput, _) = await RunGitAsync(["rev-parse", $"refs/tags/{tag}"], timeout.Token);
             if (fetchExit != 0 || revExit != 0 ||
                 !string.Equals(System.Text.Encoding.UTF8.GetString(revOutput).Trim(), remoteHash, StringComparison.OrdinalIgnoreCase))
                 return false;
 
             foreach (string name in UpdaterScripts)
             {
-                (int showExit, byte[] script) = await RunGitAsync(["show", $"{tag}:scripts/{name}"], timeout.Token);
+                (int showExit, byte[] script, _) = await RunGitAsync(["show", $"{tag}:scripts/{name}"], timeout.Token);
                 if (showExit != 0 || script.Length == 0) return false;
                 await File.WriteAllBytesAsync(Path.Combine(staging, name), script, timeout.Token);
             }
@@ -308,8 +361,8 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
         }
     }
 
-    /// <summary>Runs git in the source checkout without prompting, and returns its exit code and raw output.</summary>
-    private async Task<(int ExitCode, byte[] Output)> RunGitAsync(IReadOnlyList<string> arguments,
+    /// <summary>Runs git in the source checkout without prompting, and returns its exit code, raw output and errors.</summary>
+    private async Task<(int ExitCode, byte[] Output, string Errors)> RunGitAsync(IReadOnlyList<string> arguments,
         CancellationToken cancellationToken)
     {
         ProcessStartInfo start = new("git")
@@ -331,8 +384,7 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
             Task<string> errors = process.StandardError.ReadToEndAsync(cancellationToken);
             await process.WaitForExitAsync(cancellationToken);
             await copy;
-            _ = await errors;
-            return (process.ExitCode, output.ToArray());
+            return (process.ExitCode, output.ToArray(), await errors);
         }
         catch (OperationCanceledException)
         {
