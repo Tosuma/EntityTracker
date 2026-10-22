@@ -28,7 +28,7 @@
                      Text="{Binding Email, UpdateSourceTrigger=PropertyChanged}" />
 
             <CheckBox x:Name="ScopeCheckBox" Margin="0,16,0,0"
-                      Content="Use for all my _repositories" IsChecked="{Binding SaveForAllRepositories}"
+                      Content="Save to _global Git configuration" IsChecked="{Binding SaveToGlobalConfiguration}"
                       AutomationProperties.HelpText="{Binding ScopeDescription}" />
             <TextBlock Margin="28,2,0,0" Style="{StaticResource PageDescriptionTextStyle}"
                        Text="{Binding ScopeDescription}" />

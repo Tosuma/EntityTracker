@@ -38,7 +38,7 @@ public sealed class GitIdentityDialogViewModel : INotifyPropertyChanged
     }
 
     /// <summary>On: the global Git configuration (every repository). Off: only this repository.</summary>
-    public bool SaveForAllRepositories
+    public bool SaveToGlobalConfiguration
     {
         get => _saveForAllRepositories;
         set
@@ -53,7 +53,7 @@ public sealed class GitIdentityDialogViewModel : INotifyPropertyChanged
     public GitConfigScope Scope => _saveForAllRepositories ? GitConfigScope.Global : GitConfigScope.Local;
 
     public string ScopeDescription => _saveForAllRepositories
-        ? "Saved in your global Git configuration."
+        ? "Used by every repository on this computer."
         : "Saved only in this repository's Git configuration.";
 
     /// <summary>Cancel was pressed once; the next press closes without importing.</summary>
