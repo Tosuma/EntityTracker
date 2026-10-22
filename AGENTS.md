@@ -61,6 +61,11 @@ for.
   - Never commit untracked local files the user didn't ask for (for example `docs/review/`). Stage files by
     name or with `git add -u`, not `git add -A`.
   - Pull requests are merged with merge commits, and branches are not deleted on merge.
+- **Worktrees.** Work in the main checkout and switch branches there. When a second checkout is
+  unavoidable, create it inside the repository as `.worktrees/<name>`, never beside it: a folder
+  outside the repository is outside the agent's sandbox. `.worktrees/` must be listed in
+  `.git/info/exclude` (add it if it isn't), so it never shows in `git status` or a commit. Remove the
+  worktree when done.
 - **Line endings.** Files mix LF and CRLF with `core.autocrlf=true`; the "LF will be replaced by CRLF"
   warnings are harmless.
 - **GitHub CLI.** `gh` is installed at `C:\Program Files\GitHub CLI`. In PowerShell, refresh `PATH` first:
