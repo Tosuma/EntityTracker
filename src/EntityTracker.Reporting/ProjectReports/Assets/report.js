@@ -627,12 +627,35 @@
 
     var graph, nodeShapes = [], highlightPath, hoverPath, linkPath, matches = {};
 
+    // The same curve as the app's tree (TreeDependencyLayout.CurveControls): a route is its start, a top
+    // and bottom point per crossed row, and its end. Inside a row the line is straight; between rows it
+    // curves from the slope of the row above to the slope of the row below without moving back the way it
+    // came, leaving and reaching the two entities vertically.
     function linkD(link) {
       var route = link.route || [];
-      var d = "M" + route[0] + " " + route[1];
-      for (var i = 2; i < route.length; i += 2) {
-        var middle = (route[i - 1] + route[i + 1]) / 2;
-        d += "C" + route[i - 2] + " " + middle + " " + route[i] + " " + middle + " " + route[i] + " " + route[i + 1];
+      var points = [];
+      for (var k = 0; k + 1 < route.length; k += 2) points.push([route[k], route[k + 1]]);
+      if (points.length === 0) return "";
+      function slope(j) {
+        if (j === 0 || j === points.length - 1) return [0, 1];
+        var a = j % 2 === 1 ? points[j] : points[j - 1];
+        var b = j % 2 === 1 ? points[j + 1] : points[j];
+        return [(b[0] - a[0]) / (b[1] - a[1]), 1];
+      }
+      var d = "M" + points[0][0] + " " + points[0][1];
+      for (var i = 1; i < points.length; i++) {
+        var s = points[i - 1], e = points[i], c1, c2;
+        if (i % 2 === 0 && i < points.length - 1) {
+          c1 = [s[0] + (e[0] - s[0]) / 3, s[1] + (e[1] - s[1]) / 3];
+          c2 = [e[0] - (e[0] - s[0]) / 3, e[1] - (e[1] - s[1]) / 3];
+        } else {
+          var half = (e[1] - s[1]) / 2, a = slope(i - 1), b = slope(i);
+          var low = Math.min(s[0], e[0]), high = Math.max(s[0], e[0]);
+          c1 = [Math.min(Math.max(s[0] + a[0] * half, low), high), s[1] + half];
+          c2 = [Math.min(Math.max(e[0] - b[0] * half, low), high), e[1] - half];
+          if ((c2[0] - c1[0]) * (e[0] - s[0]) < 0) c1[0] = c2[0] = (c1[0] + c2[0]) / 2;
+        }
+        d += "C" + c1[0] + " " + c1[1] + " " + c2[0] + " " + c2[1] + " " + e[0] + " " + e[1];
       }
       return d;
     }

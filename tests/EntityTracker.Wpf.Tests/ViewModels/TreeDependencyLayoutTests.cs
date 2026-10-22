@@ -66,6 +66,38 @@ public sealed class TreeDependencyLayoutTests
                              Rect.Intersect(boxes[a], boxes[b]) is { Width: > 0.01, Height: > 0.01 });
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    [InlineData(7)]
+    [InlineData(11)]
+    [InlineData(42)]
+    public void LinesNeverPassUnderABox(int seed)
+    {
+        // Regression (#112): a line could cut under a neighbouring box, or its corner, at mid-height.
+        const double Clearance = 4;
+        DependencyGraphModel model = DependencyGraphBuilder.Build(RandomLayeredRows(seed));
+        TreeDependencyLayout tree = new(model);
+
+        foreach ((DependencyGraphEdge edge, IReadOnlyList<Point> route) in tree.Routes)
+        {
+            Rect from = tree.BoxOf(edge.From);
+            Rect to = tree.BoxOf(edge.To);
+            foreach (Point point in SampleCurve(route))
+            {
+                foreach (Rect box in tree.Boxes.Values)
+                {
+                    // The line starts and ends on its own boxes' edges; every other box keeps a margin.
+                    bool own = box == from || box == to;
+                    Rect forbidden = box;
+                    forbidden.Inflate(own ? -0.5 : Clearance, own ? -0.5 : Clearance);
+                    Assert.False(forbidden.Contains(point),
+                        $"The {edge.From.Label} -> {edge.To.Label} line passes under a box at ({point.X:0}, {point.Y:0}).");
+                }
+            }
+        }
+    }
+
     [Fact]
     public void LongLinksBendBetweenBoxesThroughWaypoints()
     {
@@ -85,11 +117,69 @@ public sealed class TreeDependencyLayoutTests
         DependencyGraphEdge longLink = model.EssentialEdges.Single(edge => edge.From.Label == "base" && edge.To.Label == "deep");
 
         IReadOnlyList<Point> route = tree.Routes[longLink];
-        Assert.Equal(4, route.Count); // start, two waypoints, end
-        Assert.All(route.Skip(1).SkipLast(1), waypoint =>
+        Assert.Equal(6, route.Count); // start, the top and bottom of each of the two crossed rows, end
+        Point[] waypoints = route.Skip(1).SkipLast(1).ToArray();
+        Assert.All(waypoints, waypoint =>
             Assert.DoesNotContain(tree.Boxes.Values, box => box.Contains(waypoint)));
+        for (int pair = 0; pair < waypoints.Length; pair += 2)
+        {
+            // A crossed row's pair spans the row's boxes from top to bottom at one X.
+            Rect row = tree.Boxes.Values.First(box => box.Top == waypoints[pair].Y);
+            Assert.Equal(waypoints[pair].X, waypoints[pair + 1].X);
+            Assert.Equal(row.Bottom, waypoints[pair + 1].Y);
+        }
         Assert.Equal(tree.BoxOf(longLink.From).Bottom, route[0].Y);
         Assert.Equal(tree.BoxOf(longLink.To).Top, route[^1].Y);
+    }
+
+    [Fact]
+    public void ALongLinkMovesSidewaysSteadilyWithoutSwingingOut()
+    {
+        // Regression (#112): long links stepped sideways in stairs or swung out and back. The line now
+        // heads along the slope from one entity to the other; where a3 stands near that slope it passes
+        // beside it, but it still only moves one way and stays between the two entities.
+        EntityOverviewRow[] rows =
+        [
+            Row(1, "base"),
+            Row(2, "a1"),
+            Row(3, "a2", "a1"),
+            Row(4, "a3", "a2"),
+            Row(5, "deep", "a3", "base")
+        ];
+        DependencyGraphModel model = DependencyGraphBuilder.Build(rows);
+        TreeDependencyLayout tree = new(model);
+        DependencyGraphEdge longLink = model.EssentialEdges.Single(edge => edge.From.Label == "base" && edge.To.Label == "deep");
+
+        double[] xs = tree.Routes[longLink].Select(static point => point.X).ToArray();
+        int direction = Math.Sign(xs[^1] - xs[0]);
+        Assert.All(xs.Zip(xs.Skip(1)), pair => Assert.True(Math.Sign(pair.Second - pair.First) != -direction,
+            $"The line turns back between x = {pair.First:0} and {pair.Second:0}."));
+        Assert.All(xs, x => Assert.InRange(x, Math.Min(xs[0], xs[^1]), Math.Max(xs[0], xs[^1])));
+    }
+
+    [Fact]
+    public void ALineNeverSwingsBackBetweenRowsWhenItsSlopeChanges()
+    {
+        // Regression (#112): where a line's slope changes from one row to the next, the curve between
+        // the rows could swing back before going on (here around x = 45 to 60).
+        Point[] route = [new(0, 81), new(30, 193), new(45, 274), new(60, 386), new(90, 467), new(100, 579)];
+
+        for (int index = 1; index < route.Length; index++)
+        {
+            double direction = Math.Sign(route[index].X - route[index - 1].X);
+            double[] xs = SampleSegment(route, index).Select(static point => point.X).ToArray();
+            Assert.All(xs.Zip(xs.Skip(1)), pair => Assert.True((pair.Second - pair.First) * direction >= -1e-9,
+                $"The line moves back between ({route[index - 1].X}, {route[index - 1].Y}) and ({route[index].X}, {route[index].Y})."));
+        }
+    }
+
+    [Fact]
+    public void ALinkBetweenNeighbouringRowsKeepsItsGentleSCurve()
+    {
+        (Point first, Point second) = TreeDependencyLayout.CurveControls([new Point(0, 81), new Point(50, 193)], 1);
+
+        Assert.Equal(new Point(0, 137), first);
+        Assert.Equal(new Point(50, 137), second);
     }
 
     [Fact]
@@ -154,6 +244,37 @@ public sealed class TreeDependencyLayoutTests
         Assert.All(graph.HighlightedEdges, edge =>
             Assert.True(ReferenceEquals(edge.From, order) || ReferenceEquals(edge.To, order)));
         Assert.Equal(3, graph.HighlightedEdges.Count);
+    }
+
+    private static EntityOverviewRow[] RandomLayeredRows(int seed)
+    {
+        Random random = new(seed);
+        return Enumerable.Range(1, 80).Select(id =>
+        {
+            int layer = (id - 1) / 10;
+            string[] dependencies = layer == 0 ? [] : Enumerable.Range(0, random.Next(1, 4))
+                .Select(_ => $"e{random.Next(1, layer * 10 + 1)}").Distinct().ToArray();
+            return Row(id, $"e{id}", dependencies);
+        }).ToArray();
+    }
+
+    /// <summary>Points along the drawn curves of a route, as the canvas and the report draw them.</summary>
+    private static IEnumerable<Point> SampleCurve(IReadOnlyList<Point> route) =>
+        Enumerable.Range(1, route.Count - 1).SelectMany(index => SampleSegment(route, index));
+
+    private static IEnumerable<Point> SampleSegment(IReadOnlyList<Point> route, int index)
+    {
+        Point start = route[index - 1];
+        Point end = route[index];
+        (Point first, Point second) = TreeDependencyLayout.CurveControls(route, index);
+        for (int step = 0; step <= 40; step++)
+        {
+            double t = step / 40.0;
+            double u = 1 - t;
+            yield return new Point(
+                u * u * u * start.X + 3 * u * u * t * first.X + 3 * u * t * t * second.X + t * t * t * end.X,
+                u * u * u * start.Y + 3 * u * u * t * first.Y + 3 * u * t * t * second.Y + t * t * t * end.Y);
+        }
     }
 
     private static EntityOverviewRow Row(int id, string name, params string[] dependencies) => new(
