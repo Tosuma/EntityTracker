@@ -127,8 +127,10 @@ public interface IProjectSyncVersionGate
 public sealed class ProjectSyncUpdateRequiredException(string version)
     : InvalidOperationException($"EntityTracker {version} is required before Project sync.");
 
-public sealed class ProjectSyncVersionCheckUnavailableException()
-    : InvalidOperationException("Project sync is paused until EntityTracker can check for app updates.");
+/// <summary>The update check failed; <paramref name="reason"/> says why and what to do, when known.</summary>
+public sealed class ProjectSyncVersionCheckUnavailableException(string? reason = null)
+    : InvalidOperationException("Project sync is paused until EntityTracker can check for app updates." +
+                                (string.IsNullOrWhiteSpace(reason) ? "" : " " + reason));
 
 public sealed partial class ProjectGitSyncService(
     IProjectSyncLinkStore links, ILocalGitTransport git, IProjectSnapshotStore snapshots,
