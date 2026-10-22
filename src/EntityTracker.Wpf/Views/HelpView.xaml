@@ -70,7 +70,7 @@
                         <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Ctrl+1, Ctrl+2, Ctrl+3: Overview, Dependency graph, Archived." />
                         <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Ctrl+F: search the page; Ctrl+N: new entity." />
                         <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Ctrl+E: export Overview; F5: refresh." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Esc closes a dialog, a menu or the details pane; Enter confirms a dialog's default choice." />
+                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Esc closes a dialog, a menu or the details pane, or leaves a search box; Enter confirms a dialog's default choice." />
                     </StackPanel>
                 </Border>
                 <Border Margin="6,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
