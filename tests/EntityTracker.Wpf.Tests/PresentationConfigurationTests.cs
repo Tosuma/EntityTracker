@@ -107,6 +107,20 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void OverviewExportShowsTheExportIconBeforeItsLabel()
+    {
+        // Regression (#119): a down arrow after "Export" read as a drop-down, not as exporting.
+        XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XElement button = workspace.Descendants().Single(element =>
+            (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "OverviewExportButton");
+        XElement label = Assert.Single(button.Elements());
+
+        Assert.Equal("IconLabel", label.Name.LocalName);
+        Assert.Equal("Icon.ArrowExportUp", (string?)label.Attribute("IconKey"));
+        Assert.Equal("Export", (string?)label.Attribute("Text"));
+    }
+
+    [Fact]
     public void ClosingTheWindowWaitsForARunningProjectSync()
     {
         string code = File.ReadAllText(Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory),
