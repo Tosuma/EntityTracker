@@ -1,6 +1,7 @@
 using System.Runtime.ExceptionServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 
 using EntityTracker.Wpf.Controls;
 
@@ -49,6 +50,51 @@ public sealed class TextFieldFocusTests
         Pump(0.05);
 
         Assert.True(box.IsKeyboardFocused);
+    });
+
+    [Fact]
+    public void ALeftFieldHandsTheFocusToItsWindowSoShortcutsStillArrive() => Run((box, heading, _) =>
+    {
+        box.Focus();
+        Pump(0.05);
+
+        TextFieldFocus.Leave(box, heading, mayClear: true);
+        Pump(0.05);
+
+        // Regression (#118): with nothing focused, WPF sent Ctrl+F to no element, so the window never saw it.
+        Assert.Same(Window.GetWindow(box), Keyboard.FocusedElement);
+        Assert.False(box.IsFocused);
+    });
+
+    [Fact]
+    public void ReleasingAFieldWithEscLeavesIt() => Run((box, _, _) =>
+    {
+        box.Focus();
+        Pump(0.05);
+
+        TextFieldFocus.Release(box);
+        Pump(0.05);
+
+        Assert.False(box.IsKeyboardFocused);
+        Assert.False(box.IsFocused);
+        Assert.Same(Window.GetWindow(box), Keyboard.FocusedElement);
+    });
+
+    [Fact]
+    public void AWindowLeftWithoutFocusTakesIt() => Run((box, _, _) =>
+    {
+        box.Focus();
+        Pump(0.05);
+        Window window = Window.GetWindow(box)!;
+        // With nothing focused, WPF sends keys to no element, so no shortcut reaches the window.
+        Keyboard.ClearFocus();
+        Pump(0.05);
+        Assert.Null(Keyboard.FocusedElement);
+
+        TextFieldFocus.TakeFocusIfNone(window);
+
+        // The window passes the focus on to the element it last had, if any.
+        Assert.True(window.IsKeyboardFocusWithin);
     });
 
     [Fact]

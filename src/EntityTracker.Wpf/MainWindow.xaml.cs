@@ -42,6 +42,7 @@ public partial class MainWindow : Window
         Closed += OnClosed;
         PreviewMouseWheel += OnPreviewMouseWheel;
         PreviewMouseDown += OnPreviewMouseDownLeaveTextField;
+        TextFieldFocus.KeepInWindow(this);
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         if (_updates is not null) _updates.StateChanged += OnUpdateStateChanged;
         _editTimer.Tick += (_, _) => RefreshUpdateBlock();
@@ -74,7 +75,8 @@ public partial class MainWindow : Window
     /// <summary>
     /// The Tracker page shortcuts: Ctrl+F search, Ctrl+1 to 3 for Overview, Dependency graph and Archived,
     /// Ctrl+N for a new entity, Ctrl+E for the export menu and F5 to refresh. None of them act while a
-    /// dialog is open, the app is busy or an update is required.
+    /// dialog is open, the app is busy or an update is required. They work wherever the focus is, since
+    /// the window keeps it when nothing else has it (<see cref="TextFieldFocus.KeepInWindow"/>).
     /// </summary>
     private void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)
     {
