@@ -332,10 +332,7 @@
                                     PreviewMouseDown="OnOverviewExportButtonPreviewMouseDown"
                                     Click="OnOverviewExportButtonClick"
                                     Style="{StaticResource PrimaryButtonStyle}">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="Export" />
-                                    <controls:Icon Margin="8,0,0,0" Size="12" VerticalAlignment="Center" IconKey="Icon.ArrowDown" />
-                                </StackPanel>
+                                <controls:IconLabel IconKey="Icon.ArrowExportUp" Text="Export" />
                             </Button>
                             <Popup x:Name="OverviewExportPopup"
                                    PlacementTarget="{Binding ElementName=OverviewExportButton}"
