@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Media.Media3D;
 
 using EntityTracker.Domain;
+using EntityTracker.Wpf.Controls;
 using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels;
 
@@ -522,6 +523,16 @@ public partial class TrackerWorkspaceView : UserControl
         EntityTableViewModel? currentTable = GetCurrentEntityTable();
         if (currentTable?.CloseOpenFilter() == true)
         {
+            e.Handled = true;
+            return;
+        }
+
+        // As in the graph search, Esc first leaves the search box and keeps the search; the next one
+        // clears it.
+        TextBox searchBox = _viewModel.SelectedTab == MainWindowTab.Archived ? ArchivedSearchTextBox : OverviewSearchTextBox;
+        if (currentTable is not null && searchBox.IsKeyboardFocusWithin)
+        {
+            TextFieldFocus.Release(searchBox);
             e.Handled = true;
             return;
         }
