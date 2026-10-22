@@ -125,6 +125,9 @@ Destructive actions require confirmation where the workflow already calls for it
   built-in Fluent behavior plus theme-aware semantic Fluent resources.
 - Primary buttons use Green 100% with White text. Secondary buttons use the active card/text
   resources. Destructive buttons use Coral with Dark Green text.
+- A cancel that throws away the user's progress takes a second press: the button's label changes to
+  "Confirm cancel" and a line says what will not happen. The button keeps its width, sized for the
+  longer label.
 - Normal controls have a 32-pixel baseline height, data rows are 36 pixels, and table headers are
   40 pixels. Layout spacing follows a 4/8/12/16/24 scale; normal cards use a 6-pixel radius.
 - Keyboard focus must remain visibly distinct in every appearance. Popups and editor overlays move

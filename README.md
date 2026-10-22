@@ -126,10 +126,10 @@ archived entities, without deleting their history.
 
 ### Import and synchronize an existing Git checkout
 
-Clone and configure a dedicated Project repository with command-line Git first, including your
-commit identity (`git config --global user.name` and `user.email`); import says which one is missing. On the Portfolio,
+Clone and configure a dedicated Project repository with command-line Git first. On the Portfolio,
 choose **Import project** and select its clean working-tree root. EntityTracker imports the
-snapshot with its stable IDs and history. If its Project name is already used locally, choose a
+snapshot with its stable IDs and history. If Git has no name or email for your commits yet, import
+asks for them, saves them for all your repositories or only this one, and then carries on. If its Project name is already used locally, choose a
 private name for this installation; the shared snapshot keeps its original name.
 
 The Project dashboard shows the linked repository, checked-out branch, upstream, current sync
@@ -139,8 +139,8 @@ and asks you to review competing changes before committing and pushing. It waits
 edit to be saved or closed before applying incoming data. A checkout without an upstream keeps
 local commits only. Permanent deletion of a linked Project publishes a tombstone; a member with
 concurrent local changes can keep the Project locally as an unlinked copy. Unlinking by itself
-leaves both the repository and SQLite data in place. EntityTracker does not clone repositories,
-configure Git, or manage credentials. Automatic sync is enabled by default: it checks linked
+leaves both the repository and SQLite data in place. EntityTracker does not clone repositories or
+manage credentials, and the only Git settings it changes are that commit name and email. Automatic sync is enabled by default: it checks linked
 Projects after startup and every five minutes. In **Settings**, choose 1, 5, 15, 30, or 60 minutes,
 or turn it off while keeping **Sync now** available. A Project with an unfinished edit waits until
 the edit is saved or closed; other Projects continue. Conflict and deletion review still require

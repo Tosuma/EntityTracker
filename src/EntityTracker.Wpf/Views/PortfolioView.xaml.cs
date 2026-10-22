@@ -60,27 +60,52 @@ public partial class PortfolioView : UserControl
     {
         string? path = new ProjectRepositoryFolderPicker().Pick();
         if (path is null) return;
-        // The import's progress notice shows each step and how it ended, failures included.
-        try { await Shell.ImportProjectAsync(path); }
-        catch (ProjectNameCollisionException collision)
+        // The import's progress notice shows each step and how it ended, failures included. When the
+        // import needs something from the user (a local name, a Git identity), it asks, then retries.
+        string? localName = null;
+        bool identityAsked = false;
+        while (true)
         {
-            Logger.LogInformation(collision, "The imported Project's name is already used here; asking for a local name.");
-            string? name = ProjectLocalNameDialog.Prompt(Window.GetWindow(this), collision.ConflictingName);
-            if (name is null)
+            try
             {
-                Logger.LogInformation("Import was stopped: no local name was chosen.");
-                Shell.StopProjectImport();
+                await Shell.ImportProjectAsync(path, localName);
                 return;
             }
-            try { await Shell.ImportProjectAsync(path, name); }
+            catch (ProjectNameCollisionException collision) when (localName is null)
+            {
+                Logger.LogInformation(collision, "The imported Project's name is already used here; asking for a local name.");
+                localName = ProjectLocalNameDialog.Prompt(Window.GetWindow(this), collision.ConflictingName);
+                if (localName is null)
+                {
+                    Logger.LogInformation("Import was stopped: no local name was chosen.");
+                    Shell.StopProjectImport();
+                    return;
+                }
+            }
+            catch (ProjectSyncIdentityRequiredException identity) when (!identityAsked)
+            {
+                identityAsked = true;
+                Logger.LogInformation("Git has no commit identity for the checkout; asking for it.");
+                GitIdentityChoice? choice = GitIdentityDialog.Prompt(Window.GetWindow(this),
+                    identity.CurrentName, identity.CurrentEmail);
+                if (choice is null)
+                {
+                    Logger.LogInformation("Import was stopped: no Git name and email were set.");
+                    Shell.StopProjectImport("Import stopped: Git needs your name and email to commit the Project.");
+                    return;
+                }
+                try { await Shell.SetGitIdentityAsync(identity.RepositoryPath, choice.Name, choice.Email, choice.Scope); }
+                catch (Exception error)
+                {
+                    Logger.LogHandled(error, "Saving the Git name and email failed.");
+                    return;
+                }
+            }
             catch (Exception error)
             {
-                Logger.LogHandled(error, "Importing the Project under a local name failed.");
+                Logger.LogHandled(error, "Importing the Project failed.");
+                return;
             }
-        }
-        catch (Exception error)
-        {
-            Logger.LogHandled(error, "Importing the Project failed.");
         }
     }
 

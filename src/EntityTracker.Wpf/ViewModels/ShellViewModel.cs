@@ -713,6 +713,12 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             _importNotice = notice;
             throw;
         }
+        catch (ProjectSyncIdentityRequiredException)
+        {
+            Notifications.Progress(notice, "Git needs your name and email. Enter them to continue.");
+            _importNotice = notice;
+            throw;
+        }
         catch (Exception error)
         {
             Notifications.Complete(notice, error.Message, NotificationKind.Failure);
@@ -720,12 +726,37 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    /// <summary>Ends a Project import that waited for a local name, when none was chosen.</summary>
-    public void StopProjectImport()
+    /// <summary>Ends a Project import that waited for the user (a local name, a Git identity) when they cancelled.</summary>
+    public void StopProjectImport(string message = "Import stopped: no local name was chosen.")
     {
         if (_importNotice is not { } notice) return;
         _importNotice = null;
-        Notifications.Complete(notice, "Import stopped: no local name was chosen.", NotificationKind.Information);
+        Notifications.Complete(notice, message, NotificationKind.Information);
+    }
+
+    /// <summary>
+    /// Saves the Git name and email an import is waiting for; the import is then retried with
+    /// <see cref="ImportProjectAsync"/>. A failure ends the waiting import's notice.
+    /// </summary>
+    public async Task SetGitIdentityAsync(string repositoryPath, string name, string email, GitConfigScope scope)
+    {
+        if (_gitSync is null) throw new InvalidOperationException("Project import is unavailable.");
+        if (_importNotice is { } notice) Notifications.Progress(notice, "Saving your Git name and email…");
+        try
+        {
+            await Task.Run(() => _gitSync.SetCommitIdentityAsync(repositoryPath, name, email, scope));
+        }
+        catch
+        {
+            if (_importNotice is { } waiting)
+            {
+                _importNotice = null;
+                Notifications.Complete(waiting,
+                    "Your Git name and email could not be saved. Set them with Git in a terminal, then import again.",
+                    NotificationKind.Failure);
+            }
+            throw;
+        }
     }
 
     public Task PublishPendingDeletionAsync(ProjectSyncLink link) =>
