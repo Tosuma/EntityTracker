@@ -126,7 +126,8 @@ archived entities, without deleting their history.
 
 ### Import and synchronize an existing Git checkout
 
-Clone and configure a dedicated Project repository with command-line Git first. On the Portfolio,
+Clone and configure a dedicated Project repository with command-line Git first, including your
+commit identity (`git config --global user.name` and `user.email`); import says which one is missing. On the Portfolio,
 choose **Import project** and select its clean working-tree root. EntityTracker imports the
 snapshot with its stable IDs and history. If its Project name is already used locally, choose a
 private name for this installation; the shared snapshot keeps its original name.

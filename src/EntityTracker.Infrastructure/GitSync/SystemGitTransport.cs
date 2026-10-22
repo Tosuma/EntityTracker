@@ -96,9 +96,7 @@ public sealed class SystemGitTransport : ILocalGitTransport
                 "(EntityTracker merges Project snapshots itself), or finish it outside EntityTracker, then retry Project sync.");
         string branch = (await RunAsync(root, ["symbolic-ref", "--quiet", "--short", "HEAD"], cancellationToken)).Trim();
         if (string.IsNullOrWhiteSpace(branch)) throw new ProjectSyncConfigurationException("Check out the linked branch with Git outside EntityTracker, then retry.");
-        if (string.IsNullOrWhiteSpace((await RunAsync(root, ["config", "--get", "user.name"], cancellationToken)).Trim()) ||
-            string.IsNullOrWhiteSpace((await RunAsync(root, ["config", "--get", "user.email"], cancellationToken)).Trim()))
-            throw new ProjectSyncConfigurationException("Configure Git commit identity outside EntityTracker before syncing.");
+        await RequireCommitIdentityAsync(root, cancellationToken);
         byte[] status = await RunBytesAsync(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], cancellationToken);
         if (status.Length > 0) throw new InvalidOperationException("The working tree must be clean before linking or syncing.");
         byte[] tracked = await RunBytesAsync(root, ["ls-files", "-z"], cancellationToken);
@@ -560,6 +558,30 @@ public sealed class SystemGitTransport : ILocalGitTransport
             output.WriteByte(bytes[i]);
         }
         return output.ToArray();
+    }
+
+    /// <summary>
+    /// Requires the Git commit identity that sync commits are made with. <c>git config --get</c> fails when
+    /// a setting is missing, so the failure is allowed and reported as the missing setting, with the
+    /// commands that set it.
+    /// </summary>
+    private async Task RequireCommitIdentityAsync(string root, CancellationToken cancellationToken)
+    {
+        List<string> missing = [];
+        foreach (string setting in new[] { "user.name", "user.email" })
+        {
+            if (string.IsNullOrWhiteSpace(await RunAsync(root, ["config", "--get", setting], cancellationToken, allowFailure: true)))
+                missing.Add(setting);
+        }
+
+        if (missing.Count == 0) return;
+        string settings = string.Join(" and ", missing);
+        string commands = string.Join(" and ", missing.Select(static setting => setting == "user.name"
+            ? "git config --global user.name \"Your Name\""
+            : "git config --global user.email \"you@example.com\""));
+        throw new ProjectSyncConfigurationException(
+            $"Git has no {settings} set, which EntityTracker needs to commit Project changes. " +
+            $"Set {(missing.Count == 1 ? "it" : "them")} with {commands} in a terminal, then retry.");
     }
 
     private static string[] SplitNull(byte[] bytes) => Encoding.UTF8.GetString(bytes)
