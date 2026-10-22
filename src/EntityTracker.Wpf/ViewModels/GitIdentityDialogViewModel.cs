@@ -13,7 +13,7 @@ public sealed class GitIdentityDialogViewModel : INotifyPropertyChanged
 {
     private string _name;
     private string _email;
-    private bool _saveForAllRepositories = true;
+    private bool _saveToGlobalConfiguration = true;
     private bool _isConfirmingCancel;
     private string? _errorMessage;
 
@@ -40,21 +40,16 @@ public sealed class GitIdentityDialogViewModel : INotifyPropertyChanged
     /// <summary>On: the global Git configuration (every repository). Off: only this repository.</summary>
     public bool SaveToGlobalConfiguration
     {
-        get => _saveForAllRepositories;
+        get => _saveToGlobalConfiguration;
         set
         {
-            if (_saveForAllRepositories == value) return;
-            _saveForAllRepositories = value;
+            if (_saveToGlobalConfiguration == value) return;
+            _saveToGlobalConfiguration = value;
             OnPropertyChanged();
-            OnPropertyChanged(nameof(ScopeDescription));
         }
     }
 
-    public GitConfigScope Scope => _saveForAllRepositories ? GitConfigScope.Global : GitConfigScope.Local;
-
-    public string ScopeDescription => _saveForAllRepositories
-        ? "Used by every repository on this computer."
-        : "Saved only in this repository's Git configuration.";
+    public GitConfigScope Scope => _saveToGlobalConfiguration ? GitConfigScope.Global : GitConfigScope.Local;
 
     /// <summary>Cancel was pressed once; the next press closes without importing.</summary>
     public bool IsConfirmingCancel

@@ -19,12 +19,10 @@ public sealed class GitIdentityDialogViewModelTests
     {
         GitIdentityDialogViewModel dialog = new(null, null);
         Assert.Equal(GitConfigScope.Global, dialog.Scope);
-        Assert.Equal("Used by every repository on this computer.", dialog.ScopeDescription);
 
         dialog.SaveToGlobalConfiguration = false;
 
         Assert.Equal(GitConfigScope.Local, dialog.Scope);
-        Assert.Equal("Saved only in this repository's Git configuration.", dialog.ScopeDescription);
     }
 
     [Theory]

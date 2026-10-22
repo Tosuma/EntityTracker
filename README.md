@@ -132,8 +132,8 @@ snapshot with its stable IDs and history. If its Project name is already used lo
 private name for this installation; the shared snapshot keeps its original name.
 
 If Git has no name or email for your commits yet, import asks for them, with any value already set
-filled in. **Save to global Git configuration** saves them for every repository on this computer; clear it to
-save them only in this repository. **Save and import** carries on with the import. Cancel needs a
+filled in. **Save to global Git configuration** is on by default; clear it to save them
+only in this repository. **Save and import** carries on with the import. Cancel needs a
 second press, **Confirm cancel**, since the Project is then not imported.
 
 ![Import asking for the Git name and email, with the name already filled in and the email still to enter](images/light/git-identity.png)
