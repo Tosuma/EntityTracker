@@ -28,7 +28,7 @@ public sealed class ScreenshotCommandLineTests
     [Fact]
     public void Manifest_HasUniquePngNames()
     {
-        Assert.Equal(47, ScreenshotManifest.FileNames.Count);
+        Assert.Equal(49, ScreenshotManifest.FileNames.Count);
         Assert.Contains("sync-states.png", ScreenshotManifest.FileNames);
         Assert.Contains("project-report.png", ScreenshotManifest.FileNames);
         Assert.Contains("dependency-graph-search.png", ScreenshotManifest.FileNames);
@@ -51,6 +51,8 @@ public sealed class ScreenshotCommandLineTests
         Assert.Contains("project-sync-progress.png", ScreenshotManifest.FileNames);
         Assert.Contains("project-sync-action-needed.png", ScreenshotManifest.FileNames);
         Assert.Contains("project-merge-review.png", ScreenshotManifest.FileNames);
+        Assert.Contains("git-identity.png", ScreenshotManifest.FileNames);
+        Assert.Contains("git-identity-confirm-cancel.png", ScreenshotManifest.FileNames);
         Assert.Equal(
             ScreenshotManifest.FileNames.Count,
             ScreenshotManifest.FileNames.Distinct(StringComparer.OrdinalIgnoreCase).Count());
