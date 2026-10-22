@@ -195,7 +195,7 @@ dotnet test EntityTracker.slnx --no-build --no-restore
 | Installer reports no approved release | Ask the developer to publish the first `app-vX.Y.Z` tag |
 | Update fails | Read the error in the update terminal; start Docker or restore network access, then press **R** to retry |
 | App closes for an update but does not reopen | Run the installer from the updated source checkout as shown above |
-| Local work opens but Project sync is paused | Restore access to the app source clone and its Git origin, then select **Retry check** |
+| Local work opens but Project sync is paused | The notification says why the update check failed (sign-in, network, an untrusted folder, or a missing source clone) and what to do; the log has Git's message. Fix it, then select **Retry check** |
 
 ## Further reading
 

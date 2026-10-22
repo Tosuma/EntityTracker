@@ -208,7 +208,8 @@ public partial class MainWindow : Window
         {
             _offlineNotice = _viewModel.Notifications.RequireAction(
                 "Project sync paused",
-                "EntityTracker could not check app releases. Local work is available; Project Git sync will resume after a successful check.",
+                "EntityTracker could not check app releases. Local work is available; Project Git sync will resume after a successful check." +
+                (_updates.OfflineReason is { } reason ? " " + reason : ""),
                 "Retry check", () => _updates.CheckAsync());
         }
         else if (_updates?.State != AppUpdateState.Offline && _offlineNotice is not null)
