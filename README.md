@@ -128,9 +128,17 @@ archived entities, without deleting their history.
 
 Clone and configure a dedicated Project repository with command-line Git first. On the Portfolio,
 choose **Import project** and select its clean working-tree root. EntityTracker imports the
-snapshot with its stable IDs and history. If Git has no name or email for your commits yet, import
-asks for them, saves them for all your repositories or only this one, and then carries on. If its Project name is already used locally, choose a
+snapshot with its stable IDs and history. If its Project name is already used locally, choose a
 private name for this installation; the shared snapshot keeps its original name.
+
+If Git has no name or email for your commits yet, import asks for them, with any value already set
+filled in. **Use for all my repositories** saves them in your global Git configuration; clear it to
+save them only in this repository. **Save and import** carries on with the import. Cancel needs a
+second press, **Confirm cancel**, since the Project is then not imported.
+
+![Import asking for the Git name and email, with the name already filled in and the email still to enter](images/light/git-identity.png)
+
+![The Git name and email dialog after pressing Cancel once: Confirm cancel, and a line saying the Project won't be imported](images/light/git-identity-confirm-cancel.png)
 
 The Project dashboard shows the linked repository, checked-out branch, upstream, current sync
 state, last result, and the latest sync duration for this session. **Sync now** fetches

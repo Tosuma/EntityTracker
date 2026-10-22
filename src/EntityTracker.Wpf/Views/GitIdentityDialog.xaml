@@ -9,79 +9,83 @@
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </Window.Resources>
-    <StackPanel Margin="24,20,24,20" FocusManager.IsFocusScope="True"
-                KeyboardNavigation.TabNavigation="Cycle" KeyboardNavigation.ControlTabNavigation="Cycle">
-        <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Set your Git name and email" />
-        <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}"
-                   Text="Git records a name and email with every commit. EntityTracker needs them to import this Project." />
+    <!-- Padding on a Border rather than a margin on the panel, so the window's content (and its
+         README capture) includes the space around the form. -->
+    <Border Padding="24,20">
+        <StackPanel FocusManager.IsFocusScope="True"
+                    KeyboardNavigation.TabNavigation="Cycle" KeyboardNavigation.ControlTabNavigation="Cycle">
+            <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Set your Git name and email" />
+            <TextBlock Margin="0,8,0,0" Style="{StaticResource PageDescriptionTextStyle}"
+                       Text="Git records a name and email with every commit. EntityTracker needs them to import this Project." />
 
-        <Label Margin="0,16,0,0" Padding="0" Content="_Name" Target="{Binding ElementName=NameBox}" />
-        <TextBox x:Name="NameBox" Margin="0,4,0,0" AutomationProperties.Name="Git name"
-                 controls:Placeholder.Text="Your name, as it appears on commits"
-                 Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
-        <Label Margin="0,12,0,0" Padding="0" Content="_Email" Target="{Binding ElementName=EmailBox}" />
-        <TextBox x:Name="EmailBox" Margin="0,4,0,0" AutomationProperties.Name="Git email"
-                 controls:Placeholder.Text="you@example.com"
-                 Text="{Binding Email, UpdateSourceTrigger=PropertyChanged}" />
+            <Label Margin="0,16,0,0" Padding="0" Content="_Name" Target="{Binding ElementName=NameBox}" />
+            <TextBox x:Name="NameBox" Margin="0,4,0,0" AutomationProperties.Name="Git name"
+                     controls:Placeholder.Text="Your name, as it appears on commits"
+                     Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+            <Label Margin="0,12,0,0" Padding="0" Content="_Email" Target="{Binding ElementName=EmailBox}" />
+            <TextBox x:Name="EmailBox" Margin="0,4,0,0" AutomationProperties.Name="Git email"
+                     controls:Placeholder.Text="you@example.com"
+                     Text="{Binding Email, UpdateSourceTrigger=PropertyChanged}" />
 
-        <CheckBox x:Name="ScopeCheckBox" Margin="0,16,0,0"
-                  Content="Use for all my _repositories" IsChecked="{Binding SaveForAllRepositories}"
-                  AutomationProperties.HelpText="{Binding ScopeDescription}" />
-        <TextBlock Margin="28,2,0,0" Style="{StaticResource PageDescriptionTextStyle}"
-                   Text="{Binding ScopeDescription}" />
+            <CheckBox x:Name="ScopeCheckBox" Margin="0,16,0,0"
+                      Content="Use for all my _repositories" IsChecked="{Binding SaveForAllRepositories}"
+                      AutomationProperties.HelpText="{Binding ScopeDescription}" />
+            <TextBlock Margin="28,2,0,0" Style="{StaticResource PageDescriptionTextStyle}"
+                       Text="{Binding ScopeDescription}" />
 
-        <!-- Shown under the fields instead of a second message box, so the dialog stays the only window. -->
-        <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" Foreground="{DynamicResource Brush.Critical}"
-                   Text="{Binding ErrorMessage}" AutomationProperties.LiveSetting="Assertive"
-                   Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
-        <TextBlock x:Name="CancelWarning" Margin="0,12,0,0" TextWrapping="Wrap"
-                   Foreground="{DynamicResource Brush.Review.Warning.Text}"
-                   Text="Without a name and email, the Project won't be imported."
-                   AutomationProperties.LiveSetting="Assertive"
-                   Visibility="{Binding IsConfirmingCancel, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            <!-- Shown under the fields instead of a second message box, so the dialog stays the only window. -->
+            <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" Foreground="{DynamicResource Brush.Critical}"
+                       Text="{Binding ErrorMessage}" AutomationProperties.LiveSetting="Assertive"
+                       Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            <TextBlock x:Name="CancelWarning" Margin="0,12,0,0" TextWrapping="Wrap"
+                       Foreground="{DynamicResource Brush.Review.Warning.Text}"
+                       Text="Without a name and email, the Project won't be imported."
+                       AutomationProperties.LiveSetting="Assertive"
+                       Visibility="{Binding IsConfirmingCancel, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
-        <StackPanel Margin="0,20,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button x:Name="SaveButton" Content="_Save and import" IsDefault="True" MinWidth="130"
-                    Style="{StaticResource PrimaryButtonStyle}" Click="OnSave" />
-            <!-- Both labels share one cell, so the button is as wide as the longer one and never
-                 resizes when the label changes. -->
-            <Button x:Name="CancelButton" Margin="8,0,0,0" IsCancel="True" Click="OnCancel">
-                <Button.Style>
-                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                        <Setter Property="AutomationProperties.Name" Value="Cancel" />
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsConfirmingCancel}" Value="True">
-                                <Setter Property="AutomationProperties.Name" Value="Confirm cancel" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Button.Style>
-                <Grid>
-                    <TextBlock x:Name="CancelLabel" Text="Cancel" HorizontalAlignment="Center">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsConfirmingCancel}" Value="True">
-                                        <Setter Property="Visibility" Value="Hidden" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                    <TextBlock x:Name="ConfirmCancelLabel" Text="Confirm cancel" HorizontalAlignment="Center">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Visibility" Value="Hidden" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsConfirmingCancel}" Value="True">
-                                        <Setter Property="Visibility" Value="Visible" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                </Grid>
-            </Button>
+            <StackPanel Margin="0,20,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="SaveButton" Content="_Save and import" IsDefault="True" MinWidth="130"
+                        Style="{StaticResource PrimaryButtonStyle}" Click="OnSave" />
+                <!-- Both labels share one cell, so the button is as wide as the longer one and never
+                     resizes when the label changes. -->
+                <Button x:Name="CancelButton" Margin="8,0,0,0" IsCancel="True" Click="OnCancel">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                            <Setter Property="AutomationProperties.Name" Value="Cancel" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsConfirmingCancel}" Value="True">
+                                    <Setter Property="AutomationProperties.Name" Value="Confirm cancel" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                    <Grid>
+                        <TextBlock x:Name="CancelLabel" Text="Cancel" HorizontalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsConfirmingCancel}" Value="True">
+                                            <Setter Property="Visibility" Value="Hidden" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock x:Name="ConfirmCancelLabel" Text="Confirm cancel" HorizontalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Hidden" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsConfirmingCancel}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
+                </Button>
+            </StackPanel>
         </StackPanel>
-    </StackPanel>
+    </Border>
 </Window>

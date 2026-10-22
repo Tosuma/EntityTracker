@@ -62,7 +62,7 @@ git switch -c <issue#>-<short-slug>        # e.g. 113-agent-workflow-skills
    1. Preview with `scripts/Generate-ReadmeScreenshots.ps1`.
    2. Inspect the changed captures in **both** themes.
    3. Publish with `-UpdateReadme`.
-   4. Check that each theme still has 47 captures.
+   4. Check that each theme still has the number of captures `AGENTS.md` states.
 3. To check something the screenshots don't cover (for example a narrow window), make a temporary,
    uncommitted change to the screenshot tool and revert it afterwards.
 
