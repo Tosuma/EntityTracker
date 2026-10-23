@@ -26,6 +26,9 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _editTimer = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private NotificationItem? _updateNotice;
     private NotificationItem? _offlineNotice;
+    // The available version already announced, so each new version is announced once.
+    private string? _announcedUpdate;
+    private bool _updating;
     private readonly CancellationTokenSource _closingSync = new();
     private NotificationItem? _closingNotice;
     private bool _closeWithoutSync;
@@ -273,6 +276,7 @@ public partial class MainWindow : Window
             _viewModel.Notifications.Dismiss(_offlineNotice);
             _offlineNotice = null;
         }
+        RefreshAvailableUpdate();
         if (_updates?.IsRequired != true) return;
         bool editing = _viewModel.CurrentWorkspace?.HasUnsavedWork == true;
         bool catalogOpen = _viewModel.IsModalOpen;
@@ -311,6 +315,64 @@ public partial class MainWindow : Window
             UpdateActionButton.Focus();
         _lastOverlayVisible = showOverlay;
         _lastActionEnabled = actionEnabled;
+    }
+
+    /// <summary>
+    /// Offers a newer minor or patch version: one notice per new version, with Update, and the
+    /// Settings dot and Settings › About's Update button until it is installed.
+    /// </summary>
+    private void RefreshAvailableUpdate()
+    {
+        // A source build has no installed version to update.
+        if (_updates is null) return;
+        string? tag = _updates.AvailableTag;
+        string? version = tag is not null && AppReleaseVersion.TryParse(tag, out AppReleaseVersion release)
+            ? $"{release.Major}.{release.Minor}.{release.Patch}"
+            : null;
+        _viewModel.OfferUpdate(version, InstallAvailableUpdateAsync);
+        if (version is null || tag == _announcedUpdate) return;
+        _announcedUpdate = tag;
+        _viewModel.Notifications.Show("Update available",
+            $"EntityTracker {version} is available. Update now, or later from Settings › About.",
+            "Update", InstallAvailableUpdateAsync);
+    }
+
+    /// <summary>
+    /// Installs the offered version: once nothing is running or unsaved, syncs the changes not synced
+    /// yet (as closing does), then starts the updater and closes.
+    /// </summary>
+    private async Task InstallAvailableUpdateAsync()
+    {
+        if (_updating || _updates?.AvailableTag is null) return;
+        if (HasInProgressWork())
+        {
+            _viewModel.Notifications.Show("Update not started",
+                "Finish or close the current edit, dialog or sync, then update.", NotificationKind.Failure);
+            return;
+        }
+        _updating = true;
+        NotificationItem notice = _viewModel.Notifications.BeginProgress("Updating EntityTracker",
+            "Syncing your changes before updating…");
+        try
+        {
+            if (await _viewModel.HasUnsyncedProjectChangesAsync() &&
+                await _viewModel.SyncBeforeClosingAsync() is { } problem)
+            {
+                _viewModel.Notifications.Complete(notice, $"{problem} Update when it is synced.", NotificationKind.Failure);
+                _updating = false;
+                return;
+            }
+            _viewModel.Notifications.Progress(notice, "Starting the updater…");
+            await _updates.LaunchUpdaterAsync(Environment.ProcessId);
+            _closeWithoutSync = true;
+            System.Windows.Application.Current.Shutdown();
+        }
+        catch (Exception error)
+        {
+            Logger.LogError(error, "The updater could not be started.");
+            _viewModel.Notifications.Complete(notice, $"The update could not start: {error.Message}", NotificationKind.Failure);
+            _updating = false;
+        }
     }
 
     private void OnUpdateClick(object sender, RoutedEventArgs e) => _ = RunUpdateAsync();

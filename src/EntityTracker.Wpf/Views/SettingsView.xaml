@@ -264,6 +264,17 @@
                                            AutomationProperties.Name="{Binding AppVersion, StringFormat=App version {0}}"
                                            Text="{Binding AppVersion}" />
                             </StackPanel>
+                            <!-- A newer minor or patch version (a major one is required and has its own overlay). -->
+                            <DockPanel x:Name="AboutUpdate" Margin="0,10,0,0" LastChildFill="False"
+                                       Visibility="{Binding IsUpdateAvailable, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <TextBlock VerticalAlignment="Center"
+                                           Text="{Binding AvailableUpdateVersion, StringFormat=EntityTracker {0} is available.}" />
+                                <Button x:Name="AboutUpdateButton" Margin="12,0,0,0" Content="Update"
+                                        Command="{Binding UpdateAppCommand}"
+                                        Style="{StaticResource PrimaryButtonStyle}"
+                                        AutomationProperties.Name="{Binding AvailableUpdateVersion, StringFormat=Update to EntityTracker {0}}"
+                                        AutomationProperties.HelpText="Closes EntityTracker, installs the new version and opens it again" />
+                            </DockPanel>
                             <StackPanel Margin="0,10,0,0" Orientation="Horizontal">
                                 <TextBlock FontWeight="SemiBold" Text="Created by:" />
                                 <TextBlock x:Name="AboutCreatorLine" Margin="6,0,0,0"

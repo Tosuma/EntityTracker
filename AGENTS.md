@@ -52,7 +52,7 @@ for.
   - Inspect the changed captures in both themes.
   - Publish with `-UpdateReadme`. It takes over 10 minutes, so run it in the background.
   - Run it with PowerShell; `powershell` is not on Git Bash's path.
-  - The manifest must stay at 50 captures per theme (update this number when a capture is added on purpose).
+  - The manifest must stay at 51 captures per theme (update this number when a capture is added on purpose).
   - Text-box placeholders never appear in captures.
 - **Branches and commits.**
   - Branch from an up-to-date `main` as `<issue#>-<short-slug>`.

@@ -45,10 +45,15 @@ public sealed class AppReleaseVersionTests
             await updates.EnsureSyncAllowedAsync(CancellationToken.None);
             Assert.Equal(AppUpdateState.Current, updates.State);
 
+            // A newer minor release is only offered (#129); a newer major one is required.
             refs += "bbb\trefs/tags/app-v1.1.0\n";
+            await updates.EnsureSyncAllowedAsync(CancellationToken.None);
+            Assert.Equal("app-v1.1.0", updates.AvailableTag);
+
+            refs += "ccc\trefs/tags/app-v2.0.0\n";
             await Assert.ThrowsAsync<ProjectSyncUpdateRequiredException>(() =>
                 updates.EnsureSyncAllowedAsync(CancellationToken.None));
-            Assert.Equal("app-v1.1.0", updates.RequiredTag);
+            Assert.Equal("app-v2.0.0", updates.RequiredTag);
 
             using AppUpdateService restarted = new(paths, install, _ =>
                 throw new IOException("Offline"));

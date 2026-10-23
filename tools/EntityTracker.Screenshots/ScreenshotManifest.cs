@@ -61,6 +61,7 @@ internal static class ScreenshotManifest
         "settings-tracker.png",
         "settings-sync.png",
         "settings-about.png",
+        "update-available.png",
         "app-update-required.png"
     ];
 

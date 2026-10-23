@@ -97,6 +97,10 @@ updating, and without doing anything by hand?**
   working alongside, including with data they simply ignore. The sync format version does not change.
 - **Patch** (`1.10.1`): nothing new. Fixes, wording, colours, layout and performance.
 
+The app enforces this: only a newer major release is required and pauses Project sync until it is
+installed. A newer minor or patch release is offered with a notification, a dot on Settings and
+**Update** in Settings › About.
+
 The local database (`SqliteDatabase.CurrentSchemaVersion`) and settings (`EntityTrackerSettings.CurrentVersion`)
 are upgraded on each machine when the new version starts and force no one else to update, so a change
 to them alone does not need a major release.

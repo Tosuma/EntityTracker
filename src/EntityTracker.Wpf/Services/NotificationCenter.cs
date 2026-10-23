@@ -155,6 +155,15 @@ public sealed class NotificationCenter : INotifyPropertyChanged
         return item;
     }
 
+    /// <summary>A notice with a button, such as Update, that closes after the display time like any other.</summary>
+    public NotificationItem Show(string title, string message, string actionLabel, Func<Task> action)
+    {
+        NotificationItem item = Add(title, message, NotificationKind.Information);
+        item.Update(message, NotificationKind.Information, actionLabel, action);
+        ScheduleExpiry(item);
+        return item;
+    }
+
     public NotificationItem BeginProgress(string title, string message,
         ProjectId? projectId = null) =>
         Add(title, message, NotificationKind.Progress, projectId);

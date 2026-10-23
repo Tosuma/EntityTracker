@@ -56,11 +56,14 @@ again. Docker must use Linux containers and be allowed to share your user folder
 defaults).
 
 The app checks for new releases at startup, every 15 minutes, and before each Project Git sync.
-When an update is available, finish any open edit and choose **Close and update**. A terminal window
+A new minor or patch release is offered: choose **Update** in its notification or in **Settings ›
+About** whenever it suits you; until then the Settings item shows a dot, and everything keeps
+working. A new major release is required: Project Git sync pauses until you update. Finish any open
+edit and choose **Close and update**. A terminal window
 shows the same five steps, reopens the app when complete, and closes itself after a few seconds. If
 the update fails, it stays open with the error: press **R** to retry or any other key to exit; the
 older app remains blocked. If the release check is unavailable, local work continues but Project Git
-sync pauses until a check succeeds.
+sync pauses until a check succeeds; the notice says what EntityTracker could not reach and why.
 
 If restore fails with `NU1100` errors, check network access to NuGet, then clear the package cache
 and retry:

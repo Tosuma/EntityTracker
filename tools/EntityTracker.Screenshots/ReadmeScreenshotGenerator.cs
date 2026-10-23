@@ -352,6 +352,14 @@ internal sealed class ReadmeScreenshotGenerator
             await renderer.CaptureAsync("settings-sync.png");
             shell.SelectedSettingsCategory = SettingsCategory.About;
             await renderer.CaptureAsync("settings-about.png");
+            // A newer minor version is offered: the notice, the dot on Settings and About's Update button.
+            shell.OfferUpdate("1.1.0", () => Task.CompletedTask);
+            NotificationItem updateNotice = provider.GetRequiredService<NotificationCenter>().Show("Update available",
+                "EntityTracker 1.1.0 is available. Update now, or later from Settings › About.",
+                "Update", () => Task.CompletedTask);
+            await renderer.CaptureAsync("update-available.png", settleMilliseconds: 900);
+            provider.GetRequiredService<NotificationCenter>().Dismiss(updateNotice);
+            shell.OfferUpdate(null, null);
             await CaptureTrackerSyncAsync(provider, shell, tracker, renderer, cancellationToken);
 
             window.ShowUpdatePreview("app-v1.0.0");

@@ -28,6 +28,31 @@ namespace EntityTracker.Wpf.Tests.ViewModels;
 public sealed class ShellViewModelTests
 {
     [Fact]
+    public async Task AnOfferedUpdateShowsInAboutAndPutsADotOnSettingsUntilItIsGone()
+    {
+        // #129: a newer minor or patch version is offered, not forced.
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(), new RecordingDiscardConfirmation(true));
+        ShellNavigationEntry settings = shell.UtilityItems.Single(entry => entry.Destination == ShellDestination.Settings);
+        int updates = 0;
+
+        shell.OfferUpdate("3.7.1", () => { updates++; return Task.CompletedTask; });
+
+        Assert.True(shell.IsUpdateAvailable);
+        Assert.Equal("3.7.1", shell.AvailableUpdateVersion);
+        Assert.True(settings.HasBadge);
+        Assert.Equal("EntityTracker 3.7.1 is available", settings.ToolTip);
+        shell.UpdateAppCommand.Execute(null);
+        await WaitUntilAsync(() => updates == 1);
+
+        shell.OfferUpdate(null, null);
+
+        Assert.False(shell.IsUpdateAvailable);
+        Assert.False(settings.HasBadge);
+        Assert.Null(settings.ToolTip);
+    }
+
+    [Fact]
     public async Task AssignMe_TogglesDetailsAndStagesEditorChangesUntilSave()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
