@@ -150,6 +150,11 @@ public sealed class PresentationConfigurationTests
         Assert.Contains("_viewModel.HasActiveProjectSync", body, StringComparison.Ordinal);
         Assert.Contains("e.Cancel = true;", body, StringComparison.Ordinal);
         Assert.Contains("Close();", body, StringComparison.Ordinal);
+        // #109: closing syncs the changes not synced yet first, with a way out, and stays open when it can't.
+        Assert.Contains("HasUnsyncedProjectChangesAsync", body, StringComparison.Ordinal);
+        Assert.Contains("SyncBeforeClosingAsync", body, StringComparison.Ordinal);
+        Assert.Contains("\"Close without syncing\"", body, StringComparison.Ordinal);
+        Assert.Contains("_updates?.IsRequired == true", body, StringComparison.Ordinal);
     }
 
     [Fact]

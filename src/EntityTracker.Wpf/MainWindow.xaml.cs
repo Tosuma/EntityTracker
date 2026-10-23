@@ -26,7 +26,9 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _editTimer = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private NotificationItem? _updateNotice;
     private NotificationItem? _offlineNotice;
-    private DispatcherTimer? _closeAfterSync;
+    private readonly CancellationTokenSource _closingSync = new();
+    private NotificationItem? _closingNotice;
+    private bool _closeWithoutSync;
     private bool _lastOverlayVisible;
     private bool _lastActionEnabled;
 
@@ -166,29 +168,83 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Keeps the window open while a Project sync is running, so closing never cuts a sync between
-    /// its commit and the moment it is recorded, and closes as soon as the sync has finished.
+    /// Syncs before closing (#109): the window waits for a running sync, so closing never cuts one
+    /// between its commit and the moment it is recorded, then syncs the Projects with changes not synced
+    /// yet, and closes. The closing notice offers to close without syncing. When a Project can't be
+    /// synced, the window stays open and says why; closing again then closes without syncing.
     /// </summary>
     private void OnClosing(object? sender, CancelEventArgs e)
     {
-        if (!_viewModel.HasActiveProjectSync) return;
+        // An update closes the app itself, and sync is paused until it is installed anyway.
+        if (_closeWithoutSync || _updates?.IsRequired == true) return;
         e.Cancel = true;
-        if (_closeAfterSync is not null) return;
-        _viewModel.Notifications.BeginProgress("Closing EntityTracker",
-            "Finishing the Project sync. EntityTracker closes when it is done.");
-        _closeAfterSync = new DispatcherTimer(TimeSpan.FromMilliseconds(250), DispatcherPriority.Background,
-            (_, _) =>
+        if (_closingNotice is null) _ = SyncThenCloseAsync();
+    }
+
+    private async Task SyncThenCloseAsync()
+    {
+        NotificationItem notice = _closingNotice = _viewModel.Notifications.BeginProgress("Closing EntityTracker",
+            "Checking for changes that are not synced yet…");
+        _viewModel.Notifications.SetAction(notice, "Close without syncing", () =>
+        {
+            CloseWithoutSync();
+            return Task.CompletedTask;
+        });
+        try
+        {
+            if (_viewModel.HasActiveProjectSync)
             {
-                if (_viewModel.HasActiveProjectSync) return;
-                _closeAfterSync?.Stop();
-                Close();
-            }, Dispatcher);
-        _closeAfterSync.Start();
+                _viewModel.Notifications.Progress(notice, "Finishing the Project sync. EntityTracker closes when it is done.");
+                while (_viewModel.HasActiveProjectSync)
+                    await Task.Delay(TimeSpan.FromMilliseconds(250), _closingSync.Token);
+            }
+
+            if (await _viewModel.HasUnsyncedProjectChangesAsync(_closingSync.Token))
+            {
+                _viewModel.Notifications.Progress(notice, "Syncing your changes before closing…");
+                if (await _viewModel.SyncBeforeClosingAsync(_closingSync.Token) is { } problem)
+                {
+                    Logger.LogWarning("EntityTracker stayed open: {Problem}", problem);
+                    _closeWithoutSync = true;
+                    _viewModel.Notifications.Complete(notice,
+                        $"{problem} EntityTracker stayed open; close it again to close without syncing.",
+                        NotificationKind.Failure);
+                    return;
+                }
+            }
+        }
+        catch (OperationCanceledException) when (_closingSync.IsCancellationRequested)
+        {
+            // Not logged: Close without syncing was chosen, and the window is already closing.
+            return;
+        }
+        catch (Exception error)
+        {
+            Logger.LogError(error, "Syncing before closing failed.");
+            _closeWithoutSync = true;
+            _viewModel.Notifications.Complete(notice,
+                "Your changes could not be synced before closing. EntityTracker stayed open; close it again to close without syncing.",
+                NotificationKind.Failure);
+            return;
+        }
+        finally
+        {
+            _closingNotice = null;
+        }
+
+        CloseWithoutSync();
+    }
+
+    private void CloseWithoutSync()
+    {
+        _closeWithoutSync = true;
+        _closingSync.Cancel();
+        Close();
     }
 
     private void OnClosed(object? sender, EventArgs e)
     {
-        _closeAfterSync?.Stop();
+        _closingSync.Cancel();
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         _editTimer.Stop();
         if (_updates is not null) _updates.StateChanged -= OnUpdateStateChanged;
