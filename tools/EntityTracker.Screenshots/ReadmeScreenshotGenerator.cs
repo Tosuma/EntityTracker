@@ -203,6 +203,14 @@ internal sealed class ReadmeScreenshotGenerator
                 "project-sync-action-needed.png", repositoryFixturePath,
                 @"C:\Projects\order-platform", settleMilliseconds: 900);
             notifications.Dismiss(syncNotice);
+            // Closing syncs the changes not synced yet first, with a way out.
+            NotificationItem closingNotice = notifications.BeginProgress("Closing EntityTracker",
+                "Syncing your changes before closing…");
+            notifications.SetAction(closingNotice, "Close without syncing", () => Task.CompletedTask);
+            await renderer.CaptureWithTextOverrideAsync(
+                "closing-sync.png", repositoryFixturePath,
+                @"C:\Projects\order-platform", settleMilliseconds: 900);
+            notifications.Dismiss(closingNotice);
             await linkStore.SaveAsync(repositoryFixture, cancellationToken);
             await shell.ProjectReporting.RepositoryCard.RefreshAsync(cancellationToken);
             ProjectMergeReviewDialog mergeDialog = new(new ProjectMergeReviewViewModel([

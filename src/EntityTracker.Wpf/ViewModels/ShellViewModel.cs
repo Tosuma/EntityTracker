@@ -241,6 +241,45 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public NotificationCenter Notifications { get; }
     public bool HasActiveProjectSync => _autoSync?.HasActiveSync == true;
 
+    /// <summary>Whether a linked Project has changes on this computer that are not in its repository yet.</summary>
+    public async Task<bool> HasUnsyncedProjectChangesAsync(CancellationToken token = default) =>
+        _syncIndicators is not null && (await _syncIndicators.ReadCurrentAsync(token)).Values
+            .Any(static indicator => indicator.Kind == ProjectSyncIndicatorKind.Unsynced);
+
+    /// <summary>
+    /// Syncs every linked Project before the app closes. Returns
+    /// null when nothing is left to sync, otherwise why a Project could not be synced, for the window to
+    /// stay open with.
+    /// </summary>
+    public async Task<string?> SyncBeforeClosingAsync(CancellationToken token = default)
+    {
+        if (_autoSync is null || _syncIndicators is null) return null;
+        await _autoSync.RunPassAsync(token);
+        IReadOnlyDictionary<Guid, ProjectSyncIndicator> indicators = await _syncIndicators.ReadCurrentAsync(token);
+        RefreshSyncIndicators();
+        return DescribeUnsyncedProjects(indicators,
+            id => Projects.FirstOrDefault(project => project.Id.Value == id)?.Name,
+            id => _autoSync.GetState(new ProjectId(id)).LastResult);
+    }
+
+    /// <summary>
+    /// Says which Projects are still not synced and why (the last sync result, else the icon's sentence),
+    /// or null when every linked Project is synced.
+    /// </summary>
+    internal static string? DescribeUnsyncedProjects(IReadOnlyDictionary<Guid, ProjectSyncIndicator> indicators,
+        Func<Guid, string?> nameOf, Func<Guid, string?> lastResultOf)
+    {
+        string[] problems = indicators
+            .Where(static pair => pair.Value.Kind is not (ProjectSyncIndicatorKind.Synced or ProjectSyncIndicatorKind.None))
+            .OrderBy(pair => nameOf(pair.Key), StringComparer.CurrentCulture)
+            .Select(pair => $"“{nameOf(pair.Key) ?? "A Project"}”: " +
+                            (lastResultOf(pair.Key) is { Length: > 0 } result ? result : pair.Value.Label))
+            .ToArray();
+        return problems.Length == 0
+            ? null
+            : $"Not every Project could be synced. {string.Join(" ", problems)}";
+    }
+
     public PortfolioDashboardViewModel PortfolioReporting { get; }
 
     public ProjectDashboardViewModel? ProjectReporting

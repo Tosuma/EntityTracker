@@ -62,7 +62,9 @@ public sealed class ProjectSyncIndicators(IProjectSyncLinkStore links, IProjectS
         if (_refreshAgain) await RefreshAsync(cancellationToken);
     }
 
-    private async Task ReadAsync(CancellationToken cancellationToken)
+    /// <summary>Reads every linked Project's indicator now, without waiting for or changing the shown icons.</summary>
+    public async Task<IReadOnlyDictionary<Guid, ProjectSyncIndicator>> ReadCurrentAsync(
+        CancellationToken cancellationToken = default)
     {
         Dictionary<Guid, ProjectSyncIndicator> next = [];
         DateTimeOffset now = _clock.GetUtcNow();
@@ -75,6 +77,12 @@ public sealed class ProjectSyncIndicators(IProjectSyncLinkStore links, IProjectS
             long revision = await snapshots.GetRevisionAsync(projectId, cancellationToken);
             next[link.ProjectId] = ProjectSyncIndicator.From(link, state, revision, now);
         }
+        return next;
+    }
+
+    private async Task ReadAsync(CancellationToken cancellationToken)
+    {
+        IReadOnlyDictionary<Guid, ProjectSyncIndicator> next = await ReadCurrentAsync(cancellationToken);
         if (next.Count == _indicators.Count &&
             next.All(pair => _indicators.TryGetValue(pair.Key, out ProjectSyncIndicator? old) && old == pair.Value))
             return;

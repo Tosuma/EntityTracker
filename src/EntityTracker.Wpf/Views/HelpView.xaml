@@ -94,6 +94,7 @@
                     <TextBlock Margin="0,14,0,0" Style="{StaticResource HelpCardTitleStyle}" Text="Syncing" />
                     <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Automatic sync is on by default and checks linked Projects after startup and at the interval in Settings › Sync. It waits while an edit is unfinished." />
                     <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Sync now is always available, and conflicts and outbound deletions need it for review or approval." />
+                    <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Closing EntityTracker syncs changes not synced yet first; its notice offers Close without syncing. If a Project can&apos;t be synced, EntityTracker stays open and says why." />
                     <TextBlock Margin="0,14,0,0" Style="{StaticResource HelpCardTitleStyle}" Text="When something goes wrong" />
                     <TextBlock Style="{StaticResource HelpPointStyle}" Text="• If authentication fails, repair credentials with command-line Git outside EntityTracker." />
                     <TextBlock Style="{StaticResource HelpPointStyle}" Text="• If a checkout moved, changed branch or upstream, or became invalid, restore it, or unlink and relink its root. The Project dashboard's Git repository card shows the last result." />

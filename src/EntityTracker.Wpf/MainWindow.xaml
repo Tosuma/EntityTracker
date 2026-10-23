@@ -255,12 +255,16 @@
                                                              Foreground="{DynamicResource Brush.Notification.Information}"
                                                              IsIndeterminate="True"
                                                              Visibility="{Binding IsProgress, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                <!-- The notice's own text size, wrapping if needed, so a longer label such
+                                                     as "Close without syncing" fits the narrow notification column. -->
                                                 <Button Margin="0,8,0,0" HorizontalAlignment="Left"
-                                                        Padding="8,3" Content="{Binding ActionLabel}"
+                                                        Padding="8,3" FontSize="12"
                                                         Command="{Binding ActionCommand}"
                                                         IsEnabled="{Binding IsActionEnabled}"
                                                         Visibility="{Binding HasAction, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                                        Style="{StaticResource SecondaryButtonStyle}" />
+                                                        Style="{StaticResource SecondaryButtonStyle}">
+                                                    <TextBlock Text="{Binding ActionLabel}" TextWrapping="Wrap" />
+                                                </Button>
                                             </StackPanel>
                                             <Button Grid.Column="2" Width="20" Height="20" Padding="0"
                                                     VerticalAlignment="Top"

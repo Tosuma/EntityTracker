@@ -43,6 +43,7 @@ public sealed class NotificationItem : INotifyPropertyChanged
     public string? ActionLabel { get => _actionLabel; private set => Set(ref _actionLabel, value); }
     public ICommand? ActionCommand { get => _actionCommand; private set => Set(ref _actionCommand, value); }
     public bool HasAction => ActionCommand is not null;
+    internal Func<Task>? Action { get; private set; }
     public bool IsActionEnabled { get => _isActionEnabled; internal set => Set(ref _isActionEnabled, value); }
     public bool IsProgress => Kind == NotificationKind.Progress;
     /// <summary>The notice's icon (Themes/EntityTrackerIcons.xaml); a running notice's icon turns.</summary>
@@ -68,6 +69,7 @@ public sealed class NotificationItem : INotifyPropertyChanged
         Message = message;
         Kind = kind;
         ActionLabel = actionLabel;
+        Action = action;
         ActionCommand = action is null ? null : new AsyncCommand(action);
         OnPropertyChanged(nameof(HasAction));
         OnPropertyChanged(nameof(IsProgress));
@@ -180,7 +182,8 @@ public sealed class NotificationCenter : INotifyPropertyChanged
     public void Progress(NotificationItem item, string message)
     {
         if (!IsActive(item) || item.Kind != NotificationKind.Progress) return;
-        item.Update(message, NotificationKind.Progress);
+        // A button the progress notice has (SetAction) stays.
+        item.Update(message, NotificationKind.Progress, item.ActionLabel, item.Action);
     }
 
     public void Complete(NotificationItem item, string message,
@@ -198,6 +201,13 @@ public sealed class NotificationCenter : INotifyPropertyChanged
     {
         if (!IsActive(item)) return;
         item.Update(message, NotificationKind.ActionNeeded, actionLabel, action);
+    }
+
+    /// <summary>Gives a progress notice a button, such as Close without syncing, while it keeps going.</summary>
+    public void SetAction(NotificationItem item, string actionLabel, Func<Task> action)
+    {
+        if (!IsActive(item) || item.Kind != NotificationKind.Progress) return;
+        item.Update(item.Message, NotificationKind.Progress, actionLabel, action);
     }
 
     public void Restart(NotificationItem item, string message)

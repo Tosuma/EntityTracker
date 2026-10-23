@@ -22,6 +22,7 @@ internal static class ScreenshotManifest
         "project-git-repository.png",
         "project-sync-progress.png",
         "project-sync-action-needed.png",
+        "closing-sync.png",
         "project-merge-review.png",
         "git-identity.png",
         "git-identity-confirm-cancel.png",

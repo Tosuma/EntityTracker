@@ -155,6 +155,15 @@ the edit is saved or closed; other Projects continue. Conflict and deletion revi
 manual action. Routine automatic checks are quiet; a notification stays visible when action is
 needed.
 
+Closing EntityTracker syncs first: it finishes a sync that is running, then syncs every Project with
+changes not synced yet, and closes when that is done, whether automatic sync is on or off. The
+closing notice has **Close without syncing** for when that takes too long. If a Project can't be
+synced (a conflict to review, a sign-in problem, no network), EntityTracker stays open and says
+which Project and why; closing it again then closes without syncing, and the changes sync on the next
+start.
+
+![Closing EntityTracker syncs changes not synced yet first, with Close without syncing in the notice](images/light/closing-sync.png)
+
 The Tracker Overview **Export** menu saves the active entity table as an Excel workbook or CSV file.
 
 ![Overview Export menu with Excel and CSV options](images/light/overview-export-menu.png)
