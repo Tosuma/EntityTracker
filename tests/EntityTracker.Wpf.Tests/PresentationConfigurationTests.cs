@@ -901,6 +901,80 @@ public sealed class PresentationConfigurationTests
             (string?)foregroundSetter.Attribute("Value"));
     }
 
+    [Theory]
+    [InlineData("TrackerWorkspaceView.xaml", "DevelopmentStatusBadgeTemplate")]
+    [InlineData("TrackerWorkspaceView.xaml", "WorkStatusBadgeTemplate")]
+    [InlineData("ProjectDashboardView.xaml", "ComparisonDevelopmentStatusBadgeTemplate")]
+    [InlineData("ProjectDashboardView.xaml", "ComparisonWorkStatusBadgeTemplate")]
+    public void StatusBadgesHaveNoBorder(string file, string templateKey)
+    {
+        // Status badges are their fill and text only, in both themes; only the "Not present" placeholder in
+        // the comparison keeps a border, as it is no status.
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement template = Assert.Single(LoadWpfXaml("Views", file).Descendants(), element =>
+            element.Name.LocalName == "DataTemplate" && (string?)element.Attribute(x + "Key") == templateKey);
+        XElement badge = Assert.Single(template.Descendants(), element => (string?)element.Attribute(x + "Name") == "Badge");
+
+        Assert.Null(badge.Attribute("BorderBrush"));
+        Assert.DoesNotContain(template.Descendants(), setter =>
+            setter.Name.LocalName == "Setter" &&
+            (string?)setter.Attribute("TargetName") == "Badge" &&
+            (string?)setter.Attribute("Property") == "BorderBrush" &&
+            (string?)setter.Parent?.Attribute("Value") != "{x:Null}");
+    }
+
+    [Fact]
+    public void TrackerWorkspace_SummaryCardsShowAStatusEdgeAndABoxOnlyOnHoverOrSelection()
+    {
+        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement style = Assert.Single(document.Descendants(), element =>
+            element.Name.LocalName == "Style" &&
+            (string?)element.Attribute(x + "Key") == "SummaryFilterButtonStyle");
+        string? Setter(XElement owner, string property) => (string?)owner.Elements()
+            .SingleOrDefault(element => element.Name.LocalName == "Setter" &&
+                (string?)element.Attribute("Property") == property)?.Attribute("Value");
+
+        // At rest no box: only the status edge (bound to the card's Tag).
+        Assert.Equal("Transparent", Setter(style, "Background"));
+        Assert.Equal("Transparent", Setter(style, "BorderBrush"));
+        XElement edge = Assert.Single(style.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "StatusEdge");
+        Assert.Equal("5", (string?)edge.Attribute("Width"));
+        Assert.Contains("Binding Tag", (string?)edge.Attribute("Fill"), StringComparison.Ordinal);
+        Assert.Null(edge.Attribute("Stroke"));
+
+        // Hover shows a rounded box, like a sidebar item; a click never draws a focus border over the card.
+        XElement hover = Assert.Single(style.Descendants(), element =>
+            element.Name.LocalName == "Trigger" && (string?)element.Attribute("Property") == "IsMouseOver");
+        Assert.Equal("{DynamicResource Brush.Surface.Hover}", Setter(hover, "Background"));
+        Assert.Equal("6", (string?)style.Descendants().Single(element =>
+            (string?)element.Attribute(x + "Name") == "Card").Attribute("CornerRadius"));
+        Assert.DoesNotContain(style.Descendants(), element =>
+            (string?)element.Attribute("Property") == "IsKeyboardFocused");
+
+        // Each status card carries its status colour as the edge; Total has none. Selected shows the box.
+        XElement[] cards = document.Descendants()
+            .Where(element => element.Name.LocalName == "Button" &&
+                (string?)element.Attribute("Command") == "{Binding SelectOverviewStatusCommand}")
+            .ToArray();
+        Assert.Equal(Enum.GetValues<EntityTracker.Domain.DevelopmentStatus>().Length, cards.Length);
+        Assert.All(cards, card =>
+        {
+            Assert.StartsWith("{DynamicResource Brush.Status.", (string?)card.Attribute("Tag"), StringComparison.Ordinal);
+            XElement selected = Assert.Single(card.Descendants(), element => element.Name.LocalName == "DataTrigger");
+            Assert.Equal("{DynamicResource Brush.Surface.Selected}", Setter(selected, "Background"));
+            Assert.Equal("{DynamicResource Brush.Border.Medium}", Setter(selected, "BorderBrush"));
+            Assert.DoesNotContain(card.Descendants(), element =>
+                element.Name.LocalName == "Setter" && (string?)element.Attribute("Value") == "{DynamicResource Brush.Accent}");
+        });
+        XElement total = Assert.Single(document.Descendants(), element =>
+            element.Name.LocalName == "Button" &&
+            (string?)element.Attribute("Command") == "{Binding ActiveTable.ClearAllFiltersCommand}" &&
+            element.Descendants().Any(text => (string?)text.Attribute("Text") == "Total"));
+        Assert.Null(total.Attribute("Tag"));
+    }
+
     [Fact]
     public void TrackerWorkspace_EditorSurfacesUseThemeAwarePageBackground()
     {

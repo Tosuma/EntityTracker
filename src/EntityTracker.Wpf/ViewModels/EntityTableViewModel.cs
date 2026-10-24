@@ -257,6 +257,14 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
         ApplyFilterChange();
     }
 
+    /// <summary>Clears only the status filter; other filters, the search and the sort stay.</summary>
+    public void ClearStatusFilter()
+    {
+        StatusFilter.ClearAppliedSelection();
+        StatusFilter.CloseWithoutApplying();
+        ApplyFilterChange();
+    }
+
     public bool IncludesStatus(DevelopmentStatus status) =>
         StatusFilter.IsApplied && StatusFilter.IncludesAppliedValue(status);
 

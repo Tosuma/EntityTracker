@@ -95,9 +95,11 @@ Icon (from `Themes/EntityTrackerIcons.xaml`) in the status's text colour; in the
 shows Prohibited in its empty band. The Warning icon is always amber (the caution colour), so a warning stays distinct from a
 coral error. The Project dashboard's aggregate progress boxes carry no warning icons: each
 status count shows its status colour as a 5 px bar along its left edge, with no outline. Active is not
-a status and stays plain. On the Overview, only the Blocked card is marked, by its coral border; the
-summary cards show their focus ring outside the card and only for keyboard navigation, so a click never
-hides the selected card's green border. Error text uses the theme's
+a status and stays plain. The Overview's summary cards look the same: no box at rest, a 5 px status bar
+(Total has none; Not relevant uses its Green 60 edge colour). Hovering shows a rounded box
+(`Brush.Surface.Hover`), as a sidebar item does, and the selected card keeps its box
+(`Brush.Surface.Selected` with a `Brush.Border.Medium` edge). Clicking the selected card again clears its
+filter and returns to Total, keeping the sort; Total counts as selected whenever nothing is filtered. The focus ring shows outside the card and only for keyboard navigation, so a click never covers it. Error text uses the theme's
 critical colour (`Brush.Critical`), not a status colour, since status colours are fills.
 
 ### Colour scheme
