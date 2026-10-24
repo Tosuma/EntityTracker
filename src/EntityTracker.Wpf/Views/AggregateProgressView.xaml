@@ -78,24 +78,9 @@
                     <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Waiting on dependencies"
                                TextTrimming="CharacterEllipsis"
                                ToolTip="Waiting on dependencies" />
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock FontSize="22" FontWeight="SemiBold"
-                                   Text="{Binding Report.ManagerSummary.WaitingOnDependenciesEntityCount}" />
-                        <controls:Icon Margin="6,0,0,0" Size="16" VerticalAlignment="Center"
-                                       IconKey="Icon.Warning"
-                                       Foreground="{DynamicResource Brush.Caution}"
-                                       AutomationProperties.Name="Needs attention">
-                            <controls:Icon.Style>
-                                <Style TargetType="controls:Icon">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Report.ManagerSummary.WaitingOnDependenciesEntityCount}" Value="0">
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </controls:Icon.Style>
-                        </controls:Icon>
-                    </StackPanel>
+                    <!-- Waiting is a soft signal, not a problem: the count stands alone. -->
+                    <TextBlock FontSize="22" FontWeight="SemiBold"
+                               Text="{Binding Report.ManagerSummary.WaitingOnDependenciesEntityCount}" />
                 </StackPanel>
                 <StackPanel Margin="4">
                     <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Blocked" />
@@ -104,7 +89,7 @@
                                    Text="{Binding Report.ManagerSummary.ManuallyBlockedEntityCount}" />
                         <controls:Icon Margin="6,0,0,0" Size="16" VerticalAlignment="Center"
                                        IconKey="Icon.Warning"
-                                       Foreground="{DynamicResource Brush.Caution}"
+                                       Foreground="{DynamicResource Brush.Accent}"
                                        AutomationProperties.Name="Needs attention">
                             <controls:Icon.Style>
                                 <Style TargetType="controls:Icon">

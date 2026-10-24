@@ -87,12 +87,15 @@ pie's slices get a thin Green 60 outline there (`Brush.Status.Outline`, set by `
 | Reconciled | Green 100 `#123836` | Checkmark Starburst |
 | Not relevant | none, dashed Green 60 `#718886` edge and text | Prohibited |
 | Waiting on dependencies | Pale amber `#F6D9A8` | (work status only) |
-| Unresolved reference warning | Warning palette | Dependencies on names no entity has yet, in the Overview, entity details and the dependency graph |
+| Unresolved reference warning | Coral `#FF6359` (filled Warning icon) | Dependencies on names no entity has yet, in the Overview, entity details and the dependency graph |
 
 A status is never told by colour alone: badges carry their name, and the dependency graph draws the
 mark above inside each node large enough to read, and in its legend. Each mark is a filled Fluent System
 Icon (from `Themes/EntityTrackerIcons.xaml`) in the status's text colour; in the tree, a Not relevant box
-shows Prohibited in its empty band. A missing dependency is marked with the filled Warning icon in coral. Error text uses the theme's
+shows Prohibited in its empty band. The Warning icon is coral beside a missing dependency and on the dashboard's Blocked count.
+The New entity and editor warning panels keep their amber panel and icon, so a warning (you can still
+save) stays distinct from a coral error (you can't). Waiting on dependencies has no warning icon, as
+waiting is not a problem. Error text uses the theme's
 critical colour (`Brush.Critical`), not a status colour, since status colours are fills.
 
 ### Colour scheme

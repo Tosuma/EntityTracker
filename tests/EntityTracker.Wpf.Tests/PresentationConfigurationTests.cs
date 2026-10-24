@@ -139,6 +139,32 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void WarningIconsAreCoralExceptInsideAmberWarningPanels()
+    {
+        // A Warning icon is coral (a missing dependency, the dashboard's Blocked count), except in the amber
+        // warning panels of the New entity and editor forms, which keep warnings apart from coral errors.
+        // Waiting on dependencies, a soft signal, has no warning icon.
+        string views = Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf", "Views");
+        XElement[] icons = Directory.EnumerateFiles(views, "*.xaml")
+            .SelectMany(path => XDocument.Load(path).Descendants())
+            .Where(element => element.Name.LocalName == "Icon" && (string?)element.Attribute("IconKey") == "Icon.Warning")
+            .ToArray();
+
+        Assert.NotEmpty(icons);
+        Assert.All(icons, icon =>
+        {
+            bool inWarningPanel = icon.Ancestors().Any(static ancestor =>
+                (string?)ancestor.Attribute("Style") == "{StaticResource WarningMessageStyle}");
+            Assert.Equal(inWarningPanel ? "{DynamicResource Brush.Caution}" : null,
+                (string?)icon.Attribute("Foreground") is "{DynamicResource Brush.Accent}" ? null : (string?)icon.Attribute("Foreground"));
+        });
+        XDocument dashboard = LoadWpfXaml("Views", "AggregateProgressView.xaml");
+        XElement waiting = dashboard.Descendants().Single(element =>
+            (string?)element.Attribute("Text") == "{Binding Report.ManagerSummary.WaitingOnDependenciesEntityCount}");
+        Assert.DoesNotContain(waiting.Parent!.Descendants(), element => element.Name.LocalName == "Icon");
+    }
+
+    [Fact]
     public void ClosingTheWindowWaitsForARunningProjectSync()
     {
         string code = File.ReadAllText(Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory),
