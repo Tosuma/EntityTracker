@@ -79,18 +79,20 @@ pie's slices get a thin Green 60 outline there (`Brush.Status.Outline`, set by `
 | Meaning | Color | Graph mark |
 | --- | --- | --- |
 | Not started / Ready | Green 40 `#A0AFAF` | none |
-| In progress | Green 80 `#41605E` | play triangle |
-| Rework needed | Notification green `#96E4AD` | exclamation bar |
-| Reworking | Green 80 `#41605E` | two triangles |
-| Blocked | Coral `#FF6359` | bar |
-| Development completed / Completed | Deep teal `#0F6455` | check |
-| Reconciled | Green 100 `#123836` | two checks |
-| Not relevant | none, dashed Green 60 `#718886` edge and text | slashed circle |
+| In progress | Green 80 `#41605E` | Play |
+| Rework needed | Notification green `#96E4AD` | Important |
+| Reworking | Green 80 `#41605E` | Fast Forward |
+| Blocked | Coral `#FF6359` | Subtract |
+| Development completed / Completed | Deep teal `#0F6455` | Checkmark |
+| Reconciled | Green 100 `#123836` | Checkmark Starburst |
+| Not relevant | none, dashed Green 60 `#718886` edge and text | Prohibited |
 | Waiting on dependencies | Pale amber `#F6D9A8` | (work status only) |
 | Unresolved reference warning | Warning palette | Dependencies on names no entity has yet, in the Overview, entity details and the dependency graph |
 
 A status is never told by colour alone: badges carry their name, and the dependency graph draws the
-mark above inside each node large enough to read, and in its legend. Error text uses the theme's
+mark above inside each node large enough to read, and in its legend. Each mark is a filled Fluent System
+Icon (from `Themes/EntityTrackerIcons.xaml`) in the status's text colour; in the tree, a Not relevant box
+shows Prohibited in its empty band. A missing dependency is marked with the filled Warning icon in coral. Error text uses the theme's
 critical colour (`Brush.Critical`), not a status colour, since status colours are fills.
 
 ### Colour scheme

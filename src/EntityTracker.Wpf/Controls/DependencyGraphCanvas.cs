@@ -406,8 +406,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
             context.DrawEllipse(Background, CachedPen(Faded(statusEdge, opacity), 1.5, dashed: true),
                 center, radius, radius);
             if (DependencyGraphStatusGlyph.For(hollow, center, radius) is { } glyph)
-                context.DrawGeometry(null, CachedPen(Faded(StatusTextBrush(hollow), opacity),
-                    DependencyGraphStatusGlyph.Thickness(radius)), glyph);
+                context.DrawGeometry(Faded(StatusTextBrush(hollow), opacity), null, glyph);
         }
         else
         {
@@ -415,11 +414,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
                 center, radius, radius);
             if (node.Status is { } status &&
                 DependencyGraphStatusGlyph.For(status, center, radius) is { } glyph)
-            {
-                Pen glyphPen = CachedPen(Faded(StatusTextBrush(status), opacity),
-                    DependencyGraphStatusGlyph.Thickness(radius));
-                context.DrawGeometry(null, glyphPen, glyph);
-            }
+                context.DrawGeometry(Faded(StatusTextBrush(status), opacity), null, glyph);
         }
 
         if (graph.IsSelected(node))
@@ -566,8 +561,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
             double markRadius = band.Height * 0.32;
             Point markCenter = new(band.Left + band.Width / 2, band.Top + band.Height / 2);
             if (DependencyGraphStatusGlyph.For(boxStatus, markCenter, markRadius * 2) is { } mark)
-                context.DrawGeometry(null, CachedPen(Faded(statusEdge, opacity),
-                    DependencyGraphStatusGlyph.Thickness(markRadius * 2)), mark);
+                context.DrawGeometry(Faded(statusEdge, opacity), null, mark);
         }
 
         if (graph.IsSelected(node))

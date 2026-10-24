@@ -51,8 +51,7 @@ public sealed class DependencyGraphLegendSwatch : FrameworkElement
             // A hollow status (Not relevant): no fill, a dashed edge and its mark, as on the graph.
             context.DrawEllipse(null, new Pen(edge, 1.25) { DashStyle = DashStyles.Dash }, center, radius, radius);
             if (Status is { } status && DependencyGraphStatusGlyph.For(status, center, radius) is { } glyph)
-                context.DrawGeometry(null, new Pen(TryFindResource($"{hollowKey}.Text") as Brush ?? edge,
-                    DependencyGraphStatusGlyph.Thickness(radius)), glyph);
+                context.DrawGeometry(TryFindResource($"{hollowKey}.Text") as Brush ?? edge, null, glyph);
         }
         else
         {
@@ -64,8 +63,7 @@ public sealed class DependencyGraphLegendSwatch : FrameworkElement
             if (Status is { } status && BrushKey is { } key &&
                 DependencyGraphStatusGlyph.For(status, center, radius) is { } glyph)
             {
-                Brush mark = TryFindResource($"{key}.Text") as Brush ?? Brushes.Black;
-                context.DrawGeometry(null, new Pen(mark, DependencyGraphStatusGlyph.Thickness(radius)), glyph);
+                context.DrawGeometry(TryFindResource($"{key}.Text") as Brush ?? Brushes.Black, null, glyph);
             }
         }
     }

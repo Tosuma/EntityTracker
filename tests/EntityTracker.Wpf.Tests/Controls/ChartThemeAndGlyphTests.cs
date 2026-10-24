@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Media;
 
@@ -30,5 +31,29 @@ public sealed class ChartThemeAndGlyphTests
             .ToArray();
         Assert.All(marks, mark => Assert.False(mark.IsEmpty()));
         Assert.Equal(marks.Length, marks.Select(static mark => mark.ToString()).Distinct().Count());
+    }
+
+    [Theory]
+    [InlineData(DevelopmentStatus.InProgress, "Icon.Play")]
+    [InlineData(DevelopmentStatus.Reworking, "Icon.FastForward")]
+    [InlineData(DevelopmentStatus.ReworkNeeded, "Icon.Important")]
+    [InlineData(DevelopmentStatus.Blocked, "Icon.Subtract")]
+    [InlineData(DevelopmentStatus.DevelopmentCompleted, "Icon.Checkmark")]
+    [InlineData(DevelopmentStatus.Reconciled, "Icon.CheckmarkStarburst")]
+    [InlineData(DevelopmentStatus.NotRelevant, "Icon.Prohibited")]
+    public void StatusGlyphs_AreFluentIconsFromTheIconDictionary(DevelopmentStatus status, string key)
+    {
+        // Every icon in the app comes from Fluent System Icons, in Themes/EntityTrackerIcons.xaml.
+        Assert.Equal(key, DependencyGraphStatusGlyph.IconKey(status));
+        string icons = File.ReadAllText(Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory),
+            "src", "EntityTracker.Wpf", "Themes", "EntityTrackerIcons.xaml"));
+        Assert.Contains($"x:Key=\"{key}\"", icons, StringComparison.Ordinal);
+    }
+
+    private static string FindRepositoryRoot(string start)
+    {
+        for (DirectoryInfo? directory = new(start); directory is not null; directory = directory.Parent)
+            if (File.Exists(Path.Combine(directory.FullName, "EntityTracker.slnx"))) return directory.FullName;
+        throw new DirectoryNotFoundException("The repository root was not found.");
     }
 }

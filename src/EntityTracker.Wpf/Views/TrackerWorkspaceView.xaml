@@ -1968,7 +1968,7 @@
                                                     <StackPanel Margin="0,2,0,0" Orientation="Horizontal">
                                                         <controls:Icon Margin="0,0,5,0" Size="14" VerticalAlignment="Center"
                                                                        IconKey="Icon.Warning"
-                                                                       Foreground="{DynamicResource Brush.Caution}"
+                                                                       Foreground="{DynamicResource Brush.Accent}"
                                                                        Visibility="{Binding IsUnresolved, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                                         <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}"
                                                                    Text="{Binding ResolutionLabel}" />
@@ -2454,7 +2454,7 @@
                                                         <StackPanel Margin="0,2,0,0" Orientation="Horizontal">
                                                             <controls:Icon Margin="0,0,5,0" Size="14" VerticalAlignment="Center"
                                                                            IconKey="Icon.Warning"
-                                                                           Foreground="{DynamicResource Brush.Caution}"
+                                                                           Foreground="{DynamicResource Brush.Accent}"
                                                                            Visibility="{Binding IsUnresolved, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                                             <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="{Binding Resolution}" />
                                                         </StackPanel>
