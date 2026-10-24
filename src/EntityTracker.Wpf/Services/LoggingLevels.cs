@@ -23,4 +23,13 @@ public static class LoggingLevels
         Enum.IsDefined(level) && level != LogLevel.None && !int.TryParse(value, out _);
 
     public static string? ReadOverride() => Environment.GetEnvironmentVariable(OverrideVariable);
+
+    /// <summary>
+    /// Says how the app logs, for the log itself: "detailed logging on (Debug)", "detailed logging off
+    /// (Information)", or the level an override sets.
+    /// </summary>
+    public static string Describe(bool detailedLogging, string? overrideValue = null) =>
+        TryParseOverride(overrideValue, out LogLevel level)
+            ? $"log level {level}, set by {OverrideVariable}"
+            : detailedLogging ? "detailed logging on (Debug)" : "detailed logging off (Information)";
 }

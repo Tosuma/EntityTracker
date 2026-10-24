@@ -69,6 +69,8 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
     private string? _requiredTag;
     private string? _availableTag;
     private string? _offlineReason;
+    // The last decision logged, so a check every 15 minutes logs only what changes.
+    private string? _loggedDecision;
     private volatile AppUpdateState _state;
 
     public AppUpdateService(ApplicationDataPaths dataPaths, TimeProvider? clock = null)
@@ -200,6 +202,11 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
                 }
                 AppReleaseVersion? newest = FindLatest(output);
                 if (newest is null) throw new InvalidDataException("No approved app release was found.");
+                if (DescribeDecision(_installedVersion, newest.Value) is var decision && decision != _loggedDecision)
+                {
+                    _loggedDecision = decision;
+                    Logger.LogInformation("Update check: {Decision}", decision);
+                }
                 if (newest is { } release && release.Major > _installedVersion.Major)
                 {
                     Volatile.Write(ref _requiredTag, release.ToString());
@@ -226,6 +233,7 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
                     _ => UnknownFailure
                 };
                 Volatile.Write(ref _offlineReason, reason);
+                _loggedDecision = null;
                 Logger.LogWarning(error, "The update check failed; EntityTracker treats the source as offline: {Reason}", reason);
                 if (!IsRequired) ChangeState(AppUpdateState.Offline);
             }
@@ -309,6 +317,16 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
 
     /// <summary>The release check's Git command failed; the message is <see cref="DescribeCheckFailure"/>'s.</summary>
     private sealed class ReleaseCheckException(string reason) : IOException(reason);
+
+    /// <summary>
+    /// What a release check decided, for the log: "installed app-v3.7.0, newest app-v3.8.0; an update is
+    /// offered (a newer minor or patch version)".
+    /// </summary>
+    internal static string DescribeDecision(AppReleaseVersion installed, AppReleaseVersion newest) =>
+        $"installed {installed}, newest {newest}; " + (
+            newest.Major > installed.Major ? "an update is required (a newer major version), so Project sync pauses until it is installed" :
+            newest.CompareTo(installed) > 0 ? "an update is offered (a newer minor or patch version)" :
+            "up to date");
 
     public static AppReleaseVersion? FindLatest(string lsRemoteOutput)
     {
@@ -434,6 +452,7 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
         foreach (string argument in arguments) start.ArgumentList.Add(argument);
         start.Environment["GIT_TERMINAL_PROMPT"] = "0";
         start.Environment["GCM_INTERACTIVE"] = "never";
+        Stopwatch elapsed = Stopwatch.StartNew();
         using Process process = Process.Start(start) ?? throw new InvalidOperationException("Git could not start.");
         try
         {
@@ -442,7 +461,12 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
             Task<string> errors = process.StandardError.ReadToEndAsync(cancellationToken);
             await process.WaitForExitAsync(cancellationToken);
             await copy;
-            return (process.ExitCode, output.ToArray(), await errors);
+            string errorText = await errors;
+            // Detailed logging records every command of the update check, successful ones too.
+            Logger.LogDebug("Git {Command} in {SourcePath} returned {ExitCode} in {ElapsedMs} ms.",
+                LogRedaction.Redact(string.Join(' ', arguments)), _install.SourcePath, process.ExitCode,
+                elapsed.ElapsedMilliseconds);
+            return (process.ExitCode, output.ToArray(), errorText);
         }
         catch (OperationCanceledException)
         {

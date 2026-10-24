@@ -87,6 +87,26 @@ public sealed class AppUpdateOfferTests : IDisposable
             AppUpdateService.DescribeCheckFailure("fatal: Authentication failed", @"C:\Apps\EntityTracker",
                 "github.com/Tosuma/EntityTracker"), StringComparison.Ordinal);
 
+    [Theory]
+    [InlineData("app-v3.7.0", "app-v4.0.0", "installed app-v3.7.0, newest app-v4.0.0; an update is required (a newer major version), so Project sync pauses until it is installed")]
+    [InlineData("app-v3.7.0", "app-v3.8.0", "installed app-v3.7.0, newest app-v3.8.0; an update is offered (a newer minor or patch version)")]
+    [InlineData("app-v3.7.0", "app-v3.7.0", "installed app-v3.7.0, newest app-v3.7.0; up to date")]
+    public void TheLogSaysWhatTheUpdateCheckDecided(string installed, string newest, string expected)
+    {
+        Assert.True(AppReleaseVersion.TryParse(installed, out AppReleaseVersion installedVersion));
+        Assert.True(AppReleaseVersion.TryParse(newest, out AppReleaseVersion newestVersion));
+
+        Assert.Equal(expected, AppUpdateService.DescribeDecision(installedVersion, newestVersion));
+    }
+
+    [Theory]
+    [InlineData(true, null, "detailed logging on (Debug)")]
+    [InlineData(false, null, "detailed logging off (Information)")]
+    [InlineData(false, "Trace", "log level Trace, set by ENTITYTRACKER_LOG_LEVEL")]
+    [InlineData(true, "not a level", "detailed logging on (Debug)")]
+    public void TheLogSaysWhetherDetailedLoggingIsOn(bool detailed, string? overrideValue, string expected) =>
+        Assert.Equal(expected, LoggingLevels.Describe(detailed, overrideValue));
+
     private string RequiredFile => Path.Combine(_root, "required-app-update.txt");
 
     private AppUpdateService Create(string installed, string tags) =>

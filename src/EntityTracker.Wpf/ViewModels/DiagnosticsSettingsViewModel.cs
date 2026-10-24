@@ -78,8 +78,9 @@ public sealed class DiagnosticsSettingsViewModel : INotifyPropertyChanged
             await _store.SaveDetailedLoggingAsync(next);
             _detailedLogging = next;
             _levelSwitch.MinimumLevel = LoggingLevels.Resolve(next, _override);
-            _logger.LogInformation("Detailed logging turned {State}; logging at {LogLevel}.",
-                next ? "on" : "off", _levelSwitch.MinimumLevel);
+            // Logged at Information, so turning detailed logging off is in the log too.
+            _logger.LogInformation("Detailed logging turned {State} in Settings; now {Logging}.",
+                next ? "on" : "off", LoggingLevels.Describe(next, _override));
         }
         catch (Exception exception)
         {

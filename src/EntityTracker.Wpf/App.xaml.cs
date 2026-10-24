@@ -77,10 +77,11 @@ public partial class App : System.Windows.Application
             SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
             logLevel.MinimumLevel = LoggingLevels.Resolve(settings.Settings.DetailedLogging, LoggingLevels.ReadOverride());
             bootstrapLogger.LogInformation(
-                "Starting EntityTracker {Version} on {OperatingSystem}, {Runtime}; data folder {DataFolder}; logging at {LogLevel}.",
+                "Starting EntityTracker {Version} on {OperatingSystem}, {Runtime}; data folder {DataFolder}; {Logging}.",
                 typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown",
                 RuntimeInformation.OSDescription, RuntimeInformation.FrameworkDescription,
-                dataPaths.RootDirectory, logLevel.MinimumLevel);
+                dataPaths.RootDirectory,
+                LoggingLevels.Describe(settings.Settings.DetailedLogging, LoggingLevels.ReadOverride()));
             _ = LogGitVersionAsync(bootstrapLogger);
 
             ServiceCollection services = new();
