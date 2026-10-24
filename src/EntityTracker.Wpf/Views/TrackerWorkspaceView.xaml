@@ -31,26 +31,29 @@
             <Setter Property="CornerRadius" Value="5" />
         </Style>
 
+        <!-- An Overview summary card: no box at rest, only its status colour as a bar along its left edge
+             (the card's Tag; Total has none), as on the Project dashboard. Hovering shows a rounded box, as a
+             sidebar item does; the selected card keeps its box visible. -->
         <Style x:Key="SummaryFilterButtonStyle" TargetType="Button">
-            <Setter Property="Margin" Value="0,0,10,8" />
-            <Setter Property="Padding" Value="16,12" />
+            <Setter Property="Margin" Value="0,0,6,8" />
+            <Setter Property="Padding" Value="12,10,16,10" />
             <Setter Property="MinWidth" Value="128" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Stretch" />
-            <Setter Property="Background" Value="{DynamicResource Brush.Surface.Card}" />
+            <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Cursor" Value="Hand" />
             <!-- The focus ring shows only when moving with the keyboard, outside the card, so a click never
-                 covers the card's own border (the selected card's green, Blocked's coral). -->
+                 covers the card. -->
             <Setter Property="FocusVisualStyle">
                 <Setter.Value>
                     <Style>
                         <Setter Property="Control.Template">
                             <Setter.Value>
                                 <ControlTemplate>
-                                    <Border Margin="-3" BorderBrush="{DynamicResource Brush.Focus}" BorderThickness="2" CornerRadius="7" />
+                                    <Border Margin="-3" BorderBrush="{DynamicResource Brush.Focus}" BorderThickness="2" CornerRadius="9" />
                                 </ControlTemplate>
                             </Setter.Value>
                         </Setter>
@@ -65,15 +68,25 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="5"
+                                CornerRadius="6"
                                 SnapsToDevicePixels="True">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Rectangle x:Name="StatusEdge"
+                                           Width="5"
+                                           Margin="0,0,10,0"
+                                           RadiusX="2.5"
+                                           RadiusY="2.5"
+                                           Fill="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" />
+                                <ContentPresenter Grid.Column="1"
+                                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                            </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Brush.Border.Strong}" />
-                            </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Cursor" Value="Arrow" />
                                 <Setter TargetName="Card" Property="Opacity" Value="0.72" />
@@ -82,6 +95,12 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+            <Style.Triggers>
+                <!-- A style trigger, so a card's own Selected trigger (declared later) wins over hover. -->
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Brush.Surface.Hover}" />
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style x:Key="EntityNameButtonStyle"
@@ -166,8 +185,6 @@
                         Padding="12,5"
                         HorizontalAlignment="Left"
                         Background="{DynamicResource Brush.Surface.Subtle}"
-                        BorderBrush="{DynamicResource Brush.Border.Medium}"
-                        BorderThickness="1"
                         CornerRadius="10">
                     <TextBlock x:Name="BadgeText"
                                VerticalAlignment="Center"
@@ -416,8 +433,7 @@
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsTotalSummarySelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green100}" />
-                                            <Setter Property="BorderThickness" Value="2" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
@@ -434,6 +450,7 @@
                                 AutomationProperties.ItemStatus="{Binding IsNotStartedSummarySelected, StringFormat=Selected: {0}}"
                                 Command="{Binding SelectOverviewStatusCommand}"
                                 CommandParameter="{x:Static domain:DevelopmentStatus.NotStarted}"
+                                Tag="{DynamicResource Brush.Status.NotStarted}"
                                 ToolTip="Show not started entities">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
@@ -441,8 +458,7 @@
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsNotStartedSummarySelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green100}" />
-                                            <Setter Property="BorderThickness" Value="2" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
@@ -459,6 +475,7 @@
                                 AutomationProperties.ItemStatus="{Binding IsInProgressSummarySelected, StringFormat=Selected: {0}}"
                                 Command="{Binding SelectOverviewStatusCommand}"
                                 CommandParameter="{x:Static domain:DevelopmentStatus.InProgress}"
+                                Tag="{DynamicResource Brush.Status.InProgress}"
                                 ToolTip="Show in progress entities">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
@@ -466,8 +483,7 @@
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsInProgressSummarySelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green100}" />
-                                            <Setter Property="BorderThickness" Value="2" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
@@ -484,6 +500,7 @@
                                 AutomationProperties.ItemStatus="{Binding IsReworkNeededSummarySelected, StringFormat=Selected: {0}}"
                                 Command="{Binding SelectOverviewStatusCommand}"
                                 CommandParameter="{x:Static domain:DevelopmentStatus.ReworkNeeded}"
+                                Tag="{DynamicResource Brush.Status.ReworkNeeded}"
                                 ToolTip="Show rework needed entities">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
@@ -491,8 +508,7 @@
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsReworkNeededSummarySelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green100}" />
-                                            <Setter Property="BorderThickness" Value="2" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
@@ -510,14 +526,14 @@
                                 AutomationProperties.ItemStatus="{Binding IsReworkingSummarySelected, StringFormat=Selected: {0}}"
                                 Command="{Binding SelectOverviewStatusCommand}"
                                 CommandParameter="{x:Static domain:DevelopmentStatus.Reworking}"
+                                Tag="{DynamicResource Brush.Status.Reworking}"
                                 ToolTip="Show reworking entities">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}" TargetType="Button">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsReworkingSummarySelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green100}" />
-                                            <Setter Property="BorderThickness" Value="2" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
@@ -533,16 +549,14 @@
                                 AutomationProperties.ItemStatus="{Binding IsBlockedSummarySelected, StringFormat=Selected: {0}}"
                                 Command="{Binding SelectOverviewStatusCommand}"
                                 CommandParameter="{x:Static domain:DevelopmentStatus.Blocked}"
+                                Tag="{DynamicResource Brush.Status.Blocked}"
                                 ToolTip="Show manually blocked entities">
                             <Button.Style>
-                                <!-- Blocked asks for attention: a coral border, its status colour. -->
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}" TargetType="Button">
-                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsBlockedSummarySelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
-                                            <Setter Property="BorderThickness" Value="2" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
@@ -558,6 +572,7 @@
                                 AutomationProperties.ItemStatus="{Binding IsDevelopmentCompletedSummarySelected, StringFormat=Selected: {0}}"
                                 Command="{Binding SelectOverviewStatusCommand}"
                                 CommandParameter="{x:Static domain:DevelopmentStatus.DevelopmentCompleted}"
+                                Tag="{DynamicResource Brush.Status.DevelopmentCompleted}"
                                 ToolTip="Show development completed entities">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
@@ -565,8 +580,7 @@
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsDevelopmentCompletedSummarySelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green100}" />
-                                            <Setter Property="BorderThickness" Value="2" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
@@ -584,6 +598,7 @@
                                 AutomationProperties.ItemStatus="{Binding IsReconciledSummarySelected, StringFormat=Selected: {0}}"
                                 Command="{Binding SelectOverviewStatusCommand}"
                                 CommandParameter="{x:Static domain:DevelopmentStatus.Reconciled}"
+                                Tag="{DynamicResource Brush.Status.Reconciled}"
                                 ToolTip="Show reconciled entities">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
@@ -591,8 +606,7 @@
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsReconciledSummarySelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green100}" />
-                                            <Setter Property="BorderThickness" Value="2" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
@@ -611,6 +625,7 @@
                                 AutomationProperties.ItemStatus="{Binding IsNotRelevantSummarySelected, StringFormat=Selected: {0}}"
                                 Command="{Binding SelectOverviewStatusCommand}"
                                 CommandParameter="{x:Static domain:DevelopmentStatus.NotRelevant}"
+                                Tag="{DynamicResource Brush.Status.NotRelevant.Edge}"
                                 ToolTip="Show entities that are not relevant in this Tracker; they are left out of progress">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
@@ -618,8 +633,7 @@
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsNotRelevantSummarySelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green100}" />
-                                            <Setter Property="BorderThickness" Value="2" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>

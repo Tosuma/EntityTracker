@@ -249,7 +249,7 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task StatusSummaryFilterCommand_CanShowEmptyStatusAndTotalKeepsActiveSearch()
+    public async Task StatusSummaryFilterCommand_CanShowEmptyStatusTogglesBackToTotalAndKeepsActiveSearch()
     {
         MainWindowViewModel viewModel = CreateViewModel(
             [Entity(1, "Matching entity"), Entity(2, "Other entity")],
@@ -268,15 +268,26 @@ public sealed class MainWindowViewModelTests
         viewModel.ActiveTable.ClearAllFiltersAndSort();
         viewModel.OverviewSearchQuery = "Matching";
         await WaitUntilAsync(() => viewModel.OverviewItems.Count == 1);
-        viewModel.SelectOverviewStatusCommand.Execute(DevelopmentStatus.NotStarted);
+        viewModel.ActiveTable.SetSort(OverviewColumnKey.WorkStatus, OverviewSortDirection.Descending);
         viewModel.SelectOverviewStatusCommand.Execute(DevelopmentStatus.NotStarted);
 
         Assert.True(viewModel.IsNotStartedSummarySelected);
+        Assert.False(viewModel.IsTotalSummarySelected);
         Assert.Equal("Matching entity", Assert.Single(viewModel.OverviewItems).SourceName);
 
+        // Clicking the selected card again deselects it and returns to Total, keeping the search and sort.
+        viewModel.SelectOverviewStatusCommand.Execute(DevelopmentStatus.NotStarted);
+
+        Assert.False(viewModel.IsNotStartedSummarySelected);
+        Assert.True(viewModel.IsTotalSummarySelected);
+        Assert.True(viewModel.ActiveTable.HasSort);
+        Assert.Equal("Matching", viewModel.OverviewSearchQuery);
+        Assert.Equal("Matching entity", Assert.Single(viewModel.OverviewItems).SourceName);
+
+        viewModel.SelectOverviewStatusCommand.Execute(DevelopmentStatus.Reconciled);
         viewModel.ActiveTable.ClearAllFiltersCommand.Execute(null);
 
-        Assert.Equal("Matching", viewModel.OverviewSearchQuery);
+        Assert.True(viewModel.IsTotalSummarySelected);
         Assert.Equal("Matching entity", Assert.Single(viewModel.OverviewItems).SourceName);
     }
 

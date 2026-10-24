@@ -178,8 +178,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             _ => !IsBusy &&
                  !ManualCreation.IsBusy &&
                  !Editor.IsOpen);
-        _selectOverviewStatusCommand = new RelayCommand<DevelopmentStatus>(
-            status => ActiveTable.SetSingleStatusFilter(status));
+        // A summary card toggles: clicking the selected card again clears the status filter, back to Total;
+        // the sort stays.
+        _selectOverviewStatusCommand = new RelayCommand<DevelopmentStatus>(status =>
+        {
+            if (ActiveTable.IncludesStatus(status))
+            {
+                ActiveTable.ClearStatusFilter();
+            }
+            else
+            {
+                ActiveTable.SetSingleStatusFilter(status);
+            }
+        });
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -595,7 +606,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public bool ShowArchivedSearchEmptyState =>
         !IsBusy && ArchivedTable.ShowFilteredEmptyState && !HasOverviewError;
 
-    public bool IsTotalSummarySelected => !ActiveTable.HasFiltersOrSort;
+    /// <summary>Total is selected whenever nothing is filtered out; a sort alone still shows every row.</summary>
+    public bool IsTotalSummarySelected => !ActiveTable.HasFilters;
 
     public bool IsNotStartedSummarySelected =>
         ActiveTable.IncludesStatus(DevelopmentStatus.NotStarted);
