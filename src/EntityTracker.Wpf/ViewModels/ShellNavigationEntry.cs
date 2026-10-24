@@ -12,6 +12,7 @@ public sealed class ShellNavigationEntry(ShellNavigationItem item) : INotifyProp
 {
     private bool _isEnabled;
     private bool _isSelected;
+    private string? _badge;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -24,9 +25,25 @@ public sealed class ShellNavigationEntry(ShellNavigationItem item) : INotifyProp
     /// <summary>
     /// What the item does, with its shortcut, or, while it can't be opened, what is missing.
     /// </summary>
-    public string? ToolTip => IsEnabled
-        ? Item.Shortcut is { } shortcut ? $"{Item.Label} ({shortcut})" : null
-        : Item.DisabledHint;
+    public string? ToolTip => !IsEnabled ? Item.DisabledHint
+        : Badge is { } badge ? badge
+        : Item.Shortcut is { } shortcut ? $"{Item.Label} ({shortcut})" : null;
+
+    /// <summary>What the dot beside the item points out, such as an available update; null for no dot.</summary>
+    public string? Badge
+    {
+        get => _badge;
+        set
+        {
+            if (_badge == value) return;
+            _badge = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasBadge));
+            OnPropertyChanged(nameof(ToolTip));
+        }
+    }
+
+    public bool HasBadge => _badge is not null;
 
     public bool IsEnabled
     {

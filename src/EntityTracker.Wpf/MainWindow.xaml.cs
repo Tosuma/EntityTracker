@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
@@ -26,6 +27,9 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _editTimer = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private NotificationItem? _updateNotice;
     private NotificationItem? _offlineNotice;
+    // The available version already announced, so each new version is announced once.
+    private string? _announcedUpdate;
+    private bool _updating;
     private readonly CancellationTokenSource _closingSync = new();
     private NotificationItem? _closingNotice;
     private bool _closeWithoutSync;
@@ -187,6 +191,7 @@ public partial class MainWindow : Window
             "Checking for changes that are not synced yet…");
         _viewModel.Notifications.SetAction(notice, "Close without syncing", () =>
         {
+            Logger.LogInformation("Closing without syncing, as chosen in the closing notice.");
             CloseWithoutSync();
             return Task.CompletedTask;
         });
@@ -202,7 +207,12 @@ public partial class MainWindow : Window
             if (await _viewModel.HasUnsyncedProjectChangesAsync(_closingSync.Token))
             {
                 _viewModel.Notifications.Progress(notice, "Syncing your changes before closing…");
-                if (await _viewModel.SyncBeforeClosingAsync(_closingSync.Token) is { } problem)
+                Logger.LogInformation("Closing: syncing the Projects with changes not synced yet.");
+                Stopwatch closingSync = Stopwatch.StartNew();
+                string? problem = await _viewModel.SyncBeforeClosingAsync(_closingSync.Token);
+                Logger.LogInformation("Closing: the sync finished in {ElapsedMs} ms{Result}.", closingSync.ElapsedMilliseconds,
+                    problem is null ? "; everything is synced" : "; not everything could be synced");
+                if (problem is not null)
                 {
                     Logger.LogWarning("EntityTracker stayed open: {Problem}", problem);
                     _closeWithoutSync = true;
@@ -273,6 +283,7 @@ public partial class MainWindow : Window
             _viewModel.Notifications.Dismiss(_offlineNotice);
             _offlineNotice = null;
         }
+        RefreshAvailableUpdate();
         if (_updates?.IsRequired != true) return;
         bool editing = _viewModel.CurrentWorkspace?.HasUnsavedWork == true;
         bool catalogOpen = _viewModel.IsModalOpen;
@@ -313,12 +324,74 @@ public partial class MainWindow : Window
         _lastActionEnabled = actionEnabled;
     }
 
+    /// <summary>
+    /// Offers a newer minor or patch version: one notice per new version, with Update, and the
+    /// Settings dot and Settings › About's Update button until it is installed.
+    /// </summary>
+    private void RefreshAvailableUpdate()
+    {
+        // A source build has no installed version to update.
+        if (_updates is null) return;
+        string? tag = _updates.AvailableTag;
+        string? version = tag is not null && AppReleaseVersion.TryParse(tag, out AppReleaseVersion release)
+            ? $"{release.Major}.{release.Minor}.{release.Patch}"
+            : null;
+        _viewModel.OfferUpdate(version, () => InstallAvailableUpdateAsync("Settings › About"));
+        if (version is null || tag == _announcedUpdate) return;
+        _announcedUpdate = tag;
+        _viewModel.Notifications.Show("Update available",
+            $"EntityTracker {version} is available. Update now, or later from Settings › About.",
+            "Update", () => InstallAvailableUpdateAsync("the notification"));
+    }
+
+    /// <summary>
+    /// Installs the offered version: once nothing is running or unsaved, syncs the changes not synced
+    /// yet (as closing does), then starts the updater and closes.
+    /// </summary>
+    private async Task InstallAvailableUpdateAsync(string from)
+    {
+        if (_updating || _updates?.AvailableTag is not { } tag) return;
+        if (HasInProgressWork())
+        {
+            Logger.LogInformation("The update to {Tag} was not started from {From}: work is in progress.", tag, from);
+            _viewModel.Notifications.Show("Update not started",
+                "Finish or close the current edit, dialog or sync, then update.", NotificationKind.Failure);
+            return;
+        }
+        _updating = true;
+        Logger.LogInformation("Update to {Tag} started from {From}.", tag, from);
+        NotificationItem notice = _viewModel.Notifications.BeginProgress("Updating EntityTracker",
+            "Syncing your changes before updating…");
+        try
+        {
+            if (await _viewModel.HasUnsyncedProjectChangesAsync() &&
+                await _viewModel.SyncBeforeClosingAsync() is { } problem)
+            {
+                Logger.LogWarning("The update to {Tag} waits: {Problem}", tag, problem);
+                _viewModel.Notifications.Complete(notice, $"{problem} Update when it is synced.", NotificationKind.Failure);
+                _updating = false;
+                return;
+            }
+            _viewModel.Notifications.Progress(notice, "Starting the updater…");
+            await _updates.LaunchUpdaterAsync(Environment.ProcessId);
+            _closeWithoutSync = true;
+            System.Windows.Application.Current.Shutdown();
+        }
+        catch (Exception error)
+        {
+            Logger.LogError(error, "The updater could not be started.");
+            _viewModel.Notifications.Complete(notice, $"The update could not start: {error.Message}", NotificationKind.Failure);
+            _updating = false;
+        }
+    }
+
     private void OnUpdateClick(object sender, RoutedEventArgs e) => _ = RunUpdateAsync();
 
     private async Task RunUpdateAsync()
     {
         if (_updates?.IsRequired != true || HasInProgressWork())
             return;
+        Logger.LogInformation("Required update to {Tag} started.", _updates.RequiredTag);
         // Reading the updater from the new release can take a few seconds.
         UpdateActionButton.IsEnabled = false;
         try

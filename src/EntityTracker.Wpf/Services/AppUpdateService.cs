@@ -8,7 +8,12 @@ using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.Services;
 
-public enum AppUpdateState { Development, Checking, Current, Offline, Required }
+/// <summary>
+/// Where the installed app stands against the approved releases. Only a newer major release is
+/// <see cref="Required"/> and pauses Project sync; a newer minor or patch release is
+/// <see cref="Available"/> and only offered.
+/// </summary>
+public enum AppUpdateState { Development, Checking, Current, Available, Offline, Required }
 
 public sealed record AppInstallManifest(string SourcePath, string Version);
 
@@ -39,7 +44,11 @@ public readonly record struct AppReleaseVersion(int Major, int Minor, int Patch)
     public override string ToString() => $"app-v{Major}.{Minor}.{Patch}";
 }
 
-/// <summary>Checks approved app tags using the user's existing source checkout.</summary>
+/// <summary>
+/// Checks approved app tags using the user's existing source checkout. A newer major release must be
+/// installed before Project sync continues (docs/DEVELOPMENT.md: a major release forces an update); a
+/// newer minor or patch release is offered.
+/// </summary>
 public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
 {
     private static readonly ILogger Logger = AppLogging.CreateLogger<AppUpdateService>();
@@ -58,7 +67,10 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
     private Task? _loop;
     private AppReleaseVersion _installedVersion;
     private string? _requiredTag;
+    private string? _availableTag;
     private string? _offlineReason;
+    // The last decision logged, so a check every 15 minutes logs only what changes.
+    private string? _loggedDecision;
     private volatile AppUpdateState _state;
 
     public AppUpdateService(ApplicationDataPaths dataPaths, TimeProvider? clock = null)
@@ -86,7 +98,7 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
         _state = AppUpdateState.Checking;
         if (File.Exists(_requiredPath) &&
             AppReleaseVersion.TryParse(File.ReadAllText(_requiredPath).Trim(), out var required) &&
-            required.CompareTo(_installedVersion) > 0)
+            required.Major > _installedVersion.Major)
         {
             _requiredTag = required.ToString();
             _state = AppUpdateState.Required;
@@ -106,7 +118,7 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
         _state = AppUpdateState.Checking;
         if (File.Exists(_requiredPath) &&
             AppReleaseVersion.TryParse(File.ReadAllText(_requiredPath).Trim(), out var required) &&
-            required.CompareTo(_installedVersion) > 0)
+            required.Major > _installedVersion.Major)
         {
             _requiredTag = required.ToString();
             _state = AppUpdateState.Required;
@@ -117,6 +129,9 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
     public AppUpdateState State => _state;
     public string? RequiredTag => Volatile.Read(ref _requiredTag);
     public bool IsRequired => State == AppUpdateState.Required;
+
+    /// <summary>The newer minor or patch release that is offered, while <see cref="State"/> is Available.</summary>
+    public string? AvailableTag => State == AppUpdateState.Available ? Volatile.Read(ref _availableTag) : null;
     public bool IsManagedInstall => _install is not null;
 
     /// <summary>Why the last update check failed and what to do about it, while <see cref="State"/> is Offline.</summary>
@@ -151,7 +166,7 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
         if (IsRequired) throw new ProjectSyncUpdateRequiredException(RequiredTag!);
         await CheckAsync(cancellationToken);
         if (IsRequired) throw new ProjectSyncUpdateRequiredException(RequiredTag!);
-        if (State != AppUpdateState.Current)
+        if (State is not (AppUpdateState.Current or AppUpdateState.Available))
             throw new ProjectSyncVersionCheckUnavailableException(OfflineReason);
     }
 
@@ -180,13 +195,19 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
                     {
                         Logger.LogWarning("Git ls-remote in {SourcePath} failed with exit code {ExitCode}: {GitError}",
                             _install.SourcePath, exitCode, LogRedaction.Redact(Truncate(gitError.Trim())));
-                        throw new ReleaseCheckException(DescribeCheckFailure(gitError, _install.SourcePath));
+                        throw new ReleaseCheckException(DescribeCheckFailure(gitError, _install.SourcePath,
+                            await ReadReleaseSourceAsync()));
                     }
                     output = System.Text.Encoding.UTF8.GetString(result);
                 }
                 AppReleaseVersion? newest = FindLatest(output);
                 if (newest is null) throw new InvalidDataException("No approved app release was found.");
-                if (newest is { } release && release.CompareTo(_installedVersion) > 0)
+                if (DescribeDecision(_installedVersion, newest.Value) is var decision && decision != _loggedDecision)
+                {
+                    _loggedDecision = decision;
+                    Logger.LogInformation("Update check: {Decision}", decision);
+                }
+                if (newest is { } release && release.Major > _installedVersion.Major)
                 {
                     Volatile.Write(ref _requiredTag, release.ToString());
                     ChangeState(AppUpdateState.Required);
@@ -195,7 +216,9 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
                 else
                 {
                     if (File.Exists(_requiredPath)) File.Delete(_requiredPath);
-                    ChangeState(AppUpdateState.Current);
+                    bool newer = newest is { } offered && offered.CompareTo(_installedVersion) > 0;
+                    Volatile.Write(ref _availableTag, newer ? newest.ToString() : null);
+                    ChangeState(newer ? AppUpdateState.Available : AppUpdateState.Current);
                 }
             }
             catch (Exception error) when (error is not OperationCanceledException ||
@@ -204,12 +227,13 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
                 string reason = error switch
                 {
                     ReleaseCheckException check => check.Message,
-                    OperationCanceledException => Unreachable,
+                    OperationCanceledException => DescribeUnreachable(await ReadReleaseSourceAsync()),
                     System.ComponentModel.Win32Exception => "Git could not be started. Install Git, then retry.",
                     InvalidDataException => "No EntityTracker release was found where EntityTracker was installed from.",
                     _ => UnknownFailure
                 };
                 Volatile.Write(ref _offlineReason, reason);
+                _loggedDecision = null;
                 Logger.LogWarning(error, "The update check failed; EntityTracker treats the source as offline: {Reason}", reason);
                 if (!IsRequired) ChangeState(AppUpdateState.Offline);
             }
@@ -217,8 +241,9 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
         finally { _checkLock.Release(); }
     }
 
-    private const string Unreachable =
-        "EntityTracker could not reach the repository it was installed from. Check the network connection, then retry.";
+    private static string DescribeUnreachable(string? source) => source is null
+        ? "EntityTracker could not reach the repository it was installed from. Check the network connection, then retry."
+        : $"EntityTracker could not reach {source}, where it checks for updates. Check the network connection, then retry.";
     private const string UnknownFailure =
         "Git could not list EntityTracker's releases; the application log has Git's message.";
 
@@ -226,7 +251,7 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
     /// Turns Git's error output from the release check into what went wrong and what to do. Git's output
     /// itself is only logged: it can hold URLs and credentials.
     /// </summary>
-    internal static string DescribeCheckFailure(string gitError, string sourcePath)
+    internal static string DescribeCheckFailure(string gitError, string sourcePath, string? source = null)
     {
         bool Has(params string[] fragments) =>
             fragments.Any(fragment => gitError.Contains(fragment, StringComparison.OrdinalIgnoreCase));
@@ -239,18 +264,69 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
                    "its origin remote. Install EntityTracker again.";
         if (Has("authentication failed", "permission denied", "could not read username", "terminal prompts disabled",
                 "publickey", "access denied", "invalid credentials", "repository not found"))
-            return "Git could not sign in to the repository EntityTracker was installed from. Run git fetch in " +
-                   $"{sourcePath} in a terminal to sign in, then retry.";
+            return $"Git could not sign in to {source ?? "the repository EntityTracker was installed from"}. " +
+                   $"Run git fetch in {sourcePath} in a terminal to sign in, then retry.";
         if (Has("could not resolve host", "failed to connect", "unable to access", "timed out", "connection refused",
                 "could not connect", "network is unreachable", "connection was reset"))
-            return Unreachable;
+            return DescribeUnreachable(source);
         return UnknownFailure;
+    }
+
+    /// <summary>
+    /// Reads where the release check looks: the source checkout's origin, shown without credentials, so a
+    /// failed check can say what it could not reach. Null when it can't be read.
+    /// </summary>
+    private async Task<string?> ReadReleaseSourceAsync()
+    {
+        if (_install is null || _queryOverride is not null) return null;
+        try
+        {
+            using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(5));
+            (int exitCode, byte[] output, _) = await RunGitAsync(["remote", "get-url", "origin"], timeout.Token);
+            return exitCode == 0 ? DescribeSource(System.Text.Encoding.UTF8.GetString(output)) : null;
+        }
+        catch (Exception error) when (error is OperationCanceledException or IOException or
+                                          InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            Logger.LogDebug(error, "The release source could not be read for the update check's message.");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Shows a Git remote as "host/owner/repository": without a user name, password or token, and
+    /// without ".git". A local path is shown as it is.
+    /// </summary>
+    internal static string? DescribeSource(string remote)
+    {
+        string url = remote.Trim();
+        if (url.Length == 0) return null;
+        if (Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) && !uri.IsFile && uri.Host.Length > 0)
+            return uri.Host + WithoutGitSuffix(uri.AbsolutePath.TrimEnd('/'));
+        // The scp-like form, user@host:owner/repository.git; one letter before the colon is a drive.
+        Match scp = Regex.Match(url, @"^(?:[^@/\\\s]+@)?(?<host>[^:/\\\s]{2,}):(?<path>[^\\].*)$");
+        if (scp.Success)
+            return scp.Groups["host"].Value + "/" + WithoutGitSuffix(scp.Groups["path"].Value.TrimStart('/'));
+        return uri is { IsFile: true } ? uri.LocalPath : url;
+
+        static string WithoutGitSuffix(string path) =>
+            path.EndsWith(".git", StringComparison.OrdinalIgnoreCase) ? path[..^4] : path;
     }
 
     private static string Truncate(string text) => text.Length > 2000 ? text[..2000] + " [...]" : text;
 
     /// <summary>The release check's Git command failed; the message is <see cref="DescribeCheckFailure"/>'s.</summary>
     private sealed class ReleaseCheckException(string reason) : IOException(reason);
+
+    /// <summary>
+    /// What a release check decided, for the log: "installed app-v3.7.0, newest app-v3.8.0; an update is
+    /// offered (a newer minor or patch version)".
+    /// </summary>
+    internal static string DescribeDecision(AppReleaseVersion installed, AppReleaseVersion newest) =>
+        $"installed {installed}, newest {newest}; " + (
+            newest.Major > installed.Major ? "an update is required (a newer major version), so Project sync pauses until it is installed" :
+            newest.CompareTo(installed) > 0 ? "an update is offered (a newer minor or patch version)" :
+            "up to date");
 
     public static AppReleaseVersion? FindLatest(string lsRemoteOutput)
     {
@@ -266,14 +342,14 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
     }
 
     /// <summary>
-    /// Starts the updater for the required release. The updater scripts are taken from that release
+    /// Starts the updater for the required release, or the offered one. The updater scripts are taken from that release
     /// itself, so fixes to the updater take effect on the very update that ships them; if the
     /// release cannot be read, the scripts installed with this version are used instead.
     /// </summary>
     public async Task LaunchUpdaterAsync(int appProcessId, CancellationToken cancellationToken = default)
     {
-        if (_install is null || RequiredTag is not { } tag)
-            throw new InvalidOperationException("No update is required.");
+        if (_install is null || (RequiredTag ?? AvailableTag) is not { } tag)
+            throw new InvalidOperationException("No update is available.");
         UpdaterStaging staging = await PrepareUpdaterAsync(tag, cancellationToken);
         ProcessStartInfo start = new("powershell.exe")
         {
@@ -376,6 +452,7 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
         foreach (string argument in arguments) start.ArgumentList.Add(argument);
         start.Environment["GIT_TERMINAL_PROMPT"] = "0";
         start.Environment["GCM_INTERACTIVE"] = "never";
+        Stopwatch elapsed = Stopwatch.StartNew();
         using Process process = Process.Start(start) ?? throw new InvalidOperationException("Git could not start.");
         try
         {
@@ -384,7 +461,12 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
             Task<string> errors = process.StandardError.ReadToEndAsync(cancellationToken);
             await process.WaitForExitAsync(cancellationToken);
             await copy;
-            return (process.ExitCode, output.ToArray(), await errors);
+            string errorText = await errors;
+            // Detailed logging records every command of the update check, successful ones too.
+            Logger.LogDebug("Git {Command} in {SourcePath} returned {ExitCode} in {ElapsedMs} ms.",
+                LogRedaction.Redact(string.Join(' ', arguments)), _install.SourcePath, process.ExitCode,
+                elapsed.ElapsedMilliseconds);
+            return (process.ExitCode, output.ToArray(), errorText);
         }
         catch (OperationCanceledException)
         {

@@ -37,6 +37,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private readonly ProjectAutoSyncService? _autoSync;
     private readonly WpfProjectUnsavedEditsGate? _syncEditGate;
     private readonly ProjectSyncIndicators? _syncIndicators;
+    private string? _availableUpdateVersion;
+    private Func<Task>? _update;
     // Kept so the refresh timer isn't collected.
     private readonly DispatcherTimer? _syncIndicatorTimer;
     private readonly ILogger<ShellViewModel> _logger;
@@ -117,6 +119,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             RefreshSyncIndicators();
         }
         SyncSelectedProjectCommand = new AsyncCommand(SyncSelectedProjectAsync);
+        UpdateAppCommand = new AsyncCommand(() => _update?.Invoke() ?? Task.CompletedTask);
         Catalog = catalogManagement;
         Appearance = appearance;
         AutoSync = autoSyncSettings;
@@ -207,6 +210,34 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public IReadOnlyList<ProjectSyncLink> PendingProjectDeletions => _pendingProjectDeletions;
 
     public string AppVersion => AppVersionFormatter.ForAssembly(typeof(App).Assembly);
+
+    /// <summary>The newer minor or patch version that can be installed, such as "3.7.1"; null when none.</summary>
+    public string? AvailableUpdateVersion
+    {
+        get => _availableUpdateVersion;
+        private set
+        {
+            if (!SetField(ref _availableUpdateVersion, value)) return;
+            OnPropertyChanged(nameof(IsUpdateAvailable));
+        }
+    }
+
+    public bool IsUpdateAvailable => _availableUpdateVersion is not null;
+
+    /// <summary>Settings › About's Update button: closes EntityTracker and installs the available version.</summary>
+    public ICommand UpdateAppCommand { get; }
+
+    /// <summary>
+    /// Offers a newer minor or patch version (null when there is none): Settings › About shows it with
+    /// Update, and the Settings item in the sidebar carries a dot until it is installed.
+    /// </summary>
+    public void OfferUpdate(string? version, Func<Task>? update)
+    {
+        _update = version is null ? null : update;
+        AvailableUpdateVersion = version;
+        if (UtilityItems.FirstOrDefault(static entry => entry.Destination == ShellDestination.Settings) is { } settings)
+            settings.Badge = version is null ? null : $"EntityTracker {version} is available";
+    }
 
     public CatalogManagementViewModel Catalog { get; }
 

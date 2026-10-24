@@ -97,6 +97,10 @@ updating, and without doing anything by hand?**
   working alongside, including with data they simply ignore. The sync format version does not change.
 - **Patch** (`1.10.1`): nothing new. Fixes, wording, colours, layout and performance.
 
+The app enforces this: only a newer major release is required and pauses Project sync until it is
+installed. A newer minor or patch release is offered with a notification, a dot on Settings and
+**Update** in Settings › About.
+
 The local database (`SqliteDatabase.CurrentSchemaVersion`) and settings (`EntityTrackerSettings.CurrentVersion`)
 are upgraded on each machine when the new version starts and force no one else to update, so a change
 to them alone does not need a major release.
@@ -472,10 +476,18 @@ Every Git sync operation (Link, Import, Sync, Auto-sync, Unlink) runs in its own
 
 **Detailed logging:** by default the log holds Information and above. **Settings › About › Detailed
 logging (for troubleshooting)** adds Debug, takes effect immediately and is kept in `settings.json`.
+The first line of each start says whether it is on ("detailed logging on (Debug)"), and turning it on
+or off logs a line too, so a log shows which parts were written with detail.
 
 **Override:** set the environment variable `ENTITYTRACKER_LOG_LEVEL` (`Trace`, `Debug`,
 `Information`, `Warning`, `Error` or `Critical`) to override the setting, for example in a support
-session. The About page says when an override is active.
+session. The About page says when an override is active, and so does the start line ("log level
+Trace, set by ENTITYTRACKER_LOG_LEVEL").
+
+**Update checks:** a check logs what it decided (installed and newest version, and whether an update
+is required, offered or not needed) whenever that changes, and a failed check logs Git's message.
+Detailed logging adds each check's Git command with its exit code and time. Closing and updating log
+whether they synced first, and an update logs where it was started from.
 
 ### Rules for code
 

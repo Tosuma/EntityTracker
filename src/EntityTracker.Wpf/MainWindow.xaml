@@ -86,7 +86,18 @@
             <Setter Property="ItemTemplate">
                 <Setter.Value>
                     <DataTemplate DataType="{x:Type viewModels:ShellNavigationEntry}">
-                        <controls:IconLabel IconKey="{Binding IconKey}" Text="{Binding Label}" />
+                        <!-- A dot after the label points something out, such as an available update (its
+                             tooltip says what). -->
+                        <DockPanel LastChildFill="False">
+                            <controls:IconLabel IconKey="{Binding IconKey}" Text="{Binding Label}" />
+                            <Ellipse x:Name="Badge" Width="8" Height="8" Margin="8,0,0,0" VerticalAlignment="Center"
+                                     Fill="{DynamicResource Brush.Notification.Success}" Visibility="Collapsed" />
+                        </DockPanel>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding HasBadge}" Value="True">
+                                <Setter TargetName="Badge" Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
                     </DataTemplate>
                 </Setter.Value>
             </Setter>

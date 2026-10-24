@@ -494,7 +494,14 @@ See the [getting started guide](docs/GETTING_STARTED.md) for prerequisites, one-
 installation, updates, and first steps. Colleagues build approved release tags on their own
 computers; the app checks for updates and guides them through rebuilding when one arrives.
 
+A new **major** version is required: Project sync pauses and the workspace asks you to close and
+update. A new minor or patch version is only offered: a notification says it is available, with
+**Update**, Settings shows a dot until it is installed, and **Settings › About** has **Update** too.
+Updating syncs your changes first, as closing does.
+
 ![Required app update blocking the workspace](images/light/app-update-required.png)
+
+![An available update: the notification with Update, the dot on Settings, and Update in Settings › About](images/light/update-available.png)
 
 The [development guide](docs/DEVELOPMENT.md) contains complete instructions for publishing, CI,
 screenshots, and locating local application data.
