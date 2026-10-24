@@ -61,6 +61,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     private readonly Dictionary<(string Text, bool Bold, bool Dimmed), FormattedText> _labelCache = [];
     private readonly Dictionary<DevelopmentStatus, Brush> _statusBrushes = [];
     private readonly Dictionary<DevelopmentStatus, Brush> _statusTextBrushes = [];
+    private readonly Dictionary<DevelopmentStatus, Brush?> _statusEdgeBrushes = [];
     private readonly Dictionary<(Brush Brush, double Opacity), Brush> _fadedBrushes = [];
     private readonly Dictionary<(Brush Brush, double Thickness, bool Dashed), Pen> _pens = [];
     private readonly Dictionary<string, FormattedText[]> _treeNames = new(StringComparer.Ordinal);
@@ -399,17 +400,21 @@ public sealed class DependencyGraphCanvas : FrameworkElement
             context.DrawEllipse(Background, CachedPen(Faded(PlaceholderBrush ?? Brushes.Gray, opacity), 1.5, dashed: true),
                 center, radius, radius);
         }
+        else if (node.Status is { } hollow && StatusEdgeBrush(hollow) is { } statusEdge)
+        {
+            // A hollow status (Not relevant): no fill, a dashed edge and its mark.
+            context.DrawEllipse(Background, CachedPen(Faded(statusEdge, opacity), 1.5, dashed: true),
+                center, radius, radius);
+            if (DependencyGraphStatusGlyph.For(hollow, center, radius) is { } glyph)
+                context.DrawGeometry(Faded(StatusTextBrush(hollow), opacity), null, glyph);
+        }
         else
         {
             context.DrawEllipse(Faded(StatusBrush(node.Status), opacity), CachedPen(Faded(edgeBrush, opacity), 1),
                 center, radius, radius);
             if (node.Status is { } status &&
                 DependencyGraphStatusGlyph.For(status, center, radius) is { } glyph)
-            {
-                Pen glyphPen = CachedPen(Faded(StatusTextBrush(status), opacity),
-                    DependencyGraphStatusGlyph.Thickness(radius));
-                context.DrawGeometry(null, glyphPen, glyph);
-            }
+                context.DrawGeometry(Faded(StatusTextBrush(status), opacity), null, glyph);
         }
 
         if (graph.IsSelected(node))
@@ -549,6 +554,15 @@ public sealed class DependencyGraphCanvas : FrameworkElement
             ? CachedPen(Faded(PlaceholderBrush ?? Brushes.Gray, opacity), 1.5, dashed: true)
             : CachedPen(Faded(edgeBrush, opacity), 1);
         context.DrawGeometry(null, border, outline);
+        // A hollow status (Not relevant) has no band colour, so its band shows its mark instead. Its box
+        // keeps the solid edge of an entity: a dashed box is a missing dependency.
+        if (!node.IsPlaceholder && node.Status is { } boxStatus && StatusEdgeBrush(boxStatus) is { } statusEdge)
+        {
+            double markRadius = band.Height * 0.32;
+            Point markCenter = new(band.Left + band.Width / 2, band.Top + band.Height / 2);
+            if (DependencyGraphStatusGlyph.For(boxStatus, markCenter, markRadius * 2) is { } mark)
+                context.DrawGeometry(Faded(statusEdge, opacity), null, mark);
+        }
 
         if (graph.IsSelected(node))
         {
@@ -885,6 +899,7 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         _labelCache.Clear();
         _statusBrushes.Clear();
         _statusTextBrushes.Clear();
+        _statusEdgeBrushes.Clear();
         _fadedBrushes.Clear();
         _pens.Clear();
         _treeNames.Clear();
@@ -1104,6 +1119,15 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         if (_statusTextBrushes.TryGetValue(status, out Brush? cached)) return cached;
         Brush brush = TryFindResource($"Brush.Status.{status}.Text") as Brush ?? Brushes.Black;
         _statusTextBrushes[status] = brush;
+        return brush;
+    }
+
+    /// <summary>Gets the dashed edge of a hollow status (Not relevant), or null for a filled one.</summary>
+    private Brush? StatusEdgeBrush(DevelopmentStatus status)
+    {
+        if (_statusEdgeBrushes.TryGetValue(status, out Brush? cached)) return cached;
+        Brush? brush = TryFindResource($"Brush.Status.{status}.Edge") as Brush;
+        _statusEdgeBrushes[status] = brush;
         return brush;
     }
 

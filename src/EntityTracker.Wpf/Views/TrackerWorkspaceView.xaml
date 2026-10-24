@@ -42,6 +42,21 @@
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Cursor" Value="Hand" />
+            <!-- The focus ring shows only when moving with the keyboard, outside the card, so a click never
+                 covers the card's own border (the selected card's green, Blocked's coral). -->
+            <Setter Property="FocusVisualStyle">
+                <Setter.Value>
+                    <Style>
+                        <Setter Property="Control.Template">
+                            <Setter.Value>
+                                <ControlTemplate>
+                                    <Border Margin="-3" BorderBrush="{DynamicResource Brush.Focus}" BorderThickness="2" CornerRadius="7" />
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -58,10 +73,6 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Brush.Border.Strong}" />
-                            </Trigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Brush.Focus}" />
-                                <Setter TargetName="Card" Property="BorderThickness" Value="2" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Cursor" Value="Arrow" />
@@ -86,22 +97,27 @@
         </Style>
 
         <DataTemplate x:Key="DevelopmentStatusBadgeTemplate">
-            <Border x:Name="Badge"
-                    Padding="12,5"
-                    HorizontalAlignment="Left"
-                    Background="{DynamicResource Brush.Status.NotStarted}"
-                    BorderBrush="{DynamicResource Brush.Status.Outline}"
-                    BorderThickness="1"
-                    CornerRadius="10">
-                <TextBlock x:Name="BadgeText"
-                           VerticalAlignment="Center"
-                           TextTrimming="CharacterEllipsis"
-                           ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
-                           FontSize="12"
-                           FontWeight="SemiBold"
-                           Foreground="{DynamicResource Brush.Status.NotStarted.Text}"
-                           Text="Not started" />
-            </Border>
+            <!-- A hollow status (Not relevant) has no fill: a dashed edge is drawn over the badge,
+                 as a Border can't be dashed. -->
+            <Grid HorizontalAlignment="Left">
+                <Border x:Name="Badge"
+                        Padding="12,5"
+                        HorizontalAlignment="Left"
+                        Background="{DynamicResource Brush.Status.NotStarted}"
+                        CornerRadius="10">
+                    <TextBlock x:Name="BadgeText"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource Brush.Status.NotStarted.Text}"
+                               Text="Not started" />
+                </Border>
+                <Rectangle x:Name="HollowEdge" RadiusX="10" RadiusY="10" StrokeThickness="1"
+                           StrokeDashArray="3 2" Visibility="Collapsed"
+                           Stroke="{DynamicResource Brush.Status.NotRelevant.Edge}" />
+            </Grid>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.InProgress}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.InProgress}" />
@@ -133,62 +149,75 @@
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Status.Reconciled.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Reconciled" />
                 </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.NotRelevant}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.NotRelevant}" />
+                    <Setter TargetName="HollowEdge" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Status.NotRelevant.Text}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Not relevant" />
+                </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
 
         <DataTemplate x:Key="WorkStatusBadgeTemplate">
-            <Border x:Name="Badge"
-                    Padding="12,5"
-                    HorizontalAlignment="Left"
-                    Background="{DynamicResource Brush.Surface.Subtle}"
-                    BorderBrush="{DynamicResource Brush.Border.Medium}"
-                    BorderThickness="1"
-                    CornerRadius="10">
-                <TextBlock x:Name="BadgeText"
-                           VerticalAlignment="Center"
-                           TextTrimming="CharacterEllipsis"
-                           ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
-                           FontSize="12"
-                           FontWeight="SemiBold"
-                           Foreground="{DynamicResource Brush.Text.Primary}"
-                           Text="Archived" />
-            </Border>
+            <!-- A hollow status (Not relevant) has no fill: a dashed edge is drawn over the badge,
+                 as a Border can't be dashed. -->
+            <Grid HorizontalAlignment="Left">
+                <Border x:Name="Badge"
+                        Padding="12,5"
+                        HorizontalAlignment="Left"
+                        Background="{DynamicResource Brush.Surface.Subtle}"
+                        BorderBrush="{DynamicResource Brush.Border.Medium}"
+                        BorderThickness="1"
+                        CornerRadius="10">
+                    <TextBlock x:Name="BadgeText"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource Brush.Text.Primary}"
+                               Text="Archived" />
+                </Border>
+                <Rectangle x:Name="HollowEdge" RadiusX="10" RadiusY="10" StrokeThickness="1"
+                           StrokeDashArray="3 2" Visibility="Collapsed"
+                           Stroke="{DynamicResource Brush.WorkStatus.NotRelevant.Edge}" />
+            </Grid>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Ready}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.Ready}" />
-                    <Setter TargetName="Badge" Property="BorderBrush" Value="{DynamicResource Brush.Status.Outline}" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.Ready.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Ready" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Blocked}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.Blocked}" />
-                    <Setter TargetName="Badge" Property="BorderBrush" Value="{DynamicResource Brush.Status.Outline}" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.Blocked.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Blocked" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.WaitingOnDependencies}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.WaitingOnDependencies}" />
-                    <Setter TargetName="Badge" Property="BorderBrush" Value="{DynamicResource Brush.Status.Outline}" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.WaitingOnDependencies.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Waiting on dependencies" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.InProgress}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.InProgress}" />
-                    <Setter TargetName="Badge" Property="BorderBrush" Value="{DynamicResource Brush.Status.Outline}" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.InProgress.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="In progress" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Completed}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.Completed}" />
-                    <Setter TargetName="Badge" Property="BorderBrush" Value="{DynamicResource Brush.Status.Outline}" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.Completed.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Completed" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Reconciled}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.Reconciled}" />
-                    <Setter TargetName="Badge" Property="BorderBrush" Value="{DynamicResource Brush.Status.Outline}" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.Reconciled.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Reconciled" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.NotRelevant}">
+                    <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.NotRelevant}" />
+                    <Setter TargetName="HollowEdge" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.NotRelevant.Text}" />
+                    <Setter TargetName="BadgeText" Property="Text" Value="Not relevant" />
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -506,7 +535,7 @@
                                 CommandParameter="{x:Static domain:DevelopmentStatus.Blocked}"
                                 ToolTip="Show manually blocked entities">
                             <Button.Style>
-                                <!-- Blocked asks for attention: the coral border and dot, as its status colour. -->
+                                <!-- Blocked asks for attention: a coral border, its status colour. -->
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}" TargetType="Button">
                                     <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
                                     <Style.Triggers>
@@ -519,15 +548,7 @@
                                 </Style>
                             </Button.Style>
                             <StackPanel>
-                                <StackPanel Orientation="Horizontal">
-                                    <Border Width="9"
-                                            Height="9"
-                                            Margin="0,0,6,0"
-                                            VerticalAlignment="Center"
-                                            Background="{DynamicResource Brush.Status.Blocked}"
-                                            CornerRadius="5" />
-                                    <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Blocked" />
-                                </StackPanel>
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Blocked" />
                                 <TextBlock Margin="0,3,0,0" FontSize="22" FontWeight="SemiBold"
                                            Text="{Binding BlockedCount}" />
                             </StackPanel>
@@ -585,6 +606,33 @@
                             </StackPanel>
                         </Button>
 
+                        <!-- Not relevant in this Tracker: listed, but left out of "% implemented". -->
+                        <Button AutomationProperties.Name="{Binding NotRelevantCount, StringFormat=Show entities that are not relevant. {0} entities}"
+                                AutomationProperties.ItemStatus="{Binding IsNotRelevantSummarySelected, StringFormat=Selected: {0}}"
+                                Command="{Binding SelectOverviewStatusCommand}"
+                                CommandParameter="{x:Static domain:DevelopmentStatus.NotRelevant}"
+                                ToolTip="Show entities that are not relevant in this Tracker; they are left out of progress">
+                            <Button.Style>
+                                <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
+                                       TargetType="Button">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsNotRelevantSummarySelected}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green100}" />
+                                            <Setter Property="BorderThickness" Value="2" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <StackPanel>
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Not relevant" />
+                                <TextBlock Margin="0,3,0,0"
+                                           FontSize="22"
+                                           FontWeight="SemiBold"
+                                           Text="{Binding NotRelevantCount}" />
+                            </StackPanel>
+                        </Button>
+
                         <Border Margin="0,0,0,8"
                                 Style="{StaticResource SummaryCardStyle}">
                             <StackPanel VerticalAlignment="Center">
@@ -614,8 +662,6 @@
                                                 Margin="0,0,4,0"
                                                 VerticalAlignment="Center"
                                                 Background="{DynamicResource Brush.Status.DevelopmentCompleted}"
-                                                BorderBrush="{DynamicResource Brush.Status.Outline}"
-                                                BorderThickness="1"
                                                 CornerRadius="4" />
                                         <TextBlock FontSize="11"
                                                    Foreground="{DynamicResource Brush.Text.Secondary}"
@@ -627,8 +673,6 @@
                                                 Margin="0,0,4,0"
                                                 VerticalAlignment="Center"
                                                 Background="{DynamicResource Brush.Status.ReworkNeeded}"
-                                                BorderBrush="{DynamicResource Brush.Status.Outline}"
-                                                BorderThickness="1"
                                                 CornerRadius="4" />
                                         <TextBlock FontSize="11"
                                                    Foreground="{DynamicResource Brush.Text.Secondary}"
@@ -638,8 +682,6 @@
                                         <Border Width="8" Height="8" Margin="0,0,4,0"
                                                 VerticalAlignment="Center"
                                                 Background="{DynamicResource Brush.Status.Reworking}"
-                                                BorderBrush="{DynamicResource Brush.Status.Outline}"
-                                                BorderThickness="1"
                                                 CornerRadius="4" />
                                         <TextBlock FontSize="11"
                                                    Foreground="{DynamicResource Brush.Text.Secondary}"
@@ -651,8 +693,6 @@
                                                 Margin="0,0,4,0"
                                                 VerticalAlignment="Center"
                                                 Background="{DynamicResource Brush.Status.Reconciled}"
-                                                BorderBrush="{DynamicResource Brush.Status.Outline}"
-                                                BorderThickness="1"
                                                 CornerRadius="4" />
                                         <TextBlock FontSize="11"
                                                    Foreground="{DynamicResource Brush.Text.Secondary}"
@@ -734,10 +774,10 @@
                                                         Click="OnContextMenuButtonClick">
                                                     <Button.Style>
                                                         <Style TargetType="Button">
-                                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+                                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Caution}" />
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding IsDirectlyUnresolved}" Value="True">
-                                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+                                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Caution}" />
                                                                 </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>

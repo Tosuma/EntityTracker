@@ -7,73 +7,47 @@ namespace EntityTracker.Wpf.Controls;
 
 /// <summary>
 /// The mark drawn inside a dependency graph node, and in its legend swatch, so a status is told by
-/// shape as well as colour: a play triangle for In progress, two for Reworking, an exclamation bar for
-/// Rework needed, a bar for Blocked, a check for Completed and two for Reconciled. Not started is plain.
-/// Drawn as lines in the status's text colour, which reads on every status colour.
+/// shape as well as colour. Each mark is a filled Fluent System Icon from <c>Themes/EntityTrackerIcons.xaml</c>:
+/// Play for In progress, Fast Forward for Reworking, Important for Rework needed, Subtract for Blocked,
+/// Checkmark for Completed, Checkmark Starburst for Reconciled and Prohibited for Not relevant. Not started
+/// is plain. Filled in the status's text colour, which reads on every status colour.
 /// </summary>
 internal static class DependencyGraphStatusGlyph
 {
     /// <summary>Nodes smaller than this (in pixels) are too small for a readable mark.</summary>
     internal const double MinimumRadius = 5;
 
-    /// <summary>Gets the mark's outline for a node of this radius, or null for no mark.</summary>
+    // The icons' 20-pixel box, and how much of a node's diameter the box takes.
+    private const double IconBox = 20;
+    private const double BoxPerRadius = 1.3;
+
+    private static readonly Lazy<ResourceDictionary> Icons = new(static () =>
+        (ResourceDictionary)System.Windows.Application.LoadComponent(
+            new Uri("/EntityTracker.Wpf;component/Themes/EntityTrackerIcons.xaml", UriKind.Relative)));
+
+    /// <summary>Gets the key of the Fluent icon that marks the status, or null for none.</summary>
+    internal static string? IconKey(DevelopmentStatus status) => status switch
+    {
+        DevelopmentStatus.InProgress => "Icon.Play",
+        DevelopmentStatus.Reworking => "Icon.FastForward",
+        DevelopmentStatus.ReworkNeeded => "Icon.Important",
+        DevelopmentStatus.Blocked => "Icon.Subtract",
+        DevelopmentStatus.DevelopmentCompleted => "Icon.Checkmark",
+        DevelopmentStatus.Reconciled => "Icon.CheckmarkStarburst",
+        DevelopmentStatus.NotRelevant => "Icon.Prohibited",
+        _ => null
+    };
+
+    /// <summary>Gets the mark, to fill, for a node of this radius around the center, or null for no mark.</summary>
     internal static Geometry? For(DevelopmentStatus status, Point center, double radius)
     {
-        if (radius < MinimumRadius || status == DevelopmentStatus.NotStarted) return null;
-        double r = radius * 0.5;
-        StreamGeometry geometry = new();
-        using (StreamGeometryContext context = geometry.Open())
-        {
-            switch (status)
-            {
-                case DevelopmentStatus.InProgress:
-                    Triangle(context, center, r);
-                    break;
-                case DevelopmentStatus.Reworking:
-                    Triangle(context, new Point(center.X - r * 0.45, center.Y), r * 0.7);
-                    Triangle(context, new Point(center.X + r * 0.45, center.Y), r * 0.7);
-                    break;
-                case DevelopmentStatus.ReworkNeeded:
-                    Line(context, new Point(center.X, center.Y - r), new Point(center.X, center.Y + r * 0.25));
-                    Line(context, new Point(center.X, center.Y + r * 0.7), new Point(center.X, center.Y + r * 0.75));
-                    break;
-                case DevelopmentStatus.Blocked:
-                    Line(context, new Point(center.X - r, center.Y), new Point(center.X + r, center.Y));
-                    break;
-                case DevelopmentStatus.DevelopmentCompleted:
-                    Check(context, center, r);
-                    break;
-                case DevelopmentStatus.Reconciled:
-                    Check(context, new Point(center.X - r * 0.35, center.Y), r * 0.75);
-                    Check(context, new Point(center.X + r * 0.35, center.Y), r * 0.75);
-                    break;
-            }
-        }
-
-        geometry.Freeze();
-        return geometry;
-    }
-
-    /// <summary>Gets the line thickness for a node of this radius.</summary>
-    internal static double Thickness(double radius) => Math.Max(1.2, radius * 0.16);
-
-    private static void Triangle(StreamGeometryContext context, Point center, double r)
-    {
-        context.BeginFigure(new Point(center.X - r * 0.55, center.Y - r * 0.8), false, true);
-        context.LineTo(new Point(center.X + r * 0.75, center.Y), true, false);
-        context.LineTo(new Point(center.X - r * 0.55, center.Y + r * 0.8), true, false);
-    }
-
-    private static void Check(StreamGeometryContext context, Point center, double r)
-    {
-        context.BeginFigure(new Point(center.X - r * 0.8, center.Y), false, false);
-        context.LineTo(new Point(center.X - r * 0.2, center.Y + r * 0.6), true, false);
-        context.LineTo(new Point(center.X + r * 0.8, center.Y - r * 0.6), true, false);
-    }
-
-    private static void Line(StreamGeometryContext context, Point from, Point to)
-    {
-        context.BeginFigure(from, false, false);
-        context.LineTo(to, true, false);
+        if (radius < MinimumRadius || IconKey(status) is not { } key || Icons.Value[key] is not Geometry icon)
+            return null;
+        double size = radius * BoxPerRadius;
+        Geometry mark = icon.Clone();
+        mark.Transform = new MatrixTransform(size / IconBox, 0, 0, size / IconBox,
+            center.X - size / 2, center.Y - size / 2);
+        mark.Freeze();
+        return mark;
     }
 }

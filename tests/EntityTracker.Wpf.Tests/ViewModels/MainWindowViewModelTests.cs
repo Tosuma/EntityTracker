@@ -125,6 +125,33 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task NotRelevantEntitiesAreListedButLeftOutOfProgress()
+    {
+        // #73: counted on their own card, out of "% implemented", and blocking nothing.
+        TrackedEntity completed = Entity(1, "Completed", DevelopmentStatus.DevelopmentCompleted);
+        TrackedEntity waiting = Entity(2, "Waiting");
+        TrackedEntity notRelevant = Entity(3, "Legacy fax number", DevelopmentStatus.NotRelevant);
+        MainWindowViewModel viewModel = CreateViewModel(
+            [completed, waiting, notRelevant],
+            [new PersistedDependency(new DependencyEdge(waiting.Id, notRelevant.Id))],
+            out _);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal(3, viewModel.TotalEntityCount);
+        Assert.Equal(1, viewModel.NotRelevantCount);
+        Assert.Equal(50, viewModel.ImplementedPercentage);
+        viewModel.ActiveTable.SetSingleStatusFilter(DevelopmentStatus.NotRelevant);
+        Assert.Equal("Legacy fax number", Assert.Single(viewModel.OverviewItems).SourceName);
+        Assert.True(viewModel.IsNotRelevantSummarySelected);
+        viewModel.ActiveTable.ClearAllFiltersAndSort();
+        ApplySingleFilter(viewModel.ActiveTable.WorkStatusFilter!, "Ready");
+        Assert.Equal("Waiting", Assert.Single(viewModel.OverviewItems).SourceName);
+        Assert.Contains(viewModel.BulkStatusOptions, static option => option.Value == DevelopmentStatus.NotRelevant);
+        Assert.Contains(viewModel.Editor.StatusOptions, static option => option.Value == DevelopmentStatus.NotRelevant);
+    }
+
+    [Fact]
     public async Task ColumnFilters_ComposeAndArchivedEntitiesStayOutsideActiveProgress()
     {
         TrackedEntity ready = Entity(1, "Ready");

@@ -105,6 +105,7 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
         new("Blocked", "Brush.Status.Blocked", false, DevelopmentStatus.Blocked),
         new("Completed", "Brush.Status.DevelopmentCompleted", false, DevelopmentStatus.DevelopmentCompleted),
         new("Reconciled", "Brush.Status.Reconciled", false, DevelopmentStatus.Reconciled),
+        new("Not relevant", "Brush.Status.NotRelevant", false, DevelopmentStatus.NotRelevant),
         new("Missing dependency (outer ring)", "Brush.Text.Secondary", true)
     ];
 

@@ -63,7 +63,9 @@ public sealed class ProgressSnapshotCalculator
                 case EntityWorkflowState.Reconciled:
                     reconciled++;
                     break;
+                // Out of scope, like archived entities: counted nowhere in progress.
                 case EntityWorkflowState.Archived:
+                case EntityWorkflowState.NotRelevant:
                     break;
                 default:
                     throw new InvalidOperationException("Unknown workflow state.");

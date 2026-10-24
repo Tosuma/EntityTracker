@@ -42,8 +42,12 @@ public sealed partial class ReportColorTests
         Assert.Equal([ColorScheme.ReportWorkStatus.WaitingOnDependencies.Fill, ColorScheme.ReportWorkStatus.WaitingOnDependencies.Text],
             colors.Work["Waiting on dependencies"]);
         Assert.Equal(ColorScheme.Chart.Decrease, colors.Decrease);
-        Assert.Equal(7, colors.Status.Count);
-        Assert.Equal(6, colors.Work.Count);
+        // #73: Not relevant is hollow, so its entry also names the dashed edge.
+        Assert.Equal([ColorScheme.Status.NotRelevant.Fill, ColorScheme.Status.NotRelevant.Text,
+            ColorScheme.Status.NotRelevant.Edge!], colors.Status["Not relevant"]);
+        Assert.Equal(3, colors.Work["Not relevant"].Length);
+        Assert.Equal(8, colors.Status.Count);
+        Assert.Equal(7, colors.Work.Count);
     }
 
     [Fact]
@@ -85,7 +89,7 @@ public sealed partial class ReportColorTests
     }
 
     /// <summary>Variables report.js sets per element, not colours of the scheme.</summary>
-    private static readonly string[] ScriptVariables = ["swatch", "swatch-ink"];
+    private static readonly string[] ScriptVariables = ["swatch", "swatch-ink", "swatch-edge"];
 
     [GeneratedRegex(@"var\(--([a-z0-9-]+)")]
     private static partial Regex CssVariable();

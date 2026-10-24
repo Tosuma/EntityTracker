@@ -178,6 +178,10 @@ mark { background: var(--highlight); color: inherit; padding: 0; }
   font-size: 12px;
   white-space: nowrap;
 }
+/* A hollow status (Not relevant): out of scope, so no fill, only a dashed edge. */
+.status.hollow { padding: 0 7px; border: 1px dashed var(--swatch-edge); }
+.legend span.hollow::before { background: transparent; border: 1px dashed var(--swatch-edge); box-sizing: border-box; }
+.graph .band.hollow { stroke: var(--swatch-edge); stroke-width: 1.5; stroke-dasharray: 4 3; }
 
 .section-hint { color: var(--muted); margin: -4px 0 12px; font-size: 13px; }
 

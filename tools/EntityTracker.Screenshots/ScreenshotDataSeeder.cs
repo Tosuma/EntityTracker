@@ -174,6 +174,18 @@ internal static class ScreenshotDataSeeder
             [changedEntity.Id],
             DevelopmentStatus.ReworkNeeded,
             cancellationToken);
+        // Out of scope in Core schema but still relevant in Release readiness: the Overview shows the
+        // Not relevant status, and the comparison shows the two Trackers differ on purpose.
+        IReadOnlyList<TrackedEntity> coreEntities = await releaseEntities.GetAllAsync(
+            defaultTracker.Id,
+            cancellationToken);
+        await catalogProvider.GetRequiredService<BulkStatusUpdateService>().ApplyAsync(
+            defaultTracker.Id,
+            [.. coreEntities
+                .Where(static entity => entity.SourceName is "status_code" or "skill_record")
+                .Select(static entity => entity.Id)],
+            DevelopmentStatus.NotRelevant,
+            cancellationToken);
         TrackedEntity missingEntity = copiedEntities.Single(static entity =>
             entity.SourceName == "employee_contact");
         bool archived = await catalogProvider.GetRequiredService<EntityLifecycleService>()

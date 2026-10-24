@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Domain;
@@ -6,7 +7,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    internal const int CurrentSchemaVersion = 23;
+    internal const int CurrentSchemaVersion = 24;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -538,8 +539,8 @@ public sealed class SqliteDatabase
             return;
         }
 
-        // Versions 16, 21 and 22 rebuild tables that other tables reference.
-        bool requiresForeignKeyRebuild = schemaVersion < 22;
+        // Versions 16, 21, 22 and 24 rebuild tables that other tables reference.
+        bool requiresForeignKeyRebuild = schemaVersion < 24;
         bool rebuildWorkflowTrackedEntities = schemaVersion is > 0 and < 7;
         if (requiresForeignKeyRebuild)
         {
@@ -989,6 +990,9 @@ public sealed class SqliteDatabase
                 await ExecuteAsync(connection, transaction,
                     "ALTER TABLE tracked_entities DROP COLUMN provenance;", cancellationToken);
 
+            if (schemaVersion < 24)
+                await AllowNotRelevantStatusAsync(connection, transaction, cancellationToken);
+
             if (newDatabase && StartNewDatabaseWithoutProjects)
             {
                 // The Project/Tracker migration (version 12) moves entities from before Projects
@@ -1017,6 +1021,56 @@ public sealed class SqliteDatabase
             }
         }
     }
+
+    /// <summary>
+    /// Version 24: the development status NotRelevant. SQLite can't change a CHECK constraint in place, so
+    /// each table with a list of statuses is rebuilt from its own current definition, with NotRelevant
+    /// added to every such list. Its rows, indexes and triggers stay as they are.
+    /// </summary>
+    private static async Task AllowNotRelevantStatusAsync(SqliteConnection connection,
+        SqliteTransaction transaction, CancellationToken cancellationToken)
+    {
+        foreach (string table in new[] { "tracked_entities", "entity_status_history" })
+        {
+            List<string> dependents = [];
+            string? definition = null;
+            await using (SqliteCommand read = connection.CreateCommand())
+            {
+                read.Transaction = transaction;
+                read.CommandText = "SELECT type, sql FROM sqlite_schema WHERE tbl_name = $table AND sql IS NOT NULL;";
+                read.Parameters.AddWithValue("$table", table);
+                await using SqliteDataReader reader = await read.ExecuteReaderAsync(cancellationToken);
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                    if (reader.GetString(0) == "table") definition = reader.GetString(1);
+                    else dependents.Add(reader.GetString(1));
+                }
+            }
+            if (definition is null) continue;
+
+            string widened = WithNotRelevantStatus(definition);
+            string rebuilt = Regex.Replace(widened, $@"^\s*CREATE\s+TABLE\s+(""?){table}\1",
+                $"CREATE TABLE {table}_v24", RegexOptions.IgnoreCase);
+            await ExecuteAsync(connection, transaction, $"""
+                {rebuilt};
+                INSERT INTO {table}_v24 SELECT * FROM {table};
+                PRAGMA legacy_alter_table = ON;
+                DROP TABLE {table};
+                ALTER TABLE {table}_v24 RENAME TO {table};
+                PRAGMA legacy_alter_table = OFF;
+                """, cancellationToken);
+            foreach (string dependent in dependents)
+                await ExecuteAsync(connection, transaction, dependent + ";", cancellationToken);
+        }
+        await EnsureNoForeignKeyViolationsAsync(connection, transaction, cancellationToken);
+    }
+
+    /// <summary>Adds 'NotRelevant' to every list of development statuses in a table definition.</summary>
+    internal static string WithNotRelevantStatus(string definition) =>
+        Regex.Replace(definition, @"\(\s*'NotStarted'[^)]*\)", list =>
+            list.Value.Contains("'NotRelevant'", StringComparison.Ordinal)
+                ? list.Value
+                : list.Value[..^1].TrimEnd() + ", 'NotRelevant')");
 
     /// <summary>
     /// Version 21: the schema import is gone, so dependencies are no longer split into imported ones

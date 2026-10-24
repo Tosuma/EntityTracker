@@ -68,26 +68,36 @@ and the exported report. They use only the official brand colours:
 - Rework needed is a calm mint: the entity is done but needs changes, and blocks nothing.
 - Waiting on dependencies is a soft pale amber: visible, without competing with Blocked.
 - Completed and Reconciled keep deep teal and the sidebar's Green 100.
+- Not relevant is hollow: no fill, a dashed Green 60 edge and Green 60 text, as it is out of scope and
+  counts toward nothing (`StatusColor.Edge`; a badge draws the dashed edge over its border).
 
-Every badge's text reads on its fill (4.5:1 or more). In the dark theme the dark fills (Green 80, deep
-teal, Green 100) would sink into the page, so status badges, legend dots and swatches, and the on-screen
-pie's slices get a thin Green 60 outline there (`Brush.Status.Outline`, set by `ApplicationThemeService`;
-`DarkChart.SliceOutline`). The light theme, saved chart images and the exported report have none.
+Every badge's text reads on its fill (4.5:1 or more). Status badges, legend dots and swatches have no
+outline in either theme: in the dark theme the dark fills (Green 80, deep teal, Green 100) sit quietly on
+the page, and the badge text carries the status. Only the on-screen pie's slices keep a thin Green 60
+outline in the dark theme (`DarkChart.SliceOutline`), so neighbouring slices stay apart.
 
 | Meaning | Color | Graph mark |
 | --- | --- | --- |
 | Not started / Ready | Green 40 `#A0AFAF` | none |
-| In progress | Green 80 `#41605E` | play triangle |
-| Rework needed | Notification green `#96E4AD` | exclamation bar |
-| Reworking | Green 80 `#41605E` | two triangles |
-| Blocked | Coral `#FF6359` | bar |
-| Development completed / Completed | Deep teal `#0F6455` | check |
-| Reconciled | Green 100 `#123836` | two checks |
+| In progress | Green 80 `#41605E` | Play |
+| Rework needed | Notification green `#96E4AD` | Important |
+| Reworking | Green 80 `#41605E` | Fast Forward |
+| Blocked | Coral `#FF6359` | Subtract |
+| Development completed / Completed | Deep teal `#0F6455` | Checkmark |
+| Reconciled | Green 100 `#123836` | Checkmark Starburst |
+| Not relevant | none, dashed Green 60 `#718886` edge and text | Prohibited |
 | Waiting on dependencies | Pale amber `#F6D9A8` | (work status only) |
 | Unresolved reference warning | Warning palette | Dependencies on names no entity has yet, in the Overview, entity details and the dependency graph |
 
 A status is never told by colour alone: badges carry their name, and the dependency graph draws the
-mark above inside each node large enough to read, and in its legend. Error text uses the theme's
+mark above inside each node large enough to read, and in its legend. Each mark is a filled Fluent System
+Icon (from `Themes/EntityTrackerIcons.xaml`) in the status's text colour; in the tree, a Not relevant box
+shows Prohibited in its empty band. The Warning icon is always amber (the caution colour), so a warning stays distinct from a
+coral error. The Project dashboard's aggregate progress boxes carry no warning icons: each
+status count shows its status colour as a 5 px bar along its left edge, with no outline. Active is not
+a status and stays plain. On the Overview, only the Blocked card is marked, by its coral border; the
+summary cards show their focus ring outside the card and only for keyboard navigation, so a click never
+hides the selected card's green border. Error text uses the theme's
 critical colour (`Brush.Critical`), not a status colour, since status colours are fills.
 
 ### Colour scheme

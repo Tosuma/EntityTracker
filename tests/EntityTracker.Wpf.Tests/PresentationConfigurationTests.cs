@@ -139,6 +139,27 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void WarningIconsAreAmberAndTheProgressBoxesHaveNone()
+    {
+        // Every Warning icon uses the caution colour, set on the icon or on the button around it; the
+        // aggregate progress boxes show their counts without warning icons.
+        string views = Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf", "Views");
+        XElement[] icons = Directory.EnumerateFiles(views, "*.xaml")
+            .SelectMany(path => XDocument.Load(path).Descendants())
+            .Where(element => element.Name.LocalName == "Icon" && (string?)element.Attribute("IconKey") == "Icon.Warning")
+            .ToArray();
+
+        Assert.NotEmpty(icons);
+        Assert.All(icons, icon => Assert.Contains("Brush.Caution",
+            (string?)icon.Attribute("Foreground") ?? string.Concat(icon.Parent!.Descendants()
+                .Where(static setter => (string?)setter.Attribute("Property") == "Foreground")
+                .Select(static setter => (string?)setter.Attribute("Value"))),
+            StringComparison.Ordinal));
+        Assert.DoesNotContain(LoadWpfXaml("Views", "AggregateProgressView.xaml").Descendants(),
+            static element => element.Name.LocalName == "Icon");
+    }
+
+    [Fact]
     public void ClosingTheWindowWaitsForARunningProjectSync()
     {
         string code = File.ReadAllText(Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory),
@@ -801,11 +822,15 @@ public sealed class PresentationConfigurationTests
                               element.Elements().Any(setter => (string?)setter.Attribute("TargetName") == "Badge"))
             .ToArray();
 
-        Assert.Equal(12, triggers.Length);
+        Assert.Equal(14, triggers.Length);
         foreach (XElement trigger in triggers)
         {
             string value = (string)trigger.Attribute("Value")!;
             string status = value[(value.LastIndexOf('.') + 1)..^1];
+            // #73: Not relevant is hollow, so its badge shows the dashed edge drawn over it.
+            Assert.Equal(status == "NotRelevant", trigger.Elements().Any(setter =>
+                (string?)setter.Attribute("TargetName") == "HollowEdge" &&
+                (string?)setter.Attribute("Value") == "Visible"));
             string brush = value.Contains("DevelopmentStatus.", StringComparison.Ordinal)
                 ? $"Brush.Status.{status}"
                 : $"Brush.WorkStatus.{status}";

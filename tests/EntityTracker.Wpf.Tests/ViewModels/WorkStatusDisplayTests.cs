@@ -17,6 +17,7 @@ public sealed class WorkStatusDisplayTests
     [InlineData(EntityWorkflowState.DevelopmentCompleted, WorkStatusDisplay.Completed, "Completed")]
     [InlineData(EntityWorkflowState.Reconciled, WorkStatusDisplay.Reconciled, "Reconciled")]
     [InlineData(EntityWorkflowState.Archived, WorkStatusDisplay.Archived, "Archived")]
+    [InlineData(EntityWorkflowState.NotRelevant, WorkStatusDisplay.NotRelevant, "Not relevant")]
     public void Mapping_GroupsWorkflowStatesForDisplay(
         EntityWorkflowState source,
         WorkStatusDisplay expected,

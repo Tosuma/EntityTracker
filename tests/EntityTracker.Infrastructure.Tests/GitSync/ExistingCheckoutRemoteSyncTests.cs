@@ -465,7 +465,7 @@ public sealed class ExistingCheckoutRemoteSyncTests
     }
 
     [Fact]
-    public async Task AFormat6RepositoryLastSyncedByAnOlderVersionSyncsAndIsRewrittenAsFormat7()
+    public async Task AFormat6RepositoryLastSyncedByAnOlderVersionSyncsAndIsRewrittenInTheCurrentFormat()
     {
         using GitWorkspace workspace = new();
         Guid id = Guid.NewGuid();
@@ -491,7 +491,7 @@ public sealed class ExistingCheckoutRemoteSyncTests
         ProjectSyncLink synced = await sync.SyncNowAsync(new ProjectId(id));
 
         Assert.Equal("Current", synced.SyncStatus);
-        Assert.Contains("\"formatVersion\": 7",
+        Assert.Contains($"\"formatVersion\": {ProjectSnapshot.CurrentFormatVersion}",
             File.ReadAllText(Path.Combine(checkout, ".entitytracker", "manifest.json")), StringComparison.Ordinal);
         Assert.DoesNotContain(Directory.EnumerateFiles(entities, "*.json", SearchOption.AllDirectories),
             path => File.ReadAllText(path).Contains("provenance", StringComparison.Ordinal));

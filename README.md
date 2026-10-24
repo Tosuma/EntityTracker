@@ -296,6 +296,11 @@ Ready for Not started or Rework needed, In progress for development or Reworking
 Waiting on dependencies for unstarted entities with unmet dependencies. A manually Blocked
 entity shows Blocked. The Blockers column shows unmet dependencies during active work.
 
+**Not relevant** marks an entity that is out of scope in this Tracker, though it may matter in a
+sibling Tracker. It stays in the Overview and the graph, drawn hollow with a dashed edge (and the Prohibited icon in the graph), blocks nothing that depends on it, and is left out of "% implemented" and the
+progress history. The Overview counts it on its own card, and the Tracker comparison shows it as a
+status, not as missing, and doesn't flag the difference.
+
 ![EntityTracker Responsible dev filter with separate Project Developers and a Blank option](images/light/overview-filter-flyout.png)
 
 ![EntityTracker overview filtered by the dependency name unit](images/light/overview-search.png)

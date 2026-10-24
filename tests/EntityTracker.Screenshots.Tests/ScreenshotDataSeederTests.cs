@@ -60,6 +60,7 @@ public sealed class ScreenshotDataSeederTests
             await provider.GetRequiredService<IProgressHistoryRepository>()
                 .GetProgressSnapshotsAsync(tracker.Id);
         Assert.True(snapshots.Count > 10);
-        Assert.Equal(125, snapshots[^1].State.TotalActiveCount);
+        // Progress leaves the three Not relevant entities out (#73).
+        Assert.Equal(122, snapshots[^1].State.TotalActiveCount);
     }
 }

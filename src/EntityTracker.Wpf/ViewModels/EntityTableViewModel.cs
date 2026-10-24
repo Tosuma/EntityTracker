@@ -25,7 +25,8 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
             [DevelopmentStatus.ReworkNeeded] = 3,
             [DevelopmentStatus.Reworking] = 4,
             [DevelopmentStatus.DevelopmentCompleted] = 5,
-            [DevelopmentStatus.Reconciled] = 6
+            [DevelopmentStatus.Reconciled] = 6,
+            [DevelopmentStatus.NotRelevant] = 7
         };
 
     private static readonly IReadOnlyDictionary<WorkStatusDisplay, int> WorkStatusOrder =
@@ -37,7 +38,8 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
             [WorkStatusDisplay.InProgress] = 3,
             [WorkStatusDisplay.Completed] = 4,
             [WorkStatusDisplay.Reconciled] = 5,
-            [WorkStatusDisplay.Archived] = 6
+            [WorkStatusDisplay.NotRelevant] = 6,
+            [WorkStatusDisplay.Archived] = 7
         };
 
     private readonly IReadOnlyList<OverviewColumnFilterState> _filters;
@@ -514,6 +516,7 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
         DevelopmentStatus.InProgress => "In progress",
         DevelopmentStatus.ReworkNeeded => "Rework needed",
         DevelopmentStatus.Reworking => "Reworking",
+        DevelopmentStatus.NotRelevant => "Not relevant",
         DevelopmentStatus.Blocked => "Blocked",
         DevelopmentStatus.DevelopmentCompleted => "Completed",
         DevelopmentStatus.Reconciled => "Reconciled",

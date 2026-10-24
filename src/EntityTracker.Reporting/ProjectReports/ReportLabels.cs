@@ -15,7 +15,8 @@ public static class ReportLabels
         Status(DevelopmentStatus.ReworkNeeded),
         Status(DevelopmentStatus.Reworking),
         Status(DevelopmentStatus.DevelopmentCompleted),
-        Status(DevelopmentStatus.Reconciled)
+        Status(DevelopmentStatus.Reconciled),
+        Status(DevelopmentStatus.NotRelevant)
     ];
 
     /// <summary>Every work status of an active entity, in the order the app lists them.</summary>
@@ -26,7 +27,8 @@ public static class ReportLabels
         WorkStatus(EntityWorkflowState.ManuallyBlocked),
         WorkStatus(EntityWorkflowState.InProgress),
         WorkStatus(EntityWorkflowState.DevelopmentCompleted),
-        WorkStatus(EntityWorkflowState.Reconciled)
+        WorkStatus(EntityWorkflowState.Reconciled),
+        WorkStatus(EntityWorkflowState.NotRelevant)
     ];
 
     internal static string Status(ProgressStatusCategory status) => status switch
@@ -52,6 +54,7 @@ public static class ReportLabels
         DevelopmentStatus.Reconciled => "Reconciled",
         DevelopmentStatus.Blocked => "Blocked",
         DevelopmentStatus.Reworking => "Reworking",
+        DevelopmentStatus.NotRelevant => "Not relevant",
         _ => status.ToString()
     };
 
@@ -65,6 +68,7 @@ public static class ReportLabels
         EntityWorkflowState.DevelopmentCompleted => "Completed",
         EntityWorkflowState.Reconciled => "Reconciled",
         EntityWorkflowState.Archived => "Archived",
+        EntityWorkflowState.NotRelevant => "Not relevant",
         _ => state.ToString()
     };
 }

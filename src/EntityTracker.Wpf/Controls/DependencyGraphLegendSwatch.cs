@@ -46,18 +46,21 @@ public sealed class DependencyGraphLegendSwatch : FrameworkElement
         Point center = new(ActualWidth / 2, ActualHeight / 2);
         if (IsPlaceholder)
             context.DrawEllipse(null, new Pen(brush, 1.25) { DashStyle = DashStyles.Dash }, center, radius, radius);
+        else if (BrushKey is { } hollowKey && TryFindResource($"{hollowKey}.Edge") is Brush edge)
+        {
+            // A hollow status (Not relevant): no fill, a dashed edge and its mark, as on the graph.
+            context.DrawEllipse(null, new Pen(edge, 1.25) { DashStyle = DashStyles.Dash }, center, radius, radius);
+            if (Status is { } status && DependencyGraphStatusGlyph.For(status, center, radius) is { } glyph)
+                context.DrawGeometry(TryFindResource($"{hollowKey}.Text") as Brush ?? edge, null, glyph);
+        }
         else
         {
-            // The dark theme's thin status outline (none in light), so the dark fills stay visible.
-            Pen? outline = TryFindResource("Brush.Status.Outline") is SolidColorBrush { Color.A: > 0 } line
-                ? new Pen(line, 1) : null;
-            context.DrawEllipse(brush, outline, center, radius, radius);
+            context.DrawEllipse(brush, null, center, radius, radius);
             // The same mark as the graph's nodes, so the legend tells the statuses apart by shape too.
             if (Status is { } status && BrushKey is { } key &&
                 DependencyGraphStatusGlyph.For(status, center, radius) is { } glyph)
             {
-                Brush mark = TryFindResource($"{key}.Text") as Brush ?? Brushes.Black;
-                context.DrawGeometry(null, new Pen(mark, DependencyGraphStatusGlyph.Thickness(radius)), glyph);
+                context.DrawGeometry(TryFindResource($"{key}.Text") as Brush ?? Brushes.Black, null, glyph);
             }
         }
     }
