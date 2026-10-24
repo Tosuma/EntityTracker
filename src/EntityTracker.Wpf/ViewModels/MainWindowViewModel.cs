@@ -180,8 +180,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             _ => !IsBusy &&
                  !ManualCreation.IsBusy &&
                  !Editor.IsOpen);
-        // A summary card toggles: clicking the selected card again clears the status filter, back to Total;
-        // the sort stays.
+        // A summary card toggles: clicking it when it is the only status shown clears the status filter, back
+        // to Total (the sort stays). When it is one of several (as after "% implemented"), it narrows to itself.
         // The "% implemented" card shows what Implemented counts; clicking it again returns to Total.
         _selectImplementedSummaryCommand = new RelayCommand(() =>
         {
@@ -196,7 +196,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         });
         _selectOverviewStatusCommand = new RelayCommand<DevelopmentStatus>(status =>
         {
-            if (ActiveTable.IncludesStatus(status))
+            if (ActiveTable.FiltersExactlyStatuses([status]))
             {
                 ActiveTable.ClearStatusFilter();
             }

@@ -327,9 +327,18 @@ public sealed class MainWindowViewModelTests
         Assert.True(viewModel.ActiveTable.HasSort);
         Assert.Equal(6, viewModel.OverviewItems.Count);
 
-        // A single status is not "Implemented".
+        // From "% implemented", a status card narrows to its own status rather than clearing the filter.
+        viewModel.SelectImplementedSummaryCommand.Execute(null);
         viewModel.SelectOverviewStatusCommand.Execute(DevelopmentStatus.Reconciled);
+
         Assert.False(viewModel.IsImplementedSummarySelected);
+        Assert.True(viewModel.IsReconciledSummarySelected);
+        Assert.False(viewModel.IsDevelopmentCompletedSummarySelected);
+        Assert.Equal("Reconciled", Assert.Single(viewModel.OverviewItems).SourceName);
+
+        // Clicking it again, now the only status shown, returns to Total.
+        viewModel.SelectOverviewStatusCommand.Execute(DevelopmentStatus.Reconciled);
+        Assert.True(viewModel.IsTotalSummarySelected);
     }
 
     [Fact]
