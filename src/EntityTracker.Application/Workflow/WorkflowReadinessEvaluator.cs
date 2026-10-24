@@ -26,9 +26,14 @@ public sealed class WorkflowReadinessEvaluator
                 static entity => entity.Id,
                 static _ => new Dictionary<EntitySourceKey, DependencyBlocker>());
 
+        // An entity that is not relevant in this Tracker is out of scope: nothing blocks it.
+        bool OutOfScope(EntityId id) =>
+            entitiesById.TryGetValue(id, out TrackedEntity? owner) && owner.Status == DevelopmentStatus.NotRelevant;
+
         foreach (PersistedDependency dependency in effectiveDependencies.ResolvedDependencies)
         {
-            if (!blockers.TryGetValue(
+            if (OutOfScope(dependency.Edge.DependentEntityId) ||
+                !blockers.TryGetValue(
                     dependency.Edge.DependentEntityId,
                     out Dictionary<EntitySourceKey, DependencyBlocker>? ownerBlockers) ||
                 !entitiesById.TryGetValue(
@@ -51,7 +56,8 @@ public sealed class WorkflowReadinessEvaluator
         foreach (PersistedUnresolvedDependency dependency in
                  effectiveDependencies.UnresolvedDependencies)
         {
-            if (!blockers.TryGetValue(
+            if (OutOfScope(dependency.Dependency.DependentEntityId) ||
+                !blockers.TryGetValue(
                     dependency.Dependency.DependentEntityId,
                     out Dictionary<EntitySourceKey, DependencyBlocker>? ownerBlockers))
             {
@@ -97,6 +103,7 @@ public sealed class WorkflowReadinessEvaluator
             DevelopmentStatus.DevelopmentCompleted =>
                 EntityWorkflowState.DevelopmentCompleted,
             DevelopmentStatus.Reconciled => EntityWorkflowState.Reconciled,
+            DevelopmentStatus.NotRelevant => EntityWorkflowState.NotRelevant,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(entity),
                 entity.Status,
@@ -104,8 +111,10 @@ public sealed class WorkflowReadinessEvaluator
         };
     }
 
+    // A dependency that is not relevant in this Tracker blocks nothing, as an archived one doesn't.
     private static bool IsDependencyImplemented(DevelopmentStatus status) =>
-        status is DevelopmentStatus.ReworkNeeded or
+        status is DevelopmentStatus.NotRelevant or
+            DevelopmentStatus.ReworkNeeded or
             DevelopmentStatus.Reworking or
             DevelopmentStatus.DevelopmentCompleted or
             DevelopmentStatus.Reconciled;

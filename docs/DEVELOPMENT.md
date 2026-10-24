@@ -367,6 +367,8 @@ A linked Project is stored in its repository under `.entitytracker/`, one JSON f
   under it.
 
 `ProjectSnapshotJsonCodec` writes them; `ProjectSnapshot.CurrentFormatVersion` is the format.
+- **Format 8:** adds the development status `NotRelevant`. An older app doesn't know it, so a
+  format 8 Project needs this version or later: that release was a major one.
 - **Format 7:**
   - files are indented JSON with `\n` line breaks, so a change shows up in a Git diff as the lines
     that changed;

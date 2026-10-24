@@ -539,7 +539,12 @@
           } else if ((column.key === "status" || column.key === "work") && value) {
             var chip = el("span", { className: "status", text: value });
             var colors = (column.key === "work" ? COLORS.work : STATUS_COLORS)[value];
-            if (colors) { chip.style.setProperty("--swatch", colors[0]); chip.style.setProperty("--swatch-ink", colors[1]); }
+            if (colors) {
+              chip.style.setProperty("--swatch", colors[0]);
+              chip.style.setProperty("--swatch-ink", colors[1]);
+              // A hollow status (Not relevant): no fill, a dashed edge.
+              if (colors[2]) { chip.style.setProperty("--swatch-edge", colors[2]); chip.classList.add("hollow"); }
+            }
             cell.appendChild(chip);
           } else {
             cell.textContent = value;
@@ -617,11 +622,12 @@
       "aria-label": "Dependency tree. Point at an entity for its details; click it to highlight its links." });
     host.appendChild(canvas);
     var legendNode = el("div", { className: "legend graph-legend" }, [
-      "Not started", "Blocked", "In progress", "Rework needed", "Reworking", "Completed", "Reconciled", "Missing"
+      "Not started", "Blocked", "In progress", "Rework needed", "Reworking", "Completed", "Reconciled", "Not relevant", "Missing"
     ].map(function (label) {
       var span = el("span", { text: label });
       span.style.setProperty("--swatch", label === "Missing" ? COLORS.missingSwatch : STATUS_COLORS[label][0]);
       if (label === "Missing") span.className = "missing";
+      else if (STATUS_COLORS[label][2]) { span.className = "hollow"; span.style.setProperty("--swatch-edge", STATUS_COLORS[label][2]); }
       return span;
     }));
 
@@ -677,7 +683,9 @@
         var group = svg("g", { "class": "node" + (node.missing ? " missing" : ""), "data-index": index,
           transform: "translate(" + node.treeX + " " + node.treeY + ")" });
         // As in the app: an empty name area above a band in the status colour, 2/3 and 1/3 of the box.
-        var color = node.missing ? null : (STATUS_COLORS[node.status] || [COLORS.unknownStatus])[0];
+        var colors = node.missing ? null : (STATUS_COLORS[node.status] || [COLORS.unknownStatus]);
+        var color = colors && colors[0];
+        var edge = colors && colors[2];
         group.appendChild(svg("rect", { "class": "halo", x: -6, y: -6, width: TREE_WIDTH + 12, height: TREE_HEIGHT + 12, rx: 14 }));
         group.appendChild(svg("rect", { "class": "card", width: TREE_WIDTH, height: TREE_HEIGHT, rx: TREE_RADIUS }));
         var band = svg("path", { "class": "band", d:
@@ -685,6 +693,8 @@
           "Q" + TREE_WIDTH + " " + TREE_HEIGHT + " " + (TREE_WIDTH - TREE_RADIUS) + " " + TREE_HEIGHT +
           "H" + TREE_RADIUS + "Q0 " + TREE_HEIGHT + " 0 " + (TREE_HEIGHT - TREE_RADIUS) + "Z" });
         if (color) band.setAttribute("fill", color);
+        // A hollow status (Not relevant): the band is a dashed edge instead of a fill.
+        if (edge) { band.setAttribute("class", "band hollow"); band.style.setProperty("--swatch-edge", edge); }
         group.appendChild(band);
         group.appendChild(svg("rect", { "class": "outline", width: TREE_WIDTH, height: TREE_HEIGHT, rx: TREE_RADIUS }));
         canvas.appendChild(group);

@@ -68,6 +68,8 @@ and the exported report. They use only the official brand colours:
 - Rework needed is a calm mint: the entity is done but needs changes, and blocks nothing.
 - Waiting on dependencies is a soft pale amber: visible, without competing with Blocked.
 - Completed and Reconciled keep deep teal and the sidebar's Green 100.
+- Not relevant is hollow: no fill, a dashed Green 60 edge and Green 60 text, as it is out of scope and
+  counts toward nothing (`StatusColor.Edge`; a badge draws the dashed edge over its border).
 
 Every badge's text reads on its fill (4.5:1 or more). In the dark theme the dark fills (Green 80, deep
 teal, Green 100) would sink into the page, so status badges, legend dots and swatches, and the on-screen
@@ -83,6 +85,7 @@ pie's slices get a thin Green 60 outline there (`Brush.Status.Outline`, set by `
 | Blocked | Coral `#FF6359` | bar |
 | Development completed / Completed | Deep teal `#0F6455` | check |
 | Reconciled | Green 100 `#123836` | two checks |
+| Not relevant | none, dashed Green 60 `#718886` edge and text | slashed circle |
 | Waiting on dependencies | Pale amber `#F6D9A8` | (work status only) |
 | Unresolved reference warning | Warning palette | Dependencies on names no entity has yet, in the Overview, entity details and the dependency graph |
 

@@ -26,6 +26,8 @@ public static class ColorScheme
         public const string Green20 = "#D0D7D7";
         public const string Green10 = "#E7EBEB";
         public const string White = "#FFFFFF";
+        /// <summary>No colour at all: the surface behind shows through.</summary>
+        public const string None = "#00000000";
         public const string Black = "#000000";
         public const string Coral = "#FF6359";
         public const string CoralHover = "#FF786F";
@@ -55,7 +57,8 @@ public static class ColorScheme
     /// Brand colours only. In progress and Reworking share one colour: both mean the entity is being worked
     /// on. Coral, the colour that asks for attention, is kept for Blocked; Rework needed is a calm mint, as
     /// the entity is done and blocks nothing. The dependency graph also draws a glyph per status, so a status
-    /// is never told by colour alone.
+    /// is never told by colour alone. Not relevant is hollow: no fill and a dashed Green 60 edge, as it is out
+    /// of scope and counts toward nothing.
     /// </remarks>
     public static class Status
     {
@@ -66,6 +69,7 @@ public static class ColorScheme
         public static readonly StatusColor Blocked = new(Base.Coral, Base.DarkGreen);
         public static readonly StatusColor DevelopmentCompleted = new(Base.DeepTeal, Base.White);
         public static readonly StatusColor Reconciled = new(Base.Green100, Base.White);
+        public static readonly StatusColor NotRelevant = new(Base.None, Base.Green60, Base.Green60);
     }
 
     /// <summary>
@@ -81,6 +85,7 @@ public static class ColorScheme
         public static readonly StatusColor InProgress = Status.InProgress;
         public static readonly StatusColor Completed = Status.DevelopmentCompleted;
         public static readonly StatusColor Reconciled = Status.Reconciled;
+        public static readonly StatusColor NotRelevant = Status.NotRelevant;
     }
 
     /// <summary>Work statuses in the exported report's tables: the same colours as in the app.</summary>
@@ -92,6 +97,7 @@ public static class ColorScheme
         public static readonly StatusColor InProgress = WorkStatus.InProgress;
         public static readonly StatusColor Completed = WorkStatus.Completed;
         public static readonly StatusColor Reconciled = WorkStatus.Reconciled;
+        public static readonly StatusColor NotRelevant = WorkStatus.NotRelevant;
     }
 
     /// <summary>The rest of the app. Each entry becomes the brush "Brush.&lt;path&gt;", e.g. Brush.Surface.Primary.</summary>
@@ -223,7 +229,8 @@ public static class ColorScheme
 }
 
 /// <summary>A status's background colour and the colour of the text on it.</summary>
-public readonly record struct StatusColor(string Fill, string Text);
+/// <summary>A status's colours: its fill and text, and, for a hollow status, the dashed edge drawn instead of a fill.</summary>
+public readonly record struct StatusColor(string Fill, string Text, string? Edge = null);
 
 /// <summary>A colour drawn see-through, at the given opacity (0–1).</summary>
 public readonly record struct Tint(string Color, double Opacity);

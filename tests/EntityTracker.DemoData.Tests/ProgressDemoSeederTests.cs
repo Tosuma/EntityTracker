@@ -130,7 +130,8 @@ public sealed class ProgressDemoSeederTests
         Assert.Equal(
             new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero),
             snapshots[0].RecordedAtUtc);
-        Assert.Equal(10, snapshots[^1].State.TotalActiveCount);
+        // One entity per status, and progress leaves the Not relevant one out (#73).
+        Assert.Equal(9, snapshots[^1].State.TotalActiveCount);
 
         foreach (TrackedEntity entity in seededEntities.Where(
                      static item => item.LifecycleState == EntityLifecycleState.Active))

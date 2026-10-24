@@ -49,6 +49,7 @@ public sealed class ColorSchemeResources : ResourceDictionary
             case StatusColor status:
                 AddColor(key, status.Fill, 1);
                 AddColor($"{key}.Text", status.Text, 1);
+                if (status.Edge is { } edge) AddColor($"{key}.Edge", edge, 1);
                 break;
             case Tint tint:
                 AddColor(key, tint.Color, tint.Opacity);

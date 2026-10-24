@@ -10,5 +10,6 @@ public enum EntityWorkflowState
     Reconciled,
     Archived,
     ManuallyBlocked,
-    Reworking
+    Reworking,
+    NotRelevant
 }

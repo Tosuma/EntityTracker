@@ -55,6 +55,7 @@ public sealed record ProjectComparisonDisplayCell(
         Domain.DevelopmentStatus.InProgress => "In progress",
         Domain.DevelopmentStatus.ReworkNeeded => "Rework needed",
         Domain.DevelopmentStatus.Reworking => "Reworking",
+        Domain.DevelopmentStatus.NotRelevant => "Not relevant",
         Domain.DevelopmentStatus.Blocked => "Blocked",
         Domain.DevelopmentStatus.DevelopmentCompleted => "Completed",
         Domain.DevelopmentStatus.Reconciled => "Reconciled",

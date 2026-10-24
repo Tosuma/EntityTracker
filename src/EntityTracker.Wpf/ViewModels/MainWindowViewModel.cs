@@ -68,6 +68,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private int _inProgressCount;
     private int _reworkNeededCount;
     private int _reworkingCount;
+    private int _notRelevantCount;
     private int _blockedCount;
     private int _developmentCompletedCount;
     private int _reconciledCount;
@@ -351,7 +352,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         new(DevelopmentStatus.ReworkNeeded, "Rework needed"),
         new(DevelopmentStatus.Reworking, "Reworking"),
         new(DevelopmentStatus.DevelopmentCompleted, "Completed"),
-        new(DevelopmentStatus.Reconciled, "Reconciled")
+        new(DevelopmentStatus.Reconciled, "Reconciled"),
+        new(DevelopmentStatus.NotRelevant, "Not relevant")
     ];
 
     public IReadOnlyList<EntityOverviewRow> OverviewItems => ActiveTable.Items;
@@ -518,22 +520,36 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    /// <summary>Not relevant in this Tracker: listed, but left out of every percentage.</summary>
+    public int NotRelevantCount
+    {
+        get => _notRelevantCount;
+        private set
+        {
+            if (SetField(ref _notRelevantCount, value))
+                NotifyPercentagesChanged();
+        }
+    }
+
     public int TotalEntityCount => ActiveTable.SourceItems.Count;
+
+    /// <summary>The entities progress is measured against: every active one except those not relevant.</summary>
+    private int RelevantEntityCount => TotalEntityCount - NotRelevantCount;
 
     public int ArchivedEntityCount => ArchivedTable.SourceItems.Count;
 
-    public double ImplementedPercentage => TotalEntityCount == 0
+    public double ImplementedPercentage => RelevantEntityCount <= 0
         ? 0
         : (ReworkNeededCount + ReworkingCount + DevelopmentCompletedCount + ReconciledCount) * 100.0 /
-          TotalEntityCount;
+          RelevantEntityCount;
 
-    public double ReworkNeededPercentage => TotalEntityCount == 0
+    public double ReworkNeededPercentage => RelevantEntityCount <= 0
         ? 0
-        : ReworkNeededCount * 100.0 / TotalEntityCount;
+        : ReworkNeededCount * 100.0 / RelevantEntityCount;
 
-    public double ReworkingPercentage => TotalEntityCount == 0
+    public double ReworkingPercentage => RelevantEntityCount <= 0
         ? 0
-        : ReworkingCount * 100.0 / TotalEntityCount;
+        : ReworkingCount * 100.0 / RelevantEntityCount;
 
     public double ReconciledAndReworkAndReworkingPercentage =>
         ReconciledAndReworkPercentage + ReworkingPercentage;
@@ -541,9 +557,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public double ReconciledAndReworkPercentage =>
         ReconciledPercentage + ReworkNeededPercentage;
 
-    public double ReconciledPercentage => TotalEntityCount == 0
+    public double ReconciledPercentage => RelevantEntityCount <= 0
         ? 0
-        : ReconciledCount * 100.0 / TotalEntityCount;
+        : ReconciledCount * 100.0 / RelevantEntityCount;
+
+    private void NotifyPercentagesChanged()
+    {
+        OnPropertyChanged(nameof(ImplementedPercentage));
+        OnPropertyChanged(nameof(ReworkNeededPercentage));
+        OnPropertyChanged(nameof(ReworkingPercentage));
+        OnPropertyChanged(nameof(ReconciledAndReworkPercentage));
+        OnPropertyChanged(nameof(ReconciledAndReworkAndReworkingPercentage));
+        OnPropertyChanged(nameof(ReconciledPercentage));
+    }
 
     public bool HasOverviewItems => ActiveTable.HasSourceItems;
 
@@ -591,6 +617,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public bool IsReconciledSummarySelected =>
         ActiveTable.IncludesStatus(DevelopmentStatus.Reconciled);
+
+    public bool IsNotRelevantSummarySelected =>
+        ActiveTable.IncludesStatus(DevelopmentStatus.NotRelevant);
 
     public ICommand RefreshCommand => _refreshCommand;
 
@@ -817,6 +846,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             item.Status == DevelopmentStatus.DevelopmentCompleted);
         ReconciledCount = itemArray.Count(static item =>
             item.Status == DevelopmentStatus.Reconciled);
+        NotRelevantCount = itemArray.Count(static item =>
+            item.Status == DevelopmentStatus.NotRelevant);
         OnPropertyChanged(nameof(ImplementedPercentage));
         OnPropertyChanged(nameof(ReworkNeededPercentage));
         OnPropertyChanged(nameof(ReworkingPercentage));
@@ -1180,6 +1211,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(IsBlockedSummarySelected));
         OnPropertyChanged(nameof(IsDevelopmentCompletedSummarySelected));
         OnPropertyChanged(nameof(IsReconciledSummarySelected));
+        OnPropertyChanged(nameof(IsNotRelevantSummarySelected));
     }
 
     internal static EntityOverviewRow CreateOverviewRow(EntityOverviewItem item)
@@ -1224,6 +1256,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         DevelopmentStatus.InProgress => "In progress",
         DevelopmentStatus.ReworkNeeded => "Rework needed",
         DevelopmentStatus.Reworking => "Reworking",
+        DevelopmentStatus.NotRelevant => "Not relevant",
         DevelopmentStatus.Blocked => "Blocked",
         DevelopmentStatus.DevelopmentCompleted => "Completed",
         DevelopmentStatus.Reconciled => "Reconciled",

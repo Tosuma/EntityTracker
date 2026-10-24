@@ -46,6 +46,14 @@ public sealed class DependencyGraphLegendSwatch : FrameworkElement
         Point center = new(ActualWidth / 2, ActualHeight / 2);
         if (IsPlaceholder)
             context.DrawEllipse(null, new Pen(brush, 1.25) { DashStyle = DashStyles.Dash }, center, radius, radius);
+        else if (BrushKey is { } hollowKey && TryFindResource($"{hollowKey}.Edge") is Brush edge)
+        {
+            // A hollow status (Not relevant): no fill, a dashed edge and its mark, as on the graph.
+            context.DrawEllipse(null, new Pen(edge, 1.25) { DashStyle = DashStyles.Dash }, center, radius, radius);
+            if (Status is { } status && DependencyGraphStatusGlyph.For(status, center, radius) is { } glyph)
+                context.DrawGeometry(null, new Pen(TryFindResource($"{hollowKey}.Text") as Brush ?? edge,
+                    DependencyGraphStatusGlyph.Thickness(radius)), glyph);
+        }
         else
         {
             // The dark theme's thin status outline (none in light), so the dark fills stay visible.

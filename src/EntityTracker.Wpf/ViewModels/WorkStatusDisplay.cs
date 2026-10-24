@@ -10,7 +10,8 @@ public enum WorkStatusDisplay
     Completed,
     Reconciled,
     Archived,
-    WaitingOnDependencies
+    WaitingOnDependencies,
+    NotRelevant
 }
 
 public static class WorkStatusDisplayMapper
@@ -25,6 +26,7 @@ public static class WorkStatusDisplayMapper
         EntityWorkflowState.DevelopmentCompleted => WorkStatusDisplay.Completed,
         EntityWorkflowState.Reconciled => WorkStatusDisplay.Reconciled,
         EntityWorkflowState.Archived => WorkStatusDisplay.Archived,
+        EntityWorkflowState.NotRelevant => WorkStatusDisplay.NotRelevant,
         _ => throw new ArgumentOutOfRangeException(nameof(state), state, null)
     };
 
@@ -37,6 +39,7 @@ public static class WorkStatusDisplayMapper
         WorkStatusDisplay.Completed => "Completed",
         WorkStatusDisplay.Reconciled => "Reconciled",
         WorkStatusDisplay.Archived => "Archived",
+        WorkStatusDisplay.NotRelevant => "Not relevant",
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
     };
 }

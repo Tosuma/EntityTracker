@@ -91,6 +91,7 @@ internal static class Program
         DevelopmentStatus.Reconciled => "Reconciled",
         DevelopmentStatus.Blocked => "Blocked",
         DevelopmentStatus.Reworking => "Reworking",
+        DevelopmentStatus.NotRelevant => "Not relevant",
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
     };
 

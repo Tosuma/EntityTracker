@@ -729,7 +729,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         new(DevelopmentStatus.ReworkNeeded, "Rework needed"),
         new(DevelopmentStatus.Reworking, "Reworking"),
         new(DevelopmentStatus.DevelopmentCompleted, "Completed"),
-        new(DevelopmentStatus.Reconciled, "Reconciled")
+        new(DevelopmentStatus.Reconciled, "Reconciled"),
+        new(DevelopmentStatus.NotRelevant, "Not relevant")
     ];
 
     public IReadOnlyList<RequestedPriorityOption> PriorityOptions { get; } =

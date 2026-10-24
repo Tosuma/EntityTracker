@@ -65,6 +65,22 @@ public sealed class ProgressSnapshotCalculatorTests
         Assert.Equal(1, result.NotStartedCount);
     }
 
+    [Fact]
+    public void Calculate_LeavesNotRelevantEntitiesOutOfProgress()
+    {
+        // #73: like an archived entity, a Not relevant one counts toward nothing.
+        TrackedEntity completed = Entity(1, "Completed", DevelopmentStatus.DevelopmentCompleted);
+        TrackedEntity notRelevant = Entity(2, "Not relevant", DevelopmentStatus.NotRelevant);
+        TrackedEntity[] entities = [completed, notRelevant];
+        EffectiveDependencyState effective = new EffectiveDependencyResolver().Resolve(entities, []);
+
+        ProgressSnapshotState result = new ProgressSnapshotCalculator().Calculate(entities, effective);
+
+        Assert.Equal(1, result.TotalActiveCount);
+        Assert.Equal(1, result.ImplementedCount);
+        Assert.Equal(0, result.NotStartedCount);
+    }
+
     private static TrackedEntity Entity(
         int id,
         string name,

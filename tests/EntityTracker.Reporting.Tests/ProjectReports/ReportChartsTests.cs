@@ -97,9 +97,11 @@ public sealed class ReportChartsTests
         ReportColumn status = EntityTableSectionProvider.Columns.Single(column => column.Key == "status");
         ReportColumn work = EntityTableSectionProvider.Columns.Single(column => column.Key == "work");
 
-        Assert.Equal(["Not started", "Blocked", "In progress", "Rework needed", "Reworking", "Completed", "Reconciled"],
+        Assert.Equal(["Not started", "Blocked", "In progress", "Rework needed", "Reworking", "Completed", "Reconciled",
+                "Not relevant"],
             status.Options);
-        Assert.Equal(["Ready", "Waiting on dependencies", "Blocked", "In progress", "Completed", "Reconciled"], work.Options);
+        Assert.Equal(["Ready", "Waiting on dependencies", "Blocked", "In progress", "Completed", "Reconciled", "Not relevant"],
+            work.Options);
     }
 
     [Fact]
