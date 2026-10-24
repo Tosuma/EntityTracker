@@ -8,7 +8,8 @@ namespace EntityTracker.Wpf.Controls;
 /// <summary>
 /// The mark drawn inside a dependency graph node, and in its legend swatch, so a status is told by
 /// shape as well as colour: a play triangle for In progress, two for Reworking, an exclamation bar for
-/// Rework needed, a bar for Blocked, a check for Completed and two for Reconciled. Not started is plain.
+/// Rework needed, a bar for Blocked, a check for Completed, two for Reconciled and a slashed circle for
+/// Not relevant. Not started is plain.
 /// Drawn as lines in the status's text colour, which reads on every status colour.
 /// </summary>
 internal static class DependencyGraphStatusGlyph
@@ -47,6 +48,9 @@ internal static class DependencyGraphStatusGlyph
                     Check(context, new Point(center.X - r * 0.35, center.Y), r * 0.75);
                     Check(context, new Point(center.X + r * 0.35, center.Y), r * 0.75);
                     break;
+                case DevelopmentStatus.NotRelevant:
+                    SlashedCircle(context, center, r);
+                    break;
             }
         }
 
@@ -69,6 +73,16 @@ internal static class DependencyGraphStatusGlyph
         context.BeginFigure(new Point(center.X - r * 0.8, center.Y), false, false);
         context.LineTo(new Point(center.X - r * 0.2, center.Y + r * 0.6), true, false);
         context.LineTo(new Point(center.X + r * 0.8, center.Y - r * 0.6), true, false);
+    }
+
+    private static void SlashedCircle(StreamGeometryContext context, Point center, double r)
+    {
+        Point top = new(center.X, center.Y - r);
+        context.BeginFigure(top, false, true);
+        context.ArcTo(new Point(center.X, center.Y + r), new Size(r, r), 0, false, SweepDirection.Clockwise, true, false);
+        context.ArcTo(top, new Size(r, r), 0, false, SweepDirection.Clockwise, true, false);
+        double d = r * 0.7071;
+        Line(context, new Point(center.X - d, center.Y + d), new Point(center.X + d, center.Y - d));
     }
 
     private static void Line(StreamGeometryContext context, Point from, Point to)

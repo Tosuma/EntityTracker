@@ -8,5 +8,10 @@ public enum DevelopmentStatus
     DevelopmentCompleted,
     Reconciled,
     Blocked,
-    Reworking
+    Reworking,
+    /// <summary>
+    /// Out of scope in this Tracker: the entity stays visible, blocks nothing that depends on it and is left
+    /// out of progress. The same entity can be relevant in a sibling Tracker.
+    /// </summary>
+    NotRelevant
 }

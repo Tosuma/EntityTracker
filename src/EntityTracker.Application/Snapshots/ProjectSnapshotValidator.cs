@@ -73,7 +73,7 @@ public static class ProjectSnapshotValidator
                 {
                     throw new InvalidDataException("The snapshot has invalid or duplicate entity IDs or names.");
                 }
-                EnumValue<DevelopmentStatus>(entity.DevelopmentStatus);
+                Status(snapshot.FormatVersion, entity.DevelopmentStatus);
                 EnumValue<EntityLifecycleState>(entity.LifecycleState);
                 if (legacy
                         ? !LegacyProvenances.Contains(entity.LegacyProvenance, StringComparer.Ordinal)
@@ -127,9 +127,9 @@ public static class ProjectSnapshotValidator
                 {
                     throw new InvalidDataException("A status event ID or entity reference is invalid.");
                 }
-                EnumValue<DevelopmentStatus>(entry.NewStatus);
+                Status(snapshot.FormatVersion, entry.NewStatus);
                 EnumValue<StatusHistoryEntryKind>(entry.Kind);
-                if (entry.PreviousStatus is not null) EnumValue<DevelopmentStatus>(entry.PreviousStatus);
+                if (entry.PreviousStatus is not null) Status(snapshot.FormatVersion, entry.PreviousStatus);
                 if ((entry.Kind == nameof(StatusHistoryEntryKind.Transition)) != (entry.PreviousStatus is not null))
                     throw new InvalidDataException("A status event kind is inconsistent.");
                 Utc(entry.OccurredAtUtc);
@@ -311,6 +311,15 @@ public static class ProjectSnapshotValidator
     private static void Utc(DateTimeOffset timestamp)
     {
         if (timestamp.Offset != TimeSpan.Zero) throw new InvalidDataException("Snapshot timestamps must be UTC.");
+    }
+
+    // NotRelevant exists from format 8; an older format holding it was not written by a compatible app.
+    private static void Status(int formatVersion, string value)
+    {
+        EnumValue<DevelopmentStatus>(value);
+        if (value == nameof(DevelopmentStatus.NotRelevant) &&
+            formatVersion < ProjectSnapshot.FirstNotRelevantFormatVersion)
+            throw new InvalidDataException($"Unsupported snapshot value '{value}'.");
     }
 
     private static void EnumValue<T>(string value) where T : struct, Enum

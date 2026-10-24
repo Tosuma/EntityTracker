@@ -138,7 +138,10 @@ public sealed class ProjectEntityComparisonQueryService(
             categories |= ProjectComparisonCategory.Missing;
         }
 
-        ProjectComparisonCell[] present = cells.Where(static cell => cell.IsPresent).ToArray();
+        // Not relevant in one Tracker and relevant in another is intended, not a difference to act on.
+        ProjectComparisonCell[] present = cells
+            .Where(static cell => cell.IsPresent && cell.DevelopmentStatus != DevelopmentStatus.NotRelevant)
+            .ToArray();
         if (present.Select(static cell => cell.DevelopmentStatus).Distinct().Skip(1).Any() ||
             present.Select(static cell => cell.WorkStatus).Distinct().Skip(1).Any())
         {

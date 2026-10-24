@@ -131,6 +131,39 @@ public sealed class WorkflowReadinessEvaluatorTests
             evaluator.Classify(activeRework, readiness[activeRework.Id]));
     }
 
+    [Fact]
+    public void ANotRelevantDependencyBlocksNothing()
+    {
+        // #73: out of scope in this Tracker, so the entities that depend on it can start.
+        TrackedEntity owner = Entity(1, "Owner");
+        TrackedEntity notRelevant = Entity(2, "Legacy fax number", DevelopmentStatus.NotRelevant);
+        TrackedEntity[] entities = [owner, notRelevant];
+        EffectiveDependencyState dependencies = TestDependencies.Resolve(
+            entities, [Dependency(owner, notRelevant)], []);
+        WorkflowReadinessEvaluator evaluator = new();
+
+        IReadOnlyDictionary<EntityId, EntityReadiness> readiness = evaluator.Evaluate(entities, dependencies);
+
+        Assert.True(readiness[owner.Id].IsReady);
+        Assert.Equal(EntityWorkflowState.Ready, evaluator.Classify(owner, readiness[owner.Id]));
+        Assert.Equal(EntityWorkflowState.NotRelevant, evaluator.Classify(notRelevant, readiness[notRelevant.Id]));
+    }
+
+    [Fact]
+    public void ANotRelevantEntityHasNoBlockersOfItsOwn()
+    {
+        // #73: out of scope, so its own unfinished or missing dependencies don't matter.
+        TrackedEntity notRelevant = Entity(1, "Legacy fax number", DevelopmentStatus.NotRelevant);
+        TrackedEntity unfinished = Entity(2, "Unfinished");
+        TrackedEntity[] entities = [notRelevant, unfinished];
+        EffectiveDependencyState dependencies = TestDependencies.Resolve(
+            entities, [Dependency(notRelevant, unfinished)], [Unresolved(notRelevant, "Missing")]);
+
+        EntityReadiness readiness = new WorkflowReadinessEvaluator().Evaluate(entities, dependencies)[notRelevant.Id];
+
+        Assert.Empty(readiness.Blockers);
+    }
+
     private static TrackedEntity Entity(
         int id,
         string name,

@@ -157,6 +157,7 @@ internal sealed class SyntheticProgressTimeline
             DevelopmentStatus.DevelopmentCompleted,
             DevelopmentStatus.Reworking
         ],
+        DevelopmentStatus.NotRelevant => [DevelopmentStatus.NotRelevant],
         _ => throw new ArgumentOutOfRangeException(nameof(target), target, null)
     };
 

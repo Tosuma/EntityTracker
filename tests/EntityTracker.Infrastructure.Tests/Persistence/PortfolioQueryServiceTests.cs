@@ -112,7 +112,8 @@ public sealed class PortfolioQueryServiceTests
         TrackedEntity alphaOnly = new(EntityId.New(), alpha.Id, "Alpha only");
         TrackedEntity alphaAttention = new(
             EntityId.New(), alpha.Id, "Attention", DevelopmentStatus.Reconciled);
-        TrackedEntity alphaStable = new(EntityId.New(), alpha.Id, "Stable");
+        // #73: not relevant in Alpha, still to do in Zulu: present in both, and not a difference to act on.
+        TrackedEntity alphaStable = new(EntityId.New(), alpha.Id, "Stable", DevelopmentStatus.NotRelevant);
         TrackedEntity alphaArchived = new(
             EntityId.New(), alpha.Id, "Archived only",
             lifecycleState: EntityLifecycleState.Archived);
@@ -170,7 +171,10 @@ public sealed class PortfolioQueryServiceTests
         Assert.True(actionable.Rows[1].Cells[0].HasIssues);
         Assert.False(actionable.Rows[1].Cells[1].HasIssues);
         Assert.True(all.Rows.Single(static row => row.NormalizedSourceKey == "CUSTOMER").IsActionable);
-        Assert.False(all.Rows.Single(static row => row.NormalizedSourceKey == "STABLE").IsActionable);
+        ProjectComparisonRow stableRow = all.Rows.Single(static row => row.NormalizedSourceKey == "STABLE");
+        Assert.False(stableRow.IsActionable);
+        Assert.True(stableRow.Cells[0].IsPresent);
+        Assert.Equal(DevelopmentStatus.NotRelevant, stableRow.Cells[0].DevelopmentStatus);
     }
 
     [Fact]

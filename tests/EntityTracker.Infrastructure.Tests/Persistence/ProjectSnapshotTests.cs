@@ -239,7 +239,8 @@ public sealed class ProjectSnapshotTests
         ProjectSnapshotJsonCodec codec = new();
         ProjectSnapshotPackage package = codec.Encode(snapshot);
 
-        Assert.Equal(7, ProjectSnapshot.CurrentFormatVersion);
+        // Format 8 keeps the format 7 layout.
+        Assert.True(ProjectSnapshot.CurrentFormatVersion >= 7);
         foreach ((string path, byte[] bytes) in package.Files)
         {
             string text = Encoding.UTF8.GetString(bytes);
@@ -321,13 +322,13 @@ public sealed class ProjectSnapshotTests
     }
 
     [Fact]
-    public void Format6_UpgradesToFormat7WithoutChangingItsHistory()
+    public void Format6_UpgradesToTheCurrentFormatWithoutChangingItsHistory()
     {
         ProjectSnapshot format6 = WithBaseline(CompleteSnapshot()) with { FormatVersion = 6 };
 
         ProjectSnapshot upgraded = ProjectSnapshotUpgrade.ToCurrent(format6, T2);
 
-        Assert.Equal(7, upgraded.FormatVersion);
+        Assert.Equal(ProjectSnapshot.CurrentFormatVersion, upgraded.FormatVersion);
         // The format 1–5 conversions must not run again on a format 6 snapshot.
         Assert.Equal(Serialized(format6), Serialized(upgraded));
 
@@ -570,6 +571,112 @@ public sealed class ProjectSnapshotTests
         Assert.Equal(snapshot.Project.Id, imported.Id.Value);
         Assert.Equal("Default project", imported.Name);
     }
+
+    [Fact]
+    public async Task Format8_KeepsANotRelevantStatusThroughTheDatabase()
+    {
+        // #73: format 8 adds NotRelevant; a fresh database (migrated to version 24) stores it.
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase db = new(file.DatabasePath);
+        await db.InitializeAsync();
+        SqliteProjectSnapshotStore store = new(db);
+        ProjectSnapshot snapshot = WithNotRelevantEntity(CompleteSnapshot());
+
+        await store.ApplyAsync(snapshot, 0);
+        ProjectSnapshot read = Assert.IsType<ProjectSnapshot>(
+            (await store.ReadAsync(new ProjectId(snapshot.Project.Id))).Snapshot);
+
+        SnapshotEntity entity = read.Trackers.SelectMany(static tracker => tracker.Entities)
+            .Single(static entity => entity.SourceName == "Orders");
+        Assert.Equal("NotRelevant", entity.DevelopmentStatus);
+        Assert.Contains(read.Trackers.SelectMany(static tracker => tracker.StatusHistory),
+            static entry => entry.NewStatus == "NotRelevant");
+    }
+
+    [Fact]
+    public async Task Version24_RebuildsTheStatusTablesWithEveryRowIndexAndTrigger()
+    {
+        // #73: SQLite can't widen a CHECK constraint in place, so version 24 rebuilds the two tables
+        // with a status list from their own definition. Run it again on a filled database.
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase db = new(file.DatabasePath);
+        await db.InitializeAsync();
+        ProjectSnapshot snapshot = CompleteSnapshot();
+        await new SqliteProjectSnapshotStore(db).ApplyAsync(snapshot, 0);
+        string connectionString = new SqliteConnectionStringBuilder { DataSource = file.DatabasePath, Pooling = false }.ToString();
+        (long Entities, long Events, long Indexes, long Triggers) before = await CountAsync();
+        await ExecuteAsync("PRAGMA user_version = 23;");
+
+        await new SqliteDatabase(file.DatabasePath).InitializeAsync();
+
+        Assert.Equal(before, await CountAsync());
+        Assert.Equal(24L, await ScalarAsync("PRAGMA user_version;"));
+        ProjectSnapshot read = Assert.IsType<ProjectSnapshot>(
+            (await new SqliteProjectSnapshotStore(db).ReadAsync(new ProjectId(snapshot.Project.Id))).Snapshot);
+        Assert.Equal(snapshot.Trackers.Sum(static tracker => tracker.Entities.Count),
+            read.Trackers.Sum(static tracker => tracker.Entities.Count));
+
+        async Task<(long, long, long, long)> CountAsync() => (
+            await ScalarAsync("SELECT count(*) FROM tracked_entities;"),
+            await ScalarAsync("SELECT count(*) FROM entity_status_history;"),
+            await ScalarAsync("SELECT count(*) FROM sqlite_schema WHERE type = 'index' AND tbl_name IN ('tracked_entities', 'entity_status_history');"),
+            await ScalarAsync("SELECT count(*) FROM sqlite_schema WHERE type = 'trigger';"));
+
+        async Task<long> ScalarAsync(string sql)
+        {
+            await using SqliteConnection connection = new(connectionString);
+            await connection.OpenAsync();
+            await using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = sql;
+            return Convert.ToInt64(await command.ExecuteScalarAsync());
+        }
+
+        async Task ExecuteAsync(string sql)
+        {
+            await using SqliteConnection connection = new(connectionString);
+            await connection.OpenAsync();
+            await using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = sql;
+            await command.ExecuteNonQueryAsync();
+        }
+    }
+
+    [Fact]
+    public void Version24_AddsNotRelevantToEveryStatusList() =>
+        Assert.Equal(
+            "CREATE TABLE h (previous_status TEXT NULL CHECK (previous_status IS NULL OR previous_status IN " +
+            "('NotStarted', 'InProgress', 'Reworking', 'NotRelevant')), new_status TEXT NOT NULL CHECK (new_status IN " +
+            "('NotStarted', 'Reconciled', 'NotRelevant')), entry_kind TEXT CHECK (entry_kind IN ('Baseline', 'Created')))",
+            SqliteDatabase.WithNotRelevantStatus(
+                "CREATE TABLE h (previous_status TEXT NULL CHECK (previous_status IS NULL OR previous_status IN " +
+                "('NotStarted', 'InProgress', 'Reworking')), new_status TEXT NOT NULL CHECK (new_status IN " +
+                "('NotStarted', 'Reconciled')), entry_kind TEXT CHECK (entry_kind IN ('Baseline', 'Created')))"));
+
+    [Fact]
+    public void Format7_CannotHoldANotRelevantStatus() =>
+        Assert.Throws<InvalidDataException>(() => ProjectSnapshotValidator.Validate(
+            WithNotRelevantEntity(CompleteSnapshot()) with { FormatVersion = 7 }));
+
+    // "Orders" goes from In progress to Not relevant, so its status history ends where its status is.
+    private static ProjectSnapshot WithNotRelevantEntity(ProjectSnapshot snapshot) => snapshot with
+    {
+        Trackers = snapshot.Trackers.Select(tracker => tracker with
+        {
+            Entities = tracker.Entities.Select(entity => entity.SourceName == "Orders"
+                ? entity with { DevelopmentStatus = "NotRelevant" } : entity).ToArray(),
+            StatusHistory = [.. tracker.StatusHistory, .. tracker.StatusHistory
+                .Where(entry => entry.NewStatus == "InProgress" && entry.Kind == "Transition")
+                .Select(entry => entry with
+                {
+                    EventId = Guid.Parse("40000000-0000-0000-0000-000000000099"),
+                    PreviousEventId = entry.EventId,
+                    PreviousStatus = "InProgress",
+                    NewStatus = "NotRelevant",
+                    OccurredAtUtc = T2,
+                    Order = 3
+                })]
+        }).ToArray()
+    };
 
     private static ProjectSnapshot CompleteSnapshot()
     {

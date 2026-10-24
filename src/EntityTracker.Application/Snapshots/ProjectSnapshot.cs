@@ -15,8 +15,13 @@ public sealed record ProjectSnapshot(
     /// read into the Legacy fields and converted by <see cref="ProjectSnapshotUpgrade"/>.
     /// Format 7 writes indented JSON, so changes are readable in Git, and keeps a Tracker's Sync from
     /// source baseline as nested JSON in tracker.json instead of one escaped JSON string.
+    /// Format 8 adds the development status NotRelevant; older apps don't know it, so they must not read
+    /// a format 8 Project.
     /// </summary>
-    public const int CurrentFormatVersion = 7;
+    public const int CurrentFormatVersion = 8;
+
+    /// <summary>The first format that may hold the development status NotRelevant.</summary>
+    public const int FirstNotRelevantFormatVersion = 8;
 
     /// <summary>
     /// The first format with today's entities and dependencies (format 6). Older snapshots are legacy:

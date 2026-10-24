@@ -801,11 +801,15 @@ public sealed class PresentationConfigurationTests
                               element.Elements().Any(setter => (string?)setter.Attribute("TargetName") == "Badge"))
             .ToArray();
 
-        Assert.Equal(12, triggers.Length);
+        Assert.Equal(14, triggers.Length);
         foreach (XElement trigger in triggers)
         {
             string value = (string)trigger.Attribute("Value")!;
             string status = value[(value.LastIndexOf('.') + 1)..^1];
+            // #73: Not relevant is hollow, so its badge shows the dashed edge drawn over it.
+            Assert.Equal(status == "NotRelevant", trigger.Elements().Any(setter =>
+                (string?)setter.Attribute("TargetName") == "HollowEdge" &&
+                (string?)setter.Attribute("Value") == "Visible"));
             string brush = value.Contains("DevelopmentStatus.", StringComparison.Ordinal)
                 ? $"Brush.Status.{status}"
                 : $"Brush.WorkStatus.{status}";

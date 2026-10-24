@@ -39,6 +39,7 @@
                         <TextBlock Style="{StaticResource HelpCardTitleStyle}" Text="Development status, Work status, and Blockers" />
                         <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Development status is set by you and records detailed progress." />
                         <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Work status summarizes it: Ready or Waiting on dependencies before work starts, Blocked when set to Blocked, In progress for work or rework, Completed after development, and Reconciled after reconciliation." />
+                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Not relevant marks an entity that is out of scope in this Tracker: it stays listed, blocks nothing that depends on it, and is left out of progress." />
                         <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Blockers list unresolved or incomplete dependencies, even when work is already in progress." />
                         <TextBlock Style="{StaticResource HelpPointStyle}" Text="• In progress and Reworking share a colour, since both mean the entity is being worked on; Blocked is coral. The dependency graph also marks each node with its status's shape." />
                     </StackPanel>

@@ -105,6 +105,7 @@ public static partial class ProjectReportHtmlWriter
             DevelopmentStatus.Blocked => ColorScheme.Status.Blocked,
             DevelopmentStatus.DevelopmentCompleted => ColorScheme.Status.DevelopmentCompleted,
             DevelopmentStatus.Reconciled => ColorScheme.Status.Reconciled,
+            DevelopmentStatus.NotRelevant => ColorScheme.Status.NotRelevant,
             _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
         })),
         new Dictionary<string, string[]>
@@ -114,7 +115,8 @@ public static partial class ProjectReportHtmlWriter
             [ReportLabels.WorkStatus(EntityWorkflowState.ManuallyBlocked)] = Pair(ColorScheme.ReportWorkStatus.Blocked),
             [ReportLabels.WorkStatus(EntityWorkflowState.InProgress)] = Pair(ColorScheme.ReportWorkStatus.InProgress),
             [ReportLabels.WorkStatus(EntityWorkflowState.DevelopmentCompleted)] = Pair(ColorScheme.ReportWorkStatus.Completed),
-            [ReportLabels.WorkStatus(EntityWorkflowState.Reconciled)] = Pair(ColorScheme.ReportWorkStatus.Reconciled)
+            [ReportLabels.WorkStatus(EntityWorkflowState.Reconciled)] = Pair(ColorScheme.ReportWorkStatus.Reconciled),
+            [ReportLabels.WorkStatus(EntityWorkflowState.NotRelevant)] = Pair(ColorScheme.ReportWorkStatus.NotRelevant)
         },
         ColorScheme.Chart.SliceBorder,
         ColorScheme.Chart.Grid,
@@ -122,7 +124,9 @@ public static partial class ProjectReportHtmlWriter
         ColorScheme.Chart.UnknownStatus,
         ColorScheme.Report.MissingSwatch);
 
-    private static string[] Pair(StatusColor color) => [color.Fill, color.Text];
+    // [fill, text], and the dashed edge of a hollow status (Not relevant) as a third entry.
+    private static string[] Pair(StatusColor color) =>
+        color.Edge is { } edge ? [color.Fill, color.Text, edge] : [color.Fill, color.Text];
 
     [GeneratedRegex(@"var\(--([a-z0-9-]+)\)")]
     private static partial Regex CssVariable();
@@ -139,7 +143,7 @@ public static partial class ProjectReportHtmlWriter
 }
 
 /// <summary>
-/// The colours written into a report for report.js: [fill, text] per development status label
+/// The colours written into a report for report.js: [fill, text] (and [2] the dashed edge of a hollow status) per development status label
 /// (<paramref name="Status"/>) and per work status label (<paramref name="Work"/>), and the chart colours it uses.
 /// </summary>
 public sealed record ReportColors(
