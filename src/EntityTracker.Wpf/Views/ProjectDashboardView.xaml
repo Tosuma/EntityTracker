@@ -64,8 +64,6 @@
                         Padding="12,5"
                         HorizontalAlignment="Left"
                         Background="{DynamicResource Brush.Status.NotStarted}"
-                        BorderBrush="{DynamicResource Brush.Status.Outline}"
-                        BorderThickness="1"
                         CornerRadius="10">
                     <TextBlock x:Name="BadgeText"
                                VerticalAlignment="Center"
@@ -120,7 +118,6 @@
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static domain:DevelopmentStatus.NotRelevant}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.Status.NotRelevant}" />
-                    <Setter TargetName="Badge" Property="BorderBrush" Value="Transparent" />
                     <Setter TargetName="HollowEdge" Property="Visibility" Value="Visible" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Status.NotRelevant.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Not relevant" />
@@ -151,43 +148,36 @@
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Ready}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.Ready}" />
-                    <Setter TargetName="Badge" Property="BorderBrush" Value="{DynamicResource Brush.Status.Outline}" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.Ready.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Ready" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Blocked}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.Blocked}" />
-                    <Setter TargetName="Badge" Property="BorderBrush" Value="{DynamicResource Brush.Status.Outline}" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.Blocked.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Blocked" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.WaitingOnDependencies}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.WaitingOnDependencies}" />
-                    <Setter TargetName="Badge" Property="BorderBrush" Value="{DynamicResource Brush.Status.Outline}" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.WaitingOnDependencies.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Waiting on dependencies" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.InProgress}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.InProgress}" />
-                    <Setter TargetName="Badge" Property="BorderBrush" Value="{DynamicResource Brush.Status.Outline}" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.InProgress.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="In progress" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Completed}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.Completed}" />
-                    <Setter TargetName="Badge" Property="BorderBrush" Value="{DynamicResource Brush.Status.Outline}" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.Completed.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Completed" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.Reconciled}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.Reconciled}" />
-                    <Setter TargetName="Badge" Property="BorderBrush" Value="{DynamicResource Brush.Status.Outline}" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.Reconciled.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Reconciled" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding}" Value="{x:Static viewModels:WorkStatusDisplay.NotRelevant}">
                     <Setter TargetName="Badge" Property="Background" Value="{DynamicResource Brush.WorkStatus.NotRelevant}" />
-                    <Setter TargetName="Badge" Property="BorderBrush" Value="Transparent" />
                     <Setter TargetName="HollowEdge" Property="Visibility" Value="Visible" />
                     <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.WorkStatus.NotRelevant.Text}" />
                     <Setter TargetName="BadgeText" Property="Text" Value="Not relevant" />

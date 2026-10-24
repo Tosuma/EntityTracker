@@ -139,11 +139,10 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
-    public void WarningIconsAreCoralExceptInsideAmberWarningPanels()
+    public void WarningIconsAreAmberAndTheProgressBoxesHaveNone()
     {
-        // A Warning icon is coral (a missing dependency, the dashboard's Blocked count), except in the amber
-        // warning panels of the New entity and editor forms, which keep warnings apart from coral errors.
-        // Waiting on dependencies, a soft signal, has no warning icon.
+        // Every Warning icon uses the caution colour, set on the icon or on the button around it; the
+        // aggregate progress boxes show their counts without warning icons.
         string views = Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf", "Views");
         XElement[] icons = Directory.EnumerateFiles(views, "*.xaml")
             .SelectMany(path => XDocument.Load(path).Descendants())
@@ -151,17 +150,13 @@ public sealed class PresentationConfigurationTests
             .ToArray();
 
         Assert.NotEmpty(icons);
-        Assert.All(icons, icon =>
-        {
-            bool inWarningPanel = icon.Ancestors().Any(static ancestor =>
-                (string?)ancestor.Attribute("Style") == "{StaticResource WarningMessageStyle}");
-            Assert.Equal(inWarningPanel ? "{DynamicResource Brush.Caution}" : null,
-                (string?)icon.Attribute("Foreground") is "{DynamicResource Brush.Accent}" ? null : (string?)icon.Attribute("Foreground"));
-        });
-        XDocument dashboard = LoadWpfXaml("Views", "AggregateProgressView.xaml");
-        XElement waiting = dashboard.Descendants().Single(element =>
-            (string?)element.Attribute("Text") == "{Binding Report.ManagerSummary.WaitingOnDependenciesEntityCount}");
-        Assert.DoesNotContain(waiting.Parent!.Descendants(), element => element.Name.LocalName == "Icon");
+        Assert.All(icons, icon => Assert.Contains("Brush.Caution",
+            (string?)icon.Attribute("Foreground") ?? string.Concat(icon.Parent!.Descendants()
+                .Where(static setter => (string?)setter.Attribute("Property") == "Foreground")
+                .Select(static setter => (string?)setter.Attribute("Value"))),
+            StringComparison.Ordinal));
+        Assert.DoesNotContain(LoadWpfXaml("Views", "AggregateProgressView.xaml").Descendants(),
+            static element => element.Name.LocalName == "Icon");
     }
 
     [Fact]

@@ -55,54 +55,77 @@
                 Padding="14"
                 Style="{StaticResource EntityTrackerCardStyle}"
                 Visibility="{Binding HasReport, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <!-- Waiting on dependencies and Blocked are different counts: one waits on another entity,
-                 the other was set to Blocked by hand. A warning icon marks either when it is not zero. -->
+            <!-- Each count shows its status colour as a bar along its left edge. Active is no status, so it
+                 has none. Waiting on dependencies and Blocked are different counts: one waits on another
+                 entity, the other was set to Blocked by hand. -->
             <UniformGrid Columns="6" controls:Layout.CompactColumns="3">
-                <StackPanel Margin="4">
-                    <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Active" />
-                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.ActiveEntityCount}" />
-                </StackPanel>
-                <StackPanel Margin="4">
-                    <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Implemented" />
-                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.ImplementedEntityCount}" />
-                </StackPanel>
-                <StackPanel Margin="4">
-                    <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Reconciled" />
-                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.ReconciledEntityCount}" />
-                </StackPanel>
-                <StackPanel Margin="4">
-                    <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Ready" />
-                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.ReadyEntityCount}" />
-                </StackPanel>
-                <StackPanel Margin="4">
-                    <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Waiting on dependencies"
-                               TextTrimming="CharacterEllipsis"
-                               ToolTip="Waiting on dependencies" />
-                    <!-- Waiting is a soft signal, not a problem: the count stands alone. -->
-                    <TextBlock FontSize="22" FontWeight="SemiBold"
-                               Text="{Binding Report.ManagerSummary.WaitingOnDependenciesEntityCount}" />
-                </StackPanel>
-                <StackPanel Margin="4">
-                    <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Blocked" />
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock FontSize="22" FontWeight="SemiBold"
-                                   Text="{Binding Report.ManagerSummary.ManuallyBlockedEntityCount}" />
-                        <controls:Icon Margin="6,0,0,0" Size="16" VerticalAlignment="Center"
-                                       IconKey="Icon.Warning"
-                                       Foreground="{DynamicResource Brush.Accent}"
-                                       AutomationProperties.Name="Needs attention">
-                            <controls:Icon.Style>
-                                <Style TargetType="controls:Icon">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Report.ManagerSummary.ManuallyBlockedEntityCount}" Value="0">
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </controls:Icon.Style>
-                        </controls:Icon>
+                <Grid Margin="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Rectangle Width="5" Margin="0,0,10,0" RadiusX="2.5" RadiusY="2.5" Fill="Transparent" />
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Active" />
+                        <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.ActiveEntityCount}" />
                     </StackPanel>
-                </StackPanel>
+                </Grid>
+                <Grid Margin="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Rectangle Width="5" Margin="0,0,10,0" RadiusX="2.5" RadiusY="2.5" Fill="{DynamicResource Brush.Status.DevelopmentCompleted}" />
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Implemented" />
+                        <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.ImplementedEntityCount}" />
+                    </StackPanel>
+                </Grid>
+                <Grid Margin="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Rectangle Width="5" Margin="0,0,10,0" RadiusX="2.5" RadiusY="2.5" Fill="{DynamicResource Brush.Status.Reconciled}" />
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Reconciled" />
+                        <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.ReconciledEntityCount}" />
+                    </StackPanel>
+                </Grid>
+                <Grid Margin="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Rectangle Width="5" Margin="0,0,10,0" RadiusX="2.5" RadiusY="2.5" Fill="{DynamicResource Brush.WorkStatus.Ready}" />
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Ready" />
+                        <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.ReadyEntityCount}" />
+                    </StackPanel>
+                </Grid>
+                <Grid Margin="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Rectangle Width="5" Margin="0,0,10,0" RadiusX="2.5" RadiusY="2.5" Fill="{DynamicResource Brush.WorkStatus.WaitingOnDependencies}" />
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Waiting on dependencies"
+                                       TextTrimming="CharacterEllipsis" ToolTip="Waiting on dependencies" />
+                        <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.WaitingOnDependenciesEntityCount}" />
+                    </StackPanel>
+                </Grid>
+                <Grid Margin="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Rectangle Width="5" Margin="0,0,10,0" RadiusX="2.5" RadiusY="2.5" Fill="{DynamicResource Brush.Status.Blocked}" />
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Blocked" />
+                        <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.ManuallyBlockedEntityCount}" />
+                    </StackPanel>
+                </Grid>
             </UniformGrid>
         </Border>
 

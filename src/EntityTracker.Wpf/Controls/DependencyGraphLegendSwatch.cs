@@ -55,10 +55,7 @@ public sealed class DependencyGraphLegendSwatch : FrameworkElement
         }
         else
         {
-            // The dark theme's thin status outline (none in light), so the dark fills stay visible.
-            Pen? outline = TryFindResource("Brush.Status.Outline") is SolidColorBrush { Color.A: > 0 } line
-                ? new Pen(line, 1) : null;
-            context.DrawEllipse(brush, outline, center, radius, radius);
+            context.DrawEllipse(brush, null, center, radius, radius);
             // The same mark as the graph's nodes, so the legend tells the statuses apart by shape too.
             if (Status is { } status && BrushKey is { } key &&
                 DependencyGraphStatusGlyph.For(status, center, radius) is { } glyph)

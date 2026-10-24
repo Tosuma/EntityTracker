@@ -103,12 +103,6 @@ public static class ColorScheme
     /// <summary>The rest of the app. Each entry becomes the brush "Brush.&lt;path&gt;", e.g. Brush.Surface.Primary.</summary>
     public static class App
     {
-        /// <summary>
-        /// The thin outline on status badges in the dark theme, so the dark fills (In progress, Completed,
-        /// Reconciled) stay visible on dark pages. The light theme uses no outline.
-        /// </summary>
-        public const string StatusOutlineOnDark = Base.Green60;
-
         public const string Accent = Base.Coral;
 
         public static class Text
