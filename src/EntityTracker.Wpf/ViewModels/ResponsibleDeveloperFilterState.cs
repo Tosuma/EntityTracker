@@ -74,6 +74,15 @@ internal sealed class ResponsibleDeveloperFilterState(EntityTableViewModel owner
         NotifyAppliedChanged();
     }
 
+    internal override void SetAppliedValues(IEnumerable<object> values)
+    {
+        _appliedSelection = [.. values.Cast<DeveloperFilterValue>()];
+        NotifyAppliedChanged();
+    }
+
+    internal override bool AppliesExactly(IEnumerable<object> values) =>
+        _appliedSelection?.SetEquals(values.Cast<DeveloperFilterValue>()) == true;
+
     internal override bool IncludesAppliedValue(object value) =>
         _appliedSelection?.Contains((DeveloperFilterValue)value) == true;
 }

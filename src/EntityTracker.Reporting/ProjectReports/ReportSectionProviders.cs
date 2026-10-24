@@ -17,7 +17,9 @@ public sealed class SummarySectionProvider : IReportSectionProvider
     private static IReadOnlyList<SummaryCard> Cards(ProgressManagerSummary summary) =>
     [
         new("Active entities", summary.ActiveEntityCount),
-        new("Implemented", summary.ImplementedEntityCount),
+        new("Implemented", summary.ImplementedEntityCount, Detail:
+            $"{summary.DevelopmentCompletedEntityCount} Completed, {summary.ReconciledEntityCount} Reconciled, " +
+            $"{summary.ReworkNeededEntityCount} Rework needed, {summary.ReworkingEntityCount} Reworking"),
         new("Reconciled", summary.ReconciledEntityCount),
         new("Ready to start", summary.ReadyEntityCount),
         new("Waiting on dependencies", summary.WaitingOnDependenciesEntityCount,

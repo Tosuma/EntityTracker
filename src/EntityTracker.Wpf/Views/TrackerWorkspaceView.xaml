@@ -647,28 +647,36 @@
                             </StackPanel>
                         </Button>
 
-                        <Border Margin="0,0,0,8"
-                                Style="{StaticResource SummaryCardStyle}">
+                        <!-- "% implemented" shows what it counts: its parts as a bar with a legend, their counts on
+                             hover, and a click filters the list to those statuses (again: back to Total). -->
+                        <Button AutomationProperties.Name="{Binding ImplementedPercentage, StringFormat='Show implemented entities: Completed, Reconciled, Rework needed and Reworking. {0:F0} percent implemented'}"
+                                AutomationProperties.ItemStatus="{Binding IsImplementedSummarySelected, StringFormat=Selected: {0}}"
+                                Command="{Binding SelectImplementedSummaryCommand}">
+                            <Button.ToolTip>
+                                <controls:ImplementedBreakdown Completed="{Binding DevelopmentCompletedCount}"
+                                                               Reconciled="{Binding ReconciledCount}"
+                                                               ReworkNeeded="{Binding ReworkNeededCount}"
+                                                               Reworking="{Binding ReworkingCount}" />
+                            </Button.ToolTip>
+                            <Button.Style>
+                                <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
+                                       TargetType="Button">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsImplementedSummarySelected}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
                             <StackPanel VerticalAlignment="Center">
                                 <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}"
                                            Text="{Binding ImplementedPercentage, StringFormat={}{0:F0}% implemented}" />
-                                <Grid Height="10" Margin="0,9,0,0">
-                                    <ProgressBar Foreground="{DynamicResource Brush.Status.DevelopmentCompleted}"
-                                                 Maximum="100"
-                                                 Value="{Binding ImplementedPercentage, Mode=OneWay}" />
-                                    <ProgressBar Background="Transparent"
-                                                 Foreground="{DynamicResource Brush.Status.Reworking}"
-                                                 Maximum="100"
-                                                 Value="{Binding ReconciledAndReworkAndReworkingPercentage, Mode=OneWay}" />
-                                    <ProgressBar Background="Transparent"
-                                                 Foreground="{DynamicResource Brush.Status.ReworkNeeded}"
-                                                 Maximum="100"
-                                                 Value="{Binding ReconciledAndReworkPercentage, Mode=OneWay}" />
-                                    <ProgressBar Background="Transparent"
-                                                 Foreground="{DynamicResource Brush.Status.Reconciled}"
-                                                 Maximum="100"
-                                                 Value="{Binding ReconciledPercentage, Mode=OneWay}" />
-                                </Grid>
+                                <controls:ImplementedComposition Margin="0,9,0,0" Completed="{Binding DevelopmentCompletedCount}"
+                                                                 Reconciled="{Binding ReconciledCount}"
+                                                                 ReworkNeeded="{Binding ReworkNeededCount}"
+                                                                 Reworking="{Binding ReworkingCount}"
+                                                                 Total="{Binding RelevantEntityCount}" />
                                 <WrapPanel Margin="0,6,0,0">
                                     <StackPanel Margin="0,0,10,0" Orientation="Horizontal">
                                         <Border Width="8"
@@ -714,7 +722,7 @@
                                     </StackPanel>
                                 </WrapPanel>
                             </StackPanel>
-                        </Border>
+                        </Button>
                     </WrapPanel>
 
                     <Border x:Name="BulkStatusToolbar"

@@ -279,7 +279,10 @@ groups, statuses, or work statuses. An entity with several Developers appears un
 while filters on different columns work together. With no values checked, all rows are shown; choose values
 and press **Apply** to narrow the list. **Clear filter** unchecks every value and leaves the menu
 open. Status summary cards remain useful one-click shortcuts: click a card to show only that status,
-and click it again to return to **Total**; the sort stays. Ordinary search matches entity names
+and click it again to return to **Total**; the sort stays. **% implemented** counts every entity whose
+development finished at least once: Completed, Reconciled, Rework needed and Reworking. Its bar shows
+those parts, pointing at it lists their counts, and clicking it shows just those entities. The Project
+dashboard, its Tracker cards and Portfolio show the same bar and counts under **Implemented**. Ordinary search matches entity names
 and, by default, current Developer initials and
 display names. Turn off **Search responsible names** in Settings to search entity names only.
 **Search dependency names** remains a separate mode. Open search with <kbd>Ctrl</kbd>+<kbd>F</kbd>.

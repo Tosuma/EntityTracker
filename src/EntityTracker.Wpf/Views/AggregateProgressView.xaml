@@ -76,9 +76,21 @@
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <Rectangle Width="5" Margin="0,0,10,0" RadiusX="2.5" RadiusY="2.5" Fill="{DynamicResource Brush.Status.DevelopmentCompleted}" />
-                    <StackPanel Grid.Column="1">
+                    <!-- Implemented explains itself: its parts as a bar, and their counts on hover. -->
+                    <StackPanel Grid.Column="1" Background="Transparent">
+                        <StackPanel.ToolTip>
+                            <controls:ImplementedBreakdown Completed="{Binding Report.ManagerSummary.DevelopmentCompletedEntityCount}"
+                                                           Reconciled="{Binding Report.ManagerSummary.ReconciledEntityCount}"
+                                                           ReworkNeeded="{Binding Report.ManagerSummary.ReworkNeededEntityCount}"
+                                                           Reworking="{Binding Report.ManagerSummary.ReworkingEntityCount}" />
+                        </StackPanel.ToolTip>
                         <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Implemented" />
                         <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.ImplementedEntityCount}" />
+                        <controls:ImplementedComposition Width="120" Margin="0,4,0,0" HorizontalAlignment="Left" Completed="{Binding Report.ManagerSummary.DevelopmentCompletedEntityCount}"
+                                                         Reconciled="{Binding Report.ManagerSummary.ReconciledEntityCount}"
+                                                         ReworkNeeded="{Binding Report.ManagerSummary.ReworkNeededEntityCount}"
+                                                         Reworking="{Binding Report.ManagerSummary.ReworkingEntityCount}"
+                                                         Total="{Binding Report.ManagerSummary.ActiveEntityCount}" />
                     </StackPanel>
                 </Grid>
                 <Grid Margin="4">

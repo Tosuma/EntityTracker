@@ -902,6 +902,46 @@ public sealed class PresentationConfigurationTests
     }
 
     [Theory]
+    [InlineData("AggregateProgressView.xaml", 1)]
+    [InlineData("ProjectDashboardView.xaml", 1)]
+    [InlineData("PortfolioView.xaml", 1)]
+    [InlineData("TrackerWorkspaceView.xaml", 1)]
+    public void EveryImplementedNumberShowsWhatItIsMadeOf(string file, int expected)
+    {
+        // "Implemented" explains itself without a description: its parts as a bar, their counts on hover.
+        XElement[] bars = LoadWpfXaml("Views", file).Descendants()
+            .Where(static element => element.Name.LocalName == "ImplementedComposition")
+            .ToArray();
+
+        Assert.Equal(expected, bars.Length);
+        Assert.All(bars, bar =>
+        {
+            Assert.All(new[] { "Completed", "Reconciled", "ReworkNeeded", "Reworking", "Total" },
+                property => Assert.StartsWith("{Binding ", (string?)bar.Attribute(property), StringComparison.Ordinal));
+            // The hover belongs to the whole number around the bar, not only to the thin bar.
+            XElement owner = bar.Ancestors().First(ancestor => ancestor.Elements()
+                .Any(child => child.Name.LocalName.EndsWith(".ToolTip", StringComparison.Ordinal)));
+            Assert.Contains(owner.Descendants(), element => element.Name.LocalName == "ImplementedBreakdown");
+        });
+    }
+
+    [Fact]
+    public void TheOverviewImplementedCardFiltersToWhatItCounts()
+    {
+        XElement bar = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml").Descendants()
+            .Single(static element => element.Name.LocalName == "ImplementedComposition");
+        XElement card = bar.Ancestors().First(static ancestor => ancestor.Name.LocalName == "Button");
+
+        Assert.Equal("{Binding SelectImplementedSummaryCommand}", (string?)card.Attribute("Command"));
+        Assert.Contains(card.Descendants(), static element =>
+            element.Name.LocalName == "Style" &&
+            (string?)element.Attribute("BasedOn") == "{StaticResource SummaryFilterButtonStyle}");
+        Assert.Contains(card.Descendants(), static element =>
+            (string?)element.Attribute("Binding") == "{Binding IsImplementedSummarySelected}");
+        Assert.Equal("{Binding RelevantEntityCount}", (string?)bar.Attribute("Total"));
+    }
+
+    [Theory]
     [InlineData("TrackerWorkspaceView.xaml", "DevelopmentStatusBadgeTemplate")]
     [InlineData("TrackerWorkspaceView.xaml", "WorkStatusBadgeTemplate")]
     [InlineData("ProjectDashboardView.xaml", "ComparisonDevelopmentStatusBadgeTemplate")]

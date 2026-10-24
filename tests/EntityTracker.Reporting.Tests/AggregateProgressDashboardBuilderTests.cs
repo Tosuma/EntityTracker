@@ -42,6 +42,26 @@ public sealed class AggregateProgressDashboardBuilderTests
     }
 
     [Fact]
+    public void Build_SummaryCarriesWhatImplementedIsMadeOf()
+    {
+        // ready, blocked, in progress, rework needed, completed, reconciled, manually blocked, reworking
+        ProgressSnapshotState state = new(1, 0, 0, 3, 5, 2, 0, 1);
+        Dictionary<TrackerId, IReadOnlyList<ProgressSnapshot>> histories = new()
+        {
+            [TrackerId.New()] = [new ProgressSnapshot(new DateTimeOffset(2026, 1, 2, 12, 0, 0, TimeSpan.Zero), state)]
+        };
+
+        ProgressManagerSummary summary = _builder.Build(
+            histories, ProgressDateRange.AllHistory, new DateOnly(2026, 1, 2), TimeZoneInfo.Utc).ManagerSummary;
+
+        Assert.Equal(11, summary.ImplementedEntityCount);
+        Assert.Equal((5, 2, 3, 1), (summary.DevelopmentCompletedEntityCount, summary.ReconciledEntityCount,
+            summary.ReworkNeededEntityCount, summary.ReworkingEntityCount));
+        Assert.Equal(summary.ImplementedEntityCount, summary.DevelopmentCompletedEntityCount +
+            summary.ReconciledEntityCount + summary.ReworkNeededEntityCount + summary.ReworkingEntityCount);
+    }
+
+    [Fact]
     public void Build_SameTimestampIsDeterministicAndEmptyScopeHasNoData()
     {
         DateTimeOffset timestamp = new(2026, 1, 2, 12, 0, 0, TimeSpan.Zero);

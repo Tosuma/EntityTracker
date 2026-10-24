@@ -44,6 +44,18 @@ public sealed record ProgressSnapshotState
     public int ReworkingCount { get; }
     public int WaitingOnDependenciesCount => BlockedCount;
     public int NotStartedCount => ReadyCount + BlockedCount;
+    /// <summary>
+    /// The statuses "Implemented" counts: development finished at least once, so rework still counts.
+    /// The Overview's "% implemented" card filters to these.
+    /// </summary>
+    public static IReadOnlyList<DevelopmentStatus> ImplementedStatuses { get; } =
+    [
+        DevelopmentStatus.DevelopmentCompleted,
+        DevelopmentStatus.Reconciled,
+        DevelopmentStatus.ReworkNeeded,
+        DevelopmentStatus.Reworking
+    ];
+
     public int ImplementedCount => ReworkNeededCount + ReworkingCount +
         DevelopmentCompletedCount + ReconciledCount;
     public int TotalActiveCount =>
