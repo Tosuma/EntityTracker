@@ -257,6 +257,16 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
         ApplyFilterChange();
     }
 
+    /// <summary>Shows only these statuses, as the "% implemented" card does.</summary>
+    public void SetStatusFilter(IEnumerable<DevelopmentStatus> statuses)
+    {
+        StatusFilter.SetAppliedValues(statuses.Cast<object>());
+        ApplyFilterChange();
+    }
+
+    public bool FiltersExactlyStatuses(IEnumerable<DevelopmentStatus> statuses) =>
+        StatusFilter.AppliesExactly(statuses.Cast<object>());
+
     /// <summary>Clears only the status filter; other filters, the search and the sort stay.</summary>
     public void ClearStatusFilter()
     {

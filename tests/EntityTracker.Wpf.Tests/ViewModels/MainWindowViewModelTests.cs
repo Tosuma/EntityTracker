@@ -292,6 +292,56 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task ImplementedCard_FiltersToWhatItCountsAndTogglesBackToTotal()
+    {
+        MainWindowViewModel viewModel = CreateViewModel(
+            [
+                Entity(1, "Completed", DevelopmentStatus.DevelopmentCompleted),
+                Entity(2, "Reconciled", DevelopmentStatus.Reconciled),
+                Entity(3, "Rework", DevelopmentStatus.ReworkNeeded),
+                Entity(4, "Reworking", DevelopmentStatus.Reworking),
+                Entity(5, "In progress", DevelopmentStatus.InProgress),
+                Entity(6, "Not started")
+            ],
+            [],
+            out _);
+        await viewModel.InitializeAsync();
+        viewModel.ActiveTable.SetSort(OverviewColumnKey.WorkStatus, OverviewSortDirection.Descending);
+
+        viewModel.SelectImplementedSummaryCommand.Execute(null);
+
+        Assert.True(viewModel.IsImplementedSummarySelected);
+        Assert.False(viewModel.IsTotalSummarySelected);
+        Assert.Equal(
+            ["Completed", "Reconciled", "Rework", "Reworking"],
+            viewModel.OverviewItems.Select(static row => row.SourceName).Order());
+        // The status cards it is made of show as selected too.
+        Assert.True(viewModel.IsDevelopmentCompletedSummarySelected && viewModel.IsReconciledSummarySelected &&
+            viewModel.IsReworkNeededSummarySelected && viewModel.IsReworkingSummarySelected);
+        Assert.False(viewModel.IsInProgressSummarySelected);
+
+        viewModel.SelectImplementedSummaryCommand.Execute(null);
+
+        Assert.False(viewModel.IsImplementedSummarySelected);
+        Assert.True(viewModel.IsTotalSummarySelected);
+        Assert.True(viewModel.ActiveTable.HasSort);
+        Assert.Equal(6, viewModel.OverviewItems.Count);
+
+        // From "% implemented", a status card narrows to its own status rather than clearing the filter.
+        viewModel.SelectImplementedSummaryCommand.Execute(null);
+        viewModel.SelectOverviewStatusCommand.Execute(DevelopmentStatus.Reconciled);
+
+        Assert.False(viewModel.IsImplementedSummarySelected);
+        Assert.True(viewModel.IsReconciledSummarySelected);
+        Assert.False(viewModel.IsDevelopmentCompletedSummarySelected);
+        Assert.Equal("Reconciled", Assert.Single(viewModel.OverviewItems).SourceName);
+
+        // Clicking it again, now the only status shown, returns to Total.
+        viewModel.SelectOverviewStatusCommand.Execute(DevelopmentStatus.Reconciled);
+        Assert.True(viewModel.IsTotalSummarySelected);
+    }
+
+    [Fact]
     public async Task OverviewRows_ExposeCompactDirectAndUpstreamGraphIssueDetails()
     {
         TrackedEntity resolved = Entity(1, "Resolved");

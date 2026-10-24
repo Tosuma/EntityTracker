@@ -63,7 +63,8 @@ public sealed record SummarySection(
     IReadOnlyDictionary<string, IReadOnlyList<SummaryCard>> ByScope)
     : ReportSection(Key, Title, Visibility);
 
-public sealed record SummaryCard(string Label, int Value, bool Attention = false);
+/// <param name="Detail">Shown on hover: what the number is made of (Implemented's statuses).</param>
+public sealed record SummaryCard(string Label, int Value, bool Attention = false, string? Detail = null);
 
 public enum ReportChartType
 {

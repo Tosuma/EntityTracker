@@ -95,7 +95,9 @@
     function render(scope) {
       cards.replaceChildren();
       (section.byScope[scope] || []).forEach(function (card) {
-        cards.appendChild(el("div", { className: "card" + (card.attention ? " attention" : "") }, [
+        var attributes = { className: "card" + (card.attention ? " attention" : "") };
+        if (card.detail) attributes.title = card.detail;
+        cards.appendChild(el("div", attributes, [
           el("div", { className: "label", text: card.label }),
           el("div", { className: "value", text: String(card.value) })
         ]));

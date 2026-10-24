@@ -102,9 +102,20 @@
                                             <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Active entities" />
                                             <TextBlock FontSize="18" FontWeight="SemiBold" Text="{Binding Progress.ActiveEntityCount}" />
                                         </StackPanel>
-                                        <StackPanel Margin="0,0,8,10">
+                                        <StackPanel Margin="0,0,8,10" Background="Transparent">
+                                            <StackPanel.ToolTip>
+                                                <controls:ImplementedBreakdown Completed="{Binding Progress.DevelopmentCompletedCount}"
+                                                                               Reconciled="{Binding Progress.ReconciledCount}"
+                                                                               ReworkNeeded="{Binding Progress.ReworkNeededCount}"
+                                                                               Reworking="{Binding Progress.ReworkingCount}" />
+                                            </StackPanel.ToolTip>
                                             <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Implemented" />
                                             <TextBlock FontWeight="SemiBold" Text="{Binding Progress.ImplementedProgressText}" />
+                                            <controls:ImplementedComposition Width="110" Margin="0,4,0,0" HorizontalAlignment="Left" Completed="{Binding Progress.DevelopmentCompletedCount}"
+                                                                             Reconciled="{Binding Progress.ReconciledCount}"
+                                                                             ReworkNeeded="{Binding Progress.ReworkNeededCount}"
+                                                                             Reworking="{Binding Progress.ReworkingCount}"
+                                                                             Total="{Binding Progress.ActiveEntityCount}" />
                                         </StackPanel>
                                         <StackPanel Margin="0,0,0,10">
                                             <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Reconciled" />

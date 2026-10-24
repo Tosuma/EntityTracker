@@ -62,9 +62,25 @@ public sealed class ReportGraphTests
         Assert.IsType<EntityTableSectionProvider>(providers[^1]);
     }
 
-    private static ReportContext Context(Tracker[] trackers)
+    [Fact]
+    public void TheImplementedHeadlineSaysWhatItCountsOnHover()
     {
-        ProgressDashboardReport empty = new(ProgressManagerSummary.Empty, [], [], [], [], null, null);
+        DateTimeOffset now = DateTimeOffset.UnixEpoch;
+        Tracker tracker = new(TrackerId.New(), ProjectId.New(), "Core schema", now, now);
+        ProgressManagerSummary summary = new(20, 11, 2, 4, 3, null, 0, 5, 3, 1);
+
+        SummarySection section = Assert.IsType<SummarySection>(
+            new SummarySectionProvider().Build(Context([tracker], summary)));
+
+        IReadOnlyList<SummaryCard> cards = section.ByScope[ReportScope.AllKey];
+        Assert.Equal("5 Completed, 2 Reconciled, 3 Rework needed, 1 Reworking",
+            cards.Single(card => card.Label == "Implemented").Detail);
+        Assert.All(cards.Where(card => card.Label != "Implemented"), card => Assert.Null(card.Detail));
+    }
+
+    private static ReportContext Context(Tracker[] trackers, ProgressManagerSummary? summary = null)
+    {
+        ProgressDashboardReport empty = new(summary ?? ProgressManagerSummary.Empty, [], [], [], [], null, null);
         return new ReportContext(
             new ProjectReportRequest(trackers[0].ProjectId, trackers.Select(tracker => tracker.Id).ToArray(),
                 ReportAudience.Client, ProgressDateRange.AllHistory),

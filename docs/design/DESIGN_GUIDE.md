@@ -99,7 +99,15 @@ a status and stays plain. The Overview's summary cards look the same: no box at 
 (Total has none; Not relevant uses its Green 60 edge colour). Hovering shows a rounded box
 (`Brush.Surface.Hover`), as a sidebar item does, and the selected card keeps its box
 (`Brush.Surface.Selected` with a `Brush.Border.Medium` edge). Clicking the selected card again clears its
-filter and returns to Total, keeping the sort; Total counts as selected whenever nothing is filtered. The focus ring shows outside the card and only for keyboard navigation, so a click never covers it. Error text uses the theme's
+filter and returns to Total, keeping the sort; Total counts as selected whenever nothing is filtered.
+
+"Implemented" (Completed, Reconciled, Rework needed and Reworking) explains itself without a description.
+Wherever the number shows (the dashboard's progress box and Tracker cards, Portfolio, the Overview's
+"% implemented" card) a thin bar (`ImplementedComposition`, 6 px, no outline) shows its parts' shares of
+the relevant entities, left to right Reconciled, Rework needed, Reworking and Completed, in their status
+colours. Pointing at the number lists the four counts (`ImplementedBreakdown`), and the report's
+headline gives them as its hover title. The Overview's card is a summary card: clicking it filters to
+those four statuses, which selects their cards too. The focus ring shows outside the card and only for keyboard navigation, so a click never covers it. Error text uses the theme's
 critical colour (`Brush.Critical`), not a status colour, since status colours are fills.
 
 ### Colour scheme

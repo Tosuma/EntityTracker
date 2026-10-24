@@ -137,6 +137,11 @@ public abstract class OverviewColumnFilterState : INotifyPropertyChanged
 
     internal abstract void SetSingleAppliedValue(object value);
 
+    internal abstract void SetAppliedValues(IEnumerable<object> values);
+
+    /// <summary>Whether exactly these values are applied, no more and no fewer.</summary>
+    internal abstract bool AppliesExactly(IEnumerable<object> values);
+
     internal abstract bool IncludesAppliedValue(object value);
 
     internal void CloseWithoutApplying() => IsOpen = false;
@@ -293,6 +298,15 @@ internal sealed class OverviewColumnFilterState<T> : OverviewColumnFilterState
         _appliedSelection = new HashSet<T>([(T)value], _equalityComparer);
         NotifyAppliedChanged();
     }
+
+    internal override void SetAppliedValues(IEnumerable<object> values)
+    {
+        _appliedSelection = new HashSet<T>(values.Cast<T>(), _equalityComparer);
+        NotifyAppliedChanged();
+    }
+
+    internal override bool AppliesExactly(IEnumerable<object> values) =>
+        _appliedSelection?.SetEquals(values.Cast<T>()) == true;
 
     internal override bool IncludesAppliedValue(object value) =>
         _appliedSelection?.Contains((T)value) == true;

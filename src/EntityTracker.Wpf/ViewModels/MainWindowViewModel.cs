@@ -3,6 +3,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 
+using EntityTracker.Application.History;
 using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.ManualOverrides;
@@ -59,6 +60,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private readonly RelayCommand _showArchivedResponsibilityHistoryCommand;
     private readonly AsyncCommand<EntityOverviewRow> _editOverviewEntityCommand;
     private readonly RelayCommand<DevelopmentStatus> _selectOverviewStatusCommand;
+    private readonly RelayCommand _selectImplementedSummaryCommand;
     private IReadOnlyList<EntityId> _selectedOverviewEntityIds = [];
     private bool _hasOverviewError;
     private string _busyMessage = string.Empty;
@@ -178,11 +180,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             _ => !IsBusy &&
                  !ManualCreation.IsBusy &&
                  !Editor.IsOpen);
-        // A summary card toggles: clicking the selected card again clears the status filter, back to Total;
-        // the sort stays.
+        // A summary card toggles: clicking it when it is the only status shown clears the status filter, back
+        // to Total (the sort stays). When it is one of several (as after "% implemented"), it narrows to itself.
+        // The "% implemented" card shows what Implemented counts; clicking it again returns to Total.
+        _selectImplementedSummaryCommand = new RelayCommand(() =>
+        {
+            if (IsImplementedSummarySelected)
+            {
+                ActiveTable.ClearStatusFilter();
+            }
+            else
+            {
+                ActiveTable.SetStatusFilter(ProgressSnapshotState.ImplementedStatuses);
+            }
+        });
         _selectOverviewStatusCommand = new RelayCommand<DevelopmentStatus>(status =>
         {
-            if (ActiveTable.IncludesStatus(status))
+            if (ActiveTable.FiltersExactlyStatuses([status]))
             {
                 ActiveTable.ClearStatusFilter();
             }
@@ -478,8 +492,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             {
                 OnPropertyChanged(nameof(ImplementedPercentage));
                 OnPropertyChanged(nameof(ReworkNeededPercentage));
-                OnPropertyChanged(nameof(ReconciledAndReworkPercentage));
-                OnPropertyChanged(nameof(ReconciledAndReworkAndReworkingPercentage));
             }
         }
     }
@@ -492,8 +504,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             if (SetField(ref _reworkingCount, value))
             {
                 OnPropertyChanged(nameof(ImplementedPercentage));
-                OnPropertyChanged(nameof(ReworkingPercentage));
-                OnPropertyChanged(nameof(ReconciledAndReworkAndReworkingPercentage));
             }
         }
     }
@@ -525,8 +535,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             {
                 OnPropertyChanged(nameof(ImplementedPercentage));
                 OnPropertyChanged(nameof(ReconciledPercentage));
-                OnPropertyChanged(nameof(ReconciledAndReworkPercentage));
-                OnPropertyChanged(nameof(ReconciledAndReworkAndReworkingPercentage));
             }
         }
     }
@@ -545,7 +553,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public int TotalEntityCount => ActiveTable.SourceItems.Count;
 
     /// <summary>The entities progress is measured against: every active one except those not relevant.</summary>
-    private int RelevantEntityCount => TotalEntityCount - NotRelevantCount;
+    public int RelevantEntityCount => TotalEntityCount - NotRelevantCount;
 
     public int ArchivedEntityCount => ArchivedTable.SourceItems.Count;
 
@@ -558,27 +566,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         ? 0
         : ReworkNeededCount * 100.0 / RelevantEntityCount;
 
-    public double ReworkingPercentage => RelevantEntityCount <= 0
-        ? 0
-        : ReworkingCount * 100.0 / RelevantEntityCount;
-
-    public double ReconciledAndReworkAndReworkingPercentage =>
-        ReconciledAndReworkPercentage + ReworkingPercentage;
-
-    public double ReconciledAndReworkPercentage =>
-        ReconciledPercentage + ReworkNeededPercentage;
-
     public double ReconciledPercentage => RelevantEntityCount <= 0
         ? 0
         : ReconciledCount * 100.0 / RelevantEntityCount;
 
     private void NotifyPercentagesChanged()
     {
+        OnPropertyChanged(nameof(RelevantEntityCount));
         OnPropertyChanged(nameof(ImplementedPercentage));
         OnPropertyChanged(nameof(ReworkNeededPercentage));
-        OnPropertyChanged(nameof(ReworkingPercentage));
-        OnPropertyChanged(nameof(ReconciledAndReworkPercentage));
-        OnPropertyChanged(nameof(ReconciledAndReworkAndReworkingPercentage));
         OnPropertyChanged(nameof(ReconciledPercentage));
     }
 
@@ -633,6 +629,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public bool IsNotRelevantSummarySelected =>
         ActiveTable.IncludesStatus(DevelopmentStatus.NotRelevant);
 
+    public bool IsImplementedSummarySelected =>
+        ActiveTable.FiltersExactlyStatuses(ProgressSnapshotState.ImplementedStatuses);
+
     public ICommand RefreshCommand => _refreshCommand;
 
     /// <summary>Opens the New entity overlay for this Tracker (Ctrl+N).</summary>
@@ -656,6 +655,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public ICommand CloseOverviewSearchCommand => ActiveTable.CloseSearchCommand;
 
     public ICommand SelectOverviewStatusCommand => _selectOverviewStatusCommand;
+
+    public ICommand SelectImplementedSummaryCommand => _selectImplementedSummaryCommand;
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -832,12 +833,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(ShowOverviewSearchEmptyState));
         OnPropertyChanged(nameof(ShowArchivedSearchEmptyState));
         OnPropertyChanged(nameof(TotalEntityCount));
+        OnPropertyChanged(nameof(RelevantEntityCount));
         OnPropertyChanged(nameof(ArchivedEntityCount));
         OnPropertyChanged(nameof(ImplementedPercentage));
         OnPropertyChanged(nameof(ReworkNeededPercentage));
-        OnPropertyChanged(nameof(ReworkingPercentage));
-        OnPropertyChanged(nameof(ReconciledAndReworkPercentage));
-        OnPropertyChanged(nameof(ReconciledAndReworkAndReworkingPercentage));
         OnPropertyChanged(nameof(ReconciledPercentage));
         OnPropertyChanged(nameof(OverviewSearchResultSummary));
         OnPropertyChanged(nameof(ArchivedSearchResultSummary));
@@ -862,9 +861,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             item.Status == DevelopmentStatus.NotRelevant);
         OnPropertyChanged(nameof(ImplementedPercentage));
         OnPropertyChanged(nameof(ReworkNeededPercentage));
-        OnPropertyChanged(nameof(ReworkingPercentage));
-        OnPropertyChanged(nameof(ReconciledAndReworkPercentage));
-        OnPropertyChanged(nameof(ReconciledAndReworkAndReworkingPercentage));
         OnPropertyChanged(nameof(ReconciledPercentage));
     }
 
@@ -1216,6 +1212,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private void NotifySummarySelectionChanged()
     {
         OnPropertyChanged(nameof(IsTotalSummarySelected));
+        OnPropertyChanged(nameof(IsImplementedSummarySelected));
         OnPropertyChanged(nameof(IsNotStartedSummarySelected));
         OnPropertyChanged(nameof(IsInProgressSummarySelected));
         OnPropertyChanged(nameof(IsReworkNeededSummarySelected));

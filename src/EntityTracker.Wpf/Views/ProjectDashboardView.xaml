@@ -386,7 +386,20 @@
                                            TextTrimming="CharacterEllipsis" />
                                 <StackPanel Grid.Row="1" Margin="0,12">
                                     <TextBlock Text="{Binding Progress.ActiveEntityCount, StringFormat={}{0} active entities}" />
-                                    <TextBlock Margin="0,4,0,0" Text="{Binding Progress.ImplementedProgressText}" />
+                                    <StackPanel Margin="0,4,0,0" Background="Transparent">
+                                        <StackPanel.ToolTip>
+                                            <controls:ImplementedBreakdown Completed="{Binding Progress.DevelopmentCompletedCount}"
+                                                                           Reconciled="{Binding Progress.ReconciledCount}"
+                                                                           ReworkNeeded="{Binding Progress.ReworkNeededCount}"
+                                                                           Reworking="{Binding Progress.ReworkingCount}" />
+                                        </StackPanel.ToolTip>
+                                        <TextBlock Text="{Binding Progress.ImplementedProgressText}" />
+                                        <controls:ImplementedComposition Width="140" Margin="0,4,0,2" HorizontalAlignment="Left" Completed="{Binding Progress.DevelopmentCompletedCount}"
+                                                                         Reconciled="{Binding Progress.ReconciledCount}"
+                                                                         ReworkNeeded="{Binding Progress.ReworkNeededCount}"
+                                                                         Reworking="{Binding Progress.ReworkingCount}"
+                                                                         Total="{Binding Progress.ActiveEntityCount}" />
+                                    </StackPanel>
                                     <TextBlock Margin="0,4,0,0" Text="{Binding Progress.ReconciledProgressText}" />
                                     <TextBlock Margin="0,4,0,0" Text="{Binding Progress.ReadyCount, StringFormat={}{0} ready to start}" />
                                     <TextBlock Margin="0,4,0,0" Text="{Binding Progress.BlockedCount, StringFormat={}{0} waiting on dependencies}" />

@@ -44,7 +44,10 @@ public sealed class ProgressDashboardBuilder
                 current.WaitingOnDependenciesCount,
                 DateOnly.FromDateTime(
                     TimeZoneInfo.ConvertTime(ordered[^1].RecordedAtUtc, timeZone).DateTime),
-                current.ManuallyBlockedCount);
+                current.ManuallyBlockedCount,
+                current.DevelopmentCompletedCount,
+                current.ReworkNeededCount,
+                current.ReworkingCount);
 
         if (ordered.Length == 0)
         {
