@@ -902,6 +902,25 @@ public sealed class PresentationConfigurationTests
     }
 
     [Theory]
+    [InlineData("Views", "SettingsView.xaml", "AboutWhatsNew")]
+    [InlineData("", "MainWindow.xaml", "UpdateBlockWhatsNew")]
+    public void WhatsNewListsTheReleaseNotesWhereUpdatesAreOffered(string folder, string file, string name)
+    {
+        // Settings › About and the required-update screen say what an update brings (and, after one,
+        // what changed), one entry per version, in a scroll area.
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XDocument document = folder.Length == 0 ? LoadWpfXaml(file) : LoadWpfXaml(folder, file);
+        XElement panel = Assert.Single(document.Descendants(), element => (string?)element.Attribute(x + "Name") == name);
+
+        Assert.Equal("{Binding WhatsNew}", (string?)panel.Attribute("DataContext"));
+        Assert.StartsWith("{Binding HasEntries", (string?)panel.Attribute("Visibility"), StringComparison.Ordinal);
+        XElement list = Assert.Single(panel.Descendants(), element => element.Name.LocalName == "ItemsControl");
+        Assert.Equal("{Binding Entries}", (string?)list.Attribute("ItemsSource"));
+        Assert.Equal("{StaticResource ReleaseNoteTemplate}", (string?)list.Attribute("ItemTemplate"));
+        Assert.Equal("ScrollViewer", list.Parent!.Name.LocalName);
+    }
+
+    [Theory]
     [InlineData("AggregateProgressView.xaml", 1)]
     [InlineData("ProjectDashboardView.xaml", 1)]
     [InlineData("PortfolioView.xaml", 1)]

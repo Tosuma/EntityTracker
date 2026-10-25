@@ -55,10 +55,12 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
 
     private readonly AppInstallManifest? _install;
     private readonly string _requiredPath;
+    private readonly string _lastRunPath;
     private readonly SemaphoreSlim _checkLock = new(1, 1);
     private readonly CancellationTokenSource _lifetime = new();
     private readonly TimeProvider _clock;
     private readonly Func<CancellationToken, Task<string>>? _queryOverride;
+    private readonly Func<CancellationToken, Task<string>>? _notesOverride;
     private readonly string _installedUpdaterDirectory;
 
     /// <summary>The scripts that perform an update; they live in <c>scripts/</c> of every release.</summary>
@@ -77,6 +79,7 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
     {
         _clock = clock ?? TimeProvider.System;
         _requiredPath = Path.Combine(dataPaths.RootDirectory, "required-app-update.txt");
+        _lastRunPath = Path.Combine(dataPaths.RootDirectory, LastRunFileName);
         _installedUpdaterDirectory = Path.Combine(AppContext.BaseDirectory, "Updater");
         string manifestPath = Path.Combine(AppContext.BaseDirectory, "app-install.json");
         if (!File.Exists(manifestPath))
@@ -106,12 +109,15 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
     }
 
     internal AppUpdateService(ApplicationDataPaths dataPaths, AppInstallManifest install,
-        Func<CancellationToken, Task<string>>? query, string? installedUpdaterDirectory = null)
+        Func<CancellationToken, Task<string>>? query, string? installedUpdaterDirectory = null,
+        Func<CancellationToken, Task<string>>? notes = null)
     {
         _clock = TimeProvider.System;
         _requiredPath = Path.Combine(dataPaths.RootDirectory, "required-app-update.txt");
+        _lastRunPath = Path.Combine(dataPaths.RootDirectory, LastRunFileName);
         _install = install;
         _queryOverride = query;
+        _notesOverride = notes;
         _installedUpdaterDirectory = installedUpdaterDirectory ?? Path.Combine(AppContext.BaseDirectory, "Updater");
         if (!AppReleaseVersion.TryParse(install.Version, out _installedVersion))
             throw new InvalidDataException("Invalid test app release version.");
@@ -133,6 +139,92 @@ public sealed class AppUpdateService : IProjectSyncVersionGate, IDisposable
     /// <summary>The newer minor or patch release that is offered, while <see cref="State"/> is Available.</summary>
     public string? AvailableTag => State == AppUpdateState.Available ? Volatile.Read(ref _availableTag) : null;
     public bool IsManagedInstall => _install is not null;
+
+    /// <summary>The installed release; null in a source build.</summary>
+    public AppReleaseVersion? InstalledVersion => _install is null ? null : _installedVersion;
+
+    /// <summary>Where the version EntityTracker last ran as is kept, to say what changed after an update.</summary>
+    internal const string LastRunFileName = "last-run-app-version.txt";
+
+    /// <summary>
+    /// Records that this version runs now, and returns the version that ran before it: null on a fresh install
+    /// (or in a source build), so only a real update is announced.
+    /// </summary>
+    public AppReleaseVersion? TakePreviousRunVersion()
+    {
+        if (_install is null) return null;
+        AppReleaseVersion? previous = null;
+        try
+        {
+            if (File.Exists(_lastRunPath) &&
+                AppReleaseVersion.TryParse(File.ReadAllText(_lastRunPath).Trim(), out AppReleaseVersion ran))
+                previous = ran;
+            if (previous is not { } known || known.CompareTo(_installedVersion) != 0)
+                File.WriteAllText(_lastRunPath, _installedVersion.ToString());
+        }
+        catch (IOException error)
+        {
+            Logger.LogWarning(error, "The version EntityTracker last ran as could not be read or saved.");
+        }
+        catch (UnauthorizedAccessException error)
+        {
+            Logger.LogWarning(error, "The version EntityTracker last ran as could not be read or saved.");
+        }
+
+        return previous;
+    }
+
+    /// <summary>
+    /// The release notes after <paramref name="after"/> (all when null) up to <paramref name="upTo"/>, newest
+    /// first: the messages on the release tags. With <paramref name="fetch"/>, the release tags are fetched
+    /// first so newer ones are known. Notes are optional: any failure gives an empty list and is logged.
+    /// </summary>
+    public async Task<IReadOnlyList<ReleaseNote>> ReadReleaseNotesAsync(AppReleaseVersion? after,
+        AppReleaseVersion upTo, bool fetch, CancellationToken cancellationToken = default)
+    {
+        if (_install is null) return [];
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(60));
+        try
+        {
+            string output;
+            if (_notesOverride is not null)
+            {
+                output = await _notesOverride(timeout.Token);
+            }
+            else
+            {
+                if (fetch)
+                {
+                    // New release tags only: a tag that exists locally is never moved (no force).
+                    (int fetchExit, _, string fetchErrors) = await RunGitAsync(
+                        ["fetch", "--no-tags", "origin", "refs/tags/app-v*:refs/tags/app-v*"], timeout.Token);
+                    if (fetchExit != 0)
+                        Logger.LogInformation("Fetching the release tags for their notes returned {ExitCode}: {GitError}",
+                            fetchExit, LogRedaction.Redact(Truncate(fetchErrors.Trim())));
+                }
+
+                (int exitCode, byte[] result, string errors) = await RunGitAsync(
+                    ["for-each-ref", "--sort=-v:refname", $"--format={ReleaseNotes.ForEachRefFormat}", "refs/tags/app-v*"],
+                    timeout.Token);
+                if (exitCode != 0)
+                {
+                    Logger.LogWarning("Reading the release notes returned {ExitCode}: {GitError}",
+                        exitCode, LogRedaction.Redact(Truncate(errors.Trim())));
+                    return [];
+                }
+
+                output = System.Text.Encoding.UTF8.GetString(result);
+            }
+
+            return ReleaseNotes.InRange(ReleaseNotes.Parse(output), after, upTo);
+        }
+        catch (Exception error) when (error is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            Logger.LogWarning(error, "The release notes could not be read.");
+            return [];
+        }
+    }
 
     /// <summary>Why the last update check failed and what to do about it, while <see cref="State"/> is Offline.</summary>
     public string? OfflineReason => State == AppUpdateState.Offline ? Volatile.Read(ref _offlineReason) : null;

@@ -508,9 +508,17 @@ update. A new minor or patch version is only offered: a notification says it is 
 **Update**, Settings shows a dot until it is installed, and **Settings › About** has **Update** too.
 Updating syncs your changes first, as closing does.
 
-![Required app update blocking the workspace](images/light/app-update-required.png)
+**What's new** lists what an update brings, one entry per version: every version after yours, so
+versions you skip are included. It shows in **Settings › About** under the update and on the
+required-update screen. After an update, a notification says once what changed, with **What's new**, and
+Settings › About lists everything since the version you used before. The entries are the release
+messages written when each version is released.
 
-![An available update: the notification with Update, the dot on Settings, and Update in Settings › About](images/light/update-available.png)
+![Required app update blocking the workspace, with what the update brings](images/light/app-update-required.png)
+
+![An available update: the notification with Update, the dot on Settings, and Update with What's new in Settings › About](images/light/update-available.png)
+
+![After an update: the Updated notification with What's new, and the changes since the previous version in Settings › About](images/light/app-updated.png)
 
 The [development guide](docs/DEVELOPMENT.md) contains complete instructions for publishing, CI,
 screenshots, and locating local application data.

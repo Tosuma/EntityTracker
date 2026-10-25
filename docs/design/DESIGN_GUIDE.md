@@ -101,6 +101,11 @@ a status and stays plain. The Overview's summary cards look the same: no box at 
 (`Brush.Surface.Selected` with a `Brush.Border.Medium` edge). Clicking the selected card again clears its
 filter and returns to Total, keeping the sort; Total counts as selected whenever nothing is filtered.
 
+**What's new** (Settings › About and the required-update screen) lists release notes, one per version,
+newest first: the version and date in semibold over its message in secondary text (`ReleaseNoteTemplate`),
+in a scroll area so many skipped versions don't push the rest of the page away. Its heading says what it
+lists: "What's new in 1.1.0" before an update, "What's new since 1.0.0" after one.
+
 "Implemented" (Completed, Reconciled, Rework needed and Reworking) explains itself without a description.
 Wherever the number shows (the dashboard's progress box and Tracker cards, Portfolio, the Overview's
 "% implemented" card) a thin bar (`ImplementedComposition`, 6 px, no outline) shows its parts' shares of

@@ -447,6 +447,16 @@
                                    Text="EntityTracker update required" />
                         <TextBlock x:Name="UpdateBlockMessage" Margin="0,14,0,20"
                                    TextWrapping="Wrap" />
+                        <!-- What the required update brings. -->
+                        <StackPanel x:Name="UpdateBlockWhatsNew" Margin="0,0,0,20" DataContext="{Binding WhatsNew}"
+                                    Visibility="{Binding HasEntries, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock FontWeight="SemiBold" FontSize="16" Text="{Binding Heading}" />
+                            <ScrollViewer Margin="0,8,0,0" MaxHeight="260" VerticalScrollBarVisibility="Auto"
+                                          AutomationProperties.Name="{Binding Heading}">
+                                <ItemsControl Margin="0,0,14,0" ItemsSource="{Binding Entries}"
+                                              ItemTemplate="{StaticResource ReleaseNoteTemplate}" />
+                            </ScrollViewer>
+                        </StackPanel>
                         <StackPanel Orientation="Horizontal">
                             <Button x:Name="UpdateActionButton" Padding="18,8"
                                     Content="Close and update"

@@ -75,7 +75,9 @@ Keep the merge commit SHA, and don't delete the branch.
      step).
    - **Minor:** something new, nothing forced.
    - **Patch:** nothing new: fixes, wording, colours, layout, performance.
-2. **Write the message** for users, in the style of earlier tags (`git tag -n9 <latest-tag>`):
+2. **Write the message** for users, in the style of earlier tags (`git tag -n9 <latest-tag>`). The app shows
+   it as the changelog (**What's new** in Settings › About, on the required-update screen and in the update
+   notices), so write it for someone reading it there:
    - Start with a short headline sentence, then say what changed and where to find it.
    - Leave out code, internal names and pull-request numbers.
 3. **Tag from a clean `main`.** The release script refuses a working tree with untracked files, and
