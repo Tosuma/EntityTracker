@@ -239,6 +239,16 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             settings.Badge = version is null ? null : $"EntityTracker {version} is available";
     }
 
+    /// <summary>Release notes for Settings › About and the required-update screen.</summary>
+    public WhatsNewViewModel WhatsNew { get; } = new();
+
+    /// <summary>Opens Settings › About, where What's new is listed.</summary>
+    public async Task OpenWhatsNewAsync()
+    {
+        SelectedSettingsCategory = SettingsCategory.About;
+        await NavigateAsync(ShellDestination.Settings);
+    }
+
     public CatalogManagementViewModel Catalog { get; }
 
     public AppearanceViewModel Appearance { get; }

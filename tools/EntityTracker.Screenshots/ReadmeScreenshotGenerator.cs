@@ -352,17 +352,28 @@ internal sealed class ReadmeScreenshotGenerator
             await renderer.CaptureAsync("settings-sync.png");
             shell.SelectedSettingsCategory = SettingsCategory.About;
             await renderer.CaptureAsync("settings-about.png");
-            // A newer minor version is offered: the notice, the dot on Settings and About's Update button.
+            // A newer minor version is offered: the notice, the dot on Settings, and About's Update button
+            // with What's new (every version after the installed one).
             shell.OfferUpdate("1.1.0", () => Task.CompletedTask);
+            shell.WhatsNew.ShowComing(SampleVersion(1, 1, 0), SampleReleaseNotes);
             NotificationItem updateNotice = provider.GetRequiredService<NotificationCenter>().Show("Update available",
-                "EntityTracker 1.1.0 is available. Update now, or later from Settings › About.",
+                $"EntityTracker 1.1.0 is available: {SampleReleaseNotes[0].Headline}. Update now, or see what's new in Settings › About.",
                 "Update", () => Task.CompletedTask);
             await renderer.CaptureAsync("update-available.png", settleMilliseconds: 900);
             provider.GetRequiredService<NotificationCenter>().Dismiss(updateNotice);
             shell.OfferUpdate(null, null);
+
+            // After an update: the notice once, and About's What's new since the version used before.
+            shell.WhatsNew.ShowSince(SampleVersion(1, 0, 0), SampleReleaseNotes);
+            NotificationItem updatedNotice = provider.GetRequiredService<NotificationCenter>().Show(
+                "Updated to EntityTracker 1.1.0", SampleReleaseNotes[0].Headline + ".",
+                "What's new", () => Task.CompletedTask);
+            await renderer.CaptureAsync("app-updated.png", settleMilliseconds: 900);
+            provider.GetRequiredService<NotificationCenter>().Dismiss(updatedNotice);
+            shell.WhatsNew.ShowComing(SampleVersion(2, 0, 0), SampleRequiredNotes);
             await CaptureTrackerSyncAsync(provider, shell, tracker, renderer, cancellationToken);
 
-            window.ShowUpdatePreview("app-v1.0.0");
+            window.ShowUpdatePreview("app-v2.0.0");
             await renderer.CaptureAsync("app-update-required.png");
         }
         finally
@@ -374,6 +385,27 @@ internal sealed class ReadmeScreenshotGenerator
             }
         }
     }
+
+    private static AppReleaseVersion SampleVersion(int major, int minor, int patch) => new(major, minor, patch);
+
+    // Release notes as the release tags carry them, for What's new in the update captures.
+    private static readonly IReadOnlyList<ReleaseNote> SampleReleaseNotes =
+    [
+        new(SampleVersion(1, 1, 0), new DateOnly(2026, 8, 24),
+            "Implemented now shows what it counts: every entity whose development finished at least once. " +
+            "A thin bar under each Implemented number shows those parts in their status colours, and pointing " +
+            "at the number lists their counts."),
+        new(SampleVersion(1, 0, 1), new DateOnly(2026, 8, 20),
+            "Work status badges no longer show a grey border, and a status card can be clicked again to go back to Total.")
+    ];
+
+    private static readonly IReadOnlyList<ReleaseNote> SampleRequiredNotes =
+    [
+        new(SampleVersion(2, 0, 0), new DateOnly(2026, 8, 26),
+            "A new \"Not relevant\" status, and everyone must update before syncing. Mark an entity Not relevant " +
+            "when it does not apply in one Tracker but stays relevant in another."),
+        .. SampleReleaseNotes
+    ];
 
     /// <summary>
     /// Changes Core schema after Release readiness was copied from it, then shows the sync dialog.

@@ -29,6 +29,8 @@ public partial class MainWindow : Window
     private NotificationItem? _offlineNotice;
     // The available version already announced, so each new version is announced once.
     private string? _announcedUpdate;
+    // The pending (available or required) version whose release notes What's new shows.
+    private string? _notesFor;
     private bool _updating;
     private readonly CancellationTokenSource _closingSync = new();
     private NotificationItem? _closingNotice;
@@ -169,6 +171,47 @@ public partial class MainWindow : Window
         _editTimer.Start();
         _updates?.Start();
         RefreshUpdateBlock();
+        await ShowWhatsNewAfterUpdateAsync();
+    }
+
+    /// <summary>
+    /// After an update, says once what changed since the version used before: a notice with What's new,
+    /// and the list in Settings › About. A fresh install says nothing; otherwise About shows the installed
+    /// version's own notes, unless a pending update's notes are already there.
+    /// </summary>
+    private async Task ShowWhatsNewAfterUpdateAsync()
+    {
+        if (_updates?.InstalledVersion is not { } installed) return;
+        AppReleaseVersion? previous = _updates.TakePreviousRunVersion();
+        if (previous is { } before && installed.CompareTo(before) > 0)
+        {
+            IReadOnlyList<ReleaseNote> notes = await _updates.ReadReleaseNotesAsync(before, installed, fetch: true);
+            if (_notesFor is null) _viewModel.WhatsNew.ShowSince(before, notes);
+            string version = WhatsNewViewModel.Short(installed);
+            _viewModel.Notifications.Show($"Updated to EntityTracker {version}",
+                notes.Count > 0 ? notes[0].Headline + "." : $"EntityTracker {version} is installed.",
+                "What's new", _viewModel.OpenWhatsNewAsync);
+            Logger.LogInformation("Updated from {Previous} to {Installed}; {Count} release notes shown.",
+                before, installed, notes.Count);
+            return;
+        }
+
+        IReadOnlyList<ReleaseNote> own = await _updates.ReadReleaseNotesAsync(null, installed, fetch: false);
+        if (_notesFor is null) _viewModel.WhatsNew.ShowInstalled(installed, own);
+    }
+
+    /// <summary>
+    /// Reads what a pending update brings, once per version, for What's new (Settings › About and the
+    /// required-update screen). Returns the notes, or an empty list when they can't be read.
+    /// </summary>
+    private async Task<IReadOnlyList<ReleaseNote>> LoadComingNotesAsync(string tag)
+    {
+        if (_updates?.InstalledVersion is not { } installed || !AppReleaseVersion.TryParse(tag, out AppReleaseVersion coming))
+            return [];
+        _notesFor = tag;
+        IReadOnlyList<ReleaseNote> notes = await _updates.ReadReleaseNotesAsync(installed, coming, fetch: true);
+        if (_notesFor == tag) _viewModel.WhatsNew.ShowComing(coming, notes);
+        return notes;
     }
 
     /// <summary>
@@ -285,6 +328,7 @@ public partial class MainWindow : Window
         }
         RefreshAvailableUpdate();
         if (_updates?.IsRequired != true) return;
+        if (_updates.RequiredTag is { } required && required != _notesFor) _ = LoadComingNotesAsync(required);
         bool editing = _viewModel.CurrentWorkspace?.HasUnsavedWork == true;
         bool catalogOpen = _viewModel.IsModalOpen;
         bool operationRunning = _viewModel.HasActiveProjectSync || _viewModel.IsBusy ||
@@ -337,10 +381,20 @@ public partial class MainWindow : Window
             ? $"{release.Major}.{release.Minor}.{release.Patch}"
             : null;
         _viewModel.OfferUpdate(version, () => InstallAvailableUpdateAsync("Settings › About"));
-        if (version is null || tag == _announcedUpdate) return;
+        if (version is null || tag is null || tag == _announcedUpdate) return;
         _announcedUpdate = tag;
-        _viewModel.Notifications.Show("Update available",
-            $"EntityTracker {version} is available. Update now, or later from Settings › About.",
+        _ = AnnounceAvailableUpdateAsync(tag, version);
+    }
+
+    /// <summary>The "Update available" notice, with the newest version's headline once its notes are read.</summary>
+    private async Task AnnounceAvailableUpdateAsync(string tag, string version)
+    {
+        IReadOnlyList<ReleaseNote> notes = await LoadComingNotesAsync(tag);
+        if (_updates?.AvailableTag != tag) return;
+        string message = notes.Count > 0
+            ? $"EntityTracker {version} is available: {notes[0].Headline}. Update now, or see what's new in Settings › About."
+            : $"EntityTracker {version} is available. Update now, or later from Settings › About.";
+        _viewModel.Notifications.Show("Update available", message,
             "Update", () => InstallAvailableUpdateAsync("the notification"));
     }
 

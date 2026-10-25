@@ -3,6 +3,15 @@
                     xmlns:controls="clr-namespace:EntityTracker.Wpf.Controls">
     <!-- These styles tune density and semantics while retaining .NET's Fluent templates. -->
 
+    <!-- What's new: each release's number and date over its message (the release tag's), newest first. -->
+    <DataTemplate x:Key="ReleaseNoteTemplate">
+        <StackPanel Margin="0,0,0,12">
+            <TextBlock FontWeight="SemiBold" Text="{Binding Heading}" />
+            <TextBlock Margin="0,2,0,0" Text="{Binding Text}" TextWrapping="Wrap"
+                       Foreground="{DynamicResource Brush.Text.Secondary}" />
+        </StackPanel>
+    </DataTemplate>
+
     <!-- A page's toolbar: beside its heading, or under it and wrapping in the compact layout. -->
     <Style x:Key="PageToolbarStyle" TargetType="WrapPanel">
         <Setter Property="DockPanel.Dock" Value="Right" />

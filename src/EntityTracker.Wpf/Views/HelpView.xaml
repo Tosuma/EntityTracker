@@ -95,6 +95,7 @@
                     <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Then use Import project on Portfolio, or Link repository on the Project dashboard, and select the clean repository root." />
                     <TextBlock Margin="0,14,0,0" Style="{StaticResource HelpCardTitleStyle}" Text="Syncing" />
                     <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Automatic sync is on by default and checks linked Projects after startup and at the interval in Settings › Sync. It waits while an edit is unfinished." />
+                    <TextBlock Style="{StaticResource HelpPointStyle}" Text="• What&apos;s new in Settings › About lists what an offered update brings, and after an update what changed since the version you used before." />
                     <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Sync now is always available, and conflicts and outbound deletions need it for review or approval." />
                     <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Closing EntityTracker syncs changes not synced yet first; its notice offers Close without syncing. If a Project can&apos;t be synced, EntityTracker stays open and says why." />
                     <TextBlock Margin="0,14,0,0" Style="{StaticResource HelpCardTitleStyle}" Text="When something goes wrong" />
