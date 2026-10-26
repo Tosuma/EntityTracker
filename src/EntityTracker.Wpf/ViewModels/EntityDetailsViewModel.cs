@@ -31,7 +31,6 @@ public sealed class EntityDetailsViewModel : INotifyPropertyChanged
         FilterActive = string.IsNullOrWhiteSpace(row.FilterActive) ? "No filter instructions" : row.FilterActive;
         RequestedPriority = FormatPriority(row.RequestedPriorityValue);
         EffectivePriority = IsArchived ? "Not applicable while archived" : row.Priority;
-        Rank = IsArchived ? "Not applicable while archived" : row.Rank;
         DueDate = DueDateText.Format(row.DueDateValue, "None");
         EffectiveDueDate = IsArchived
             ? "Not applicable while archived"
@@ -98,8 +97,6 @@ public sealed class EntityDetailsViewModel : INotifyPropertyChanged
     public string RequestedPriority { get; }
 
     public string EffectivePriority { get; }
-
-    public string Rank { get; }
 
     public string DueDate { get; }
 

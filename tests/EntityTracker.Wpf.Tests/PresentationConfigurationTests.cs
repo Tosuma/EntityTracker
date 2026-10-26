@@ -773,7 +773,7 @@ public sealed class PresentationConfigurationTests
         XElement[] columns = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml").Descendants()
             .Where(static element => element.Name.LocalName == "DataGridTextColumn")
             .ToArray();
-        Assert.Equal(6, columns.Length);
+        Assert.Equal(5, columns.Length);
         Assert.All(columns, column =>
             Assert.Equal("{StaticResource CenteredCellTextStyle}", (string?)column.Attribute("ElementStyle")));
     }
@@ -1240,15 +1240,18 @@ public sealed class PresentationConfigurationTests
             element.Name.LocalName == "DataGrid.Columns");
         XElement[] configuredColumns = columns.Elements().ToArray();
 
-        Assert.Equal(10, configuredColumns.Length);
+        // The dependency rank only breaks ties in the order; its number is not shown.
+        Assert.Equal(9, configuredColumns.Length);
         Assert.Equal("Priority", (string?)configuredColumns[0].Attribute("Header"));
-        Assert.Equal("Rank", (string?)configuredColumns[1].Attribute("Header"));
-        Assert.Equal("Due", (string?)configuredColumns[2].Attribute("Header"));
-        Assert.Equal("{Binding Due}", (string?)configuredColumns[2].Attribute("Binding"));
-        Assert.Equal("Entity", (string?)configuredColumns[3].Attribute("Header"));
-        Assert.Contains(configuredColumns[8].Descendants(), element =>
+        Assert.Equal("Due", (string?)configuredColumns[1].Attribute("Header"));
+        Assert.Equal("{Binding Due}", (string?)configuredColumns[1].Attribute("Binding"));
+        Assert.Equal("Entity", (string?)configuredColumns[2].Attribute("Header"));
+        Assert.Contains(configuredColumns[7].Descendants(), element =>
             (string?)element.Attribute("Text") == "Blockers");
-        Assert.Null(configuredColumns[9].Attribute("Header"));
+        Assert.Null(configuredColumns[8].Attribute("Header"));
+        Assert.DoesNotContain(document.Descendants(), element =>
+            (string?)element.Attribute("Header") == "Rank" ||
+            (string?)element.Attribute("Text") == "{Binding Rank}");
         Assert.DoesNotContain(columns.DescendantsAndSelf(), element =>
             ((string?)element.Attribute("Binding"))?.Contains("Provenance", StringComparison.Ordinal) == true ||
             ((string?)element.Attribute("Binding"))?.Contains("Notes", StringComparison.Ordinal) == true ||

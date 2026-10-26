@@ -12,7 +12,7 @@ public sealed class OverviewExportService
 {
     public static readonly IReadOnlyList<string> Headers =
     [
-        "Priority", "Rank", "Entity", "Work status", "Development status",
+        "Priority", "Entity", "Work status", "Development status",
         "Responsible dev", "Group", "Blockers", "Entity ID", "Requested priority",
         "Due date", "Effective due date",
         "Current Developer names", "Dependency count", "Dependencies",
@@ -78,7 +78,7 @@ public sealed class OverviewExportService
             for (int col = 0; col < cells.Count; col++)
             {
                 IXLCell cell = sheet.Cell(index + 2, col + 1);
-                if (col is 0 or 1 or 9 or 13 &&
+                if (col is 0 or 8 or 12 &&
                     double.TryParse(cells[col], NumberStyles.Integer, CultureInfo.InvariantCulture,
                         out double number))
                     cell.Value = number;
@@ -92,7 +92,7 @@ public sealed class OverviewExportService
 
     public static IReadOnlyList<string> Cells(EntityOverviewRow row) =>
     [
-        EmptyDash(row.Priority), EmptyDash(row.Rank), row.SourceName, row.WorkStatus,
+        EmptyDash(row.Priority), row.SourceName, row.WorkStatus,
         row.Status, string.Join(", ", row.DeveloperItems.Select(dev => dev.Initials)),
         EmptyDash(row.GroupName), EmptyDash(row.BlockersDisplay), row.EntityId.Value.ToString("D"),
         row.RequestedPriorityValue?.ToString(CultureInfo.InvariantCulture) ?? "",

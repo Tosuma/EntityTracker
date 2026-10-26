@@ -57,7 +57,7 @@ EntityTracker keeps those concerns separate:
 
 1. Add the entities you need to build, each with the entities it depends on. A dependency on a name
    that is not an entity yet is kept as an unresolved reference.
-2. Use dependency-safe rank, readiness, blockers, filters, and search to choose the next work item.
+2. Use the dependency-safe planning order, readiness, blockers, filters, and search to choose the next work item.
 3. Update development status as work progresses; renames keep progress, history, and dependencies.
 4. Share a Project report to communicate delivery trends.
 
@@ -317,16 +317,17 @@ Archived entities have their own tab and independent search, filters, and Status
 available as read-only records with their progress, notes, and dependencies intact and can be
 deliberately restored from the archived view.
 
-The Overview lists entities in planning order: by due date first, then priority, then dependency-safe
-rank. An entity inherits the earliest due date and the most urgent priority of the entities that
+The Overview lists entities in planning order: by due date first, then priority, then dependency order.
+An entity inherits the earliest due date and the most urgent priority of the entities that
 depend on it, because it has to be done before them, so it never sorts after an entity that needs
-it. The **Due** column shows each entity's own due date as day-month-year (26-10-2026). Turn on
+it. The list has no rank number, because the date and priority grouping would make one look
+shuffled; the row order itself is the plan. The **Due** column shows each entity's own due date as day-month-year (26-10-2026). Turn on
 **Show inherited due dates** in **Settings → Tracker** to show the inherited date as well. Set or
 clear a due date in the entity editor or when adding an entity; the export and Sync from source
 include it.
 
 Entity names and each row's **View details** action open a read-only side pane with priorities,
-due dates, rank, assignment, full notes, effective dependencies, blockers, and audit timestamps.
+due dates, assignment, full notes, effective dependencies, blockers, and audit timestamps.
 Use **Edit** in the details header to open the entity editor. Opening or closing the pane does not
 disturb bulk row selection.
 
@@ -374,7 +375,7 @@ missing dependencies orbit on the outermost ring, straight out from the entities
 directly. Entities are placed straight out from what they link to, so chains run outward instead of
 across the map, and only direct links are drawn, never ones a longer chain already implies. The most used entities and the foundations keep their names visible at every zoom level, and
 names never pile on top of each other. Links stay faint until you hover over an entity; hovering
-also shows a card with its status, rank, ring, what it depends on, how many entities it unblocks,
+also shows a card with its status, ring, what it depends on, how many entities it unblocks,
 and any missing dependencies. Click an entity to highlight everything it depends on, back
 towards the centre, and click it again to clear the selection. Ctrl+click adds more entities to the
 selection (or removes one again), and the highlight covers all of them. The **Highlight** choice
@@ -394,7 +395,7 @@ faint orbit rings for each level, under **Settings → Tracker**.
 
 ![Dependency graph with one entity selected and its dependency chain highlighted](images/light/dependency-graph-selected.png)
 
-![Dependency graph hover card explaining an entity's status, rank, ring and usage](images/light/dependency-graph-hover.png)
+![Dependency graph hover card explaining an entity's status, ring and usage](images/light/dependency-graph-hover.png)
 
 ![Dependency graph search suggesting entities word by word](images/light/dependency-graph-search.png)
 

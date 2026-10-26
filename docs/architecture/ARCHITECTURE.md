@@ -231,6 +231,10 @@ earliest date and the most urgent priority (`PriorityPlanningService`). A depend
 date and priority are therefore never later or less urgent than those of an entity that needs it, so
 the grouping stays dependency-safe. Neither changes Rank.
 
+Rank is internal: it breaks ties within a group and orders the dependency graph layouts, but the app
+does not show its number, in the Overview, the details pane, the export or the graph. Within the
+date and priority groups the numbers would look shuffled, so the row order itself is the plan.
+
 Presentation-only analytical views are an explicit exception to the visual ordering statement.
 For example, a user may temporarily sort the Overview by Status or Work status to inspect a
 workflow segment. Such a sort:
