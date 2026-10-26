@@ -43,6 +43,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private readonly DispatcherTimer? _syncIndicatorTimer;
     private readonly ILogger<ShellViewModel> _logger;
     private readonly Dictionary<TrackerId, MainWindowViewModel> _workspaces = [];
+    private WorkspaceViewState? _lastWorkspaceView;
     private readonly Dictionary<ProjectId, ProjectDashboardViewModel> _projectDashboards = [];
     private readonly ProjectId? _startupProjectId;
     private readonly TrackerId? _startupTrackerId;
@@ -961,8 +962,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         Project? previousProject = SelectedProject;
         Tracker? previousTracker = SelectedTracker;
         MainWindowViewModel? previousWorkspace = CurrentWorkspace;
-        // A search in progress follows the user to the next Tracker instead of being lost.
-        WorkspaceSearchState? carriedSearch = previousWorkspace?.CaptureSearch();
+        // The Tracker supplies data; the current view follows the user, including a cleared view.
+        WorkspaceViewState? carriedView = previousWorkspace?.CaptureView() ?? _lastWorkspaceView;
         ProjectDevelopersViewModel? previousDevelopers = Developers;
         ShellDestination previousDestination = SelectedDestination;
         Tracker[] previousTrackers = Trackers.ToArray();
@@ -1032,8 +1033,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                     await workspace.RefreshAsync(cancellationToken);
                 }
 
-                if (carriedSearch is { IsSearching: true } search && !ReferenceEquals(workspace, previousWorkspace))
-                    workspace.RestoreSearch(search);
+                if (carriedView is { } view && !ReferenceEquals(workspace, previousWorkspace))
+                    workspace.RestoreView(view);
                 CurrentWorkspace = workspace;
             }
 
@@ -1051,6 +1052,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
             _navigateCommand.NotifyCanExecuteChanged();
             RefreshNavigationEntries();
+            _lastWorkspaceView = carriedView;
             return true;
         }
         catch (Exception exception)

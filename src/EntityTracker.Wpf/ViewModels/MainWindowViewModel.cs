@@ -22,13 +22,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace EntityTracker.Wpf.ViewModels;
 
-/// <summary>The searches on a Tracker's pages: Overview, Archived and the dependency graph.</summary>
-internal readonly record struct WorkspaceSearchState(
-    TableSearchState Active, TableSearchState Archived, string GraphSearch)
-{
-    /// <summary>Gets whether anything is being searched for.</summary>
-    public bool IsSearching => Active.IsOpen || Archived.IsOpen || !string.IsNullOrWhiteSpace(GraphSearch);
-}
+/// <summary>The current view applied to Tracker data on Overview, Archived and the graph.</summary>
+internal readonly record struct WorkspaceViewState(
+    TableViewState Active, TableViewState Archived, string GraphSearch);
 
 public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 {
@@ -324,15 +320,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public event Action<EntityId>? EntityRevealRequested;
 
-    /// <summary>Gets every search on this Tracker's pages, so it can be carried to another Tracker.</summary>
-    internal WorkspaceSearchState CaptureSearch() =>
-        new(ActiveTable.CaptureSearch(), ArchivedTable.CaptureSearch(), DependencyGraph.SearchText);
+    /// <summary>Gets the current view so it can be applied to another Tracker's data.</summary>
+    internal WorkspaceViewState CaptureView() =>
+        new(ActiveTable.CaptureView(), ArchivedTable.CaptureView(), DependencyGraph.SearchText);
 
-    /// <summary>Takes over the searches from another Tracker, so switching Tracker keeps searching.</summary>
-    internal void RestoreSearch(WorkspaceSearchState state)
+    /// <summary>Applies the current view when switching Tracker.</summary>
+    internal void RestoreView(WorkspaceViewState state)
     {
-        ActiveTable.RestoreSearch(state.Active);
-        ArchivedTable.RestoreSearch(state.Archived);
+        ActiveTable.RestoreView(state.Active);
+        ArchivedTable.RestoreView(state.Archived);
         DependencyGraph.SearchText = state.GraphSearch;
         DependencyGraph.IsSuggestionsOpen = false;
     }
