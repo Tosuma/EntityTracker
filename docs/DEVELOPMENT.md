@@ -63,9 +63,17 @@ comparison table to reload, as well as recreating and loading the developer page
 visible Tracker wait for work on other pages.
 
 Same-Project Tracker-page switches reuse the developer page and leave hidden dashboards alone.
-The selected workspace still checks its history baseline and reloads persisted data.
-Dashboards refresh when opened and after existing edit/catalog/sync notifications, and the
-developer page refreshes when opened.
+Cached workspaces are reused while the persisted Project revision is unchanged. Any Project edit,
+including an incoming Git snapshot or a developer change, invalidates that revision; the next visit
+checks the history baseline and reloads the Tracker. The revision is captured before loading, so a
+concurrent write cannot mark stale rows as current. Without a revision store, switches always reload.
+
+Overview and Archived share the loaded Tracker data. The dependency graph's model and layout are
+rebuilt only while its page is active; changes made while it is hidden are applied when it is opened.
+Dashboard charts and comparisons are loaded only when their page is shown, including at startup.
+Edit/catalog/sync notifications refresh only the visible dashboard; hidden pages load current data
+when opened. The developer page also loads when opened. Returning to a Tracker page checks the
+Project revision so changes made while it was hidden are reflected there too.
 
 ## Continuous integration
 

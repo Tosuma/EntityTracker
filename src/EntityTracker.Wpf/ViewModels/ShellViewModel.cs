@@ -9,6 +9,7 @@ using EntityTracker.Application.History;
 using EntityTracker.Application.GitSync;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Projects;
+using EntityTracker.Application.Snapshots;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Wpf.Commands;
@@ -43,6 +44,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private readonly DispatcherTimer? _syncIndicatorTimer;
     private readonly ILogger<ShellViewModel> _logger;
     private readonly Dictionary<TrackerId, MainWindowViewModel> _workspaces = [];
+    private readonly Dictionary<TrackerId, long> _workspaceRevisions = [];
+    private readonly IProjectSnapshotStore? _projectSnapshots;
     private WorkspaceViewState? _lastWorkspaceView;
     private readonly Dictionary<ProjectId, ProjectDashboardViewModel> _projectDashboards = [];
     private readonly ProjectId? _startupProjectId;
@@ -88,7 +91,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         EntityTracker.Reporting.ProjectReports.ProjectReportBuilder? reportBuilder = null,
         IProjectReportFiles? reportFiles = null,
         DiagnosticsSettingsViewModel? diagnostics = null,
-        ProjectSyncIndicators? syncIndicators = null)
+        ProjectSyncIndicators? syncIndicators = null,
+        IProjectSnapshotStore? projectSnapshots = null)
     {
         Diagnostics = diagnostics;
         _reportBuilder = reportBuilder;
@@ -101,6 +105,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         _historyInitializer = historyInitializer;
         _settingsStore = settingsStore;
         _workspaceFactory = workspaceFactory;
+        _projectSnapshots = projectSnapshots;
         _discardConfirmation = discardConfirmation;
         _gitSync = gitSync;
         _autoSync = autoSync;
@@ -610,7 +615,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        await ReloadCatalogAsync(cancellationToken);
+        await ReloadCatalogAsync(cancellationToken, refreshVisibleDashboard: false);
         Project? startupProject = _startupProjectId is null
             ? null
             : Projects.FirstOrDefault(project => project.Id == _startupProjectId);
@@ -700,10 +705,12 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         CurrentWorkspace?.PrepareForDeactivation();
         if (SelectedDestination == ShellDestination.Developers)
             Developers?.CloseRetired();
+        if (IsTrackerDestination(destination) && CurrentWorkspace is { } workspace && SelectedTracker is { } tracker)
+            await RefreshWorkspaceIfChangedAsync(workspace, tracker, cancellationToken);
         SetDestination(destination);
         if (destination is ShellDestination.Portfolio or ShellDestination.ProjectDashboard)
         {
-            await RefreshDashboardsAsync(cancellationToken);
+            await RefreshVisibleDashboardAsync(cancellationToken);
         }
         if (destination == ShellDestination.Developers && Developers is not null)
             await Developers.RefreshAsync(cancellationToken);
@@ -988,13 +995,20 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                     "The selected tracker is not active in the selected project.");
             }
             SelectedProject = project;
+            if (previousProject?.Id != project?.Id)
+            {
+                ProjectReporting = project is not null && _projectDashboards.TryGetValue(project.Id, out var cachedDashboard)
+                    ? cachedDashboard : null;
+                ProjectDashboard = ProjectReporting?.Dashboard;
+            }
             await SetSettingsProjectAsync(project, cancellationToken);
             if (!switchingTrackerPage)
             {
                 Developers = project is null || _developerService is null ? null :
                     new ProjectDevelopersViewModel(project.Id, _developerService,
                         OnProjectDevelopersChangedAsync, Notifications);
-                if (Developers is not null) await Developers.RefreshAsync(cancellationToken);
+                if (Developers is not null && destination == ShellDestination.Developers)
+                    await Developers.RefreshAsync(cancellationToken);
             }
             Replace(Trackers, availableTrackers);
             SelectedTracker = selectedTracker;
@@ -1005,10 +1019,10 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             }
             else
             {
-                await _historyInitializer.EnsureInitializedAsync(selectedTracker.Id, cancellationToken);
                 if (!_workspaces.TryGetValue(selectedTracker.Id, out MainWindowViewModel? workspace))
                 {
                     workspace = _workspaceFactory.Create(selectedTracker.Id);
+                    workspace.PrepareForDeactivation();
                     workspace.SetSearchResponsibleNames(
                         ResponsibilitySearch?.IsEnabled ?? true);
                     ApplyGraphSettings(workspace);
@@ -1018,7 +1032,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                     workspace.PropertyChanged += OnWorkspacePropertyChanged;
                     try
                     {
-                        await workspace.InitializeAsync(cancellationToken);
+                        if (IsTrackerDestination(destination))
+                            await RefreshWorkspaceIfChangedAsync(workspace, selectedTracker, cancellationToken);
                         _workspaces.Add(selectedTracker.Id, workspace);
                     }
                     catch
@@ -1035,7 +1050,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 {
                     workspace.SetSearchResponsibleNames(
                         ResponsibilitySearch?.IsEnabled ?? true);
-                    await workspace.RefreshAsync(cancellationToken);
+                    if (IsTrackerDestination(destination))
+                        await RefreshWorkspaceIfChangedAsync(workspace, selectedTracker, cancellationToken);
                 }
 
                 if (carriedView is { } view && !ReferenceEquals(workspace, previousWorkspace))
@@ -1044,10 +1060,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             }
 
             SetDestination(destination);
-            // A Tracker switch changes no dashboard data. Refresh those pages on navigation,
-            // edits and sync, without making the visible Tracker wait for hidden charts/comparisons.
-            if (!switchingTrackerPage)
-                await RefreshDashboardsAsync(cancellationToken);
+            await RefreshVisibleDashboardAsync(cancellationToken);
             ShowDefaultNamePrompt =
                 project?.Name == "Default project" || selectedTracker?.Name == "Default tracker";
             if (persist)
@@ -1092,38 +1105,58 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 : new ProjectReportViewModel(SelectedProject.Id, SelectedProject.Name, Trackers,
                     _reportBuilder, _reportFiles, Notifications);
         SelectedDestination = destination;
-        if (CurrentWorkspace is not null)
+        if (CurrentWorkspace is not null && IsTrackerDestination(destination))
         {
-            CurrentWorkspace.SelectedTab = destination switch
+            CurrentWorkspace.Activate(destination switch
             {
                 ShellDestination.Overview => MainWindowTab.Overview,
                 ShellDestination.DependencyGraph => MainWindowTab.DependencyGraph,
                 ShellDestination.Archived => MainWindowTab.Archived,
                 _ => CurrentWorkspace.SelectedTab
-            };
+            });
         }
     }
 
-    private async Task ReloadCatalogAsync(CancellationToken cancellationToken)
+    private async Task RefreshWorkspaceIfChangedAsync(
+        MainWindowViewModel workspace, Tracker tracker, CancellationToken cancellationToken)
+    {
+        long? revision = _projectSnapshots is null ? null :
+            await _projectSnapshots.GetRevisionAsync(tracker.ProjectId, cancellationToken);
+        if (revision is { } current && _workspaceRevisions.TryGetValue(tracker.Id, out long loadedRevision) &&
+            loadedRevision == current && !workspace.HasOverviewError)
+            return;
+
+        _workspaceRevisions.Remove(tracker.Id);
+        await _historyInitializer.EnsureInitializedAsync(tracker.Id, cancellationToken);
+        // A write during the load must invalidate the workspace on its next visit.
+        revision = _projectSnapshots is null ? null :
+            await _projectSnapshots.GetRevisionAsync(tracker.ProjectId, cancellationToken);
+        await workspace.InitializeAsync(cancellationToken);
+        if (revision is { } loaded && !workspace.HasOverviewError)
+            _workspaceRevisions[tracker.Id] = loaded;
+    }
+
+    private async Task ReloadCatalogAsync(CancellationToken cancellationToken, bool refreshVisibleDashboard = true)
     {
         _pendingProjectDeletions = _gitSync is null ? [] :
             await _gitSync.ListPendingDeletionsAsync(cancellationToken);
         OnPropertyChanged(nameof(PendingProjectDeletions));
         Replace(Projects, (await _projectRepository.GetAllAsync(cancellationToken))
             .Where(static project => project.LifecycleState == CatalogLifecycleState.Active));
-        await RefreshDashboardsAsync(cancellationToken);
+        if (refreshVisibleDashboard)
+            await RefreshVisibleDashboardAsync(cancellationToken);
     }
 
-    private async Task RefreshDashboardsAsync(CancellationToken cancellationToken)
+    private async Task RefreshVisibleDashboardAsync(CancellationToken cancellationToken)
     {
-        await PortfolioReporting.RefreshAsync(cancellationToken);
-        Portfolio = PortfolioReporting.Dashboard;
-        if (SelectedProject is null)
+        if (SelectedDestination == ShellDestination.Portfolio)
         {
-            ProjectReporting = null;
-            ProjectDashboard = null;
+            await PortfolioReporting.RefreshAsync(cancellationToken);
+            Portfolio = PortfolioReporting.Dashboard;
             return;
         }
+        if (SelectedDestination != ShellDestination.ProjectDashboard || SelectedProject is null)
+            return;
 
         if (!_projectDashboards.TryGetValue(
                 SelectedProject.Id,
@@ -1143,7 +1176,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         RefreshSyncIndicators();
         try
         {
-            await RefreshDashboardsAsync(CancellationToken.None);
+            await RefreshVisibleDashboardAsync(CancellationToken.None);
         }
         catch (Exception exception)
         {
@@ -1237,6 +1270,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         if (SettingsProject?.Id == projectId && _localIdentitySettings is not null)
             await _localIdentitySettings.RefreshAsync();
         if (SelectedProject?.Id != projectId || CurrentWorkspace is null) return;
+        _workspaceRevisions.Remove(CurrentWorkspace.TrackerId);
+        if (!IsTrackerDestination(SelectedDestination)) return;
         try { await CurrentWorkspace.RefreshAsync(); }
         catch (Exception exception)
         {

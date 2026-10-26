@@ -28,6 +28,8 @@ internal readonly record struct WorkspaceViewState(
 
 public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 {
+    private bool _isWorkspaceActive = true;
+    private bool _graphNeedsRebuild;
     private readonly EntityOverviewService _overviewService;
     private readonly TrackerId _trackerId;
     private readonly ProjectDeveloperService? _developers;
@@ -448,6 +450,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
                 CloseEntityDetails();
                 ClearOverviewSelection();
                 _applyBulkStatusCommand.NotifyCanExecuteChanged();
+                RebuildGraphIfVisible();
             }
         }
     }
@@ -663,10 +666,26 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public void PrepareForDeactivation()
     {
+        _isWorkspaceActive = false;
         ActiveTable.CloseOpenFilter();
         ArchivedTable.CloseOpenFilter();
         CloseEntityDetails();
         ClearOverviewSelection();
+    }
+
+    internal void Activate(MainWindowTab tab)
+    {
+        _isWorkspaceActive = true;
+        SelectedTab = tab;
+        RebuildGraphIfVisible();
+    }
+
+    private void RebuildGraphIfVisible()
+    {
+        if (!_isWorkspaceActive || SelectedTab != MainWindowTab.DependencyGraph || !_graphNeedsRebuild)
+            return;
+        DependencyGraph.Rebuild(ActiveTable.SourceItems);
+        _graphNeedsRebuild = false;
     }
 
     public void DiscardTransientWork()
@@ -821,7 +840,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         ClearOverviewSelection();
         ActiveTable.ReplaceSourceItems(items);
         ArchivedTable.ReplaceSourceItems(archivedItems);
-        DependencyGraph.Rebuild(items);
+        _graphNeedsRebuild = true;
+        RebuildGraphIfVisible();
         OnPropertyChanged(nameof(HasOverviewItems));
         OnPropertyChanged(nameof(HasArchivedItems));
         OnPropertyChanged(nameof(ShowOverviewEmptyState));
