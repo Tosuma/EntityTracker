@@ -288,7 +288,8 @@ public sealed class MainWindowViewModelTests
         viewModel.ActiveTable.ClearAllFiltersCommand.Execute(null);
 
         Assert.True(viewModel.IsTotalSummarySelected);
-        Assert.Equal("Matching entity", Assert.Single(viewModel.OverviewItems).SourceName);
+        Assert.Equal(string.Empty, viewModel.OverviewSearchQuery);
+        Assert.Equal(2, viewModel.OverviewItems.Count);
     }
 
     [Fact]

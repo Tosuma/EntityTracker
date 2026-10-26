@@ -83,6 +83,9 @@ internal sealed class ResponsibleDeveloperFilterState(EntityTableViewModel owner
     internal override bool AppliesExactly(IEnumerable<object> values) =>
         _appliedSelection?.SetEquals(values.Cast<DeveloperFilterValue>()) == true;
 
+    internal override IReadOnlyList<object> GetAppliedValues() =>
+        _appliedSelection?.Cast<object>().ToArray() ?? [];
+
     internal override bool IncludesAppliedValue(object value) =>
         _appliedSelection?.Contains((DeveloperFilterValue)value) == true;
 }

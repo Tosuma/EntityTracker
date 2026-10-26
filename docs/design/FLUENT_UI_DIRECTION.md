@@ -156,6 +156,9 @@ application theme.
 ## Interaction principles
 
 - Preserve accepted filtering semantics: OR within a column and AND across columns.
+- Apply each page's current search, filters and sort to the next Tracker's data when switching
+  Trackers, including cleared values. Overview and Archived keep separate views. **Clear filters
+  and sort** also clears the page's search text.
 - Keep filter and status-sort actions in Fluent column-header flyouts. Do not add a duplicate filter
   pane or applied-filter chip system.
 - Preserve lazy entity/dependency search and `Ctrl+F`. Search is a box in the page toolbar

@@ -139,6 +139,8 @@ public abstract class OverviewColumnFilterState : INotifyPropertyChanged
 
     internal abstract void SetAppliedValues(IEnumerable<object> values);
 
+    internal abstract IReadOnlyList<object> GetAppliedValues();
+
     /// <summary>Whether exactly these values are applied, no more and no fewer.</summary>
     internal abstract bool AppliesExactly(IEnumerable<object> values);
 
@@ -307,6 +309,9 @@ internal sealed class OverviewColumnFilterState<T> : OverviewColumnFilterState
 
     internal override bool AppliesExactly(IEnumerable<object> values) =>
         _appliedSelection?.SetEquals(values.Cast<T>()) == true;
+
+    internal override IReadOnlyList<object> GetAppliedValues() =>
+        _appliedSelection?.Cast<object>().ToArray() ?? [];
 
     internal override bool IncludesAppliedValue(object value) =>
         _appliedSelection?.Contains((T)value) == true;

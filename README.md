@@ -292,7 +292,9 @@ adding or editing an entity, and the dependency graph search) matches names the 
 the name, word by word across spaces, snake_case, kebab-case, PascalCase and camelCase ("cust pref"
 finds `customer_preference`), and written without spaces ("legalentity" finds `legal entity`,
 `legalEntity` and `legal_entity`). Typing is never interrupted when suggestions appear. Switching
-Tracker while searching keeps the search: the next Tracker opens with the same search already applied.
+Tracker keeps the current search, column filters and sort: they apply immediately to the next
+Tracker's data, including when returning to a previously visited Tracker. Overview and Archived keep
+separate views. **Clear filters and sort** also clears that page's search text.
 
 Development status keeps the user-set detail: **Rework needed** means work is pending,
 **Reworking** means it is active, and **Blocked** manually pauses an entity. Work status shows
