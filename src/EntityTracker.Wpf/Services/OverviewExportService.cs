@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using ClosedXML.Excel;
+using EntityTracker.Application.Planning;
 using EntityTracker.Infrastructure.Configuration;
 using EntityTracker.Wpf.ViewModels;
 
@@ -13,6 +14,7 @@ public sealed class OverviewExportService
     [
         "Priority", "Rank", "Entity", "Work status", "Development status",
         "Responsible dev", "Group", "Blockers", "Entity ID", "Requested priority",
+        "Due date", "Effective due date",
         "Current Developer names", "Dependency count", "Dependencies",
         "Internal notes", "Shared notes", "Filter active", "Created UTC", "Schema updated UTC", "Progress updated UTC"
     ];
@@ -76,7 +78,7 @@ public sealed class OverviewExportService
             for (int col = 0; col < cells.Count; col++)
             {
                 IXLCell cell = sheet.Cell(index + 2, col + 1);
-                if (col is 0 or 1 or 9 or 12 &&
+                if (col is 0 or 1 or 9 or 13 &&
                     double.TryParse(cells[col], NumberStyles.Integer, CultureInfo.InvariantCulture,
                         out double number))
                     cell.Value = number;
@@ -94,6 +96,7 @@ public sealed class OverviewExportService
         row.Status, string.Join(", ", row.DeveloperItems.Select(dev => dev.Initials)),
         EmptyDash(row.GroupName), EmptyDash(row.BlockersDisplay), row.EntityId.Value.ToString("D"),
         row.RequestedPriorityValue?.ToString(CultureInfo.InvariantCulture) ?? "",
+        DueDateText.Format(row.DueDateValue, ""), DueDateText.Format(row.EffectiveDueDateValue, ""),
         string.Join(", ", row.DeveloperItems.Select(dev =>
             string.IsNullOrWhiteSpace(dev.DisplayName) ? dev.Initials : dev.DisplayName)),
         row.DependencyCount, string.Join(" | ", row.DependencyNames), row.Notes, row.SharedNotes, row.FilterActive,

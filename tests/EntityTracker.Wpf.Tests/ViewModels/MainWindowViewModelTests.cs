@@ -821,6 +821,42 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task StandaloneEditor_SavesDueDateAndTheDueColumnFollowsTheInheritedSetting()
+    {
+        TrackedEntity prerequisite = Entity(1, "Prerequisite");
+        TrackedEntity owner = Entity(2, "Owner");
+        MainWindowViewModel viewModel = CreateViewModel(
+            [owner, prerequisite],
+            [Dependency(owner, prerequisite)],
+            out StubStateStore store);
+        await viewModel.InitializeAsync();
+        EntityOverviewRow ownerRow = viewModel.OverviewItems.Single(item => item.EntityId == owner.Id);
+        viewModel.EditOverviewEntityCommand.Execute(ownerRow);
+        await WaitUntilAsync(() => viewModel.Editor.IsOpen && !viewModel.Editor.IsBusy);
+        Assert.Null(viewModel.Editor.SelectedDueDate);
+        Assert.False(viewModel.Editor.IsDirty);
+
+        viewModel.Editor.SelectedDueDate = new DateTime(2026, 11, 5, 14, 30, 0);
+
+        Assert.True(viewModel.Editor.IsDirty);
+        viewModel.Editor.SaveCommand.Execute(null);
+        await WaitUntilAsync(() => !viewModel.Editor.IsOpen &&
+            viewModel.OverviewItems.Any(item => item.Due == "05-11-2026"));
+
+        TrackedEntity update = Assert.Single(store.AppliedChangeSet!.EntitiesWithDueDateToUpdate);
+        Assert.Equal(new DateOnly(2026, 11, 5), update.DueDate);
+        Assert.Empty(store.AppliedChangeSet.EntitiesWithRequestedPriorityToUpdate);
+        Assert.Equal(["Prerequisite", "Owner"], viewModel.OverviewItems.Select(static item => item.SourceName));
+        Assert.Equal(["—", "05-11-2026"], viewModel.OverviewItems.Select(static item => item.Due));
+
+        viewModel.SetShowInheritedDueDates(true);
+        Assert.Equal(["05-11-2026", "05-11-2026"], viewModel.OverviewItems.Select(static item => item.Due));
+
+        viewModel.SetShowInheritedDueDates(false);
+        Assert.Equal(["—", "05-11-2026"], viewModel.OverviewItems.Select(static item => item.Due));
+    }
+
+    [Fact]
     public async Task ArchivedDetails_CancelDoesNothingAndRestoreReusesSameEntity()
     {
         TrackedEntity archived = Entity(
@@ -1373,6 +1409,10 @@ public sealed class MainWindowViewModelTests
             _entities.Single(item => item.Id == updated.Id)
                 .ChangeGroupName(updated.GroupName);
 
+        public void UpdateDueDate(TrackedEntity updated) =>
+            _entities.Single(item => item.Id == updated.Id)
+                .ChangeDueDate(updated.DueDate);
+
     }
 
     private sealed class AlwaysDiscardConfirmation : IContextDiscardConfirmation
@@ -1447,6 +1487,11 @@ public sealed class MainWindowViewModelTests
             foreach (TrackedEntity entity in changeSet.EntitiesWithGroupNameToUpdate)
             {
                 entityRepository.UpdateGroupName(entity);
+            }
+
+            foreach (TrackedEntity entity in changeSet.EntitiesWithDueDateToUpdate)
+            {
+                entityRepository.UpdateDueDate(entity);
             }
 
             return Task.CompletedTask;

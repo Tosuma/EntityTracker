@@ -44,6 +44,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private readonly NotificationCenter? _notifications;
     private readonly AsyncCommand<OverviewExportFormat> _exportOverviewCommand;
     private bool _isExporting;
+    private bool _showInheritedDueDates;
     private readonly AsyncCommand _assignMeCommand;
     private readonly AsyncCommand _openIdentitySettingsCommand;
     private string? _assignmentGuidance;
@@ -793,9 +794,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         }
 
         HasOverviewError = false;
-        EntityOverviewRow[] rows = result.Items.Select(CreateOverviewRow).ToArray();
+        EntityOverviewRow[] rows = result.Items
+            .Select(item => CreateOverviewRow(item, _showInheritedDueDates))
+            .ToArray();
         EntityOverviewRow[] archivedRows = result.ArchivedItems
-            .Select(CreateOverviewRow)
+            .Select(item => CreateOverviewRow(item, _showInheritedDueDates))
             .ToArray();
         ReplaceOverviewItems(rows, archivedRows);
         UpdateProgressCounts(result.Items);
@@ -1062,6 +1065,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         ArchivedTable.SearchResponsibleNames = enabled;
     }
 
+    /// <summary>Switches the Due column between each entity's own due date and the one it inherits.</summary>
+    public void SetShowInheritedDueDates(bool enabled)
+    {
+        if (_showInheritedDueDates == enabled) return;
+        _showInheritedDueDates = enabled;
+        ActiveTable.ReplaceSourceItems(ActiveTable.SourceItems
+            .Select(row => row with { ShowInheritedDueDate = enabled }).ToArray());
+        ArchivedTable.ReplaceSourceItems(ArchivedTable.SourceItems
+            .Select(row => row with { ShowInheritedDueDate = enabled }).ToArray());
+    }
+
     private void ShowArchivedResponsibilityHistory()
     {
         EntityId? entityId = Editor.ArchivedDetails?.Entity.Id;
@@ -1223,7 +1237,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(IsNotRelevantSummarySelected));
     }
 
-    internal static EntityOverviewRow CreateOverviewRow(EntityOverviewItem item)
+    internal static EntityOverviewRow CreateOverviewRow(EntityOverviewItem item,
+        bool showInheritedDueDates = false)
     {
         bool isArchived = item.LifecycleState == EntityLifecycleState.Archived;
         return new EntityOverviewRow(
@@ -1256,7 +1271,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             item.AuditTimestamps.ProgressUpdatedAtUtc,
             item.CurrentDevelopers,
             item.FilterActive,
-            item.SharedNotes);
+            item.SharedNotes,
+            item.DueDate,
+            item.EffectiveDueDate,
+            showInheritedDueDates);
     }
 
     private static string FormatStatus(DevelopmentStatus status) => status switch

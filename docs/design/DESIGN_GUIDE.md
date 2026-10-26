@@ -106,6 +106,11 @@ newest first: the version and date in semibold over its message in secondary tex
 in a scroll area so many skipped versions don't push the rest of the page away. Its heading says what it
 lists: "What's new in 1.1.0" before an update, "What's new since 1.0.0" after one.
 
+A **due date** is shown as day-month-year with leading zeros (`dd-MM-yyyy`, 26-10-2026; `DueDateText`) in
+the Overview's Due column, the details pane, the export and the Sync from source review, and as "—" when
+there is none. It has no colour or icon: the order already puts the most urgent dates first. Date pickers
+keep the Fluent `DatePicker` and the Windows date format.
+
 "Implemented" (Completed, Reconciled, Rework needed and Reworking) explains itself without a description.
 Wherever the number shows (the dashboard's progress box and Tracker cards, Portfolio, the Overview's
 "% implemented" card) a thin bar (`ImplementedComposition`, 6 px, no outline) shows its parts' shares of

@@ -32,6 +32,8 @@ EntityTracker keeps those concerns separate:
 
 - **Dependency-aware planning** — rank entities so dependencies appear before the entities that
   use them, while keeping references to names no entity has yet as unresolved dependencies.
+- **Due dates** — give an entity a date it must be done by; the Overview orders by due date before
+  priority, and the entities it depends on inherit the date so they come first.
 - **Entity tracking** — create and rename entities, add or remove dependencies, update notes and
   progress, and archive or restore entities.
 - **Workflow visibility** — combine Excel-style filters on Responsible dev, Group, Status, and
@@ -174,14 +176,14 @@ separator is also selected there. Choose the file location and name in the save 
 notification reports when the export finishes or fails.
 
 **Settings** is split into categories: **General** (appearance), **Project** (your local Developer
-for any Project, independent of the current context), **Tracker** (Overview search and export, and the dependency graph's display), **Sync**
+for any Project, independent of the current context), **Tracker** (Overview search, due dates and export, and the dependency graph's display), **Sync**
 (automatic Project sync), and **About** (app version).
 
 ![Settings General page with the appearance choice](images/light/settings.png)
 
 ![Settings Project page with the Project picker and local Developer choice](images/light/settings-project.png)
 
-![Settings Tracker page with Overview search and export, and Dependency graph display options](images/light/settings-tracker.png)
+![Settings Tracker page with Overview search, due dates and export, and Dependency graph display options](images/light/settings-tracker.png)
 
 ![Settings Sync page with automatic Project sync and interval](images/light/settings-sync.png)
 
@@ -240,7 +242,7 @@ Overview after the normal unsaved-work confirmation.
 
 A Tracker created as a copy of another keeps a link to it. **Sync from source** on the Project
 dashboard brings the source's later changes into the copy: which entities exist, their dependencies,
-requested priorities, groups and Filter active. A copy starts with its source's Filter active. Each difference is a plain sentence naming both Trackers, with two
+requested priorities, due dates, groups and Filter active. A copy starts with its source's Filter active. Each difference is a plain sentence naming both Trackers, with two
 outcomes to choose from, such as "Add the dependency on customer" or "Leave it out". An entity that
 exists on only one side is a single choice that brings it whole, with all its dependencies, or leaves
 it out. **Use … for all** and **Keep … for all** decide everything at once, and single rows can still be
@@ -313,8 +315,16 @@ Archived entities have their own tab and independent search, filters, and Status
 available as read-only records with their progress, notes, and dependencies intact and can be
 deliberately restored from the archived view.
 
+The Overview lists entities in planning order: by due date first, then priority, then dependency-safe
+rank. An entity inherits the earliest due date and the most urgent priority of the entities that
+depend on it, because it has to be done before them, so it never sorts after an entity that needs
+it. The **Due** column shows each entity's own due date as day-month-year (26-10-2026). Turn on
+**Show inherited due dates** in **Settings → Tracker** to show the inherited date as well. Set or
+clear a due date in the entity editor or when adding an entity; the export and Sync from source
+include it.
+
 Entity names and each row's **View details** action open a read-only side pane with priorities,
-rank, assignment, full notes, effective dependencies, blockers, and audit timestamps.
+due dates, rank, assignment, full notes, effective dependencies, blockers, and audit timestamps.
 Use **Edit** in the details header to open the entity editor. Opening or closing the pane does not
 disturb bulk row selection.
 

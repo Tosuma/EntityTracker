@@ -48,20 +48,30 @@ public sealed class OverviewExportServiceTests
         {
             string path = Path.Combine(directory, "overview.xlsx");
             await new OverviewExportService().ExportAsync(path, OverviewExportFormat.Excel,
-                [Row("Example", "Notes")], OverviewCsvSeparator.Semicolon);
+                [Row("Example", "Notes") with
+                {
+                    DueDateValue = new DateOnly(2026, 11, 5),
+                    EffectiveDueDateValue = new DateOnly(2026, 10, 30)
+                }], OverviewCsvSeparator.Semicolon);
             using XLWorkbook workbook = new(path);
             IXLWorksheet sheet = workbook.Worksheet("Overview");
             Assert.Equal("Entity", sheet.Cell(1, 3).GetString());
             Assert.Equal("Example", sheet.Cell(2, 3).GetString());
             Assert.Equal(2, sheet.Cell(2, 1).GetDouble());
             Assert.Equal("AB, CD", sheet.Cell(2, 6).GetString());
-            Assert.Equal("Alice Brown, Chris Doe", sheet.Cell(2, 11).GetString());
-            Assert.Equal("Internal notes", sheet.Cell(1, 14).GetString());
-            Assert.Equal("Notes", sheet.Cell(2, 14).GetString());
-            Assert.Equal("Shared notes", sheet.Cell(1, 15).GetString());
-            Assert.Equal("Agreed with the client", sheet.Cell(2, 15).GetString());
-            Assert.Equal("Filter active", sheet.Cell(1, 16).GetString());
-            Assert.Equal("Active only\nBy region", sheet.Cell(2, 16).GetString());
+            Assert.Equal("Alice Brown, Chris Doe", sheet.Cell(2, 13).GetString());
+            Assert.Equal("Due date", sheet.Cell(1, 11).GetString());
+            Assert.Equal("05-11-2026", sheet.Cell(2, 11).GetString());
+            Assert.Equal("Effective due date", sheet.Cell(1, 12).GetString());
+            Assert.Equal("30-10-2026", sheet.Cell(2, 12).GetString());
+            Assert.Equal("Dependency count", sheet.Cell(1, 14).GetString());
+            Assert.Equal(XLDataType.Number, sheet.Cell(2, 14).DataType);
+            Assert.Equal("Internal notes", sheet.Cell(1, 16).GetString());
+            Assert.Equal("Notes", sheet.Cell(2, 16).GetString());
+            Assert.Equal("Shared notes", sheet.Cell(1, 17).GetString());
+            Assert.Equal("Agreed with the client", sheet.Cell(2, 17).GetString());
+            Assert.Equal("Filter active", sheet.Cell(1, 18).GetString());
+            Assert.Equal("Active only\nBy region", sheet.Cell(2, 18).GetString());
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

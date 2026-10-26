@@ -773,7 +773,7 @@ public sealed class PresentationConfigurationTests
         XElement[] columns = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml").Descendants()
             .Where(static element => element.Name.LocalName == "DataGridTextColumn")
             .ToArray();
-        Assert.Equal(5, columns.Length);
+        Assert.Equal(6, columns.Length);
         Assert.All(columns, column =>
             Assert.Equal("{StaticResource CenteredCellTextStyle}", (string?)column.Attribute("ElementStyle")));
     }
@@ -1240,13 +1240,15 @@ public sealed class PresentationConfigurationTests
             element.Name.LocalName == "DataGrid.Columns");
         XElement[] configuredColumns = columns.Elements().ToArray();
 
-        Assert.Equal(9, configuredColumns.Length);
+        Assert.Equal(10, configuredColumns.Length);
         Assert.Equal("Priority", (string?)configuredColumns[0].Attribute("Header"));
         Assert.Equal("Rank", (string?)configuredColumns[1].Attribute("Header"));
-        Assert.Equal("Entity", (string?)configuredColumns[2].Attribute("Header"));
-        Assert.Contains(configuredColumns[7].Descendants(), element =>
+        Assert.Equal("Due", (string?)configuredColumns[2].Attribute("Header"));
+        Assert.Equal("{Binding Due}", (string?)configuredColumns[2].Attribute("Binding"));
+        Assert.Equal("Entity", (string?)configuredColumns[3].Attribute("Header"));
+        Assert.Contains(configuredColumns[8].Descendants(), element =>
             (string?)element.Attribute("Text") == "Blockers");
-        Assert.Null(configuredColumns[8].Attribute("Header"));
+        Assert.Null(configuredColumns[9].Attribute("Header"));
         Assert.DoesNotContain(columns.DescendantsAndSelf(), element =>
             ((string?)element.Attribute("Binding"))?.Contains("Provenance", StringComparison.Ordinal) == true ||
             ((string?)element.Attribute("Binding"))?.Contains("Notes", StringComparison.Ordinal) == true ||
@@ -1263,9 +1265,11 @@ public sealed class PresentationConfigurationTests
             "{DynamicResource Brush.Surface.Page}",
             (string?)detailsPane.Attribute("Background"));
         Assert.DoesNotContain(detailsPane.Descendants(), element =>
-            element.Name.LocalName is "TextBox" or "ComboBox" or "CheckBox");
+            element.Name.LocalName is "TextBox" or "ComboBox" or "CheckBox" or "DatePicker");
         Assert.Contains(detailsPane.Descendants(), element =>
             (string?)element.Attribute("AutomationProperties.Name") == "Close entity details");
+        Assert.Contains(detailsPane.Descendants(), element =>
+            (string?)element.Attribute("Text") == "{Binding EffectiveDueDate}");
         Assert.Contains(document.Descendants(), element =>
             (string?)element.Attribute("Command") ==
             "{Binding DataContext.OpenEntityDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}");

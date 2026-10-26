@@ -21,7 +21,7 @@ public sealed class DependencyGraphReportSectionProvider : IReportSectionProvide
     {
         ArgumentNullException.ThrowIfNull(context);
         return Section(context.Trackers.Select(tracker => (context.TrackerScopeKey(tracker),
-            (IReadOnlyList<EntityOverviewRow>)context.Entities[tracker.Id].Select(MainWindowViewModel.CreateOverviewRow).ToArray())));
+            (IReadOnlyList<EntityOverviewRow>)context.Entities[tracker.Id].Select(item => MainWindowViewModel.CreateOverviewRow(item)).ToArray())));
     }
 
     /// <summary>Builds the section from each Tracker's scope and Overview rows; Trackers without entities get no graph.</summary>

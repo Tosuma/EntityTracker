@@ -417,7 +417,7 @@
                             <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Overview" />
                             <TextBlock Margin="0,3,0,0"
                                        Foreground="{DynamicResource Brush.Text.Secondary}"
-                                       Text="Entities are grouped by priority while dependencies remain before the entities that use them." />
+                                       Text="Entities are ordered by due date, then priority, while dependencies remain before the entities that use them." />
                         </StackPanel>
                     </DockPanel>
 
@@ -769,6 +769,7 @@
                             <DataGrid.Columns>
                                 <DataGridTextColumn Width="72" Binding="{Binding Priority}" Header="Priority" ElementStyle="{StaticResource CenteredCellTextStyle}" />
                                 <DataGridTextColumn Width="70" Binding="{Binding Rank}" Header="Rank" ElementStyle="{StaticResource CenteredCellTextStyle}" />
+                                <DataGridTextColumn Width="100" Binding="{Binding Due}" Header="Due" ElementStyle="{StaticResource CenteredCellTextStyle}" />
                                 <DataGridTemplateColumn Width="2.2*" MinWidth="180" Header="Entity">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
@@ -1574,6 +1575,7 @@
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -1588,6 +1590,14 @@
                                 <TextBlock Margin="0,3,0,0" Text="{Binding EffectivePriority}" TextWrapping="Wrap" />
                             </StackPanel>
                             <StackPanel Grid.Row="1" Margin="0,12,12,0">
+                                <TextBlock FontWeight="SemiBold" Text="Due date" />
+                                <TextBlock Margin="0,3,0,0" Text="{Binding DueDate}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,12,0,0">
+                                <TextBlock FontWeight="SemiBold" Text="Effective due date" />
+                                <TextBlock Margin="0,3,0,0" Text="{Binding EffectiveDueDate}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <StackPanel Grid.Row="2" Margin="0,12,12,0">
                                 <TextBlock FontWeight="SemiBold" Text="Rank" />
                                 <TextBlock Margin="0,3,0,0" Text="{Binding Rank}" TextWrapping="Wrap" />
                             </StackPanel>
@@ -1822,7 +1832,7 @@
                                     <TextBlock FontSize="16" FontWeight="SemiBold" Text="Identity and planning" />
                                     <TextBlock Margin="0,3,0,14"
                                                Foreground="{DynamicResource Brush.Text.Secondary}"
-                                               Text="Name the entity and optionally record ownership, grouping, and its requested priority."
+                                               Text="Name the entity and optionally record ownership, grouping, its requested priority, and a due date."
                                                TextWrapping="Wrap" />
 
                                     <Label Target="{Binding ElementName=ManualEntityNameTextBox}" Content="Entity name" />
@@ -1873,6 +1883,10 @@
                                             <ColumnDefinition Width="16" />
                                             <ColumnDefinition Width="220" />
                                         </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
                                         <StackPanel>
                                             <Label Target="{Binding ElementName=ManualGroupComboBox}" Content="Group" />
                                             <controls:SuggestionComboBox x:Name="ManualGroupComboBox"
@@ -1896,6 +1910,14 @@
                                                       ItemsSource="{Binding ManualCreation.PriorityOptions}"
                                                       SelectedValue="{Binding ManualCreation.SelectedRequestedPriority}"
                                                       SelectedValuePath="Value" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,12,0,0">
+                                            <Label Target="{Binding ElementName=ManualDueDatePicker}" Content="Due date" />
+                                            <DatePicker x:Name="ManualDueDatePicker"
+                                                        Margin="0,4,0,0"
+                                                        AutomationProperties.HelpText="Optional. A due date orders before priority, and the entity's dependencies inherit it."
+                                                        AutomationProperties.Name="Due date"
+                                                        SelectedDate="{Binding ManualCreation.SelectedDueDate}" />
                                         </StackPanel>
                                     </Grid>
                                     <TextBlock Margin="0,7,0,0"
@@ -2341,6 +2363,21 @@
                                                    TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Grid>
+
+                                <StackPanel x:Name="EditorDueDatePanel" Margin="0,0,0,12">
+                                    <TextBlock FontWeight="SemiBold" Text="Due date" />
+                                    <DatePicker Width="208"
+                                                Margin="0,5,0,0"
+                                                HorizontalAlignment="Left"
+                                                AutomationProperties.HelpText="Optional. A due date orders before priority, and the entities this one depends on inherit it."
+                                                AutomationProperties.Name="Due date"
+                                                IsEnabled="{Binding Editor.CanEditPriority}"
+                                                SelectedDate="{Binding Editor.SelectedDueDate}" />
+                                    <TextBlock Margin="0,4,0,0"
+                                               Foreground="{DynamicResource Brush.Text.Secondary}"
+                                               Text="Orders before priority; the entities this one depends on inherit it. Clear the date to remove it."
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
 
                                 <Border Margin="0,0,0,14"
                                         Padding="10"

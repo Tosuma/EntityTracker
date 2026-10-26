@@ -82,6 +82,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     private string? _nameConflict;
     private int _nameCheckVersion;
     private int? _selectedRequestedPriority;
+    private DateTime? _selectedDueDate;
     private string _effectivePriority = "—";
     private IReadOnlyList<PriorityPlanningRow> _priorityPreviewRows = [];
     private IReadOnlyList<string> _priorityUnresolvedDependencyNames = [];
@@ -685,6 +686,23 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         }
     }
 
+    /// <summary>Gets or sets the due date; a DateTime for the DatePicker, of which only the date counts.</summary>
+    public DateTime? SelectedDueDate
+    {
+        get => _selectedDueDate;
+        set
+        {
+            if (CanEditPriority)
+                SetField(ref _selectedDueDate, value?.Date);
+        }
+    }
+
+    private DateOnly? SelectedDueDateValue =>
+        _selectedDueDate is { } date ? DateOnly.FromDateTime(date) : null;
+
+    private static DateTime? ToPickerDate(DateOnly? date) =>
+        date?.ToDateTime(TimeOnly.MinValue);
+
     public string EffectivePriority
     {
         get => _effectivePriority;
@@ -809,6 +827,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                    !_initialDeveloperIds.SetEquals(DeveloperPicker.SelectedIds) ||
                    EditedGroupName != entity.GroupName ||
                    SelectedRequestedPriority != entity.RequestedPriority ||
+                   SelectedDueDateValue != entity.DueDate ||
                    DependencySignature(CurrentEditPlan.DesiredDependencies) != _initialDependencySignature;
         }
     }
@@ -826,7 +845,7 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     {
         EntityEditorMode.ArchivedDetails =>
             "Archived entities are read-only until explicitly restored.",
-        _ => "Update name, group, assignment, priority, progress, notes, and dependencies."
+        _ => "Update name, group, assignment, priority, due date, progress, notes, and dependencies."
     };
 
     public string SaveLabel => "Save changes";
@@ -967,6 +986,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(EditedGroupName));
             _selectedRequestedPriority = details.Entity.RequestedPriority;
             OnPropertyChanged(nameof(SelectedRequestedPriority));
+            _selectedDueDate = ToPickerDate(details.Entity.DueDate);
+            OnPropertyChanged(nameof(SelectedDueDate));
             EffectivePriority = "—";
             Dependencies = details.Dependencies.Select(static item =>
                 new EntityDependencyEditRow(
@@ -1254,7 +1275,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
                 developerIds: DeveloperPicker?.SelectedIds,
                 filterActive: EditedFilterActive,
                 sharedNotes: EditedSharedNotes,
-                sourceName: EditedName);
+                sourceName: EditedName,
+                dueDateChange: new DueDateChange(SelectedDueDateValue));
             await _onPersisted();
 
             CloseSession();
@@ -1441,6 +1463,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(EditedGroupName));
             _selectedRequestedPriority = plan.Entity.RequestedPriority;
             OnPropertyChanged(nameof(SelectedRequestedPriority));
+            _selectedDueDate = ToPickerDate(plan.Entity.DueDate);
+            OnPropertyChanged(nameof(SelectedDueDate));
         }
 
         Dependencies = plan.Dependencies.Select(static item => new EntityDependencyEditRow(
@@ -1532,6 +1556,8 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         NotifyNameState();
         _selectedRequestedPriority = null;
         OnPropertyChanged(nameof(SelectedRequestedPriority));
+        _selectedDueDate = null;
+        OnPropertyChanged(nameof(SelectedDueDate));
         EffectivePriority = "—";
         HasPendingPriorityChange = false;
         PriorityPreviewRows = [];

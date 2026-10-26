@@ -190,6 +190,8 @@ public partial class App : System.Windows.Application
                 levelOverride: LoggingLevels.ReadOverride()));
             services.AddSingleton(provider => new ResponsibilitySearchSettingsViewModel(
                 settingsStore, settings.Settings, provider.GetRequiredService<NotificationCenter>()));
+            services.AddSingleton(provider => new DueDateSettingsViewModel(
+                settingsStore, settings.Settings, provider.GetRequiredService<NotificationCenter>()));
             services.AddSingleton(provider => new OverviewExportSettingsViewModel(
                 settingsStore, settings.Settings, provider.GetRequiredService<NotificationCenter>()));
             services.AddSingleton(provider => new DependencyGraphSettingsViewModel(

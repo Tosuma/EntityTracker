@@ -150,6 +150,19 @@
                                       IsChecked="{Binding ResponsibilitySearch.IsEnabled, Mode=OneWay}" />
                         </StackPanel>
                     </Border>
+                    <Border x:Name="DueDateSettingsCard" Margin="0,16,0,0" Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
+                        <StackPanel>
+                            <TextBlock Margin="0,0,0,4" Style="{StaticResource SectionHeadingTextStyle}"
+                                       Text="Due dates" />
+                            <TextBlock Margin="0,0,0,12" Style="{StaticResource PageDescriptionTextStyle}"
+                                       Text="An entity must be done before the entities that depend on it, so it inherits their earliest due date. The order always uses it; the Due column shows only an entity's own due date unless this is on."
+                                       TextWrapping="Wrap" />
+                            <CheckBox Content="Show inherited due dates"
+                                      AutomationProperties.Name="Show inherited due dates in the overview"
+                                      Command="{Binding DueDates.ToggleCommand}"
+                                      IsChecked="{Binding DueDates.IsEnabled, Mode=OneWay}" />
+                        </StackPanel>
+                    </Border>
                     <Border x:Name="OverviewExportSettingsCard" Margin="0,16,0,0" Padding="18" Style="{StaticResource EntityTrackerCardStyle}">
                         <StackPanel>
                             <TextBlock Margin="0,0,0,4" Style="{StaticResource SectionHeadingTextStyle}"

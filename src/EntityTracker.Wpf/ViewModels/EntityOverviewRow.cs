@@ -1,5 +1,6 @@
 using EntityTracker.Application.Ranking;
 using EntityTracker.Application.Overview;
+using EntityTracker.Application.Planning;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 
@@ -34,7 +35,10 @@ public sealed record EntityOverviewRow(
     DateTimeOffset? ProgressUpdatedAtUtc = null,
     IReadOnlyList<EntityOverviewDeveloper>? CurrentDevelopers = null,
     string FilterActive = "",
-    string SharedNotes = "")
+    string SharedNotes = "",
+    DateOnly? DueDateValue = null,
+    DateOnly? EffectiveDueDateValue = null,
+    bool ShowInheritedDueDate = false)
 {
     public IReadOnlyList<EntityOverviewDeveloper> DeveloperItems => CurrentDevelopers ?? [];
 
@@ -45,6 +49,14 @@ public sealed record EntityOverviewRow(
 
     public string GroupNameDisplay =>
         string.IsNullOrWhiteSpace(GroupName) ? "—" : GroupName;
+
+    /// <summary>
+    /// The Due column: the entity's own due date, or, with "Show inherited due dates" on, the earliest one
+    /// it inherits from the entities that depend on it.
+    /// </summary>
+    public string Due => DueDateText.Format(ShowInheritedDueDate
+        ? EffectiveDueDateValue ?? DueDateValue
+        : DueDateValue);
 
     public bool HasGraphIssue =>
         DependencyState is DependencyResolutionState.Unresolved or

@@ -96,6 +96,8 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton(provider => new ResponsibilitySearchSettingsViewModel(
             settingsStore,
             provider.GetRequiredService<EntityTrackerSettings>()));
+        services.AddSingleton(provider => new DueDateSettingsViewModel(
+            settingsStore, provider.GetRequiredService<EntityTrackerSettings>()));
         services.AddSingleton(provider => new OverviewExportSettingsViewModel(
             settingsStore, provider.GetRequiredService<EntityTrackerSettings>()));
         services.AddSingleton(provider => new DependencyGraphSettingsViewModel(
