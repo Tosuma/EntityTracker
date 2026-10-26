@@ -30,6 +30,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 {
     private bool _isWorkspaceActive = true;
     private bool _graphNeedsRebuild;
+    private readonly Func<CancellationToken, Task<long>>? _readRevision;
     private readonly EntityOverviewService _overviewService;
     private readonly TrackerId _trackerId;
     private readonly ProjectDeveloperService? _developers;
@@ -93,7 +94,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         IOverviewExportFilePicker? overviewExportFilePicker = null,
         OverviewExportSettingsViewModel? overviewExportSettings = null,
         NotificationCenter? notifications = null,
-        IProgressChartFilePicker? graphFilePicker = null)
+        IProgressChartFilePicker? graphFilePicker = null,
+        Func<CancellationToken, Task<long>>? readRevision = null)
     {
         ArgumentNullException.ThrowIfNull(overviewService);
         ArgumentNullException.ThrowIfNull(bulkStatusUpdateService);
@@ -102,6 +104,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         ArgumentNullException.ThrowIfNull(entityLifecycleService);
         ArgumentNullException.ThrowIfNull(discardConfirmation);
         _trackerId = trackerId;
+        _readRevision = readRevision;
         _developers = developers;
         _responsibilityPeriods = responsibilityPeriods;
         _trackedState = trackedState;
@@ -337,6 +340,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public TrackerId TrackerId => _trackerId;
 
+    /// <summary>
+    /// Gets the persisted Project revision the loaded rows reflect, or null when the rows are not
+    /// known to be current (never loaded, failed to load, or no revision store).
+    /// </summary>
+    internal long? LoadedRevision { get; private set; }
+
     public bool HasUnsavedWork =>
         ManualCreation.IsDirty || Editor.IsDirty;
 
@@ -390,12 +399,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     }
 
     public bool IsOverviewSearchOpen => ActiveTable.IsSearchOpen;
-
-    public bool SearchOverviewDependencies
-    {
-        get => ActiveTable.SearchDependenciesInstead;
-        set => ActiveTable.SearchDependenciesInstead = value;
-    }
 
     /// <summary>
     /// Gets whether the entities could not be loaded; the reason is in the notification center,
@@ -818,7 +821,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     private async Task LoadOverviewAndProgressAsync(CancellationToken cancellationToken)
     {
+        LoadedRevision = null;
+        // Read before loading, so a write during the load leaves the rows older than the store.
+        long? revision = _readRevision is null ? null : await _readRevision(cancellationToken);
         await LoadOverviewAsync(cancellationToken);
+        if (!HasOverviewError)
+            LoadedRevision = revision;
     }
 
     private void SetOverviewFailure(string message, NotificationKind kind = NotificationKind.Failure)

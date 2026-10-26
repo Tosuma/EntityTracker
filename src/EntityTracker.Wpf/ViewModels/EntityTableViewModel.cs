@@ -9,8 +9,8 @@ using Microsoft.Extensions.Logging;
 
 namespace EntityTracker.Wpf.ViewModels;
 
-/// <summary>A table's search: whether it is open, what it searches for, and in which names.</summary>
-internal readonly record struct TableSearchState(bool IsOpen, string Query, bool DependenciesInstead);
+/// <summary>A table's search: whether it is open and what it searches for.</summary>
+internal readonly record struct TableSearchState(bool IsOpen, string Query);
 
 internal sealed record TableViewState(
     TableSearchState Search,
@@ -48,19 +48,16 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
         };
 
     private readonly IReadOnlyList<OverviewColumnFilterState> _filters;
-    private readonly bool _searchDependencies;
     private IReadOnlyList<EntityOverviewRow> _sourceItems = [];
     private IReadOnlyList<EntityOverviewRow> _items = [];
     private string _searchQuery = string.Empty;
     private bool _isSearchOpen;
-    private bool _searchDependenciesInstead;
     private OverviewSort? _sort;
     private CancellationTokenSource? _searchDebounce;
 
     private EntityTableViewModel(bool isArchived)
     {
         IsArchived = isArchived;
-        _searchDependencies = !isArchived;
 
         ResponsibleDeveloperFilter = new ResponsibleDeveloperFilterState(this);
         GroupFilter = CreateStringFilter(
@@ -196,24 +193,6 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
         {
             if (_searchResponsibleNames == value) return;
             _searchResponsibleNames = value;
-            OnPropertyChanged();
-            RebuildProjectionWithSelectionClear();
-        }
-    }
-
-    public bool CanSearchDependencies => _searchDependencies;
-
-    public bool SearchDependenciesInstead
-    {
-        get => _searchDependenciesInstead;
-        set
-        {
-            if (!_searchDependencies || _searchDependenciesInstead == value)
-            {
-                return;
-            }
-
-            _searchDependenciesInstead = value;
             OnPropertyChanged();
             RebuildProjectionWithSelectionClear();
         }
@@ -406,7 +385,7 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
     internal bool IsSearchPending => _searchDebounce is not null;
 
     /// <summary>Gets what the search looks like now, so it can be carried to another Tracker.</summary>
-    internal TableSearchState CaptureSearch() => new(IsSearchOpen, _searchQuery, _searchDependenciesInstead);
+    internal TableSearchState CaptureSearch() => new(IsSearchOpen, _searchQuery);
 
     internal TableViewState CaptureView() => new(CaptureSearch(),
         _filters.Where(filter => filter.IsApplied).ToDictionary(
@@ -437,11 +416,6 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
         _searchDebounce?.Cancel();
         _searchDebounce = null;
         IsSearchOpen = state.IsOpen;
-        if (_searchDependencies && _searchDependenciesInstead != state.DependenciesInstead)
-        {
-            _searchDependenciesInstead = state.DependenciesInstead;
-            OnPropertyChanged(nameof(SearchDependenciesInstead));
-        }
 
         _searchQuery = state.Query;
         OnPropertyChanged(nameof(SearchQuery));
@@ -530,19 +504,14 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
             return true;
         }
 
-        if (!SearchDependenciesInstead)
-        {
-            return MatchesName(row.SourceName, query) ||
-                   SearchResponsibleNames && row.DeveloperItems.Any(developer =>
-                       developer.Initials.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                       developer.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
-        }
-
-        return row.DependencyNames.Any(name => MatchesName(name, query));
+        return MatchesName(row.SourceName, query) ||
+               SearchResponsibleNames && row.DeveloperItems.Any(developer =>
+                   developer.Initials.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                   developer.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
-    /// Finds text anywhere in a name, and also word by word as the dependency search does, so
+    /// Finds text anywhere in a name, and also word by word, so
     /// "cust pref" and "legalentity" find "customer_preference" and "legal_entity".
     /// </summary>
     private static bool MatchesName(string name, string query) =>

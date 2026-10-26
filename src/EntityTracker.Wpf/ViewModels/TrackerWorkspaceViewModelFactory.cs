@@ -30,7 +30,9 @@ public sealed class TrackerWorkspaceViewModelFactory(
     OverviewExportSettingsViewModel? overviewExportSettings = null,
     NotificationCenter? notifications = null)
 {
-    public MainWindowViewModel Create(TrackerId trackerId)
+    public MainWindowViewModel Create(
+        TrackerId trackerId,
+        Func<CancellationToken, Task<long>>? readRevision = null)
     {
         return new MainWindowViewModel(
             trackerId,
@@ -49,6 +51,7 @@ public sealed class TrackerWorkspaceViewModelFactory(
             overviewExportFilePicker,
             overviewExportSettings,
             notifications,
-            chartFilePicker);
+            chartFilePicker,
+            readRevision);
     }
 }

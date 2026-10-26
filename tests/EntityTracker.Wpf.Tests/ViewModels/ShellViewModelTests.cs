@@ -113,6 +113,41 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
     }
 
     [Fact]
+    public async Task TrackerPages_KeepRowsAfterOwnEditsButRetryAReloadTheWorkspaceSkipped()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        Tracker second = await harness.TrackerManagement.CreateBlankAsync(harness.DefaultProject.Id, "Second tracker");
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "First entity");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        MainWindowViewModel first = shell.CurrentWorkspace!;
+        Tracker firstSelection = shell.Trackers.Single(tracker => tracker.Id == harness.DefaultTracker.Id);
+        Tracker secondSelection = shell.Trackers.Single(tracker => tracker.Id == second.Id);
+
+        first.UpdateOverviewSelection(first.ActiveTable.SourceItems);
+        first.SelectedBulkStatus = DevelopmentStatus.DevelopmentCompleted;
+        await first.ApplyBulkStatusAsync();
+        IReadOnlyList<EntityOverviewRow> afterOwnEdit = first.ActiveTable.SourceItems;
+        Assert.True(await shell.NavigateAsync(ShellDestination.DependencyGraph));
+        Assert.Same(afterOwnEdit, first.ActiveTable.SourceItems);
+        Assert.True(await shell.NavigateAsync(ShellDestination.Overview));
+
+        first.EditOverviewEntityCommand.Execute(Assert.Single(first.ActiveTable.SourceItems));
+        Assert.True(first.Editor.IsOpen);
+        Assert.True(await shell.SelectTrackerAsync(secondSelection));
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "Added while the editor was open");
+        Assert.True(await shell.SelectTrackerAsync(firstSelection));
+        Assert.Single(first.ActiveTable.SourceItems);
+
+        first.Editor.DiscardAndClose();
+        Assert.True(await shell.SelectTrackerAsync(secondSelection));
+        Assert.True(await shell.SelectTrackerAsync(firstSelection));
+        Assert.Equal(2, first.ActiveTable.SourceItems.Count);
+    }
+
+    [Fact]
     public async Task DependencyGraph_BuildsOnlyWhenVisibleAndUsesTheLatestTrackerData()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();

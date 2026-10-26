@@ -95,18 +95,13 @@ public sealed class EntityTableViewModelTests
 
         await SearchAsync(table, "voic");
         Assert.Equal(["invoice"], table.Items.Select(row => row.SourceName));
-
-        table.SearchDependenciesInstead = true;
-        await SearchAsync(table, "legal entity");
-        Assert.Equal(["invoice"], table.Items.Select(row => row.SourceName));
     }
 
     [Fact]
-    public void ASearchCarriedToAnotherTableAppliesAtOnceIncludingTheDependencyMode()
+    public void ASearchCarriedToAnotherTableAppliesAtOnce()
     {
         EntityTableViewModel from = EntityTableViewModel.CreateActive();
         from.OpenSearchCommand.Execute(null);
-        from.SearchDependenciesInstead = true;
         from.SearchQuery = "legalentity";
         EntityTableViewModel to = EntityTableViewModel.CreateActive();
         to.ReplaceSourceItems([
@@ -118,11 +113,10 @@ public sealed class EntityTableViewModelTests
         to.RestoreSearch(from.CaptureSearch());
 
         Assert.True(to.IsSearchOpen);
-        Assert.True(to.SearchDependenciesInstead);
         Assert.Equal("legalentity", to.SearchQuery);
-        Assert.Equal(["invoice"], to.Items.Select(row => row.SourceName));
+        Assert.Equal(["legal_entity"], to.Items.Select(row => row.SourceName));
 
-        to.RestoreSearch(new TableSearchState(false, string.Empty, false));
+        to.RestoreSearch(new TableSearchState(false, string.Empty));
         Assert.False(to.IsSearchOpen);
         Assert.Equal(string.Empty, to.SearchQuery);
         Assert.Equal(2, to.Items.Count);
@@ -212,7 +206,7 @@ public sealed class EntityTableViewModelTests
     }
 
     [Fact]
-    public async Task OrdinarySearch_UsesCurrentNamesOnlyWhenEnabledAndLeavesDependencyModeIsolated()
+    public async Task OrdinarySearch_UsesCurrentNamesOnlyWhenEnabled()
     {
         EntityOverviewDeveloper developer = Developer(1, "AB", "Alex Brown");
         EntityOverviewRow row = Row(1, "Invoice", "", "Core",
@@ -234,12 +228,7 @@ public sealed class EntityTableViewModelTests
         archived.SearchResponsibleNames = true;
         Assert.Single(active.Items);
         Assert.Single(archived.Items);
-
-        active.SearchDependenciesInstead = true;
-        Assert.Empty(active.Items);
         active.SearchQuery = "address";
-        await WaitUntilAsync(() => active.Items.Count == 1);
-        active.SearchQuery = "alex";
         await WaitUntilAsync(() => active.Items.Count == 0);
     }
 

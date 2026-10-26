@@ -64,9 +64,13 @@ visible Tracker wait for work on other pages.
 
 Same-Project Tracker-page switches reuse the developer page and leave hidden dashboards alone.
 Cached workspaces are reused while the persisted Project revision is unchanged. Any Project edit,
-including an incoming Git snapshot or a developer change, invalidates that revision; the next visit
-checks the history baseline and reloads the Tracker. The revision is captured before loading, so a
-concurrent write cannot mark stale rows as current. Without a revision store, switches always reload.
+including an incoming Git snapshot or a developer change, raises that revision; the next visit
+checks the history baseline and reloads the Tracker. Each workspace records the revision it read
+just before its last successful load, including the reload after its own edits, so those edits do
+not force another reload. A write during the load, a failed load, or a load skipped because the
+editor was open leaves the workspace stale for the next visit. Without a revision store, switches
+always reload. A Tracker selected while a dashboard or report is showing still gets its history
+baseline checked once, because those pages read it.
 
 Overview and Archived share the loaded Tracker data. The dependency graph's model and layout are
 rebuilt only while its page is active; changes made while it is hidden are applied when it is opened.

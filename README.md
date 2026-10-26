@@ -35,7 +35,7 @@ EntityTracker keeps those concerns separate:
 - **Entity tracking** — create and rename entities, add or remove dependencies, update notes and
   progress, and archive or restore entities.
 - **Workflow visibility** — combine Excel-style filters on Responsible dev, Group, Status, and
-  Work status; sort workflow statuses in their defined order; and search by entity or dependency
+  Work status; sort workflow statuses in their defined order; and search by entity or responsible
   name.
 - **Progress reporting** — share a Project report with the client or the team: current status,
   implementation history, ready-versus-blocked trends, weekly change, the dependency graph and every
