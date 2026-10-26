@@ -390,6 +390,11 @@ A linked Project is stored in its repository under `.entitytracker/`, one JSON f
   under it.
 
 `ProjectSnapshotJsonCodec` writes them; `ProjectSnapshot.CurrentFormatVersion` is the format.
+- **Format 10:** a Sync from source baseline keeps each entity's ID (`id`), and for a copy's entity
+  that kept another name, the source name it is paired with (`sourceName`), so a rename is recognised.
+  An older app refuses the unknown properties, so a format 10 Project needs this version or later.
+  The SQLite schema is version 26 (`entity_id` and `source_name` on the baseline entities; existing
+  baselines get the IDs of the entities that have their names).
 - **Format 9:** adds an entity's optional due date (`dueDate`, `yyyy-MM-dd`, left out when there is
   none), also in a Sync from source baseline. An older app would drop it, so a format 9 Project needs
   this version or later. The SQLite schema is version 25 (`due_date` columns).

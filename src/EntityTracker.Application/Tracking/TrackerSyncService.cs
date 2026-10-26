@@ -65,21 +65,56 @@ public sealed class TrackerSyncService(
         ProgressSnapshotState currentProgress = snapshotCalculator.Calculate(existing,
             resolver.Resolve(existing, existingDependencies));
         var existingByKey = existing.ToDictionary(static entity => TrackerSyncPlanner.Key(entity.SourceName));
+        var existingById = existing.ToDictionary(static entity => entity.Id);
+        var currentById = review.Destination.Entities
+            .Where(static entity => entity.Id is not null)
+            .ToDictionary(static entity => entity.Id!.Value);
         var currentByKey = review.Destination.Entities.ToDictionary(
             static entity => TrackerSyncPlanner.Key(entity.Name));
         var selectedByKey = selected.Entities.ToDictionary(
             static entity => TrackerSyncPlanner.Key(entity.Name));
         List<TrackedEntity> additions = [];
+        List<TrackedEntity> renames = [];
         List<EntityId> archives = [];
         List<EntityId> restores = [];
         List<TrackedEntity> priorityUpdates = [];
         List<TrackedEntity> groupUpdates = [];
         List<TrackedEntity> filterActiveUpdates = [];
         List<TrackedEntity> dueDateUpdates = [];
+        Dictionary<TrackerSyncEntity, TrackedEntity> results = new(ReferenceEqualityComparer.Instance);
+
+        // Renames come first, so a new entity can take a name a renamed one gave up. An entity renamed
+        // onto a placeholder's name takes the placeholder's place: what depended on the placeholder
+        // depends on the entity.
+        Dictionary<EntityId, EntityId> replacedPlaceholders = [];
+        foreach (TrackerSyncEntity wanted in selected.Entities)
+        {
+            if (Existing(wanted) is not { IsPlaceholder: false } entity ||
+                string.Equals(entity.SourceName, wanted.Name, StringComparison.Ordinal))
+                continue;
+            string oldKey = TrackerSyncPlanner.Key(entity.SourceName);
+            if (existingByKey.GetValueOrDefault(oldKey) == entity) existingByKey.Remove(oldKey);
+            string key = TrackerSyncPlanner.Key(wanted.Name);
+            if (existingByKey.TryGetValue(key, out TrackedEntity? holder) && holder != entity)
+            {
+                if (!holder.IsPlaceholder)
+                    throw new InvalidOperationException(
+                        $"Another entity in this tracker is already called {holder.SourceName}.");
+                replacedPlaceholders[holder.Id] = entity.Id;
+            }
+            entity.ChangeSourceName(wanted.Name);
+            existingByKey[key] = entity;
+            // A copy, because the entity's lifecycle changes below: archiving and restoring are their own
+            // steps of the change.
+            renames.Add(new TrackedEntity(entity.Id, entity.TrackerId, entity.SourceName, entity.Status,
+                entity.Notes, entity.LifecycleState, entity.RequestedPriority, entity.ResponsibleDeveloper,
+                entity.GroupName, entity.FilterActive, entity.SharedNotes, entity.DueDate));
+        }
+
         foreach (TrackerSyncEntity wanted in selected.Entities)
         {
             string key = TrackerSyncPlanner.Key(wanted.Name);
-            existingByKey.TryGetValue(key, out TrackedEntity? entity);
+            TrackedEntity? entity = Existing(wanted);
             if (entity is null or { IsPlaceholder: true })
             {
                 if (!wanted.Active) continue;
@@ -89,8 +124,10 @@ public sealed class TrackerSyncService(
                     filterActive: wanted.FilterActive ?? "", dueDate: wanted.DueDate);
                 existingByKey[key] = entity;
                 additions.Add(entity);
+                results[wanted] = entity;
                 continue;
             }
+            results[wanted] = entity;
             if (wanted.Active && entity.LifecycleState == EntityLifecycleState.Archived)
                 restores.Add(entity.Id);
             if (!wanted.Active && entity.LifecycleState == EntityLifecycleState.Active)
@@ -124,17 +161,32 @@ public sealed class TrackerSyncService(
         DependencyTargets targets = new(review.DestinationTrackerId, existingByKey.Values);
         foreach (TrackerSyncEntity wanted in selected.Entities.Where(static item => item.Active))
         {
-            string key = TrackerSyncPlanner.Key(wanted.Name);
-            currentByKey.TryGetValue(key, out TrackerSyncEntity? current);
+            TrackerSyncEntity? current = wanted.Id is { } id
+                ? currentById.GetValueOrDefault(id)
+                : currentByKey.GetValueOrDefault(TrackerSyncPlanner.Key(wanted.Name));
             if (current is not null && SameDependencies(current.Dependencies, wanted.Dependencies))
                 continue;
-            EntityId ownerId = existingByKey[key].Id;
+            EntityId ownerId = results[wanted].Id;
             reconciled.Add(ownerId);
             desiredDependencies.AddRange(wanted.Dependencies.Select(dependency =>
                 new EntityDependency(ownerId, targets.For(dependency.Name).Id)));
         }
-        additions.AddRange(targets.NewPlaceholders);
         HashSet<EntityId> reconciledIds = reconciled.ToHashSet();
+        // What depended on a placeholder an entity was renamed onto depends on the entity now.
+        foreach (IGrouping<EntityId, EntityDependency> owner in existingDependencies
+                     .Where(item => replacedPlaceholders.ContainsKey(item.DependencyEntityId) &&
+                                    !reconciledIds.Contains(item.DependentEntityId))
+                     .GroupBy(static item => item.DependentEntityId))
+        {
+            reconciled.Add(owner.Key);
+            reconciledIds.Add(owner.Key);
+            desiredDependencies.AddRange(existingDependencies
+                .Where(item => item.DependentEntityId == owner.Key)
+                .Select(item => new EntityDependency(owner.Key,
+                    replacedPlaceholders.GetValueOrDefault(item.DependencyEntityId, item.DependencyEntityId)))
+                .Distinct());
+        }
+        additions.AddRange(targets.NewPlaceholders);
         EntityDependency[] finalDependencies = existingDependencies
             .Where(item => !reconciledIds.Contains(item.DependentEntityId))
             .Concat(desiredDependencies).ToArray();
@@ -154,7 +206,7 @@ public sealed class TrackerSyncService(
             throw new InvalidOperationException(string.Join(Environment.NewLine,
                 ranking.Diagnostics.Select(static item => item.Message)));
         var snapshot = snapshotCalculator.Calculate(candidate, effective);
-        TrackedStateChangeSet changes = new(additions, [], archives,
+        TrackedStateChangeSet changes = new(additions, renames, archives,
             reconciled, desiredDependencies, entitiesWithProgressToUpdate: filterActiveUpdates,
             entityIdsToRestore: restores,
             progressSnapshotAfterChanges: snapshot,
@@ -164,9 +216,20 @@ public sealed class TrackerSyncService(
         TrackerSyncCommit commit = new(review.SourceTrackerId,
             review.DestinationTrackerId, review.SourceFingerprint,
             review.DestinationFingerprint, changes,
-            new TrackerSyncBaseline(review.Source, selected));
+            // The baseline keeps the copy's entity IDs, new entities' included, to recognise renames.
+            new TrackerSyncBaseline(review.Source, new TrackerSyncStructure(selected.Entities
+                .Select(wanted => results.TryGetValue(wanted, out TrackedEntity? entity)
+                    ? wanted with { Id = entity.Id.Value }
+                    : wanted)
+                .ToArray())));
         return (commit, new TrackerSyncPreview(currentProgress, snapshot,
             effective.UnresolvedDependencies.Count));
+
+        // The copy's entity a selected one is: by ID, or by name for one new to the copy.
+        TrackedEntity? Existing(TrackerSyncEntity wanted) =>
+            wanted.Id is { } id && existingById.TryGetValue(new EntityId(id), out TrackedEntity? byId)
+                ? byId
+                : existingByKey.GetValueOrDefault(TrackerSyncPlanner.Key(wanted.Name));
     }
 
     private async Task<Tracker> RequireActiveAsync(TrackerId id, CancellationToken cancellationToken)

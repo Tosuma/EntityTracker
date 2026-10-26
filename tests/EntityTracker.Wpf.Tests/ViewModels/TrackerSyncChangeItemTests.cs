@@ -75,6 +75,21 @@ public sealed class TrackerSyncChangeItemTests
     }
 
     [Fact]
+    public void ARenameNamesBothNamesAndOffersToRenameTheCopysEntity()
+    {
+        Guid sourceId = Guid.NewGuid(), copyId = Guid.NewGuid();
+        TrackerSyncBaseline baseline = new(new([Entity("country_code") with { Id = sourceId }]),
+            new([Entity("country_code") with { Id = copyId }]));
+        TrackerSyncReview review = TrackerSyncPlanner.CreateReview(TrackerId.New(), TrackerId.New(),
+            new([Entity("country_iso") with { Id = sourceId }]), baseline.Destination, baseline, "a", "b");
+
+        TrackerSyncChangeItem item = new(Assert.Single(review.Changes), review, Source, Copy);
+
+        Assert.Equal("Name: country_iso in Core schema, country_code in Release readiness.", item.Description);
+        Assert.Equal(("Rename it to country_iso", "Keep country_code"), (item.UseSourceLabel, item.KeepCopyLabel));
+    }
+
+    [Fact]
     public void TheRadioChoicesFollowTheUnderlyingChoice()
     {
         TrackerSyncChangeItem item = Single(source: [Entity("order", 3)], copy: [Entity("order")]);

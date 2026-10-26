@@ -7,7 +7,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    internal const int CurrentSchemaVersion = 25;
+    internal const int CurrentSchemaVersion = 26;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -1005,6 +1005,36 @@ public sealed class SqliteDatabase
                     await ExecuteAsync(connection, transaction,
                         "ALTER TABLE tracker_sync_baseline_entities ADD COLUMN due_date TEXT NULL;",
                         cancellationToken);
+            }
+
+            // Version 26: Sync from source baselines keep each entity's ID, so a rename is recognised, and
+            // the source name a copy's entity was paired with when it kept another name. Baselines already
+            // saved get the IDs of the entities that have their names now.
+            if (schemaVersion < 26)
+            {
+                if (!await ColumnExistsAsync(connection, transaction, "tracker_sync_baseline_entities",
+                        "entity_id", cancellationToken))
+                    await ExecuteAsync(connection, transaction,
+                        "ALTER TABLE tracker_sync_baseline_entities ADD COLUMN entity_id TEXT NULL;",
+                        cancellationToken);
+                if (!await ColumnExistsAsync(connection, transaction, "tracker_sync_baseline_entities",
+                        "source_name", cancellationToken))
+                    await ExecuteAsync(connection, transaction,
+                        "ALTER TABLE tracker_sync_baseline_entities ADD COLUMN source_name TEXT NULL;",
+                        cancellationToken);
+                await ExecuteAsync(connection, transaction, """
+                    UPDATE tracker_sync_baseline_entities
+                    SET entity_id = (
+                        SELECT entity.id FROM tracked_entities entity
+                        WHERE entity.source_name = tracker_sync_baseline_entities.name
+                          AND entity.lifecycle_state <> 'Placeholder'
+                          AND entity.tracker_id = CASE tracker_sync_baseline_entities.side
+                              WHEN 'Destination' THEN tracker_sync_baseline_entities.tracker_id
+                              ELSE (SELECT tracker.copied_from_tracker_id FROM trackers tracker
+                                    WHERE tracker.id = tracker_sync_baseline_entities.tracker_id)
+                          END)
+                    WHERE entity_id IS NULL;
+                    """, cancellationToken);
             }
 
             if (newDatabase && StartNewDatabaseWithoutProjects)
