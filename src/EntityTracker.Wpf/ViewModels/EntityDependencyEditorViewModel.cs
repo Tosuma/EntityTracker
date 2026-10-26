@@ -23,7 +23,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 {
     private readonly EntityDependencyEditorService _editorService;
     private readonly TrackerId _trackerId;
-    private bool _trackerIsCopy;
     private readonly NotificationCenter? _notifications;
     private readonly EntityLifecycleService _lifecycleService;
     private readonly Func<Task> _onPersisted;
@@ -614,28 +613,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
 
     public bool HasNameError => NameError.Length > 0;
 
-    /// <summary>
-    /// Gets a warning when the entity's Tracker is a copy of another: Sync from source matches entities
-    /// by name, so the new name may not match the source.
-    /// </summary>
-    public string RenameNotice
-    {
-        get
-        {
-            if (CurrentEditPlan is not { } plan || HasNameError || !IsNameKeyChanged(plan.Entity.SourceName)) return string.Empty;
-            return _trackerIsCopy
-                ? "This Tracker was copied from another Tracker. Syncing with that Tracker will show the old " +
-                  "and the new name as two different entities."
-                : string.Empty;
-        }
-    }
-
-    public bool HasRenameNotice => RenameNotice.Length > 0;
-
-    private bool IsNameKeyChanged(string original) =>
-        !string.IsNullOrWhiteSpace(EditedName) &&
-        !string.Equals(EditedName.Trim(), original.Trim(), StringComparison.OrdinalIgnoreCase);
-
     private async Task CheckNameAsync(int version)
     {
         if (CurrentEditPlan is not { } plan || string.IsNullOrWhiteSpace(EditedName)) return;
@@ -657,8 +634,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
     {
         OnPropertyChanged(nameof(NameError));
         OnPropertyChanged(nameof(HasNameError));
-        OnPropertyChanged(nameof(RenameNotice));
-        OnPropertyChanged(nameof(HasRenameNotice));
         _saveCommand.NotifyCanExecuteChanged();
     }
 
@@ -908,7 +883,6 @@ public sealed class EntityDependencyEditorViewModel : INotifyPropertyChanged
         IsBusy = true;
         try
         {
-            _trackerIsCopy = await _editorService.IsCopiedTrackerAsync(_trackerId, cancellationToken);
             LoadPlan(await _editorService.LoadAsync(_trackerId, entityId, cancellationToken), true);
             if (DeveloperPicker is not null && _responsibilityPeriods is not null)
             {

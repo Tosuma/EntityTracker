@@ -1395,7 +1395,9 @@ public sealed class PresentationConfigurationTests
         Assert.Equal("{Binding Editor.CanEditName}", (string?)name.Attribute("IsEnabled"));
         Assert.Equal("{Binding ElementName=EditorNameLabel}", (string?)name.Attribute("AutomationProperties.LabeledBy"));
         Assert.Contains(section.Descendants(), element => (string?)element.Attribute("Text") == "{Binding Editor.NameError}");
-        Assert.Contains(section.Descendants(), element => (string?)element.Attribute("Text") == "{Binding Editor.RenameNotice}");
+        // Sync from source recognises a renamed entity, so a rename in a copied Tracker needs no warning.
+        Assert.DoesNotContain(section.Descendants(), element => element.Name.LocalName == "Border" &&
+            (string?)element.Attribute("Style") == "{StaticResource WarningMessageStyle}");
         // No explanatory text under the Name heading.
         Assert.DoesNotContain(section.Descendants(), element => element.Name.LocalName == "TextBlock" &&
             element.Attribute("Text") is { } text && !text.Value.StartsWith('{'));

@@ -19,14 +19,19 @@ public sealed record ProjectSnapshot(
     /// a format 8 Project.
     /// Format 9 adds an entity's optional due date (and a Sync from source baseline entity's); older apps
     /// would drop it, so they must not read a format 9 Project.
+    /// Format 10 keeps entity IDs in a Sync from source baseline, and the source name a copy's entity was
+    /// paired with, so a rename is recognised; older apps refuse the unknown properties.
     /// </summary>
-    public const int CurrentFormatVersion = 9;
+    public const int CurrentFormatVersion = 10;
 
     /// <summary>The first format that may hold the development status NotRelevant.</summary>
     public const int FirstNotRelevantFormatVersion = 8;
 
     /// <summary>The first format that may hold a due date.</summary>
     public const int FirstDueDateFormatVersion = 9;
+
+    /// <summary>The first format whose Sync from source baselines may hold entity IDs and paired names.</summary>
+    public const int FirstBaselineEntityIdFormatVersion = 10;
 
     /// <summary>
     /// The first format with today's entities and dependencies (format 6). Older snapshots are legacy:

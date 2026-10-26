@@ -20,7 +20,15 @@ public sealed record TrackerSyncEntity(
     string? FilterActive = null,
     // Left out when there is none, so baselines without due dates read as before.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    DateOnly? DueDate = null);
+    DateOnly? DueDate = null,
+    // The entity's ID in its own Tracker, so a rename is recognised as the same entity. Missing in
+    // baselines saved before entity IDs were kept.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    Guid? Id = null,
+    // Only on a baseline's destination side: the name of the source entity it was synced with, when the
+    // copy kept a different name. Entities are otherwise paired by name.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? SourceName = null);
 
 public sealed record TrackerSyncStructure(IReadOnlyList<TrackerSyncEntity> Entities);
 
@@ -57,7 +65,7 @@ public enum TrackerSyncChoice { Source, Destination }
 
 public sealed record TrackerSyncChoiceOption(TrackerSyncChoice Value, string Label);
 
-public enum TrackerSyncChangeKind { Entity, Dependency, RequestedPriority, Group, FilterActive, DueDate }
+public enum TrackerSyncChangeKind { Entity, Dependency, RequestedPriority, Group, FilterActive, DueDate, Name }
 
 public sealed class TrackerSyncChange : INotifyPropertyChanged
 {
@@ -75,6 +83,8 @@ public sealed class TrackerSyncChange : INotifyPropertyChanged
         DependencyName = dependencyName;
         SourceValue = sourceValue;
         DestinationValue = destinationValue;
+        EntityKey = TrackerSyncPlanner.Key(entityName);
+        DependencyKey = dependencyName is null ? null : TrackerSyncPlanner.Key(dependencyName);
         Choices = kind == TrackerSyncChangeKind.Dependency &&
                   (sourceValue == "Absent" || destinationValue == "Absent")
             ? [new(TrackerSyncChoice.Source, sourceValue == "Absent" ? "Remove dependency" : "Keep dependency"),
@@ -87,6 +97,15 @@ public sealed class TrackerSyncChange : INotifyPropertyChanged
     public TrackerSyncChangeKind Kind { get; }
     public string EntityName { get; }
     public string? DependencyName { get; }
+
+    /// <summary>
+    /// Which entity the change is about. It is the entity's name key unless the entity was renamed since
+    /// the last sync; then it is the key it was synced under.
+    /// </summary>
+    public string EntityKey { get; init; }
+
+    /// <summary>Which dependency the change is about, keyed like <see cref="EntityKey"/>.</summary>
+    public string? DependencyKey { get; init; }
     public string SourceValue { get; }
     public string DestinationValue { get; }
     public IReadOnlyList<TrackerSyncChoiceOption> Choices { get; }
@@ -97,6 +116,7 @@ public sealed class TrackerSyncChange : INotifyPropertyChanged
         TrackerSyncChangeKind.RequestedPriority => $"{EntityName} — requested priority",
         TrackerSyncChangeKind.FilterActive => $"{EntityName} — Filter active",
         TrackerSyncChangeKind.DueDate => $"{EntityName} — due date",
+        TrackerSyncChangeKind.Name => $"{EntityName} — name",
         _ => $"{EntityName} — group"
     };
 

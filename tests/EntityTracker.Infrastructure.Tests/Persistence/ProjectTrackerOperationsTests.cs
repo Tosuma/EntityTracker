@@ -230,39 +230,117 @@ public sealed class ProjectTrackerOperationsTests
     }
 
     [Fact]
-    public async Task TrackerSync_SourceRenameIsReviewedAsArchiveAndAddition()
+    public async Task TrackerSync_SourceRenameRenamesTheSameEntityInTheCopy()
     {
         await using TemporarySqliteFile file = new();
         SqliteDatabase database = new(file.DatabasePath);
         await database.InitializeAsync();
         SqliteTrackerRepository trackers = new(database);
         SqliteEntityRepository entities = new(database);
+        SqliteDependencyRepository dependencies = new(database);
         SqliteTrackedStateStore state = new(database);
         Tracker source = Assert.Single(await trackers.GetAllAsync());
         TrackedEntity sourceEntity = new(EntityId.New(), source.Id, "Old name");
-        await state.ApplyAsync(source.Id, Add(sourceEntity));
+        TrackedEntity sourceOrder = new(EntityId.New(), source.Id, "Order");
+        await state.ApplyAsync(source.Id, new TrackedStateChangeSet([sourceEntity, sourceOrder], [], [],
+            [sourceOrder.Id], [new EntityDependency(sourceOrder.Id, sourceEntity.Id)]));
         Tracker copy = await CreateTrackerService(database).CopyAsync(
             source.Id, source.ProjectId, "Rename copy");
-        TrackedEntity oldCopy = Assert.Single(await entities.GetAllAsync(copy.Id));
+        TrackedEntity oldCopy = Assert.Single(await entities.GetAllAsync(copy.Id),
+            item => item.SourceName == "Old name");
         oldCopy.ChangeNotes("Keep history");
-        await state.ApplyAsync(copy.Id, new TrackedStateChangeSet(
-            [], [], [], entitiesWithProgressToUpdate: [oldCopy]));
+        // Only in the copy: a report that already refers to the new name, as a placeholder.
+        TrackedEntity report = new(EntityId.New(), copy.Id, "Report");
+        TrackedEntity placeholder = TrackedEntity.Placeholder(copy.Id, "New name");
+        await state.ApplyAsync(copy.Id, new TrackedStateChangeSet([report, placeholder], [], [],
+            [report.Id], [new EntityDependency(report.Id, placeholder.Id)],
+            entitiesWithProgressToUpdate: [oldCopy]));
         sourceEntity.ChangeSourceName("New name");
         await state.ApplyAsync(source.Id, new TrackedStateChangeSet(
             [], [sourceEntity], []));
 
         TrackerSyncService sync = CreateSyncService(database);
         TrackerSyncReview review = await sync.ReviewAsync(copy.Id);
-        Assert.Equal(2, review.Changes.Count);
-        Assert.All(review.Changes, change => change.Choice = TrackerSyncChoice.Source);
+        TrackerSyncChange rename = Assert.Single(review.Changes,
+            change => change.Kind == TrackerSyncChangeKind.Name);
+        Assert.Equal(("Old name", "New name", "Old name"),
+            (rename.EntityName, rename.SourceValue, rename.DestinationValue));
+        Assert.DoesNotContain(review.Changes, change => change.Kind == TrackerSyncChangeKind.Entity &&
+                                                        change.EntityName != "Report");
+        Assert.All(review.Changes, change => change.Choice = change.Kind == TrackerSyncChangeKind.Name
+            ? TrackerSyncChoice.Source
+            : TrackerSyncChoice.Destination);
         await sync.ApplyAsync(review);
+
         TrackedEntity[] copied = (await entities.GetAllAsync(copy.Id)).ToArray();
-        Assert.Equal(EntityLifecycleState.Archived,
-            copied.Single(item => item.Id == oldCopy.Id).LifecycleState);
-        Assert.Equal("Keep history", copied.Single(item => item.Id == oldCopy.Id).Notes);
-        TrackedEntity renamed = copied.Single(item => item.SourceName == "New name");
-        Assert.NotEqual(oldCopy.Id, renamed.Id);
-        Assert.Equal(EntityLifecycleState.Active, renamed.LifecycleState);
+        TrackedEntity renamed = Assert.Single(copied, item => item.Id == oldCopy.Id);
+        Assert.Equal(("New name", EntityLifecycleState.Active, "Keep history"),
+            (renamed.SourceName, renamed.LifecycleState, renamed.Notes));
+        Assert.DoesNotContain(copied, item => item.IsPlaceholder);
+        EntityDependency[] links = (await dependencies.GetAllAsync(copy.Id)).ToArray();
+        Assert.Contains(new EntityDependency(report.Id, oldCopy.Id), links);
+        Assert.Contains(links, item => item.DependencyEntityId == oldCopy.Id &&
+                                       item.DependentEntityId != report.Id);
+        Assert.Empty((await sync.ReviewAsync(copy.Id)).Changes);
+    }
+
+    [Fact]
+    public async Task Version26_GivesExistingBaselinesTheEntityIdsOfTheirNames()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteTrackedStateStore state = new(database);
+        Tracker source = Assert.Single(await new SqliteTrackerRepository(database).GetAllAsync());
+        TrackedEntity sourceEntity = new(EntityId.New(), source.Id, "Old name");
+        await state.ApplyAsync(source.Id, Add(sourceEntity));
+        Tracker copy = await CreateTrackerService(database).CopyAsync(
+            source.Id, source.ProjectId, "Older copy");
+        await using (var connection = await database.OpenConnectionAsync(CancellationToken.None))
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                ALTER TABLE tracker_sync_baseline_entities DROP COLUMN entity_id;
+                ALTER TABLE tracker_sync_baseline_entities DROP COLUMN source_name;
+                PRAGMA user_version = 25;
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await new SqliteDatabase(file.DatabasePath).InitializeAsync();
+
+        // Renamed after the update, the entity is still recognised.
+        sourceEntity.ChangeSourceName("New name");
+        await state.ApplyAsync(source.Id, new TrackedStateChangeSet([], [sourceEntity], []));
+        TrackerSyncReview review = await CreateSyncService(database).ReviewAsync(copy.Id);
+        TrackedEntity copied = Assert.Single(await new SqliteEntityRepository(database).GetAllAsync(copy.Id));
+        Assert.Equal(sourceEntity.Id.Value, Assert.Single(review.Baseline!.Source.Entities).Id);
+        Assert.Equal(copied.Id.Value, Assert.Single(review.Baseline.Destination.Entities).Id);
+        Assert.Equal(TrackerSyncChangeKind.Name, Assert.Single(review.Changes).Kind);
+    }
+
+    [Fact]
+    public async Task TrackerSync_AKeptNameIsNotAskedAboutAgain()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteTrackedStateStore state = new(database);
+        Tracker source = Assert.Single(await new SqliteTrackerRepository(database).GetAllAsync());
+        TrackedEntity sourceEntity = new(EntityId.New(), source.Id, "Old name");
+        await state.ApplyAsync(source.Id, Add(sourceEntity));
+        Tracker copy = await CreateTrackerService(database).CopyAsync(
+            source.Id, source.ProjectId, "Rename copy");
+        sourceEntity.ChangeSourceName("New name");
+        await state.ApplyAsync(source.Id, new TrackedStateChangeSet([], [sourceEntity], []));
+
+        TrackerSyncService sync = CreateSyncService(database);
+        TrackerSyncReview review = await sync.ReviewAsync(copy.Id);
+        Assert.Single(review.Changes).Choice = TrackerSyncChoice.Destination;
+        await sync.ApplyAsync(review);
+
+        Assert.Equal("Old name", Assert.Single(await new SqliteEntityRepository(database).GetAllAsync(copy.Id)).SourceName);
+        Assert.Empty((await sync.ReviewAsync(copy.Id)).Changes);
     }
 
     [Fact]

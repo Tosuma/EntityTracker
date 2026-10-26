@@ -61,15 +61,18 @@ public sealed class TrackerSyncChangeItem : INotifyPropertyChanged
         {
             case TrackerSyncChangeKind.Entity:
             {
-                TrackerSyncEntity? inSource = Find(review.Source, entity);
-                TrackerSyncEntity? inCopy = Find(review.Destination, entity);
+                TrackerSyncEntity? inSource = TrackerSyncPlanner.Find(review, TrackerSyncChoice.Source, change);
+                TrackerSyncEntity? inCopy = TrackerSyncPlanner.Find(review, TrackerSyncChoice.Destination, change);
                 if (inSource?.Active == true)
                 {
                     string details = Details(inSource);
+                    string renamed = inCopy is not null && inSource.Name != inCopy.Name
+                        ? $" as {inSource.Name}"
+                        : "";
                     return inCopy is null
                         ? ($"New in {source}{details}. Add it to {copy}?",
                             $"Add {entity} to {copy}", "Leave it out")
-                        : ($"Active in {source}{details}, archived in {copy}. Restore it in {copy}?",
+                        : ($"Active in {source}{renamed}{details}, archived in {copy}. Restore it in {copy}?",
                             $"Restore {entity} in {copy}", "Keep it archived");
                 }
 
@@ -88,6 +91,9 @@ public sealed class TrackerSyncChangeItem : INotifyPropertyChanged
                     : ($"In {copy}, {entity} depends on {target}. In {source} it does not.",
                         $"Remove the dependency on {target}", "Keep it");
             }
+            case TrackerSyncChangeKind.Name:
+                return ($"Name: {change.SourceValue} in {source}, {change.DestinationValue} in {copy}.",
+                    $"Rename it to {change.SourceValue}", $"Keep {change.DestinationValue}");
             case TrackerSyncChangeKind.FilterActive:
                 return ($"Filter active differs.\nIn {source}: {Text(change.SourceValue)}\nIn {copy}: {Text(change.DestinationValue)}",
                     $"Use {source}'s", $"Keep {copy}'s");
@@ -130,10 +136,6 @@ public sealed class TrackerSyncChangeItem : INotifyPropertyChanged
         if (!string.IsNullOrWhiteSpace(entity.FilterActive)) parts.Add("Filter active");
         return ", " + string.Join(" · ", parts);
     }
-
-    private static TrackerSyncEntity? Find(TrackerSyncStructure structure, string name) =>
-        structure.Entities.FirstOrDefault(entity =>
-            TrackerSyncPlanner.Key(entity.Name) == TrackerSyncPlanner.Key(name));
 
     private static string Value(string value) => value == "None" ? "none" : value;
 

@@ -173,8 +173,10 @@ public sealed class NormalFormTests
             await SqliteSyncBaselineRows.WriteAsync(connection, transaction, SqlitePersistenceValues.Format(tracker),
                 new TrackerSyncBaseline(
                     new TrackerSyncStructure([new TrackerSyncEntity("customer", true, 2, "Core", [], "")]),
+                    // Version 26 gives a baseline entity the ID of the entity with its name, so the
+                    // Destination entity has it already; this Tracker has no source to find one in.
                     new TrackerSyncStructure([new TrackerSyncEntity("Order", true, null, "",
-                        [new TrackerSyncDependency("customer")], "")])),
+                        [new TrackerSyncDependency("customer")], "", Id: order.Id.Value)])),
                 CancellationToken.None);
             await transaction.CommitAsync();
         }

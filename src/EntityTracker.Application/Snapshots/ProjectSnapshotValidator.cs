@@ -59,6 +59,15 @@ public static class ProjectSnapshotValidator
             }
             ValidateCatalog(tracker.Name, tracker.LifecycleState,
                 tracker.CreatedAtUtc, tracker.UpdatedAtUtc, tracker.RecycledAtUtc);
+            // Baseline entity IDs and paired names exist from format 10.
+            if (snapshot.FormatVersion < ProjectSnapshot.FirstBaselineEntityIdFormatVersion &&
+                tracker.SyncBaseline is { } baseline &&
+                baseline.Source.Entities.Concat(baseline.Destination.Entities)
+                    .Any(static entity => entity.Id is not null || entity.SourceName is not null))
+            {
+                throw new InvalidDataException(
+                    "A Sync from source baseline entity ID is not supported in this snapshot format.");
+            }
             HashSet<string> names = new(StringComparer.OrdinalIgnoreCase);
             HashSet<Guid> entityIds = [];
             foreach (SnapshotEntity entity in tracker.Entities)

@@ -122,7 +122,6 @@ public sealed class EntityDependencyEditorViewModelTests
 
         Assert.True(viewModel.IsDirty);
         Assert.False(viewModel.HasNameError);
-        Assert.False(viewModel.HasRenameNotice);
         Assert.True(viewModel.SaveCommand.CanExecute(null));
     }
 
@@ -148,29 +147,8 @@ public sealed class EntityDependencyEditorViewModelTests
         Assert.True(viewModel.SaveCommand.CanExecute(null));
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Name_WarnsInACopiedTrackerThatTheSourceStillUsesTheOldName(bool trackerIsCopy)
-    {
-        TrackedEntity owner = Entity(1, "custmer");
-        EntityDependencyEditorViewModel viewModel = ViewModel([owner], trackerIsCopy);
-        await viewModel.BeginStandaloneAsync(owner.Id);
-
-        viewModel.EditedName = "Custmer";
-        Assert.False(viewModel.HasRenameNotice);
-
-        // Sync from source matches entities by name, whether an entity was copied or added in the copy.
-        viewModel.EditedName = "customer";
-        Assert.Equal(trackerIsCopy, viewModel.HasRenameNotice);
-        if (trackerIsCopy)
-            Assert.Contains("copied from another Tracker", viewModel.RenameNotice, StringComparison.Ordinal);
-        Assert.True(viewModel.SaveCommand.CanExecute(null));
-    }
-
     private static EntityDependencyEditorViewModel ViewModel(
-        IReadOnlyList<TrackedEntity> entities,
-        bool trackerIsCopy = false)
+        IReadOnlyList<TrackedEntity> entities)
     {
         StubEntityRepository entityRepository = new(entities);
         StubDependencyRepository dependencyRepository = new();
@@ -181,8 +159,7 @@ public sealed class EntityDependencyEditorViewModelTests
             new EffectiveDependencyResolver(),
             new DependencyRanker(),
             store,
-            new PriorityPlanningService(),
-            trackerRepository: new StubTrackerRepository(trackerIsCopy));
+            new PriorityPlanningService());
         return new EntityDependencyEditorViewModel(
             TestTrackerId,
             editorService,
@@ -206,27 +183,6 @@ public sealed class EntityDependencyEditorViewModelTests
         new EntityId(new Guid(id, 0, 0, new byte[8])),
         TestTrackerId,
         name);
-
-    private sealed class StubTrackerRepository(bool isCopy) : ITrackerRepository
-    {
-        private Tracker Tracker => new(TestTrackerId, new ProjectId(Guid.Parse("10000000-0000-0000-0000-000000000001")), "Tracker",
-            DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch,
-            copiedFromTrackerId: isCopy ? new TrackerId(Guid.NewGuid()) : null);
-
-        public Task<Tracker?> GetAsync(TrackerId trackerId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<Tracker?>(trackerId == TestTrackerId ? Tracker : null);
-
-        public Task<IReadOnlyList<Tracker>> GetAllAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<Tracker>>([Tracker]);
-
-        public Task<IReadOnlyList<Tracker>> GetByProjectAsync(
-            ProjectId projectId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<Tracker>>([Tracker]);
-
-        public Task<bool> IsNameReservedAsync(ProjectId projectId, string name,
-            TrackerId? excludingTrackerId = null, CancellationToken cancellationToken = default) =>
-            Task.FromResult(false);
-    }
 
     private sealed class StubEntityRepository(IReadOnlyList<TrackedEntity> entities) : IEntityRepository
     {

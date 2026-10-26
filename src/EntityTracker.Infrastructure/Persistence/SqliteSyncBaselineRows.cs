@@ -38,13 +38,16 @@ internal static class SqliteSyncBaselineRows
                 string id = Guid.NewGuid().ToString("D");
                 await ExecuteAsync(connection, transaction, """
                     INSERT INTO tracker_sync_baseline_entities
-                    (id, tracker_id, side, name, is_active, requested_priority, group_name, filter_active, due_date)
-                    VALUES ($id, $trackerId, $side, $name, $active, $priority, $group, $filterActive, $dueDate);
+                    (id, tracker_id, side, name, is_active, requested_priority, group_name, filter_active, due_date,
+                     entity_id, source_name)
+                    VALUES ($id, $trackerId, $side, $name, $active, $priority, $group, $filterActive, $dueDate,
+                            $entityId, $sourceName);
                     """, cancellationToken,
                     ("$id", id), ("$trackerId", trackerId), ("$side", side), ("$name", entity.Name),
                     ("$active", entity.Active ? 1 : 0), ("$priority", entity.RequestedPriority),
                     ("$group", entity.GroupName), ("$filterActive", entity.FilterActive),
-                    ("$dueDate", SqlitePersistenceValues.FormatDate(entity.DueDate)));
+                    ("$dueDate", SqlitePersistenceValues.FormatDate(entity.DueDate)),
+                    ("$entityId", entity.Id?.ToString("D")), ("$sourceName", entity.SourceName));
                 foreach (TrackerSyncDependency dependency in entity.Dependencies
                              .DistinctBy(static item => Key(item.Name)))
                 {
@@ -110,7 +113,8 @@ internal static class SqliteSyncBaselineRows
         {
             command.Transaction = transaction;
             command.CommandText = """
-                SELECT id, side, name, is_active, requested_priority, group_name, filter_active, due_date
+                SELECT id, side, name, is_active, requested_priority, group_name, filter_active, due_date,
+                       entity_id, source_name
                 FROM tracker_sync_baseline_entities
                 WHERE tracker_id = $trackerId
                 ORDER BY name;
@@ -128,7 +132,9 @@ internal static class SqliteSyncBaselineRows
                         .Select(static name => new TrackerSyncDependency(name)).ToArray(),
                     reader.IsDBNull(6) ? null : reader.GetString(6),
                     SqlitePersistenceValues.ParseDate(reader.IsDBNull(7) ? null : reader.GetString(7),
-                        "baseline due date"));
+                        "baseline due date"),
+                    reader.IsDBNull(8) ? null : Guid.Parse(reader.GetString(8)),
+                    reader.IsDBNull(9) ? null : reader.GetString(9));
                 (reader.GetString(1) == Source ? source : destination).Add(entity);
             }
         }

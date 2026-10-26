@@ -245,7 +245,9 @@ dashboard brings the source's later changes into the copy: which entities exist,
 requested priorities, due dates, groups and Filter active. A copy starts with its source's Filter active. Each difference is a plain sentence naming both Trackers, with two
 outcomes to choose from, such as "Add the dependency on customer" or "Leave it out". An entity that
 exists on only one side is a single choice that brings it whole, with all its dependencies, or leaves
-it out. **Use … for all** and **Keep … for all** decide everything at once, and single rows can still be
+it out. An entity renamed in the source (or in the copy) since the last sync stays the same entity:
+the new name is one choice, and its progress, notes and dependencies stay with it. If the copy keeps
+its own name, the two names stay paired and the choice isn't asked again. **Use … for all** and **Keep … for all** decide everything at once, and single rows can still be
 changed. Only the copy changes; the source is never touched, and progress (statuses, notes,
 developers and history) stays as it is in each Tracker. After the first sync, only differences that
 appeared since the last sync are listed.

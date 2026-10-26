@@ -122,6 +122,27 @@ public sealed class ProjectSnapshotTests
     }
 
     [Fact]
+    public void BaselineEntityIds_RoundTripAndAreRefusedInAnOlderFormat()
+    {
+        Guid id = Guid.NewGuid();
+        ProjectSnapshot seed = CompleteSnapshot();
+        ProjectSnapshot snapshot = seed with { Trackers = [seed.Trackers[0] with
+        {
+            SyncBaseline = new TrackerSyncBaseline(
+                new TrackerSyncStructure([new TrackerSyncEntity("order", true, null, "", [], "", Id: id)]),
+                new TrackerSyncStructure([new TrackerSyncEntity("orders", true, null, "", [], "",
+                    SourceName: "order")]))
+        }, .. seed.Trackers.Skip(1)] };
+
+        ProjectSnapshotJsonCodec codec = new();
+        TrackerSyncBaseline read = codec.Decode(codec.Encode(snapshot).Files).Trackers[0].SyncBaseline!;
+
+        Assert.Equal(id, Assert.Single(read.Source.Entities).Id);
+        Assert.Equal("order", Assert.Single(read.Destination.Entities).SourceName);
+        Assert.Throws<InvalidDataException>(() => codec.Encode(snapshot with { FormatVersion = 9 }));
+    }
+
+    [Fact]
     public async Task Version25_AddsNullableDueDateColumns()
     {
         await using TemporarySqliteFile file = new();

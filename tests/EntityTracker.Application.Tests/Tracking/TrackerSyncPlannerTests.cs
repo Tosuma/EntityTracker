@@ -200,11 +200,116 @@ public sealed class TrackerSyncPlannerTests
         Assert.Equal("Open invoices", Assert.Single(TrackerSyncPlanner.Resolve(review).Entities).FilterActive);
     }
 
+    [Fact]
+    public void ARenameInTheSourceIsOneNameChoiceForTheSameEntity()
+    {
+        Guid sourceId = Guid.NewGuid(), copyId = Guid.NewGuid();
+        TrackerSyncBaseline baseline = new(
+            new([Entity("country_code", id: sourceId), Entity("order", dependsOn: ["country_code"])]),
+            new([Entity("country_code", id: copyId), Entity("order", dependsOn: ["country_code"])]));
+        TrackerSyncStructure source = new(
+            [Entity("country_iso", id: sourceId), Entity("order", dependsOn: ["country_iso"])]);
+
+        TrackerSyncReview review = TrackerSyncPlanner.CreateReview(
+            SourceId, CopyId, source, baseline.Destination, baseline, "a", "b");
+
+        TrackerSyncChange change = Assert.Single(review.Changes);
+        Assert.Equal((TrackerSyncChangeKind.Name, "country_code"), (change.Kind, change.EntityName));
+        Assert.Equal(("country_iso", "country_code"), (change.SourceValue, change.DestinationValue));
+        Assert.Equal("country_code — name", change.Label);
+
+        change.Choice = TrackerSyncChoice.Source;
+        TrackerSyncStructure renamed = TrackerSyncPlanner.Resolve(review);
+        TrackerSyncEntity entity = Assert.Single(renamed.Entities, item => item.Id == copyId);
+        Assert.Equal(("country_iso", null), (entity.Name, entity.SourceName));
+        Assert.Equal(["country_iso"],
+            Assert.Single(renamed.Entities, item => item.Name == "order").Dependencies.Select(item => item.Name));
+
+        change.Choice = TrackerSyncChoice.Destination;
+        TrackerSyncStructure kept = TrackerSyncPlanner.Resolve(review);
+        entity = Assert.Single(kept.Entities, item => item.Id == copyId);
+        Assert.Equal(("country_code", "country_iso"), (entity.Name, entity.SourceName));
+        Assert.Equal(["country_code"],
+            Assert.Single(kept.Entities, item => item.Name == "order").Dependencies.Select(item => item.Name));
+
+        // The copy kept its name, so the next sync pairs the two names and asks nothing.
+        TrackerSyncStructure copy = new([Entity("country_code", id: copyId), Entity("order", dependsOn: ["country_code"])]);
+        Assert.Empty(TrackerSyncPlanner.CreateReview(
+            SourceId, CopyId, source, copy, new TrackerSyncBaseline(source, kept), "a", "b").Changes);
+    }
+
+    [Fact]
+    public void ARenameInTheCopyIsAskedAboutAsANameChoice()
+    {
+        Guid sourceId = Guid.NewGuid(), copyId = Guid.NewGuid();
+        TrackerSyncBaseline baseline = new(
+            new([Entity("country_code", id: sourceId)]), new([Entity("country_code", id: copyId)]));
+
+        TrackerSyncReview review = TrackerSyncPlanner.CreateReview(SourceId, CopyId, baseline.Source,
+            new([Entity("country", id: copyId)]), baseline, "a", "b");
+
+        TrackerSyncChange change = Assert.Single(review.Changes);
+        Assert.Equal((TrackerSyncChangeKind.Name, "country"), (change.Kind, change.EntityName));
+        Assert.Equal(("country_code", "country"), (change.SourceValue, change.DestinationValue));
+    }
+
+    [Fact]
+    public void ARenameOntoAnotherEntitysNameCannotBeApplied()
+    {
+        Guid sourceId = Guid.NewGuid(), copyId = Guid.NewGuid();
+        TrackerSyncBaseline baseline = new(
+            new([Entity("country_code", id: sourceId)]), new([Entity("country_code", id: copyId)]));
+        TrackerSyncStructure copy = new([Entity("country_code", id: copyId), Entity("country_iso", id: Guid.NewGuid())]);
+
+        TrackerSyncReview review = TrackerSyncPlanner.CreateReview(SourceId, CopyId,
+            new([Entity("country_iso", id: sourceId)]), copy, baseline, "a", "b");
+        foreach (TrackerSyncChange change in review.Changes) change.Choice = TrackerSyncChoice.Source;
+        Assert.Contains(review.Changes, change => change.Kind == TrackerSyncChangeKind.Name);
+        Assert.Contains(review.Changes, change => change.Kind == TrackerSyncChangeKind.Entity &&
+                                                  change.EntityName == "country_iso");
+
+        // Archiving the copy's own country_iso keeps it, so the renamed entity can't take its name.
+        InvalidOperationException error =
+            Assert.Throws<InvalidOperationException>(() => TrackerSyncPlanner.Resolve(review));
+        Assert.Contains("country_iso", error.Message);
+    }
+
+    [Fact]
+    public void ABaselineWithoutEntityIdsStillPairsEntitiesByName()
+    {
+        TrackerSyncBaseline old = new(new([Entity("country_code")]), new([Entity("country_code")]));
+
+        TrackerSyncReview review = TrackerSyncPlanner.CreateReview(SourceId, CopyId,
+            new([Entity("country_iso", id: Guid.NewGuid())]), new([Entity("country_code", id: Guid.NewGuid())]),
+            old, "a", "b");
+
+        Assert.Equal(["country_code", "country_iso"],
+            review.Changes.Where(change => change.Kind == TrackerSyncChangeKind.Entity)
+                .Select(change => change.EntityName).Order());
+    }
+
+    [Fact]
+    public void BaselineEntityIdsSurviveTheJsonAndAreLeftOutWhenThereAreNone()
+    {
+        Guid id = Guid.NewGuid();
+        TrackerSyncBaseline baseline = new(new([Entity("order", id: id)]),
+            new([Entity("order") with { SourceName = "orders" }]));
+
+        string json = System.Text.Json.JsonSerializer.Serialize(baseline);
+        TrackerSyncBaseline read = Assert.IsType<TrackerSyncBaseline>(
+            System.Text.Json.JsonSerializer.Deserialize<TrackerSyncBaseline>(json));
+
+        Assert.Equal(id, Assert.Single(read.Source.Entities).Id);
+        Assert.Equal("orders", Assert.Single(read.Destination.Entities).SourceName);
+        Assert.Equal(1, json.Split("\"Id\"").Length - 1);
+        Assert.Equal(1, json.Split("SourceName").Length - 1);
+    }
+
     private static TrackerSyncReview Review(TrackerSyncStructure source, TrackerSyncStructure copy) =>
         TrackerSyncPlanner.CreateReview(SourceId, CopyId, source, copy, baseline: null, "a", "b");
 
     private static TrackerSyncEntity Entity(string name, bool active = true, int? priority = null, string group = "",
-        string[]? dependsOn = null, string? filterActive = null, DateOnly? dueDate = null) =>
+        string[]? dependsOn = null, string? filterActive = null, DateOnly? dueDate = null, Guid? id = null) =>
         new(name, active, priority, group, (dependsOn ?? []).Select(target => new TrackerSyncDependency(target)).ToArray(),
-            filterActive, dueDate);
+            filterActive, dueDate, id);
 }
