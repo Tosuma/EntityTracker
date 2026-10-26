@@ -117,13 +117,17 @@
       if (!hasData) { body.appendChild(el("div", { className: "empty", text: "No progress history for this selection yet." })); return; }
       var key = legend(chart, section.chartType);
       var drawn = section.chartType === "donut" ? donut(chart, key) : section.chartType === "bars" ? bars(chart, key) : lines(chart, key);
-      drawn.setAttribute("aria-label", section.title + ". Use the left and right arrow keys to read the values.");
+      drawn.setAttribute("aria-label", section.title + ". " + (section.description ? section.description + " " : "") +
+        "Use the left and right arrow keys to read the values.");
       body.appendChild(drawn);
       body.appendChild(key.node);
     }
     render(currentScope);
     scopeListeners.push(render);
-    return el("section", { className: "report-section", id: section.key }, [el("h2", { text: section.title }), body]);
+    // Pointing at the title shows what the chart shows.
+    var heading = el("h2", { text: section.title });
+    if (section.description) heading.title = section.description;
+    return el("section", { className: "report-section", id: section.key }, [heading, body]);
   }
 
   /** The legend; its entries and the chart's parts highlight each other. */
@@ -249,7 +253,7 @@
                "A", r, r, 0, large, 1, cx + r * Math.cos(end), cy + r * Math.sin(end),
                "L", cx + inner * Math.cos(end), cy + inner * Math.sin(end),
                "A", inner, inner, 0, large, 0, cx + inner * Math.cos(angle), cy + inner * Math.sin(angle), "Z"].join(" ");
-      var path = svg("path", { d: d, fill: series.pointColors[i], stroke: COLORS.sliceBorder, "stroke-width": 1, "class": "slice" });
+      var path = svg("path", { d: d, fill: series.pointColors[i], "class": "slice" });
       slices.push({ index: i, path: path, middle: (angle + end) / 2, start: angle, end: end });
       group.appendChild(path);
       angle = end;
@@ -262,7 +266,7 @@
     if (!calm && group.animate) {
       var id = "sweep-" + (++uniqueId);
       var reach = r + 12, maskRadius = reach / 2, circumference = 2 * Math.PI * maskRadius;
-      var circle = svg("circle", { cx: cx, cy: cy, r: maskRadius, fill: "none", stroke: COLORS.sliceBorder, "stroke-width": reach,
+      var circle = svg("circle", { cx: cx, cy: cy, r: maskRadius, fill: "none", stroke: COLORS.canvas, "stroke-width": reach,
         "stroke-dasharray": circumference, transform: "rotate(-90 " + cx + " " + cy + ")" });
       var mask = svg("mask", { id: id, maskUnits: "userSpaceOnUse", x: 0, y: 0, width: 320, height: 220 });
       mask.appendChild(circle);
@@ -414,45 +418,56 @@
     return box.node;
   }
 
+  /** Bars per label, one for each series side by side, in the series' colours. */
   function bars(chart, key) {
     var e = extent(chart, true);
     var box = axes(chart, e[0], e[1]);
-    var series = chart.series[0];
     var count = chart.labels.length;
     var slot = box.plotWidth / Math.max(count, 1);
+    var width = Math.max(slot * 0.7 / chart.series.length, 1);
     var zero = box.y(0);
-    var rects = series.values.map(function (v, i) {
-      var rect = svg("rect", {
-        x: box.left + i * slot + slot * 0.15, y: Math.min(zero, box.y(v)),
-        width: Math.max(slot * 0.7, 1), height: Math.max(Math.abs(box.y(v) - zero), 1),
-        fill: v < 0 ? COLORS.decrease : series.color, rx: 2, "class": "bar"
+    // rects[series][label]
+    var rects = chart.series.map(function (series, s) {
+      return series.values.map(function (v, i) {
+        var rect = svg("rect", {
+          x: box.left + i * slot + slot * 0.15 + s * width, y: Math.min(zero, box.y(v)),
+          width: Math.max(width - 1, 1), height: Math.max(Math.abs(box.y(v) - zero), 1),
+          fill: series.color, rx: 2, "class": "bar"
+        });
+        box.node.appendChild(rect);
+        // Each bar grows out of the zero line, a moment after the one before it.
+        rect.style.transformBox = "fill-box";
+        rect.style.transformOrigin = v < 0 ? "top" : "bottom";
+        animate(rect, [{ transform: "scaleY(0)" }, { transform: "scaleY(1)" }], Math.min(i * 12, 300));
+        return rect;
       });
-      box.node.appendChild(rect);
-      // Each bar grows out of the zero line, a moment after the one before it.
-      rect.style.transformBox = "fill-box";
-      rect.style.transformOrigin = v < 0 ? "top" : "bottom";
-      animate(rect, [{ transform: "scaleY(0)" }, { transform: "scaleY(1)" }], Math.min(i * 12, 300));
-      return rect;
     });
 
     function show(index) {
-      rects[index].classList.add("active");
-      key.emphasise(0);
-      var v = series.values[index];
+      rects.forEach(function (row) { row[index].classList.add("active"); });
+      var top = zero;
+      chart.series.forEach(function (series) { top = Math.min(top, box.y(series.values[index])); });
       return {
-        lines: ["Week of " + formatDate(chart.labels[index]), series.name + " " + Charts.formatNumber(v)],
-        anchor: [box.left + (index + 0.5) * slot, Math.min(zero, box.y(v))]
+        lines: Charts.pointLines("Week of " + formatDate(chart.labels[index]), chart.series, index),
+        anchor: [box.left + (index + 0.5) * slot, top]
       };
     }
 
     function clear() {
-      rects.forEach(function (rect) { rect.classList.remove("active"); });
-      key.emphasise(-1);
+      rects.forEach(function (row) { row.forEach(function (rect) { rect.classList.remove("active"); }); });
     }
 
     interactive(box.node, box.width, box.height, count, function (px) {
       return px < box.left || px > box.left + box.plotWidth ? -1 : Charts.barIndex(count, box.left, box.plotWidth, px);
     }, show, clear);
+    // Pointing at a legend entry brings its bars forward and fades the others.
+    key.onHover(function (index) {
+      rects.forEach(function (row, s) { row.forEach(function (rect) { rect.classList.toggle("faded", s !== index); }); });
+      key.emphasise(index);
+    }, function () {
+      rects.forEach(function (row) { row.forEach(function (rect) { rect.classList.remove("faded"); }); });
+      key.emphasise(-1);
+    });
     return box.node;
   }
 

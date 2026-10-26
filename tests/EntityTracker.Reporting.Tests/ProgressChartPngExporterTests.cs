@@ -79,7 +79,7 @@ public sealed class ProgressChartPngExporterTests
             .ToArray();
         WeeklyImplementedChange[] weekly = implemented
             .Where((_, index) => index % 7 == 0)
-            .Select((point, index) => new WeeklyImplementedChange(point.Date, index % 3 == 2 ? -2 : 4))
+            .Select((point, index) => new WeeklyImplementedChange(point.Date, 4, index % 3 == 2 ? 2 : 0))
             .ToArray();
 
         return new ProgressDashboardReport(

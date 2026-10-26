@@ -41,7 +41,8 @@ public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IRepo
             ProgressChartKind.WeeklyNetImplementedChange => ReportChartType.Bars,
             _ => ReportChartType.Line
         },
-        context.Scopes.ToDictionary(scope => scope.Key, scope => Chart(context.ReportFor(scope))));
+        context.Scopes.ToDictionary(scope => scope.Key, scope => Chart(context.ReportFor(scope))),
+        ProgressChartPresentationBuilder.GetDescription(kind));
 
     private ReportChart Chart(ProgressDashboardReport report) => kind switch
     {
@@ -49,11 +50,16 @@ public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IRepo
             report.CurrentStatusCounts.Select(count => ReportLabels.Status(count.Status)).ToArray(),
             [new ReportSeries("Entities", ColorScheme.Chart.Entities,
                 report.CurrentStatusCounts.Select(count => (double)count.Count).ToArray(),
-                report.CurrentStatusCounts.Select(count => ReportLabels.StatusColor(count.Status)).ToArray())]),
+                report.CurrentStatusCounts.Select(count => ReportLabels.SliceColor(count.Status)).ToArray())]),
         ProgressChartKind.ImplementedOverTime => new ReportChart(
             report.ImplementedOverTime.Select(point => Date(point.Date)).ToArray(),
-            [new ReportSeries("Implemented", ColorScheme.Chart.Implemented,
-                report.ImplementedOverTime.Select(point => (double)point.ImplementedCount).ToArray())]),
+            [
+                new ReportSeries("Implemented", ColorScheme.Chart.Implemented,
+                    report.ImplementedOverTime.Select(point => (double)point.ImplementedCount).ToArray()),
+                // The target: today's number of active entities, flat across the chart.
+                new ReportSeries("Active entities", ColorScheme.Chart.Target,
+                    report.ImplementedOverTime.Select(_ => (double)report.ManagerSummary.ActiveEntityCount).ToArray())
+            ]),
         ProgressChartKind.ReadyAndBlockedOverTime => new ReportChart(
             report.ReadyAndBlockedOverTime.Select(point => Date(point.Date)).ToArray(),
             [
@@ -64,8 +70,12 @@ public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IRepo
             ]),
         ProgressChartKind.WeeklyNetImplementedChange => new ReportChart(
             report.WeeklyNetImplementedChange.Select(week => Date(week.WeekStartingMonday)).ToArray(),
-            [new ReportSeries("Net implemented change", ColorScheme.Chart.NetChange,
-                report.WeeklyNetImplementedChange.Select(week => (double)week.NetChange).ToArray())]),
+            [
+                new ReportSeries("Increase", ColorScheme.Chart.Increase,
+                    report.WeeklyNetImplementedChange.Select(week => (double)week.Increase).ToArray()),
+                new ReportSeries("Decrease", ColorScheme.Chart.Decrease,
+                    report.WeeklyNetImplementedChange.Select(week => (double)week.Decrease).ToArray())
+            ]),
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
     };
 

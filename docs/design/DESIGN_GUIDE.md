@@ -73,8 +73,14 @@ and the exported report. They use only the official brand colours:
 
 Every badge's text reads on its fill (4.5:1 or more). Status badges, legend dots and swatches have no
 outline in either theme: in the dark theme the dark fills (Green 80, deep teal, Green 100) sit quietly on
-the page, and the badge text carries the status. Only the on-screen pie's slices keep a thin Green 60
-outline in the dark theme (`DarkChart.SliceOutline`), so neighbouring slices stay apart.
+the page, and the badge text carries the status.
+
+The development status pie is the exception: as a chart it uses a standard categorical palette
+(`Chart.Categories`, with `DarkChart.Categories` stepped for the dark card) instead of the status colours,
+which are too alike to compare as slices. The slices have no borders, and the legend names each status.
+The implemented chart's target line (today's active entities) is Coral (`Chart.Target`); the weekly chart's
+increase and decrease bars are `Chart.Increase` and `Chart.Decrease`, side by side. Every chart title shows
+a short description when pointed at (`ProgressChartPresentationBuilder.GetDescription`).
 
 | Meaning | Color | Graph mark |
 | --- | --- | --- |

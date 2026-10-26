@@ -74,12 +74,14 @@ public enum ReportChartType
 }
 
 /// <summary>A chart, per scope, as plain data that any renderer can draw.</summary>
+/// <summary>A chart per scope; <see cref="Description"/> is shown when pointing at its title.</summary>
 public sealed record ChartSection(
     string Key,
     string Title,
     ReportVisibility Visibility,
     ReportChartType ChartType,
-    IReadOnlyDictionary<string, ReportChart> ByScope)
+    IReadOnlyDictionary<string, ReportChart> ByScope,
+    string? Description = null)
     : ReportSection(Key, Title, Visibility);
 
 /// <summary>Labels along the x axis (or slices) and one or more series of values.</summary>

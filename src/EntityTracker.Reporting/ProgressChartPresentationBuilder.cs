@@ -11,10 +11,6 @@ namespace EntityTracker.Reporting;
 
 public sealed class ProgressChartPresentationBuilder
 {
-    private static readonly IReadOnlyDictionary<ProgressStatusCategory, SKColor> StatusFills =
-        Enum.GetValues<ProgressStatusCategory>().ToDictionary(
-            static status => status, static status => ProgressChartPalette.From(ProgressChartPalette.Status(status).Fill));
-
     /// <summary>Builds the charts the app shows, with axes, legends and tooltips readable on the theme.</summary>
     public ProgressChartPresentation Build(
         ProgressDashboardReport report,
@@ -34,9 +30,8 @@ public sealed class ProgressChartPresentationBuilder
 
         ISeries[] currentStatusSeries = CreateCurrentStatusSeries(
             report.CurrentStatusCounts,
-            StatusFills,
             includeExportPieLabels,
-            ProgressChartPalette.SliceOutlineFor(theme));
+            theme);
 
         DateOnly[] implementedDates = report.ImplementedOverTime
             .Select(static point => point.Date)
@@ -60,6 +55,20 @@ public sealed class ProgressChartPresentationBuilder
                 Stroke = new SolidColorPaint(ProgressChartPalette.Implemented, 3),
                 Fill = new SolidColorPaint(ProgressChartPalette.Implemented.WithAlpha(35)),
                 GeometrySize = 5
+            },
+            // The target: today's number of active entities, flat across the chart.
+            new LineSeries<int>
+            {
+                Name = "Active entities",
+                Values = report.ImplementedOverTime
+                    .Select(_ => report.ManagerSummary.ActiveEntityCount)
+                    .ToArray(),
+                Stroke = new SolidColorPaint(ProgressChartPalette.Target, 2),
+                Fill = null,
+                GeometrySize = 0,
+                GeometryStroke = null,
+                GeometryFill = null,
+                LineSmoothness = 0
             }
         ];
         ISeries[] readinessSeries =
@@ -86,24 +95,20 @@ public sealed class ProgressChartPresentationBuilder
             }
         ];
 
-        int?[] positive = report.WeeklyNetImplementedChange
-            .Select(static point => point.NetChange >= 0 ? point.NetChange : (int?)null)
-            .ToArray();
-        int?[] negative = report.WeeklyNetImplementedChange
-            .Select(static point => point.NetChange < 0 ? point.NetChange : (int?)null)
-            .ToArray();
+        // Two bars a week, side by side and both upward: entities that became implemented, and
+        // entities that stopped being implemented.
         ISeries[] weeklySeries =
         [
-            new ColumnSeries<int?>
+            new ColumnSeries<int>
             {
                 Name = "Increase",
-                Values = positive,
+                Values = report.WeeklyNetImplementedChange.Select(static week => week.Increase).ToArray(),
                 Fill = new SolidColorPaint(ProgressChartPalette.Increase)
             },
-            new ColumnSeries<int?>
+            new ColumnSeries<int>
             {
                 Name = "Decrease",
-                Values = negative,
+                Values = report.WeeklyNetImplementedChange.Select(static week => week.Decrease).ToArray(),
                 Fill = new SolidColorPaint(ProgressChartPalette.Decrease)
             }
         ];
@@ -125,6 +130,7 @@ public sealed class ProgressChartPresentationBuilder
             }],
             [new Axis
             {
+                MinLimit = 0,
                 MinStep = 1,
                 LabelsPaint = CreateTextPaint(theme),
                 SeparatorsPaint = CreateGridPaint(theme)
@@ -139,7 +145,20 @@ public sealed class ProgressChartPresentationBuilder
         ProgressChartKind.CurrentStatus => "Entities by development status",
         ProgressChartKind.ImplementedOverTime => "Implemented entities over time",
         ProgressChartKind.ReadyAndBlockedOverTime => "Ready to start vs waiting on dependencies over time",
-        ProgressChartKind.WeeklyNetImplementedChange => "Weekly net implemented change",
+        ProgressChartKind.WeeklyNetImplementedChange => "Weekly implemented change",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
+    };
+
+    /// <summary>A short description of the chart, shown when pointing at its title.</summary>
+    public static string GetDescription(ProgressChartKind kind) => kind switch
+    {
+        ProgressChartKind.CurrentStatus => "How many active entities have each development status now.",
+        ProgressChartKind.ImplementedOverTime =>
+            "Implemented entities each day, against today's number of active entities.",
+        ProgressChartKind.ReadyAndBlockedOverTime =>
+            "Each day, the entities ready to start and the ones still waiting on a dependency.",
+        ProgressChartKind.WeeklyNetImplementedChange =>
+            "Each week, how many entities became implemented and how many stopped being implemented.",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
     };
 
@@ -154,19 +173,20 @@ public sealed class ProgressChartPresentationBuilder
 
     private static ISeries[] CreateCurrentStatusSeries(
         IReadOnlyList<ProgressStatusCount> counts,
-        IReadOnlyDictionary<ProgressStatusCategory, SKColor> statusColors,
         bool includeExportPieLabels,
-        SKColor? sliceOutline)
+        ProgressChartTheme theme)
     {
         int total = counts.Sum(static item => item.Count);
         return counts.Select(item =>
         {
+            // Standard chart colours, not the status colours, and no borders between the slices.
+            string fill = ProgressChartPalette.Category(item.Status, theme);
             PieSeries<int> series = new()
             {
                 Name = FormatStatus(item.Status),
                 Values = [item.Count],
-                Fill = new SolidColorPaint(statusColors[item.Status]),
-                Stroke = sliceOutline is { } outline ? new SolidColorPaint(outline, 1) : null
+                Fill = new SolidColorPaint(ProgressChartPalette.From(fill)),
+                Stroke = null
             };
             if (includeExportPieLabels && item.Count > 0 && total > 0)
             {
@@ -174,7 +194,7 @@ public sealed class ProgressChartPresentationBuilder
                 series.ShowDataLabels = true;
                 series.DataLabelsPosition = PolarLabelsPosition.Middle;
                 series.DataLabelsSize = 22;
-                series.DataLabelsPaint = new SolidColorPaint(GetPieLabelColor(item.Status));
+                series.DataLabelsPaint = new SolidColorPaint(ProgressChartPalette.LabelOn(fill));
                 series.DataLabelsFormatter = _ => label;
             }
 
@@ -187,8 +207,6 @@ public sealed class ProgressChartPresentationBuilder
         double percentage = count * 100d / total;
         return $"{count} ({percentage.ToString("0.#", CultureInfo.CurrentCulture)}%)";
     }
-
-    private static SKColor GetPieLabelColor(ProgressStatusCategory status) => ProgressChartPalette.From(ProgressChartPalette.Status(status).Text);
 
     private static Axis[] CreateDateAxes(DateOnly[] dates, ProgressChartTheme theme)
     {

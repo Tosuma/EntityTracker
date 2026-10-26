@@ -160,7 +160,8 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
                     <TextBlock Margin="0,0,0,8" FontSize="16" FontWeight="SemiBold"
-                               Text="Entities by development status" />
+                               Text="Entities by development status"
+                               ToolTip="How many active entities have each development status now." AutomationProperties.HelpText="How many active entities have each development status now." />
                     <Border Grid.Row="1" Background="{DynamicResource Brush.Surface.Card}">
                         <lvc:PieChart Background="Transparent" LegendTextPaint="{Binding Presentation.LegendTextPaint}" TooltipTextPaint="{Binding Presentation.TooltipTextPaint}" TooltipBackgroundPaint="{Binding Presentation.TooltipBackgroundPaint}" AutomationProperties.Name="Aggregate entities by development status chart"
                                       LegendPosition="Right"
@@ -175,7 +176,8 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
                     <TextBlock Margin="0,0,0,8" FontSize="16" FontWeight="SemiBold"
-                               Text="Implemented entities over time" />
+                               Text="Implemented entities over time"
+                               ToolTip="Implemented entities each day, against today's number of active entities." AutomationProperties.HelpText="Implemented entities each day, against today's number of active entities." />
                     <Border Grid.Row="1" Background="{DynamicResource Brush.Surface.Card}">
                         <lvc:CartesianChart Background="Transparent" LegendTextPaint="{Binding Presentation.LegendTextPaint}" TooltipTextPaint="{Binding Presentation.TooltipTextPaint}" TooltipBackgroundPaint="{Binding Presentation.TooltipBackgroundPaint}" AutomationProperties.Name="Aggregate implemented entities over time chart"
                                             LegendPosition="Top"

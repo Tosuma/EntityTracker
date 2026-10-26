@@ -47,13 +47,13 @@ public sealed class ProgressChartPresentationBuilderTests
         Assert.Equal(lightText, Assert.IsType<SolidColorPaint>(light.CountYAxes[0].LabelsPaint).Color);
         Assert.Equal(lightText, Assert.IsType<SolidColorPaint>(export.CountYAxes[0].LabelsPaint).Color);
 
-        // Dark slices (Completed, Reconciled) get a thin light outline on the dark card; light charts and
-        // exports keep plain slices.
-        SKColor outline = SKColor.Parse(ColorScheme.DarkChart.SliceOutline);
-        Assert.All(dark.CurrentStatusSeries, series =>
-            Assert.Equal(outline, Assert.IsType<SolidColorPaint>(Assert.IsType<PieSeries<int>>(series).Stroke).Color));
-        Assert.All(light.CurrentStatusSeries.Concat(export.CurrentStatusSeries), series =>
-            Assert.Null(Assert.IsType<PieSeries<int>>(series).Stroke));
+        // No borders between slices; the dark card uses the palette's dark steps.
+        Assert.All(dark.CurrentStatusSeries.Concat(light.CurrentStatusSeries).Concat(export.CurrentStatusSeries),
+            series => Assert.Null(Assert.IsType<PieSeries<int>>(series).Stroke));
+        Assert.Equal(SKColor.Parse(ColorScheme.DarkChart.Categories[0]),
+            Assert.IsType<SolidColorPaint>(Assert.IsType<PieSeries<int>>(dark.CurrentStatusSeries[0]).Fill).Color);
+        Assert.Equal(SKColor.Parse(ColorScheme.Chart.Categories[0]),
+            Assert.IsType<SolidColorPaint>(Assert.IsType<PieSeries<int>>(export.CurrentStatusSeries[0]).Fill).Color);
     }
 
     [Fact]
@@ -66,13 +66,14 @@ public sealed class ProgressChartPresentationBuilderTests
             completed: 21,
             reconciled: 30));
 
+        // Standard chart colours by status, not the status colours.
         SKColor[] expectedStatusColors =
         [
-            SKColor.Parse(ColorScheme.Status.NotStarted.Fill),
-            SKColor.Parse(ColorScheme.Status.InProgress.Fill),
-            SKColor.Parse(ColorScheme.Status.ReworkNeeded.Fill),
-            SKColor.Parse(ColorScheme.Status.DevelopmentCompleted.Fill),
-            SKColor.Parse(ColorScheme.Status.Reconciled.Fill)
+            SKColor.Parse(ColorScheme.Chart.Categories[0]),
+            SKColor.Parse(ColorScheme.Chart.Categories[2]),
+            SKColor.Parse(ColorScheme.Chart.Categories[3]),
+            SKColor.Parse(ColorScheme.Chart.Categories[5]),
+            SKColor.Parse(ColorScheme.Chart.Categories[6])
         ];
         Assert.Equal(expectedStatusColors.Length, presentation.CurrentStatusSeries.Length);
         for (int index = 0; index < expectedStatusColors.Length; index++)
@@ -99,11 +100,51 @@ public sealed class ProgressChartPresentationBuilderTests
         Assert.Equal(
             SKColor.Parse(ColorScheme.Chart.Increase),
             Assert.IsType<SolidColorPaint>(
-                Assert.IsType<ColumnSeries<int?>>(presentation.WeeklySeries[0]).Fill).Color);
+                Assert.IsType<ColumnSeries<int>>(presentation.WeeklySeries[0]).Fill).Color);
         Assert.Equal(
             SKColor.Parse(ColorScheme.Chart.Decrease),
             Assert.IsType<SolidColorPaint>(
-                Assert.IsType<ColumnSeries<int?>>(presentation.WeeklySeries[1]).Fill).Color);
+                Assert.IsType<ColumnSeries<int>>(presentation.WeeklySeries[1]).Fill).Color);
+        Assert.Equal(
+            SKColor.Parse(ColorScheme.Chart.Target),
+            Assert.IsType<SolidColorPaint>(
+                Assert.IsType<LineSeries<int>>(presentation.ImplementedSeries[1]).Stroke).Color);
+    }
+
+    [Fact]
+    public void Build_DrawsTodaysActiveEntitiesAsAFlatTargetAndTwoWeeklyBars()
+    {
+        DateOnly monday = new(2026, 8, 3);
+        ProgressDashboardReport report = CreateReport(notStarted: 3, inProgress: 2, rework: 1, completed: 2, reconciled: 2) with
+        {
+            ImplementedOverTime = [new(monday, 2), new(monday.AddDays(1), 4), new(monday.AddDays(7), 5)],
+            WeeklyNetImplementedChange = [new(monday, 3, 1), new(monday.AddDays(7), 1, 0)]
+        };
+
+        ProgressChartPresentation presentation = _builder.Build(report);
+
+        LineSeries<int> target = Assert.IsType<LineSeries<int>>(presentation.ImplementedSeries[1]);
+        Assert.Equal("Active entities", target.Name);
+        Assert.Equal([10, 10, 10], Assert.IsAssignableFrom<IEnumerable<int>>(target.Values));
+        ColumnSeries<int> increase = Assert.IsType<ColumnSeries<int>>(presentation.WeeklySeries[0]);
+        ColumnSeries<int> decrease = Assert.IsType<ColumnSeries<int>>(presentation.WeeklySeries[1]);
+        Assert.Equal(("Increase", "Decrease"), (increase.Name, decrease.Name));
+        Assert.Equal([3, 1], Assert.IsAssignableFrom<IEnumerable<int>>(increase.Values));
+        Assert.Equal([1, 0], Assert.IsAssignableFrom<IEnumerable<int>>(decrease.Values));
+        Assert.Equal(0, presentation.WeeklyYAxes[0].MinLimit);
+    }
+
+    [Theory]
+    [InlineData(ProgressChartKind.CurrentStatus)]
+    [InlineData(ProgressChartKind.ImplementedOverTime)]
+    [InlineData(ProgressChartKind.ReadyAndBlockedOverTime)]
+    [InlineData(ProgressChartKind.WeeklyNetImplementedChange)]
+    public void EveryChartHasATitleAndAShortDescription(ProgressChartKind kind)
+    {
+        Assert.False(string.IsNullOrWhiteSpace(ProgressChartPresentationBuilder.GetTitle(kind)));
+        string description = ProgressChartPresentationBuilder.GetDescription(kind);
+        Assert.InRange(description.Length, 20, 100);
+        Assert.EndsWith(".", description, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -131,22 +172,12 @@ public sealed class ProgressChartPresentationBuilderTests
             $"13 ({10.4.ToString("0.#", CultureInfo.CurrentCulture)}%)",
             FormatLabel(rework));
 
-        SKColor[] expectedLabelColors =
-        [
-            SKColor.Parse(ColorScheme.Status.NotStarted.Text),
-            SKColor.Parse(ColorScheme.Status.InProgress.Text),
-            SKColor.Parse(ColorScheme.Status.ReworkNeeded.Text),
-            SKColor.Parse(ColorScheme.Status.DevelopmentCompleted.Text),
-            SKColor.Parse(ColorScheme.Status.Reconciled.Text)
-        ];
-        for (int index = 0; index < expectedLabelColors.Length; index++)
-        {
-            PieSeries<int> series = Assert.IsType<PieSeries<int>>(
-                presentation.CurrentStatusSeries[index]);
-            Assert.Equal(
-                expectedLabelColors[index],
-                Assert.IsType<SolidColorPaint>(series.DataLabelsPaint).Color);
-        }
+        // A label is white on a deep slice and dark on a light one: the blue Not started and the yellow
+        // Rework needed.
+        Assert.Equal(SKColor.Parse(ColorScheme.Base.White),
+            Assert.IsType<SolidColorPaint>(notStarted.DataLabelsPaint).Color);
+        Assert.Equal(SKColor.Parse(ColorScheme.Chart.Text),
+            Assert.IsType<SolidColorPaint>(rework.DataLabelsPaint).Color);
     }
 
     [Fact]

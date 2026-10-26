@@ -1342,6 +1342,29 @@ public sealed class PresentationConfigurationTests
         Assert.Equal("Never shown in client report", (string?)internalNotes.Attribute("AutomationProperties.HelpText"));
     }
 
+    [Theory]
+    [InlineData("ProjectReportView.xaml", 4)]
+    [InlineData("AggregateProgressView.xaml", 2)]
+    public void ProgressChartTitles_ShowAShortDescriptionWhenPointedAt(string view, int charts)
+    {
+        XElement[] titles = LoadWpfXaml("Views", view).Descendants()
+            .Where(static element => element.Name.LocalName == "TextBlock")
+            .Where(element => Enum.GetValues<EntityTracker.Reporting.ProgressChartKind>().Any(kind =>
+                (string?)element.Attribute("Text") == EntityTracker.Reporting.ProgressChartPresentationBuilder.GetTitle(kind)))
+            .ToArray();
+
+        Assert.Equal(charts, titles.Length);
+        Assert.All(titles, title =>
+        {
+            EntityTracker.Reporting.ProgressChartKind kind = Enum.GetValues<EntityTracker.Reporting.ProgressChartKind>()
+                .Single(item => EntityTracker.Reporting.ProgressChartPresentationBuilder.GetTitle(item) ==
+                                (string?)title.Attribute("Text"));
+            string description = EntityTracker.Reporting.ProgressChartPresentationBuilder.GetDescription(kind);
+            Assert.Equal(description, (string?)title.Attribute("ToolTip"));
+            Assert.Equal(description, (string?)title.Attribute("AutomationProperties.HelpText"));
+        });
+    }
+
     [Fact]
     public void ProjectReport_ShowsFourLiveChartsEachWithSaveAndCopyImage()
     {

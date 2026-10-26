@@ -105,7 +105,7 @@ section.report-section h2 { margin: 0 0 12px; font-size: 18px; font-weight: 600;
 .chart .guide.visible { opacity: 1; }
 .chart circle.active { stroke: var(--surface); stroke-width: 2; }
 .chart .series { transition: opacity 150ms ease; }
-.chart .series.faded { opacity: 0.2; }
+.chart .series.faded, .chart .bar.faded { opacity: 0.2; }
 .chart .slice { transition: transform 150ms ease, filter 150ms ease; }
 .chart .slice.active, .chart .bar.active { filter: brightness(1.12) drop-shadow(0 2px 4px color-mix(in srgb, var(--green-100) 30%, transparent)); }
 

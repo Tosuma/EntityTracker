@@ -15,14 +15,25 @@ internal static class ProgressChartPalette
     internal static readonly SKColor WaitingTrend = From(ColorScheme.Chart.WaitingTrend);
     internal static readonly SKColor Increase = From(ColorScheme.Chart.Increase);
     internal static readonly SKColor Decrease = From(ColorScheme.Chart.Decrease);
+    internal static readonly SKColor Target = From(ColorScheme.Chart.Target);
 
     /// <summary>Gets the text colour of axes, legends and tooltips on the theme's canvas.</summary>
     internal static SKColor TextFor(ProgressChartTheme theme) =>
         From(theme == ProgressChartTheme.Dark ? ColorScheme.DarkChart.Text : ColorScheme.Chart.Text);
 
-    /// <summary>Gets the slice outline on the theme's canvas: none on light, a thin light line on dark.</summary>
-    internal static SKColor? SliceOutlineFor(ProgressChartTheme theme) =>
-        theme == ProgressChartTheme.Dark ? From(ColorScheme.DarkChart.SliceOutline) : null;
+    /// <summary>Gets a development status's pie slice colour on the theme's canvas.</summary>
+    internal static string Category(ProgressStatusCategory status, ProgressChartTheme theme = ProgressChartTheme.Light) =>
+        (theme == ProgressChartTheme.Dark ? ColorScheme.DarkChart.Categories : ColorScheme.Chart.Categories)[status switch
+        {
+            ProgressStatusCategory.NotStarted => 0,
+            ProgressStatusCategory.Blocked => 1,
+            ProgressStatusCategory.InProgress => 2,
+            ProgressStatusCategory.ReworkNeeded => 3,
+            ProgressStatusCategory.Reworking => 4,
+            ProgressStatusCategory.DevelopmentCompleted => 5,
+            ProgressStatusCategory.Reconciled => 6,
+            _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
+        }];
 
     /// <summary>Gets the grid line colour on the theme's canvas.</summary>
     internal static SKColor GridFor(ProgressChartTheme theme) =>
@@ -36,16 +47,27 @@ internal static class ProgressChartPalette
 
     internal static SKColor From(string hex) => SKColor.Parse(hex);
 
-    /// <summary>Gets a development status's colour (and the colour of a label on it).</summary>
-    internal static StatusColor Status(ProgressStatusCategory status) => status switch
+    /// <summary>Gets the label colour that reads best on a slice: white, or the chart's dark text.</summary>
+    internal static SKColor LabelOn(string fill)
     {
-        ProgressStatusCategory.NotStarted => ColorScheme.Status.NotStarted,
-        ProgressStatusCategory.InProgress => ColorScheme.Status.InProgress,
-        ProgressStatusCategory.ReworkNeeded => ColorScheme.Status.ReworkNeeded,
-        ProgressStatusCategory.Reworking => ColorScheme.Status.Reworking,
-        ProgressStatusCategory.Blocked => ColorScheme.Status.Blocked,
-        ProgressStatusCategory.DevelopmentCompleted => ColorScheme.Status.DevelopmentCompleted,
-        ProgressStatusCategory.Reconciled => ColorScheme.Status.Reconciled,
-        _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
-    };
+        SKColor background = From(fill);
+        SKColor white = From(ColorScheme.Base.White);
+        SKColor dark = From(ColorScheme.Chart.Text);
+        return Contrast(white, background) >= Contrast(dark, background) ? white : dark;
+
+        static double Contrast(SKColor a, SKColor b)
+        {
+            double la = Luminance(a), lb = Luminance(b);
+            return (Math.Max(la, lb) + 0.05) / (Math.Min(la, lb) + 0.05);
+        }
+
+        static double Luminance(SKColor color) =>
+            0.2126 * Linear(color.Red) + 0.7152 * Linear(color.Green) + 0.0722 * Linear(color.Blue);
+
+        static double Linear(byte channel)
+        {
+            double value = channel / 255d;
+            return value <= 0.03928 ? value / 12.92 : Math.Pow((value + 0.055) / 1.055, 2.4);
+        }
+    }
 }
