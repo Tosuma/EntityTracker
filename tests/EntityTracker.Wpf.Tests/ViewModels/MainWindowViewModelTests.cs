@@ -196,8 +196,6 @@ public sealed class MainWindowViewModelTests
         Assert.Equal("Archived", archivedRow.SourceName);
         Assert.False(archivedRow.HasGraphIssue);
         Assert.Empty(archivedRow.GraphIssueTitle);
-        Assert.False(viewModel.SearchOverviewDependencies);
-        Assert.False(viewModel.ArchivedTable.CanSearchDependencies);
     }
 
     [Fact]
@@ -288,7 +286,8 @@ public sealed class MainWindowViewModelTests
         viewModel.ActiveTable.ClearAllFiltersCommand.Execute(null);
 
         Assert.True(viewModel.IsTotalSummarySelected);
-        Assert.Equal("Matching entity", Assert.Single(viewModel.OverviewItems).SourceName);
+        Assert.Equal(string.Empty, viewModel.OverviewSearchQuery);
+        Assert.Equal(2, viewModel.OverviewItems.Count);
     }
 
     [Fact]
@@ -412,34 +411,6 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(1, viewModel.DevelopmentCompletedCount);
         Assert.Equal(1, viewModel.InProgressCount);
         Assert.Equal("Showing 2 of 3", viewModel.OverviewSearchResultSummary);
-    }
-
-    [Fact]
-    public async Task OverviewSearch_DependencyModeFindsDirectResolvedAndUnresolvedDependents()
-    {
-        TrackedEntity alpha = Entity(1, "Alpha");
-        TrackedEntity beta = Entity(2, "Beta");
-        TrackedEntity downstream = Entity(3, "Downstream");
-        TrackedEntity unresolvedOwner = Entity(4, "Unresolved Owner");
-        MainWindowViewModel viewModel = CreateViewModel(
-            [alpha, beta, downstream, unresolvedOwner],
-            [Dependency(beta, alpha), Dependency(downstream, beta)],
-            out _,
-            [Unresolved(unresolvedOwner, "Legacy API")]);
-        await viewModel.InitializeAsync();
-        viewModel.OpenOverviewSearchCommand.Execute(null);
-        viewModel.SearchOverviewDependencies = true;
-
-        viewModel.OverviewSearchQuery = "alpha";
-        await WaitUntilAsync(() => viewModel.OverviewItems.Count == 1);
-
-        Assert.Equal("Beta", Assert.Single(viewModel.OverviewItems).SourceName);
-        Assert.DoesNotContain(viewModel.OverviewItems, row => row.SourceName == "Downstream");
-
-        viewModel.OverviewSearchQuery = "legacy";
-        await WaitUntilAsync(() =>
-            viewModel.OverviewItems.Count == 1 &&
-            viewModel.OverviewItems[0].SourceName == "Unresolved Owner");
     }
 
     [Fact]

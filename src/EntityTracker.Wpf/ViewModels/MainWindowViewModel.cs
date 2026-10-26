@@ -22,16 +22,15 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace EntityTracker.Wpf.ViewModels;
 
-/// <summary>The searches on a Tracker's pages: Overview, Archived and the dependency graph.</summary>
-internal readonly record struct WorkspaceSearchState(
-    TableSearchState Active, TableSearchState Archived, string GraphSearch)
-{
-    /// <summary>Gets whether anything is being searched for.</summary>
-    public bool IsSearching => Active.IsOpen || Archived.IsOpen || !string.IsNullOrWhiteSpace(GraphSearch);
-}
+/// <summary>The current view applied to Tracker data on Overview, Archived and the graph.</summary>
+internal readonly record struct WorkspaceViewState(
+    TableViewState Active, TableViewState Archived, string GraphSearch);
 
 public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 {
+    private bool _isWorkspaceActive = true;
+    private bool _graphNeedsRebuild;
+    private readonly Func<CancellationToken, Task<long>>? _readRevision;
     private readonly EntityOverviewService _overviewService;
     private readonly TrackerId _trackerId;
     private readonly ProjectDeveloperService? _developers;
@@ -96,7 +95,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         IOverviewExportFilePicker? overviewExportFilePicker = null,
         OverviewExportSettingsViewModel? overviewExportSettings = null,
         NotificationCenter? notifications = null,
-        IProgressChartFilePicker? graphFilePicker = null)
+        IProgressChartFilePicker? graphFilePicker = null,
+        Func<CancellationToken, Task<long>>? readRevision = null)
     {
         ArgumentNullException.ThrowIfNull(overviewService);
         ArgumentNullException.ThrowIfNull(bulkStatusUpdateService);
@@ -105,6 +105,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         ArgumentNullException.ThrowIfNull(entityLifecycleService);
         ArgumentNullException.ThrowIfNull(discardConfirmation);
         _trackerId = trackerId;
+        _readRevision = readRevision;
         _developers = developers;
         _responsibilityPeriods = responsibilityPeriods;
         _trackedState = trackedState;
@@ -325,20 +326,26 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public event Action<EntityId>? EntityRevealRequested;
 
-    /// <summary>Gets every search on this Tracker's pages, so it can be carried to another Tracker.</summary>
-    internal WorkspaceSearchState CaptureSearch() =>
-        new(ActiveTable.CaptureSearch(), ArchivedTable.CaptureSearch(), DependencyGraph.SearchText);
+    /// <summary>Gets the current view so it can be applied to another Tracker's data.</summary>
+    internal WorkspaceViewState CaptureView() =>
+        new(ActiveTable.CaptureView(), ArchivedTable.CaptureView(), DependencyGraph.SearchText);
 
-    /// <summary>Takes over the searches from another Tracker, so switching Tracker keeps searching.</summary>
-    internal void RestoreSearch(WorkspaceSearchState state)
+    /// <summary>Applies the current view when switching Tracker.</summary>
+    internal void RestoreView(WorkspaceViewState state)
     {
-        ActiveTable.RestoreSearch(state.Active);
-        ArchivedTable.RestoreSearch(state.Archived);
+        ActiveTable.RestoreView(state.Active);
+        ArchivedTable.RestoreView(state.Archived);
         DependencyGraph.SearchText = state.GraphSearch;
         DependencyGraph.IsSuggestionsOpen = false;
     }
 
     public TrackerId TrackerId => _trackerId;
+
+    /// <summary>
+    /// Gets the persisted Project revision the loaded rows reflect, or null when the rows are not
+    /// known to be current (never loaded, failed to load, or no revision store).
+    /// </summary>
+    internal long? LoadedRevision { get; private set; }
 
     public bool HasUnsavedWork =>
         ManualCreation.IsDirty || Editor.IsDirty;
@@ -394,12 +401,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public bool IsOverviewSearchOpen => ActiveTable.IsSearchOpen;
 
-    public bool SearchOverviewDependencies
-    {
-        get => ActiveTable.SearchDependenciesInstead;
-        set => ActiveTable.SearchDependenciesInstead = value;
-    }
-
     /// <summary>
     /// Gets whether the entities could not be loaded; the reason is in the notification center,
     /// and the empty-state hints stay hidden so an unloaded list does not look empty.
@@ -453,6 +454,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
                 CloseEntityDetails();
                 ClearOverviewSelection();
                 _applyBulkStatusCommand.NotifyCanExecuteChanged();
+                RebuildGraphIfVisible();
             }
         }
     }
@@ -668,10 +670,26 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public void PrepareForDeactivation()
     {
+        _isWorkspaceActive = false;
         ActiveTable.CloseOpenFilter();
         ArchivedTable.CloseOpenFilter();
         CloseEntityDetails();
         ClearOverviewSelection();
+    }
+
+    internal void Activate(MainWindowTab tab)
+    {
+        _isWorkspaceActive = true;
+        SelectedTab = tab;
+        RebuildGraphIfVisible();
+    }
+
+    private void RebuildGraphIfVisible()
+    {
+        if (!_isWorkspaceActive || SelectedTab != MainWindowTab.DependencyGraph || !_graphNeedsRebuild)
+            return;
+        DependencyGraph.Rebuild(ActiveTable.SourceItems);
+        _graphNeedsRebuild = false;
     }
 
     public void DiscardTransientWork()
@@ -806,7 +824,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     private async Task LoadOverviewAndProgressAsync(CancellationToken cancellationToken)
     {
+        LoadedRevision = null;
+        // Read before loading, so a write during the load leaves the rows older than the store.
+        long? revision = _readRevision is null ? null : await _readRevision(cancellationToken);
         await LoadOverviewAsync(cancellationToken);
+        if (!HasOverviewError)
+            LoadedRevision = revision;
     }
 
     private void SetOverviewFailure(string message, NotificationKind kind = NotificationKind.Failure)
@@ -828,7 +851,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         ClearOverviewSelection();
         ActiveTable.ReplaceSourceItems(items);
         ArchivedTable.ReplaceSourceItems(archivedItems);
-        DependencyGraph.Rebuild(items);
+        _graphNeedsRebuild = true;
+        RebuildGraphIfVisible();
         OnPropertyChanged(nameof(HasOverviewItems));
         OnPropertyChanged(nameof(HasArchivedItems));
         OnPropertyChanged(nameof(ShowOverviewEmptyState));

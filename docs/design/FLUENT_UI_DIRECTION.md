@@ -156,6 +156,9 @@ application theme.
 ## Interaction principles
 
 - Preserve accepted filtering semantics: OR within a column and AND across columns.
+- Apply each page's current search, filters and sort to the next Tracker's data when switching
+  Trackers, including cleared values. Overview and Archived keep separate views. **Clear filters
+  and sort** also clears the page's search text.
 - Keep filter and status-sort actions in Fluent column-header flyouts. Do not add a duplicate filter
   pane or applied-filter chip system.
 - Preserve lazy entity/dependency search and `Ctrl+F`. Search is a box in the page toolbar
@@ -163,6 +166,10 @@ application theme.
   separate Find button.
 - Preserve clickable summary cards as status-filter shortcuts.
 - Keep bulk status selection atomic and clear selection when context or projection changes.
+- Reuse unchanged Tracker data after checking its persisted Project revision. Defer dependency graph
+  preparation until its page is active, and apply changes made while it was hidden when it opens.
+- Load dashboard charts and comparisons only when their page is shown. Background data changes
+  refresh the visible dashboard; hidden dashboards pick up current data when opened.
 - Keep Complete/Partial synchronization semantics and actionable review behavior unchanged.
 - Keep entity creation warnings non-fatal for deliberately unresolved dependencies.
 - Keep archive/restore reversible and archive confirmation difficult to trigger accidentally.

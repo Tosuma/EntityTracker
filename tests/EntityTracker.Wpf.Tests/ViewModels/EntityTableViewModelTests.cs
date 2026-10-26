@@ -9,6 +9,58 @@ namespace EntityTracker.Wpf.Tests.ViewModels;
 
 public sealed class EntityTableViewModelTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ClearFiltersAndSort_AlsoClearsPendingSearchAndKeepsSearchOpen(bool archived)
+    {
+        EntityTableViewModel table = archived ? EntityTableViewModel.CreateArchived() : EntityTableViewModel.CreateActive();
+        table.ReplaceSourceItems([
+            Row(1, "First", "", "A", DevelopmentStatus.NotStarted, EntityWorkflowState.Ready),
+            Row(2, "Second", "", "B", DevelopmentStatus.InProgress, EntityWorkflowState.Ready)
+        ]);
+        table.OpenSearchCommand.Execute(null);
+        table.SetSingleStatusFilter(DevelopmentStatus.InProgress);
+        table.StatusFilter.SortDescendingCommand.Execute(null);
+        table.SearchQuery = "missing";
+
+        table.ClearAllFiltersCommand.Execute(null);
+
+        Assert.True(table.IsSearchOpen);
+        Assert.Equal(string.Empty, table.SearchQuery);
+        Assert.False(table.IsSearchPending);
+        Assert.False(table.HasFiltersOrSort);
+        Assert.Equal(["First", "Second"], table.Items.Select(row => row.SourceName));
+        await Task.Delay(300);
+        Assert.Equal(2, table.Items.Count);
+    }
+
+    [Fact]
+    public void ViewTransfer_KeepsAbsentFilterValuesAndDiscardsUnappliedEdits()
+    {
+        EntityTableViewModel from = EntityTableViewModel.CreateActive();
+        EntityOverviewRow matching = Row(1, "First", "", "Core", DevelopmentStatus.NotStarted, EntityWorkflowState.Ready);
+        from.ReplaceSourceItems([matching]);
+        ApplyFilter(from.GroupFilter, "Core");
+        ApplyFilter(from.ResponsibleDeveloperFilter, "(Blank)");
+        from.WorkStatusFilter!.OpenCommand.Execute(null);
+        from.WorkStatusFilter.Options.Single().IsSelected = true;
+        EntityTableViewModel to = EntityTableViewModel.CreateActive();
+        to.ReplaceSourceItems([matching with { GroupName = "Other" }]);
+
+        to.RestoreView(from.CaptureView());
+
+        Assert.True(to.GroupFilter.IsApplied);
+        Assert.True(to.ResponsibleDeveloperFilter.IsApplied);
+        Assert.False(to.WorkStatusFilter!.IsApplied);
+        Assert.False(to.WorkStatusFilter.IsOpen);
+        Assert.Empty(to.Items);
+        to.ReplaceSourceItems([matching]);
+        Assert.Single(to.Items);
+        to.GroupFilter.OpenCommand.Execute(null);
+        Assert.True(Assert.Single(to.GroupFilter.Options).IsSelected);
+    }
+
     [Fact]
     public void ExportAllScope_IgnoresSearchAndFiltersButKeepsCurrentSort()
     {
@@ -43,18 +95,13 @@ public sealed class EntityTableViewModelTests
 
         await SearchAsync(table, "voic");
         Assert.Equal(["invoice"], table.Items.Select(row => row.SourceName));
-
-        table.SearchDependenciesInstead = true;
-        await SearchAsync(table, "legal entity");
-        Assert.Equal(["invoice"], table.Items.Select(row => row.SourceName));
     }
 
     [Fact]
-    public void ASearchCarriedToAnotherTableAppliesAtOnceIncludingTheDependencyMode()
+    public void ASearchCarriedToAnotherTableAppliesAtOnce()
     {
         EntityTableViewModel from = EntityTableViewModel.CreateActive();
         from.OpenSearchCommand.Execute(null);
-        from.SearchDependenciesInstead = true;
         from.SearchQuery = "legalentity";
         EntityTableViewModel to = EntityTableViewModel.CreateActive();
         to.ReplaceSourceItems([
@@ -66,11 +113,10 @@ public sealed class EntityTableViewModelTests
         to.RestoreSearch(from.CaptureSearch());
 
         Assert.True(to.IsSearchOpen);
-        Assert.True(to.SearchDependenciesInstead);
         Assert.Equal("legalentity", to.SearchQuery);
-        Assert.Equal(["invoice"], to.Items.Select(row => row.SourceName));
+        Assert.Equal(["legal_entity"], to.Items.Select(row => row.SourceName));
 
-        to.RestoreSearch(new TableSearchState(false, "ignored", false));
+        to.RestoreSearch(new TableSearchState(false, string.Empty));
         Assert.False(to.IsSearchOpen);
         Assert.Equal(string.Empty, to.SearchQuery);
         Assert.Equal(2, to.Items.Count);
@@ -160,7 +206,7 @@ public sealed class EntityTableViewModelTests
     }
 
     [Fact]
-    public async Task OrdinarySearch_UsesCurrentNamesOnlyWhenEnabledAndLeavesDependencyModeIsolated()
+    public async Task OrdinarySearch_UsesCurrentNamesOnlyWhenEnabled()
     {
         EntityOverviewDeveloper developer = Developer(1, "AB", "Alex Brown");
         EntityOverviewRow row = Row(1, "Invoice", "", "Core",
@@ -182,12 +228,7 @@ public sealed class EntityTableViewModelTests
         archived.SearchResponsibleNames = true;
         Assert.Single(active.Items);
         Assert.Single(archived.Items);
-
-        active.SearchDependenciesInstead = true;
-        Assert.Empty(active.Items);
         active.SearchQuery = "address";
-        await WaitUntilAsync(() => active.Items.Count == 1);
-        active.SearchQuery = "alex";
         await WaitUntilAsync(() => active.Items.Count == 0);
     }
 

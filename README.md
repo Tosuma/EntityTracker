@@ -37,7 +37,7 @@ EntityTracker keeps those concerns separate:
 - **Entity tracking** — create and rename entities, add or remove dependencies, update notes and
   progress, and archive or restore entities.
 - **Workflow visibility** — combine Excel-style filters on Responsible dev, Group, Status, and
-  Work status; sort workflow statuses in their defined order; and search by entity or dependency
+  Work status; sort workflow statuses in their defined order; and search by entity or responsible
   name.
 - **Progress reporting** — share a Project report with the client or the team: current status,
   implementation history, ready-versus-blocked trends, weekly change, the dependency graph and every
@@ -287,14 +287,16 @@ those parts, pointing at it lists their counts, and clicking it shows just those
 dashboard, its Tracker cards and Portfolio show the same bar and counts under **Implemented**. Ordinary search matches entity names
 and, by default, current Developer initials and
 display names. Turn off **Search responsible names** in Settings to search entity names only.
-**Search dependency names** remains a separate mode. Open search with <kbd>Ctrl</kbd>+<kbd>F</kbd>.
+Open search with <kbd>Ctrl</kbd>+<kbd>F</kbd>.
 
 Every entity search in the app (Overview and Archived search, the dependency and Group boxes when
 adding or editing an entity, and the dependency graph search) matches names the same way: part of
 the name, word by word across spaces, snake_case, kebab-case, PascalCase and camelCase ("cust pref"
 finds `customer_preference`), and written without spaces ("legalentity" finds `legal entity`,
 `legalEntity` and `legal_entity`). Typing is never interrupted when suggestions appear. Switching
-Tracker while searching keeps the search: the next Tracker opens with the same search already applied.
+Tracker keeps the current search, column filters and sort: they apply immediately to the next
+Tracker's data, including when returning to a previously visited Tracker. Overview and Archived keep
+separate views. **Clear filters and sort** also clears that page's search text.
 
 Development status keeps the user-set detail: **Rework needed** means work is pending,
 **Reworking** means it is active, and **Blocked** manually pauses an entity. Work status shows
@@ -309,7 +311,7 @@ status, not as missing, and doesn't flag the difference.
 
 ![EntityTracker Responsible dev filter with separate Project Developers and a Blank option](images/light/overview-filter-flyout.png)
 
-![EntityTracker overview filtered by the dependency name unit](images/light/overview-search.png)
+![EntityTracker overview filtered by the entity name unit](images/light/overview-search.png)
 
 Archived entities have their own tab and independent search, filters, and Status sort. They remain
 available as read-only records with their progress, notes, and dependencies intact and can be
