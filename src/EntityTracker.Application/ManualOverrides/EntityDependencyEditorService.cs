@@ -22,7 +22,6 @@ public sealed class EntityDependencyEditorService
     private readonly ITrackedStateStore _store;
     private readonly ProgressSnapshotCalculator _snapshotCalculator;
     private readonly PriorityPlanningService _priorityPlanningService;
-    private readonly ITrackerRepository? _trackerRepository;
 
     public EntityDependencyEditorService(
         IEntityRepository entityRepository,
@@ -31,8 +30,7 @@ public sealed class EntityDependencyEditorService
         IDependencyRankingService dependencyRanker,
         ITrackedStateStore store,
         PriorityPlanningService priorityPlanningService,
-        ProgressSnapshotCalculator? snapshotCalculator = null,
-        ITrackerRepository? trackerRepository = null)
+        ProgressSnapshotCalculator? snapshotCalculator = null)
     {
         ArgumentNullException.ThrowIfNull(entityRepository);
         ArgumentNullException.ThrowIfNull(dependencyRepository);
@@ -48,16 +46,7 @@ public sealed class EntityDependencyEditorService
         _store = store;
         _priorityPlanningService = priorityPlanningService;
         _snapshotCalculator = snapshotCalculator ?? new ProgressSnapshotCalculator();
-        _trackerRepository = trackerRepository;
     }
-
-    /// <summary>
-    /// Whether the Tracker was copied from another. Sync from source matches entities by name, so a
-    /// rename there may not match the source.
-    /// </summary>
-    public async Task<bool> IsCopiedTrackerAsync(TrackerId trackerId, CancellationToken cancellationToken = default) =>
-        _trackerRepository is not null &&
-        (await _trackerRepository.GetAsync(trackerId, cancellationToken))?.CopiedFromTrackerId is not null;
 
     public async Task<IReadOnlyList<TrackedEntity>> GetEditableEntitiesAsync(
         TrackerId trackerId,
