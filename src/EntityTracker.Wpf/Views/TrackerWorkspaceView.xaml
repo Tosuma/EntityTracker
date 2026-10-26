@@ -350,12 +350,6 @@
                                      controls:Placeholder.Text="Search entities (Ctrl+F)"
                                      AutomationProperties.Name="Search active entities"
                                      Text="{Binding OverviewSearchQuery, UpdateSourceTrigger=PropertyChanged}" />
-                            <CheckBox Margin="0,0,12,0"
-                                      VerticalAlignment="Center"
-                                      Content="Dependency names"
-                                      ToolTip="Search the names of dependencies instead of entity names"
-                                      IsEnabled="{Binding ActiveTable.CanSearchDependencies}"
-                                      IsChecked="{Binding SearchOverviewDependencies}" />
                             <Button Margin="0,0,8,0"
                                     Command="{Binding RefreshCommand}"
                                     ToolTip="Refresh (F5)"
