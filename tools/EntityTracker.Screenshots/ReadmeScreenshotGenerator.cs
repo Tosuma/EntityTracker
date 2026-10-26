@@ -544,7 +544,6 @@ internal sealed class ReadmeScreenshotGenerator
         overview.UnselectAll();
 
         viewModel.OpenOverviewSearchCommand.Execute(null);
-        viewModel.SearchOverviewDependencies = true;
         viewModel.OverviewSearchQuery = "unit";
         await WaitUntilAsync(
             () => viewModel.OverviewItems.Count is > 0 and < 125,

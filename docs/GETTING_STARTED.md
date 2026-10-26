@@ -154,8 +154,7 @@ entities. The active and archived overviews show each current Developer separate
 entities. All overview column filters start with no checked values, which shows all rows. Check
 the values you want and choose **Apply**; **Clear filter** unchecks them and keeps the menu open.
 Ordinary search includes current Developer initials and display names by default; turn off
-**Search responsible names** in Settings to search entity names only. **Search dependency
-names** remains a separate search mode.
+**Search responsible names** in Settings to search entity names only.
 
 ### Sync a copied tracker
 
