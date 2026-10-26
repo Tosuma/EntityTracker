@@ -599,7 +599,7 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
     }
 
     [Fact]
-    public async Task TrackerSwitch_WithoutASearchLeavesTheNextTrackersSearchAlone()
+    public async Task TrackerSwitch_CarriesClearedSearchToACachedWorkspace()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
         Tracker second = await harness.TrackerManagement.CreateBlankAsync(harness.DefaultProject.Id, "Second tracker");
@@ -619,8 +619,49 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
 
         Assert.True(await shell.SelectTrackerAsync(secondSelection));
 
-        Assert.True(next.ArchivedTable.IsSearchOpen);
-        Assert.Equal("kept", next.ArchivedTable.SearchQuery);
+        Assert.False(next.ArchivedTable.IsSearchOpen);
+        Assert.Equal(string.Empty, next.ArchivedTable.SearchQuery);
+    }
+
+    [Fact]
+    public async Task TrackerSwitch_AppliesCurrentFiltersAndSortToNewAndCachedWorkspaces()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        Tracker second = await harness.TrackerManagement.CreateBlankAsync(harness.DefaultProject.Id, "Second tracker");
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "first");
+        await harness.AddEntityAsync(second.Id, "second");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        MainWindowViewModel first = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
+        first.ActiveTable.SetSingleStatusFilter(DevelopmentStatus.InProgress);
+        first.ActiveTable.WorkStatusFilter!.SortDescendingCommand.Execute(null);
+        first.ArchivedTable.SetSingleStatusFilter(DevelopmentStatus.Reconciled);
+        first.ArchivedTable.StatusFilter.SortAscendingCommand.Execute(null);
+
+        Assert.True(await shell.SelectTrackerAsync(shell.Trackers.Single(item => item.Id == second.Id)));
+        MainWindowViewModel next = Assert.IsType<MainWindowViewModel>(shell.CurrentWorkspace);
+        Assert.True(next.ActiveTable.IncludesStatus(DevelopmentStatus.InProgress));
+        Assert.Equal(first.ActiveTable.Sort, next.ActiveTable.Sort);
+        Assert.Empty(next.ActiveTable.Items);
+        Assert.True(next.ArchivedTable.IncludesStatus(DevelopmentStatus.Reconciled));
+        Assert.Equal(first.ArchivedTable.Sort, next.ArchivedTable.Sort);
+
+        next.ActiveTable.ClearAllFiltersCommand.Execute(null);
+        next.ArchivedTable.ClearAllFiltersCommand.Execute(null);
+        Assert.True(await shell.SelectTrackerAsync(shell.Trackers.Single(item => item.Id == harness.DefaultTracker.Id)));
+        Assert.Same(first, shell.CurrentWorkspace);
+        Assert.False(first.ActiveTable.HasFiltersOrSort);
+        Assert.False(first.ArchivedTable.HasFiltersOrSort);
+        Assert.Equal("first", Assert.Single(first.ActiveTable.Items).SourceName);
+
+        first.ActiveTable.SetSingleStatusFilter(DevelopmentStatus.Reconciled);
+        Assert.True(await shell.SelectTrackerAsync(null));
+        Assert.Null(shell.CurrentWorkspace);
+        Assert.True(await shell.SelectTrackerAsync(shell.Trackers.Single(item => item.Id == second.Id)));
+        Assert.True(next.ActiveTable.IncludesStatus(DevelopmentStatus.Reconciled));
+        Assert.Empty(next.ActiveTable.Items);
     }
 
     [Fact]
@@ -823,7 +864,7 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
     }
 
     [Fact]
-    public async Task TrackerSwitch_PreservesPerTrackerTableStateClearsSelectionAndGuardsDirtyWork()
+    public async Task TrackerSwitch_CarriesCurrentSearchClearsSelectionAndGuardsDirtyWork()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
         Tracker second = await harness.TrackerManagement.CreateBlankAsync(
@@ -863,7 +904,7 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
             item => item.Id == harness.DefaultTracker.Id);
         Assert.True(await shell.SelectTrackerAsync(firstSelection));
         Assert.Same(firstWorkspace, shell.CurrentWorkspace);
-        Assert.Equal("First", firstWorkspace.ActiveTable.SearchQuery);
+        Assert.Equal("Second", firstWorkspace.ActiveTable.SearchQuery);
         Assert.Equal("Second", secondWorkspace.ActiveTable.SearchQuery);
     }
 
