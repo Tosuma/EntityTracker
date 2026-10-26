@@ -56,6 +56,33 @@ Use the matching configuration when testing a Release build:
 dotnet test EntityTracker.slnx --configuration Release --no-build --no-restore
 ```
 
+## Measure Tracker switching
+
+The shell regression test below creates two Trackers with 125 independent entities each, opens
+the first, then measures the first visit to the second and five alternating cached visits. It
+checks that every switch still shows the selected Tracker's rows. Timings are diagnostic output,
+not pass/fail thresholds:
+
+```powershell
+dotnet test tests/EntityTracker.Wpf.Tests/EntityTracker.Wpf.Tests.csproj --configuration Release --filter FullyQualifiedName~TrackerSwitch_LargeTrackersKeepTheirOwnRowsAcrossRepeatedSwitches --logger "console;verbosity=detailed"
+```
+
+For #143, the same harness on the parent implementation and the change produced these milliseconds
+on the development machine (one isolated run each):
+
+| Implementation | First visit | Five cached visits | Cached median |
+| --- | --- | --- | --- |
+| Before | 298.6 | 162.7, 91.7, 74.0, 76.2, 92.6 | 91.7 |
+| After | 263.4 | 136.3, 65.0, 26.2, 27.3, 31.5 | 31.5 |
+
+This measures the awaited shell operation against temporary SQLite data, excluding WPF window
+rendering and real Project dependencies/history; first-visit timings include initialization and
+JIT costs. Compare the same test on both implementations, in isolation, on the same machine.
+Same-Project Tracker-page switches reuse the developer page and leave hidden dashboards alone.
+The selected workspace still checks its history baseline and reloads persisted data.
+Dashboards refresh when opened and after existing edit/catalog/sync notifications, and the
+developer page refreshes when opened.
+
 ## Continuous integration
 
 GitHub Actions runs the same Release restore, build, and test commands for every pull request and

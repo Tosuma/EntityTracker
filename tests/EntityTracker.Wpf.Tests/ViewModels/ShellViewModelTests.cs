@@ -25,8 +25,79 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace EntityTracker.Wpf.Tests.ViewModels;
 
-public sealed class ShellViewModelTests
+public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper output)
 {
+    [Fact]
+    public async Task TrackerSwitch_LargeTrackersKeepTheirOwnRowsAcrossRepeatedSwitches()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        Tracker second = await harness.TrackerManagement.CreateBlankAsync(harness.DefaultProject.Id, "Second tracker");
+        foreach (Tracker tracker in new[] { harness.DefaultTracker, second })
+            for (int i = 0; i < 125; i++)
+                await harness.AddEntityAsync(tracker.Id,
+                    $"{(tracker.Id == second.Id ? "Second" : "First")}{i:D3}");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        List<double> milliseconds = [];
+        foreach (TrackerId id in new[] { second.Id, harness.DefaultTracker.Id, second.Id,
+            harness.DefaultTracker.Id, second.Id, harness.DefaultTracker.Id })
+        {
+            System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
+            Assert.True(await shell.SelectTrackerAsync(shell.Trackers.Single(tracker => tracker.Id == id)));
+            milliseconds.Add(watch.Elapsed.TotalMilliseconds);
+            Assert.Equal(125, shell.CurrentWorkspace!.ActiveTable.SourceItems.Count);
+            Assert.All(shell.CurrentWorkspace.ActiveTable.SourceItems, row =>
+                Assert.StartsWith(id == second.Id ? "Second" : "First", row.SourceName));
+        }
+        output.WriteLine("Switch times in ms (first visit, then five cached visits): {0}",
+            string.Join(", ", milliseconds.Select(value => value.ToString("F1", System.Globalization.CultureInfo.InvariantCulture))));
+    }
+
+    [Fact]
+    public async Task TrackerSwitch_RefreshesTrackerDataAndDefersHiddenProjectPagesUntilNavigation()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        Tracker second = await harness.TrackerManagement.CreateBlankAsync(harness.DefaultProject.Id, "Second tracker");
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "First entity");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        PortfolioDashboard? portfolio = shell.Portfolio;
+        ProjectDashboard? project = shell.ProjectDashboard;
+        ProjectDevelopersViewModel? developers = shell.Developers;
+        Assert.NotNull(project);
+        Assert.True(await shell.SelectTrackerAsync(shell.Trackers.Single(tracker => tracker.Id == second.Id)));
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "Added while inactive");
+
+        Assert.True(await shell.SelectTrackerAsync(shell.Trackers.Single(tracker => tracker.Id == harness.DefaultTracker.Id)));
+
+        Assert.Equal(2, shell.CurrentWorkspace!.ActiveTable.SourceItems.Count);
+        Assert.Same(portfolio, shell.Portfolio);
+        Assert.Same(project, shell.ProjectDashboard);
+        Assert.Same(developers, shell.Developers);
+        Assert.True(await shell.NavigateAsync(ShellDestination.ProjectDashboard));
+        Assert.NotSame(project, shell.ProjectDashboard);
+        Assert.Contains(shell.ProjectReporting!.Comparison!.Rows,
+            row => row.DisplayName == "Added while inactive");
+        Assert.True(await shell.NavigateAsync(ShellDestination.Overview));
+        await harness.CreateDeveloperAsync("AL");
+        Assert.True(await shell.NavigateAsync(ShellDestination.Developers));
+        Assert.Same(developers, shell.Developers);
+        Assert.Equal("AL", Assert.Single(shell.Developers!.Available).Initials);
+
+        Assert.True(await shell.NavigateAsync(ShellDestination.Overview));
+        MainWindowViewModel workspace = shell.CurrentWorkspace!;
+        workspace.UpdateOverviewSelection(workspace.ActiveTable.SourceItems);
+        workspace.SelectedBulkStatus = DevelopmentStatus.DevelopmentCompleted;
+        await workspace.ApplyBulkStatusAsync();
+        await WaitUntilAsync(() => shell.Portfolio?.Progress.DevelopmentCompletedCount == 2 &&
+            shell.ProjectDashboard?.Progress.DevelopmentCompletedCount == 2 &&
+            !shell.PortfolioReporting.IsBusy && shell.ProjectReporting?.IsBusy == false);
+    }
+
     [Fact]
     public async Task AnOfferedUpdateShowsInAboutAndPutsADotOnSettingsUntilItIsGone()
     {

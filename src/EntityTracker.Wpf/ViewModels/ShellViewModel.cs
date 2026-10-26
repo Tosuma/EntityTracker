@@ -961,6 +961,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         Project? previousProject = SelectedProject;
         Tracker? previousTracker = SelectedTracker;
         MainWindowViewModel? previousWorkspace = CurrentWorkspace;
+        bool switchingTrackerPage = project is not null && previousProject?.Id == project.Id &&
+            IsTrackerDestination(destination);
         // A search in progress follows the user to the next Tracker instead of being lost.
         WorkspaceSearchState? carriedSearch = previousWorkspace?.CaptureSearch();
         ProjectDevelopersViewModel? previousDevelopers = Developers;
@@ -986,10 +988,13 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             }
             SelectedProject = project;
             await SetSettingsProjectAsync(project, cancellationToken);
-            Developers = project is null || _developerService is null ? null :
-                new ProjectDevelopersViewModel(project.Id, _developerService,
-                    OnProjectDevelopersChangedAsync, Notifications);
-            if (Developers is not null) await Developers.RefreshAsync(cancellationToken);
+            if (!switchingTrackerPage)
+            {
+                Developers = project is null || _developerService is null ? null :
+                    new ProjectDevelopersViewModel(project.Id, _developerService,
+                        OnProjectDevelopersChangedAsync, Notifications);
+                if (Developers is not null) await Developers.RefreshAsync(cancellationToken);
+            }
             Replace(Trackers, availableTrackers);
             SelectedTracker = selectedTracker;
 
@@ -1038,7 +1043,10 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             }
 
             SetDestination(destination);
-            await RefreshDashboardsAsync(cancellationToken);
+            // A Tracker switch changes no dashboard data. Refresh those pages on navigation,
+            // edits and sync, without making the visible Tracker wait for hidden charts/comparisons.
+            if (!switchingTrackerPage)
+                await RefreshDashboardsAsync(cancellationToken);
             ShowDefaultNamePrompt =
                 project?.Name == "Default project" || selectedTracker?.Name == "Default tracker";
             if (persist)
