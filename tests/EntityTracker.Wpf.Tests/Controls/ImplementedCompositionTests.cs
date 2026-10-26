@@ -19,6 +19,21 @@ public sealed class ImplementedCompositionTests
     });
 
     [Fact]
+    public void TheBarIsRoundAtBothEnds() => RunOnSta(() =>
+    {
+        ImplementedComposition bar = new() { Completed = 5, Reconciled = 2, Total = 20 };
+
+        bar.Measure(new System.Windows.Size(120, 6));
+        bar.Arrange(new System.Windows.Rect(0, 0, 120, 6));
+
+        // The coloured parts are clipped to the track's rounded shape, not to a square rectangle.
+        Assert.False(bar.ClipToBounds);
+        System.Windows.Media.RectangleGeometry clip = Assert.IsType<System.Windows.Media.RectangleGeometry>(bar.Clip);
+        Assert.Equal(new System.Windows.Rect(0, 0, 120, 6), clip.Rect);
+        Assert.Equal((3d, 3d), (clip.RadiusX, clip.RadiusY));
+    });
+
+    [Fact]
     public void AnEmptyTotalDrawsOnlyTheTrack() => RunOnSta(() =>
     {
         ImplementedComposition bar = new();
