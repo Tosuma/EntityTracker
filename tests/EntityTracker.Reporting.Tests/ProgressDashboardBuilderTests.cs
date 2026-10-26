@@ -1,4 +1,5 @@
 using EntityTracker.Application.History;
+using EntityTracker.Domain;
 
 namespace EntityTracker.Reporting.Tests;
 
@@ -125,7 +126,8 @@ public sealed class ProgressDashboardBuilderTests
             Utc);
 
         Assert.Equal([4, 2], report.ImplementedOverTime.Select(static point => point.ImplementedCount));
-        Assert.Contains(report.WeeklyNetImplementedChange, static point => point.NetChange < 0);
+        Assert.Equal((0, 2), (report.WeeklyNetImplementedChange.Single().Increase,
+            report.WeeklyNetImplementedChange.Single().Decrease));
     }
 
     [Fact]
@@ -159,6 +161,65 @@ public sealed class ProgressDashboardBuilderTests
             new DateOnly(2026, 1, 2),
             Utc));
     }
+
+    [Fact]
+    public void Build_CountsEachEntityThatBecameOrStoppedBeingImplementedFromTheStatusHistory()
+    {
+        // One save moves one entity to Completed and another back to In progress: the saved totals don't
+        // change, but the history shows both.
+        ProgressSnapshot[] snapshots =
+        [
+            Snapshot(2026, 1, 5, inProgress: 1, completed: 1),
+            Snapshot(2026, 1, 6, inProgress: 1, completed: 1),
+            Snapshot(2026, 1, 13, completed: 2)
+        ];
+        EntityId first = EntityId.New(), second = EntityId.New(), third = EntityId.New();
+        EntityStatusHistoryEntry[] history =
+        [
+            Moved(first, DevelopmentStatus.InProgress, DevelopmentStatus.DevelopmentCompleted, 2026, 1, 6),
+            Moved(second, DevelopmentStatus.DevelopmentCompleted, DevelopmentStatus.InProgress, 2026, 1, 6),
+            // Between two implemented statuses, and between two unimplemented ones: no change.
+            Moved(first, DevelopmentStatus.DevelopmentCompleted, DevelopmentStatus.Reconciled, 2026, 1, 7),
+            Moved(third, DevelopmentStatus.NotStarted, DevelopmentStatus.InProgress, 2026, 1, 7),
+            Moved(second, DevelopmentStatus.InProgress, DevelopmentStatus.ReworkNeeded, 2026, 1, 13),
+            // Before the range: not counted.
+            Moved(third, DevelopmentStatus.InProgress, DevelopmentStatus.DevelopmentCompleted, 2025, 12, 1)
+        ];
+
+        ProgressDashboardReport report = _builder.Build(
+            snapshots,
+            ProgressDateRange.AllHistory,
+            new DateOnly(2026, 1, 14),
+            Utc,
+            history);
+
+        Assert.Equal(
+        [
+            new WeeklyImplementedChange(new DateOnly(2026, 1, 5), 1, 1),
+            new WeeklyImplementedChange(new DateOnly(2026, 1, 12), 1, 0)
+        ], report.WeeklyNetImplementedChange);
+    }
+
+    [Fact]
+    public void Build_WithoutStatusHistoryCountsTheStepsBetweenSavedStates()
+    {
+        ProgressSnapshot[] snapshots =
+        [
+            Snapshot(2026, 1, 5, inProgress: 2),
+            Snapshot(2026, 1, 6, completed: 2),
+            Snapshot(2026, 1, 7, inProgress: 1, completed: 1)
+        ];
+
+        ProgressDashboardReport report = _builder.Build(
+            snapshots, ProgressDateRange.AllHistory, new DateOnly(2026, 1, 7), Utc);
+
+        Assert.Equal([new WeeklyImplementedChange(new DateOnly(2026, 1, 5), 2, 1)], report.WeeklyNetImplementedChange);
+    }
+
+    private static EntityStatusHistoryEntry Moved(
+        EntityId entity, DevelopmentStatus from, DevelopmentStatus to, int year, int month, int day) =>
+        new(entity, from, to, new DateTimeOffset(year, month, day, 12, 0, 0, TimeSpan.Zero),
+            StatusHistoryEntryKind.Transition);
 
     private static int Count(ProgressDashboardReport report, ProgressStatusCategory status) =>
         report.CurrentStatusCounts.Single(item => item.Status == status).Count;

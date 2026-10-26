@@ -34,8 +34,10 @@ public sealed class ProgressReportingService
         ArgumentNullException.ThrowIfNull(range);
         IReadOnlyList<ProgressSnapshot> snapshots =
             await _repository.GetProgressSnapshotsAsync(trackerId, cancellationToken);
+        IReadOnlyList<EntityStatusHistoryEntry> statusHistory =
+            await _repository.GetStatusHistoryAsync(trackerId, cancellationToken);
         DateOnly today = DateOnly.FromDateTime(
             TimeZoneInfo.ConvertTime(_timeProvider.GetUtcNow(), _timeZone).DateTime);
-        return _builder.Build(snapshots, range, today, _timeZone);
+        return _builder.Build(snapshots, range, today, _timeZone, statusHistory);
     }
 }

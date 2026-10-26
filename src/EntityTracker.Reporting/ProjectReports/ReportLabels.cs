@@ -43,7 +43,8 @@ public static class ReportLabels
         _ => status.ToString()
     };
 
-    internal static string StatusColor(ProgressStatusCategory status) => ProgressChartPalette.Status(status).Fill;
+    /// <summary>A development status's slice in the pie: a standard chart colour, not the status colour.</summary>
+    internal static string SliceColor(ProgressStatusCategory status) => ProgressChartPalette.Category(status);
 
     public static string Status(DevelopmentStatus status) => status switch
     {

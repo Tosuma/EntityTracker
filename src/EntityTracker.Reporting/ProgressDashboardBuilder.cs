@@ -1,14 +1,21 @@
 using EntityTracker.Application.History;
+using EntityTracker.Domain;
 
 namespace EntityTracker.Reporting;
 
 public sealed class ProgressDashboardBuilder
 {
+    /// <param name="statusHistory">
+    /// The entities' status changes, so the weekly chart counts each entity that became, or stopped
+    /// being, implemented. Without it, the weekly changes come from the steps between saved progress
+    /// states, where opposite moves in one save cancel out.
+    /// </param>
     public ProgressDashboardReport Build(
         IEnumerable<ProgressSnapshot> snapshots,
         ProgressDateRange range,
         DateOnly today,
-        TimeZoneInfo timeZone)
+        TimeZoneInfo timeZone,
+        IEnumerable<EntityStatusHistoryEntry>? statusHistory = null)
     {
         ArgumentNullException.ThrowIfNull(snapshots);
         ArgumentNullException.ThrowIfNull(range);
@@ -114,9 +121,13 @@ public sealed class ProgressDashboardBuilder
                 carried.BlockedCount));
         }
 
-        IReadOnlyList<WeeklyImplementedChange> weekly = BuildWeeklyChanges(
-            implemented,
-            dated.Where(item => item.Date < from).Select(static item => item.State).LastOrDefault());
+        IEnumerable<(DateOnly Date, int Step)> moves = statusHistory is null
+            ? SnapshotSteps(
+                dated.Where(item => item.Date >= from && item.Date <= to),
+                dated.Where(item => item.Date < from).Select(static item => item.State).LastOrDefault())
+            : StatusMoves(statusHistory, timeZone)
+                .Where(move => move.Date >= from && move.Date <= to);
+        IReadOnlyList<WeeklyImplementedChange> weekly = BuildWeeklyChanges(implemented, moves);
         return new ProgressDashboardReport(
             managerSummary,
             currentCounts,
@@ -127,26 +138,64 @@ public sealed class ProgressDashboardBuilder
             implemented.LastOrDefault()?.Date);
     }
 
+    /// <summary>
+    /// Each week of the range with how many entities became implemented and how many stopped being
+    /// implemented. Ups and downs in the same week are counted apart, so they don't cancel out.
+    /// </summary>
     private static IReadOnlyList<WeeklyImplementedChange> BuildWeeklyChanges(
         IReadOnlyList<ImplementedProgressPoint> daily,
+        IEnumerable<(DateOnly Date, int Step)> moves)
+    {
+        Dictionary<DateOnly, (int Increase, int Decrease)> weeks = daily
+            .Select(static point => StartOfWeek(point.Date))
+            .Distinct()
+            .ToDictionary(static week => week, static _ => (0, 0));
+        foreach ((DateOnly date, int step) in moves)
+        {
+            DateOnly week = StartOfWeek(date);
+            if (!weeks.TryGetValue(week, out (int Increase, int Decrease) counts)) continue;
+            weeks[week] = step >= 0 ? (counts.Increase + step, counts.Decrease) : (counts.Increase, counts.Decrease - step);
+        }
+
+        return weeks
+            .OrderBy(static week => week.Key)
+            .Select(static week => new WeeklyImplementedChange(week.Key, week.Value.Increase, week.Value.Decrease))
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Every status change that moved an entity into or out of an implemented status: +1 or -1 on the
+    /// day it happened. Archiving and restoring change no status, so they are not counted.
+    /// </summary>
+    private static IEnumerable<(DateOnly Date, int Step)> StatusMoves(
+        IEnumerable<EntityStatusHistoryEntry> statusHistory, TimeZoneInfo timeZone)
+    {
+        foreach (EntityStatusHistoryEntry entry in statusHistory)
+        {
+            if (entry.Kind != StatusHistoryEntryKind.Transition || entry.PreviousStatus is not { } previous)
+                continue;
+            bool was = ProgressSnapshotState.ImplementedStatuses.Contains(previous);
+            bool now = ProgressSnapshotState.ImplementedStatuses.Contains(entry.NewStatus);
+            if (was == now) continue;
+            yield return (DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(entry.OccurredAtUtc, timeZone).DateTime),
+                now ? 1 : -1);
+        }
+    }
+
+    /// <summary>
+    /// The change in implemented entities from each saved progress state to the next, for a caller without
+    /// the status history. A save that moves entities both ways counts as its net step.
+    /// </summary>
+    private static IEnumerable<(DateOnly Date, int Step)> SnapshotSteps(
+        IEnumerable<(DateOnly Date, ProgressSnapshotState State)> snapshotsInRange,
         ProgressSnapshotState? stateBeforeRange)
     {
-        if (daily.Count == 0)
+        int? previous = stateBeforeRange?.ImplementedCount;
+        foreach ((DateOnly date, ProgressSnapshotState state) in snapshotsInRange)
         {
-            return [];
+            yield return (date, state.ImplementedCount - (previous ?? state.ImplementedCount));
+            previous = state.ImplementedCount;
         }
-
-        int previous = stateBeforeRange?.ImplementedCount ?? daily[0].ImplementedCount;
-        List<WeeklyImplementedChange> result = [];
-        foreach (IGrouping<DateOnly, ImplementedProgressPoint> week in daily.GroupBy(
-                     static point => StartOfWeek(point.Date)))
-        {
-            int end = week.Last().ImplementedCount;
-            result.Add(new WeeklyImplementedChange(week.Key, end - previous));
-            previous = end;
-        }
-
-        return result;
     }
 
     private static DateOnly StartOfWeek(DateOnly date)

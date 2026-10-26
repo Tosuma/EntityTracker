@@ -16,7 +16,7 @@ public sealed record ProgressChartPresentation(
     Axis[] ReadinessXAxes,
     Axis[] WeeklyXAxes,
     Axis[] CountYAxes,
-    Axis[] SignedYAxes,
+    Axis[] WeeklyYAxes,
     SolidColorPaint? LegendTextPaint = null,
     SolidColorPaint? TooltipTextPaint = null,
     SolidColorPaint? TooltipBackgroundPaint = null);

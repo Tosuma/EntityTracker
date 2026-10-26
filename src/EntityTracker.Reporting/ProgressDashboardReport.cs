@@ -6,7 +6,11 @@ public sealed record ImplementedProgressPoint(DateOnly Date, int ImplementedCoun
 
 public sealed record ReadinessProgressPoint(DateOnly Date, int ReadyCount, int BlockedCount);
 
-public sealed record WeeklyImplementedChange(DateOnly WeekStartingMonday, int NetChange);
+/// <summary>
+/// A week's change in implemented entities: how many became implemented and how many stopped being
+/// implemented (both counted up, from one saved progress state to the next).
+/// </summary>
+public sealed record WeeklyImplementedChange(DateOnly WeekStartingMonday, int Increase, int Decrease);
 
 public sealed record ProgressDashboardReport(
     ProgressManagerSummary ManagerSummary,

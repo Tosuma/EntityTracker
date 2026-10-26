@@ -170,14 +170,22 @@ public static class ColorScheme
         public const string Canvas = Base.White;
         public const string Text = Base.DarkGreen;
         public const string Grid = Base.Green20;
-        public const string SliceBorder = Base.White;
         public const string Entities = Base.Green80;
         public const string Implemented = Base.DeepTeal;
         public const string ReadyTrend = Base.Green60;
         public const string WaitingTrend = Base.Amber;
         public const string Increase = Base.Green60;
         public const string Decrease = Base.Coral;
-        public const string NetChange = Base.Green60;
+        /// <summary>The target line: the number of active entities the implemented line works towards.</summary>
+        public const string Target = Base.Coral;
+        /// <summary>
+        /// The development status pie's slices, one per status in the order the chart lists them (Not
+        /// started, Blocked, In progress, Rework needed, Reworking, Completed, Reconciled). A standard
+        /// categorical palette rather than the status colours: evenly light, and told apart with colour
+        /// blindness. Slices have no borders.
+        /// </summary>
+        public static readonly IReadOnlyList<string> Categories =
+            ["#2A78D6", "#EB6834", "#1BAF7A", "#EDA100", "#E87BA4", "#008300", "#6250D6"];
         public const string UnknownStatus = Base.Green40;
         public const string TooltipBackground = Base.White;
     }
@@ -191,8 +199,9 @@ public static class ColorScheme
         public const string Text = Base.Green10;
         public const string Grid = Base.Green90;
         public const string TooltipBackground = Base.Green100;
-        /// <summary>A thin outline around each slice, so the dark Completed and Reconciled slices stay visible.</summary>
-        public const string SliceOutline = Base.Green60;
+        /// <summary>The pie's slices on the dark card: <see cref="Chart.Categories"/>, stepped for the dark canvas.</summary>
+        public static readonly IReadOnlyList<string> Categories =
+            ["#3987E5", "#D95926", "#199E70", "#C98500", "#D55181", "#008300", "#9085E9"];
     }
 
     /// <summary>

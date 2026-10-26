@@ -132,7 +132,8 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Entities by development status" />
+                                    <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Entities by development status"
+                               ToolTip="How many active entities have each development status now." AutomationProperties.HelpText="How many active entities have each development status now." />
                                     <!-- Save image… and Copy image in one menu, so each chart header has one quiet button. -->
                                     <Button Grid.Column="2" Margin="8,0,0,0" Click="OnChartActionsClick"
                                             ToolTip="Save or copy this chart as an image"
@@ -167,7 +168,8 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Implemented entities over time" />
+                                    <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Implemented entities over time"
+                               ToolTip="Implemented entities each day, against today's number of active entities." AutomationProperties.HelpText="Implemented entities each day, against today's number of active entities." />
                                     <!-- Save image… and Copy image in one menu, so each chart header has one quiet button. -->
                                     <Button Grid.Column="2" Margin="8,0,0,0" Click="OnChartActionsClick"
                                             ToolTip="Save or copy this chart as an image"
@@ -204,7 +206,8 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Ready to start vs waiting on dependencies over time" />
+                                    <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Ready to start vs waiting on dependencies over time"
+                               ToolTip="Each day, the entities ready to start and the ones still waiting on a dependency." AutomationProperties.HelpText="Each day, the entities ready to start and the ones still waiting on a dependency." />
                                     <!-- Save image… and Copy image in one menu, so each chart header has one quiet button. -->
                                     <Button Grid.Column="2" Margin="8,0,0,0" Click="OnChartActionsClick"
                                             ToolTip="Save or copy this chart as an image"
@@ -241,11 +244,12 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Weekly net implemented change" />
+                                    <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Weekly implemented change"
+                               ToolTip="Each week, how many entities became implemented and how many stopped being implemented." AutomationProperties.HelpText="Each week, how many entities became implemented and how many stopped being implemented." />
                                     <!-- Save image… and Copy image in one menu, so each chart header has one quiet button. -->
                                     <Button Grid.Column="2" Margin="8,0,0,0" Click="OnChartActionsClick"
                                             ToolTip="Save or copy this chart as an image"
-                                            AutomationProperties.Name="Image actions for the weekly net implemented change chart"
+                                            AutomationProperties.Name="Image actions for the weekly implemented change chart"
                                             Style="{StaticResource SecondaryIconButtonStyle}">
                                         <controls:Icon IconKey="Icon.MoreHorizontal" />
                                         <Button.ContextMenu>
@@ -259,10 +263,10 @@
                                     </Button>
                                 </Grid>
                                 <Border Grid.Row="1" Margin="0,8,0,0" Background="{DynamicResource Brush.Surface.Card}">
-                                    <lvc:CartesianChart Background="Transparent" LegendTextPaint="{Binding Charts.Presentation.LegendTextPaint}" TooltipTextPaint="{Binding Charts.Presentation.TooltipTextPaint}" TooltipBackgroundPaint="{Binding Charts.Presentation.TooltipBackgroundPaint}" AutomationProperties.Name="Weekly net implemented change chart" LegendPosition="Top" TooltipPosition="Top"
+                                    <lvc:CartesianChart Background="Transparent" LegendTextPaint="{Binding Charts.Presentation.LegendTextPaint}" TooltipTextPaint="{Binding Charts.Presentation.TooltipTextPaint}" TooltipBackgroundPaint="{Binding Charts.Presentation.TooltipBackgroundPaint}" AutomationProperties.Name="Weekly implemented change chart" LegendPosition="Top" TooltipPosition="Top"
                                                         Series="{Binding Charts.Presentation.WeeklySeries}"
                                                         XAxes="{Binding Charts.Presentation.WeeklyXAxes}"
-                                                        YAxes="{Binding Charts.Presentation.SignedYAxes}" />
+                                                        YAxes="{Binding Charts.Presentation.WeeklyYAxes}" />
                                 </Border>
                             </Grid>
                         </Border>

@@ -118,9 +118,8 @@ public static partial class ProjectReportHtmlWriter
             [ReportLabels.WorkStatus(EntityWorkflowState.Reconciled)] = Pair(ColorScheme.ReportWorkStatus.Reconciled),
             [ReportLabels.WorkStatus(EntityWorkflowState.NotRelevant)] = Pair(ColorScheme.ReportWorkStatus.NotRelevant)
         },
-        ColorScheme.Chart.SliceBorder,
+        ColorScheme.Chart.Canvas,
         ColorScheme.Chart.Grid,
-        ColorScheme.Chart.Decrease,
         ColorScheme.Chart.UnknownStatus,
         ColorScheme.Report.MissingSwatch);
 
@@ -149,8 +148,7 @@ public static partial class ProjectReportHtmlWriter
 public sealed record ReportColors(
     IReadOnlyDictionary<string, string[]> Status,
     IReadOnlyDictionary<string, string[]> Work,
-    string SliceBorder,
+    string Canvas,
     string Grid,
-    string Decrease,
     string UnknownStatus,
     string MissingSwatch);

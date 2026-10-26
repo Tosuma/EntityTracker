@@ -86,11 +86,14 @@ public sealed class AggregateProgressReportingService
             tracker => _historyRepository.GetProgressSnapshotsAsync(
                 tracker.Id,
                 cancellationToken)));
+        IReadOnlyList<EntityStatusHistoryEntry>[] statusHistories = await Task.WhenAll(trackers.Select(
+            tracker => _historyRepository.GetStatusHistoryAsync(tracker.Id, cancellationToken)));
         Dictionary<TrackerId, IReadOnlyList<ProgressSnapshot>> byTracker = trackers
             .Select((tracker, index) => (tracker.Id, History: histories[index]))
             .ToDictionary(static item => item.Id, static item => item.History);
         DateOnly today = DateOnly.FromDateTime(
             TimeZoneInfo.ConvertTime(_timeProvider.GetUtcNow(), _timeZone).DateTime);
-        return _builder.Build(byTracker, range, today, _timeZone);
+        return _builder.Build(byTracker, range, today, _timeZone,
+            statusHistories.SelectMany(static history => history));
     }
 }

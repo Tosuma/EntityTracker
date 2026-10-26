@@ -41,7 +41,7 @@ public sealed partial class ReportColorTests
         Assert.Equal([ColorScheme.ReportWorkStatus.Ready.Fill, ColorScheme.ReportWorkStatus.Ready.Text], colors.Work["Ready"]);
         Assert.Equal([ColorScheme.ReportWorkStatus.WaitingOnDependencies.Fill, ColorScheme.ReportWorkStatus.WaitingOnDependencies.Text],
             colors.Work["Waiting on dependencies"]);
-        Assert.Equal(ColorScheme.Chart.Decrease, colors.Decrease);
+        Assert.Equal(ColorScheme.Chart.Canvas, colors.Canvas);
         // #73: Not relevant is hollow, so its entry also names the dashed edge.
         Assert.Equal([ColorScheme.Status.NotRelevant.Fill, ColorScheme.Status.NotRelevant.Text,
             ColorScheme.Status.NotRelevant.Edge!], colors.Status["Not relevant"]);
@@ -81,11 +81,12 @@ public sealed partial class ReportColorTests
         {
             SKColor fill = Assert.IsType<SolidColorPaint>(
                 Assert.IsType<PieSeries<int>>(presentation.CurrentStatusSeries[index]).Fill).Color;
-            Assert.Equal(SKColor.Parse(ReportLabels.StatusColor(statuses[index])), fill);
+            Assert.Equal(SKColor.Parse(ReportLabels.SliceColor(statuses[index])), fill);
         }
 
-        Assert.Equal(ColorScheme.Status.Blocked.Fill, ReportLabels.StatusColor(ProgressStatusCategory.Blocked));
-        Assert.Equal(ColorScheme.Status.Reworking.Fill, ReportLabels.StatusColor(ProgressStatusCategory.Reworking));
+        // The pie uses standard chart colours, not the status colours.
+        Assert.Equal(ColorScheme.Chart.Categories[1], ReportLabels.SliceColor(ProgressStatusCategory.Blocked));
+        Assert.Equal(ColorScheme.Chart.Categories[4], ReportLabels.SliceColor(ProgressStatusCategory.Reworking));
     }
 
     /// <summary>Variables report.js sets per element, not colours of the scheme.</summary>

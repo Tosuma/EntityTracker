@@ -444,7 +444,12 @@ report's name and a page number.
 
 Under **Progress charts** on the same page, the report's four charts are shown live in the app for the
 chosen period: for all chosen Trackers together or for one of them. Point at a chart to read its values,
-and save or copy any chart as a PNG image for slides or e-mails.
+and save or copy any chart as a PNG image for slides or e-mails. Point at a chart's title for a short
+description of what it shows. The pie of development statuses uses standard chart colours, without
+borders between the slices. **Implemented entities over time** has a coral target line at today's number
+of active entities, so you can see how far along the work is. **Weekly implemented change** shows two
+bars a week: the entities that became implemented, and the ones that stopped being implemented, each
+counted from the entities' own status changes.
 
 ![Progress charts on the Project report page](images/light/project-report-charts.png)
 

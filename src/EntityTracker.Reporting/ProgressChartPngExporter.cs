@@ -135,7 +135,7 @@ public sealed class ProgressChartPngExporter
                 Height = height,
                 Series = presentation.WeeklySeries,
                 XAxes = presentation.WeeklyXAxes,
-                YAxes = presentation.SignedYAxes,
+                YAxes = presentation.WeeklyYAxes,
                 LegendPosition = LegendPosition.Top
             },
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
