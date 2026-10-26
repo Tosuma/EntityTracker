@@ -372,7 +372,8 @@ public sealed class ProjectTrackerOperationsTests
             "Source notes",
             requestedPriority: 3,
             responsibleDeveloper: "Ada",
-            groupName: "Core");
+            groupName: "Core",
+            dueDate: new DateOnly(2026, 11, 30));
         TrackedEntity target = new(
             EntityId.New(),
             sourceTracker.Id,
@@ -434,6 +435,8 @@ public sealed class ProjectTrackerOperationsTests
         });
         Assert.Equal(3, copiedOwner.RequestedPriority);
         Assert.Equal(5, copiedTarget.RequestedPriority);
+        Assert.Equal(new DateOnly(2026, 11, 30), copiedOwner.DueDate);
+        Assert.Null(copiedTarget.DueDate);
         Assert.Equal("Core", copiedOwner.GroupName);
         Assert.Equal("Core", copiedTarget.GroupName);
 

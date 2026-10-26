@@ -126,6 +126,26 @@ public sealed class ProjectSnapshotMergerTests
     }
 
     [Fact]
+    public void DueDate_MergesIndependentlyAndConflictingEditsRequireReview()
+    {
+        ProjectSnapshot basis = Snapshot();
+        ProjectSnapshot local = EditEntity(basis,
+            entity => entity with { DueDate = new DateOnly(2026, 11, 1) });
+        ProjectSnapshot remote = EditEntity(basis,
+            entity => entity with { RequestedPriority = 2 });
+
+        ProjectMergeResult independent = new ProjectSnapshotMerger().Merge(basis, local, remote);
+        Assert.Empty(independent.Conflicts);
+        Assert.Equal(new DateOnly(2026, 11, 1), independent.Snapshot.Trackers[0].Entities[0].DueDate);
+        Assert.Equal(2, independent.Snapshot.Trackers[0].Entities[0].RequestedPriority);
+
+        ProjectSnapshot other = EditEntity(basis,
+            entity => entity with { DueDate = new DateOnly(2026, 12, 1) });
+        ProjectMergeResult conflict = new ProjectSnapshotMerger().Merge(basis, local, other);
+        Assert.Contains(conflict.Conflicts, item => item.Path.EndsWith("/DueDate", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void IndependentResponsibilityAndNoteEditsMergeByPeriodId()
     {
         ProjectSnapshot basis = Snapshot();

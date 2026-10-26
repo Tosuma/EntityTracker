@@ -72,7 +72,7 @@ public sealed class EntityTrackerSettingsStore
                     current.AutoSyncIntervalMinutes,
                     current.SearchResponsibleNames, current.ProjectDeveloperChoices,
                     current.OverviewExportRows, current.OverviewCsvSeparator,
-                    current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode, current.DetailedLogging),
+                    current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode, current.DetailedLogging, current.ShowInheritedDueDates),
                 cancellationToken);
         }
         finally
@@ -104,7 +104,7 @@ public sealed class EntityTrackerSettingsStore
                     current.AutoSyncIntervalMinutes,
                     current.SearchResponsibleNames, current.ProjectDeveloperChoices,
                     current.OverviewExportRows, current.OverviewCsvSeparator,
-                    current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode, current.DetailedLogging),
+                    current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode, current.DetailedLogging, current.ShowInheritedDueDates),
                 cancellationToken);
         }
         finally
@@ -126,8 +126,24 @@ public sealed class EntityTrackerSettingsStore
                 current.LastProjectId, current.LastTrackerId, enabled, intervalMinutes,
                 current.SearchResponsibleNames, current.ProjectDeveloperChoices,
                 current.OverviewExportRows, current.OverviewCsvSeparator,
-                current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode, current.DetailedLogging),
+                current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode, current.DetailedLogging, current.ShowInheritedDueDates),
                 cancellationToken);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task SaveShowInheritedDueDatesAsync(bool enabled,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            EntityTrackerSettings current = await LoadSettingsForUpdateAsync(cancellationToken);
+            await WriteAsync(new EntityTrackerSettings(current.Appearance,
+                current.LastProjectId, current.LastTrackerId, current.AutoSyncEnabled,
+                current.AutoSyncIntervalMinutes, current.SearchResponsibleNames, current.ProjectDeveloperChoices,
+                current.OverviewExportRows, current.OverviewCsvSeparator,
+                current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode, current.DetailedLogging, enabled), cancellationToken);
         }
         finally { _gate.Release(); }
     }
@@ -143,7 +159,7 @@ public sealed class EntityTrackerSettingsStore
                 current.LastProjectId, current.LastTrackerId, current.AutoSyncEnabled,
                 current.AutoSyncIntervalMinutes, enabled, current.ProjectDeveloperChoices,
                 current.OverviewExportRows, current.OverviewCsvSeparator,
-                current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode, current.DetailedLogging), cancellationToken);
+                current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode, current.DetailedLogging, current.ShowInheritedDueDates), cancellationToken);
         }
         finally { _gate.Release(); }
     }
@@ -162,7 +178,7 @@ public sealed class EntityTrackerSettingsStore
                 current.LastTrackerId, current.AutoSyncEnabled, current.AutoSyncIntervalMinutes,
                 current.SearchResponsibleNames, choices,
                 current.OverviewExportRows, current.OverviewCsvSeparator,
-                current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode, current.DetailedLogging), cancellationToken);
+                current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode, current.DetailedLogging, current.ShowInheritedDueDates), cancellationToken);
         }
         finally { _gate.Release(); }
     }
@@ -177,7 +193,7 @@ public sealed class EntityTrackerSettingsStore
             await WriteAsync(new EntityTrackerSettings(current.Appearance, current.LastProjectId,
                 current.LastTrackerId, current.AutoSyncEnabled, current.AutoSyncIntervalMinutes,
                 current.SearchResponsibleNames, current.ProjectDeveloperChoices, rows, separator,
-                current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode, current.DetailedLogging),
+                current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode, current.DetailedLogging, current.ShowInheritedDueDates),
                 cancellationToken);
         }
         finally { _gate.Release(); }
@@ -194,7 +210,7 @@ public sealed class EntityTrackerSettingsStore
                 current.LastTrackerId, current.AutoSyncEnabled, current.AutoSyncIntervalMinutes,
                 current.SearchResponsibleNames, current.ProjectDeveloperChoices,
                 current.OverviewExportRows, current.OverviewCsvSeparator, enabled,
-                current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode, current.DetailedLogging), cancellationToken);
+                current.ShowDependencyGraphRings, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode, current.DetailedLogging, current.ShowInheritedDueDates), cancellationToken);
         }
         finally { _gate.Release(); }
     }
@@ -210,7 +226,7 @@ public sealed class EntityTrackerSettingsStore
                 current.LastTrackerId, current.AutoSyncEnabled, current.AutoSyncIntervalMinutes,
                 current.SearchResponsibleNames, current.ProjectDeveloperChoices,
                 current.OverviewExportRows, current.OverviewCsvSeparator,
-                current.AnimateDependencyGraph, enabled, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode, current.DetailedLogging), cancellationToken);
+                current.AnimateDependencyGraph, enabled, current.DependencyGraphView, current.SolarHighlightMode, current.TreeHighlightMode, current.DetailedLogging, current.ShowInheritedDueDates), cancellationToken);
         }
         finally { _gate.Release(); }
     }
@@ -226,7 +242,7 @@ public sealed class EntityTrackerSettingsStore
                 current.SearchResponsibleNames, current.ProjectDeveloperChoices,
                 current.OverviewExportRows, current.OverviewCsvSeparator,
                 current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView,
-                current.SolarHighlightMode, current.TreeHighlightMode, enabled), cancellationToken);
+                current.SolarHighlightMode, current.TreeHighlightMode, enabled, current.ShowInheritedDueDates), cancellationToken);
         }
         finally { _gate.Release(); }
     }
@@ -244,7 +260,7 @@ public sealed class EntityTrackerSettingsStore
                 current.SearchResponsibleNames, current.ProjectDeveloperChoices,
                 current.OverviewExportRows, current.OverviewCsvSeparator,
                 current.AnimateDependencyGraph, current.ShowDependencyGraphRings, view,
-                current.SolarHighlightMode, current.TreeHighlightMode, current.DetailedLogging), cancellationToken);
+                current.SolarHighlightMode, current.TreeHighlightMode, current.DetailedLogging, current.ShowInheritedDueDates), cancellationToken);
         }
         finally { _gate.Release(); }
     }
@@ -264,7 +280,7 @@ public sealed class EntityTrackerSettingsStore
                 current.OverviewExportRows, current.OverviewCsvSeparator,
                 current.AnimateDependencyGraph, current.ShowDependencyGraphRings, current.DependencyGraphView,
                 view == DependencyGraphView.Tree ? current.SolarHighlightMode : mode,
-                view == DependencyGraphView.Tree ? mode : current.TreeHighlightMode, current.DetailedLogging), cancellationToken);
+                view == DependencyGraphView.Tree ? mode : current.TreeHighlightMode, current.DetailedLogging, current.ShowInheritedDueDates), cancellationToken);
         }
         finally { _gate.Release(); }
     }
@@ -372,6 +388,7 @@ public sealed class EntityTrackerSettingsStore
             SolarHighlightMode = settings.SolarHighlightMode.ToString(),
             TreeHighlightMode = settings.TreeHighlightMode.ToString(),
             DetailedLogging = settings.DetailedLogging,
+            ShowInheritedDueDates = settings.ShowInheritedDueDates,
             ProjectDeveloperChoices = settings.ProjectDeveloperChoices.ToDictionary(
                 pair => pair.Key.Value.ToString("D"), pair => pair.Value.Value.ToString("D"))
         };
@@ -431,7 +448,8 @@ public sealed class EntityTrackerSettingsStore
             ParseDependencyGraphView(document, warnings),
             ParseHighlightMode(document.SolarHighlightMode, DependencyHighlightMode.Dependencies, "solar system", warnings),
             ParseHighlightMode(document.TreeHighlightMode, DependencyHighlightMode.DirectLinks, "tree", warnings),
-            document.DetailedLogging ?? false);
+            document.DetailedLogging ?? false,
+            document.ShowInheritedDueDates ?? false);
     }
 
     /// <summary>Reads a highlight mode by name; an unknown value falls back to that view's default.</summary>
@@ -613,6 +631,8 @@ public sealed class EntityTrackerSettingsStore
         public string? DependencyGraphView { get; init; }
 
         public bool? DetailedLogging { get; init; }
+
+        public bool? ShowInheritedDueDates { get; init; }
 
         public string? SolarHighlightMode { get; init; }
 

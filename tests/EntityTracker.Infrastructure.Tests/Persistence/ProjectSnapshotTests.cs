@@ -78,6 +78,80 @@ public sealed class ProjectSnapshotTests
     }
 
     [Fact]
+    public async Task DueDate_RoundTripsThroughSqliteAndVersionedSnapshots()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        ProjectSnapshot seed = CompleteSnapshot();
+        SnapshotTracker tracker = seed.Trackers[0];
+        SnapshotEntity entity = tracker.Entities[0] with { DueDate = new DateOnly(2026, 10, 26) };
+        seed = seed with { Trackers = [tracker with
+        {
+            Entities = tracker.Entities.Select(item => item.Id == entity.Id ? entity : item).ToArray()
+        }, .. seed.Trackers.Skip(1)] };
+
+        SqliteProjectSnapshotStore store = new(database);
+        await store.ApplyAsync(seed, 0);
+        ProjectSnapshot persisted = Assert.IsType<ProjectSnapshot>(
+            (await store.ReadAsync(new ProjectId(seed.Project.Id))).Snapshot);
+        Assert.Equal(entity.DueDate, persisted.Trackers.SelectMany(t => t.Entities)
+            .Single(item => item.Id == entity.Id).DueDate);
+        Assert.Equal(entity.DueDate, (await new SqliteEntityRepository(database)
+            .GetAsync(new TrackerId(tracker.Id), new EntityId(entity.Id)))!.DueDate);
+
+        ProjectSnapshotJsonCodec codec = new();
+        ProjectSnapshotPackage package = codec.Encode(persisted);
+        Assert.Contains("\"dueDate\": \"2026-10-26\"", Encoding.UTF8.GetString(package.Files
+            .Single(pair => pair.Key.EndsWith($"entities/{entity.Id:D}.json", StringComparison.Ordinal)).Value));
+        Assert.Equal(entity.DueDate, codec.Decode(package.Files).Trackers.SelectMany(t => t.Entities)
+            .Single(item => item.Id == entity.Id).DueDate);
+        // Entities without a due date keep their files as they were.
+        SnapshotEntity other = persisted.Trackers.SelectMany(t => t.Entities).First(item => item.Id != entity.Id);
+        Assert.DoesNotContain("dueDate", Encoding.UTF8.GetString(package.Files
+            .Single(pair => pair.Key.EndsWith($"entities/{other.Id:D}.json", StringComparison.Ordinal)).Value));
+
+        // An older format can't hold a due date: it is refused both when written and when read.
+        Assert.Throws<InvalidDataException>(() => codec.Encode(persisted with { FormatVersion = 8 }));
+        Dictionary<string, byte[]> forged = codec.Encode(persisted).Files.ToDictionary();
+        string manifestPath = forged.Keys.Single(path => path.EndsWith("manifest.json", StringComparison.Ordinal));
+        forged[manifestPath] = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(forged[manifestPath]).Replace(
+            $"\"formatVersion\": {ProjectSnapshot.CurrentFormatVersion}", "\"formatVersion\": 8",
+            StringComparison.Ordinal));
+        Assert.Throws<InvalidDataException>(() => codec.Decode(forged));
+    }
+
+    [Fact]
+    public async Task Version25_AddsNullableDueDateColumns()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        await using (SqliteConnection connection = await database.OpenConnectionAsync(CancellationToken.None))
+        {
+            await using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                ALTER TABLE tracked_entities DROP COLUMN due_date;
+                ALTER TABLE tracker_sync_baseline_entities DROP COLUMN due_date;
+                PRAGMA user_version = 24;
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await new SqliteDatabase(file.DatabasePath).InitializeAsync();
+
+        await using SqliteConnection check = await database.OpenConnectionAsync(CancellationToken.None);
+        await using SqliteCommand query = check.CreateCommand();
+        query.CommandText = """
+            SELECT (SELECT count(*) FROM pragma_table_info('tracked_entities') WHERE name = 'due_date' AND "notnull" = 0)
+                 + (SELECT count(*) FROM pragma_table_info('tracker_sync_baseline_entities') WHERE name = 'due_date' AND "notnull" = 0);
+            """;
+        Assert.Equal(2L, Convert.ToInt64(await query.ExecuteScalarAsync()));
+        query.CommandText = "PRAGMA user_version;";
+        Assert.Equal((long)SqliteDatabase.CurrentSchemaVersion, Convert.ToInt64(await query.ExecuteScalarAsync()));
+    }
+
+    [Fact]
     public async Task SharedNotes_RoundTripThroughSqliteAndVersionedSnapshots()
     {
         await using TemporarySqliteFile file = new();
@@ -610,7 +684,7 @@ public sealed class ProjectSnapshotTests
         await new SqliteDatabase(file.DatabasePath).InitializeAsync();
 
         Assert.Equal(before, await CountAsync());
-        Assert.Equal(24L, await ScalarAsync("PRAGMA user_version;"));
+        Assert.Equal((long)SqliteDatabase.CurrentSchemaVersion, await ScalarAsync("PRAGMA user_version;"));
         ProjectSnapshot read = Assert.IsType<ProjectSnapshot>(
             (await new SqliteProjectSnapshotStore(db).ReadAsync(new ProjectId(snapshot.Project.Id))).Snapshot);
         Assert.Equal(snapshot.Trackers.Sum(static tracker => tracker.Entities.Count),

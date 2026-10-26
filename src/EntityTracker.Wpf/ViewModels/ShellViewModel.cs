@@ -92,6 +92,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         IProjectReportFiles? reportFiles = null,
         DiagnosticsSettingsViewModel? diagnostics = null,
         ProjectSyncIndicators? syncIndicators = null,
+        DueDateSettingsViewModel? dueDates = null,
         IProjectSnapshotStore? projectSnapshots = null)
     {
         Diagnostics = diagnostics;
@@ -133,6 +134,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         OverviewExport = overviewExport;
         if (ResponsibilitySearch is not null)
             ResponsibilitySearch.Changed += OnResponsibilitySearchChanged;
+        DueDates = dueDates;
+        if (DueDates is not null)
+            DueDates.Changed += OnDueDatesChanged;
         GraphSettings = graphSettings;
         if (GraphSettings is not null)
             GraphSettings.Changed += OnGraphSettingsChanged;
@@ -260,6 +264,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public AppearanceViewModel Appearance { get; }
     public AutoSyncSettingsViewModel? AutoSync { get; }
     public ResponsibilitySearchSettingsViewModel? ResponsibilitySearch { get; }
+
+    public DueDateSettingsViewModel? DueDates { get; }
 
     /// <summary>Gets Settings › About's log folder and detailed logging switch.</summary>
     public DiagnosticsSettingsViewModel? Diagnostics { get; }
@@ -1050,6 +1056,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                     workspace.PrepareForDeactivation();
                     workspace.SetSearchResponsibleNames(
                         ResponsibilitySearch?.IsEnabled ?? true);
+                    workspace.SetShowInheritedDueDates(DueDates?.IsEnabled ?? false);
                     ApplyGraphSettings(workspace);
                     workspace.DependencyGraph.PropertyChanged += OnDependencyGraphPropertyChanged;
                     workspace.PersistedStateChanged += OnWorkspacePersistedStateChanged;
@@ -1285,6 +1292,12 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             workspace.SetSearchResponsibleNames(enabled);
     }
 
+    private void OnDueDatesChanged(object? sender, bool enabled)
+    {
+        foreach (MainWindowViewModel workspace in _workspaces.Values)
+            workspace.SetShowInheritedDueDates(enabled);
+    }
+
     private async Task SetSettingsProjectAsync(Project? project,
         CancellationToken cancellationToken = default)
     {
@@ -1423,6 +1436,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         if (_autoSync is not null) _autoSync.StateChanged -= OnAutoSyncStateChanged;
         if (ResponsibilitySearch is not null)
             ResponsibilitySearch.Changed -= OnResponsibilitySearchChanged;
+        if (DueDates is not null)
+            DueDates.Changed -= OnDueDatesChanged;
         if (GraphSettings is not null)
             GraphSettings.Changed -= OnGraphSettingsChanged;
         foreach (ProjectDashboardViewModel dashboard in _projectDashboards.Values)

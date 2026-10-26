@@ -32,7 +32,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
         command.CommandText = """
             SELECT entity.id, entity.tracker_id, entity.source_name, status.development_status, entity.notes,
                    entity.lifecycle_state, entity.requested_priority, entity.group_name,
-                   entity.filter_active, entity.shared_notes
+                   entity.filter_active, entity.shared_notes, entity.due_date
             FROM tracked_entities entity
             JOIN entity_current_status status ON status.entity_id = entity.id
             WHERE entity.tracker_id = $trackerId AND entity.id = $id;
@@ -57,7 +57,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
         command.CommandText = """
             SELECT entity.id, entity.tracker_id, entity.source_name, status.development_status, entity.notes,
                    entity.lifecycle_state, entity.requested_priority, entity.group_name,
-                   entity.filter_active, entity.shared_notes
+                   entity.filter_active, entity.shared_notes, entity.due_date
             FROM tracked_entities entity
             JOIN entity_current_status status ON status.entity_id = entity.id
             WHERE entity.tracker_id = $trackerId
@@ -106,6 +106,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
                 shared_notes,
                 lifecycle_state,
                 requested_priority,
+                due_date,
                 group_name,
                 created_at_utc,
                 schema_updated_at_utc,
@@ -121,6 +122,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
                 $sharedNotes,
                 $lifecycleState,
                 $requestedPriority,
+                $dueDate,
                 $groupName,
                 $createdAtUtc,
                 $schemaUpdatedAtUtc,
@@ -197,6 +199,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
         command.Parameters.AddWithValue(
             "$requestedPriority",
             entity.RequestedPriority is null ? DBNull.Value : entity.RequestedPriority.Value);
+        command.Parameters.AddWithValue("$dueDate", SqlitePersistenceValues.FormatDate(entity.DueDate));
         command.Parameters.AddWithValue("$groupName", entity.GroupName);
     }
 
@@ -217,6 +220,9 @@ public sealed class SqliteEntityRepository : IEntityRepository
         string groupName = reader.GetString(7);
         string filterActive = reader.GetString(8);
         string sharedNotes = reader.GetString(9);
+        DateOnly? dueDate = SqlitePersistenceValues.ParseDate(
+            reader.IsDBNull(10) ? null : reader.GetString(10),
+            "due date");
 
         return new TrackedEntity(
             id,
@@ -229,6 +235,7 @@ public sealed class SqliteEntityRepository : IEntityRepository
             null,
             groupName,
             filterActive,
-            sharedNotes);
+            sharedNotes,
+            dueDate);
     }
 }

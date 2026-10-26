@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
 using EntityTracker.Application.Dependencies;
+using EntityTracker.Application.Planning;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
 using Domain = EntityTracker.Domain;
@@ -30,7 +31,10 @@ public sealed class EntityDetailsViewModel : INotifyPropertyChanged
         FilterActive = string.IsNullOrWhiteSpace(row.FilterActive) ? "No filter instructions" : row.FilterActive;
         RequestedPriority = FormatPriority(row.RequestedPriorityValue);
         EffectivePriority = IsArchived ? "Not applicable while archived" : row.Priority;
-        Rank = IsArchived ? "Not applicable while archived" : row.Rank;
+        DueDate = DueDateText.Format(row.DueDateValue, "None");
+        EffectiveDueDate = IsArchived
+            ? "Not applicable while archived"
+            : DueDateText.Format(row.EffectiveDueDateValue, "None");
         DevelopmentStatus = row.Status;
         WorkStatus = row.WorkStatus;
         DevelopmentStatusValue = row.DevelopmentStatus;
@@ -94,7 +98,9 @@ public sealed class EntityDetailsViewModel : INotifyPropertyChanged
 
     public string EffectivePriority { get; }
 
-    public string Rank { get; }
+    public string DueDate { get; }
+
+    public string EffectiveDueDate { get; }
 
     public string DevelopmentStatus { get; }
 

@@ -7,7 +7,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    internal const int CurrentSchemaVersion = 24;
+    internal const int CurrentSchemaVersion = 25;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -992,6 +992,20 @@ public sealed class SqliteDatabase
 
             if (schemaVersion < 24)
                 await AllowNotRelevantStatusAsync(connection, transaction, cancellationToken);
+
+            // Version 25: an optional due date (yyyy-MM-dd), on entities and in Sync from source baselines.
+            if (schemaVersion < 25)
+            {
+                if (!await ColumnExistsAsync(connection, transaction, "tracked_entities",
+                        "due_date", cancellationToken))
+                    await ExecuteAsync(connection, transaction,
+                        "ALTER TABLE tracked_entities ADD COLUMN due_date TEXT NULL;", cancellationToken);
+                if (!await ColumnExistsAsync(connection, transaction, "tracker_sync_baseline_entities",
+                        "due_date", cancellationToken))
+                    await ExecuteAsync(connection, transaction,
+                        "ALTER TABLE tracker_sync_baseline_entities ADD COLUMN due_date TEXT NULL;",
+                        cancellationToken);
+            }
 
             if (newDatabase && StartNewDatabaseWithoutProjects)
             {

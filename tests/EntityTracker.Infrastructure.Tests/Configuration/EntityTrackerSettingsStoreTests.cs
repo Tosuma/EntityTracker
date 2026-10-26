@@ -6,6 +6,36 @@ namespace EntityTracker.Infrastructure.Tests.Configuration;
 public sealed class EntityTrackerSettingsStoreTests
 {
     [Fact]
+    public async Task ShowInheritedDueDates_DefaultsOffAndSurvivesEveryOtherSave()
+    {
+        using TemporarySettingsDirectory directory = new();
+        EntityTrackerSettingsStore store = new(directory.SettingsPath);
+        Assert.False((await store.LoadAsync()).Settings.ShowInheritedDueDates);
+
+        await store.SaveShowInheritedDueDatesAsync(true);
+        await store.SaveAppearanceAsync(ApplicationAppearance.Dark);
+        await store.SaveActiveContextAsync(null, null);
+        await store.SaveAutoSyncAsync(false, 15);
+        await store.SaveSearchResponsibleNamesAsync(false);
+        await store.SaveProjectDeveloperChoiceAsync(ProjectId.New(), DeveloperId.New());
+        await store.SaveOverviewExportPreferencesAsync(OverviewExportRows.AllActiveEntities,
+            OverviewCsvSeparator.Comma);
+        await store.SaveDependencyHighlightModeAsync(DependencyGraphView.Tree, DependencyHighlightMode.Dependencies);
+        await store.SaveAnimateDependencyGraphAsync(false);
+        await store.SaveShowDependencyGraphRingsAsync(true);
+        await store.SaveDetailedLoggingAsync(true);
+        await store.SaveDependencyGraphViewAsync(DependencyGraphView.SolarSystem);
+
+        EntityTrackerSettings result = (await new EntityTrackerSettingsStore(directory.SettingsPath)
+            .LoadAsync()).Settings;
+        Assert.True(result.ShowInheritedDueDates);
+        Assert.Equal(ApplicationAppearance.Dark, result.Appearance);
+
+        await store.SaveShowInheritedDueDatesAsync(false);
+        Assert.False((await store.LoadAsync()).Settings.ShowInheritedDueDates);
+    }
+
+    [Fact]
     public async Task ExportPreferences_DefaultAndRoundTripWithoutLosingDeveloperChoices()
     {
         using TemporarySettingsDirectory directory = new();

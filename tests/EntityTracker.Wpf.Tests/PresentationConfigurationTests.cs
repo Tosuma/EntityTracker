@@ -1240,13 +1240,18 @@ public sealed class PresentationConfigurationTests
             element.Name.LocalName == "DataGrid.Columns");
         XElement[] configuredColumns = columns.Elements().ToArray();
 
+        // The dependency rank only breaks ties in the order; its number is not shown.
         Assert.Equal(9, configuredColumns.Length);
         Assert.Equal("Priority", (string?)configuredColumns[0].Attribute("Header"));
-        Assert.Equal("Rank", (string?)configuredColumns[1].Attribute("Header"));
+        Assert.Equal("Due", (string?)configuredColumns[1].Attribute("Header"));
+        Assert.Equal("{Binding Due}", (string?)configuredColumns[1].Attribute("Binding"));
         Assert.Equal("Entity", (string?)configuredColumns[2].Attribute("Header"));
         Assert.Contains(configuredColumns[7].Descendants(), element =>
             (string?)element.Attribute("Text") == "Blockers");
         Assert.Null(configuredColumns[8].Attribute("Header"));
+        Assert.DoesNotContain(document.Descendants(), element =>
+            (string?)element.Attribute("Header") == "Rank" ||
+            (string?)element.Attribute("Text") == "{Binding Rank}");
         Assert.DoesNotContain(columns.DescendantsAndSelf(), element =>
             ((string?)element.Attribute("Binding"))?.Contains("Provenance", StringComparison.Ordinal) == true ||
             ((string?)element.Attribute("Binding"))?.Contains("Notes", StringComparison.Ordinal) == true ||
@@ -1263,9 +1268,11 @@ public sealed class PresentationConfigurationTests
             "{DynamicResource Brush.Surface.Page}",
             (string?)detailsPane.Attribute("Background"));
         Assert.DoesNotContain(detailsPane.Descendants(), element =>
-            element.Name.LocalName is "TextBox" or "ComboBox" or "CheckBox");
+            element.Name.LocalName is "TextBox" or "ComboBox" or "CheckBox" or "DatePicker");
         Assert.Contains(detailsPane.Descendants(), element =>
             (string?)element.Attribute("AutomationProperties.Name") == "Close entity details");
+        Assert.Contains(detailsPane.Descendants(), element =>
+            (string?)element.Attribute("Text") == "{Binding EffectiveDueDate}");
         Assert.Contains(document.Descendants(), element =>
             (string?)element.Attribute("Command") ==
             "{Binding DataContext.OpenEntityDetailsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}");

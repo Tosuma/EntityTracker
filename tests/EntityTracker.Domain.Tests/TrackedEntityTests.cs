@@ -217,6 +217,23 @@ public sealed class TrackedEntityTests
         Assert.Null(entity.RequestedPriority);
     }
 
+    [Fact]
+    public void DueDate_DefaultsToNoneAndCanBeSetChangedAndCleared()
+    {
+        TrackedEntity entity = new(EntityId.New(), TestTrackerId, "sales.Customer");
+        Assert.Null(entity.DueDate);
+
+        TrackedEntity dated = new(EntityId.New(), TestTrackerId, "sales.Order",
+            dueDate: new DateOnly(2026, 10, 26));
+        Assert.Equal(new DateOnly(2026, 10, 26), dated.DueDate);
+
+        dated.ChangeDueDate(new DateOnly(2026, 12, 24));
+        Assert.Equal(new DateOnly(2026, 12, 24), dated.DueDate);
+
+        dated.ChangeDueDate(null);
+        Assert.Null(dated.DueDate);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(6)]

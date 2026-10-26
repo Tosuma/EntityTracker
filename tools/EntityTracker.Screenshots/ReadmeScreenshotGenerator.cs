@@ -728,6 +728,7 @@ internal sealed class ReadmeScreenshotGenerator
             .Single(choice => choice.Developer.Initials == "PT").IsSelected = true;
         viewModel.ManualCreation.GroupName = "Operations";
         viewModel.ManualCreation.SelectedRequestedPriority = 2;
+        viewModel.ManualCreation.SelectedDueDate = new DateTime(2026, 9, 30);
 
         viewModel.ManualCreation.DependencyQuery = "time_zone";
         await viewModel.ManualCreation.SearchDependenciesAsync(cancellationToken);

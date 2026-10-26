@@ -390,6 +390,9 @@ A linked Project is stored in its repository under `.entitytracker/`, one JSON f
   under it.
 
 `ProjectSnapshotJsonCodec` writes them; `ProjectSnapshot.CurrentFormatVersion` is the format.
+- **Format 9:** adds an entity's optional due date (`dueDate`, `yyyy-MM-dd`, left out when there is
+  none), also in a Sync from source baseline. An older app would drop it, so a format 9 Project needs
+  this version or later. The SQLite schema is version 25 (`due_date` columns).
 - **Format 8:** adds the development status `NotRelevant`. An older app doesn't know it, so a
   format 8 Project needs this version or later: that release was a major one.
 - **Format 7:**

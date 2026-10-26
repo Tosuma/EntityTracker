@@ -13,7 +13,8 @@ public sealed class TrackedEntity
         string? responsibleDeveloper = null,
         string? groupName = null,
         string filterActive = "",
-        string sharedNotes = "")
+        string sharedNotes = "",
+        DateOnly? dueDate = null)
     {
         ArgumentNullException.ThrowIfNull(id);
         ArgumentNullException.ThrowIfNull(trackerId);
@@ -37,6 +38,7 @@ public sealed class TrackedEntity
         RequestedPriority = requestedPriority;
         ResponsibleDeveloper = NormalizeResponsibleDeveloper(responsibleDeveloper);
         GroupName = NormalizeGroupName(groupName);
+        DueDate = dueDate;
     }
 
     /// <summary>
@@ -86,6 +88,9 @@ public sealed class TrackedEntity
 
     public string GroupName { get; private set; }
 
+    /// <summary>Gets the date the entity must be done by, or null for none. It orders before priority.</summary>
+    public DateOnly? DueDate { get; private set; }
+
     public void ChangeSourceName(string sourceName)
     {
         ValidateSourceName(sourceName);
@@ -126,6 +131,11 @@ public sealed class TrackedEntity
     {
         EnsureValidRequestedPriority(requestedPriority);
         RequestedPriority = requestedPriority;
+    }
+
+    public void ChangeDueDate(DateOnly? dueDate)
+    {
+        DueDate = dueDate;
     }
 
     public void ChangeResponsibleDeveloper(string? responsibleDeveloper)

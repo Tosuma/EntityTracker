@@ -141,6 +141,29 @@ public sealed class EntityDependencyEditorServiceTests
     }
 
     [Fact]
+    public async Task SaveAsync_KeepsTheDueDateUnlessAChangeIsGiven()
+    {
+        TrackedEntity owner = Entity(1, "Owner");
+        owner.ChangeDueDate(new DateOnly(2026, 11, 1));
+        EntityDependencyEditorService service = Service([owner], [], out StubStore store);
+        EntityDependencyEditPlan plan = service.CreatePlan(owner.Id, [owner], [], []);
+
+        await service.SaveAsync(plan, DevelopmentStatus.InProgress, owner.Notes,
+            owner.RequestedPriority, owner.ResponsibleDeveloper, owner.GroupName);
+
+        TrackedStateChangeSet kept = Assert.IsType<TrackedStateChangeSet>(store.LastChangeSet);
+        Assert.Empty(kept.EntitiesWithDueDateToUpdate);
+        Assert.Equal(new DateOnly(2026, 11, 1), Assert.Single(kept.EntitiesWithProgressToUpdate).DueDate);
+
+        await service.SaveAsync(TestTrackerId, plan, owner.Status, owner.Notes,
+            owner.RequestedPriority, owner.ResponsibleDeveloper, owner.GroupName,
+            dueDateChange: new DueDateChange(null));
+
+        TrackedStateChangeSet cleared = Assert.IsType<TrackedStateChangeSet>(store.LastChangeSet);
+        Assert.Null(Assert.Single(cleared.EntitiesWithDueDateToUpdate).DueDate);
+    }
+
+    [Fact]
     public async Task SaveAsync_StatusNotesAndDependenciesShareOneChangeSet()
     {
         TrackedEntity owner = Entity(1, "Owner", "Core Team");

@@ -32,6 +32,8 @@ EntityTracker keeps those concerns separate:
 
 - **Dependency-aware planning** — rank entities so dependencies appear before the entities that
   use them, while keeping references to names no entity has yet as unresolved dependencies.
+- **Due dates** — give an entity a date it must be done by; the Overview orders by due date before
+  priority, and the entities it depends on inherit the date so they come first.
 - **Entity tracking** — create and rename entities, add or remove dependencies, update notes and
   progress, and archive or restore entities.
 - **Workflow visibility** — combine Excel-style filters on Responsible dev, Group, Status, and
@@ -55,7 +57,7 @@ EntityTracker keeps those concerns separate:
 
 1. Add the entities you need to build, each with the entities it depends on. A dependency on a name
    that is not an entity yet is kept as an unresolved reference.
-2. Use dependency-safe rank, readiness, blockers, filters, and search to choose the next work item.
+2. Use the dependency-safe planning order, readiness, blockers, filters, and search to choose the next work item.
 3. Update development status as work progresses; renames keep progress, history, and dependencies.
 4. Share a Project report to communicate delivery trends.
 
@@ -174,14 +176,14 @@ separator is also selected there. Choose the file location and name in the save 
 notification reports when the export finishes or fails.
 
 **Settings** is split into categories: **General** (appearance), **Project** (your local Developer
-for any Project, independent of the current context), **Tracker** (Overview search and export, and the dependency graph's display), **Sync**
+for any Project, independent of the current context), **Tracker** (Overview search, due dates and export, and the dependency graph's display), **Sync**
 (automatic Project sync), and **About** (app version).
 
 ![Settings General page with the appearance choice](images/light/settings.png)
 
 ![Settings Project page with the Project picker and local Developer choice](images/light/settings-project.png)
 
-![Settings Tracker page with Overview search and export, and Dependency graph display options](images/light/settings-tracker.png)
+![Settings Tracker page with Overview search, due dates and export, and Dependency graph display options](images/light/settings-tracker.png)
 
 ![Settings Sync page with automatic Project sync and interval](images/light/settings-sync.png)
 
@@ -240,7 +242,7 @@ Overview after the normal unsaved-work confirmation.
 
 A Tracker created as a copy of another keeps a link to it. **Sync from source** on the Project
 dashboard brings the source's later changes into the copy: which entities exist, their dependencies,
-requested priorities, groups and Filter active. A copy starts with its source's Filter active. Each difference is a plain sentence naming both Trackers, with two
+requested priorities, due dates, groups and Filter active. A copy starts with its source's Filter active. Each difference is a plain sentence naming both Trackers, with two
 outcomes to choose from, such as "Add the dependency on customer" or "Leave it out". An entity that
 exists on only one side is a single choice that brings it whole, with all its dependencies, or leaves
 it out. **Use … for all** and **Keep … for all** decide everything at once, and single rows can still be
@@ -315,8 +317,17 @@ Archived entities have their own tab and independent search, filters, and Status
 available as read-only records with their progress, notes, and dependencies intact and can be
 deliberately restored from the archived view.
 
+The Overview lists entities in planning order: by due date first, then priority, then dependency order.
+An entity inherits the earliest due date and the most urgent priority of the entities that
+depend on it, because it has to be done before them, so it never sorts after an entity that needs
+it. The list has no rank number, because the date and priority grouping would make one look
+shuffled; the row order itself is the plan. The **Due** column shows each entity's own due date as day-month-year (26-10-2026). Turn on
+**Show inherited due dates** in **Settings → Tracker** to show the inherited date as well. Set or
+clear a due date in the entity editor or when adding an entity; the export and Sync from source
+include it.
+
 Entity names and each row's **View details** action open a read-only side pane with priorities,
-rank, assignment, full notes, effective dependencies, blockers, and audit timestamps.
+due dates, assignment, full notes, effective dependencies, blockers, and audit timestamps.
 Use **Edit** in the details header to open the entity editor. Opening or closing the pane does not
 disturb bulk row selection.
 
@@ -364,7 +375,7 @@ missing dependencies orbit on the outermost ring, straight out from the entities
 directly. Entities are placed straight out from what they link to, so chains run outward instead of
 across the map, and only direct links are drawn, never ones a longer chain already implies. The most used entities and the foundations keep their names visible at every zoom level, and
 names never pile on top of each other. Links stay faint until you hover over an entity; hovering
-also shows a card with its status, rank, ring, what it depends on, how many entities it unblocks,
+also shows a card with its status, ring, what it depends on, how many entities it unblocks,
 and any missing dependencies. Click an entity to highlight everything it depends on, back
 towards the centre, and click it again to clear the selection. Ctrl+click adds more entities to the
 selection (or removes one again), and the highlight covers all of them. The **Highlight** choice
@@ -384,7 +395,7 @@ faint orbit rings for each level, under **Settings → Tracker**.
 
 ![Dependency graph with one entity selected and its dependency chain highlighted](images/light/dependency-graph-selected.png)
 
-![Dependency graph hover card explaining an entity's status, rank, ring and usage](images/light/dependency-graph-hover.png)
+![Dependency graph hover card explaining an entity's status, ring and usage](images/light/dependency-graph-hover.png)
 
 ![Dependency graph search suggesting entities word by word](images/light/dependency-graph-search.png)
 

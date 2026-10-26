@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
+using EntityTracker.Application.Planning;
 using EntityTracker.Application.Tracking;
 
 namespace EntityTracker.Wpf.ViewModels;
@@ -96,6 +97,12 @@ public sealed class TrackerSyncChangeItem : INotifyPropertyChanged
                 return ($"Requested priority: {sourceValue} in {source}, {copyValue} in {copy}.",
                     $"Use {sourceValue} (from {source})", $"Keep {copyValue}");
             }
+            case TrackerSyncChangeKind.DueDate:
+            {
+                string sourceValue = Value(change.SourceValue), copyValue = Value(change.DestinationValue);
+                return ($"Due date: {sourceValue} in {source}, {copyValue} in {copy}.",
+                    $"Use {sourceValue} (from {source})", $"Keep {copyValue}");
+            }
             default:
             {
                 string sourceValue = Value(change.SourceValue), copyValue = Value(change.DestinationValue);
@@ -119,6 +126,7 @@ public sealed class TrackerSyncChangeItem : INotifyPropertyChanged
         ];
         if (!string.IsNullOrEmpty(entity.GroupName)) parts.Add($"group {entity.GroupName}");
         if (entity.RequestedPriority is { } priority) parts.Add($"priority {priority}");
+        if (entity.DueDate is { } dueDate) parts.Add($"due {DueDateText.Format(dueDate)}");
         if (!string.IsNullOrWhiteSpace(entity.FilterActive)) parts.Add("Filter active");
         return ", " + string.Join(" · ", parts);
     }

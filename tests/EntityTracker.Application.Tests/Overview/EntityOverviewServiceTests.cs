@@ -205,6 +205,49 @@ public sealed class EntityOverviewServiceTests
     }
 
     [Fact]
+    public async Task GetAsync_OrdersByEffectiveDueDateBeforePriorityAndKeepsPrerequisitesFirst()
+    {
+        // The urgent entity has the highest priority but no due date; the dated target comes first,
+        // after the prerequisite it inherits its due date to.
+        TrackedEntity prerequisite = Entity(1, "ZuluPrerequisite");
+        TrackedEntity datedTarget = Entity(2, "DatedTarget", requestedPriority: 3,
+            dueDate: new DateOnly(2026, 11, 1));
+        TrackedEntity earlierDated = Entity(3, "EarlierDated", dueDate: new DateOnly(2026, 10, 30));
+        TrackedEntity urgent = Entity(4, "Urgent", requestedPriority: 1);
+        EntityOverviewService service = CreateService(
+            [urgent, datedTarget, earlierDated, prerequisite],
+            [Dependency(datedTarget, prerequisite)]);
+
+        EntityOverviewResult result = await service.GetAsync();
+
+        Assert.Equal(
+            ["EarlierDated", "ZuluPrerequisite", "DatedTarget", "Urgent"],
+            result.Items.Select(static item => item.SourceName));
+        Assert.Equal(
+            [new DateOnly(2026, 10, 30), new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 1), (DateOnly?)null],
+            result.Items.Select(static item => item.EffectiveDueDate));
+        Assert.Equal(
+            [new DateOnly(2026, 10, 30), null, new DateOnly(2026, 11, 1), (DateOnly?)null],
+            result.Items.Select(static item => item.DueDate));
+    }
+
+    [Fact]
+    public async Task GetAsync_PrerequisiteKeepsItsOwnEarlierDueDate()
+    {
+        TrackedEntity prerequisite = Entity(1, "Prerequisite", dueDate: new DateOnly(2026, 10, 1));
+        TrackedEntity target = Entity(2, "Target", dueDate: new DateOnly(2026, 12, 1));
+        EntityOverviewService service = CreateService(
+            [target, prerequisite],
+            [Dependency(target, prerequisite)]);
+
+        EntityOverviewResult result = await service.GetAsync();
+
+        Assert.Equal(
+            [new DateOnly(2026, 10, 1), new DateOnly(2026, 12, 1)],
+            result.Items.Select(static item => item.EffectiveDueDate));
+    }
+
+    [Fact]
     public async Task GetAsync_UnrankedPrioritySegmentKeepsKnownDependencyBeforeDependent()
     {
         TrackedEntity prerequisite = Entity(1, "ZuluPrerequisite");
@@ -269,7 +312,8 @@ public sealed class EntityOverviewServiceTests
         string notes = "",
         int? requestedPriority = null,
         string? responsibleDeveloper = null,
-        string? groupName = null)
+        string? groupName = null,
+        DateOnly? dueDate = null)
     {
         return new TrackedEntity(
             new EntityId(new Guid(id, 0, 0, new byte[8])),
@@ -279,7 +323,8 @@ public sealed class EntityOverviewServiceTests
             notes,
             requestedPriority: requestedPriority,
             responsibleDeveloper: responsibleDeveloper,
-            groupName: groupName);
+            groupName: groupName,
+            dueDate: dueDate);
     }
 
     private static PersistedDependency Dependency(

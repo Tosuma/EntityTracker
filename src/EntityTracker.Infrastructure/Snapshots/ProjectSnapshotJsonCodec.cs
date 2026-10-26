@@ -209,7 +209,8 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
         int formatVersion)
     {
         SnapshotEntityV6 entity = Read<SnapshotEntityV6>(files, path);
-        if (formatVersion >= 7 && entity.Provenance is not null)
+        if (formatVersion >= 7 && entity.Provenance is not null ||
+            formatVersion < ProjectSnapshot.FirstDueDateFormatVersion && entity.DueDate is not null)
             throw new InvalidDataException($"The snapshot document {path} is malformed.");
         return entity.ToSnapshotEntity();
     }
@@ -359,7 +360,10 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
         // Written by format 6 versions from before provenance was removed (app-v2.0.0). It is read and
         // ignored, and never written; format 7 files must not have it.
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        string? Provenance = null)
+        string? Provenance = null,
+        // Format 9: left out when the entity has none.
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        DateOnly? DueDate = null)
     {
         // Empty Shared notes are left out, as in format 5.
         public static SnapshotEntityV6 From(SnapshotEntity entity) => new(
@@ -368,12 +372,14 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
             entity.RequestedPriority, entity.GroupName,
             entity.CreatedAtUtc, entity.SchemaUpdatedAtUtc, entity.ProgressUpdatedAtUtc,
             entity.Dependencies, entity.ResponsibilityPeriods ?? [], entity.FilterActive,
-            entity.SharedNotes.Length > 0 ? entity.SharedNotes : null);
+            entity.SharedNotes.Length > 0 ? entity.SharedNotes : null,
+            DueDate: entity.DueDate);
 
         public SnapshotEntity ToSnapshotEntity() => new(Id, TrackerId, SourceName,
             DevelopmentStatus, Notes, LifecycleState, RequestedPriority,
             string.Empty, GroupName, CreatedAtUtc, SchemaUpdatedAtUtc,
-            ProgressUpdatedAtUtc, Dependencies, ResponsibilityPeriods, FilterActive, SharedNotes ?? "");
+            ProgressUpdatedAtUtc, Dependencies, ResponsibilityPeriods, FilterActive, SharedNotes ?? "",
+            DueDate: DueDate);
     }
 
     private sealed record TrackerDocument(

@@ -277,13 +277,16 @@ public sealed class EntityDependencyEditorService
         IReadOnlyList<DeveloperId>? developerIds = null,
         string? filterActive = null,
         string? sharedNotes = null,
-        string? sourceName = null)
+        string? sourceName = null,
+        DueDateChange? dueDateChange = null)
     {
         ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(notes);
         filterActive ??= plan.Entity.FilterActive;
         sharedNotes ??= plan.Entity.SharedNotes;
+        // Without a change, the entity keeps its due date.
+        DateOnly? dueDate = dueDateChange is null ? plan.Entity.DueDate : dueDateChange.DueDate;
         if (!plan.IsValid)
         {
             throw new InvalidOperationException(
@@ -307,7 +310,8 @@ public sealed class EntityDependencyEditorService
             responsibleDeveloper,
             groupName,
             filterActive,
-            sharedNotes);
+            sharedNotes,
+            dueDate);
         TrackedEntity[] progressUpdates =
             status != plan.Entity.Status || !string.Equals(notes, plan.Entity.Notes, StringComparison.Ordinal) ||
             !string.Equals(filterActive, plan.Entity.FilterActive, StringComparison.Ordinal) ||
@@ -315,6 +319,9 @@ public sealed class EntityDependencyEditorService
                 ? [updatedEntity]
                 : [];
         TrackedEntity[] priorityUpdates = requestedPriority != plan.Entity.RequestedPriority
+            ? [updatedEntity]
+            : [];
+        TrackedEntity[] dueDateUpdates = dueDate != plan.Entity.DueDate
             ? [updatedEntity]
             : [];
         TrackedEntity[] responsibleDeveloperUpdates = !string.Equals(
@@ -352,7 +359,8 @@ public sealed class EntityDependencyEditorService
                 entitiesWithResponsibleDeveloperToUpdate: responsibleDeveloperUpdates,
                 entitiesWithGroupNameToUpdate: groupNameUpdates,
                 responsibilitySelections: developerIds is null ? [] :
-                    [new ResponsibilitySelection(plan.Entity.Id, developerIds)]),
+                    [new ResponsibilitySelection(plan.Entity.Id, developerIds)],
+                entitiesWithDueDateToUpdate: dueDateUpdates),
             cancellationToken);
     }
 

@@ -348,7 +348,6 @@ public sealed class DependencyGraphViewModelTests
         Assert.Equal(
         [
             "Status: Not started",
-            "Rank: Unranked",
             "Ring: Level 3",
             "Depends on: 2 entities",
             "Used by: 0 entities · unblocks 0",

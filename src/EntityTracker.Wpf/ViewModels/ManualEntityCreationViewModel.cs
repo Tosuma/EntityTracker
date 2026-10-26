@@ -42,6 +42,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
     private string _responsibleDeveloper = string.Empty;
     private string _groupName = string.Empty;
     private int? _selectedRequestedPriority;
+    private DateTime? _selectedDueDate;
     private string _dependencyQuery = string.Empty;
     private IReadOnlyList<ManualDependencySuggestion> _suggestions = [];
     private IReadOnlyList<string> _groupSuggestions = [];
@@ -181,6 +182,13 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
                 ClearFatalValidation();
             }
         }
+    }
+
+    /// <summary>Gets or sets the optional due date; a DateTime for the DatePicker, of which only the date counts.</summary>
+    public DateTime? SelectedDueDate
+    {
+        get => _selectedDueDate;
+        set => SetField(ref _selectedDueDate, value?.Date);
     }
 
     public IReadOnlyList<RequestedPriorityOption> PriorityOptions { get; } =
@@ -400,6 +408,7 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         DeveloperPicker?.SelectedIds.Count > 0 ||
         !string.IsNullOrWhiteSpace(GroupName) ||
         SelectedRequestedPriority is not null ||
+        SelectedDueDate is not null ||
         SelectedDependencies.Count > 0;
 
     public ICommand AddExistingCommand => _addExistingCommand;
@@ -569,7 +578,8 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
                     ResponsibleDeveloper,
                     GroupName,
                     SelectedRequestedPriority,
-                    DeveloperPicker?.SelectedIds),
+                    DeveloperPicker?.SelectedIds,
+                    SelectedDueDate is { } dueDate ? DateOnly.FromDateTime(dueDate) : null),
                 cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -915,6 +925,8 @@ public sealed class ManualEntityCreationViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(GroupName));
         _selectedRequestedPriority = null;
         OnPropertyChanged(nameof(SelectedRequestedPriority));
+        _selectedDueDate = null;
+        OnPropertyChanged(nameof(SelectedDueDate));
         _dependencyQuery = string.Empty;
         OnPropertyChanged(nameof(DependencyQuery));
         SelectedDependencies.Clear();

@@ -75,6 +75,7 @@ public sealed class TrackerSyncService(
         List<TrackedEntity> priorityUpdates = [];
         List<TrackedEntity> groupUpdates = [];
         List<TrackedEntity> filterActiveUpdates = [];
+        List<TrackedEntity> dueDateUpdates = [];
         foreach (TrackerSyncEntity wanted in selected.Entities)
         {
             string key = TrackerSyncPlanner.Key(wanted.Name);
@@ -85,7 +86,7 @@ public sealed class TrackerSyncService(
                 // A placeholder with the name becomes the entity, keeping its ID.
                 entity = new TrackedEntity(entity?.Id ?? EntityId.New(), review.DestinationTrackerId,
                     wanted.Name, requestedPriority: wanted.RequestedPriority, groupName: wanted.GroupName,
-                    filterActive: wanted.FilterActive ?? "");
+                    filterActive: wanted.FilterActive ?? "", dueDate: wanted.DueDate);
                 existingByKey[key] = entity;
                 additions.Add(entity);
                 continue;
@@ -109,6 +110,11 @@ public sealed class TrackerSyncService(
             {
                 entity.ChangeFilterActive(filterActive);
                 filterActiveUpdates.Add(entity);
+            }
+            if (entity.DueDate != wanted.DueDate)
+            {
+                entity.ChangeDueDate(wanted.DueDate);
+                dueDateUpdates.Add(entity);
             }
         }
 
@@ -153,7 +159,8 @@ public sealed class TrackerSyncService(
             entityIdsToRestore: restores,
             progressSnapshotAfterChanges: snapshot,
             entitiesWithRequestedPriorityToUpdate: priorityUpdates,
-            entitiesWithGroupNameToUpdate: groupUpdates);
+            entitiesWithGroupNameToUpdate: groupUpdates,
+            entitiesWithDueDateToUpdate: dueDateUpdates);
         TrackerSyncCommit commit = new(review.SourceTrackerId,
             review.DestinationTrackerId, review.SourceFingerprint,
             review.DestinationFingerprint, changes,

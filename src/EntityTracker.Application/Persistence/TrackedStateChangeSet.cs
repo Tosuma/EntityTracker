@@ -24,7 +24,8 @@ public sealed class TrackedStateChangeSet
         IEnumerable<ResponsibilitySelection>? responsibilitySelections = null,
         IEnumerable<ResponsibilityPeriod>? responsibilityPeriodsToCopy = null,
         IEnumerable<ResponsibilityAddition>? responsibilityAdditions = null,
-        IEnumerable<ResponsibilityRemoval>? responsibilityRemovals = null)
+        IEnumerable<ResponsibilityRemoval>? responsibilityRemovals = null,
+        IEnumerable<TrackedEntity>? entitiesWithDueDateToUpdate = null)
     {
         EntitiesToAdd = entitiesToAdd.ToArray();
         EntitiesToUpdate = entitiesToUpdate.ToArray();
@@ -45,6 +46,7 @@ public sealed class TrackedStateChangeSet
         ResponsibilityPeriodsToCopy = (responsibilityPeriodsToCopy ?? []).ToArray();
         ResponsibilityAdditions = (responsibilityAdditions ?? []).ToArray();
         ResponsibilityRemovals = (responsibilityRemovals ?? []).ToArray();
+        EntitiesWithDueDateToUpdate = (entitiesWithDueDateToUpdate ?? []).ToArray();
     }
 
     public IReadOnlyList<TrackedEntity> EntitiesToAdd { get; }
@@ -71,6 +73,8 @@ public sealed class TrackedStateChangeSet
 
     public IReadOnlyList<TrackedEntity> EntitiesWithGroupNameToUpdate { get; }
 
+    public IReadOnlyList<TrackedEntity> EntitiesWithDueDateToUpdate { get; }
+
     public IReadOnlyList<EntityId> EntityIdsToPurge { get; }
     public IReadOnlyList<ResponsibilitySelection> ResponsibilitySelections { get; }
     public IReadOnlyList<ResponsibilityPeriod> ResponsibilityPeriodsToCopy { get; }
@@ -87,6 +91,7 @@ public sealed class TrackedStateChangeSet
             EntitiesWithRequestedPriorityToUpdate.Count > 0 ||
             EntitiesWithResponsibleDeveloperToUpdate.Count > 0 ||
             EntitiesWithGroupNameToUpdate.Count > 0 ||
+            EntitiesWithDueDateToUpdate.Count > 0 ||
             EntityIdsToPurge.Count > 0 ||
             ResponsibilitySelections.Count > 0 ||
             ResponsibilityPeriodsToCopy.Count > 0 ||

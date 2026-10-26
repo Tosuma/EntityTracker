@@ -114,6 +114,16 @@ internal static class ScreenshotDataSeeder
                 new TrackedStateChangeSet([], [], [],
                     responsibilitySelections: [new ResponsibilitySelection(noteEntity.Id, [platform.Id])]),
                 cancellationToken);
+
+            // Two due dates, so the Overview shows the Due column and orders by it.
+            TrackedEntity[] current = (await repository.GetAllAsync(tracker.Id, cancellationToken)).ToArray();
+            TrackedEntity preference = current.Single(static entity => entity.SourceName == "customer_preference");
+            TrackedEntity contract = current.Single(static entity => entity.SourceName == "supplier_contract");
+            preference.ChangeDueDate(new DateOnly(2026, 9, 4));
+            contract.ChangeDueDate(new DateOnly(2026, 9, 18));
+            await provider.GetRequiredService<ITrackedStateStore>().ApplyAsync(tracker.Id,
+                new TrackedStateChangeSet([], [], [], entitiesWithDueDateToUpdate: [preference, contract]),
+                cancellationToken);
         }
 
         ProgressDemoOptions options = new(

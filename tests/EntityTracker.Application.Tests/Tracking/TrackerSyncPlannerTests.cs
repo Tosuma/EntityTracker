@@ -102,6 +102,52 @@ public sealed class TrackerSyncPlannerTests
     }
 
     [Fact]
+    public void ADueDateDifferenceIsOneChoiceShownAsDayMonthYear()
+    {
+        TrackerSyncStructure copy = new([Entity("order")]);
+        TrackerSyncStructure source = new([Entity("order", dueDate: new DateOnly(2026, 11, 5))]);
+
+        TrackerSyncReview review = Review(source, copy);
+
+        TrackerSyncChange change = Assert.Single(review.Changes);
+        Assert.Equal((TrackerSyncChangeKind.DueDate, "05-11-2026", "None", "order — due date"),
+            (change.Kind, change.SourceValue, change.DestinationValue, change.Label));
+        change.Choice = TrackerSyncChoice.Source;
+        Assert.Equal(new DateOnly(2026, 11, 5), Assert.Single(TrackerSyncPlanner.Resolve(review).Entities).DueDate);
+        change.Choice = TrackerSyncChoice.Destination;
+        Assert.Null(Assert.Single(TrackerSyncPlanner.Resolve(review).Entities).DueDate);
+    }
+
+    [Fact]
+    public void ADueDateIsOnlyAskedAboutAgainWhenASideChangesIt()
+    {
+        TrackerSyncStructure copy = new([Entity("order", dueDate: new DateOnly(2026, 11, 1))]);
+        TrackerSyncStructure source = new([Entity("order", dueDate: new DateOnly(2026, 12, 1))]);
+        TrackerSyncBaseline kept = new(source, copy);
+
+        Assert.Empty(TrackerSyncPlanner.CreateReview(SourceId, CopyId, source, copy, kept, "a", "b").Changes);
+
+        TrackerSyncStructure changed = new([Entity("order", dueDate: new DateOnly(2027, 1, 1))]);
+        Assert.Equal(TrackerSyncChangeKind.DueDate,
+            Assert.Single(TrackerSyncPlanner.CreateReview(SourceId, CopyId, changed, copy, kept, "a", "b").Changes).Kind);
+    }
+
+    [Fact]
+    public void ADueDateSurvivesTheBaselineJsonAndIsLeftOutWhenThereIsNone()
+    {
+        TrackerSyncBaseline baseline = new(new([Entity("order", dueDate: new DateOnly(2026, 11, 5))]),
+            new([Entity("order")]));
+
+        string json = System.Text.Json.JsonSerializer.Serialize(baseline);
+        TrackerSyncBaseline read = Assert.IsType<TrackerSyncBaseline>(
+            System.Text.Json.JsonSerializer.Deserialize<TrackerSyncBaseline>(json));
+
+        Assert.Equal(new DateOnly(2026, 11, 5), Assert.Single(read.Source.Entities).DueDate);
+        Assert.Null(Assert.Single(read.Destination.Entities).DueDate);
+        Assert.Equal(1, json.Split("DueDate").Length - 1);
+    }
+
+    [Fact]
     public void FilterActiveIsOnlyAskedAboutAgainWhenASideChangesIt()
     {
         TrackerSyncStructure copy = new([Entity("order", filterActive: "Mine")]);
@@ -158,7 +204,7 @@ public sealed class TrackerSyncPlannerTests
         TrackerSyncPlanner.CreateReview(SourceId, CopyId, source, copy, baseline: null, "a", "b");
 
     private static TrackerSyncEntity Entity(string name, bool active = true, int? priority = null, string group = "",
-        string[]? dependsOn = null, string? filterActive = null) =>
+        string[]? dependsOn = null, string? filterActive = null, DateOnly? dueDate = null) =>
         new(name, active, priority, group, (dependsOn ?? []).Select(target => new TrackerSyncDependency(target)).ToArray(),
-            filterActive);
+            filterActive, dueDate);
 }

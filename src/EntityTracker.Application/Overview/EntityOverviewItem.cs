@@ -27,12 +27,16 @@ public sealed class EntityOverviewItem
         EntityAuditTimestamps auditTimestamps,
         IEnumerable<EntityOverviewDeveloper>? currentDevelopers = null,
         string filterActive = "",
-        string sharedNotes = "")
+        string sharedNotes = "",
+        DateOnly? dueDate = null,
+        DateOnly? effectiveDueDate = null)
     {
         EntityId = entityId;
         Rank = rank;
         RequestedPriority = requestedPriority;
         EffectivePriority = effectivePriority;
+        DueDate = dueDate;
+        EffectiveDueDate = effectiveDueDate;
         SourceName = sourceName;
         Status = status;
         Notes = notes;
@@ -59,6 +63,15 @@ public sealed class EntityOverviewItem
     public int? RequestedPriority { get; }
 
     public int? EffectivePriority { get; }
+
+    /// <summary>Gets the due date set on the entity itself.</summary>
+    public DateOnly? DueDate { get; }
+
+    /// <summary>
+    /// Gets the earliest due date of the entity and of everything that depends on it; the overview is
+    /// ordered by it before priority.
+    /// </summary>
+    public DateOnly? EffectiveDueDate { get; }
 
     public string SourceName { get; }
 

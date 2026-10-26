@@ -215,6 +215,9 @@ internal static class SqliteNormalFormMigration
                 group_name TEXT NOT NULL,
                 -- Null in baselines saved before Filter active was synced.
                 filter_active TEXT NULL,
+                -- Added in version 25, but created here too: the baselines are written again below with
+                -- today's writer. Version 25 then finds the column and leaves it.
+                due_date TEXT NULL,
                 UNIQUE (tracker_id, side, name),
                 FOREIGN KEY (tracker_id) REFERENCES tracker_sync_baselines (tracker_id) ON DELETE CASCADE
             );

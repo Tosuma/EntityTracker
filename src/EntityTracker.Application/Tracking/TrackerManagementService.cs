@@ -87,7 +87,8 @@ public sealed class TrackerManagementService(
             entity.SourceName,
             requestedPriority: entity.RequestedPriority,
             groupName: entity.GroupName,
-            filterActive: entity.FilterActive)).ToArray();
+            filterActive: entity.FilterActive,
+            dueDate: entity.DueDate)).ToArray();
 
         // A dependency on a copied entity points at its copy. One on an entity that is not copied (an
         // archived entity or a placeholder) points at a placeholder with its name in the copy.

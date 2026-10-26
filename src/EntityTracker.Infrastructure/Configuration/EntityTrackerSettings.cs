@@ -22,7 +22,8 @@ public sealed class EntityTrackerSettings
         DependencyGraphView dependencyGraphView = DependencyGraphView.Tree,
         DependencyHighlightMode solarHighlightMode = DependencyHighlightMode.Dependencies,
         DependencyHighlightMode treeHighlightMode = DependencyHighlightMode.DirectLinks,
-        bool detailedLogging = false)
+        bool detailedLogging = false,
+        bool showInheritedDueDates = false)
     {
         if (!Enum.IsDefined(appearance))
         {
@@ -57,6 +58,7 @@ public sealed class EntityTrackerSettings
         SolarHighlightMode = solarHighlightMode;
         TreeHighlightMode = treeHighlightMode;
         DetailedLogging = detailedLogging;
+        ShowInheritedDueDates = showInheritedDueDates;
     }
 
     public ApplicationAppearance Appearance { get; }
@@ -88,6 +90,12 @@ public sealed class EntityTrackerSettings
 
     /// <summary>Gets whether the log also records Debug detail, for troubleshooting.</summary>
     public bool DetailedLogging { get; }
+
+    /// <summary>
+    /// Gets whether the overview's Due column shows the due date an entity inherits from the entities that
+    /// depend on it, when that is earlier than its own. Off, it shows only the entity's own due date.
+    /// </summary>
+    public bool ShowInheritedDueDates { get; }
 
     /// <summary>Gets what selecting an entity highlights in the given view.</summary>
     public DependencyHighlightMode HighlightModeFor(DependencyGraphView view) =>

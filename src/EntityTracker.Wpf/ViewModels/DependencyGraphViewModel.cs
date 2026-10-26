@@ -452,7 +452,6 @@ public sealed class DependencyGraphViewModel : INotifyPropertyChanged
         List<string> lines =
         [
             $"Status: {StatusLabel(node.Status)}",
-            $"Rank: {(node.Rank is { } rank ? rank.ToString(System.Globalization.CultureInfo.CurrentCulture) : "Unranked")}",
             node.Level switch
             {
                 0 => $"{PlaceWord}: Foundation",
