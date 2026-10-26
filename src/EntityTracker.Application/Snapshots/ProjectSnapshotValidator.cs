@@ -83,6 +83,12 @@ public static class ProjectSnapshotValidator
                 {
                     throw new InvalidDataException("An entity priority is invalid.");
                 }
+                // Due dates exist from format 9; an older format holding one was not written by a compatible app.
+                if (entity.DueDate is not null &&
+                    snapshot.FormatVersion < ProjectSnapshot.FirstDueDateFormatVersion)
+                {
+                    throw new InvalidDataException("An entity due date is not supported in this snapshot format.");
+                }
                 Utc(entity.CreatedAtUtc); Utc(entity.SchemaUpdatedAtUtc); Utc(entity.ProgressUpdatedAtUtc);
                 if (snapshot.FormatVersion >= 3)
                 {

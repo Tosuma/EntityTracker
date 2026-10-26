@@ -272,6 +272,22 @@ public sealed class ManualEntityCreationServiceTests
         Assert.Equal(2, added.RequestedPriority);
     }
 
+    [Fact]
+    public async Task CreateAsync_WithDueDate_PersistsDueDateOnCreatedEntity()
+    {
+        ManualEntityCreationService service = Service([], [], [], out RecordingStore store);
+
+        ManualEntityCreationResult result = await service.CreateAsync(
+            new ManualEntityCreationRequest(
+                "DatedEntity",
+                [],
+                dueDate: new DateOnly(2026, 12, 1)));
+
+        Assert.True(result.IsSuccess);
+        TrackedEntity added = Assert.Single(store.LastChangeSet!.EntitiesToAdd);
+        Assert.Equal(new DateOnly(2026, 12, 1), added.DueDate);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(6)]

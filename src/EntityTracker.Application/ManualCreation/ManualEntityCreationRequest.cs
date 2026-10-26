@@ -10,7 +10,8 @@ public sealed class ManualEntityCreationRequest
         string? responsibleDeveloper = null,
         string? groupName = null,
         int? requestedPriority = null,
-        IEnumerable<DeveloperId>? developerIds = null)
+        IEnumerable<DeveloperId>? developerIds = null,
+        DateOnly? dueDate = null)
     {
         ArgumentNullException.ThrowIfNull(entityName);
         ArgumentNullException.ThrowIfNull(dependencies);
@@ -21,6 +22,7 @@ public sealed class ManualEntityCreationRequest
         GroupName = groupName;
         RequestedPriority = requestedPriority;
         DeveloperIds = (developerIds ?? []).Distinct().ToArray();
+        DueDate = dueDate;
 
         if (Dependencies.Any(static dependency => dependency is null))
         {
@@ -40,4 +42,6 @@ public sealed class ManualEntityCreationRequest
 
     public int? RequestedPriority { get; }
     public IReadOnlyList<DeveloperId> DeveloperIds { get; }
+
+    public DateOnly? DueDate { get; }
 }

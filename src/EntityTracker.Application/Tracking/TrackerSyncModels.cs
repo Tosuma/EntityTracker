@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text.Json.Serialization;
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
 using EntityTracker.Domain;
@@ -16,7 +17,10 @@ public sealed record TrackerSyncEntity(
     string GroupName,
     IReadOnlyList<TrackerSyncDependency> Dependencies,
     // Missing (null) in baselines saved before Filter active was synced.
-    string? FilterActive = null);
+    string? FilterActive = null,
+    // Left out when there is none, so baselines without due dates read as before.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    DateOnly? DueDate = null);
 
 public sealed record TrackerSyncStructure(IReadOnlyList<TrackerSyncEntity> Entities);
 
@@ -53,7 +57,7 @@ public enum TrackerSyncChoice { Source, Destination }
 
 public sealed record TrackerSyncChoiceOption(TrackerSyncChoice Value, string Label);
 
-public enum TrackerSyncChangeKind { Entity, Dependency, RequestedPriority, Group, FilterActive }
+public enum TrackerSyncChangeKind { Entity, Dependency, RequestedPriority, Group, FilterActive, DueDate }
 
 public sealed class TrackerSyncChange : INotifyPropertyChanged
 {
@@ -91,6 +95,8 @@ public sealed class TrackerSyncChange : INotifyPropertyChanged
         TrackerSyncChangeKind.Entity => $"{EntityName} — entity",
         TrackerSyncChangeKind.Dependency => $"{EntityName} → {DependencyName} — dependency",
         TrackerSyncChangeKind.RequestedPriority => $"{EntityName} — requested priority",
+        TrackerSyncChangeKind.FilterActive => $"{EntityName} — Filter active",
+        TrackerSyncChangeKind.DueDate => $"{EntityName} — due date",
         _ => $"{EntityName} — group"
     };
 

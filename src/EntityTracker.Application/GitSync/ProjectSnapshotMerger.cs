@@ -247,6 +247,7 @@ public sealed class ProjectSnapshotMerger
                 l.LifecycleState, r.LifecycleState, ProjectConflictKind.Lifecycle),
             RequestedPriority = Field(path + "/RequestedPriority", b.RequestedPriority,
                 l.RequestedPriority, r.RequestedPriority),
+            DueDate = Field(path + "/DueDate", b.DueDate, l.DueDate, r.DueDate),
             ResponsibleDeveloper = string.Empty,
             ResponsibilityPeriods = MergeResponsibility(path, b, l, r),
             GroupName = Field(path + "/GroupName", b.GroupName, l.GroupName, r.GroupName),

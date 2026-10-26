@@ -267,6 +267,7 @@ internal sealed class ProjectMergeConflictPresenter(
         "FilterActive" => "Filter active",
         "Notes" => "Internal notes",
         "SharedNotes" => "Shared notes",
+        "DueDate" => "Due date",
         _ => Humanize(value.Replace("Utc", "", StringComparison.Ordinal))
     };
 

@@ -1,5 +1,6 @@
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Planning;
 using EntityTracker.Domain;
 
 namespace EntityTracker.Application.Tracking;
@@ -31,7 +32,8 @@ public static class TrackerSyncPlanner
                 entity.GroupName,
                 declarations[entity.Id].Values
                     .OrderBy(static dependency => Key(dependency.Name), StringComparer.Ordinal).ToArray(),
-                entity.FilterActive))
+                entity.FilterActive,
+                entity.DueDate))
             .ToArray());
     }
 
@@ -82,6 +84,9 @@ public static class TrackerSyncPlanner
                     oldAe?.FilterActive, oldBe?.FilterActive))
                 changes.Add(new TrackerSyncChange(TrackerSyncChangeKind.FilterActive, name, null,
                     ae?.FilterActive ?? "", be?.FilterActive ?? ""));
+            if (Different(hasBaseline, ae?.DueDate, be?.DueDate, oldAe?.DueDate, oldBe?.DueDate))
+                changes.Add(new TrackerSyncChange(TrackerSyncChangeKind.DueDate, name, null,
+                    DueDateText.Format(ae?.DueDate, "None"), DueDateText.Format(be?.DueDate, "None")));
 
             var ad = Dependencies(ae);
             var bd = Dependencies(be);
@@ -138,6 +143,7 @@ public static class TrackerSyncPlanner
             string group = Pick(TrackerSyncChangeKind.Group, "", ae?.GroupName ?? "", be?.GroupName ?? "");
             string filterActive = Pick(TrackerSyncChangeKind.FilterActive, "",
                 ae?.FilterActive ?? "", be?.FilterActive ?? "");
+            DateOnly? dueDate = Pick(TrackerSyncChangeKind.DueDate, "", ae?.DueDate, be?.DueDate);
             var ad = Dependencies(ae);
             var bd = Dependencies(be);
             List<TrackerSyncDependency> dependencies = [];
@@ -149,7 +155,7 @@ public static class TrackerSyncPlanner
                 if (selected is not null)
                     dependencies.Add(selected);
             }
-            result.Add(new TrackerSyncEntity(name, active, priority, group, dependencies, filterActive));
+            result.Add(new TrackerSyncEntity(name, active, priority, group, dependencies, filterActive, dueDate));
 
             T Pick<T>(TrackerSyncChangeKind kind, string target, T sourceValue, T destinationValue)
             {

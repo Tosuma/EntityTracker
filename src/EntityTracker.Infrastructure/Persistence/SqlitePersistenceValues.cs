@@ -64,6 +64,27 @@ internal static class SqlitePersistenceValues
         return timestamp.ToUniversalTime();
     }
 
+    /// <summary>A due date as stored: ISO 8601 (yyyy-MM-dd), or DBNull for none.</summary>
+    public static object FormatDate(DateOnly? value) =>
+        value is { } date ? date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : DBNull.Value;
+
+    public static DateOnly? ParseDate(string? value, string fieldName)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        if (!DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out DateOnly date))
+        {
+            throw new InvalidDataException(
+                $"The stored {fieldName} value '{value}' is not a valid date.");
+        }
+
+        return date;
+    }
+
     public static TEnum ParseEnum<TEnum>(string value, string fieldName)
         where TEnum : struct, Enum
     {

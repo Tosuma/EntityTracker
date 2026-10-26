@@ -17,11 +17,16 @@ public sealed record ProjectSnapshot(
     /// source baseline as nested JSON in tracker.json instead of one escaped JSON string.
     /// Format 8 adds the development status NotRelevant; older apps don't know it, so they must not read
     /// a format 8 Project.
+    /// Format 9 adds an entity's optional due date (and a Sync from source baseline entity's); older apps
+    /// would drop it, so they must not read a format 9 Project.
     /// </summary>
-    public const int CurrentFormatVersion = 8;
+    public const int CurrentFormatVersion = 9;
 
     /// <summary>The first format that may hold the development status NotRelevant.</summary>
     public const int FirstNotRelevantFormatVersion = 8;
+
+    /// <summary>The first format that may hold a due date.</summary>
+    public const int FirstDueDateFormatVersion = 9;
 
     /// <summary>
     /// The first format with today's entities and dependencies (format 6). Older snapshots are legacy:
@@ -68,7 +73,9 @@ public sealed record SnapshotEntity(
     IReadOnlyList<SnapshotLegacyUnresolvedDependency>? LegacyUnresolvedDependencies = null,
     IReadOnlyList<SnapshotLegacyOverride>? LegacyOverrides = null,
     // Formats 1–5 only: how the entity entered its Tracker (Imported, ManualOnly, Copied, ...).
-    string? LegacyProvenance = null);
+    string? LegacyProvenance = null,
+    // Format 9 and later.
+    DateOnly? DueDate = null);
 
 public sealed record SnapshotResponsibilityPeriod(Guid Id, Guid EntityId, Guid DeveloperId,
     DateTimeOffset StartedAtUtc, DateTimeOffset? EndedAtUtc);

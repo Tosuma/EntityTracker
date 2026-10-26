@@ -40,7 +40,8 @@ public sealed class SqliteProjectTrackerStore(
             changeSet.EntitiesWithProgressToUpdate.Count > 0 ||
             changeSet.EntitiesWithRequestedPriorityToUpdate.Count > 0 ||
             changeSet.EntitiesWithResponsibleDeveloperToUpdate.Count > 0 ||
-            changeSet.EntitiesWithGroupNameToUpdate.Count > 0)
+            changeSet.EntitiesWithGroupNameToUpdate.Count > 0 ||
+            changeSet.EntitiesWithDueDateToUpdate.Count > 0)
         {
             throw new ArgumentException("A tracker creation state may only contain initial data.", nameof(creation));
         }
@@ -241,11 +242,11 @@ public sealed class SqliteProjectTrackerStore(
         using SqliteCommand command = CreateCommand(connection, transaction, """
             INSERT INTO tracked_entities
             (id, tracker_id, source_name, notes, filter_active, shared_notes,
-             lifecycle_state, requested_priority, group_name,
+             lifecycle_state, requested_priority, due_date, group_name,
              created_at_utc, schema_updated_at_utc, progress_updated_at_utc)
             VALUES
             ($id, $trackerId, $sourceName, $notes, $filterActive, $sharedNotes,
-             $lifecycle, $priority, $group,
+             $lifecycle, $priority, $dueDate, $group,
              $timestamp, $timestamp, $timestamp);
             """);
         command.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(entity.Id));
@@ -256,6 +257,7 @@ public sealed class SqliteProjectTrackerStore(
         command.Parameters.AddWithValue("$sharedNotes", entity.SharedNotes);
         command.Parameters.AddWithValue("$lifecycle", entity.LifecycleState.ToString());
         command.Parameters.AddWithValue("$priority", entity.RequestedPriority is null ? DBNull.Value : entity.RequestedPriority.Value);
+        command.Parameters.AddWithValue("$dueDate", SqlitePersistenceValues.FormatDate(entity.DueDate));
         command.Parameters.AddWithValue("$group", entity.GroupName);
         command.Parameters.AddWithValue("$timestamp", timestamp);
         await command.ExecuteNonQueryAsync(cancellationToken);

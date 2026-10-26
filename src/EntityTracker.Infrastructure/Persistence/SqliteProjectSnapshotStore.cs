@@ -117,7 +117,8 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                                 d.Guid("entity_id"), d.Guid("developer_id"),
                                 d.Time("started_at_utc"), d.TimeOrNull("ended_at_utc")))
                             .OrderBy(d => d.StartedAtUtc).ThenBy(d => d.Id).ToArray(),
-                        entity.Str("filter_active"), entity.Str("shared_notes"));
+                        entity.Str("filter_active"), entity.Str("shared_notes"),
+                        DueDate: SqlitePersistenceValues.ParseDate(entity.StrOrNull("due_date"), "due date"));
                 }).ToArray();
             return new SnapshotTracker(tracker.Guid("id"), tracker.Guid("project_id"),
                 tracker.Str("name"), tracker.Str("lifecycle_state"),
@@ -203,10 +204,10 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         foreach (SnapshotEntity entity in tracker.Entities)
         {
             await InsertAsync(connection, transaction, "tracked_entities",
-                ["id", "tracker_id", "source_name", "notes", "filter_active", "shared_notes", "lifecycle_state", "requested_priority", "group_name", "created_at_utc", "schema_updated_at_utc", "progress_updated_at_utc"],
+                ["id", "tracker_id", "source_name", "notes", "filter_active", "shared_notes", "lifecycle_state", "requested_priority", "due_date", "group_name", "created_at_utc", "schema_updated_at_utc", "progress_updated_at_utc"],
                 [Id(entity.Id), Id(tracker.Id),
                  entity.SourceName, entity.Notes, entity.FilterActive, entity.SharedNotes, entity.LifecycleState,
-                 entity.RequestedPriority, entity.GroupName,
+                 entity.RequestedPriority, SqlitePersistenceValues.FormatDate(entity.DueDate), entity.GroupName,
                  Time(entity.CreatedAtUtc), Time(entity.SchemaUpdatedAtUtc), Time(entity.ProgressUpdatedAtUtc)], cancellationToken);
         }
         foreach (SnapshotTracker tracker in snapshot.Trackers)

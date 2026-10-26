@@ -134,7 +134,8 @@ public sealed class ManualEntityCreationService
             entityName,
             requestedPriority: request.RequestedPriority,
             responsibleDeveloper: request.ResponsibleDeveloper,
-            groupName: request.GroupName);
+            groupName: request.GroupName,
+            dueDate: request.DueDate);
         TrackedEntity[] withCreated = currentEntities
             .Where(entity => entity.Id != createdEntity.Id)
             .Append(createdEntity)

@@ -424,6 +424,45 @@ public sealed class SqliteTrackedStateStoreTests
     }
 
     [Fact]
+    public async Task ApplyAsync_DueDateOnlyUpdateSetsAndClearsItAndPreservesProgress()
+    {
+        await using TemporarySqliteFile file = new();
+        SqliteDatabase database = new(file.DatabasePath);
+        await database.InitializeAsync();
+        SqliteTrackedStateStore store = new(database);
+        SqliteEntityRepository entities = new(database);
+        SqliteProgressHistoryRepository history = new(database);
+        TrackedEntity entity = new(
+            EntityId.New(),
+            database.GetTrackerId(),
+            "Dated",
+            DevelopmentStatus.InProgress,
+            "Keep notes",
+            requestedPriority: 3,
+            dueDate: new DateOnly(2026, 10, 26));
+        await store.ApplyAsync(new TrackedStateChangeSet([entity], [], []));
+        Assert.Equal(new DateOnly(2026, 10, 26), (await entities.GetAsync(entity.Id))!.DueDate);
+        int historyCount = (await history.GetStatusHistoryAsync()).Count;
+
+        entity.ChangeDueDate(new DateOnly(2027, 1, 31));
+        TrackedStateChangeSet moved = new([], [], [], entitiesWithDueDateToUpdate: [entity]);
+        Assert.True(moved.HasChanges);
+        await store.ApplyAsync(moved);
+
+        TrackedEntity loaded = Assert.IsType<TrackedEntity>(await entities.GetAsync(entity.Id));
+        Assert.Equal(new DateOnly(2027, 1, 31), loaded.DueDate);
+        Assert.Equal(DevelopmentStatus.InProgress, loaded.Status);
+        Assert.Equal("Keep notes", loaded.Notes);
+        Assert.Equal(3, loaded.RequestedPriority);
+        Assert.Equal(historyCount, (await history.GetStatusHistoryAsync()).Count);
+
+        entity.ChangeDueDate(null);
+        await store.ApplyAsync(new TrackedStateChangeSet([], [], [], entitiesWithDueDateToUpdate: [entity]));
+
+        Assert.Null((await entities.GetAsync(entity.Id))!.DueDate);
+    }
+
+    [Fact]
     public async Task ApplyAsync_ResponsibilitySelectionPreservesProgressAndTimestamps()
     {
         await using TemporarySqliteFile file = new();
