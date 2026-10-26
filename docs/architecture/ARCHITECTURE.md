@@ -225,6 +225,12 @@ Topological ordering is therefore the hard constraint.
 
 Additional importance scoring may only influence ordering among entities that are simultaneously eligible.
 
+The Overview's default planning order groups entities by effective due date, then effective priority,
+then Rank. Both effective values pass from an entity to everything it depends on, which keeps the
+earliest date and the most urgent priority (`PriorityPlanningService`). A dependency's effective due
+date and priority are therefore never later or less urgent than those of an entity that needs it, so
+the grouping stays dependency-safe. Neither changes Rank.
+
 Presentation-only analytical views are an explicit exception to the visual ordering statement.
 For example, a user may temporarily sort the Overview by Status or Work status to inspect a
 workflow segment. Such a sort:
@@ -232,7 +238,8 @@ workflow segment. Such a sort:
 - does not change or recompute Rank;
 - does not become the implementation work order;
 - may visually place an entity before one of its dependencies; and
-- must restore the dependency-safe effective-priority-then-rank order when cleared.
+- must restore the dependency-safe effective-due-date-then-effective-priority-then-rank order when
+  cleared.
 
 Dependency safety therefore remains mandatory for computed Rank and the default planning order,
 while an explicitly selected analytical display sort is clearly indicated as a temporary view.

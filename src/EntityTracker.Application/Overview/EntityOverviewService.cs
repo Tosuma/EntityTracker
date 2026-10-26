@@ -120,6 +120,8 @@ public sealed class EntityOverviewService
 
         IReadOnlyDictionary<EntityId, int?> effectivePriorities =
             _priorityPlanningService.CalculateEffectivePriorities(allEntities, effectiveState);
+        IReadOnlyDictionary<EntityId, DateOnly?> effectiveDueDates =
+            _priorityPlanningService.CalculateEffectiveDueDates(allEntities, effectiveState);
         IReadOnlyDictionary<EntityId, int> knownGraphPositions = knownGraphOrdering.Rankings
             .ToDictionary(static ranking => ranking.EntityId, static ranking => ranking.Rank);
 
@@ -202,7 +204,9 @@ public sealed class EntityOverviewService
                     auditByEntityId[entity.Id],
                     currentDevelopers.GetValueOrDefault(entity.Id),
                     entity.FilterActive,
-                    entity.SharedNotes);
+                    entity.SharedNotes,
+                    entity.DueDate,
+                    effectiveDueDates[entity.Id]);
             });
 
         IEnumerable<EntityOverviewItem> unrankedItems = rankingResult.UnrankedEntities
@@ -230,7 +234,9 @@ public sealed class EntityOverviewService
                     auditByEntityId[entity.Id],
                     currentDevelopers.GetValueOrDefault(entity.Id),
                     entity.FilterActive,
-                    entity.SharedNotes);
+                    entity.SharedNotes,
+                    entity.DueDate,
+                    effectiveDueDates[entity.Id]);
             });
 
         IReadOnlyDictionary<EntityId, string[]> archivedDependencyNames =
@@ -259,12 +265,16 @@ public sealed class EntityOverviewService
                 auditByEntityId[entity.Id],
                 currentDevelopers.GetValueOrDefault(entity.Id),
                 entity.FilterActive,
-                    entity.SharedNotes));
+                entity.SharedNotes,
+                entity.DueDate));
 
         return new EntityOverviewResult(
             rankedItems
                 .Concat(unrankedItems)
-                .OrderBy(static item => item.EffectivePriority ?? int.MaxValue)
+                // A due date counts for more than a priority. Both pass down to dependencies, so a
+                // dependency never sorts after an entity that needs it.
+                .OrderBy(static item => item.EffectiveDueDate ?? DateOnly.MaxValue)
+                .ThenBy(static item => item.EffectivePriority ?? int.MaxValue)
                 .ThenBy(static item => item.Rank is null ? 1 : 0)
                 .ThenBy(item => item.Rank ?? knownGraphPositions[item.EntityId])
                 .ThenBy(static item => item.SourceName, StringComparer.OrdinalIgnoreCase)

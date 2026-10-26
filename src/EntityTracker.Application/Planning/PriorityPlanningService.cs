@@ -10,7 +10,26 @@ public sealed class PriorityPlanningService
 {
     public IReadOnlyDictionary<EntityId, int?> CalculateEffectivePriorities(
         IEnumerable<TrackedEntity> entities,
-        EffectiveDependencyState effectiveState)
+        EffectiveDependencyState effectiveState) =>
+        CalculateEffective(entities, effectiveState, static entity => entity.RequestedPriority);
+
+    /// <summary>
+    /// Each active entity's effective due date: the earliest due date of the entity and of every entity
+    /// that depends on it, directly or not. A dependency must be done before what needs it, so it inherits
+    /// the deadline.
+    /// </summary>
+    public IReadOnlyDictionary<EntityId, DateOnly?> CalculateEffectiveDueDates(
+        IEnumerable<TrackedEntity> entities,
+        EffectiveDependencyState effectiveState) =>
+        CalculateEffective(entities, effectiveState, static entity => entity.DueDate);
+
+    // The requested value flows from each entity to everything it depends on, and a dependency keeps the
+    // most urgent (smallest) value of anything that needs it.
+    private static IReadOnlyDictionary<EntityId, T?> CalculateEffective<T>(
+        IEnumerable<TrackedEntity> entities,
+        EffectiveDependencyState effectiveState,
+        Func<TrackedEntity, T?> requested)
+        where T : struct, IComparable<T>
     {
         ArgumentNullException.ThrowIfNull(entities);
         ArgumentNullException.ThrowIfNull(effectiveState);
@@ -22,11 +41,11 @@ public sealed class PriorityPlanningService
             static entity => entity.Id);
         IReadOnlyDictionary<EntityId, EntityId[]> dependenciesByOwner =
             BuildDependenciesByOwner(effectiveState, entitiesById);
-        Dictionary<EntityId, int?> effectivePriorities = activeEntities.ToDictionary(
+        Dictionary<EntityId, T?> effectiveValues = activeEntities.ToDictionary(
             static entity => entity.Id,
-            static entity => entity.RequestedPriority);
+            requested);
         Queue<EntityId> pending = new(activeEntities
-            .Where(static entity => entity.RequestedPriority is not null)
+            .Where(entity => requested(entity) is not null)
             .OrderBy(static entity => entity.SourceName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static entity => entity.SourceName, StringComparer.Ordinal)
             .ThenBy(static entity => entity.Id.Value)
@@ -35,8 +54,8 @@ public sealed class PriorityPlanningService
         while (pending.Count > 0)
         {
             EntityId ownerId = pending.Dequeue();
-            int? ownerPriority = effectivePriorities[ownerId];
-            if (ownerPriority is null || !dependenciesByOwner.TryGetValue(
+            T? ownerValue = effectiveValues[ownerId];
+            if (ownerValue is null || !dependenciesByOwner.TryGetValue(
                     ownerId,
                     out EntityId[]? dependencyIds))
             {
@@ -45,18 +64,18 @@ public sealed class PriorityPlanningService
 
             foreach (EntityId dependencyId in dependencyIds)
             {
-                int? dependencyPriority = effectivePriorities[dependencyId];
-                if (dependencyPriority is not null && dependencyPriority <= ownerPriority)
+                T? dependencyValue = effectiveValues[dependencyId];
+                if (dependencyValue is { } current && current.CompareTo(ownerValue.Value) <= 0)
                 {
                     continue;
                 }
 
-                effectivePriorities[dependencyId] = ownerPriority;
+                effectiveValues[dependencyId] = ownerValue;
                 pending.Enqueue(dependencyId);
             }
         }
 
-        return effectivePriorities;
+        return effectiveValues;
     }
 
     public PriorityPlanningPreview CreatePreview(
@@ -91,7 +110,8 @@ public sealed class PriorityPlanningService
             target.ResponsibleDeveloper,
             target.GroupName,
             target.FilterActive,
-            target.SharedNotes);
+            target.SharedNotes,
+            target.DueDate);
         TrackedEntity[] candidateEntities = entityArray
             .Select(entity => entity.Id == targetEntityId ? candidateTarget : entity)
             .ToArray();
