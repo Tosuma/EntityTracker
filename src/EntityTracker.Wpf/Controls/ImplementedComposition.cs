@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace EntityTracker.Wpf.Controls;
 
@@ -24,7 +25,6 @@ public sealed class ImplementedComposition : Border
     {
         Height = 6;
         CornerRadius = new CornerRadius(3);
-        ClipToBounds = true;
         SetResourceReference(BackgroundProperty, "Brush.Border.Default");
         Child = _bar;
         foreach (ImplementedBreakdown.Part part in ImplementedBreakdown.Parts)
@@ -52,6 +52,17 @@ public sealed class ImplementedComposition : Border
     /// <summary>The bar's star widths, left to right: the four parts, then the rest of <see cref="Total"/>.</summary>
     internal IReadOnlyList<double> SegmentWeights =>
         _bar.ColumnDefinitions.Select(static column => column.Width.Value).ToArray();
+
+    // ClipToBounds clips to a square rectangle, so the first coloured part kept square corners while the
+    // track behind it was rounded. Clip the parts to the bar's rounded shape instead, so both ends are round.
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        Size arranged = base.ArrangeOverride(finalSize);
+        double radius = Math.Min(CornerRadius.TopLeft, arranged.Height / 2);
+        if (Clip is not RectangleGeometry clip || clip.Rect.Size != arranged || clip.RadiusX != radius)
+            Clip = new RectangleGeometry(new Rect(arranged), radius, radius);
+        return arranged;
+    }
 
     private static DependencyProperty Count(string name) => DependencyProperty.Register(
         name, typeof(int), typeof(ImplementedComposition),
