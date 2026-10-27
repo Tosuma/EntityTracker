@@ -761,8 +761,8 @@
                                   SelectionMode="Extended"
                                   SelectionUnit="FullRow">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Width="72" Binding="{Binding Priority}" Header="Priority" ElementStyle="{StaticResource CenteredCellTextStyle}" />
                                 <DataGridTextColumn Width="100" Binding="{Binding Due}" Header="Due" ElementStyle="{StaticResource CenteredCellTextStyle}" />
+                                <DataGridTextColumn Width="72" Binding="{Binding Priority}" Header="Priority" ElementStyle="{StaticResource CenteredCellTextStyle}" />
                                 <DataGridTemplateColumn Width="2.2*" MinWidth="180" Header="Entity">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
