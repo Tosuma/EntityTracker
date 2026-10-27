@@ -224,6 +224,32 @@ public sealed class ProgressDashboardBuilderTests
     private static int Count(ProgressDashboardReport report, ProgressStatusCategory status) =>
         report.CurrentStatusCounts.Single(item => item.Status == status).Count;
 
+    [Fact]
+    public void Build_ProgressPointsCarryInProgressNotStartedAndBlockedCounts()
+    {
+        ProgressSnapshot[] snapshots =
+        [
+            new(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero),
+                new ProgressSnapshotState(2, 1, 3, 0, 1, 0, manuallyBlockedCount: 2, reworkingCount: 1)),
+            new(new DateTimeOffset(2026, 1, 3, 12, 0, 0, TimeSpan.Zero),
+                new ProgressSnapshotState(1, 0, 4, 0, 2, 1, manuallyBlockedCount: 1))
+        ];
+
+        ProgressDashboardReport report = _builder.Build(
+            snapshots,
+            ProgressDateRange.Inclusive(new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 3)),
+            new DateOnly(2026, 1, 3),
+            Utc);
+
+        // Reworking counts as implemented, not in progress; 2 January carries 1 January over.
+        Assert.Equal(
+        [
+            new ImplementedProgressPoint(new DateOnly(2026, 1, 1), 2, 3, 3, 2),
+            new ImplementedProgressPoint(new DateOnly(2026, 1, 2), 2, 3, 3, 2),
+            new ImplementedProgressPoint(new DateOnly(2026, 1, 3), 3, 4, 1, 1)
+        ], report.ImplementedOverTime);
+    }
+
     private static ProgressSnapshot Snapshot(
         int year,
         int month,

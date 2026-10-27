@@ -911,7 +911,7 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
 
             Assert.Contains(shell.Notifications.Items, item => item.Title == "Chart image" && item.Kind == NotificationKind.Success);
             // Named after the Project, the chart and the date of its data.
-            Assert.Matches(@"-implemented-over-time-[0-9]{8}\.png$", harness.ReportFiles.SuggestedChartName);
+            Assert.Matches(@"-progress-over-time-[0-9]{8}\.png$", harness.ReportFiles.SuggestedChartName);
             Assert.Equal([0x89, 0x50, 0x4E, 0x47], (await File.ReadAllBytesAsync(chartPath)).Take(4).ToArray());
 
             charts.CopyChartCommand.Execute(EntityTracker.Reporting.ProgressChartKind.CurrentStatus);

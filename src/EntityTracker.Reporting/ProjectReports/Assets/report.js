@@ -378,10 +378,16 @@
       var length = points.reduce(function (sum, p, i) {
         return i === 0 ? 0 : sum + Math.sqrt(Math.pow(p[0] - points[i - 1][0], 2) + Math.pow(p[1] - points[i - 1][1], 2));
       }, 0);
-      line.setAttribute("stroke-dasharray", length + " " + length);
-      var drawing = animate(line, [{ strokeDashoffset: length }, { strokeDashoffset: 0 }]);
-      if (drawing) drawing.onfinish = function () { line.removeAttribute("stroke-dasharray"); };
-      else line.removeAttribute("stroke-dasharray");
+      if (series.dashed) {
+        // A dashed line (the target) keeps its dashes, so it fades in instead of drawing itself.
+        line.setAttribute("stroke-dasharray", "6 4");
+        animate(line, [{ opacity: 0 }, { opacity: 1 }], 300);
+      } else {
+        line.setAttribute("stroke-dasharray", length + " " + length);
+        var drawing = animate(line, [{ strokeDashoffset: length }, { strokeDashoffset: 0 }]);
+        if (drawing) drawing.onfinish = function () { line.removeAttribute("stroke-dasharray"); };
+        else line.removeAttribute("stroke-dasharray");
+      }
       animate(dots, [{ opacity: 0 }, { opacity: 1 }], 300);
       return { line: line, dots: dots, circles: circles };
     });

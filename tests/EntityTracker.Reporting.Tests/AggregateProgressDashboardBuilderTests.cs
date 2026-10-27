@@ -35,6 +35,7 @@ public sealed class AggregateProgressDashboardBuilderTests
         Assert.Equal(10, report.ManagerSummary.ActiveEntityCount);
         Assert.Equal(10, report.ManagerSummary.ImplementedEntityCount);
         Assert.Equal([0, 0, 9, 10], report.ImplementedOverTime.Select(static point => point.ImplementedCount));
+        Assert.Equal([10, 10, 1, 0], report.ImplementedOverTime.Select(static point => point.NotStartedCount));
         Assert.Equal(9, report.CurrentStatusCounts.Single(
             static item => item.Status == ProgressStatusCategory.DevelopmentCompleted).Count);
         Assert.Equal(1, report.CurrentStatusCounts.Single(

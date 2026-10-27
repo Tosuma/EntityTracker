@@ -446,8 +446,9 @@ Under **Progress charts** on the same page, the report's four charts are shown l
 chosen period: for all chosen Trackers together or for one of them. Point at a chart to read its values,
 and save or copy any chart as a PNG image for slides or e-mails. Point at a chart's title for a short
 description of what it shows. The pie of development statuses uses standard chart colours, without
-borders between the slices. **Implemented entities over time** has a coral target line at today's number
-of active entities, so you can see how far along the work is. **Weekly implemented change** shows two
+borders between the slices. **Progress over time** shows the implemented entities each day, with lines
+for the entities in progress, not started and blocked in the same colours as the pie, and a dashed coral
+target line at today's number of active entities, so you can see how far along the work is. **Weekly implemented change** shows two
 bars a week: the entities that became implemented, and the ones that stopped being implemented, each
 counted from the entities' own status changes.
 

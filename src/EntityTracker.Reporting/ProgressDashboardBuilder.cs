@@ -114,7 +114,12 @@ public sealed class ProgressDashboardBuilder
                 continue;
             }
 
-            implemented.Add(new ImplementedProgressPoint(date, carried.ImplementedCount));
+            implemented.Add(new ImplementedProgressPoint(
+                date,
+                carried.ImplementedCount,
+                carried.InProgressCount,
+                carried.NotStartedCount,
+                carried.ManuallyBlockedCount));
             readiness.Add(new ReadinessProgressPoint(
                 date,
                 carried.ReadyCount,

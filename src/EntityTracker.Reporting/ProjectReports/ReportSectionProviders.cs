@@ -56,9 +56,17 @@ public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IRepo
             [
                 new ReportSeries("Implemented", ColorScheme.Chart.Implemented,
                     report.ImplementedOverTime.Select(point => (double)point.ImplementedCount).ToArray()),
-                // The target: today's number of active entities, flat across the chart.
+                // The other statuses in the pie's colours for the same statuses.
+                new ReportSeries("In progress", ReportLabels.SliceColor(ProgressStatusCategory.InProgress),
+                    report.ImplementedOverTime.Select(point => (double)point.InProgressCount).ToArray()),
+                new ReportSeries("Not started", ReportLabels.SliceColor(ProgressStatusCategory.NotStarted),
+                    report.ImplementedOverTime.Select(point => (double)point.NotStartedCount).ToArray()),
+                new ReportSeries("Blocked", ReportLabels.SliceColor(ProgressStatusCategory.Blocked),
+                    report.ImplementedOverTime.Select(point => (double)point.BlockedCount).ToArray()),
+                // The target: today's number of active entities, flat across the chart, dashed.
                 new ReportSeries("Active entities", ColorScheme.Chart.Target,
-                    report.ImplementedOverTime.Select(_ => (double)report.ManagerSummary.ActiveEntityCount).ToArray())
+                    report.ImplementedOverTime.Select(_ => (double)report.ManagerSummary.ActiveEntityCount).ToArray(),
+                    Dashed: true)
             ]),
         ProgressChartKind.ReadyAndBlockedOverTime => new ReportChart(
             report.ReadyAndBlockedOverTime.Select(point => Date(point.Date)).ToArray(),

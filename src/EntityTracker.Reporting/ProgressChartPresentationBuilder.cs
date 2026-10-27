@@ -4,6 +4,7 @@ using LiveChartsCore;
 using LiveChartsCore.Measure;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Painting;
+using LiveChartsCore.SkiaSharpView.Painting.Effects;
 
 using SkiaSharp;
 
@@ -56,14 +57,25 @@ public sealed class ProgressChartPresentationBuilder
                 Fill = new SolidColorPaint(ProgressChartPalette.Implemented.WithAlpha(35)),
                 GeometrySize = 5
             },
-            // The target: today's number of active entities, flat across the chart.
+            // The other statuses as plain lines, in the pie's colours for the same statuses.
+            CreateStatusLine("In progress", ProgressStatusCategory.InProgress,
+                report.ImplementedOverTime.Select(static point => point.InProgressCount), theme),
+            CreateStatusLine("Not started", ProgressStatusCategory.NotStarted,
+                report.ImplementedOverTime.Select(static point => point.NotStartedCount), theme),
+            CreateStatusLine("Blocked", ProgressStatusCategory.Blocked,
+                report.ImplementedOverTime.Select(static point => point.BlockedCount), theme),
+            // The target: today's number of active entities, flat across the chart. Dashed, so it
+            // stays apart from the orange Blocked line.
             new LineSeries<int>
             {
                 Name = "Active entities",
                 Values = report.ImplementedOverTime
                     .Select(_ => report.ManagerSummary.ActiveEntityCount)
                     .ToArray(),
-                Stroke = new SolidColorPaint(ProgressChartPalette.Target, 2),
+                Stroke = new SolidColorPaint(ProgressChartPalette.Target, 2)
+                {
+                    PathEffect = new DashEffect([6, 4])
+                },
                 Fill = null,
                 GeometrySize = 0,
                 GeometryStroke = null,
@@ -140,10 +152,24 @@ public sealed class ProgressChartPresentationBuilder
             new SolidColorPaint(ProgressChartPalette.TooltipBackgroundFor(theme)));
     }
 
+    private static LineSeries<int> CreateStatusLine(
+        string name,
+        ProgressStatusCategory status,
+        IEnumerable<int> values,
+        ProgressChartTheme theme) => new()
+    {
+        Name = name,
+        Values = values.ToArray(),
+        Stroke = new SolidColorPaint(ProgressChartPalette.From(ProgressChartPalette.Category(status, theme)), 2),
+        Fill = null,
+        GeometrySize = 3,
+        GeometryStroke = new SolidColorPaint(ProgressChartPalette.From(ProgressChartPalette.Category(status, theme)), 2)
+    };
+
     public static string GetTitle(ProgressChartKind kind) => kind switch
     {
         ProgressChartKind.CurrentStatus => "Entities by development status",
-        ProgressChartKind.ImplementedOverTime => "Implemented entities over time",
+        ProgressChartKind.ImplementedOverTime => "Progress over time",
         ProgressChartKind.ReadyAndBlockedOverTime => "Ready to start vs waiting on dependencies over time",
         ProgressChartKind.WeeklyNetImplementedChange => "Weekly implemented change",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
@@ -154,7 +180,7 @@ public sealed class ProgressChartPresentationBuilder
     {
         ProgressChartKind.CurrentStatus => "How many active entities have each development status now.",
         ProgressChartKind.ImplementedOverTime =>
-            "Implemented entities each day, against today's number of active entities.",
+            "Implemented, in progress, not started and blocked entities each day, against today's active total.",
         ProgressChartKind.ReadyAndBlockedOverTime =>
             "Each day, the entities ready to start and the ones still waiting on a dependency.",
         ProgressChartKind.WeeklyNetImplementedChange =>
@@ -165,7 +191,7 @@ public sealed class ProgressChartPresentationBuilder
     public static string GetFileNameSegment(ProgressChartKind kind) => kind switch
     {
         ProgressChartKind.CurrentStatus => "current-work-status",
-        ProgressChartKind.ImplementedOverTime => "implemented-over-time",
+        ProgressChartKind.ImplementedOverTime => "progress-over-time",
         ProgressChartKind.ReadyAndBlockedOverTime => "ready-vs-blocked",
         ProgressChartKind.WeeklyNetImplementedChange => "weekly-implemented-change",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
