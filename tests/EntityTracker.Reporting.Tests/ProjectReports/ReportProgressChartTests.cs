@@ -14,11 +14,30 @@ public sealed class ReportProgressChartTests
     {
         ReportChart chart = Chart(ProgressChartKind.ImplementedOverTime);
 
-        Assert.Equal(["Implemented", "Active entities"], chart.Series.Select(series => series.Name));
-        ReportSeries target = chart.Series[1];
+        Assert.Equal(["Implemented", "In progress", "Not started", "Blocked", "Active entities"],
+            chart.Series.Select(series => series.Name));
+        ReportSeries target = chart.Series[^1];
         Assert.Equal(ColorScheme.Chart.Target, target.Color);
         Assert.Equal([12d, 12d, 12d], target.Values);
+        Assert.True(target.Dashed);
+        Assert.DoesNotContain(chart.Series.SkipLast(1), series => series.Dashed);
     }
+
+    [Fact]
+    public void TheProgressChartDrawsTheOtherStatusesInThePiesColours()
+    {
+        ReportChart chart = Chart(ProgressChartKind.ImplementedOverTime);
+
+        Assert.Equal([ColorScheme.Chart.Categories[2], ColorScheme.Chart.Categories[0], ColorScheme.Chart.Categories[1]],
+            chart.Series.Skip(1).Take(3).Select(series => series.Color));
+        Assert.Equal([2d, 3d, 1d], chart.Series[1].Values);
+        Assert.Equal([6d, 5d, 4d], chart.Series[2].Values);
+        Assert.Equal([1d, 1d, 0d], chart.Series[3].Values);
+    }
+
+    [Fact]
+    public void TheReportScriptKeepsADashedLineDashed() =>
+        Assert.Contains("if (series.dashed)", ProjectReportHtmlWriter.Asset("report.js"), StringComparison.Ordinal);
 
     [Fact]
     public void TheWeeklyChartHasAnIncreaseAndADecreaseBarEachWeek()
@@ -70,7 +89,7 @@ public sealed class ReportProgressChartTests
                 new ProgressStatusCount(ProgressStatusCategory.NotStarted, 7),
                 new ProgressStatusCount(ProgressStatusCategory.DevelopmentCompleted, 5)
             ],
-            [new(Monday, 3), new(Monday.AddDays(1), 4), new(Monday.AddDays(7), 5)],
+            [new(Monday, 3, 2, 6, 1), new(Monday.AddDays(1), 4, 3, 5, 1), new(Monday.AddDays(7), 5, 1, 4, 0)],
             [],
             [new(Monday, 3, 2), new(Monday.AddDays(7), 1, 0)],
             Monday,

@@ -78,7 +78,10 @@ the page, and the badge text carries the status.
 The development status pie is the exception: as a chart it uses a standard categorical palette
 (`Chart.Categories`, with `DarkChart.Categories` stepped for the dark card) instead of the status colours,
 which are too alike to compare as slices. The slices have no borders, and the legend names each status.
-The implemented chart's target line (today's active entities) is Coral (`Chart.Target`); the weekly chart's
+The Progress over time chart draws implemented entities as a teal area (`Chart.Implemented`) and In progress,
+Not started and Blocked as thin lines in the pie's colours for those statuses, so a status keeps its colour
+across the charts. Its target line (today's active entities) is Coral (`Chart.Target`) and dashed, so it
+stays apart from the orange Blocked line; the weekly chart's
 increase and decrease bars are `Chart.Increase` and `Chart.Decrease`, side by side. Every chart title shows
 a short description when pointed at (`ProgressChartPresentationBuilder.GetDescription`).
 

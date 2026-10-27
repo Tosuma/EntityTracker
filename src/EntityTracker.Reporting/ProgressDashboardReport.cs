@@ -2,7 +2,12 @@ namespace EntityTracker.Reporting;
 
 public sealed record ProgressStatusCount(ProgressStatusCategory Status, int Count);
 
-public sealed record ImplementedProgressPoint(DateOnly Date, int ImplementedCount);
+/// <summary>
+/// A day's counts for the Progress over time chart: implemented entities and, next to them, the ones in
+/// progress, not started (ready or waiting on dependencies) and blocked.
+/// </summary>
+public sealed record ImplementedProgressPoint(
+    DateOnly Date, int ImplementedCount, int InProgressCount = 0, int NotStartedCount = 0, int BlockedCount = 0);
 
 public sealed record ReadinessProgressPoint(DateOnly Date, int ReadyCount, int BlockedCount);
 

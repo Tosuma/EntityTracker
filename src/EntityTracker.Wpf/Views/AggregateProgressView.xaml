@@ -176,10 +176,10 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
                     <TextBlock Margin="0,0,0,8" FontSize="16" FontWeight="SemiBold"
-                               Text="Implemented entities over time"
-                               ToolTip="Implemented entities each day, against today's number of active entities." AutomationProperties.HelpText="Implemented entities each day, against today's number of active entities." />
+                               Text="Progress over time"
+                               ToolTip="Implemented, in progress, not started and blocked entities each day, against today's active total." AutomationProperties.HelpText="Implemented, in progress, not started and blocked entities each day, against today's active total." />
                     <Border Grid.Row="1" Background="{DynamicResource Brush.Surface.Card}">
-                        <lvc:CartesianChart Background="Transparent" LegendTextPaint="{Binding Presentation.LegendTextPaint}" TooltipTextPaint="{Binding Presentation.TooltipTextPaint}" TooltipBackgroundPaint="{Binding Presentation.TooltipBackgroundPaint}" AutomationProperties.Name="Aggregate implemented entities over time chart"
+                        <lvc:CartesianChart Background="Transparent" LegendTextPaint="{Binding Presentation.LegendTextPaint}" TooltipTextPaint="{Binding Presentation.TooltipTextPaint}" TooltipBackgroundPaint="{Binding Presentation.TooltipBackgroundPaint}" AutomationProperties.Name="Aggregate progress over time chart"
                                             LegendPosition="Top"
                                             Series="{Binding ImplementedSeries}"
                                             TooltipPosition="Top"

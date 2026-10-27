@@ -5,6 +5,7 @@ using LiveChartsCore.Measure;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Drawing.Geometries;
 using LiveChartsCore.SkiaSharpView.Painting;
+using LiveChartsCore.SkiaSharpView.Painting.Effects;
 
 using EntityTracker.Theme;
 
@@ -108,7 +109,37 @@ public sealed class ProgressChartPresentationBuilderTests
         Assert.Equal(
             SKColor.Parse(ColorScheme.Chart.Target),
             Assert.IsType<SolidColorPaint>(
-                Assert.IsType<LineSeries<int>>(presentation.ImplementedSeries[1]).Stroke).Color);
+                Assert.IsType<LineSeries<int>>(presentation.ImplementedSeries[^1]).Stroke).Color);
+    }
+
+    [Theory]
+    [InlineData(ProgressChartTheme.Light)]
+    [InlineData(ProgressChartTheme.Dark)]
+    public void Build_DrawsInProgressNotStartedAndBlockedInThePiesColoursWithADashedTarget(ProgressChartTheme theme)
+    {
+        DateOnly monday = new(2026, 8, 3);
+        ProgressDashboardReport report = CreateReport(notStarted: 3, inProgress: 2, rework: 1, completed: 2, reconciled: 2) with
+        {
+            ImplementedOverTime = [new(monday, 2, 3, 6, 1), new(monday.AddDays(1), 4, 2, 5, 0)]
+        };
+
+        ProgressChartPresentation presentation = _builder.Build(report, theme);
+
+        LineSeries<int>[] lines = presentation.ImplementedSeries.Select(Assert.IsType<LineSeries<int>>).ToArray();
+        Assert.Equal(["Implemented", "In progress", "Not started", "Blocked", "Active entities"],
+            lines.Select(line => line.Name));
+        IReadOnlyList<string> categories = theme == ProgressChartTheme.Dark
+            ? ColorScheme.DarkChart.Categories
+            : ColorScheme.Chart.Categories;
+        Assert.Equal(
+            [SKColor.Parse(categories[2]), SKColor.Parse(categories[0]), SKColor.Parse(categories[1])],
+            lines[1..4].Select(line => Assert.IsType<SolidColorPaint>(line.Stroke).Color));
+        Assert.Equal([3, 2], Assert.IsAssignableFrom<IEnumerable<int>>(lines[1].Values));
+        Assert.Equal([6, 5], Assert.IsAssignableFrom<IEnumerable<int>>(lines[2].Values));
+        Assert.Equal([1, 0], Assert.IsAssignableFrom<IEnumerable<int>>(lines[3].Values));
+        Assert.All(lines[1..4], line => Assert.Null(line.Fill));
+        Assert.IsType<DashEffect>(Assert.IsType<SolidColorPaint>(lines[^1].Stroke).PathEffect);
+        Assert.Null(Assert.IsType<SolidColorPaint>(lines[0].Stroke).PathEffect);
     }
 
     [Fact]
@@ -123,7 +154,7 @@ public sealed class ProgressChartPresentationBuilderTests
 
         ProgressChartPresentation presentation = _builder.Build(report);
 
-        LineSeries<int> target = Assert.IsType<LineSeries<int>>(presentation.ImplementedSeries[1]);
+        LineSeries<int> target = Assert.IsType<LineSeries<int>>(presentation.ImplementedSeries[^1]);
         Assert.Equal("Active entities", target.Name);
         Assert.Equal([10, 10, 10], Assert.IsAssignableFrom<IEnumerable<int>>(target.Values));
         ColumnSeries<int> increase = Assert.IsType<ColumnSeries<int>>(presentation.WeeklySeries[0]);

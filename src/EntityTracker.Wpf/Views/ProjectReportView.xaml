@@ -168,8 +168,8 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Implemented entities over time"
-                               ToolTip="Implemented entities each day, against today's number of active entities." AutomationProperties.HelpText="Implemented entities each day, against today's number of active entities." />
+                                    <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Progress over time"
+                               ToolTip="Implemented, in progress, not started and blocked entities each day, against today's active total." AutomationProperties.HelpText="Implemented, in progress, not started and blocked entities each day, against today's active total." />
                                     <!-- Save image… and Copy image in one menu, so each chart header has one quiet button. -->
                                     <Button Grid.Column="2" Margin="8,0,0,0" Click="OnChartActionsClick"
                                             ToolTip="Save or copy this chart as an image"
@@ -187,7 +187,7 @@
                                     </Button>
                                 </Grid>
                                 <Border Grid.Row="1" Margin="0,8,0,0" Background="{DynamicResource Brush.Surface.Card}">
-                                    <lvc:CartesianChart Background="Transparent" LegendTextPaint="{Binding Charts.Presentation.LegendTextPaint}" TooltipTextPaint="{Binding Charts.Presentation.TooltipTextPaint}" TooltipBackgroundPaint="{Binding Charts.Presentation.TooltipBackgroundPaint}" AutomationProperties.Name="Implemented entities over time chart" LegendPosition="Top" TooltipPosition="Top"
+                                    <lvc:CartesianChart Background="Transparent" LegendTextPaint="{Binding Charts.Presentation.LegendTextPaint}" TooltipTextPaint="{Binding Charts.Presentation.TooltipTextPaint}" TooltipBackgroundPaint="{Binding Charts.Presentation.TooltipBackgroundPaint}" AutomationProperties.Name="Progress over time chart" LegendPosition="Top" TooltipPosition="Top"
                                                         Series="{Binding Charts.Presentation.ImplementedSeries}"
                                                         XAxes="{Binding Charts.Presentation.ImplementedXAxes}"
                                                         YAxes="{Binding Charts.Presentation.CountYAxes}" />

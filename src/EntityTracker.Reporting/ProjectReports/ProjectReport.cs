@@ -90,12 +90,16 @@ public sealed record ReportChart(IReadOnlyList<string> Labels, IReadOnlyList<Rep
     public bool HasData => Series.Any(series => series.Values.Count > 0 && series.Values.Any(value => value != 0));
 }
 
-/// <summary>A series; <see cref="PointColors"/> gives each slice its own colour in a donut.</summary>
+/// <summary>
+/// A series; <see cref="PointColors"/> gives each slice its own colour in a donut, and
+/// <see cref="Dashed"/> draws a line dashed (a target rather than a measurement).
+/// </summary>
 public sealed record ReportSeries(
     string Name,
     string Color,
     IReadOnlyList<double> Values,
-    IReadOnlyList<string>? PointColors = null);
+    IReadOnlyList<string>? PointColors = null,
+    bool Dashed = false);
 
 /// <summary>A searchable table; every cell is text, keyed by its column.</summary>
 public sealed record TableSection(
