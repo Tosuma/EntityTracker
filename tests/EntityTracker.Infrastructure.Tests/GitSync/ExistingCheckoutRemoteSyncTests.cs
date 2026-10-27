@@ -639,8 +639,8 @@ public sealed class ExistingCheckoutRemoteSyncTests
         Assert.Equal(
         [
             "Project “Remote update”, with its 2 developers",
-            "Tracker “Delivery” and everything in it: 3 entities, 2 dependencies, 3 status changes, 2 progress records",
-            "Tracker “Archive” and everything in it: 1 entity, 1 progress record"
+            "Tracker “Archive” and everything in it: 1 entity, 1 progress record",
+            "Tracker “Delivery” and everything in it: 3 entities, 2 dependencies, 3 status changes, 2 progress records"
         ], approval.Calls[1]);
         Assert.Equal($"{localHead} {remoteHead}", workspace.Git(publisherCheckout,
             "show", "-s", "--format=%P", "HEAD"));

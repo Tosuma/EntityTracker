@@ -876,7 +876,7 @@ public sealed partial class ProjectGitSyncService(
             .Select(d => $"Developer {Quote(string.IsNullOrWhiteSpace(d.DisplayName) ? d.Initials : d.DisplayName)}"));
         HashSet<Guid> trackerIds = current.Trackers.Select(t => t.Id).ToHashSet();
         // Both sides in the current format, so a format upgrade is not a deletion.
-        foreach (SnapshotTracker tracker in previous.Trackers.Select(ProjectSnapshotUpgrade.ToCurrentDependencies))
+        foreach (SnapshotTracker tracker in ByName(previous.Trackers).Select(ProjectSnapshotUpgrade.ToCurrentDependencies))
         {
             if (!trackerIds.Contains(tracker.Id))
             {
@@ -917,6 +917,10 @@ public sealed partial class ProjectGitSyncService(
         }
         return deleted;
     }
+
+    // The snapshot's Tracker order follows their IDs; a person reads the list by name.
+    private static IEnumerable<SnapshotTracker> ByName(IEnumerable<SnapshotTracker> trackers) =>
+        trackers.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase).ThenBy(t => t.Id);
 
     private static string TrackerDeletion(SnapshotTracker tracker)
     {
