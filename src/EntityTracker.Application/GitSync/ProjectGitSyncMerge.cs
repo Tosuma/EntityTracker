@@ -389,7 +389,7 @@ public sealed partial class ProjectGitSyncService
         string project = $"Project {Quote(snapshot.Project.Name)}";
         List<string> deleted = [developers == 0 ? project
             : $"{project}, with its {Counts((developers, "developer", "developers"))}"];
-        deleted.AddRange(snapshot.Trackers.Select(ProjectSnapshotUpgrade.ToCurrentDependencies)
+        deleted.AddRange(ByName(snapshot.Trackers).Select(ProjectSnapshotUpgrade.ToCurrentDependencies)
             .Select(TrackerDeletion));
         return deleted;
     }
