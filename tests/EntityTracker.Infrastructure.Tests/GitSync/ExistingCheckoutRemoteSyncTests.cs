@@ -378,9 +378,49 @@ public sealed class ExistingCheckoutRemoteSyncTests
         await sync.SyncNowAsync(projectId);
 
         IReadOnlyList<string> deletionSet = Assert.Single(approval.Calls);
-        Assert.Contains($"Tracker {removed.Id:D}", deletionSet);
-        Assert.Contains($"Entity {removed.Entities[0].Id:D}", deletionSet);
-        Assert.Contains($"Progress record {removed.ProgressHistory[0].SnapshotId:D}", deletionSet);
+        Assert.Equal(["Tracker “Archive” and everything in it: 1 entity, 1 progress record"], deletionSet);
+        Assert.DoesNotContain(deletionSet, line => line.Contains(removed.Id.ToString("D")));
+    }
+
+    [Fact]
+    public async Task DeletionApprovalNamesRemovedDevelopersEntitiesAndDependencies()
+    {
+        using GitWorkspace workspace = new();
+        Guid id = Guid.NewGuid();
+        string checkout = workspace.CreateLocalCheckout("project", Snapshot(id, "Project"));
+        await using TestCatalog catalog = await TestCatalog.CreateAsync(workspace, "catalog");
+        RecordingApproval approval = new();
+        ProjectGitSyncService sync = catalog.Sync(checkout, approval: approval);
+        await sync.ImportAsync(checkout);
+        ProjectId projectId = new(id);
+        ProjectSnapshotRead read = await catalog.Snapshots.ReadAsync(projectId);
+        SnapshotTracker delivery = read.Snapshot!.Trackers[0];
+        SnapshotEntity customers = delivery.Entities.Single(e => e.SourceName == "Customers");
+        SnapshotEntity orders = delivery.Entities.Single(e => e.SourceName == "Orders");
+        SnapshotTracker edited = delivery with
+        {
+            Entities = delivery.Entities.Where(e => e.Id != customers.Id)
+                .Select(e => e.Id == orders.Id
+                    ? e with { Dependencies = e.Dependencies.Where(d => d.DependencyEntityId != customers.Id).ToArray() }
+                    : e)
+                .ToArray(),
+            StatusHistory = delivery.StatusHistory.Where(e => e.EntityId != customers.Id)
+                .Select((e, order) => e with { Order = order }).ToArray()
+        };
+        await catalog.Snapshots.ApplyAsync(read.Snapshot with
+        {
+            Trackers = [edited, read.Snapshot.Trackers[1]],
+            Developers = read.Snapshot.Developers!.Where(d => d.Initials != "Grace").ToArray()
+        }, read.Revision);
+
+        await sync.SyncNowAsync(projectId);
+
+        Assert.Equal(
+        [
+            "Developer “Grace”",
+            "Entity “Customers” in Tracker “Delivery”, with its 1 status change",
+            "Dependency in Tracker “Delivery”: “Orders” depends on “Customers”"
+        ], Assert.Single(approval.Calls));
     }
 
     [Fact]
@@ -596,7 +636,12 @@ public sealed class ExistingCheckoutRemoteSyncTests
 
         Assert.Equal("Deleted", result.SyncStatus);
         Assert.Equal(2, approval.Calls.Count);
-        Assert.Contains($"Project {id:D}", approval.Calls[1]);
+        Assert.Equal(
+        [
+            "Project “Remote update”, with its 2 developers",
+            "Tracker “Delivery” and everything in it: 3 entities, 2 dependencies, 3 status changes, 2 progress records",
+            "Tracker “Archive” and everything in it: 1 entity, 1 progress record"
+        ], approval.Calls[1]);
         Assert.Equal($"{localHead} {remoteHead}", workspace.Git(publisherCheckout,
             "show", "-s", "--format=%P", "HEAD"));
         Assert.Null(await sync.GetLinkAsync(projectId));

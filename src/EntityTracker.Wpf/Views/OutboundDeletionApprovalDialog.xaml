@@ -16,10 +16,10 @@
         <TextBlock FontSize="22" FontWeight="SemiBold" Text="Approve repository deletion"
                    AutomationProperties.HeadingLevel="Level1" />
         <TextBlock Grid.Row="1" Margin="0,10,0,14"
-                   Text="Sync will permanently remove these objects from the repository snapshot. Approve this exact deletion set?"
+                   Text="These items were deleted on this computer since the Project last synced. Sync will remove them from the shared repository too, so everyone who syncs this Project loses them. Approve to sync these deletions, or cancel to sync nothing now."
                    TextWrapping="Wrap" />
         <ListBox Grid.Row="2" ItemsSource="{Binding DeletedObjects}" IsTabStop="False"
-                 AutomationProperties.Name="Objects to delete">
+                 AutomationProperties.Name="Items to delete from the repository">
             <ListBox.ItemTemplate>
                 <DataTemplate>
                     <TextBlock Padding="4" Text="{Binding}" TextWrapping="Wrap" />
@@ -30,7 +30,7 @@
             <!-- Enter must never approve an irreversible deletion: Cancel is the default and starts focused. -->
             <Button Margin="0,0,8,0" Content="Approve deletion" MinWidth="135"
                     Click="OnApprove" Style="{StaticResource DangerButtonStyle}"
-                    AutomationProperties.HelpText="Permanently remove these objects from the repository snapshot" />
+                    AutomationProperties.HelpText="Remove these items from the shared repository" />
             <Button x:Name="CancelButton" Content="Cancel" IsCancel="True" IsDefault="True" MinWidth="100" />
         </StackPanel>
     </Grid>
