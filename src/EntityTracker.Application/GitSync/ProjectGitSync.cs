@@ -863,50 +863,74 @@ public sealed partial class ProjectGitSyncService(
     private static bool PackagesEqual(IReadOnlyDictionary<string, byte[]> a, IReadOnlyDictionary<string, byte[]> b) =>
         a.Count == b.Count && a.All(pair => b.TryGetValue(pair.Key, out byte[]? bytes) && pair.Value.AsSpan().SequenceEqual(bytes));
 
+    /// <summary>
+    /// Describes, by name, what the repository loses when sync writes <paramref name="current"/> over
+    /// <paramref name="previous"/>: one line per removed developer, Tracker, entity or dependency, with
+    /// the history that goes with it counted rather than listed.
+    /// </summary>
     private static IReadOnlyList<string> FindDeletions(ProjectSnapshot previous, ProjectSnapshot current)
     {
         List<string> deleted = [];
-        deleted.AddRange((previous.Developers ?? []).Select(d => d.Id)
-            .Except((current.Developers ?? []).Select(d => d.Id))
-            .Select(id => $"Developer {id:D}"));
+        HashSet<Guid> developerIds = (current.Developers ?? []).Select(d => d.Id).ToHashSet();
+        deleted.AddRange((previous.Developers ?? []).Where(d => !developerIds.Contains(d.Id))
+            .Select(d => $"Developer {Quote(string.IsNullOrWhiteSpace(d.DisplayName) ? d.Initials : d.DisplayName)}"));
         HashSet<Guid> trackerIds = current.Trackers.Select(t => t.Id).ToHashSet();
         // Both sides in the current format, so a format upgrade is not a deletion.
         foreach (SnapshotTracker tracker in previous.Trackers.Select(ProjectSnapshotUpgrade.ToCurrentDependencies))
         {
             if (!trackerIds.Contains(tracker.Id))
             {
-                deleted.Add($"Tracker {tracker.Id:D}");
-                deleted.AddRange(tracker.Entities.Select(e => $"Entity {e.Id:D}"));
-                deleted.AddRange(tracker.StatusHistory.Select(e => $"Status event {e.EventId:D}"));
-                deleted.AddRange(tracker.ProgressHistory.Select(e => $"Progress record {e.SnapshotId:D}"));
-                deleted.AddRange(tracker.Entities.SelectMany(RelationshipDeletions));
+                deleted.Add(TrackerDeletion(tracker));
                 continue;
             }
+            string trackerName = $"Tracker {Quote(tracker.Name)}";
             SnapshotTracker next = ProjectSnapshotUpgrade.ToCurrentDependencies(
                 current.Trackers.Single(t => t.Id == tracker.Id));
-            foreach (SnapshotEntity removed in tracker.Entities.Where(e =>
-                         next.Entities.All(n => n.Id != e.Id)))
+            Dictionary<Guid, string> names = tracker.Entities.ToDictionary(e => e.Id, e => e.SourceName);
+            HashSet<Guid> remainingEntities = next.Entities.Select(e => e.Id).ToHashSet();
+            HashSet<Guid> remainingEvents = next.StatusHistory.Select(e => e.EventId).ToHashSet();
+            List<SnapshotStatusEvent> removedEvents = tracker.StatusHistory
+                .Where(e => !remainingEvents.Contains(e.EventId)).ToList();
+            foreach (SnapshotEntity removed in tracker.Entities.Where(e => !remainingEntities.Contains(e.Id)))
             {
-                deleted.Add($"Entity {removed.Id:D}");
-                deleted.AddRange(RelationshipDeletions(removed));
+                string owned = Counts(
+                    (removed.Dependencies.Count, "dependency", "dependencies"),
+                    (removedEvents.Count(e => e.EntityId == removed.Id), "status change", "status changes"));
+                deleted.Add($"Entity {Quote(removed.SourceName)} in {trackerName}" +
+                            (owned.Length == 0 ? "" : $", with its {owned}"));
             }
-            deleted.AddRange(tracker.StatusHistory.Select(e => e.EventId).Except(next.StatusHistory.Select(e => e.EventId)).Select(id => $"Status event {id:D}"));
-            deleted.AddRange(tracker.ProgressHistory.Select(e => e.SnapshotId).Except(next.ProgressHistory.Select(e => e.SnapshotId)).Select(id => $"Progress record {id:D}"));
             foreach (SnapshotEntity entity in tracker.Entities)
             {
                 SnapshotEntity? updated = next.Entities.SingleOrDefault(e => e.Id == entity.Id);
                 if (updated is null) continue;
                 deleted.AddRange(entity.Dependencies
                     .Where(d => updated.Dependencies.All(n => n.DependencyEntityId != d.DependencyEntityId))
-                    .Select(d => DependencyDeletion(entity, d)));
+                    .Select(d => $"Dependency in {trackerName}: {Quote(entity.SourceName)} depends on " +
+                                 (names.TryGetValue(d.DependencyEntityId, out string? name) ? Quote(name) : "an unknown entity")));
             }
+            string history = Counts(
+                (removedEvents.Count(e => remainingEntities.Contains(e.EntityId) || !names.ContainsKey(e.EntityId)),
+                    "status change", "status changes"),
+                (tracker.ProgressHistory.Select(e => e.SnapshotId)
+                    .Except(next.ProgressHistory.Select(e => e.SnapshotId)).Count(), "progress record", "progress records"));
+            if (history.Length > 0) deleted.Add($"History in {trackerName}: {history}");
         }
-        return deleted.Order(StringComparer.Ordinal).ToArray();
+        return deleted;
     }
 
-    private static IEnumerable<string> RelationshipDeletions(SnapshotEntity entity) =>
-        entity.Dependencies.Select(d => DependencyDeletion(entity, d));
+    private static string TrackerDeletion(SnapshotTracker tracker)
+    {
+        string contents = Counts(
+            (tracker.Entities.Count, "entity", "entities"),
+            (tracker.Entities.Sum(e => e.Dependencies.Count), "dependency", "dependencies"),
+            (tracker.StatusHistory.Count, "status change", "status changes"),
+            (tracker.ProgressHistory.Count, "progress record", "progress records"));
+        string name = $"Tracker {Quote(tracker.Name)}";
+        return contents.Length == 0 ? name : $"{name} and everything in it: {contents}";
+    }
 
-    private static string DependencyDeletion(SnapshotEntity entity, SnapshotDependency dependency) =>
-        $"Dependency {entity.Id:D} → {dependency.DependencyEntityId:D}";
+    private static string Quote(string name) => $"“{name}”";
+
+    private static string Counts(params (int Count, string One, string Many)[] parts) =>
+        string.Join(", ", parts.Where(p => p.Count > 0).Select(p => $"{p.Count} {(p.Count == 1 ? p.One : p.Many)}"));
 }
