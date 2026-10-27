@@ -385,18 +385,13 @@ public sealed partial class ProjectGitSyncService
 
     private static IReadOnlyList<string> FullDeletionSet(ProjectSnapshot snapshot)
     {
-        List<string> deleted = [$"Project {snapshot.Project.Id:D}"];
-        deleted.AddRange((snapshot.Developers ?? []).Select(d => $"Developer {d.Id:D}"));
-        foreach (SnapshotTracker tracker in snapshot.Trackers.Select(ProjectSnapshotUpgrade.ToCurrentDependencies))
-        {
-            deleted.Add($"Tracker {tracker.Id:D}");
-            deleted.AddRange(tracker.Entities.Select(e => $"Entity {e.Id:D}"));
-            deleted.AddRange(tracker.StatusHistory.Select(e => $"Status event {e.EventId:D}"));
-            deleted.AddRange(tracker.ProgressHistory.Select(e => $"Progress record {e.SnapshotId:D}"));
-            foreach (SnapshotEntity entity in tracker.Entities)
-                deleted.AddRange(RelationshipDeletions(entity));
-        }
-        return deleted.Order(StringComparer.Ordinal).ToArray();
+        int developers = (snapshot.Developers ?? []).Count;
+        string project = $"Project {Quote(snapshot.Project.Name)}";
+        List<string> deleted = [developers == 0 ? project
+            : $"{project}, with its {Counts((developers, "developer", "developers"))}"];
+        deleted.AddRange(ByName(snapshot.Trackers).Select(ProjectSnapshotUpgrade.ToCurrentDependencies)
+            .Select(TrackerDeletion));
+        return deleted;
     }
 
     private static ProjectSnapshot AppendMergedProgress(ProjectSnapshot snapshot,
