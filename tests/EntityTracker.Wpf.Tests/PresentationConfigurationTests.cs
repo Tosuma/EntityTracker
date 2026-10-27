@@ -1242,9 +1242,10 @@ public sealed class PresentationConfigurationTests
 
         // The dependency rank only breaks ties in the order; its number is not shown.
         Assert.Equal(9, configuredColumns.Length);
-        Assert.Equal("Priority", (string?)configuredColumns[0].Attribute("Header"));
-        Assert.Equal("Due", (string?)configuredColumns[1].Attribute("Header"));
-        Assert.Equal("{Binding Due}", (string?)configuredColumns[1].Attribute("Binding"));
+        // The Overview orders by due date before priority, so Due comes first.
+        Assert.Equal("Due", (string?)configuredColumns[0].Attribute("Header"));
+        Assert.Equal("{Binding Due}", (string?)configuredColumns[0].Attribute("Binding"));
+        Assert.Equal("Priority", (string?)configuredColumns[1].Attribute("Header"));
         Assert.Equal("Entity", (string?)configuredColumns[2].Attribute("Header"));
         Assert.Contains(configuredColumns[7].Descendants(), element =>
             (string?)element.Attribute("Text") == "Blockers");
