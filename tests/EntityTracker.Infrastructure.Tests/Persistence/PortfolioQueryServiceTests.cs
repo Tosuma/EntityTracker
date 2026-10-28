@@ -89,7 +89,7 @@ public sealed class PortfolioQueryServiceTests
     }
 
     [Fact]
-    public async Task ProjectComparison_NormalizesKeysAndDefaultsToActionableRows()
+    public async Task ProjectComparison_NormalizesKeysDefaultsToEveryRowAndAddsUpCategories()
     {
         await using TemporarySqliteFile file = new();
         SqliteDatabase database = new(file.DatabasePath);
@@ -143,36 +143,40 @@ public sealed class PortfolioQueryServiceTests
             new PriorityPlanningService());
         ProjectEntityComparisonQueryService query = new(projects, trackers, overview);
 
-        ProjectEntityComparison actionable = Assert.IsType<ProjectEntityComparison>(
-            await query.GetAsync(project.Id));
         ProjectEntityComparison all = Assert.IsType<ProjectEntityComparison>(
-            await query.GetAsync(project.Id, ProjectComparisonFilter.All));
+            await query.GetAsync(project.Id));
         ProjectEntityComparison missing = Assert.IsType<ProjectEntityComparison>(
+            await query.GetAsync(project.Id, ProjectComparisonCategory.Missing));
+        // Chosen categories add up: a row in either.
+        ProjectEntityComparison missingOrUnresolved = Assert.IsType<ProjectEntityComparison>(
             await query.GetAsync(
                 project.Id,
-                ProjectComparisonFilter.ActionableDifferences,
-                ProjectComparisonCategory.Missing));
+                ProjectComparisonCategory.Missing | ProjectComparisonCategory.Unresolved));
 
-        Assert.Equal(["Alpha", "Zulu"], actionable.Trackers.Select(static item => item.Name));
+        Assert.Equal(["Alpha", "Zulu"], all.Trackers.Select(static item => item.Name));
         Assert.Equal(5, all.TotalEntityCount);
-        Assert.Equal(4, actionable.ActionableEntityCount);
         Assert.Equal(
-            ["ALPHA ONLY", "ATTENTION", "CUSTOMER", "ZULU ONLY"],
-            actionable.Rows.Select(static row => row.NormalizedSourceKey));
-        Assert.Equal(2, actionable.CategoryCounts.Missing);
-        Assert.Equal(1, actionable.CategoryCounts.Divergent);
-        Assert.Equal(1, actionable.CategoryCounts.Unresolved);
+            ["ALPHA ONLY", "ATTENTION", "CUSTOMER", "STABLE", "ZULU ONLY"],
+            all.Rows.Select(static row => row.NormalizedSourceKey));
+        Assert.Equal(2, all.CategoryCounts.Missing);
+        Assert.Equal(1, all.CategoryCounts.Divergent);
+        Assert.Equal(1, all.CategoryCounts.Unresolved);
+        Assert.Equal(all.CategoryCounts, missing.CategoryCounts);
         Assert.Equal(["ALPHA ONLY", "ZULU ONLY"],
             missing.Rows.Select(static row => row.NormalizedSourceKey));
+        Assert.Equal(["ALPHA ONLY", "ATTENTION", "ZULU ONLY"],
+            missingOrUnresolved.Rows.Select(static row => row.NormalizedSourceKey));
         Assert.DoesNotContain(all.Rows, static row => row.NormalizedSourceKey == "ARCHIVED ONLY");
-        ProjectComparisonRow alphaOnlyRow = actionable.Rows[0];
+        ProjectComparisonRow alphaOnlyRow = all.Rows[0];
         Assert.True(alphaOnlyRow.Cells[0].IsPresent);
         Assert.False(alphaOnlyRow.Cells[1].IsPresent);
-        Assert.True(actionable.Rows[1].Cells[0].HasIssues);
-        Assert.False(actionable.Rows[1].Cells[1].HasIssues);
-        Assert.True(all.Rows.Single(static row => row.NormalizedSourceKey == "CUSTOMER").IsActionable);
+        Assert.True(all.Rows[1].Cells[0].HasIssues);
+        Assert.False(all.Rows[1].Cells[1].HasIssues);
+        Assert.Equal(
+            ProjectComparisonCategory.Divergent,
+            all.Rows.Single(static row => row.NormalizedSourceKey == "CUSTOMER").Categories);
         ProjectComparisonRow stableRow = all.Rows.Single(static row => row.NormalizedSourceKey == "STABLE");
-        Assert.False(stableRow.IsActionable);
+        Assert.Equal(ProjectComparisonCategory.None, stableRow.Categories);
         Assert.True(stableRow.Cells[0].IsPresent);
         Assert.Equal(DevelopmentStatus.NotRelevant, stableRow.Cells[0].DevelopmentStatus);
     }

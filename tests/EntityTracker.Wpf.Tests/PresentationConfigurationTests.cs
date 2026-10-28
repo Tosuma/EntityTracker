@@ -413,7 +413,7 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
-    public void Theme_IsSplitIntoPaletteIconsTypographyAndComponentsWithOnlyDangerButtonTemplate()
+    public void Theme_IsSplitIntoPaletteIconsTypographyAndComponentsWithOnlyDangerButtonAndSummaryCardTemplates()
     {
         XDocument theme = LoadWpfXaml("Themes", "EntityTrackerTheme.xaml");
         string[] sources = theme
@@ -432,13 +432,17 @@ public sealed class PresentationConfigurationTests
         ],
             sources);
 
+        // Only the danger button and the summary filter card (shared by the Overview and the Entity
+        // comparison) replace a Fluent template.
         XDocument components = LoadWpfXaml("Themes", "EntityTrackerComponents.xaml");
-        XElement template = Assert.Single(components.Descendants(),
-            element => element.Name.LocalName == "ControlTemplate");
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
-        Assert.Equal("DangerButtonStyle",
-            (string?)template.Ancestors().First(element => element.Name.LocalName == "Style")
-                .Attribute(x + "Key"));
+        string[] templatedStyles = components.Descendants()
+            .Where(static element => element.Name.LocalName == "ControlTemplate")
+            .Select(element => (string?)element.Ancestors().Last(static ancestor => ancestor.Name.LocalName == "Style")
+                .Attribute(x + "Key") ?? string.Empty)
+            .Distinct()
+            .ToArray();
+        Assert.Equal(["SummaryFilterButtonStyle", "DangerButtonStyle"], templatedStyles);
     }
 
     [Fact]
@@ -886,7 +890,7 @@ public sealed class PresentationConfigurationTests
     [Fact]
     public void TrackerWorkspace_SummaryFilterButtonsUseThemeAwarePrimaryText()
     {
-        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XDocument document = LoadWpfXaml("Themes", "EntityTrackerComponents.xaml");
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
 
         XElement style = Assert.Single(document.Descendants(), element =>
@@ -987,7 +991,7 @@ public sealed class PresentationConfigurationTests
     {
         XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
-        XElement style = Assert.Single(document.Descendants(), element =>
+        XElement style = Assert.Single(LoadWpfXaml("Themes", "EntityTrackerComponents.xaml").Descendants(), element =>
             element.Name.LocalName == "Style" &&
             (string?)element.Attribute(x + "Key") == "SummaryFilterButtonStyle");
         string? Setter(XElement owner, string property) => (string?)owner.Elements()
@@ -1438,32 +1442,52 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
-    public void ProjectComparison_DisabledFilterCardsRetainSurfaceWithMildFade()
+    public void ProjectComparison_FilterCardsLookLikeTheOverviewSummaryCards()
     {
+        // The comparison's cards share the Overview's summary card style: a coloured edge (the status colour
+        // where a category is one, otherwise a neutral Green 60), and one selected look. Total comes first,
+        // with no edge, and clears the cards, so there is no Show all check box or Clear filter button.
         XDocument document = LoadWpfXaml("Views", "ProjectDashboardView.xaml");
-        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
-        XElement style = Assert.Single(document.Descendants(), element =>
-            element.Name.LocalName == "Style" &&
-            (string?)element.Attribute(x + "Key") == "ComparisonFilterButtonStyle");
-        XElement disabledTrigger = Assert.Single(style.Descendants(), element =>
-            element.Name.LocalName == "Trigger" &&
-            (string?)element.Attribute("Property") == "IsEnabled" &&
-            (string?)element.Attribute("Value") == "False");
-        XElement[] setters = disabledTrigger.Elements()
-            .Where(static element => element.Name.LocalName == "Setter")
+        string? Setter(XElement owner, string property) => (string?)owner.Elements()
+            .SingleOrDefault(element => element.Name.LocalName == "Setter" &&
+                (string?)element.Attribute("Property") == property)?.Attribute("Value");
+        XElement panel = document.Descendants()
+            .Where(static element => element.Name.LocalName == "WrapPanel")
+            .Single(static element => element.Descendants().Any(static descendant =>
+                (string?)descendant.Attribute("Command") == "{Binding ProjectReporting.SelectCategoryCommand}"));
+        XElement[] cards = panel.Elements()
+            .Where(static element => element.Name.LocalName == "Button" &&
+                element.Descendants().Any(static descendant =>
+                    (string?)descendant.Attribute("BasedOn") == "{StaticResource SummaryFilterButtonStyle}"))
             .ToArray();
 
-        Assert.Contains(setters, setter =>
-            (string?)setter.Attribute("TargetName") == "Card" &&
-            (string?)setter.Attribute("Property") == "Background" &&
-            (string?)setter.Attribute("Value") == "{DynamicResource Brush.Surface.Card}");
-        Assert.Contains(setters, setter =>
-            (string?)setter.Attribute("TargetName") == "Card" &&
-            (string?)setter.Attribute("Property") == "Opacity" &&
-            (string?)setter.Attribute("Value") == "0.72");
-        Assert.Contains(setters, setter =>
-            (string?)setter.Attribute("Property") == "Cursor" &&
-            (string?)setter.Attribute("Value") == "Arrow");
+        Assert.Equal(
+            ["Total", "Missing", "Divergent", "Blocked", "Waiting on dependencies", "Rework", "Unresolved"],
+            cards.Select(static card => (string?)card.Descendants().First(static element =>
+                element.Name.LocalName == "TextBlock").Attribute("Text")));
+        Assert.Equal(
+            [
+                null,
+                "{DynamicResource Brush.Brand.Green60}",
+                "{DynamicResource Brush.Brand.Green60}",
+                "{DynamicResource Brush.Status.Blocked}",
+                "{DynamicResource Brush.WorkStatus.WaitingOnDependencies}",
+                "{DynamicResource Brush.Status.ReworkNeeded}",
+                "{DynamicResource Brush.Brand.Green60}",
+            ],
+            cards.Select(static card => (string?)card.Attribute("Tag")));
+        Assert.Equal("{Binding ProjectReporting.ClearCategoryCommand}", (string?)cards[0].Attribute("Command"));
+        Assert.All(cards, card =>
+        {
+            XElement selected = Assert.Single(card.Descendants(), element => element.Name.LocalName == "DataTrigger");
+            Assert.Equal("{DynamicResource Brush.Surface.Selected}", Setter(selected, "Background"));
+            Assert.Equal("{DynamicResource Brush.Border.Medium}", Setter(selected, "BorderBrush"));
+            Assert.StartsWith("{Binding ProjectReporting.", (string?)card.Attribute("AutomationProperties.ItemStatus"), StringComparison.Ordinal);
+        });
+        Assert.DoesNotContain(panel.Elements(), static element => element.Name.LocalName == "ToggleButton");
+        Assert.DoesNotContain(document.Descendants(), static element => element.Name.LocalName == "CheckBox");
+        Assert.Single(document.Descendants(), static element =>
+            (string?)element.Attribute("Command") == "{Binding ProjectReporting.ClearCategoryCommand}");
     }
 
     [Fact]

@@ -683,7 +683,7 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
             ProjectComparisonCategory.Missing));
         shell.ProjectReporting.SelectCategoryCommand.Execute(ProjectComparisonCategory.Missing);
         await WaitUntilAsync(() =>
-            shell.ProjectReporting.SelectedCategory == ProjectComparisonCategory.Missing &&
+            shell.ProjectReporting.SelectedCategories == ProjectComparisonCategory.Missing &&
             shell.ProjectReporting.Comparison?.Rows.Count == 2);
         Assert.All(
             shell.ProjectReporting.Comparison!.Rows,
@@ -691,8 +691,8 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
                 (row.Categories & ProjectComparisonCategory.Missing) != 0));
         shell.ProjectReporting.SelectCategoryCommand.Execute(ProjectComparisonCategory.Missing);
         await WaitUntilAsync(() =>
-            shell.ProjectReporting.SelectedCategory == ProjectComparisonCategory.None &&
-            shell.ProjectReporting.Comparison?.SelectedCategory == ProjectComparisonCategory.None);
+            shell.ProjectReporting.SelectedCategories == ProjectComparisonCategory.None &&
+            shell.ProjectReporting.Comparison?.SelectedCategories == ProjectComparisonCategory.None);
         ProjectComparisonCell cell = shell.ProjectReporting!.Comparison!.Rows
             .Single(static row => row.DisplayName == "Second only")
             .Cells.Single(candidate => candidate.TrackerId == second.Id);
@@ -709,6 +709,59 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         Assert.Equal(ShellDestination.Overview, shell.SelectedDestination);
         Assert.True(shell.CurrentWorkspace?.IsEntityDetailsOpen);
         Assert.Equal(cell.EntityId, shell.CurrentWorkspace?.SelectedEntityDetails?.EntityId);
+    }
+
+    [Fact]
+    public async Task ComparisonCards_OpenOnEveryEntityAddCategoriesAndTotalClearsThem()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        Tracker second = await harness.TrackerManagement.CreateBlankAsync(
+            harness.DefaultProject.Id,
+            "Second tracker");
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "shared");
+        await harness.AddEntityAsync(second.Id, "shared");
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "first_only");
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "blocked", status: DevelopmentStatus.Blocked);
+        await harness.AddEntityAsync(second.Id, "blocked");
+        using ShellViewModel shell = harness.CreateShell(
+            new EntityTrackerSettings(
+                lastProjectId: harness.DefaultProject.Id,
+                lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        Assert.True(await shell.NavigateAsync(ShellDestination.ProjectDashboard));
+        ProjectDashboardViewModel reporting = shell.ProjectReporting!;
+
+        // Like the Overview, it opens on every entity, with Total chosen.
+        await WaitUntilAsync(() => reporting.Comparison?.Rows.Count == 3 && reporting.BlockedCount == 1);
+        Assert.True(reporting.IsTotalSelected);
+        Assert.Equal(3, reporting.TotalEntityCount);
+        Assert.Equal(1, reporting.MissingCount);
+
+        // Cards add up: Missing, then Blocked, shows the entities in either.
+        reporting.SelectCategoryCommand.Execute(ProjectComparisonCategory.Missing);
+        await WaitUntilAsync(() => reporting.Comparison?.SelectedCategories == ProjectComparisonCategory.Missing);
+        reporting.SelectCategoryCommand.Execute(ProjectComparisonCategory.Blocked);
+        await WaitUntilAsync(() =>
+            reporting.Comparison?.SelectedCategories ==
+                (ProjectComparisonCategory.Missing | ProjectComparisonCategory.Blocked));
+        Assert.Equal(["blocked", "first_only"], reporting.Comparison!.Rows.Select(static row => row.DisplayName));
+        Assert.True(reporting.IsMissingSelected);
+        Assert.True(reporting.IsBlockedSelected);
+        Assert.False(reporting.IsTotalSelected);
+
+        // Choosing a card again takes its entities away.
+        reporting.SelectCategoryCommand.Execute(ProjectComparisonCategory.Missing);
+        await WaitUntilAsync(() => reporting.Comparison?.SelectedCategories == ProjectComparisonCategory.Blocked);
+        Assert.Equal("blocked", Assert.Single(reporting.Comparison!.Rows).DisplayName);
+
+        // Total clears every card.
+        reporting.ClearCategoryCommand.Execute(null);
+        await WaitUntilAsync(() =>
+            reporting.Comparison?.SelectedCategories == ProjectComparisonCategory.None &&
+            reporting.Comparison.Rows.Count == 3);
+        Assert.True(reporting.IsTotalSelected);
+        Assert.Equal("Showing all 3 entities", reporting.ComparisonSummary);
     }
 
     [Fact]
@@ -1653,11 +1706,11 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         }
 
         public Task AddEntityAsync(TrackerId trackerId, string name, string notes = "", string filterActive = "",
-            string sharedNotes = "") =>
+            string sharedNotes = "", DevelopmentStatus status = DevelopmentStatus.NotStarted) =>
             _stateStore.ApplyAsync(
                 trackerId,
                 new TrackedStateChangeSet(
-                    [new TrackedEntity(EntityId.New(), trackerId, name, notes: notes, filterActive: filterActive,
+                    [new TrackedEntity(EntityId.New(), trackerId, name, status, notes: notes, filterActive: filterActive,
                         sharedNotes: sharedNotes)],
                     [], [],
                     progressSnapshotAfterChanges:
