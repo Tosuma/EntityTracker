@@ -178,6 +178,9 @@ Destructive actions require confirmation where the workflow already calls for it
   40 pixels. Layout spacing follows a 4/8/12/16/24 scale; normal cards use a 6-pixel radius.
 - Keyboard focus must remain visibly distinct in every appearance. Popups and editor overlays move
   focus into their first useful field and restore it to the invoker when closed.
+- The Overview's bulk edit panel is an editor overlay: the same scrim, focus scope and footer
+  (primary Apply, then Cancel). Each field starts at "Keep as is" so an unchanged field is never
+  applied, and closing it with chosen changes asks before discarding them, as the editor does.
 - Informational overlays use a translucent Dark Green scrim. Focused catalog-management dialogs
   use the stronger scrim semantic so background content cannot compete with the active form.
 - Missing/removal and error states use Coral with Dark Green explanatory text. Synchronization

@@ -198,6 +198,9 @@
                     <DataTrigger Binding="{Binding ManualCreation.IsOpen}" Value="True">
                         <Setter Property="IsHitTestVisible" Value="False" />
                     </DataTrigger>
+                    <DataTrigger Binding="{Binding BulkEdit.IsOpen}" Value="True">
+                        <Setter Property="IsHitTestVisible" Value="False" />
+                    </DataTrigger>
                 </Style.Triggers>
             </Style>
         </DockPanel.Style>
@@ -647,7 +650,7 @@
                         </Button>
                     </WrapPanel>
 
-                    <Border x:Name="BulkStatusToolbar"
+                    <Border x:Name="BulkEditToolbar"
                             Grid.Row="3"
                             Margin="0,0,0,12"
                             Padding="12"
@@ -661,20 +664,10 @@
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource Brush.Text.Primary}"
                                        Text="{Binding BulkSelectionSummary}" />
-                            <TextBlock Margin="0,0,7,0"
-                                       VerticalAlignment="Center"
-                                       Foreground="{DynamicResource Brush.Text.Secondary}"
-                                       Text="Set status to" />
-                            <ComboBox MinWidth="155"
-                                      Margin="0,0,8,0"
-                                      AutomationProperties.Name="Bulk target status"
-                                      DisplayMemberPath="DisplayName"
-                                      ItemsSource="{Binding BulkStatusOptions}"
-                                      SelectedValue="{Binding SelectedBulkStatus}"
-                                      SelectedValuePath="Value" />
-                            <Button AutomationProperties.Name="Apply status to selected entities"
-                                    Command="{Binding ApplyBulkStatusCommand}"
-                                    Content="Apply status"
+                            <Button x:Name="OpenBulkEditButton"
+                                    AutomationProperties.HelpText="Change the status, priority, due date or responsible developer of every selected entity."
+                                    Command="{Binding OpenBulkEditCommand}"
+                                    Content="{Binding BulkEditButtonText}"
                                     Style="{StaticResource PrimaryButtonStyle}" />
                         </DockPanel>
                     </Border>
@@ -2594,6 +2587,128 @@
                         </Border>
                     </Grid>
                 </Grid>
+            </Border>
+        </Grid>
+        <!-- Bulk edit: the same scrim, focus scope and footer as the entity editor. Every field starts at
+             "Keep as is", so Apply changes only what was chosen, on every selected entity. -->
+        <Grid x:Name="BulkEditOverlay"
+              Panel.ZIndex="100"
+              Background="{DynamicResource Brush.Overlay}"
+              FocusManager.IsFocusScope="True"
+              KeyboardNavigation.ControlTabNavigation="Cycle"
+              KeyboardNavigation.DirectionalNavigation="Cycle"
+              KeyboardNavigation.TabNavigation="Cycle"
+              Visibility="{Binding BulkEdit.IsOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Border x:Name="BulkEditSurface"
+                    Width="560"
+                    MaxWidth="560"
+                    Margin="24"
+                    Padding="22"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Background="{DynamicResource Brush.Surface.Page}"
+                    BorderBrush="{DynamicResource Brush.Border.Medium}"
+                    BorderThickness="1"
+                    CornerRadius="7"
+                    Focusable="True">
+                <StackPanel>
+                    <TextBlock FontSize="20"
+                               AutomationProperties.HeadingLevel="Level2"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource Brush.Text.Primary}"
+                               Text="{Binding BulkEdit.Title}" />
+                    <TextBlock Margin="0,3,0,16"
+                               Foreground="{DynamicResource Brush.Text.Secondary}"
+                               Text="Choose what to change on every selected entity. Fields left at Keep as is stay as they are."
+                               TextWrapping="Wrap" />
+                    <Grid x:Name="BulkEditFields">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="130" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Label Grid.Row="0" VerticalAlignment="Center" Content="Status"
+                               Target="{Binding ElementName=BulkEditStatusComboBox}" />
+                        <ComboBox x:Name="BulkEditStatusComboBox"
+                                  Grid.Row="0" Grid.Column="1" Margin="0,0,0,10"
+                                  AutomationProperties.Name="Development status"
+                                  DisplayMemberPath="DisplayName"
+                                  ItemsSource="{Binding BulkEdit.StatusOptions}"
+                                  SelectedItem="{Binding BulkEdit.SelectedStatus}" />
+                        <Label Grid.Row="1" VerticalAlignment="Center" Content="Priority"
+                               Target="{Binding ElementName=BulkEditPriorityComboBox}" />
+                        <ComboBox x:Name="BulkEditPriorityComboBox"
+                                  Grid.Row="1" Grid.Column="1" Margin="0,0,0,10"
+                                  AutomationProperties.Name="Requested priority"
+                                  DisplayMemberPath="DisplayName"
+                                  ItemsSource="{Binding BulkEdit.PriorityOptions}"
+                                  SelectedItem="{Binding BulkEdit.SelectedPriority}" />
+                        <Label Grid.Row="2" VerticalAlignment="Center" Content="Due date"
+                               Target="{Binding ElementName=BulkEditDueDateComboBox}" />
+                        <ComboBox x:Name="BulkEditDueDateComboBox"
+                                  Grid.Row="2" Grid.Column="1" Margin="0,0,0,10"
+                                  AutomationProperties.Name="Due date change"
+                                  DisplayMemberPath="DisplayName"
+                                  ItemsSource="{Binding BulkEdit.DueDateModeOptions}"
+                                  SelectedItem="{Binding BulkEdit.SelectedDueDateMode}" />
+                        <DatePicker x:Name="BulkEditDueDatePicker"
+                                    Grid.Row="3" Grid.Column="1" Width="208" Margin="0,0,0,10"
+                                    HorizontalAlignment="Left"
+                                    AutomationProperties.Name="Due date"
+                                    SelectedDate="{Binding BulkEdit.DueDate}"
+                                    Visibility="{Binding BulkEdit.IsDueDateVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <Label Grid.Row="4" VerticalAlignment="Center" Content="Responsible"
+                               Target="{Binding ElementName=BulkEditResponsibilityComboBox}" />
+                        <ComboBox x:Name="BulkEditResponsibilityComboBox"
+                                  Grid.Row="4" Grid.Column="1" Margin="0,0,0,10"
+                                  AutomationProperties.Name="Responsible developer change"
+                                  AutomationProperties.HelpText="Add or remove one developer; other responsible developers stay."
+                                  DisplayMemberPath="DisplayName"
+                                  IsEnabled="{Binding BulkEdit.CanChangeResponsibility}"
+                                  ItemsSource="{Binding BulkEdit.ResponsibilityModeOptions}"
+                                  SelectedItem="{Binding BulkEdit.SelectedResponsibilityMode}" />
+                        <ComboBox x:Name="BulkEditDeveloperComboBox"
+                                  Grid.Row="5" Grid.Column="1" Margin="0,0,0,10"
+                                  AutomationProperties.Name="Developer"
+                                  DisplayMemberPath="DisplayName"
+                                  ItemsSource="{Binding BulkEdit.DeveloperOptions}"
+                                  SelectedItem="{Binding BulkEdit.SelectedDeveloper}"
+                                  Visibility="{Binding BulkEdit.IsDeveloperVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </Grid>
+                    <TextBlock Margin="0,0,0,4"
+                               Foreground="{DynamicResource Brush.Text.Secondary}"
+                               Text="No available developers. Add one from Project → Developers."
+                               TextWrapping="Wrap">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding BulkEdit.CanChangeResponsibility}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <StackPanel Margin="0,12,0,0" HorizontalAlignment="Right" Orientation="Horizontal">
+                        <Button x:Name="ApplyBulkEditButton"
+                                Margin="0,0,8,0"
+                                AutomationProperties.Name="Apply the changes to the selected entities"
+                                Command="{Binding ApplyBulkEditCommand}"
+                                Content="Apply"
+                                Style="{StaticResource PrimaryButtonStyle}" />
+                        <Button Command="{Binding CancelBulkEditCommand}"
+                                Content="Cancel"
+                                Style="{StaticResource SecondaryButtonStyle}" />
+                    </StackPanel>
+                </StackPanel>
             </Border>
         </Grid>
     </Grid>

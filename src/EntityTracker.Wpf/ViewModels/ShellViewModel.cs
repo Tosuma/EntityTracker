@@ -365,7 +365,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     public bool IsModalOpen =>
         Catalog.IsOpen ||
-        IsTrackerWorkspace && (CurrentWorkspace!.Editor.IsOpen || CurrentWorkspace.ManualCreation.IsOpen) ||
+        IsTrackerWorkspace && (CurrentWorkspace!.Editor.IsOpen || CurrentWorkspace.ManualCreation.IsOpen ||
+                               CurrentWorkspace.BulkEdit.IsOpen) ||
         IsDevelopers && (Developers?.IsRetirementOpen == true || Developers?.IsRetiredDialogOpen == true);
 
     /// <summary>
@@ -503,11 +504,13 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 {
                     previous.Editor.PropertyChanged -= OnModalSourceChanged;
                     previous.ManualCreation.PropertyChanged -= OnModalSourceChanged;
+                    previous.BulkEdit.PropertyChanged -= OnModalSourceChanged;
                 }
                 if (value is not null)
                 {
                     value.Editor.PropertyChanged += OnModalSourceChanged;
                     value.ManualCreation.PropertyChanged += OnModalSourceChanged;
+                    value.BulkEdit.PropertyChanged += OnModalSourceChanged;
                 }
                 OnPropertyChanged(nameof(HasWorkspace));
                 OnPropertyChanged(nameof(IsTrackerWorkspace));

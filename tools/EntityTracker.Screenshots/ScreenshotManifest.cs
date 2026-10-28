@@ -53,6 +53,7 @@ internal static class ScreenshotManifest
         "edit-entity.png",
         "edit-entity-dependencies.png",
         "archive-entity-confirmation.png",
+        "bulk-edit.png",
         "archived-entity.png",
         "archived-details.png",
         "help.png",

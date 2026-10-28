@@ -179,22 +179,22 @@ internal static class ScreenshotDataSeeder
             cancellationToken);
         TrackedEntity changedEntity = copiedEntities.Single(static entity =>
             entity.SourceName == "customer_preference");
-        await catalogProvider.GetRequiredService<BulkStatusUpdateService>().ApplyAsync(
+        await catalogProvider.GetRequiredService<BulkEntityUpdateService>().ApplyAsync(
             releaseReadiness.Id,
             [changedEntity.Id],
-            DevelopmentStatus.ReworkNeeded,
+            new BulkEntityUpdate(DevelopmentStatus.ReworkNeeded),
             cancellationToken);
         // Out of scope in Core schema but still relevant in Release readiness: the Overview shows the
         // Not relevant status, and the comparison shows the two Trackers differ on purpose.
         IReadOnlyList<TrackedEntity> coreEntities = await releaseEntities.GetAllAsync(
             defaultTracker.Id,
             cancellationToken);
-        await catalogProvider.GetRequiredService<BulkStatusUpdateService>().ApplyAsync(
+        await catalogProvider.GetRequiredService<BulkEntityUpdateService>().ApplyAsync(
             defaultTracker.Id,
             [.. coreEntities
                 .Where(static entity => entity.SourceName is "status_code" or "skill_record")
                 .Select(static entity => entity.Id)],
-            DevelopmentStatus.NotRelevant,
+            new BulkEntityUpdate(DevelopmentStatus.NotRelevant),
             cancellationToken);
         TrackedEntity missingEntity = copiedEntities.Single(static entity =>
             entity.SourceName == "employee_contact");

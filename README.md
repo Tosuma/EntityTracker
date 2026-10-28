@@ -212,7 +212,7 @@ a short display time. A sync that needs attention stays visible with a contextua
 Project card also retains its detailed status. Notifications are kept for the current session.
 
 The notification center is also where every other action reports its outcome: imported Projects,
-bulk status updates, chart copies, saved exports, and any failure to load a page, save a
+bulk updates, chart copies, saved exports, and any failure to load a page, save a
 setting, archive or delete an entity, or change developers. Successes disappear after a short
 display time; failures stay until you dismiss them. Only input checks, such as an invalid date
 range or a search with no matches, and errors inside an open dialog appear next to the controls.
@@ -343,6 +343,15 @@ Entity names and each row's **View details** action open a read-only side pane w
 due dates, assignment, full notes, effective dependencies, blockers, and audit timestamps.
 Use **Edit** in the details header to open the entity editor. Opening or closing the pane does not
 disturb bulk row selection.
+
+To change several entities at once, select their rows on the Overview (Ctrl+click or Shift+click)
+and choose **Edit N entities** above the list. The bulk edit panel sets the development status,
+the requested priority and the due date, and adds or removes one responsible developer, on every
+selected entity in one save. Every field starts at **Keep as is**, so only what you change is
+applied; priority and due date can also be cleared, and the other responsible developers stay.
+The notification center reports how many entities changed and how many already matched.
+
+![Bulk edit panel setting a priority and adding a responsible developer on four selected entities](images/light/bulk-edit.png)
 
 Every entity has two kinds of notes. **Internal notes** are only for the team and never appear in
 a client report. **Shared notes** are meant for the client and appear in both client and internal

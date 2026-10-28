@@ -147,7 +147,7 @@ public sealed class MainWindowViewModelTests
         viewModel.ActiveTable.ClearAllFiltersAndSort();
         ApplySingleFilter(viewModel.ActiveTable.WorkStatusFilter!, "Ready");
         Assert.Equal("Waiting", Assert.Single(viewModel.OverviewItems).SourceName);
-        Assert.Contains(viewModel.BulkStatusOptions, static option => option.Value == DevelopmentStatus.NotRelevant);
+        Assert.Contains(viewModel.BulkEdit.StatusOptions, static option => option.Value == DevelopmentStatus.NotRelevant);
         Assert.Contains(viewModel.Editor.StatusOptions, static option => option.Value == DevelopmentStatus.NotRelevant);
     }
 
@@ -1053,7 +1053,7 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task ApplyBulkStatusAsync_StoreFailurePostsAFailureAndKeepsTheOverview()
+    public async Task ApplyBulkEditAsync_StoreFailurePostsAFailureAndKeepsTheOverview()
     {
         NotificationCenter notifications = new();
         MainWindowViewModel viewModel = CreateViewModel(
@@ -1063,20 +1063,23 @@ public sealed class MainWindowViewModelTests
             notifications: notifications);
         await viewModel.InitializeAsync();
         viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
-        viewModel.SelectedBulkStatus = DevelopmentStatus.DevelopmentCompleted;
+        await viewModel.OpenBulkEditAsync();
+        viewModel.BulkEdit.SelectedStatus = viewModel.BulkEdit.StatusOptions.Single(static option =>
+            option.Value == DevelopmentStatus.DevelopmentCompleted);
         store.Exception = new InvalidOperationException("Database unavailable");
 
-        await viewModel.ApplyBulkStatusAsync();
+        await viewModel.ApplyBulkEditAsync();
 
         NotificationItem notice = Assert.Single(notifications.Items);
-        Assert.Equal(("Bulk status update", NotificationKind.Failure), (notice.Title, notice.Kind));
-        Assert.Equal("The status update was not applied: Database unavailable", notice.Message);
+        Assert.Equal(("Bulk update", NotificationKind.Failure), (notice.Title, notice.Kind));
+        Assert.Equal("The bulk update was not applied: Database unavailable", notice.Message);
+        Assert.False(viewModel.BulkEdit.IsOpen);
         Assert.Single(viewModel.OverviewItems);
         Assert.False(viewModel.HasOverviewError);
     }
 
     [Fact]
-    public async Task ApplyBulkStatusAsync_UpdatesSelectedRowsAndRefreshesSummary()
+    public async Task ApplyBulkEditAsync_AppliesEveryChosenFieldAndRefreshesSummary()
     {
         TrackedEntity first = Entity(1, "First");
         TrackedEntity second = Entity(
@@ -1091,24 +1094,83 @@ public sealed class MainWindowViewModelTests
             notifications: notifications);
         await viewModel.InitializeAsync();
         viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
-        viewModel.SelectedBulkStatus = DevelopmentStatus.DevelopmentCompleted;
 
         Assert.Equal(2, viewModel.SelectedActiveEntityCount);
-        Assert.True(viewModel.ApplyBulkStatusCommand.CanExecute(null));
+        Assert.Equal("Edit 2 entities", viewModel.BulkEditButtonText);
+        Assert.True(viewModel.OpenBulkEditCommand.CanExecute(null));
+        await viewModel.OpenBulkEditAsync();
+        Assert.True(viewModel.BulkEdit.IsOpen);
+        Assert.Equal("Edit 2 entities", viewModel.BulkEdit.Title);
+        Assert.False(viewModel.OpenBulkEditCommand.CanExecute(null));
+        Assert.False(viewModel.EditOverviewEntityCommand.CanExecute(viewModel.OverviewItems[0]));
+        viewModel.BulkEdit.SelectedStatus = viewModel.BulkEdit.StatusOptions.Single(static option =>
+            option.Value == DevelopmentStatus.DevelopmentCompleted);
+        viewModel.BulkEdit.SelectedPriority = viewModel.BulkEdit.PriorityOptions.Single(static option =>
+            option.Value?.Value == 2);
 
-        await viewModel.ApplyBulkStatusAsync();
+        await viewModel.ApplyBulkEditAsync();
 
         Assert.Equal(1, store.ApplyCount);
+        TrackedStateChangeSet changeSet = Assert.IsType<TrackedStateChangeSet>(store.AppliedChangeSet);
+        Assert.Single(changeSet.EntitiesWithProgressToUpdate);
+        Assert.Equal(2, changeSet.EntitiesWithRequestedPriorityToUpdate.Count);
+        Assert.False(viewModel.BulkEdit.IsOpen);
         Assert.Equal(0, viewModel.SelectedActiveEntityCount);
-        Assert.False(viewModel.ApplyBulkStatusCommand.CanExecute(null));
+        Assert.False(viewModel.OpenBulkEditCommand.CanExecute(null));
         Assert.Equal(0, viewModel.NotStartedCount);
         Assert.Equal(2, viewModel.DevelopmentCompletedCount);
-        Assert.All(
-            viewModel.OverviewItems,
-            row => Assert.Equal(DevelopmentStatus.DevelopmentCompleted, row.DevelopmentStatus));
+        Assert.All(viewModel.OverviewItems, row =>
+        {
+            Assert.Equal(DevelopmentStatus.DevelopmentCompleted, row.DevelopmentStatus);
+            Assert.Equal(2, row.RequestedPriorityValue);
+        });
         NotificationItem notice = Assert.Single(notifications.Items);
-        Assert.Equal(("Bulk status update", NotificationKind.Success), (notice.Title, notice.Kind));
-        Assert.Equal("1 entity updated to Completed; 1 already matched.", notice.Message);
+        Assert.Equal(("Bulk update", NotificationKind.Success), (notice.Title, notice.Kind));
+        Assert.Equal("2 entities updated; 0 already matched.", notice.Message);
+    }
+
+    [Fact]
+    public async Task BulkEdit_AppliesOnlyCompleteChangesAndConfirmsBeforeDiscardingThem()
+    {
+        RecordingDiscardConfirmation confirmation = new(false);
+        MainWindowViewModel viewModel = CreateViewModel(
+            [Entity(1, "Alpha"), Entity(2, "Beta")],
+            [],
+            out StubStateStore store,
+            discardConfirmation: confirmation);
+        await viewModel.InitializeAsync();
+        viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
+        await viewModel.OpenBulkEditAsync();
+
+        Assert.False(viewModel.BulkEdit.HasChanges);
+        Assert.False(viewModel.ApplyBulkEditCommand.CanExecute(null));
+        Assert.False(viewModel.BulkEdit.CanChangeResponsibility);
+        viewModel.BulkEdit.SelectedDueDateMode = viewModel.BulkEdit.DueDateModeOptions.Single(static option =>
+            option.Value == BulkDueDateMode.Set);
+        Assert.True(viewModel.BulkEdit.IsDueDateVisible);
+        Assert.False(viewModel.ApplyBulkEditCommand.CanExecute(null));
+        viewModel.BulkEdit.DueDate = new DateTime(2026, 11, 15);
+        Assert.True(viewModel.ApplyBulkEditCommand.CanExecute(null));
+        Assert.True(viewModel.HasUnsavedWork);
+
+        Assert.False(viewModel.TryCloseBulkEdit());
+        Assert.Equal(1, confirmation.CallCount);
+        Assert.True(viewModel.BulkEdit.IsOpen);
+
+        confirmation.Result = true;
+        viewModel.CancelBulkEditCommand.Execute(null);
+        Assert.Equal(2, confirmation.CallCount);
+        Assert.False(viewModel.BulkEdit.IsOpen);
+        Assert.False(viewModel.HasUnsavedWork);
+        Assert.Equal(2, viewModel.SelectedActiveEntityCount);
+        Assert.Equal(0, store.ApplyCount);
+
+        // Reopened, every field is back at Keep as is, so closing needs no confirmation.
+        await viewModel.OpenBulkEditAsync();
+        Assert.False(viewModel.BulkEdit.HasChanges);
+        Assert.Null(viewModel.BulkEdit.DueDate);
+        Assert.True(viewModel.TryCloseBulkEdit());
+        Assert.Equal(2, confirmation.CallCount);
     }
 
     [Fact]
@@ -1157,12 +1219,13 @@ public sealed class MainWindowViewModelTests
 
         Assert.Equal(0, viewModel.SelectedActiveEntityCount);
         Assert.Equal("No active entities selected", viewModel.BulkSelectionSummary);
-        Assert.False(viewModel.ApplyBulkStatusCommand.CanExecute(null));
+        Assert.Equal("Edit entities", viewModel.BulkEditButtonText);
+        Assert.False(viewModel.OpenBulkEditCommand.CanExecute(null));
         Assert.Equal(1, clearRequestCount);
     }
 
     [Fact]
-    public async Task BulkStatusAction_IgnoresArchivedRowsAndDisablesWhileEditorIsOpen()
+    public async Task BulkEditAction_IgnoresArchivedRowsAndDisablesWhileEditorIsOpen()
     {
         TrackedEntity active = Entity(1, "Active");
         TrackedEntity archived = Entity(
@@ -1178,7 +1241,7 @@ public sealed class MainWindowViewModelTests
         viewModel.SelectedTab = MainWindowTab.Archived;
         viewModel.UpdateOverviewSelection(viewModel.ArchivedItems);
         Assert.Equal(0, viewModel.SelectedActiveEntityCount);
-        Assert.False(viewModel.ApplyBulkStatusCommand.CanExecute(null));
+        Assert.False(viewModel.OpenBulkEditCommand.CanExecute(null));
 
         viewModel.SelectedTab = MainWindowTab.Overview;
         EntityOverviewRow activeRow = Assert.Single(viewModel.OverviewItems);
@@ -1186,7 +1249,7 @@ public sealed class MainWindowViewModelTests
         viewModel.EditOverviewEntityCommand.Execute(activeRow);
         await WaitUntilAsync(() => viewModel.Editor.IsOpen);
 
-        Assert.False(viewModel.ApplyBulkStatusCommand.CanExecute(null));
+        Assert.False(viewModel.OpenBulkEditCommand.CanExecute(null));
     }
 
     [Fact]
@@ -1239,7 +1302,7 @@ public sealed class MainWindowViewModelTests
                 resolver,
                 new WorkflowReadinessEvaluator(),
                 new PriorityPlanningService()),
-            new BulkStatusUpdateService(
+            new BulkEntityUpdateService(
                 entityRepository,
                 dependencyRepository,
                 resolver,

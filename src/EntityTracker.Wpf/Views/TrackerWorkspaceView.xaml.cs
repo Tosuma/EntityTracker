@@ -142,6 +142,7 @@ public partial class TrackerWorkspaceView : UserControl
         viewModel.EntityRevealRequested += OnEntityRevealRequested;
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
         viewModel.Editor.PropertyChanged += OnEditorPropertyChanged;
+        viewModel.BulkEdit.PropertyChanged += OnBulkEditPropertyChanged;
         viewModel.ManualCreation.PropertyChanged += OnCreationPropertyChanged;
         ObserveDetails(viewModel.SelectedEntityDetails);
     }
@@ -157,6 +158,7 @@ public partial class TrackerWorkspaceView : UserControl
         _viewModel.EntityRevealRequested -= OnEntityRevealRequested;
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         _viewModel.Editor.PropertyChanged -= OnEditorPropertyChanged;
+        _viewModel.BulkEdit.PropertyChanged -= OnBulkEditPropertyChanged;
         _viewModel.ManualCreation.PropertyChanged -= OnCreationPropertyChanged;
         ObserveDetails(null);
         _viewModel = null;
@@ -309,6 +311,28 @@ public partial class TrackerWorkspaceView : UserControl
         }
     }
 
+    /// <summary>Moves the focus into the bulk edit panel when it opens, and back to its button or the grid.</summary>
+    private void OnBulkEditPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(BulkEditViewModel.IsOpen) || _viewModel is null)
+        {
+            return;
+        }
+
+        bool open = _viewModel.BulkEdit.IsOpen;
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (open)
+            {
+                if (!BulkEditStatusComboBox.Focus()) BulkEditSurface.Focus();
+            }
+            else if (!(OpenBulkEditButton.IsEnabled && OpenBulkEditButton.Focus()))
+            {
+                OverviewDataGrid.Focus();
+            }
+        }));
+    }
+
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(MainWindowViewModel.SelectedEntityDetails))
@@ -424,10 +448,11 @@ public partial class TrackerWorkspaceView : UserControl
             _viewModel.SelectedTab != MainWindowTab.Overview ||
             OverviewDataGrid.SelectedItems.Count == 0 ||
             _viewModel.Editor.IsOpen ||
+            _viewModel.BulkEdit.IsOpen ||
             e.OriginalSource is not DependencyObject source ||
             !IsDescendantOrSelf(source, this) ||
             IsDescendantOrSelf(source, OverviewDataGrid) ||
-            IsDescendantOrSelf(source, BulkStatusToolbar) ||
+            IsDescendantOrSelf(source, BulkEditToolbar) ||
             IsDescendantOrSelf(source, EntityDetailsPane))
         {
             return;
@@ -497,6 +522,24 @@ public partial class TrackerWorkspaceView : UserControl
         if (_viewModel.Editor.IsOpen)
         {
             _viewModel.TryCloseEditor();
+            e.Handled = true;
+            return;
+        }
+
+        if (_viewModel.BulkEdit.IsOpen)
+        {
+            // Esc first closes an open list or calendar in the panel, then the panel.
+            ComboBox[] lists =
+            [
+                BulkEditStatusComboBox, BulkEditPriorityComboBox, BulkEditDueDateComboBox,
+                BulkEditResponsibilityComboBox, BulkEditDeveloperComboBox
+            ];
+            if (lists.Any(static list => list.IsDropDownOpen) || BulkEditDueDatePicker.IsDropDownOpen)
+            {
+                return;
+            }
+
+            _viewModel.TryCloseBulkEdit();
             e.Handled = true;
             return;
         }

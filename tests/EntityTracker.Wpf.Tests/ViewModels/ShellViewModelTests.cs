@@ -113,6 +113,49 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
     }
 
     [Fact]
+    public async Task BulkEdit_AddsAndRemovesADeveloperOnEverySelectedEntityAsAPageDialog()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        ProjectDeveloper developer = await harness.CreateDeveloperAsync("AL");
+        EntityId first = await harness.AddEntityAndReturnIdAsync(harness.DefaultTracker.Id, "First entity");
+        EntityId second = await harness.AddEntityAndReturnIdAsync(harness.DefaultTracker.Id, "Second entity");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        MainWindowViewModel workspace = shell.CurrentWorkspace!;
+        workspace.UpdateOverviewSelection(workspace.ActiveTable.SourceItems);
+
+        await workspace.OpenBulkEditAsync();
+        Assert.True(shell.IsPageDialogOpen);
+        Assert.True(workspace.BulkEdit.CanChangeResponsibility);
+        workspace.BulkEdit.SelectedResponsibilityMode = workspace.BulkEdit.ResponsibilityModeOptions
+            .Single(static option => option.Value == BulkResponsibilityMode.Add);
+        workspace.BulkEdit.SelectedDeveloper = Assert.Single(workspace.BulkEdit.DeveloperOptions);
+        await workspace.ApplyBulkEditAsync();
+
+        Assert.False(shell.IsPageDialogOpen);
+        IReadOnlyList<ResponsibilityPeriod> periods = await harness.Periods.GetByTrackerAsync(harness.DefaultTracker.Id);
+        Assert.Equal(
+            new HashSet<EntityId> { first, second },
+            periods.Where(period => period.IsCurrent && period.DeveloperId == developer.Id)
+                .Select(static period => period.EntityId).ToHashSet());
+        Assert.All(workspace.ActiveTable.SourceItems, row => Assert.Contains("AL", row.ResponsibleDeveloper));
+
+        workspace.UpdateOverviewSelection(workspace.ActiveTable.SourceItems.Where(row => row.EntityId == first));
+        await workspace.OpenBulkEditAsync();
+        workspace.BulkEdit.SelectedResponsibilityMode = workspace.BulkEdit.ResponsibilityModeOptions
+            .Single(static option => option.Value == BulkResponsibilityMode.Remove);
+        workspace.BulkEdit.SelectedDeveloper = Assert.Single(workspace.BulkEdit.DeveloperOptions);
+        await workspace.ApplyBulkEditAsync();
+
+        periods = await harness.Periods.GetByTrackerAsync(harness.DefaultTracker.Id);
+        Assert.Equal(
+            second,
+            Assert.Single(periods, period => period.IsCurrent && period.DeveloperId == developer.Id).EntityId);
+    }
+
+    [Fact]
     public async Task TrackerPages_KeepRowsAfterOwnEditsButRetryAReloadTheWorkspaceSkipped()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
@@ -127,8 +170,10 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         Tracker secondSelection = shell.Trackers.Single(tracker => tracker.Id == second.Id);
 
         first.UpdateOverviewSelection(first.ActiveTable.SourceItems);
-        first.SelectedBulkStatus = DevelopmentStatus.DevelopmentCompleted;
-        await first.ApplyBulkStatusAsync();
+        await first.OpenBulkEditAsync();
+        first.BulkEdit.SelectedStatus = first.BulkEdit.StatusOptions.Single(static option =>
+            option.Value == DevelopmentStatus.DevelopmentCompleted);
+        await first.ApplyBulkEditAsync();
         IReadOnlyList<EntityOverviewRow> afterOwnEdit = first.ActiveTable.SourceItems;
         Assert.True(await shell.NavigateAsync(ShellDestination.DependencyGraph));
         Assert.Same(afterOwnEdit, first.ActiveTable.SourceItems);
@@ -256,8 +301,10 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         Assert.True(await shell.NavigateAsync(ShellDestination.Overview));
         MainWindowViewModel workspace = shell.CurrentWorkspace!;
         workspace.UpdateOverviewSelection(workspace.ActiveTable.SourceItems);
-        workspace.SelectedBulkStatus = DevelopmentStatus.DevelopmentCompleted;
-        await workspace.ApplyBulkStatusAsync();
+        await workspace.OpenBulkEditAsync();
+        workspace.BulkEdit.SelectedStatus = workspace.BulkEdit.StatusOptions.Single(static option =>
+            option.Value == DevelopmentStatus.DevelopmentCompleted);
+        await workspace.ApplyBulkEditAsync();
         Assert.Equal(0, shell.ProjectDashboard!.Progress.DevelopmentCompletedCount);
         Assert.Null(shell.PortfolioReporting.Progress.Presentation);
         Assert.True(await shell.NavigateAsync(ShellDestination.ProjectDashboard));
@@ -1603,11 +1650,12 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
             TestAdapters adapters = new();
             TrackerWorkspaceViewModelFactory workspaceFactory = new(
                 overview,
-                new BulkStatusUpdateService(
+                new BulkEntityUpdateService(
                     entities,
                     dependencies,
                     resolver,
-                    stateStore),
+                    stateStore,
+                    periods),
                 new ManualEntityCreationService(
                     entities,
                     dependencies,
