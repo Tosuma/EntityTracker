@@ -393,6 +393,18 @@
             <Border Margin="0,8,0,0" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
                 <StackPanel>
                     <DockPanel Margin="0,0,0,12">
+                        <!-- Narrows the rows by entity name, together with the chosen cards; Fluent's clear
+                             button empties it. -->
+                        <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center" Orientation="Horizontal">
+                            <controls:Icon Margin="0,0,6,0" VerticalAlignment="Center" Size="16"
+                                           Foreground="{DynamicResource Brush.Text.Secondary}" IconKey="Icon.Search" />
+                            <TextBox x:Name="ComparisonSearchTextBox"
+                                     Width="240"
+                                     VerticalAlignment="Center"
+                                     controls:Placeholder.Text="Search entities"
+                                     AutomationProperties.Name="Search compared entities"
+                                     Text="{Binding ProjectReporting.SearchQuery, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
                         <StackPanel>
                             <TextBlock FontSize="20" FontWeight="SemiBold" Text="Entity comparison" />
                             <TextBlock Margin="0,3,0,0"
@@ -450,17 +462,17 @@
                                            Text="{Binding ProjectReporting.MissingCount}" />
                             </StackPanel>
                         </Button>
-                        <Button AutomationProperties.Name="{Binding ProjectReporting.DivergentCount, StringFormat=Filter comparison to divergent entities. {0} entities}"
-                                AutomationProperties.ItemStatus="{Binding ProjectReporting.IsDivergentSelected, StringFormat=Selected: {0}}"
+                        <Button AutomationProperties.Name="{Binding ProjectReporting.DifferentScopeCount, StringFormat=Filter comparison to entities with a different scope. {0} entities}"
+                                AutomationProperties.ItemStatus="{Binding ProjectReporting.IsDifferentScopeSelected, StringFormat=Selected: {0}}"
                                 Command="{Binding ProjectReporting.SelectCategoryCommand}"
-                                CommandParameter="{x:Static projects:ProjectComparisonCategory.Divergent}"
+                                CommandParameter="{x:Static projects:ProjectComparisonCategory.DifferentScope}"
                                 Tag="{DynamicResource Brush.Brand.Green60}"
-                                ToolTip="Show divergent entities. More cards add their entities. Unavailable when the count is zero.">
+                                ToolTip="Show entities that are Not relevant in some Trackers and in scope in others. More cards add their entities. Unavailable when the count is zero.">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
                                        TargetType="Button">
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding ProjectReporting.IsDivergentSelected}" Value="True">
+                                        <DataTrigger Binding="{Binding ProjectReporting.IsDifferentScopeSelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
                                             <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
                                         </DataTrigger>
@@ -468,11 +480,36 @@
                                 </Style>
                             </Button.Style>
                             <StackPanel>
-                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Divergent" />
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Different scope" />
                                 <TextBlock Margin="0,3,0,0"
                                            FontSize="22"
                                            FontWeight="SemiBold"
-                                           Text="{Binding ProjectReporting.DivergentCount}" />
+                                           Text="{Binding ProjectReporting.DifferentScopeCount}" />
+                            </StackPanel>
+                        </Button>
+                        <Button AutomationProperties.Name="{Binding ProjectReporting.DoneVsStuckCount, StringFormat=Filter comparison to entities done in some Trackers and stuck in others. {0} entities}"
+                                AutomationProperties.ItemStatus="{Binding ProjectReporting.IsDoneVsStuckSelected, StringFormat=Selected: {0}}"
+                                Command="{Binding ProjectReporting.SelectCategoryCommand}"
+                                CommandParameter="{x:Static projects:ProjectComparisonCategory.DoneVsStuck}"
+                                Tag="{DynamicResource Brush.Brand.Green60}"
+                                ToolTip="Show entities that are Completed or Reconciled in some Trackers and blocked, waiting on dependencies or in rework in others. More cards add their entities. Unavailable when the count is zero.">
+                            <Button.Style>
+                                <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
+                                       TargetType="Button">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ProjectReporting.IsDoneVsStuckSelected}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <StackPanel>
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Done vs stuck" />
+                                <TextBlock Margin="0,3,0,0"
+                                           FontSize="22"
+                                           FontWeight="SemiBold"
+                                           Text="{Binding ProjectReporting.DoneVsStuckCount}" />
                             </StackPanel>
                         </Button>
                         <Button AutomationProperties.Name="{Binding ProjectReporting.BlockedCount, StringFormat=Filter comparison to blocked entities. {0} entities}"
@@ -586,9 +623,9 @@
                                 HorizontalAlignment="Center"
                                 Visibility="{Binding ProjectReporting.ShowNoMatchingRows, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <TextBlock HorizontalAlignment="Center" FontWeight="SemiBold"
-                                   Text="No entities match the chosen cards" />
+                                   Text="No matching entities" />
                         <TextBlock Margin="0,3,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
-                                   Text="Choose Total to show every entity." />
+                                   Text="Try another search, or choose Total to clear the cards." />
                     </StackPanel>
 
                     <DataGrid x:Name="ComparisonGrid"

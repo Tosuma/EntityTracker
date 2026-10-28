@@ -762,6 +762,22 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
             reporting.Comparison.Rows.Count == 3);
         Assert.True(reporting.IsTotalSelected);
         Assert.Equal("Showing all 3 entities", reporting.ComparisonSummary);
+
+        // Search narrows by name together with the cards; Total clears only the cards.
+        reporting.SearchQuery = "first";
+        Assert.Equal("first_only", Assert.Single(reporting.ComparisonRows).DisplayName);
+        Assert.Equal("Showing 1 of 3 entities", reporting.ComparisonSummary);
+        reporting.SelectCategoryCommand.Execute(ProjectComparisonCategory.Blocked);
+        await WaitUntilAsync(() =>
+            reporting.Comparison?.SelectedCategories == ProjectComparisonCategory.Blocked &&
+            reporting.ComparisonRows.Count == 0);
+        Assert.True(reporting.ShowNoMatchingRows);
+        reporting.ClearCategoryCommand.Execute(null);
+        await WaitUntilAsync(() =>
+            reporting.Comparison?.SelectedCategories == ProjectComparisonCategory.None &&
+            reporting.ComparisonRows.Count == 1);
+        Assert.Equal("first", reporting.SearchQuery);
+        Assert.False(reporting.ShowNoMatchingRows);
     }
 
     [Fact]

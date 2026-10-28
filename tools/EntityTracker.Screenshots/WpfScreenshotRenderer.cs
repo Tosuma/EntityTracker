@@ -258,7 +258,27 @@ internal sealed class WpfScreenshotRenderer(Window window, string outputDirector
         int width = Math.Max(1, (int)Math.Ceiling(visual.ActualWidth));
         int height = Math.Max(1, (int)Math.Ceiling(visual.ActualHeight));
         RenderTargetBitmap raw = new(width, height, Dpi, Dpi, PixelFormats.Pbgra32);
-        raw.Render(visual);
+        // Text-box placeholders never appear in a capture. A field's hint is an adorner: one in the window's
+        // adorner layer falls outside the rendered visual, but one inside scrolled content is drawn in that
+        // content's own layer, so it is hidden while rendering.
+        UIElement[] hints = VisibleDescendants(visual).OfType<PlaceholderAdorner>().ToArray<UIElement>();
+        foreach (UIElement hint in hints)
+        {
+            hint.Visibility = Visibility.Hidden;
+        }
+
+        try
+        {
+            raw.Render(visual);
+        }
+        finally
+        {
+            foreach (UIElement hint in hints)
+            {
+                hint.Visibility = Visibility.Visible;
+            }
+        }
+
         if (!includePageBackground)
         {
             return raw;
@@ -276,6 +296,24 @@ internal sealed class WpfScreenshotRenderer(Window window, string outputDirector
         RenderTargetBitmap opaque = new(width, height, Dpi, Dpi, PixelFormats.Pbgra32);
         opaque.Render(drawing);
         return opaque;
+    }
+
+    private static IEnumerable<DependencyObject> VisibleDescendants(DependencyObject parent)
+    {
+        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(parent, index);
+            if (child is UIElement { Visibility: not Visibility.Visible })
+            {
+                continue;
+            }
+
+            yield return child;
+            foreach (DependencyObject descendant in VisibleDescendants(child))
+            {
+                yield return descendant;
+            }
+        }
     }
 
     private static void Save(BitmapSource bitmap, string path)

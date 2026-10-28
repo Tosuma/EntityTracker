@@ -1462,12 +1462,13 @@ public sealed class PresentationConfigurationTests
             .ToArray();
 
         Assert.Equal(
-            ["Total", "Missing", "Divergent", "Blocked", "Waiting on dependencies", "Rework", "Unresolved"],
+            ["Total", "Missing", "Different scope", "Done vs stuck", "Blocked", "Waiting on dependencies", "Rework", "Unresolved"],
             cards.Select(static card => (string?)card.Descendants().First(static element =>
                 element.Name.LocalName == "TextBlock").Attribute("Text")));
         Assert.Equal(
             [
                 null,
+                "{DynamicResource Brush.Brand.Green60}",
                 "{DynamicResource Brush.Brand.Green60}",
                 "{DynamicResource Brush.Brand.Green60}",
                 "{DynamicResource Brush.Status.Blocked}",
@@ -1486,6 +1487,10 @@ public sealed class PresentationConfigurationTests
         });
         Assert.DoesNotContain(panel.Elements(), static element => element.Name.LocalName == "ToggleButton");
         Assert.DoesNotContain(document.Descendants(), static element => element.Name.LocalName == "CheckBox");
+        XElement search = Assert.Single(document.Descendants(), static element =>
+            element.Name.LocalName == "TextBox" &&
+            (string?)element.Attribute("Text") == "{Binding ProjectReporting.SearchQuery, UpdateSourceTrigger=PropertyChanged}");
+        Assert.False(string.IsNullOrWhiteSpace((string?)search.Attribute("AutomationProperties.Name")));
         Assert.Single(document.Descendants(), static element =>
             (string?)element.Attribute("Command") == "{Binding ProjectReporting.ClearCategoryCommand}");
     }
