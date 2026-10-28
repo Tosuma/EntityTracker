@@ -8,54 +8,6 @@
              xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels"
              xmlns:views="clr-namespace:EntityTracker.Wpf.Views">
     <UserControl.Resources>
-        <Style x:Key="ComparisonFilterButtonStyle" TargetType="ToggleButton">
-            <Setter Property="Margin" Value="0,0,8,8" />
-            <Setter Property="Padding" Value="12,8" />
-            <Setter Property="MinWidth" Value="104" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="VerticalContentAlignment" Value="Stretch" />
-            <Setter Property="Background" Value="{DynamicResource Brush.Surface.Card}" />
-            <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ToggleButton">
-                        <Border x:Name="Card"
-                                Padding="{TemplateBinding Padding}"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4"
-                                SnapsToDevicePixels="True">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Card" Property="Background" Value="{DynamicResource Brush.Surface.Hover}" />
-                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Card" Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
-                            </Trigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Brush.Focus}" />
-                                <Setter TargetName="Card" Property="BorderThickness" Value="2" />
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Cursor" Value="Arrow" />
-                                <Setter TargetName="Card" Property="Background" Value="{DynamicResource Brush.Surface.Card}" />
-                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Brush.Border.Default}" />
-                                <Setter TargetName="Card" Property="Opacity" Value="0.72" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
         <DataTemplate x:Key="ComparisonDevelopmentStatusBadgeTemplate">
             <!-- A hollow status (Not relevant) has no fill: a dashed edge is drawn over the badge,
                  as a Border can't be dashed. -->
@@ -441,11 +393,6 @@
             <Border Margin="0,8,0,0" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
                 <StackPanel>
                     <DockPanel Margin="0,0,0,12">
-                        <CheckBox DockPanel.Dock="Right"
-                                  VerticalAlignment="Center"
-                                  AutomationProperties.Name="Show all entities in project comparison"
-                                  Content="Show all"
-                                  IsChecked="{Binding ProjectReporting.ShowAllEntities}" />
                         <StackPanel>
                             <TextBlock FontSize="20" FontWeight="SemiBold" Text="Entity comparison" />
                             <TextBlock Margin="0,3,0,0"
@@ -455,140 +402,179 @@
                     </DockPanel>
 
                     <WrapPanel Margin="0,0,0,8">
-                        <ToggleButton AutomationProperties.Name="Filter comparison to missing entities"
-                                IsChecked="{Binding ProjectReporting.IsMissingSelected, Mode=OneWay}"
-                                ToolTip="Filter to missing entities. Unavailable when the count is zero."
+                        <Button AutomationProperties.Name="{Binding ProjectReporting.TotalEntityCount, StringFormat=Show all entities in the comparison. {0} entities}"
+                                AutomationProperties.ItemStatus="{Binding ProjectReporting.ShowAllEntities, StringFormat=Selected: {0}}"
+                                Command="{Binding ProjectReporting.ToggleShowAllCommand}"
+                                ToolTip="Show every entity, including those that match in every Tracker. Choose again to show only differences.">
+                            <Button.Style>
+                                <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
+                                       TargetType="Button">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ProjectReporting.ShowAllEntities}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <StackPanel>
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="All" />
+                                <TextBlock Margin="0,3,0,0"
+                                           FontSize="22"
+                                           FontWeight="SemiBold"
+                                           Text="{Binding ProjectReporting.TotalEntityCount}" />
+                            </StackPanel>
+                        </Button>
+                        <Button AutomationProperties.Name="{Binding ProjectReporting.MissingCount, StringFormat=Filter comparison to missing entities. {0} entities}"
+                                AutomationProperties.ItemStatus="{Binding ProjectReporting.IsMissingSelected, StringFormat=Selected: {0}}"
                                 Command="{Binding ProjectReporting.SelectCategoryCommand}"
-                                CommandParameter="{x:Static projects:ProjectComparisonCategory.Missing}">
-                            <ToggleButton.Style>
-                                <Style TargetType="ToggleButton" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
+                                CommandParameter="{x:Static projects:ProjectComparisonCategory.Missing}"
+                                Tag="{DynamicResource Brush.Brand.Green60}"
+                                ToolTip="Filter to missing entities. Unavailable when the count is zero.">
+                            <Button.Style>
+                                <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
+                                       TargetType="Button">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding ProjectReporting.IsMissingSelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green100}" />
-                                            <Setter Property="BorderThickness" Value="2" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </ToggleButton.Style>
+                            </Button.Style>
                             <StackPanel>
-                                <TextBlock Text="Missing" />
-                                <TextBlock Margin="0,2,0,0" FontSize="18" FontWeight="SemiBold"
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Missing" />
+                                <TextBlock Margin="0,3,0,0"
+                                           FontSize="22"
+                                           FontWeight="SemiBold"
                                            Text="{Binding ProjectReporting.MissingCount}" />
                             </StackPanel>
-                        </ToggleButton>
-                        <ToggleButton AutomationProperties.Name="Filter comparison to divergent entities"
-                                IsChecked="{Binding ProjectReporting.IsDivergentSelected, Mode=OneWay}"
-                                ToolTip="Filter to divergent entities. Unavailable when the count is zero."
+                        </Button>
+                        <Button AutomationProperties.Name="{Binding ProjectReporting.DivergentCount, StringFormat=Filter comparison to divergent entities. {0} entities}"
+                                AutomationProperties.ItemStatus="{Binding ProjectReporting.IsDivergentSelected, StringFormat=Selected: {0}}"
                                 Command="{Binding ProjectReporting.SelectCategoryCommand}"
-                                CommandParameter="{x:Static projects:ProjectComparisonCategory.Divergent}">
-                            <ToggleButton.Style>
-                                <Style TargetType="ToggleButton" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
+                                CommandParameter="{x:Static projects:ProjectComparisonCategory.Divergent}"
+                                Tag="{DynamicResource Brush.Brand.Green60}"
+                                ToolTip="Filter to divergent entities. Unavailable when the count is zero.">
+                            <Button.Style>
+                                <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
+                                       TargetType="Button">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding ProjectReporting.IsDivergentSelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Brand.Green100}" />
-                                            <Setter Property="BorderThickness" Value="2" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </ToggleButton.Style>
+                            </Button.Style>
                             <StackPanel>
-                                <TextBlock Text="Divergent" />
-                                <TextBlock Margin="0,2,0,0" FontSize="18" FontWeight="SemiBold"
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Divergent" />
+                                <TextBlock Margin="0,3,0,0"
+                                           FontSize="22"
+                                           FontWeight="SemiBold"
                                            Text="{Binding ProjectReporting.DivergentCount}" />
                             </StackPanel>
-                        </ToggleButton>
-                        <ToggleButton AutomationProperties.Name="Filter comparison to blocked entities"
-                                IsChecked="{Binding ProjectReporting.IsBlockedSelected, Mode=OneWay}"
-                                ToolTip="Filter to blocked entities. Unavailable when the count is zero."
+                        </Button>
+                        <Button AutomationProperties.Name="{Binding ProjectReporting.BlockedCount, StringFormat=Filter comparison to blocked entities. {0} entities}"
+                                AutomationProperties.ItemStatus="{Binding ProjectReporting.IsBlockedSelected, StringFormat=Selected: {0}}"
                                 Command="{Binding ProjectReporting.SelectCategoryCommand}"
-                                CommandParameter="{x:Static projects:ProjectComparisonCategory.Blocked}">
-                            <ToggleButton.Style>
-                                <Style TargetType="ToggleButton" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
+                                CommandParameter="{x:Static projects:ProjectComparisonCategory.Blocked}"
+                                Tag="{DynamicResource Brush.Status.Blocked}"
+                                ToolTip="Filter to blocked entities. Unavailable when the count is zero.">
+                            <Button.Style>
+                                <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
+                                       TargetType="Button">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding ProjectReporting.IsBlockedSelected}" Value="True">
-                                            <Setter Property="Background" Value="{DynamicResource Brush.Status.Blocked}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Status.Blocked}" />
-                                            <Setter Property="BorderThickness" Value="2" />
-                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </ToggleButton.Style>
+                            </Button.Style>
                             <StackPanel>
-                                <TextBlock Text="Blocked" />
-                                <TextBlock Margin="0,2,0,0" FontSize="18" FontWeight="SemiBold"
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Blocked" />
+                                <TextBlock Margin="0,3,0,0"
+                                           FontSize="22"
+                                           FontWeight="SemiBold"
                                            Text="{Binding ProjectReporting.BlockedCount}" />
                             </StackPanel>
-                        </ToggleButton>
-                        <ToggleButton AutomationProperties.Name="Filter comparison to entities waiting on dependencies"
-                                IsChecked="{Binding ProjectReporting.IsWaitingOnDependenciesSelected, Mode=OneWay}"
-                                ToolTip="Filter to entities waiting on dependencies. Unavailable when the count is zero."
+                        </Button>
+                        <Button AutomationProperties.Name="{Binding ProjectReporting.WaitingOnDependenciesCount, StringFormat=Filter comparison to entities waiting on dependencies. {0} entities}"
+                                AutomationProperties.ItemStatus="{Binding ProjectReporting.IsWaitingOnDependenciesSelected, StringFormat=Selected: {0}}"
                                 Command="{Binding ProjectReporting.SelectCategoryCommand}"
-                                CommandParameter="{x:Static projects:ProjectComparisonCategory.WaitingOnDependencies}">
-                            <ToggleButton.Style>
-                                <Style TargetType="ToggleButton" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
+                                CommandParameter="{x:Static projects:ProjectComparisonCategory.WaitingOnDependencies}"
+                                Tag="{DynamicResource Brush.WorkStatus.WaitingOnDependencies}"
+                                ToolTip="Filter to entities waiting on dependencies. Unavailable when the count is zero.">
+                            <Button.Style>
+                                <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
+                                       TargetType="Button">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding ProjectReporting.IsWaitingOnDependenciesSelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
-                                            <Setter Property="BorderThickness" Value="2" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </ToggleButton.Style>
+                            </Button.Style>
                             <StackPanel>
-                                <TextBlock Text="Waiting on dependencies" />
-                                <TextBlock Margin="0,2,0,0" FontSize="18" FontWeight="SemiBold"
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Waiting on dependencies" />
+                                <TextBlock Margin="0,3,0,0"
+                                           FontSize="22"
+                                           FontWeight="SemiBold"
                                            Text="{Binding ProjectReporting.WaitingOnDependenciesCount}" />
                             </StackPanel>
-                        </ToggleButton>
-                        <ToggleButton AutomationProperties.Name="Filter comparison to rework entities"
-                                IsChecked="{Binding ProjectReporting.IsReworkSelected, Mode=OneWay}"
-                                ToolTip="Filter to Rework needed entities. Unavailable when the count is zero."
+                        </Button>
+                        <Button AutomationProperties.Name="{Binding ProjectReporting.ReworkCount, StringFormat=Filter comparison to rework entities. {0} entities}"
+                                AutomationProperties.ItemStatus="{Binding ProjectReporting.IsReworkSelected, StringFormat=Selected: {0}}"
                                 Command="{Binding ProjectReporting.SelectCategoryCommand}"
-                                CommandParameter="{x:Static projects:ProjectComparisonCategory.ReworkNeeded}">
-                            <ToggleButton.Style>
-                                <Style TargetType="ToggleButton" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
+                                CommandParameter="{x:Static projects:ProjectComparisonCategory.ReworkNeeded}"
+                                Tag="{DynamicResource Brush.Status.ReworkNeeded}"
+                                ToolTip="Filter to Rework needed entities. Unavailable when the count is zero.">
+                            <Button.Style>
+                                <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
+                                       TargetType="Button">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding ProjectReporting.IsReworkSelected}" Value="True">
-                                            <Setter Property="Background" Value="{DynamicResource Brush.Status.ReworkNeeded}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Status.ReworkNeeded}" />
-                                            <Setter Property="BorderThickness" Value="2" />
-                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Brand.DarkGreen}" />
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </ToggleButton.Style>
+                            </Button.Style>
                             <StackPanel>
-                                <TextBlock Text="Rework" />
-                                <TextBlock Margin="0,2,0,0" FontSize="18" FontWeight="SemiBold"
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Rework" />
+                                <TextBlock Margin="0,3,0,0"
+                                           FontSize="22"
+                                           FontWeight="SemiBold"
                                            Text="{Binding ProjectReporting.ReworkCount}" />
                             </StackPanel>
-                        </ToggleButton>
-                        <ToggleButton AutomationProperties.Name="Filter comparison to unresolved entities"
-                                IsChecked="{Binding ProjectReporting.IsUnresolvedSelected, Mode=OneWay}"
-                                ToolTip="Filter to unresolved entities. Unavailable when the count is zero."
+                        </Button>
+                        <Button AutomationProperties.Name="{Binding ProjectReporting.UnresolvedCount, StringFormat=Filter comparison to unresolved entities. {0} entities}"
+                                AutomationProperties.ItemStatus="{Binding ProjectReporting.IsUnresolvedSelected, StringFormat=Selected: {0}}"
                                 Command="{Binding ProjectReporting.SelectCategoryCommand}"
-                                CommandParameter="{x:Static projects:ProjectComparisonCategory.Unresolved}">
-                            <ToggleButton.Style>
-                                <Style TargetType="ToggleButton" BasedOn="{StaticResource ComparisonFilterButtonStyle}">
+                                CommandParameter="{x:Static projects:ProjectComparisonCategory.Unresolved}"
+                                Tag="{DynamicResource Brush.Brand.Green60}"
+                                ToolTip="Filter to unresolved entities. Unavailable when the count is zero.">
+                            <Button.Style>
+                                <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
+                                       TargetType="Button">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding ProjectReporting.IsUnresolvedSelected}" Value="True">
-                                            <Setter Property="Background" Value="{DynamicResource Brush.Surface.Alert}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Status.ReworkNeeded}" />
-                                            <Setter Property="BorderThickness" Value="2" />
+                                            <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </ToggleButton.Style>
+                            </Button.Style>
                             <StackPanel>
-                                <TextBlock Text="Unresolved" />
-                                <TextBlock Margin="0,2,0,0" FontSize="18" FontWeight="SemiBold"
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Unresolved" />
+                                <TextBlock Margin="0,3,0,0"
+                                           FontSize="22"
+                                           FontWeight="SemiBold"
                                            Text="{Binding ProjectReporting.UnresolvedCount}" />
                             </StackPanel>
-                        </ToggleButton>
+                        </Button>
                         <Button Margin="0,0,8,8"
                                 VerticalAlignment="Center"
                                 AutomationProperties.HelpText="Clear the comparison category filter"

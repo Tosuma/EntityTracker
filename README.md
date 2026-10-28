@@ -232,9 +232,11 @@ source remembers about earlier syncs, is merged automatically.
 
 The Project matrix aligns active entities by normalized source key. It starts with actionable
 differences—including missing entities, divergent statuses, blockers, rework, and unresolved
-references—and can explicitly show all entities. The category cards filter the matrix and reuse
-the Overview status colors for fast scanning. Each present cell opens that entity in its Tracker's
-Overview after the normal unsaved-work confirmation.
+references. The filter cards look like the Overview's summary cards: each category shows its color as a
+bar along its left edge (the status color for Blocked, Waiting on dependencies and Rework), and
+choosing a card again clears it. **All**, the first card, also shows the entities that match in every
+Tracker. Each present cell opens that entity in its Tracker's Overview after the normal unsaved-work
+confirmation.
 
 ![Project entity comparison with labeled statuses and explicit missing entities](images/light/project-comparison.png)
 

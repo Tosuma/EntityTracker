@@ -712,6 +712,48 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
     }
 
     [Fact]
+    public async Task ComparisonAllCard_ShowsMatchingEntitiesTooAndTogglesBackToDifferences()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        Tracker second = await harness.TrackerManagement.CreateBlankAsync(
+            harness.DefaultProject.Id,
+            "Second tracker");
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "shared");
+        await harness.AddEntityAsync(second.Id, "shared");
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "first_only");
+        using ShellViewModel shell = harness.CreateShell(
+            new EntityTrackerSettings(
+                lastProjectId: harness.DefaultProject.Id,
+                lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        Assert.True(await shell.NavigateAsync(ShellDestination.ProjectDashboard));
+        ProjectDashboardViewModel reporting = shell.ProjectReporting!;
+        await WaitUntilAsync(() => reporting.Comparison?.Rows.Count == 1 && reporting.TotalEntityCount == 2);
+        reporting.SelectCategoryCommand.Execute(ProjectComparisonCategory.Missing);
+        await WaitUntilAsync(() =>
+            reporting.SelectedCategory == ProjectComparisonCategory.Missing &&
+            reporting.Comparison?.SelectedCategory == ProjectComparisonCategory.Missing);
+
+        // All shows every entity, the matching one too, and replaces the category filter.
+        reporting.ToggleShowAllCommand.Execute(null);
+        await WaitUntilAsync(() =>
+            reporting.Comparison?.Filter == ProjectComparisonFilter.All &&
+            reporting.Comparison.Rows.Count == 2);
+        Assert.True(reporting.ShowAllEntities);
+        Assert.Equal(ProjectComparisonCategory.None, reporting.SelectedCategory);
+        Assert.Equal(2, reporting.TotalEntityCount);
+
+        // Choosing All again returns to the differences only.
+        reporting.ToggleShowAllCommand.Execute(null);
+        await WaitUntilAsync(() =>
+            reporting.Comparison?.Filter == ProjectComparisonFilter.ActionableDifferences &&
+            reporting.Comparison.Rows.Count == 1);
+        Assert.False(reporting.ShowAllEntities);
+        Assert.Equal("first_only", Assert.Single(reporting.Comparison!.Rows).DisplayName);
+    }
+
+    [Fact]
     public async Task InitializeAsync_InvalidSavedContextFallsBackToPortfolioAndClearsIt()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();

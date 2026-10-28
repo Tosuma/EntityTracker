@@ -53,6 +53,7 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
         _clearCategoryCommand = new AsyncCommand(
             ClearCategoryAsync,
             () => HasCategoryFilter);
+        ToggleShowAllCommand = new RelayCommand(() => ShowAllEntities = !ShowAllEntities);
         Progress = new AggregateProgressDashboardViewModel(
             (range, cancellationToken) => reportingService.GetProjectReportAsync(
                 projectId,
@@ -147,7 +148,7 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
 
     public string ComparisonEmptyHint => HasCategoryFilter
         ? "Choose the selected category again or clear the filter."
-        : "Choose Show all to inspect matching entities.";
+        : "Choose All to inspect matching entities.";
 
     public ProjectComparisonCategory SelectedCategory => _selectedCategory;
 
@@ -166,6 +167,8 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
 
     public bool IsUnresolvedSelected => SelectedCategory == ProjectComparisonCategory.Unresolved;
 
+    public int TotalEntityCount => Comparison?.TotalEntityCount ?? 0;
+
     public int MissingCount => Comparison?.CategoryCounts.Missing ?? 0;
 
     public int DivergentCount => Comparison?.CategoryCounts.Divergent ?? 0;
@@ -180,6 +183,8 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
     public int UnresolvedCount => Comparison?.CategoryCounts.Unresolved ?? 0;
 
     public ICommand SelectCategoryCommand => _selectCategoryCommand;
+
+    public ICommand ToggleShowAllCommand { get; }
 
     public ICommand ClearCategoryCommand => _clearCategoryCommand;
 
@@ -306,6 +311,7 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(IsWaitingOnDependenciesSelected));
         OnPropertyChanged(nameof(IsReworkSelected));
         OnPropertyChanged(nameof(IsUnresolvedSelected));
+        OnPropertyChanged(nameof(TotalEntityCount));
         OnPropertyChanged(nameof(MissingCount));
         OnPropertyChanged(nameof(DivergentCount));
         OnPropertyChanged(nameof(BlockedCount));
