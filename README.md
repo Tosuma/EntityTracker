@@ -528,7 +528,8 @@ computers; the app checks for updates and guides them through rebuilding when on
 
 A new **major** version is required: Project sync pauses and the workspace asks you to close and
 update. A new minor or patch version is only offered: a notification says it is available, with
-**Update**, Settings shows a dot until it is installed, and **Settings › About** has **Update** too.
+**Update**, Settings and its **About** category show a dot until it is installed, and **Settings ›
+About** has **Update** too.
 Updating syncs your changes first, as closing does.
 
 **What's new** lists what an update brings, one entry per version: every version after yours, so
@@ -539,7 +540,7 @@ messages written when each version is released.
 
 ![Required app update blocking the workspace, with what the update brings](images/light/app-update-required.png)
 
-![An available update: the notification with Update, the dot on Settings, and Update with What's new in Settings › About](images/light/update-available.png)
+![An available update: the notification with Update, the dots on Settings and About, and Update with What's new in Settings › About](images/light/update-available.png)
 
 ![After an update: the Updated notification with What's new, and the changes since the previous version in Settings › About](images/light/app-updated.png)
 

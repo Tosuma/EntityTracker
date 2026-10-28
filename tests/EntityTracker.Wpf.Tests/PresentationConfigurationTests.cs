@@ -905,6 +905,40 @@ public sealed class PresentationConfigurationTests
             (string?)foregroundSetter.Attribute("Value"));
     }
 
+    [Fact]
+    public void SettingsAbout_ShowsTheSidebarsUpdateDotWhileAnUpdateIsAvailable()
+    {
+        // #162: Settings › About is where an update is installed, so its category carries the same green dot
+        // as Settings in the sidebar while an update is available.
+        XDocument settings = LoadWpfXaml("Views", "SettingsView.xaml");
+        XDocument window = LoadWpfXaml("MainWindow.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement list = Assert.Single(settings.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "SettingsCategoryList");
+        XElement dot = Assert.Single(list.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "UpdateBadge");
+        XElement sidebarDot = Assert.Single(window.Descendants(), element =>
+            element.Name.LocalName == "Ellipse" && (string?)element.Attribute(x + "Name") == "Badge");
+
+        foreach (string attribute in new[] { "Width", "Height", "Fill" })
+        {
+            Assert.Equal((string?)sidebarDot.Attribute(attribute), (string?)dot.Attribute(attribute));
+        }
+
+        Assert.Equal("Collapsed", (string?)dot.Attribute("Visibility"));
+        Assert.Contains("AvailableUpdateVersion", (string?)dot.Attribute("ToolTip"), StringComparison.Ordinal);
+        XElement[] conditions = list.Descendants()
+            .Where(static element => element.Name.LocalName == "MultiDataTrigger")
+            .SelectMany(static trigger => trigger.Descendants().Where(static element => element.Name.LocalName == "Condition"))
+            .ToArray();
+        Assert.Equal(4, conditions.Length);
+        Assert.Equal(2, conditions.Count(static condition =>
+            (string?)condition.Attribute("Value") == "{x:Static viewModels:SettingsCategory.About}"));
+        Assert.Equal(2, conditions.Count(static condition =>
+            ((string?)condition.Attribute("Binding"))?.Contains("DataContext.IsUpdateAvailable", StringComparison.Ordinal) == true &&
+            (string?)condition.Attribute("Value") == "True"));
+    }
+
     [Theory]
     [InlineData("Views", "SettingsView.xaml", "AboutWhatsNew")]
     [InlineData("", "MainWindow.xaml", "UpdateBlockWhatsNew")]
