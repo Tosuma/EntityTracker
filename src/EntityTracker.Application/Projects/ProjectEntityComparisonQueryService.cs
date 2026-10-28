@@ -20,7 +20,8 @@ public sealed class ProjectEntityComparisonQueryService(
 
         const ProjectComparisonCategory allCategories =
             ProjectComparisonCategory.Missing |
-            ProjectComparisonCategory.Divergent |
+            ProjectComparisonCategory.DifferentScope |
+            ProjectComparisonCategory.DoneVsStuck |
             ProjectComparisonCategory.Blocked |
             ProjectComparisonCategory.ReworkNeeded |
             ProjectComparisonCategory.Unresolved |
@@ -101,7 +102,8 @@ public sealed class ProjectEntityComparisonQueryService(
             : allRows.Where(row => (row.Categories & categories) != 0).ToArray();
         ProjectComparisonCategoryCounts counts = new(
             Count(ProjectComparisonCategory.Missing),
-            Count(ProjectComparisonCategory.Divergent),
+            Count(ProjectComparisonCategory.DifferentScope),
+            Count(ProjectComparisonCategory.DoneVsStuck),
             Count(ProjectComparisonCategory.Blocked),
             Count(ProjectComparisonCategory.ReworkNeeded),
             Count(ProjectComparisonCategory.Unresolved),
@@ -128,14 +130,19 @@ public sealed class ProjectEntityComparisonQueryService(
             categories |= ProjectComparisonCategory.Missing;
         }
 
-        // Not relevant in one Tracker and relevant in another is intended, not a difference to act on.
-        ProjectComparisonCell[] present = cells
-            .Where(static cell => cell.IsPresent && cell.DevelopmentStatus != DevelopmentStatus.NotRelevant)
-            .ToArray();
-        if (present.Select(static cell => cell.DevelopmentStatus).Distinct().Skip(1).Any() ||
-            present.Select(static cell => cell.WorkStatus).Distinct().Skip(1).Any())
+        // The Trackers are parallel copies that progress at their own pace, so a different status alone is
+        // not out of sync. These are: in scope in one Tracker and Not relevant in another, and finished in
+        // one Tracker while stuck in another.
+        ProjectComparisonCell[] present = cells.Where(static cell => cell.IsPresent).ToArray();
+        if (present.Any(static cell => cell.DevelopmentStatus == DevelopmentStatus.NotRelevant) &&
+            present.Any(static cell => cell.DevelopmentStatus != DevelopmentStatus.NotRelevant))
         {
-            categories |= ProjectComparisonCategory.Divergent;
+            categories |= ProjectComparisonCategory.DifferentScope;
+        }
+
+        if (present.Any(IsDone) && present.Any(static cell => !IsDone(cell) && IsStuck(cell)))
+        {
+            categories |= ProjectComparisonCategory.DoneVsStuck;
         }
 
         if (cells.Any(static cell => cell.DevelopmentStatus == DevelopmentStatus.Blocked))
@@ -161,4 +168,13 @@ public sealed class ProjectEntityComparisonQueryService(
 
         return categories;
     }
+
+    private static bool IsDone(ProjectComparisonCell cell) =>
+        cell.DevelopmentStatus is DevelopmentStatus.DevelopmentCompleted or DevelopmentStatus.Reconciled;
+
+    // Blocked, waiting on dependencies, or in rework.
+    private static bool IsStuck(ProjectComparisonCell cell) =>
+        cell.DevelopmentStatus is DevelopmentStatus.Blocked or DevelopmentStatus.ReworkNeeded
+            or DevelopmentStatus.Reworking ||
+        cell.WorkStatus == EntityWorkflowState.Blocked;
 }

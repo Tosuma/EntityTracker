@@ -231,12 +231,21 @@ source remembers about earlier syncs, is merged automatically.
 ### Compare sibling Trackers
 
 The Project matrix aligns active entities by normalized source key and, like the Overview, opens on
-every entity. The cards above it work like the Overview's summary cards: each one shows how many
-entities are missing, divergent, blocked, waiting on dependencies, in rework or unresolved, with its
-color as a bar along its left edge (the status color for Blocked, Waiting on dependencies and Rework).
-Choosing cards adds their entities together, choosing one again takes it away, and **Total** shows
-every entity again. Each present cell opens that entity in its Tracker's Overview after the normal
-unsaved-work confirmation.
+every entity. The Trackers of a Project are parallel copies that move at their own pace, so a
+different status alone is not flagged. The cards above the matrix count what is out of sync or stuck:
+
+- **Missing**: absent from at least one Tracker.
+- **Different scope**: Not relevant in some Trackers and in scope in others.
+- **Done vs stuck**: Completed or Reconciled in some Trackers, and blocked, waiting on dependencies or
+  in rework in others.
+- **Blocked**, **Waiting on dependencies**, **Rework** and **Unresolved**: in that state in any
+  Tracker.
+
+The cards work like the Overview's summary cards, with each card's color as a bar along its left edge
+(the status color for Blocked, Waiting on dependencies and Rework). Choosing cards adds their entities
+together, choosing one again takes it away, and **Total** clears the cards. The search box narrows the
+matrix by entity name, together with the cards. Each present cell opens that entity in its Tracker's
+Overview after the normal unsaved-work confirmation.
 
 ![Project entity comparison with labeled statuses and explicit missing entities](images/light/project-comparison.png)
 

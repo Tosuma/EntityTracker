@@ -8,22 +8,24 @@ public enum ProjectComparisonCategory
 {
     None = 0,
     Missing = 1,
-    Divergent = 2,
+    DifferentScope = 2,
     Blocked = 4,
     ReworkNeeded = 8,
     Unresolved = 16,
-    WaitingOnDependencies = 32
+    WaitingOnDependencies = 32,
+    DoneVsStuck = 64
 }
 
 public sealed record ProjectComparisonCategoryCounts(
     int Missing,
-    int Divergent,
+    int DifferentScope,
+    int DoneVsStuck,
     int Blocked,
     int ReworkNeeded,
     int Unresolved,
-    int WaitingOnDependencies = 0)
+    int WaitingOnDependencies)
 {
-    public static ProjectComparisonCategoryCounts Empty { get; } = new(0, 0, 0, 0, 0);
+    public static ProjectComparisonCategoryCounts Empty { get; } = new(0, 0, 0, 0, 0, 0, 0);
 }
 
 public sealed record ProjectComparisonTracker(
