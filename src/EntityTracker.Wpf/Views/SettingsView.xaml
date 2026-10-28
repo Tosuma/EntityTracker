@@ -41,11 +41,37 @@
                 <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
                     <Setter Property="AutomationProperties.Name"
                             Value="{Binding Converter={x:Static services:SettingsCategoryLabelConverter.Instance}}" />
+                    <Style.Triggers>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding}" Value="{x:Static viewModels:SettingsCategory.About}" />
+                                <Condition Binding="{Binding DataContext.IsUpdateAvailable, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True" />
+                            </MultiDataTrigger.Conditions>
+                            <Setter Property="AutomationProperties.HelpText"
+                                    Value="{Binding DataContext.AvailableUpdateVersion, RelativeSource={RelativeSource AncestorType=ListBox}, StringFormat=EntityTracker {0} is available}" />
+                        </MultiDataTrigger>
+                    </Style.Triggers>
                 </Style>
             </ListBox.ItemContainerStyle>
             <ListBox.ItemTemplate>
                 <DataTemplate>
-                    <TextBlock Text="{Binding Converter={x:Static services:SettingsCategoryLabelConverter.Instance}}" />
+                    <!-- About carries the sidebar's update dot while an update is available, as that is
+                         where the update is installed (its tooltip says which version). -->
+                    <DockPanel LastChildFill="False">
+                        <TextBlock Text="{Binding Converter={x:Static services:SettingsCategoryLabelConverter.Instance}}" />
+                        <Ellipse x:Name="UpdateBadge" Width="8" Height="8" Margin="8,0,0,0" VerticalAlignment="Center"
+                                 Fill="{DynamicResource Brush.Notification.Success}" Visibility="Collapsed"
+                                 ToolTip="{Binding DataContext.AvailableUpdateVersion, RelativeSource={RelativeSource AncestorType=ListBox}, StringFormat=EntityTracker {0} is available}" />
+                    </DockPanel>
+                    <DataTemplate.Triggers>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding}" Value="{x:Static viewModels:SettingsCategory.About}" />
+                                <Condition Binding="{Binding DataContext.IsUpdateAvailable, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True" />
+                            </MultiDataTrigger.Conditions>
+                            <Setter TargetName="UpdateBadge" Property="Visibility" Value="Visible" />
+                        </MultiDataTrigger>
+                    </DataTemplate.Triggers>
                 </DataTemplate>
             </ListBox.ItemTemplate>
         </ListBox>
