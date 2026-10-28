@@ -67,5 +67,4 @@ public sealed record ProjectComparisonDisplayCell(
 public sealed record ProjectComparisonDisplayRow(
     string NormalizedSourceKey,
     string DisplayName,
-    IReadOnlyList<ProjectComparisonDisplayCell> Cells,
-    bool IsActionable);
+    IReadOnlyList<ProjectComparisonDisplayCell> Cells);

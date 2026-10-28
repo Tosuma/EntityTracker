@@ -24,8 +24,7 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
     private ProjectDashboard? _dashboard;
     private ProjectEntityComparison? _comparison;
     private IReadOnlyList<ProjectComparisonDisplayRow> _comparisonRows = [];
-    private bool _showAllEntities;
-    private ProjectComparisonCategory _selectedCategory;
+    private ProjectComparisonCategory _selectedCategories;
     private readonly NotificationCenter? _notifications;
     private bool _hasError;
     private bool _isBusy;
@@ -49,11 +48,8 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
         RepositoryCard = repositoryCard;
         _selectCategoryCommand = new AsyncCommand<ProjectComparisonCategory>(
             SelectCategoryAsync,
-            category => GetCategoryCount(category) > 0);
-        _clearCategoryCommand = new AsyncCommand(
-            ClearCategoryAsync,
-            () => HasCategoryFilter);
-        ToggleShowAllCommand = new RelayCommand(() => ShowAllEntities = !ShowAllEntities);
+            category => GetCategoryCount(category) > 0 || SelectedCategories.HasFlag(category));
+        _clearCategoryCommand = new AsyncCommand(ClearCategoryAsync);
         Progress = new AggregateProgressDashboardViewModel(
             (range, cancellationToken) => reportingService.GetProjectReportAsync(
                 projectId,
@@ -92,31 +88,11 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
             {
                 ComparisonRows = CreateDisplayRows(value);
                 OnPropertyChanged(nameof(HasComparisonRows));
-                OnPropertyChanged(nameof(ShowNoActionableRows));
+                OnPropertyChanged(nameof(ShowNoMatchingRows));
                 OnPropertyChanged(nameof(ShowNoComparisonEntities));
                 OnPropertyChanged(nameof(ComparisonSummary));
                 NotifyCategoryPropertiesChanged();
                 _selectCategoryCommand.NotifyCanExecuteChanged();
-            }
-        }
-    }
-
-    public bool ShowAllEntities
-    {
-        get => _showAllEntities;
-        set
-        {
-            if (SetField(ref _showAllEntities, value))
-            {
-                if (value && _selectedCategory != ProjectComparisonCategory.None)
-                {
-                    _selectedCategory = ProjectComparisonCategory.None;
-                    NotifyCategoryPropertiesChanged();
-                }
-
-                OnPropertyChanged(nameof(ShowNoActionableRows));
-                OnPropertyChanged(nameof(ComparisonSummary));
-                _ = LoadComparisonSafelyAsync();
             }
         }
     }
@@ -137,35 +113,29 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
 
     public bool HasComparisonRows => Comparison?.Rows.Count > 0;
 
-    public bool ShowNoActionableRows =>
-        Comparison is { Rows.Count: 0, TotalEntityCount: > 0 } && !ShowAllEntities;
+    public bool ShowNoMatchingRows => Comparison is { Rows.Count: 0, TotalEntityCount: > 0 };
 
     public bool ShowNoComparisonEntities => Comparison is { TotalEntityCount: 0 };
 
-    public string ComparisonEmptyTitle => HasCategoryFilter
-        ? $"No {FormatCategory(SelectedCategory).ToLowerInvariant()} entities"
-        : "No actionable differences";
+    // The chosen category cards; they add up, and none chosen (Total) shows every entity.
+    public ProjectComparisonCategory SelectedCategories => _selectedCategories;
 
-    public string ComparisonEmptyHint => HasCategoryFilter
-        ? "Choose the selected category again or clear the filter."
-        : "Choose All to inspect matching entities.";
+    public bool HasCategoryFilter => SelectedCategories != ProjectComparisonCategory.None;
 
-    public ProjectComparisonCategory SelectedCategory => _selectedCategory;
+    public bool IsTotalSelected => !HasCategoryFilter;
 
-    public bool HasCategoryFilter => SelectedCategory != ProjectComparisonCategory.None;
+    public bool IsMissingSelected => SelectedCategories.HasFlag(ProjectComparisonCategory.Missing);
 
-    public bool IsMissingSelected => SelectedCategory == ProjectComparisonCategory.Missing;
+    public bool IsDivergentSelected => SelectedCategories.HasFlag(ProjectComparisonCategory.Divergent);
 
-    public bool IsDivergentSelected => SelectedCategory == ProjectComparisonCategory.Divergent;
-
-    public bool IsBlockedSelected => SelectedCategory == ProjectComparisonCategory.Blocked;
+    public bool IsBlockedSelected => SelectedCategories.HasFlag(ProjectComparisonCategory.Blocked);
 
     public bool IsWaitingOnDependenciesSelected =>
-        SelectedCategory == ProjectComparisonCategory.WaitingOnDependencies;
+        SelectedCategories.HasFlag(ProjectComparisonCategory.WaitingOnDependencies);
 
-    public bool IsReworkSelected => SelectedCategory == ProjectComparisonCategory.ReworkNeeded;
+    public bool IsReworkSelected => SelectedCategories.HasFlag(ProjectComparisonCategory.ReworkNeeded);
 
-    public bool IsUnresolvedSelected => SelectedCategory == ProjectComparisonCategory.Unresolved;
+    public bool IsUnresolvedSelected => SelectedCategories.HasFlag(ProjectComparisonCategory.Unresolved);
 
     public int TotalEntityCount => Comparison?.TotalEntityCount ?? 0;
 
@@ -184,17 +154,13 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
 
     public ICommand SelectCategoryCommand => _selectCategoryCommand;
 
-    public ICommand ToggleShowAllCommand { get; }
-
     public ICommand ClearCategoryCommand => _clearCategoryCommand;
 
     public string ComparisonSummary => Comparison is null
         ? string.Empty
-        : ShowAllEntities
-            ? $"Showing all {Comparison.TotalEntityCount} entities"
-            : HasCategoryFilter
-                ? $"Showing {Comparison.Rows.Count} {FormatCategory(SelectedCategory).ToLowerInvariant()} of {Comparison.TotalEntityCount} entities"
-                : $"Showing {Comparison.ActionableEntityCount} actionable of {Comparison.TotalEntityCount} entities";
+        : HasCategoryFilter
+            ? $"Showing {Comparison.Rows.Count} of {Comparison.TotalEntityCount} entities"
+            : $"Showing all {Comparison.TotalEntityCount} entities";
 
     public bool IsBusy
     {
@@ -246,10 +212,7 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
         {
             Comparison = await _comparisonService.GetAsync(
                 ProjectId,
-                ShowAllEntities
-                    ? ProjectComparisonFilter.All
-                    : ProjectComparisonFilter.ActionableDifferences,
-                ShowAllEntities ? ProjectComparisonCategory.None : SelectedCategory,
+                SelectedCategories,
                 cancellationToken);
         }
         finally
@@ -260,20 +223,13 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
 
     private async Task SelectCategoryAsync(ProjectComparisonCategory category)
     {
-        if (GetCategoryCount(category) == 0)
+        if (!_selectCategoryCommand.CanExecute(category))
         {
             return;
         }
 
-        if (_showAllEntities)
-        {
-            _showAllEntities = false;
-            OnPropertyChanged(nameof(ShowAllEntities));
-        }
-
-        _selectedCategory = _selectedCategory == category
-            ? ProjectComparisonCategory.None
-            : category;
+        // A card adds its entities to the chosen ones; choosing it again takes them away.
+        _selectedCategories ^= category;
         NotifyCategoryPropertiesChanged();
         await LoadComparisonSafelyAsync();
     }
@@ -285,7 +241,7 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
             return;
         }
 
-        _selectedCategory = ProjectComparisonCategory.None;
+        _selectedCategories = ProjectComparisonCategory.None;
         NotifyCategoryPropertiesChanged();
         await LoadComparisonSafelyAsync();
     }
@@ -303,8 +259,9 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
 
     private void NotifyCategoryPropertiesChanged()
     {
-        OnPropertyChanged(nameof(SelectedCategory));
+        OnPropertyChanged(nameof(SelectedCategories));
         OnPropertyChanged(nameof(HasCategoryFilter));
+        OnPropertyChanged(nameof(IsTotalSelected));
         OnPropertyChanged(nameof(IsMissingSelected));
         OnPropertyChanged(nameof(IsDivergentSelected));
         OnPropertyChanged(nameof(IsBlockedSelected));
@@ -319,22 +276,9 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ReworkCount));
         OnPropertyChanged(nameof(UnresolvedCount));
         OnPropertyChanged(nameof(ComparisonSummary));
-        OnPropertyChanged(nameof(ShowNoActionableRows));
-        OnPropertyChanged(nameof(ComparisonEmptyTitle));
-        OnPropertyChanged(nameof(ComparisonEmptyHint));
-        _clearCategoryCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(ShowNoMatchingRows));
+        _selectCategoryCommand.NotifyCanExecuteChanged();
     }
-
-    private static string FormatCategory(ProjectComparisonCategory category) => category switch
-    {
-        ProjectComparisonCategory.Missing => "Missing",
-        ProjectComparisonCategory.Divergent => "Divergent",
-        ProjectComparisonCategory.Blocked => "Blocked",
-        ProjectComparisonCategory.WaitingOnDependencies => "Waiting on dependencies",
-        ProjectComparisonCategory.ReworkNeeded => "Rework",
-        ProjectComparisonCategory.Unresolved => "Unresolved",
-        _ => "Actionable"
-    };
 
     private async Task LoadComparisonSafelyAsync()
     {
@@ -364,8 +308,7 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
             row.Cells.Select((cell, index) => ProjectComparisonDisplayCell.Create(
                 row.DisplayName,
                 comparison.Trackers[index].Name,
-                cell)).ToArray(),
-            row.IsActionable)).ToArray();
+                cell)).ToArray())).ToArray();
     }
 
     private void ReportError(string message, NotificationKind kind = NotificationKind.Failure)

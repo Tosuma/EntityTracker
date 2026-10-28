@@ -403,14 +403,14 @@
 
                     <WrapPanel Margin="0,0,0,8">
                         <Button AutomationProperties.Name="{Binding ProjectReporting.TotalEntityCount, StringFormat=Show all entities in the comparison. {0} entities}"
-                                AutomationProperties.ItemStatus="{Binding ProjectReporting.ShowAllEntities, StringFormat=Selected: {0}}"
-                                Command="{Binding ProjectReporting.ToggleShowAllCommand}"
-                                ToolTip="Show every entity, including those that match in every Tracker. Choose again to show only differences.">
+                                AutomationProperties.ItemStatus="{Binding ProjectReporting.IsTotalSelected, StringFormat=Selected: {0}}"
+                                Command="{Binding ProjectReporting.ClearCategoryCommand}"
+                                ToolTip="Show every entity">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
                                        TargetType="Button">
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding ProjectReporting.ShowAllEntities}" Value="True">
+                                        <DataTrigger Binding="{Binding ProjectReporting.IsTotalSelected}" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
                                             <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border.Medium}" />
                                         </DataTrigger>
@@ -418,7 +418,7 @@
                                 </Style>
                             </Button.Style>
                             <StackPanel>
-                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="All" />
+                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Total" />
                                 <TextBlock Margin="0,3,0,0"
                                            FontSize="22"
                                            FontWeight="SemiBold"
@@ -430,7 +430,7 @@
                                 Command="{Binding ProjectReporting.SelectCategoryCommand}"
                                 CommandParameter="{x:Static projects:ProjectComparisonCategory.Missing}"
                                 Tag="{DynamicResource Brush.Brand.Green60}"
-                                ToolTip="Filter to missing entities. Unavailable when the count is zero.">
+                                ToolTip="Show missing entities. More cards add their entities. Unavailable when the count is zero.">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
                                        TargetType="Button">
@@ -455,7 +455,7 @@
                                 Command="{Binding ProjectReporting.SelectCategoryCommand}"
                                 CommandParameter="{x:Static projects:ProjectComparisonCategory.Divergent}"
                                 Tag="{DynamicResource Brush.Brand.Green60}"
-                                ToolTip="Filter to divergent entities. Unavailable when the count is zero.">
+                                ToolTip="Show divergent entities. More cards add their entities. Unavailable when the count is zero.">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
                                        TargetType="Button">
@@ -480,7 +480,7 @@
                                 Command="{Binding ProjectReporting.SelectCategoryCommand}"
                                 CommandParameter="{x:Static projects:ProjectComparisonCategory.Blocked}"
                                 Tag="{DynamicResource Brush.Status.Blocked}"
-                                ToolTip="Filter to blocked entities. Unavailable when the count is zero.">
+                                ToolTip="Show blocked entities. More cards add their entities. Unavailable when the count is zero.">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
                                        TargetType="Button">
@@ -505,7 +505,7 @@
                                 Command="{Binding ProjectReporting.SelectCategoryCommand}"
                                 CommandParameter="{x:Static projects:ProjectComparisonCategory.WaitingOnDependencies}"
                                 Tag="{DynamicResource Brush.WorkStatus.WaitingOnDependencies}"
-                                ToolTip="Filter to entities waiting on dependencies. Unavailable when the count is zero.">
+                                ToolTip="Show entities waiting on dependencies. More cards add their entities. Unavailable when the count is zero.">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
                                        TargetType="Button">
@@ -530,7 +530,7 @@
                                 Command="{Binding ProjectReporting.SelectCategoryCommand}"
                                 CommandParameter="{x:Static projects:ProjectComparisonCategory.ReworkNeeded}"
                                 Tag="{DynamicResource Brush.Status.ReworkNeeded}"
-                                ToolTip="Filter to Rework needed entities. Unavailable when the count is zero.">
+                                ToolTip="Show Rework needed entities. More cards add their entities. Unavailable when the count is zero.">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
                                        TargetType="Button">
@@ -555,7 +555,7 @@
                                 Command="{Binding ProjectReporting.SelectCategoryCommand}"
                                 CommandParameter="{x:Static projects:ProjectComparisonCategory.Unresolved}"
                                 Tag="{DynamicResource Brush.Brand.Green60}"
-                                ToolTip="Filter to unresolved entities. Unavailable when the count is zero.">
+                                ToolTip="Show unresolved entities. More cards add their entities. Unavailable when the count is zero.">
                             <Button.Style>
                                 <Style BasedOn="{StaticResource SummaryFilterButtonStyle}"
                                        TargetType="Button">
@@ -575,13 +575,6 @@
                                            Text="{Binding ProjectReporting.UnresolvedCount}" />
                             </StackPanel>
                         </Button>
-                        <Button Margin="0,0,8,8"
-                                VerticalAlignment="Center"
-                                AutomationProperties.HelpText="Clear the comparison category filter"
-                                Command="{Binding ProjectReporting.ClearCategoryCommand}"
-                                Content="Clear filter"
-                                Style="{StaticResource SecondaryButtonStyle}"
-                                Visibility="{Binding ProjectReporting.HasCategoryFilter, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     </WrapPanel>
 
                     <TextBlock Margin="0,8"
@@ -591,11 +584,11 @@
                                Visibility="{Binding ProjectReporting.ShowNoComparisonEntities, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <StackPanel Margin="0,8"
                                 HorizontalAlignment="Center"
-                                Visibility="{Binding ProjectReporting.ShowNoActionableRows, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                Visibility="{Binding ProjectReporting.ShowNoMatchingRows, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <TextBlock HorizontalAlignment="Center" FontWeight="SemiBold"
-                                   Text="{Binding ProjectReporting.ComparisonEmptyTitle}" />
+                                   Text="No entities match the chosen cards" />
                         <TextBlock Margin="0,3,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
-                                   Text="{Binding ProjectReporting.ComparisonEmptyHint}" />
+                                   Text="Choose Total to show every entity." />
                     </StackPanel>
 
                     <DataGrid x:Name="ComparisonGrid"

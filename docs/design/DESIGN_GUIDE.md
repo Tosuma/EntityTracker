@@ -112,9 +112,10 @@ filter and returns to Total, keeping the sort; Total counts as selected whenever
 The Project dashboard's Entity comparison uses the same card (`SummaryFilterButtonStyle`, in
 `Themes/EntityTrackerComponents.xaml`). Blocked, Waiting on dependencies and Rework carry their status
 colours (Waiting on dependencies its work status's pale amber); Missing, Divergent and Unresolved are not
-statuses and carry a neutral Green 60 bar. All, first, has no bar, like Total, but it is not the default:
-the comparison starts with only the actionable differences, and All adds the entities that match in
-every Tracker. A card with no entities is disabled.
+statuses and carry a neutral Green 60 bar. Total comes first, with no bar, and works as on the Overview:
+the comparison opens on every entity with Total chosen, and Total clears the cards. Unlike the Overview's
+status cards, the comparison's cards add up: each chosen card adds its entities, since one entity can be
+in several categories. A card with no entities is disabled.
 
 **What's new** (Settings › About and the required-update screen) lists release notes, one per version,
 newest first: the version and date in semibold over its message in secondary text (`ReleaseNoteTemplate`),

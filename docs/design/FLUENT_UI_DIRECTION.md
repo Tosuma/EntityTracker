@@ -185,8 +185,9 @@ total. Tracker-specific cards remain visible so a large tracker does not obscure
 performance.
 
 A Project can show an entity comparison matrix across its trackers. Rows match by the established
-normalized schema key. Missing entities are explicit, and actionable differences are shown by
-default with an option to show every entity. Unrelated projects do not share an entity matrix.
+normalized schema key. Missing entities are explicit. Like the Overview, the matrix opens on every
+entity, and its category cards narrow it to the entities in any chosen category. Unrelated projects do
+not share an entity matrix.
 
 All aggregation and comparison calculations remain in Application or Reporting. WPF only presents
 their query models.

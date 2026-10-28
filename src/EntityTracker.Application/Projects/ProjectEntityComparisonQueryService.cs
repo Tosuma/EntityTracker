@@ -13,15 +13,10 @@ public sealed class ProjectEntityComparisonQueryService(
 {
     public async Task<ProjectEntityComparison?> GetAsync(
         ProjectId projectId,
-        ProjectComparisonFilter filter = ProjectComparisonFilter.ActionableDifferences,
-        ProjectComparisonCategory category = ProjectComparisonCategory.None,
+        ProjectComparisonCategory categories = ProjectComparisonCategory.None,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(projectId);
-        if (!Enum.IsDefined(filter))
-        {
-            throw new ArgumentOutOfRangeException(nameof(filter));
-        }
 
         const ProjectComparisonCategory allCategories =
             ProjectComparisonCategory.Missing |
@@ -30,10 +25,9 @@ public sealed class ProjectEntityComparisonQueryService(
             ProjectComparisonCategory.ReworkNeeded |
             ProjectComparisonCategory.Unresolved |
             ProjectComparisonCategory.WaitingOnDependencies;
-        if ((category & ~allCategories) != 0 ||
-            category != ProjectComparisonCategory.None && !IsSingleCategory(category))
+        if ((categories & ~allCategories) != 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(category));
+            throw new ArgumentOutOfRangeException(nameof(categories));
         }
 
         Project? project = await projectRepository.GetAsync(projectId, cancellationToken);
@@ -101,12 +95,10 @@ public sealed class ProjectEntityComparisonQueryService(
                 cells,
                 Categorize(cells));
         }).ToArray();
-        int actionableCount = allRows.Count(static row => row.IsActionable);
-        ProjectComparisonRow[] rows = filter == ProjectComparisonFilter.All
+        // Every entity unless cards are chosen; chosen cards add up (a row in any of them).
+        ProjectComparisonRow[] rows = categories == ProjectComparisonCategory.None
             ? allRows
-            : category == ProjectComparisonCategory.None
-                ? allRows.Where(static row => row.IsActionable).ToArray()
-                : allRows.Where(row => (row.Categories & category) != 0).ToArray();
+            : allRows.Where(row => (row.Categories & categories) != 0).ToArray();
         ProjectComparisonCategoryCounts counts = new(
             Count(ProjectComparisonCategory.Missing),
             Count(ProjectComparisonCategory.Divergent),
@@ -120,9 +112,7 @@ public sealed class ProjectEntityComparisonQueryService(
             columns,
             rows,
             allRows.Length,
-            actionableCount,
-            filter,
-            category,
+            categories,
             counts);
 
         int Count(ProjectComparisonCategory value) =>
@@ -171,7 +161,4 @@ public sealed class ProjectEntityComparisonQueryService(
 
         return categories;
     }
-
-    private static bool IsSingleCategory(ProjectComparisonCategory category) =>
-        ((int)category & ((int)category - 1)) == 0;
 }

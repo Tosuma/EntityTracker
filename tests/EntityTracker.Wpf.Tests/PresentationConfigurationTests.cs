@@ -436,10 +436,10 @@ public sealed class PresentationConfigurationTests
         // comparison) replace a Fluent template.
         XDocument components = LoadWpfXaml("Themes", "EntityTrackerComponents.xaml");
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
-        string?[] templatedStyles = components.Descendants()
+        string[] templatedStyles = components.Descendants()
             .Where(static element => element.Name.LocalName == "ControlTemplate")
             .Select(element => (string?)element.Ancestors().Last(static ancestor => ancestor.Name.LocalName == "Style")
-                .Attribute(x + "Key"))
+                .Attribute(x + "Key") ?? string.Empty)
             .Distinct()
             .ToArray();
         Assert.Equal(["SummaryFilterButtonStyle", "DangerButtonStyle"], templatedStyles);
@@ -1445,8 +1445,8 @@ public sealed class PresentationConfigurationTests
     public void ProjectComparison_FilterCardsLookLikeTheOverviewSummaryCards()
     {
         // The comparison's cards share the Overview's summary card style: a coloured edge (the status colour
-        // where a category is one, otherwise a neutral Green 60), and one selected look. All comes first,
-        // with no edge, and replaces the old Show all check box.
+        // where a category is one, otherwise a neutral Green 60), and one selected look. Total comes first,
+        // with no edge, and clears the cards, so there is no Show all check box or Clear filter button.
         XDocument document = LoadWpfXaml("Views", "ProjectDashboardView.xaml");
         string? Setter(XElement owner, string property) => (string?)owner.Elements()
             .SingleOrDefault(element => element.Name.LocalName == "Setter" &&
@@ -1462,7 +1462,7 @@ public sealed class PresentationConfigurationTests
             .ToArray();
 
         Assert.Equal(
-            ["All", "Missing", "Divergent", "Blocked", "Waiting on dependencies", "Rework", "Unresolved"],
+            ["Total", "Missing", "Divergent", "Blocked", "Waiting on dependencies", "Rework", "Unresolved"],
             cards.Select(static card => (string?)card.Descendants().First(static element =>
                 element.Name.LocalName == "TextBlock").Attribute("Text")));
         Assert.Equal(
@@ -1476,7 +1476,7 @@ public sealed class PresentationConfigurationTests
                 "{DynamicResource Brush.Brand.Green60}",
             ],
             cards.Select(static card => (string?)card.Attribute("Tag")));
-        Assert.Equal("{Binding ProjectReporting.ToggleShowAllCommand}", (string?)cards[0].Attribute("Command"));
+        Assert.Equal("{Binding ProjectReporting.ClearCategoryCommand}", (string?)cards[0].Attribute("Command"));
         Assert.All(cards, card =>
         {
             XElement selected = Assert.Single(card.Descendants(), element => element.Name.LocalName == "DataTrigger");
@@ -1485,9 +1485,9 @@ public sealed class PresentationConfigurationTests
             Assert.StartsWith("{Binding ProjectReporting.", (string?)card.Attribute("AutomationProperties.ItemStatus"), StringComparison.Ordinal);
         });
         Assert.DoesNotContain(panel.Elements(), static element => element.Name.LocalName == "ToggleButton");
-        Assert.DoesNotContain(document.Descendants(), static element =>
-            element.Name.LocalName == "CheckBox" &&
-            (string?)element.Attribute("IsChecked") == "{Binding ProjectReporting.ShowAllEntities}");
+        Assert.DoesNotContain(document.Descendants(), static element => element.Name.LocalName == "CheckBox");
+        Assert.Single(document.Descendants(), static element =>
+            (string?)element.Attribute("Command") == "{Binding ProjectReporting.ClearCategoryCommand}");
     }
 
     [Fact]

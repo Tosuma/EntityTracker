@@ -3,12 +3,6 @@ using EntityTracker.Domain;
 
 namespace EntityTracker.Application.Projects;
 
-public enum ProjectComparisonFilter
-{
-    ActionableDifferences,
-    All
-}
-
 [Flags]
 public enum ProjectComparisonCategory
 {
@@ -52,17 +46,12 @@ public sealed record ProjectComparisonRow(
     string NormalizedSourceKey,
     string DisplayName,
     IReadOnlyList<ProjectComparisonCell> Cells,
-    ProjectComparisonCategory Categories)
-{
-    public bool IsActionable => Categories != ProjectComparisonCategory.None;
-}
+    ProjectComparisonCategory Categories);
 
 public sealed record ProjectEntityComparison(
     ProjectId ProjectId,
     IReadOnlyList<ProjectComparisonTracker> Trackers,
     IReadOnlyList<ProjectComparisonRow> Rows,
     int TotalEntityCount,
-    int ActionableEntityCount,
-    ProjectComparisonFilter Filter,
-    ProjectComparisonCategory SelectedCategory,
+    ProjectComparisonCategory SelectedCategories,
     ProjectComparisonCategoryCounts CategoryCounts);
