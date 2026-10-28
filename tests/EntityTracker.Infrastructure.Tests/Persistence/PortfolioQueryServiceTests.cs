@@ -112,14 +112,17 @@ public sealed class PortfolioQueryServiceTests
         TrackedEntity alphaOnly = new(EntityId.New(), alpha.Id, "Alpha only");
         TrackedEntity alphaAttention = new(
             EntityId.New(), alpha.Id, "Attention", DevelopmentStatus.Reconciled);
-        // #73: not relevant in Alpha, still to do in Zulu: present in both, and not a difference to act on.
+        // #73: not relevant in Alpha, still to do in Zulu: present in both, with a different scope (#164).
         TrackedEntity alphaStable = new(EntityId.New(), alpha.Id, "Stable", DevelopmentStatus.NotRelevant);
+        // #164: done in Alpha and needing rework in Zulu.
+        TrackedEntity alphaStuck = new(
+            EntityId.New(), alpha.Id, "Stuck", DevelopmentStatus.DevelopmentCompleted);
         TrackedEntity alphaArchived = new(
             EntityId.New(), alpha.Id, "Archived only",
             lifecycleState: EntityLifecycleState.Archived);
         TrackedEntity alphaMissing = TrackedEntity.Placeholder(alpha.Id, "Missing target");
         await state.ApplyAsync(alpha.Id, new TrackedStateChangeSet(
-            [alphaCommon, alphaOnly, alphaAttention, alphaStable, alphaArchived, alphaMissing],
+            [alphaCommon, alphaOnly, alphaAttention, alphaStable, alphaStuck, alphaArchived, alphaMissing],
             [], [],
             [alphaAttention.Id],
             [new EntityDependency(alphaAttention.Id, alphaMissing.Id)]));
@@ -130,8 +133,9 @@ public sealed class PortfolioQueryServiceTests
         TrackedEntity zuluAttention = new(
             EntityId.New(), zulu.Id, "Attention", DevelopmentStatus.Reconciled);
         TrackedEntity zuluStable = new(EntityId.New(), zulu.Id, "stable");
+        TrackedEntity zuluStuck = new(EntityId.New(), zulu.Id, "Stuck", DevelopmentStatus.ReworkNeeded);
         await state.ApplyAsync(zulu.Id, new TrackedStateChangeSet(
-            [zuluCommon, zuluOnly, zuluAttention, zuluStable], [], []));
+            [zuluCommon, zuluOnly, zuluAttention, zuluStable, zuluStuck], [], []));
 
         EntityOverviewService overview = new(
             entities,
@@ -154,12 +158,14 @@ public sealed class PortfolioQueryServiceTests
                 ProjectComparisonCategory.Missing | ProjectComparisonCategory.Unresolved));
 
         Assert.Equal(["Alpha", "Zulu"], all.Trackers.Select(static item => item.Name));
-        Assert.Equal(5, all.TotalEntityCount);
+        Assert.Equal(6, all.TotalEntityCount);
         Assert.Equal(
-            ["ALPHA ONLY", "ATTENTION", "CUSTOMER", "STABLE", "ZULU ONLY"],
+            ["ALPHA ONLY", "ATTENTION", "CUSTOMER", "STABLE", "STUCK", "ZULU ONLY"],
             all.Rows.Select(static row => row.NormalizedSourceKey));
         Assert.Equal(2, all.CategoryCounts.Missing);
-        Assert.Equal(1, all.CategoryCounts.Divergent);
+        Assert.Equal(1, all.CategoryCounts.DifferentScope);
+        Assert.Equal(1, all.CategoryCounts.DoneVsStuck);
+        Assert.Equal(1, all.CategoryCounts.ReworkNeeded);
         Assert.Equal(1, all.CategoryCounts.Unresolved);
         Assert.Equal(all.CategoryCounts, missing.CategoryCounts);
         Assert.Equal(["ALPHA ONLY", "ZULU ONLY"],
@@ -172,11 +178,17 @@ public sealed class PortfolioQueryServiceTests
         Assert.False(alphaOnlyRow.Cells[1].IsPresent);
         Assert.True(all.Rows[1].Cells[0].HasIssues);
         Assert.False(all.Rows[1].Cells[1].HasIssues);
+        // #164: Trackers progress at their own pace, so In progress in one and Completed in another is not
+        // out of sync; present in one Tracker only is Missing, nothing more.
+        ProjectComparisonCategory Categories(string key) =>
+            all.Rows.Single(row => row.NormalizedSourceKey == key).Categories;
+        Assert.Equal(ProjectComparisonCategory.None, Categories("CUSTOMER"));
+        Assert.Equal(ProjectComparisonCategory.Missing, Categories("ALPHA ONLY"));
+        Assert.Equal(ProjectComparisonCategory.DifferentScope, Categories("STABLE"));
         Assert.Equal(
-            ProjectComparisonCategory.Divergent,
-            all.Rows.Single(static row => row.NormalizedSourceKey == "CUSTOMER").Categories);
+            ProjectComparisonCategory.DoneVsStuck | ProjectComparisonCategory.ReworkNeeded,
+            Categories("STUCK"));
         ProjectComparisonRow stableRow = all.Rows.Single(static row => row.NormalizedSourceKey == "STABLE");
-        Assert.Equal(ProjectComparisonCategory.None, stableRow.Categories);
         Assert.True(stableRow.Cells[0].IsPresent);
         Assert.Equal(DevelopmentStatus.NotRelevant, stableRow.Cells[0].DevelopmentStatus);
     }

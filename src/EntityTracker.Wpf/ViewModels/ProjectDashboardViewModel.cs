@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 
+using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.Projects;
 using EntityTracker.Domain;
 using EntityTracker.Reporting;
@@ -25,6 +26,7 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
     private ProjectEntityComparison? _comparison;
     private IReadOnlyList<ProjectComparisonDisplayRow> _comparisonRows = [];
     private ProjectComparisonCategory _selectedCategories;
+    private string _searchQuery = string.Empty;
     private readonly NotificationCenter? _notifications;
     private bool _hasError;
     private bool _isBusy;
@@ -86,8 +88,7 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
         {
             if (SetField(ref _comparison, value))
             {
-                ComparisonRows = CreateDisplayRows(value);
-                OnPropertyChanged(nameof(HasComparisonRows));
+                ComparisonRows = CreateDisplayRows(value, _searchQuery);
                 OnPropertyChanged(nameof(ShowNoMatchingRows));
                 OnPropertyChanged(nameof(ShowNoComparisonEntities));
                 OnPropertyChanged(nameof(ComparisonSummary));
@@ -105,15 +106,31 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
             if (SetField(ref _comparisonRows, value))
             {
                 OnPropertyChanged(nameof(HasComparisonRows));
+                OnPropertyChanged(nameof(ShowNoMatchingRows));
+                OnPropertyChanged(nameof(ComparisonSummary));
             }
         }
     }
 
     public bool HasTrackers => Dashboard?.Trackers.Count > 0;
 
-    public bool HasComparisonRows => Comparison?.Rows.Count > 0;
+    public bool HasComparisonRows => ComparisonRows.Count > 0;
 
-    public bool ShowNoMatchingRows => Comparison is { Rows.Count: 0, TotalEntityCount: > 0 };
+    public bool ShowNoMatchingRows => Comparison is { TotalEntityCount: > 0 } && ComparisonRows.Count == 0;
+
+    // Narrows the rows by entity name, as the Overview's search does, together with the chosen cards.
+    // It filters the rows already loaded, so typing doesn't query the Trackers again.
+    public string SearchQuery
+    {
+        get => _searchQuery;
+        set
+        {
+            if (SetField(ref _searchQuery, value ?? string.Empty))
+            {
+                ComparisonRows = CreateDisplayRows(Comparison, _searchQuery);
+            }
+        }
+    }
 
     public bool ShowNoComparisonEntities => Comparison is { TotalEntityCount: 0 };
 
@@ -126,7 +143,9 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
 
     public bool IsMissingSelected => SelectedCategories.HasFlag(ProjectComparisonCategory.Missing);
 
-    public bool IsDivergentSelected => SelectedCategories.HasFlag(ProjectComparisonCategory.Divergent);
+    public bool IsDifferentScopeSelected => SelectedCategories.HasFlag(ProjectComparisonCategory.DifferentScope);
+
+    public bool IsDoneVsStuckSelected => SelectedCategories.HasFlag(ProjectComparisonCategory.DoneVsStuck);
 
     public bool IsBlockedSelected => SelectedCategories.HasFlag(ProjectComparisonCategory.Blocked);
 
@@ -141,7 +160,9 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
 
     public int MissingCount => Comparison?.CategoryCounts.Missing ?? 0;
 
-    public int DivergentCount => Comparison?.CategoryCounts.Divergent ?? 0;
+    public int DifferentScopeCount => Comparison?.CategoryCounts.DifferentScope ?? 0;
+
+    public int DoneVsStuckCount => Comparison?.CategoryCounts.DoneVsStuck ?? 0;
 
     public int BlockedCount => Comparison?.CategoryCounts.Blocked ?? 0;
 
@@ -158,9 +179,9 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
 
     public string ComparisonSummary => Comparison is null
         ? string.Empty
-        : HasCategoryFilter
-            ? $"Showing {Comparison.Rows.Count} of {Comparison.TotalEntityCount} entities"
-            : $"Showing all {Comparison.TotalEntityCount} entities";
+        : ComparisonRows.Count == Comparison.TotalEntityCount
+            ? $"Showing all {Comparison.TotalEntityCount} entities"
+            : $"Showing {ComparisonRows.Count} of {Comparison.TotalEntityCount} entities";
 
     public bool IsBusy
     {
@@ -249,7 +270,8 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
     private int GetCategoryCount(ProjectComparisonCategory category) => category switch
     {
         ProjectComparisonCategory.Missing => MissingCount,
-        ProjectComparisonCategory.Divergent => DivergentCount,
+        ProjectComparisonCategory.DifferentScope => DifferentScopeCount,
+        ProjectComparisonCategory.DoneVsStuck => DoneVsStuckCount,
         ProjectComparisonCategory.Blocked => BlockedCount,
         ProjectComparisonCategory.WaitingOnDependencies => WaitingOnDependenciesCount,
         ProjectComparisonCategory.ReworkNeeded => ReworkCount,
@@ -263,14 +285,16 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(HasCategoryFilter));
         OnPropertyChanged(nameof(IsTotalSelected));
         OnPropertyChanged(nameof(IsMissingSelected));
-        OnPropertyChanged(nameof(IsDivergentSelected));
+        OnPropertyChanged(nameof(IsDifferentScopeSelected));
+        OnPropertyChanged(nameof(IsDoneVsStuckSelected));
         OnPropertyChanged(nameof(IsBlockedSelected));
         OnPropertyChanged(nameof(IsWaitingOnDependenciesSelected));
         OnPropertyChanged(nameof(IsReworkSelected));
         OnPropertyChanged(nameof(IsUnresolvedSelected));
         OnPropertyChanged(nameof(TotalEntityCount));
         OnPropertyChanged(nameof(MissingCount));
-        OnPropertyChanged(nameof(DivergentCount));
+        OnPropertyChanged(nameof(DifferentScopeCount));
+        OnPropertyChanged(nameof(DoneVsStuckCount));
         OnPropertyChanged(nameof(BlockedCount));
         OnPropertyChanged(nameof(WaitingOnDependenciesCount));
         OnPropertyChanged(nameof(ReworkCount));
@@ -295,14 +319,19 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
     }
 
     private static IReadOnlyList<ProjectComparisonDisplayRow> CreateDisplayRows(
-        ProjectEntityComparison? comparison)
+        ProjectEntityComparison? comparison,
+        string searchQuery)
     {
         if (comparison is null)
         {
             return [];
         }
 
-        return comparison.Rows.Select(row => new ProjectComparisonDisplayRow(
+        // Finds text anywhere in a name and word by word, as the Overview's search does.
+        string query = searchQuery.Trim();
+        return comparison.Rows
+            .Where(row => query.Length == 0 || EntityNameWords.MatchPriority(row.DisplayName, query) < int.MaxValue)
+            .Select(row => new ProjectComparisonDisplayRow(
             row.NormalizedSourceKey,
             row.DisplayName,
             row.Cells.Select((cell, index) => ProjectComparisonDisplayCell.Create(
