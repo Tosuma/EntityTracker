@@ -183,6 +183,9 @@ Destructive actions require confirmation where the workflow already calls for it
   applied, and closing it with chosen changes asks before discarding them, as the editor does.
   The toolbar that opens it keeps a quick "Set status to" box with a secondary Apply status button,
   so a status-only change needs no panel; the Edit button stays the toolbar's one primary action.
+- Table column headers: a filterable column opens its flyout (filter values and, where it applies,
+  Sort). A column with nothing to filter, such as Entity, sorts on click instead: A–Z, Z–A, then the
+  default order. Both show the active sort with the same accent arrow.
 - Informational overlays use a translucent Dark Green scrim. Focused catalog-management dialogs
   use the stronger scrim semantic so background content cannot compete with the active form.
 - Missing/removal and error states use Coral with Dark Green explanatory text. Synchronization

@@ -1325,6 +1325,37 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void TrackerWorkspace_EntityColumnsSortFromTheirHeader()
+    {
+        // #168: the Entity column has no filter, so its header sorts on click and shows the sort with an arrow.
+        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+
+        XElement[] headers = document.Descendants()
+            .Where(element => element.Name.LocalName == "SortableColumnHeader")
+            .ToArray();
+
+        Assert.Equal(2, headers.Length);
+        foreach ((XElement header, string table) in headers.Zip(["ActiveTable", "ArchivedTable"]))
+        {
+            Assert.Equal("Entity", (string?)header.Attribute("Title"));
+            Assert.Equal(
+                $"{{Binding Data.{table}.CycleEntitySortCommand, Source={{StaticResource WorkspaceProxy}}}}",
+                (string?)header.Attribute("Command"));
+            Assert.Equal(
+                $"{{Binding Data.{table}.IsEntitySortAscending, Source={{StaticResource WorkspaceProxy}}}}",
+                (string?)header.Attribute("IsAscending"));
+            Assert.Equal(
+                $"{{Binding Data.{table}.IsEntitySortDescending, Source={{StaticResource WorkspaceProxy}}}}",
+                (string?)header.Attribute("IsDescending"));
+        }
+
+        string control = LoadWpfXaml("Controls", "SortableColumnHeader.xaml").ToString(SaveOptions.DisableFormatting);
+        Assert.Contains("IconKey=\"Icon.ArrowUp\"", control);
+        Assert.Contains("IconKey=\"Icon.ArrowDown\"", control);
+        Assert.Contains("AutomationProperties.Name=\"{Binding Description, ElementName=Root}\"", control);
+    }
+
+    [Fact]
     public void TrackerWorkspace_UsesManagerColumnsBadgesAndReadOnlyDetailsPane()
     {
         XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
@@ -1341,7 +1372,8 @@ public sealed class PresentationConfigurationTests
         Assert.Equal("Due", (string?)configuredColumns[0].Attribute("Header"));
         Assert.Equal("{Binding Due}", (string?)configuredColumns[0].Attribute("Binding"));
         Assert.Equal("Priority", (string?)configuredColumns[1].Attribute("Header"));
-        Assert.Equal("Entity", (string?)configuredColumns[2].Attribute("Header"));
+        Assert.Contains(configuredColumns[2].Descendants(), element =>
+            element.Name.LocalName == "SortableColumnHeader" && (string?)element.Attribute("Title") == "Entity");
         Assert.Contains(configuredColumns[7].Descendants(), element =>
             (string?)element.Attribute("Text") == "Blockers");
         Assert.Null(configuredColumns[8].Attribute("Header"));

@@ -37,8 +37,8 @@ EntityTracker keeps those concerns separate:
 - **Entity tracking** — create and rename entities, add or remove dependencies, update notes and
   progress, and archive or restore entities.
 - **Workflow visibility** — combine Excel-style filters on Responsible dev, Group, Status, and
-  Work status; sort workflow statuses in their defined order; and search by entity or responsible
-  name.
+  Work status; sort workflow statuses in their defined order; click the Entity header to sort
+  names A–Z, then Z–A, then back to the default order; and search by entity or responsible name.
 - **Progress reporting** — share a Project report with the client or the team: current status,
   implementation history, ready-versus-blocked trends, weekly change, the dependency graph and every
   entity in one offline web page; copy or save charts as PNG files.
@@ -326,7 +326,7 @@ status, not as missing, and doesn't flag the difference.
 
 ![EntityTracker overview filtered by the entity name unit](images/light/overview-search.png)
 
-Archived entities have their own tab and independent search, filters, and Status sort. They remain
+Archived entities have their own tab and independent search, filters, and Status and Entity sort. They remain
 available as read-only records with their progress, notes, and dependencies intact and can be
 deliberately restored from the archived view.
 

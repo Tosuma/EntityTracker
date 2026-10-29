@@ -5,5 +5,6 @@ public enum OverviewColumnKey
     ResponsibleDeveloper,
     Group,
     Status,
-    WorkStatus
+    WorkStatus,
+    Entity
 }
