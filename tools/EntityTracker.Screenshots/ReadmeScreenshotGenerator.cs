@@ -717,6 +717,27 @@ internal sealed class ReadmeScreenshotGenerator
         await renderer.CaptureAsync("archive-entity-confirmation.png");
         viewModel.Editor.CancelArchiveCommand.Execute(null);
         viewModel.Editor.CancelCommand.Execute(null);
+
+        // Bulk edit: four selected entities get a priority and one more responsible developer.
+        await WaitUntilAsync(() => !viewModel.Editor.IsOpen && !viewModel.IsBusy,
+            "The editor did not close before the bulk edit.", cancellationToken);
+        // Select the rows in the grid, as a user would, so they show as selected behind the panel.
+        DataGrid overviewGrid = (DataGrid)(window.FindWorkspaceElement("OverviewDataGrid")
+            ?? throw new InvalidOperationException("The Overview grid was not rendered."));
+        foreach (EntityOverviewRow selected in viewModel.OverviewItems.Take(4))
+            overviewGrid.SelectedItems.Add(selected);
+        if (viewModel.SelectedActiveEntityCount != 4)
+            throw new InvalidOperationException("Selecting Overview rows did not select them for the bulk edit.");
+        await viewModel.OpenBulkEditAsync(cancellationToken);
+        BulkEditViewModel bulkEdit = viewModel.BulkEdit;
+        bulkEdit.SelectedPriority = bulkEdit.PriorityOptions.Single(static option => option.Value?.Value == 1);
+        bulkEdit.SelectedResponsibilityMode = bulkEdit.ResponsibilityModeOptions
+            .Single(static option => option.Value == BulkResponsibilityMode.Add);
+        bulkEdit.SelectedDeveloper = bulkEdit.DeveloperOptions.FirstOrDefault()
+            ?? throw new InvalidOperationException("The sample Project has no developer to add.");
+        await renderer.CaptureAsync("bulk-edit.png");
+        bulkEdit.Close();
+        viewModel.ClearOverviewSelection();
     }
 
     private static async Task PopulateManualCreationAsync(

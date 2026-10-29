@@ -1128,6 +1128,63 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void TrackerWorkspace_BulkEditOpensAPanelLikeTheEditorWithEveryBulkField()
+    {
+        // #163: the toolbar keeps the quick status change and opens one panel for status, priority, due
+        // date and responsible, which blocks the page and keeps the focus inside, as the entity editor does.
+        XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement Named(string name) => Assert.Single(document.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == name);
+
+        XElement toolbar = Named("BulkEditToolbar");
+        string[] toolbarControls = toolbar.Descendants()
+            .Where(element => element.Name.LocalName is "ComboBox" or "Button")
+            .Select(element => (string?)element.Attribute(x + "Name") ?? string.Empty)
+            .ToArray();
+        Assert.Equal(["BulkStatusComboBox", "ApplyBulkStatusButton", "OpenBulkEditButton"], toolbarControls);
+        Assert.Equal("{Binding SelectedBulkStatus}", (string?)Named("BulkStatusComboBox").Attribute("SelectedValue"));
+        XElement applyStatusButton = Named("ApplyBulkStatusButton");
+        Assert.Equal("{Binding ApplyBulkStatusCommand}", (string?)applyStatusButton.Attribute("Command"));
+        Assert.Equal("{StaticResource SecondaryButtonStyle}", (string?)applyStatusButton.Attribute("Style"));
+        XElement openButton = Named("OpenBulkEditButton");
+        Assert.Equal("{Binding OpenBulkEditCommand}", (string?)openButton.Attribute("Command"));
+        Assert.Equal("{StaticResource PrimaryButtonStyle}", (string?)openButton.Attribute("Style"));
+
+        XElement overlay = Named("BulkEditOverlay");
+        Assert.Equal("{Binding BulkEdit.IsOpen, Converter={StaticResource BooleanToVisibilityConverter}}",
+            (string?)overlay.Attribute("Visibility"));
+        Assert.Equal("{DynamicResource Brush.Overlay}", (string?)overlay.Attribute("Background"));
+        Assert.Equal("True", (string?)overlay.Attribute("FocusManager.IsFocusScope"));
+        Assert.Equal("Cycle", (string?)overlay.Attribute("KeyboardNavigation.TabNavigation"));
+        Assert.Equal("Cycle", (string?)overlay.Attribute("KeyboardNavigation.ControlTabNavigation"));
+        Dictionary<string, string?> fields = overlay.Descendants()
+            .Where(element => element.Name.LocalName is "ComboBox" or "DatePicker")
+            .ToDictionary(element => (string)element.Attribute(x + "Name")!,
+                element => (string?)(element.Attribute("SelectedItem") ?? element.Attribute("SelectedDate")));
+        Assert.Equal(new Dictionary<string, string?>
+        {
+            ["BulkEditStatusComboBox"] = "{Binding BulkEdit.SelectedStatus}",
+            ["BulkEditPriorityComboBox"] = "{Binding BulkEdit.SelectedPriority}",
+            ["BulkEditDueDateComboBox"] = "{Binding BulkEdit.SelectedDueDateMode}",
+            ["BulkEditDueDatePicker"] = "{Binding BulkEdit.DueDate}",
+            ["BulkEditResponsibilityComboBox"] = "{Binding BulkEdit.SelectedResponsibilityMode}",
+            ["BulkEditDeveloperComboBox"] = "{Binding BulkEdit.SelectedDeveloper}"
+        }, fields);
+        string[] commands = overlay.Descendants()
+            .Where(element => element.Name.LocalName == "Button")
+            .Select(element => (string?)element.Attribute("Command") ?? string.Empty)
+            .ToArray();
+        Assert.Equal(["{Binding ApplyBulkEditCommand}", "{Binding CancelBulkEditCommand}"], commands);
+
+        XElement applicationContent = Named("ApplicationContent");
+        Assert.Contains(applicationContent.Elements().Single(element => element.Name.LocalName == "DockPanel.Style")
+                .Descendants(),
+            element => element.Name.LocalName == "DataTrigger" &&
+                (string?)element.Attribute("Binding") == "{Binding BulkEdit.IsOpen}");
+    }
+
+    [Fact]
     public void TrackerWorkspace_CreationAndEditorUseFluentSuggestionControlsAndResponsiveSections()
     {
         XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");

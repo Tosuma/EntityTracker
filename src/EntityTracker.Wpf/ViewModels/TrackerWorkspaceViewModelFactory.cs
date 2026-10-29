@@ -14,7 +14,7 @@ namespace EntityTracker.Wpf.ViewModels;
 
 public sealed class TrackerWorkspaceViewModelFactory(
     EntityOverviewService overviewService,
-    BulkStatusUpdateService bulkStatusUpdateService,
+    BulkEntityUpdateService bulkEntityUpdateService,
     ManualEntityCreationService manualEntityCreationService,
     EntityDependencyEditorService entityDependencyEditorService,
     EntityLifecycleService entityLifecycleService,
@@ -37,7 +37,7 @@ public sealed class TrackerWorkspaceViewModelFactory(
         return new MainWindowViewModel(
             trackerId,
             overviewService,
-            bulkStatusUpdateService,
+            bulkEntityUpdateService,
             manualEntityCreationService,
             entityDependencyEditorService,
             entityLifecycleService,

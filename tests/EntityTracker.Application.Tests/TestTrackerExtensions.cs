@@ -112,10 +112,10 @@ internal static class TestTrackerExtensions
         CancellationToken cancellationToken = default) =>
         service.GetAsync(TestTrackerId, cancellationToken);
 
-    internal static Task<BulkStatusUpdateResult> ApplyAsync(
-        this BulkStatusUpdateService service,
+    internal static Task<BulkEntityUpdateResult> ApplyAsync(
+        this BulkEntityUpdateService service,
         IReadOnlyCollection<EntityId> entityIds,
-        DevelopmentStatus targetStatus,
+        BulkEntityUpdate update,
         CancellationToken cancellationToken = default) =>
-        service.ApplyAsync(TestTrackerId, entityIds, targetStatus, cancellationToken);
+        service.ApplyAsync(TestTrackerId, entityIds, update, cancellationToken);
 }

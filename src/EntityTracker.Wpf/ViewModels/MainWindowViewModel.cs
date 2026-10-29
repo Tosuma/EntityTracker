@@ -47,12 +47,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private readonly AsyncCommand _assignMeCommand;
     private readonly AsyncCommand _openIdentitySettingsCommand;
     private string? _assignmentGuidance;
-    private readonly BulkStatusUpdateService _bulkStatusUpdateService;
+    private readonly BulkEntityUpdateService _bulkEntityUpdateService;
     private readonly IContextDiscardConfirmation _discardConfirmation;
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly AsyncCommand _refreshCommand;
     private readonly RelayCommand _openCreateEntityCommand;
     private readonly AsyncCommand _applyBulkStatusCommand;
+    private readonly AsyncCommand _openBulkEditCommand;
+    private readonly AsyncCommand _applyBulkEditCommand;
+    private readonly RelayCommand _cancelBulkEditCommand;
     private readonly RelayCommand<EntityOverviewRow> _openEntityDetailsCommand;
     private readonly RelayCommand _closeEntityDetailsCommand;
     private readonly RelayCommand _showFullResponsibilityHistoryCommand;
@@ -66,6 +69,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private string _busyMessage = string.Empty;
     private bool _isBusy;
     private MainWindowTab _selectedTab = MainWindowTab.Overview;
+    private DevelopmentStatus _selectedBulkStatus = DevelopmentStatus.InProgress;
     private int _notStartedCount;
     private int _inProgressCount;
     private int _reworkNeededCount;
@@ -74,14 +78,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private int _blockedCount;
     private int _developmentCompletedCount;
     private int _reconciledCount;
-    private DevelopmentStatus _selectedBulkStatus = DevelopmentStatus.InProgress;
     private EntityDetailsViewModel? _selectedEntityDetails;
     private EntityId? _historyReturnToArchivedEntityId;
 
     public MainWindowViewModel(
         TrackerId trackerId,
         EntityOverviewService overviewService,
-        BulkStatusUpdateService bulkStatusUpdateService,
+        BulkEntityUpdateService bulkEntityUpdateService,
         ManualEntityCreationService manualEntityCreationService,
         EntityDependencyEditorService entityDependencyEditorService,
         EntityLifecycleService entityLifecycleService,
@@ -99,7 +102,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         Func<CancellationToken, Task<long>>? readRevision = null)
     {
         ArgumentNullException.ThrowIfNull(overviewService);
-        ArgumentNullException.ThrowIfNull(bulkStatusUpdateService);
+        ArgumentNullException.ThrowIfNull(bulkEntityUpdateService);
         ArgumentNullException.ThrowIfNull(manualEntityCreationService);
         ArgumentNullException.ThrowIfNull(entityDependencyEditorService);
         ArgumentNullException.ThrowIfNull(entityLifecycleService);
@@ -115,7 +118,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         _overviewExportSettings = overviewExportSettings;
         _notifications = notifications;
         _overviewService = overviewService;
-        _bulkStatusUpdateService = bulkStatusUpdateService;
+        _bulkEntityUpdateService = bulkEntityUpdateService;
         _discardConfirmation = discardConfirmation;
         ILoggerFactory effectiveLoggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
         _logger = effectiveLoggerFactory.CreateLogger<MainWindowViewModel>();
@@ -152,17 +155,30 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             responsibilityPeriods,
             developers, localIdentity, () => OpenIdentitySettingsAsync(), notifications);
         Editor.PropertyChanged += OnEditorPropertyChanged;
+        BulkEdit = new BulkEditViewModel(trackerId, developers);
+        BulkEdit.PropertyChanged += OnBulkEditPropertyChanged;
+        BulkEdit.ChoicesChanged += OnBulkEditChoicesChanged;
         _refreshCommand = new AsyncCommand(
             () => RefreshAsync(),
-            () => !IsBusy && !ManualCreation.IsBusy && !ManualCreation.IsOpen && !Editor.IsOpen);
+            () => !IsBusy && !ManualCreation.IsBusy && !ManualCreation.IsOpen && !Editor.IsOpen &&
+                  !BulkEdit.IsOpen);
         _openCreateEntityCommand = new RelayCommand(
             ManualCreation.Open,
-            () => !IsBusy && !ManualCreation.IsOpen && !Editor.IsOpen);
+            () => !IsBusy && !ManualCreation.IsOpen && !Editor.IsOpen && !BulkEdit.IsOpen);
         _exportOverviewCommand = new AsyncCommand<OverviewExportFormat>(ExportOverviewAsync,
             _ => !_isExporting && !IsBusy && !Editor.IsOpen && ActiveTable.SourceItems.Count > 0);
         _applyBulkStatusCommand = new AsyncCommand(
             () => ApplyBulkStatusAsync(),
             CanApplyBulkStatus);
+        _openBulkEditCommand = new AsyncCommand(
+            () => OpenBulkEditAsync(),
+            CanOpenBulkEdit);
+        _applyBulkEditCommand = new AsyncCommand(
+            () => ApplyBulkEditAsync(),
+            () => BulkEdit.IsOpen && BulkEdit.IsComplete && !IsBusy);
+        _cancelBulkEditCommand = new RelayCommand(
+            () => TryCloseBulkEdit(),
+            () => BulkEdit.IsOpen && !IsBusy);
         _openEntityDetailsCommand = new RelayCommand<EntityOverviewRow>(
             OpenEntityDetails,
             _ => !IsBusy && !ManualCreation.IsBusy && !Editor.IsOpen);
@@ -181,7 +197,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             OpenOverviewEntityAsync,
             _ => !IsBusy &&
                  !ManualCreation.IsBusy &&
-                 !Editor.IsOpen);
+                 !Editor.IsOpen &&
+                 !BulkEdit.IsOpen);
         // A summary card toggles: clicking it when it is the only status shown clears the status filter, back
         // to Total (the sort stays). When it is one of several (as after "% implemented"), it narrows to itself.
         // The "% implemented" card shows what Implemented counts; clicking it again returns to Total.
@@ -348,11 +365,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     internal long? LoadedRevision { get; private set; }
 
     public bool HasUnsavedWork =>
-        ManualCreation.IsDirty || Editor.IsDirty;
+        ManualCreation.IsDirty || Editor.IsDirty || BulkEdit.IsOpen && BulkEdit.HasChanges;
 
     public ManualEntityCreationViewModel ManualCreation { get; }
 
     public EntityDependencyEditorViewModel Editor { get; }
+
+    /// <summary>The panel that changes several selected Overview entities at once.</summary>
+    public BulkEditViewModel BulkEdit { get; }
 
 
     public DependencyGraphViewModel DependencyGraph { get; }
@@ -454,6 +474,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
                 CloseEntityDetails();
                 ClearOverviewSelection();
                 _applyBulkStatusCommand.NotifyCanExecuteChanged();
+                _openBulkEditCommand.NotifyCanExecuteChanged();
                 RebuildGraphIfVisible();
             }
         }
@@ -472,6 +493,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         0 => "No active entities selected",
         1 => "1 active entity selected",
         _ => $"{SelectedActiveEntityCount} active entities selected"
+    };
+
+    public string BulkEditButtonText => SelectedActiveEntityCount switch
+    {
+        0 => "Edit entities",
+        1 => "Edit 1 entity",
+        _ => $"Edit {SelectedActiveEntityCount} entities"
     };
 
     public int NotStartedCount
@@ -640,7 +668,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     /// <summary>Opens the New entity overlay for this Tracker (Ctrl+N).</summary>
     public ICommand OpenCreateEntityCommand => _openCreateEntityCommand;
 
+    /// <summary>Sets the toolbar's status on every selected Overview entity, without opening the panel.</summary>
     public ICommand ApplyBulkStatusCommand => _applyBulkStatusCommand;
+
+    /// <summary>Opens the bulk edit panel for the selected Overview entities.</summary>
+    public ICommand OpenBulkEditCommand => _openBulkEditCommand;
+
+    public ICommand ApplyBulkEditCommand => _applyBulkEditCommand;
+
+    public ICommand CancelBulkEditCommand => _cancelBulkEditCommand;
 
     public ICommand OpenEntityDetailsCommand => _openEntityDetailsCommand;
 
@@ -702,7 +738,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
-        if (IsBusy || ManualCreation.IsBusy || Editor.IsOpen)
+        if (IsBusy || ManualCreation.IsBusy || Editor.IsOpen || BulkEdit.IsOpen)
         {
             return;
         }
@@ -749,6 +785,30 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         NotifyOverviewSelectionChanged();
     }
 
+    public async Task OpenBulkEditAsync(CancellationToken cancellationToken = default)
+    {
+        if (!CanOpenBulkEdit())
+        {
+            return;
+        }
+
+        CloseEntityDetails();
+        try
+        {
+            await BulkEdit.OpenAsync(SelectedActiveEntityCount, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _logger.LogError(exception, "The developers for the bulk edit could not be loaded.");
+            Notify("Bulk update", $"The bulk edit could not be opened: {exception.Message}",
+                NotificationKind.Failure);
+        }
+    }
+
+    /// <summary>
+    /// Sets the toolbar's status on the selected entities in one save, then reloads the Overview: the
+    /// quick path for a status-only change, without opening the bulk edit panel.
+    /// </summary>
     public async Task ApplyBulkStatusAsync(CancellationToken cancellationToken = default)
     {
         if (!CanApplyBulkStatus())
@@ -756,48 +816,102 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        EntityId[] selectedIds = _selectedOverviewEntityIds.ToArray();
         DevelopmentStatus targetStatus = SelectedBulkStatus;
+        await ApplyBulkUpdateAsync(
+            new BulkEntityUpdate(targetStatus),
+            $"Applying {FormatStatus(targetStatus).ToLowerInvariant()} status…",
+            result => FormatBulkUpdateResult(result, targetStatus),
+            onSaved: null,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Applies the bulk edit panel's changes to the selected entities in one save, then reloads the
+    /// Overview. The panel closes either way: a failed save leaves nothing half applied.
+    /// </summary>
+    public async Task ApplyBulkEditAsync(CancellationToken cancellationToken = default)
+    {
+        if (!BulkEdit.IsOpen || !BulkEdit.IsComplete || IsBusy || _selectedOverviewEntityIds.Count == 0)
+        {
+            return;
+        }
+
+        int count = _selectedOverviewEntityIds.Count;
+        await ApplyBulkUpdateAsync(
+            BulkEdit.BuildRequest(),
+            count == 1 ? "Updating 1 entity…" : $"Updating {count} entities…",
+            result => FormatBulkUpdateResult(result),
+            BulkEdit.Close,
+            cancellationToken);
+    }
+
+    private async Task ApplyBulkUpdateAsync(
+        BulkEntityUpdate update,
+        string busyMessage,
+        Func<BulkEntityUpdateResult, string> formatResult,
+        Action? onSaved,
+        CancellationToken cancellationToken)
+    {
+        EntityId[] selectedIds = _selectedOverviewEntityIds.ToArray();
         IsBusy = true;
-        BusyMessage = $"Applying {FormatStatus(targetStatus).ToLowerInvariant()} status…";
+        BusyMessage = busyMessage;
         bool operationCompleted = false;
         try
         {
-            BulkStatusUpdateResult result = await _bulkStatusUpdateService.ApplyAsync(
+            BulkEntityUpdateResult result = await _bulkEntityUpdateService.ApplyAsync(
                 _trackerId,
                 selectedIds,
-                targetStatus,
+                update,
                 cancellationToken);
             operationCompleted = true;
-            Notify("Bulk status update", FormatBulkStatusResult(result, targetStatus), NotificationKind.Success);
+            onSaved?.Invoke();
+            Notify("Bulk update", formatResult(result), NotificationKind.Success);
             BusyMessage = "Recomputing workflow readiness and progress…";
             await LoadOverviewAndProgressAsync(cancellationToken);
             PersistedStateChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            _logger.LogInformation("The bulk status update was cancelled (statuses saved: {Saved}).", operationCompleted);
+            _logger.LogInformation("The bulk update was cancelled (changes saved: {Saved}).", operationCompleted);
             ClearOverviewSelection();
-            Notify("Bulk status update", operationCompleted
-                ? "The statuses were updated, but refreshing the overview was cancelled. " +
+            Notify("Bulk update", operationCompleted
+                ? "The entities were updated, but refreshing the overview was cancelled. " +
                   "Refresh to load the latest state."
-                : "The status update was cancelled; no partial changes were saved.",
+                : "The bulk update was cancelled; no partial changes were saved.",
                 NotificationKind.Information);
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "The selected entity statuses could not be updated.");
+            _logger.LogError(exception, "The selected entities could not be updated.");
             ClearOverviewSelection();
-            Notify("Bulk status update", operationCompleted
-                ? "The statuses were updated, but the latest overview could not be loaded: " +
+            Notify("Bulk update", operationCompleted
+                ? "The entities were updated, but the latest overview could not be loaded: " +
                   exception.Message
-                : $"The status update was not applied: {exception.Message}",
+                : $"The bulk update was not applied: {exception.Message}",
                 NotificationKind.Failure);
         }
         finally
         {
             EndBusyOperation();
         }
+    }
+
+    /// <summary>Closes the bulk edit panel, after confirming when it has changes that were not applied.</summary>
+    public bool TryCloseBulkEdit()
+    {
+        if (!BulkEdit.IsOpen)
+        {
+            return true;
+        }
+
+        if (BulkEdit.HasChanges && !_discardConfirmation.ConfirmDiscard(
+                "The bulk edit has changes that were not applied."))
+        {
+            return false;
+        }
+
+        BulkEdit.Close();
+        return true;
     }
 
     private async Task LoadOverviewAsync(CancellationToken cancellationToken)
@@ -904,6 +1018,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         _refreshCommand.NotifyCanExecuteChanged();
         _openCreateEntityCommand.NotifyCanExecuteChanged();
         _applyBulkStatusCommand.NotifyCanExecuteChanged();
+        _openBulkEditCommand.NotifyCanExecuteChanged();
+        _applyBulkEditCommand.NotifyCanExecuteChanged();
+        _cancelBulkEditCommand.NotifyCanExecuteChanged();
         _openEntityDetailsCommand.NotifyCanExecuteChanged();
         _assignMeCommand.NotifyCanExecuteChanged();
         _editOverviewEntityCommand.NotifyCanExecuteChanged();
@@ -914,10 +1031,21 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         SelectedTab == MainWindowTab.Overview &&
         !IsBusy &&
         !ManualCreation.IsBusy &&
-        !Editor.IsOpen;
+        !Editor.IsOpen &&
+        !BulkEdit.IsOpen;
+
+    private bool CanOpenBulkEdit() =>
+        SelectedActiveEntityCount > 0 &&
+        SelectedTab == MainWindowTab.Overview &&
+        !IsBusy &&
+        !ManualCreation.IsBusy &&
+        !Editor.IsOpen &&
+        !BulkEdit.IsOpen;
 
     public void ClearOverviewSelection()
     {
+        // The panel edits the selection, so it closes with it (after a reload, a filter or a tab change).
+        BulkEdit.Close();
         bool hadSelection = _selectedOverviewEntityIds.Count > 0;
         _selectedOverviewEntityIds = [];
         if (hadSelection)
@@ -932,12 +1060,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     {
         OnPropertyChanged(nameof(SelectedActiveEntityCount));
         OnPropertyChanged(nameof(BulkSelectionSummary));
+        OnPropertyChanged(nameof(BulkEditButtonText));
         _applyBulkStatusCommand.NotifyCanExecuteChanged();
+        _openBulkEditCommand.NotifyCanExecuteChanged();
     }
 
-    private static string FormatBulkStatusResult(
-        BulkStatusUpdateResult result,
-        DevelopmentStatus targetStatus)
+    private static string FormatBulkUpdateResult(
+        BulkEntityUpdateResult result,
+        DevelopmentStatus? targetStatus = null)
     {
         string changed = result.ChangedCount == 1
             ? "1 entity updated"
@@ -945,7 +1075,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         string unchanged = result.UnchangedCount == 1
             ? "1 already matched"
             : $"{result.UnchangedCount} already matched";
-        return $"{changed} to {FormatStatus(targetStatus)}; {unchanged}.";
+        string target = targetStatus is { } status ? $" to {FormatStatus(status)}" : string.Empty;
+        return $"{changed}{target}; {unchanged}.";
     }
 
     /// <summary>
@@ -1201,6 +1332,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    private void OnBulkEditPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(BulkEditViewModel.IsOpen))
+        {
+            NotifyCommandsChanged();
+        }
+    }
+
+    private void OnBulkEditChoicesChanged(object? sender, EventArgs e) =>
+        _applyBulkEditCommand.NotifyCanExecuteChanged();
+
     private void OnEditorPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(EntityDependencyEditorViewModel.IsBusy) or
@@ -1375,6 +1517,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         ArchivedTable.PropertyChanged -= OnArchivedTablePropertyChanged;
         ManualCreation.PropertyChanged -= OnManualCreationPropertyChanged;
         Editor.PropertyChanged -= OnEditorPropertyChanged;
+        BulkEdit.PropertyChanged -= OnBulkEditPropertyChanged;
+        BulkEdit.ChoicesChanged -= OnBulkEditChoicesChanged;
     }
 
     private void OnActiveTableProjectionChanging(object? sender, EventArgs e)
