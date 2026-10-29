@@ -147,6 +147,7 @@ public sealed class MainWindowViewModelTests
         viewModel.ActiveTable.ClearAllFiltersAndSort();
         ApplySingleFilter(viewModel.ActiveTable.WorkStatusFilter!, "Ready");
         Assert.Equal("Waiting", Assert.Single(viewModel.OverviewItems).SourceName);
+        Assert.Contains(viewModel.BulkStatusOptions, static option => option.Value == DevelopmentStatus.NotRelevant);
         Assert.Contains(viewModel.BulkEdit.StatusOptions, static option => option.Value == DevelopmentStatus.NotRelevant);
         Assert.Contains(viewModel.Editor.StatusOptions, static option => option.Value == DevelopmentStatus.NotRelevant);
     }
@@ -1079,6 +1080,49 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task ApplyBulkStatusAsync_SetsOnlyTheStatusWithoutOpeningThePanel()
+    {
+        TrackedEntity first = Entity(1, "First");
+        TrackedEntity second = Entity(
+            2,
+            "Second",
+            DevelopmentStatus.DevelopmentCompleted);
+        NotificationCenter notifications = new();
+        MainWindowViewModel viewModel = CreateViewModel(
+            [first, second],
+            [],
+            out StubStateStore store,
+            notifications: notifications);
+        await viewModel.InitializeAsync();
+        viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
+        viewModel.SelectedBulkStatus = DevelopmentStatus.DevelopmentCompleted;
+
+        Assert.True(viewModel.ApplyBulkStatusCommand.CanExecute(null));
+        await viewModel.OpenBulkEditAsync();
+        Assert.False(viewModel.ApplyBulkStatusCommand.CanExecute(null));
+        Assert.True(viewModel.TryCloseBulkEdit());
+        Assert.True(viewModel.ApplyBulkStatusCommand.CanExecute(null));
+
+        await viewModel.ApplyBulkStatusAsync();
+
+        Assert.Equal(1, store.ApplyCount);
+        TrackedStateChangeSet changeSet = Assert.IsType<TrackedStateChangeSet>(store.AppliedChangeSet);
+        Assert.Single(changeSet.EntitiesWithProgressToUpdate);
+        Assert.Empty(changeSet.EntitiesWithRequestedPriorityToUpdate);
+        Assert.False(viewModel.BulkEdit.IsOpen);
+        Assert.Equal(0, viewModel.SelectedActiveEntityCount);
+        Assert.False(viewModel.ApplyBulkStatusCommand.CanExecute(null));
+        Assert.Equal(0, viewModel.NotStartedCount);
+        Assert.Equal(2, viewModel.DevelopmentCompletedCount);
+        Assert.All(
+            viewModel.OverviewItems,
+            row => Assert.Equal(DevelopmentStatus.DevelopmentCompleted, row.DevelopmentStatus));
+        NotificationItem notice = Assert.Single(notifications.Items);
+        Assert.Equal(("Bulk update", NotificationKind.Success), (notice.Title, notice.Kind));
+        Assert.Equal("1 entity updated to Completed; 1 already matched.", notice.Message);
+    }
+
+    [Fact]
     public async Task ApplyBulkEditAsync_AppliesEveryChosenFieldAndRefreshesSummary()
     {
         TrackedEntity first = Entity(1, "First");
@@ -1220,6 +1264,7 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(0, viewModel.SelectedActiveEntityCount);
         Assert.Equal("No active entities selected", viewModel.BulkSelectionSummary);
         Assert.Equal("Edit entities", viewModel.BulkEditButtonText);
+        Assert.False(viewModel.ApplyBulkStatusCommand.CanExecute(null));
         Assert.False(viewModel.OpenBulkEditCommand.CanExecute(null));
         Assert.Equal(1, clearRequestCount);
     }
@@ -1241,6 +1286,7 @@ public sealed class MainWindowViewModelTests
         viewModel.SelectedTab = MainWindowTab.Archived;
         viewModel.UpdateOverviewSelection(viewModel.ArchivedItems);
         Assert.Equal(0, viewModel.SelectedActiveEntityCount);
+        Assert.False(viewModel.ApplyBulkStatusCommand.CanExecute(null));
         Assert.False(viewModel.OpenBulkEditCommand.CanExecute(null));
 
         viewModel.SelectedTab = MainWindowTab.Overview;
@@ -1249,6 +1295,7 @@ public sealed class MainWindowViewModelTests
         viewModel.EditOverviewEntityCommand.Execute(activeRow);
         await WaitUntilAsync(() => viewModel.Editor.IsOpen);
 
+        Assert.False(viewModel.ApplyBulkStatusCommand.CanExecute(null));
         Assert.False(viewModel.OpenBulkEditCommand.CanExecute(null));
     }
 

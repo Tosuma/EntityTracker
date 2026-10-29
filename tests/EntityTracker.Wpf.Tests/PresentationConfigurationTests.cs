@@ -1130,18 +1130,26 @@ public sealed class PresentationConfigurationTests
     [Fact]
     public void TrackerWorkspace_BulkEditOpensAPanelLikeTheEditorWithEveryBulkField()
     {
-        // #163: the toolbar opens one panel for status, priority, due date and responsible, which blocks
-        // the page and keeps the focus inside, as the entity editor does.
+        // #163: the toolbar keeps the quick status change and opens one panel for status, priority, due
+        // date and responsible, which blocks the page and keeps the focus inside, as the entity editor does.
         XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
         XElement Named(string name) => Assert.Single(document.Descendants(), element =>
             (string?)element.Attribute(x + "Name") == name);
 
         XElement toolbar = Named("BulkEditToolbar");
-        XElement openButton = Assert.Single(toolbar.Descendants(), element => element.Name.LocalName == "Button");
-        Assert.Equal("OpenBulkEditButton", (string?)openButton.Attribute(x + "Name"));
+        string[] toolbarControls = toolbar.Descendants()
+            .Where(element => element.Name.LocalName is "ComboBox" or "Button")
+            .Select(element => (string?)element.Attribute(x + "Name") ?? string.Empty)
+            .ToArray();
+        Assert.Equal(["BulkStatusComboBox", "ApplyBulkStatusButton", "OpenBulkEditButton"], toolbarControls);
+        Assert.Equal("{Binding SelectedBulkStatus}", (string?)Named("BulkStatusComboBox").Attribute("SelectedValue"));
+        XElement applyStatusButton = Named("ApplyBulkStatusButton");
+        Assert.Equal("{Binding ApplyBulkStatusCommand}", (string?)applyStatusButton.Attribute("Command"));
+        Assert.Equal("{StaticResource SecondaryButtonStyle}", (string?)applyStatusButton.Attribute("Style"));
+        XElement openButton = Named("OpenBulkEditButton");
         Assert.Equal("{Binding OpenBulkEditCommand}", (string?)openButton.Attribute("Command"));
-        Assert.DoesNotContain(toolbar.Descendants(), element => element.Name.LocalName == "ComboBox");
+        Assert.Equal("{StaticResource PrimaryButtonStyle}", (string?)openButton.Attribute("Style"));
 
         XElement overlay = Named("BulkEditOverlay");
         Assert.Equal("{Binding BulkEdit.IsOpen, Converter={StaticResource BooleanToVisibilityConverter}}",

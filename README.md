@@ -345,9 +345,10 @@ Use **Edit** in the details header to open the entity editor. Opening or closing
 disturb bulk row selection.
 
 To change several entities at once, select their rows on the Overview (Ctrl+click or Shift+click)
-and choose **Edit N entities** above the list. The bulk edit panel sets the development status,
-the requested priority and the due date, and adds or removes one responsible developer, on every
-selected entity in one save. Every field starts at **Keep as is**, so only what you change is
+and use the toolbar above the list. To change only the status, pick it in **Set status to** and
+choose **Apply status**. For anything more, choose **Edit N entities**: the bulk edit panel sets
+the development status, the requested priority and the due date, and adds or removes one
+responsible developer, on every selected entity in one save. Every field starts at **Keep as is**, so only what you change is
 applied; priority and due date can also be cleared, and the other responsible developers stay.
 The notification center reports how many entities changed and how many already matched.
 

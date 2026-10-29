@@ -181,6 +181,8 @@ Destructive actions require confirmation where the workflow already calls for it
 - The Overview's bulk edit panel is an editor overlay: the same scrim, focus scope and footer
   (primary Apply, then Cancel). Each field starts at "Keep as is" so an unchanged field is never
   applied, and closing it with chosen changes asks before discarding them, as the editor does.
+  The toolbar that opens it keeps a quick "Set status to" box with a secondary Apply status button,
+  so a status-only change needs no panel; the Edit button stays the toolbar's one primary action.
 - Informational overlays use a translucent Dark Green scrim. Focused catalog-management dialogs
   use the stronger scrim semantic so background content cannot compete with the active form.
 - Missing/removal and error states use Coral with Dark Green explanatory text. Synchronization

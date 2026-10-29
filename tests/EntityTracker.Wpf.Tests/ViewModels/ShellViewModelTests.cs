@@ -170,10 +170,8 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         Tracker secondSelection = shell.Trackers.Single(tracker => tracker.Id == second.Id);
 
         first.UpdateOverviewSelection(first.ActiveTable.SourceItems);
-        await first.OpenBulkEditAsync();
-        first.BulkEdit.SelectedStatus = first.BulkEdit.StatusOptions.Single(static option =>
-            option.Value == DevelopmentStatus.DevelopmentCompleted);
-        await first.ApplyBulkEditAsync();
+        first.SelectedBulkStatus = DevelopmentStatus.DevelopmentCompleted;
+        await first.ApplyBulkStatusAsync();
         IReadOnlyList<EntityOverviewRow> afterOwnEdit = first.ActiveTable.SourceItems;
         Assert.True(await shell.NavigateAsync(ShellDestination.DependencyGraph));
         Assert.Same(afterOwnEdit, first.ActiveTable.SourceItems);
