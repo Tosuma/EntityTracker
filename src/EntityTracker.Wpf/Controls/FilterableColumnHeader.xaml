@@ -10,17 +10,13 @@
 
     <Grid>
         <Button x:Name="MenuButton"
-                MinHeight="28"
-                Padding="5,2"
-                HorizontalContentAlignment="Stretch"
+                Style="{StaticResource ColumnHeaderButtonStyle}"
                 AutomationProperties.Name="{Binding Filter.Title, ElementName=Root, StringFormat=Filter {0}}"
-                Background="Transparent"
-                BorderThickness="0"
                 Command="{Binding Filter.OpenCommand, ElementName=Root}"
-                Cursor="Hand"
                 ToolTip="{Binding Filter.Title, ElementName=Root, StringFormat=Filter {0}}">
             <DockPanel LastChildFill="True">
-                <!-- The filter icon is coloured while the column is filtered or sorted; the arrow shows the sort. -->
+                <!-- The filter icon takes the accent while the column is filtered or sorted; the arrow shows the sort.
+                     Fluent has the accent only as a brush (AccentFillColorDefaultBrush). -->
                 <controls:Icon DockPanel.Dock="Right"
                                Margin="6,0,0,0"
                                VerticalAlignment="Center"
@@ -31,10 +27,10 @@
                             <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Secondary}" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding Filter.IsApplied, ElementName=Root}" Value="True">
-                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Indicator.Active}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource AccentFillColorDefaultBrush}" />
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding Filter.IsSorted, ElementName=Root}" Value="True">
-                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Indicator.Active}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource AccentFillColorDefaultBrush}" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
@@ -45,14 +41,14 @@
                                VerticalAlignment="Center"
                                Size="14"
                                IconKey="Icon.ArrowUp"
-                               Foreground="{DynamicResource Brush.Indicator.Active}"
+                               Foreground="{DynamicResource AccentFillColorDefaultBrush}"
                                Visibility="{Binding Filter.IsSortAscending, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 <controls:Icon DockPanel.Dock="Right"
                                Margin="5,0,0,0"
                                VerticalAlignment="Center"
                                Size="14"
                                IconKey="Icon.ArrowDown"
-                               Foreground="{DynamicResource Brush.Indicator.Active}"
+                               Foreground="{DynamicResource AccentFillColorDefaultBrush}"
                                Visibility="{Binding Filter.IsSortDescending, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 <TextBlock VerticalAlignment="Center"
                            FontWeight="SemiBold"

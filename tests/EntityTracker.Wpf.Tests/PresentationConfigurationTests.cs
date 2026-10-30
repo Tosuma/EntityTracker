@@ -1656,7 +1656,24 @@ public sealed class PresentationConfigurationTests
         string header = LoadWpfXaml("Controls", "FilterableColumnHeader.xaml").ToString(SaveOptions.DisableFormatting);
 
         Assert.DoesNotContain("Brush.Brand.", header, StringComparison.Ordinal);
-        Assert.Contains("{DynamicResource Brush.Indicator.Active}", header, StringComparison.Ordinal);
+        Assert.Contains("{DynamicResource AccentFillColorDefaultBrush}", header, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ColumnHeaders_UseTheFlatHeaderButtonAndTakeClicksOnTheWholeHeader()
+    {
+        // The whole header takes the click, so the button draws no box of its own.
+        foreach ((string file, string button) in new[] { ("FilterableColumnHeader", "MenuButton"), ("SortableColumnHeader", "SortButton") })
+        {
+            XDocument control = LoadWpfXaml("Controls", file + ".xaml");
+            XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+            XElement element = Assert.Single(control.Descendants(), item => (string?)item.Attribute(x + "Name") == button);
+            Assert.Equal("{StaticResource ColumnHeaderButtonStyle}", (string?)element.Attribute("Style"));
+            Assert.Contains(
+                $"ColumnHeaderClickForwarder.Attach(this, {button});",
+                File.ReadAllText(Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf", "Controls", file + ".xaml.cs")),
+                StringComparison.Ordinal);
+        }
     }
 
     [Fact]

@@ -39,6 +39,7 @@ public partial class SortableColumnHeader : UserControl
     public SortableColumnHeader()
     {
         InitializeComponent();
+        ColumnHeaderClickForwarder.Attach(this, SortButton);
     }
 
     public string Title

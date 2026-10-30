@@ -9,16 +9,11 @@
     </UserControl.Resources>
 
     <!-- A sort-only header: each click moves to the next sort, and the arrow shows the current one.
-         Sized like FilterableColumnHeader so the header row stays aligned. -->
+         It uses FilterableColumnHeader's button style so the header row stays aligned. -->
     <Button x:Name="SortButton"
-            MinHeight="28"
-            Padding="5,2"
-            HorizontalContentAlignment="Stretch"
+            Style="{StaticResource ColumnHeaderButtonStyle}"
             AutomationProperties.Name="{Binding Description, ElementName=Root}"
-            Background="Transparent"
-            BorderThickness="0"
             Command="{Binding Command, ElementName=Root}"
-            Cursor="Hand"
             ToolTip="{Binding Description, ElementName=Root}">
         <DockPanel LastChildFill="True">
             <controls:Icon DockPanel.Dock="Right"
@@ -26,14 +21,14 @@
                            VerticalAlignment="Center"
                            Size="14"
                            IconKey="Icon.ArrowUp"
-                           Foreground="{DynamicResource Brush.Indicator.Active}"
+                           Foreground="{DynamicResource AccentFillColorDefaultBrush}"
                            Visibility="{Binding IsAscending, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}" />
             <controls:Icon DockPanel.Dock="Right"
                            Margin="5,0,0,0"
                            VerticalAlignment="Center"
                            Size="14"
                            IconKey="Icon.ArrowDown"
-                           Foreground="{DynamicResource Brush.Indicator.Active}"
+                           Foreground="{DynamicResource AccentFillColorDefaultBrush}"
                            Visibility="{Binding IsDescending, ElementName=Root, Converter={StaticResource BooleanToVisibilityConverter}}" />
             <TextBlock VerticalAlignment="Center"
                        FontWeight="SemiBold"

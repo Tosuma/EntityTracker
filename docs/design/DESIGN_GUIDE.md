@@ -185,7 +185,9 @@ Destructive actions require confirmation where the workflow already calls for it
   so a status-only change needs no panel; the Edit button stays the toolbar's one primary action.
 - Table column headers: a filterable column opens its flyout (filter values and, where it applies,
   Sort). A column with nothing to filter, such as Entity, sorts on click instead: A–Z, Z–A, then the
-  default order. Both show the active sort with the same accent arrow.
+  default order. The whole header takes the click, not only its title. Both show the active sort
+  with an up or down arrow in the Windows accent colour (Fluent's `AccentFillColorDefaultBrush`); a
+  filter column's filter icon stays and turns the accent colour while the column is filtered or sorted.
 - Informational overlays use a translucent Dark Green scrim. Focused catalog-management dialogs
   use the stronger scrim semantic so background content cannot compete with the active form.
 - Missing/removal and error states use Coral with Dark Green explanatory text. Synchronization

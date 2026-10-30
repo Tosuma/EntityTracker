@@ -17,6 +17,7 @@ public partial class FilterableColumnHeader : UserControl
     public FilterableColumnHeader()
     {
         InitializeComponent();
+        ColumnHeaderClickForwarder.Attach(this, MenuButton);
     }
 
     public OverviewColumnFilterState? Filter
