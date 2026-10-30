@@ -452,6 +452,66 @@ public sealed class EntityTableViewModelTests
             table.ResponsibleDeveloperFilter.Options.Select(option => option.DisplayName));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EntityHeader_CyclesAToZThenZToAThenTheDefaultOrder(bool archived)
+    {
+        EntityTableViewModel table = archived ? EntityTableViewModel.CreateArchived() : EntityTableViewModel.CreateActive();
+        table.ReplaceSourceItems(
+        [
+            Row(1, "customer", "", "", DevelopmentStatus.NotStarted, EntityWorkflowState.Ready),
+            Row(2, "Address", "", "", DevelopmentStatus.InProgress, EntityWorkflowState.InProgress),
+            Row(3, "billing", "", "", DevelopmentStatus.NotStarted, EntityWorkflowState.Ready)
+        ]);
+        Assert.Equal("Sort by entity A to Z", table.EntitySortDescription);
+
+        table.CycleEntitySortCommand.Execute(null);
+        Assert.Equal(["Address", "billing", "customer"], table.Items.Select(row => row.SourceName));
+        Assert.True(table.IsEntitySortAscending);
+        Assert.True(table.HasFiltersOrSort);
+        Assert.Equal("Sorted by entity A to Z. Click to sort Z to A.", table.EntitySortDescription);
+
+        table.CycleEntitySortCommand.Execute(null);
+        Assert.Equal(["customer", "billing", "Address"], table.Items.Select(row => row.SourceName));
+        Assert.True(table.IsEntitySortDescending);
+        Assert.False(table.IsEntitySortAscending);
+        Assert.Equal(["customer", "billing", "Address"],
+            table.GetAllItemsInCurrentSortOrder().Select(row => row.SourceName));
+
+        table.CycleEntitySortCommand.Execute(null);
+        Assert.Equal(["customer", "Address", "billing"], table.Items.Select(row => row.SourceName));
+        Assert.False(table.HasSort);
+        Assert.False(table.IsEntitySortDescending);
+    }
+
+    [Fact]
+    public void EntitySort_ReplacesAStatusSortAndIsResetByClearAll()
+    {
+        EntityTableViewModel table = EntityTableViewModel.CreateActive();
+        table.ReplaceSourceItems(
+        [
+            Row(1, "Beta", "", "", DevelopmentStatus.InProgress, EntityWorkflowState.InProgress),
+            Row(2, "Alpha", "", "", DevelopmentStatus.NotStarted, EntityWorkflowState.Ready)
+        ]);
+        table.StatusFilter.SortDescendingCommand.Execute(null);
+
+        table.CycleEntitySortCommand.Execute(null);
+        Assert.False(table.StatusFilter.IsSorted);
+        Assert.True(table.IsEntitySortAscending);
+        Assert.Equal(["Alpha", "Beta"], table.Items.Select(row => row.SourceName));
+
+        table.StatusFilter.SortDescendingCommand.Execute(null);
+        Assert.False(table.IsEntitySortAscending);
+        table.CycleEntitySortCommand.Execute(null);
+        Assert.True(table.IsEntitySortAscending);
+
+        table.ClearAllFiltersCommand.Execute(null);
+        Assert.False(table.IsEntitySortAscending);
+        Assert.False(table.HasFiltersOrSort);
+        Assert.Equal(["Beta", "Alpha"], table.Items.Select(row => row.SourceName));
+    }
+
     [Fact]
     public void StatusAndWorkStatusSortsUseDisplayGroupOrderAndReplaceEachOther()
     {

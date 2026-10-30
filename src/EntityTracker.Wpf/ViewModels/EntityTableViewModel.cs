@@ -95,6 +95,7 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
         ClearSearchCommand = new RelayCommand(ClearSearch);
         CloseSearchCommand = new RelayCommand(CloseSearch);
         ClearAllFiltersCommand = new RelayCommand(ClearAllFiltersAndSort);
+        CycleEntitySortCommand = new RelayCommand(CycleEntitySort);
     }
 
     public static EntityTableViewModel CreateActive() => new(isArchived: false);
@@ -146,8 +147,24 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
             {
                 filter.NotifySortChanged();
             }
+
+            OnPropertyChanged(nameof(IsEntitySortAscending));
+            OnPropertyChanged(nameof(IsEntitySortDescending));
+            OnPropertyChanged(nameof(EntitySortDescription));
         }
     }
+
+    public bool IsEntitySortAscending =>
+        Sort is { Column: OverviewColumnKey.Entity, Direction: OverviewSortDirection.Ascending };
+
+    public bool IsEntitySortDescending =>
+        Sort is { Column: OverviewColumnKey.Entity, Direction: OverviewSortDirection.Descending };
+
+    /// <summary>What a click on the Entity header does next, for its tooltip and automation name.</summary>
+    public string EntitySortDescription =>
+        IsEntitySortAscending ? "Sorted by entity A to Z. Click to sort Z to A."
+        : IsEntitySortDescending ? "Sorted by entity Z to A. Click to restore the default order."
+        : "Sort by entity A to Z";
 
     public bool HasSort => Sort is not null;
 
@@ -220,6 +237,9 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
     public RelayCommand CloseSearchCommand { get; }
 
     public RelayCommand ClearAllFiltersCommand { get; }
+
+    /// <summary>Cycles the Entity column's sort: A to Z, Z to A, then the default order.</summary>
+    public RelayCommand CycleEntitySortCommand { get; }
 
     public event EventHandler? ProjectionChanging;
 
@@ -315,14 +335,31 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
 
     internal void SetSort(OverviewColumnKey column, OverviewSortDirection direction)
     {
+        // The Entity column has no filter; it sorts from its header alone.
         OverviewColumnFilterState? filter = _filters.SingleOrDefault(item => item.Key == column);
-        if (filter?.CanSort != true)
+        if (column != OverviewColumnKey.Entity && filter?.CanSort != true)
         {
             return;
         }
 
         Sort = new OverviewSort(column, direction);
         RebuildProjectionWithSelectionClear();
+    }
+
+    private void CycleEntitySort()
+    {
+        if (IsEntitySortAscending)
+        {
+            SetSort(OverviewColumnKey.Entity, OverviewSortDirection.Descending);
+        }
+        else if (IsEntitySortDescending)
+        {
+            ClearSort();
+        }
+        else
+        {
+            SetSort(OverviewColumnKey.Entity, OverviewSortDirection.Ascending);
+        }
     }
 
     internal void ClearSort()
@@ -484,6 +521,15 @@ public sealed class EntityTableViewModel : INotifyPropertyChanged
         IEnumerable<(EntityOverviewRow Row, int SourcePosition)> rows,
         OverviewSort sort)
     {
+        if (sort.Column == OverviewColumnKey.Entity)
+        {
+            return sort.Direction == OverviewSortDirection.Ascending
+                ? rows.OrderBy(item => item.Row.SourceName, StringComparer.CurrentCultureIgnoreCase)
+                    .ThenBy(item => item.SourcePosition)
+                : rows.OrderByDescending(item => item.Row.SourceName, StringComparer.CurrentCultureIgnoreCase)
+                    .ThenBy(item => item.SourcePosition);
+        }
+
         Func<(EntityOverviewRow Row, int SourcePosition), int> keySelector = sort.Column switch
         {
             OverviewColumnKey.Status => item => StatusOrder[item.Row.DevelopmentStatus],

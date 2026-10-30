@@ -367,6 +367,25 @@
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
+    <!-- The button in a filter or sort column header: no box of its own, since the whole header takes the
+         click (ColumnHeaderClickForwarder) and shows the header's hover. Fluent's template and focus
+         rectangle stay; only its hover and pressed colours are cleared. -->
+    <Style x:Key="ColumnHeaderButtonStyle"
+           TargetType="{x:Type Button}"
+           BasedOn="{StaticResource {x:Type Button}}">
+        <Style.Resources>
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="Transparent" />
+            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="Transparent" />
+            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
+            <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
+        </Style.Resources>
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="Padding" Value="5,2" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
     <Style x:Key="EntityTrackerDataGridCellStyle"
            TargetType="{x:Type DataGridCell}"
            BasedOn="{StaticResource {x:Type DataGridCell}}">

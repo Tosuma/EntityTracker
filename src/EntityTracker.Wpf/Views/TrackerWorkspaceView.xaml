@@ -702,7 +702,14 @@
                             <DataGrid.Columns>
                                 <DataGridTextColumn Width="100" Binding="{Binding Due}" Header="Due" ElementStyle="{StaticResource CenteredCellTextStyle}" />
                                 <DataGridTextColumn Width="72" Binding="{Binding Priority}" Header="Priority" ElementStyle="{StaticResource CenteredCellTextStyle}" />
-                                <DataGridTemplateColumn Width="2.2*" MinWidth="180" Header="Entity">
+                                <DataGridTemplateColumn Width="2.2*" MinWidth="180">
+                                    <DataGridTemplateColumn.Header>
+                                        <controls:SortableColumnHeader Title="Entity"
+                                                                       Command="{Binding Data.ActiveTable.CycleEntitySortCommand, Source={StaticResource WorkspaceProxy}}"
+                                                                       Description="{Binding Data.ActiveTable.EntitySortDescription, Source={StaticResource WorkspaceProxy}}"
+                                                                       IsAscending="{Binding Data.ActiveTable.IsEntitySortAscending, Source={StaticResource WorkspaceProxy}}"
+                                                                       IsDescending="{Binding Data.ActiveTable.IsEntitySortDescending, Source={StaticResource WorkspaceProxy}}" />
+                                    </DataGridTemplateColumn.Header>
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
                                             <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
@@ -1230,7 +1237,14 @@
                                   SelectionMode="Single"
                                   SelectionUnit="FullRow">
                             <DataGrid.Columns>
-                                <DataGridTemplateColumn Width="2.2*" MinWidth="180" Header="Entity">
+                                <DataGridTemplateColumn Width="2.2*" MinWidth="180">
+                                    <DataGridTemplateColumn.Header>
+                                        <controls:SortableColumnHeader Title="Entity"
+                                                                       Command="{Binding Data.ArchivedTable.CycleEntitySortCommand, Source={StaticResource WorkspaceProxy}}"
+                                                                       Description="{Binding Data.ArchivedTable.EntitySortDescription, Source={StaticResource WorkspaceProxy}}"
+                                                                       IsAscending="{Binding Data.ArchivedTable.IsEntitySortAscending, Source={StaticResource WorkspaceProxy}}"
+                                                                       IsDescending="{Binding Data.ArchivedTable.IsEntitySortDescending, Source={StaticResource WorkspaceProxy}}" />
+                                    </DataGridTemplateColumn.Header>
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
                                             <Button AutomationProperties.Name="{Binding SourceName, StringFormat=View details for {0}}"
