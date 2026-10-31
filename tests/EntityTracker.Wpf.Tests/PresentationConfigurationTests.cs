@@ -1793,13 +1793,21 @@ public sealed class PresentationConfigurationTests
         XDocument window = LoadWpfXaml("MainWindow.xaml");
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
 
-        foreach (string name in new[] { "SidebarDialogScrim", "HeaderDialogScrim" })
+        foreach (string name in new[] { "SidebarDialogScrim", "HeaderDialogScrim", "WorkspaceMarginDialogScrim" })
             Assert.Equal("{Binding IsPageDialogOpen, Converter={StaticResource BooleanToVisibilityConverter}}",
                 (string?)Assert.Single(window.Descendants(), element =>
                     (string?)element.Attribute(x + "Name") == name).Attribute("Visibility"));
         Assert.Equal(2, window.Descendants().Count(element =>
             element.Name.LocalName == "DataTrigger" &&
             (string?)element.Attribute("Binding") == "{Binding IsPageDialogOpen}"));
+
+        // #151: the margin around the page is dimmed as a frame exactly as wide as that margin, so the
+        // page's own dimmed area is not dimmed twice.
+        XElement margin = Assert.Single(window.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "WorkspaceMarginDialogScrim");
+        Assert.Equal("{Binding Margin, ElementName=WorkspaceArea}", (string?)margin.Attribute("BorderThickness"));
+        Assert.Equal("{DynamicResource Brush.Overlay}", (string?)margin.Attribute("BorderBrush"));
+        Assert.Null(margin.Attribute("Background"));
     }
 
     private static XDocument LoadWpfXaml(params string[] relativePath)

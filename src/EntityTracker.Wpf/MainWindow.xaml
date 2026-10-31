@@ -428,6 +428,12 @@
                     <views:HelpView Visibility="{Binding IsHelp, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <views:SettingsView Visibility="{Binding IsSettings, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 </Grid>
+                <!-- A page dialog dims its page; this dims the margin around the page, which would otherwise
+                     show as an undimmed frame between the dimmed header, sidebar and page. -->
+                <Border x:Name="WorkspaceMarginDialogScrim" Grid.Row="2" Panel.ZIndex="24"
+                        BorderBrush="{DynamicResource Brush.Overlay}"
+                        BorderThickness="{Binding Margin, ElementName=WorkspaceArea}"
+                        Visibility="{Binding IsPageDialogOpen, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
                 <Border x:Name="BusyFooter" Grid.Row="3"
                         Padding="12,8"
