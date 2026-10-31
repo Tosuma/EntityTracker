@@ -1,6 +1,9 @@
 using System.IO;
 
+using System.Windows.Threading;
+
 using EntityTracker.Application.Dependencies;
+using EntityTracker.Application.GitSync;
 using EntityTracker.Application.History;
 using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
@@ -130,7 +133,6 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         IReadOnlyList<EntityId>? restored = null;
         workspace.OverviewSelectionRestoreRequested += (_, ids) => restored = ids;
 
-        await shell.RecordRevisionAtSyncStartAsync(harness.DefaultProject.Id);
         await ApplyIncomingNotesAsync(harness, "Updated by a colleague");
         await shell.RefreshVisiblePageAfterSyncAsync(harness.DefaultProject.Id);
 
@@ -154,13 +156,11 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         MainWindowViewModel workspace = shell.CurrentWorkspace!;
         IReadOnlyList<EntityOverviewRow> cached = workspace.ActiveTable.SourceItems;
 
-        await shell.RecordRevisionAtSyncStartAsync(harness.DefaultProject.Id);
         await shell.RefreshVisiblePageAfterSyncAsync(harness.DefaultProject.Id);
         Assert.Same(cached, workspace.ActiveTable.SourceItems);
 
         workspace.EditOverviewEntityCommand.Execute(Assert.Single(cached));
         Assert.True(workspace.Editor.IsOpen);
-        await shell.RecordRevisionAtSyncStartAsync(harness.DefaultProject.Id);
         await ApplyIncomingNotesAsync(harness, "Updated while editing");
         await shell.RefreshVisiblePageAfterSyncAsync(harness.DefaultProject.Id);
         Assert.Same(cached, workspace.ActiveTable.SourceItems);
@@ -184,15 +184,83 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         Assert.True(await shell.NavigateAsync(ShellDestination.ProjectDashboard));
         object? dashboard = shell.ProjectDashboard;
 
-        await shell.RecordRevisionAtSyncStartAsync(harness.DefaultProject.Id);
         await ApplyIncomingNotesAsync(harness, "Updated by a colleague");
         await shell.RefreshVisiblePageAfterSyncAsync(harness.DefaultProject.Id);
 
         Assert.NotNull(shell.ProjectDashboard);
         Assert.NotSame(dashboard, shell.ProjectDashboard);
         Assert.Same(cached, workspace.ActiveTable.SourceItems);
+
+        // A further sync that brought nothing in leaves the dashboard as it is.
+        object? afterSync = shell.ProjectDashboard;
+        await shell.RefreshVisiblePageAfterSyncAsync(harness.DefaultProject.Id);
+        Assert.Same(afterSync, shell.ProjectDashboard);
         Assert.True(await shell.NavigateAsync(ShellDestination.Overview));
         Assert.Equal("Updated by a colleague", Assert.Single(workspace.ActiveTable.SourceItems).Notes);
+    }
+
+    [Fact]
+    public async Task AFinishedSync_UpdatesTheOpenOverviewThroughTheSyncStateEvent()
+    {
+        // The whole path: the sync service reports a sync starting and finishing, from a background
+        // thread as automatic sync does, and the Overview on the UI thread shows what it applied.
+        (Dispatcher dispatcher, Thread _) = StartUiThread();
+        try
+        {
+            await dispatcher.InvokeAsync(async () =>
+            {
+                await using ShellHarness harness = await ShellHarness.CreateAsync();
+                await harness.AddEntityAsync(harness.DefaultTracker.Id, "First entity");
+                using ProjectAutoSyncService autoSync = new(new NoLinks(),
+                    (_, _) => throw new InvalidOperationException("Only reported syncs run in this test."));
+                using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+                    lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+                    new RecordingDiscardConfirmation(true), autoSync: autoSync);
+                await shell.InitializeAsync();
+                MainWindowViewModel workspace = shell.CurrentWorkspace!;
+                ProjectId project = harness.DefaultProject.Id;
+
+                await Task.Run(() => autoSync.ReportManual(project,
+                    new ProjectSyncState(ProjectSyncStateKind.Syncing, "Syncing")));
+                await ApplyIncomingNotesAsync(harness, "Updated by a colleague");
+                await Task.Run(() => autoSync.ReportManual(project,
+                    new ProjectSyncState(ProjectSyncStateKind.UpToDate, "Fast-forwarded")));
+
+                DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+                while (workspace.ActiveTable.SourceItems.Single().Notes != "Updated by a colleague" &&
+                       DateTime.UtcNow < deadline)
+                    await Task.Delay(20);
+                Assert.Equal("Updated by a colleague", Assert.Single(workspace.ActiveTable.SourceItems).Notes);
+            }).Task.Unwrap();
+        }
+        finally
+        {
+            dispatcher.InvokeShutdown();
+        }
+    }
+
+    private static (Dispatcher Dispatcher, Thread Thread) StartUiThread()
+    {
+        TaskCompletionSource<Dispatcher> started = new();
+        Thread thread = new(() =>
+        {
+            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
+            started.SetResult(Dispatcher.CurrentDispatcher);
+            Dispatcher.Run();
+        }) { IsBackground = true };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        return (started.Task.GetAwaiter().GetResult(), thread);
+    }
+
+    private sealed class NoLinks : IProjectSyncLinkStore
+    {
+        public Task<IReadOnlyList<ProjectSyncLink>> ReadAllAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ProjectSyncLink>>([]);
+
+        public Task SaveAsync(ProjectSyncLink link, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task RemoveAsync(Guid projectId, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     // Git sync applies its incoming data through this same snapshot store.
@@ -1825,7 +1893,8 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         public ShellViewModel CreateShell(
             EntityTrackerSettings initialSettings,
             IContextDiscardConfirmation confirmation,
-            DependencyGraphSettingsViewModel? graphSettings = null) => new(
+            DependencyGraphSettingsViewModel? graphSettings = null,
+            ProjectAutoSyncService? autoSync = null) => new(
                 _projects,
                 _trackers,
                 _dashboardFactory,
@@ -1841,7 +1910,8 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
                 graphSettings: graphSettings,
                 reportBuilder: ReportBuilder,
                 reportFiles: ReportFiles,
-                projectSnapshots: Snapshots);
+                projectSnapshots: Snapshots,
+                autoSync: autoSync);
 
         public Task<ProjectDeveloper> CreateDeveloperAsync(string initials) =>
             _developers.CreateAsync(DefaultProject.Id, initials);
