@@ -29,6 +29,7 @@ internal readonly record struct WorkspaceViewState(
 public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 {
     private bool _isWorkspaceActive = true;
+    private bool _isRefreshingKeepingView;
     private bool _graphNeedsRebuild;
     private readonly Func<CancellationToken, Task<long>>? _readRevision;
     private readonly EntityOverviewService _overviewService;
@@ -229,6 +230,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public event EventHandler? OverviewSelectionClearRequested;
+
+    /// <summary>Asks the view to select these rows again after a reload that kept the selection.</summary>
+    public event EventHandler<IReadOnlyList<EntityId>>? OverviewSelectionRestoreRequested;
 
     public event EventHandler? PersistedStateChanged;
     public event Func<Task>? IdentitySettingsRequested;
@@ -697,11 +701,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public ICommand SelectImplementedSummaryCommand => _selectImplementedSummaryCommand;
 
-    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    public async Task InitializeAsync(CancellationToken cancellationToken = default, bool keepView = false)
     {
         if (ManualCreation.DeveloperPicker is not null)
             await ManualCreation.DeveloperPicker.LoadAsync(cancellationToken: cancellationToken);
-        await RefreshAsync(cancellationToken);
+        if (keepView)
+            await RefreshKeepingViewAsync(cancellationToken);
+        else
+            await RefreshAsync(cancellationToken);
     }
 
     public void PrepareForDeactivation()
@@ -738,7 +745,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
-        if (IsBusy || ManualCreation.IsBusy || Editor.IsOpen || BulkEdit.IsOpen)
+        if (IsBusy || _isRefreshingKeepingView || ManualCreation.IsBusy || Editor.IsOpen || BulkEdit.IsOpen)
         {
             return;
         }
@@ -764,6 +771,62 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         finally
         {
             EndBusyOperation();
+        }
+    }
+
+    /// <summary>
+    /// Reloads the rows in place, as when a sync brought in changes: no busy overlay, and the details pane
+    /// and the selected rows stay on the entities that are still there. Skipped, like
+    /// <see cref="RefreshAsync"/>, while an edit is open; the stale revision makes the next check retry.
+    /// </summary>
+    public async Task RefreshKeepingViewAsync(CancellationToken cancellationToken = default)
+    {
+        if (IsBusy || _isRefreshingKeepingView || ManualCreation.IsBusy || Editor.IsOpen || BulkEdit.IsOpen)
+        {
+            return;
+        }
+
+        EntityId? detailsEntityId = SelectedEntityDetails?.EntityId;
+        bool wasFullHistoryOpen = SelectedEntityDetails?.IsFullHistoryOpen == true;
+        EntityId? historyReturnToArchivedEntityId = _historyReturnToArchivedEntityId;
+        EntityId[] selectedIds = _selectedOverviewEntityIds.ToArray();
+        _isRefreshingKeepingView = true;
+        try
+        {
+            await LoadOverviewAndProgressAsync(cancellationToken, keepView: true);
+        }
+        finally
+        {
+            _isRefreshingKeepingView = false;
+        }
+
+        if (detailsEntityId is { } entityId)
+        {
+            EntityOverviewRow? row = ActiveTable.SourceItems.Concat(ArchivedTable.SourceItems)
+                .FirstOrDefault(item => item.EntityId == entityId);
+            if (row is null)
+            {
+                CloseEntityDetails();
+            }
+            else
+            {
+                OpenEntityDetails(row);
+                _historyReturnToArchivedEntityId = historyReturnToArchivedEntityId;
+                if (wasFullHistoryOpen) SelectedEntityDetails?.ShowFullHistory();
+            }
+        }
+
+        HashSet<EntityId> activeIds = ActiveTable.SourceItems.Select(static item => item.EntityId).ToHashSet();
+        EntityId[] keptIds = selectedIds.Where(activeIds.Contains).ToArray();
+        if (!_selectedOverviewEntityIds.SequenceEqual(keptIds))
+        {
+            _selectedOverviewEntityIds = keptIds;
+            NotifyOverviewSelectionChanged();
+        }
+
+        if (keptIds.Length > 0)
+        {
+            OverviewSelectionRestoreRequested?.Invoke(this, keptIds);
         }
     }
 
@@ -914,7 +977,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         return true;
     }
 
-    private async Task LoadOverviewAsync(CancellationToken cancellationToken)
+    private async Task LoadOverviewAsync(CancellationToken cancellationToken, bool keepView = false)
     {
         EntityOverviewResult result = await _overviewService.GetAsync(_trackerId, cancellationToken);
         if (!result.IsSuccess)
@@ -932,16 +995,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         EntityOverviewRow[] archivedRows = result.ArchivedItems
             .Select(item => CreateOverviewRow(item, _showInheritedDueDates))
             .ToArray();
-        ReplaceOverviewItems(rows, archivedRows);
+        ReplaceOverviewItems(rows, archivedRows, keepView);
         UpdateProgressCounts(result.Items);
     }
 
-    private async Task LoadOverviewAndProgressAsync(CancellationToken cancellationToken)
+    private async Task LoadOverviewAndProgressAsync(CancellationToken cancellationToken, bool keepView = false)
     {
         LoadedRevision = null;
         // Read before loading, so a write during the load leaves the rows older than the store.
         long? revision = _readRevision is null ? null : await _readRevision(cancellationToken);
-        await LoadOverviewAsync(cancellationToken);
+        await LoadOverviewAsync(cancellationToken, keepView);
         if (!HasOverviewError)
             LoadedRevision = revision;
     }
@@ -959,10 +1022,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     private void ReplaceOverviewItems(
         IReadOnlyList<EntityOverviewRow> items,
-        IReadOnlyList<EntityOverviewRow> archivedItems)
+        IReadOnlyList<EntityOverviewRow> archivedItems,
+        bool keepView = false)
     {
-        CloseEntityDetails();
-        ClearOverviewSelection();
+        // A reload that keeps the view reopens the details pane and the selection itself afterwards.
+        if (!keepView)
+        {
+            CloseEntityDetails();
+            ClearOverviewSelection();
+        }
         ActiveTable.ReplaceSourceItems(items);
         ArchivedTable.ReplaceSourceItems(archivedItems);
         _graphNeedsRebuild = true;

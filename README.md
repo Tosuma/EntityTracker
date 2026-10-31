@@ -155,7 +155,8 @@ Projects after startup and every five minutes. In **Settings**, choose 1, 5, 15,
 or turn it off while keeping **Sync now** available. A Project with an unfinished edit waits until
 the edit is saved or closed; other Projects continue. Conflict and deletion review still require
 manual action. Routine automatic checks are quiet; a notification stays visible when action is
-needed.
+needed. When a sync brings in changes, the page you are on updates by itself, keeping an open details
+pane and the selected rows; other pages show the changes when you open them.
 
 Closing EntityTracker syncs first: it finishes a sync that is running, then syncs every Project with
 changes not synced yet, and closes when that is done, whether automatic sync is on or off. The
