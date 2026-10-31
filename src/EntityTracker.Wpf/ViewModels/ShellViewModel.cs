@@ -43,8 +43,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     // Kept so the refresh timer isn't collected.
     private readonly DispatcherTimer? _syncIndicatorTimer;
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
-    // Each Project's revision when its running sync started, to tell whether the sync brought anything in.
-    private readonly Dictionary<ProjectId, long> _revisionsAtSyncStart = [];
+    // The Project revision each non-Tracker page last showed after a sync, so a sync that brought nothing
+    // in leaves it alone. Tracker workspaces keep their own (LoadedRevision).
+    private readonly Dictionary<(ShellDestination Page, ProjectId Project), long> _revisionsShownAfterSync = [];
     private readonly ILogger<ShellViewModel> _logger;
     private readonly Dictionary<TrackerId, MainWindowViewModel> _workspaces = [];
     private readonly HashSet<TrackerId> _historyBaselines = [];
@@ -774,9 +775,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         }
         RefreshSyncIndicators();
         ProjectSyncState state = _autoSync!.GetState(projectId);
-        if (state.Kind == ProjectSyncStateKind.Syncing)
-            _ = RecordRevisionAtSyncStartAsync(projectId);
-        else if (state.Kind != ProjectSyncStateKind.Unlinked)
+        if (state.Kind is not (ProjectSyncStateKind.Syncing or ProjectSyncStateKind.Unlinked))
             _ = RefreshVisiblePageAfterSyncAsync(projectId);
         if (state.Kind is ProjectSyncStateKind.DeletionApproval or
             ProjectSyncStateKind.Conflict or ProjectSyncStateKind.AuthenticationRequired or
@@ -1162,19 +1161,6 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    internal async Task RecordRevisionAtSyncStartAsync(ProjectId projectId)
-    {
-        if (_projectSnapshots is null) return;
-        try
-        {
-            _revisionsAtSyncStart[projectId] = await _projectSnapshots.GetRevisionAsync(projectId);
-        }
-        catch (Exception exception)
-        {
-            _logger.LogWarning(exception, "The Project revision could not be read before a sync.");
-        }
-    }
-
     /// <summary>
     /// Shows what a finished sync brought in on the page that is open, keeping its details pane and
     /// selection. Hidden pages stay cached until they are opened, when their own checks reload them.
@@ -1183,12 +1169,11 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     {
         try
         {
-            if (_projectSnapshots is not null && _revisionsAtSyncStart.Remove(projectId, out long before) &&
-                before == await _projectSnapshots.GetRevisionAsync(projectId))
-                return;
             // Navigation is under way and refreshes the page it opens.
             if (IsBusy) return;
 
+            // The revision is compared with what the page shows, read once the sync has finished, so a read
+            // can never miss what the sync applied.
             if (IsTrackerDestination(SelectedDestination))
             {
                 if (CurrentWorkspace is { } workspace && SelectedTracker is { } tracker &&
@@ -1198,18 +1183,31 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             else if (SelectedDestination == ShellDestination.Portfolio ||
                      (SelectedDestination == ShellDestination.ProjectDashboard && SelectedProject?.Id == projectId))
             {
-                await RefreshVisibleDashboardAsync(CancellationToken.None);
+                if (await HasNewerRevisionThanShownAsync(SelectedDestination, projectId))
+                    await RefreshVisibleDashboardAsync(CancellationToken.None);
             }
             else if (SelectedDestination == ShellDestination.Developers && SelectedProject?.Id == projectId &&
                      Developers is { IsRetirementOpen: false, IsRetiredDialogOpen: false } developers)
             {
-                await developers.RefreshAsync(CancellationToken.None);
+                if (await HasNewerRevisionThanShownAsync(SelectedDestination, projectId))
+                    await developers.RefreshAsync(CancellationToken.None);
             }
         }
         catch (Exception exception)
         {
             _logger.LogWarning(exception, "The open page could not be updated after a sync.");
         }
+    }
+
+    // Read before the page reloads, so a write during the reload leaves the page marked older. A page that
+    // has not been refreshed by a sync yet counts as older, which costs at most one extra reload.
+    private async Task<bool> HasNewerRevisionThanShownAsync(ShellDestination page, ProjectId projectId)
+    {
+        if (_projectSnapshots is null) return true;
+        long revision = await _projectSnapshots.GetRevisionAsync(projectId);
+        bool newer = !_revisionsShownAfterSync.TryGetValue((page, projectId), out long shown) || shown != revision;
+        _revisionsShownAfterSync[(page, projectId)] = revision;
+        return newer;
     }
 
     private async Task RefreshWorkspaceIfChangedAsync(
