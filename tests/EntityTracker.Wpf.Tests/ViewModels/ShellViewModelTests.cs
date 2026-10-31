@@ -113,6 +113,103 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
     }
 
     [Fact]
+    public async Task SyncWithIncomingData_UpdatesTheOpenOverviewKeepingDetailsAndSelection()
+    {
+        // #169: a sync that brings in changes updates the page that is open, without Refresh or navigation.
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        EntityId first = await harness.AddEntityAndReturnIdAsync(harness.DefaultTracker.Id, "First entity");
+        EntityId second = await harness.AddEntityAndReturnIdAsync(harness.DefaultTracker.Id, "Second entity");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        MainWindowViewModel workspace = shell.CurrentWorkspace!;
+        IReadOnlyList<EntityOverviewRow> beforeSync = workspace.ActiveTable.SourceItems;
+        workspace.OpenEntityDetailsCommand.Execute(beforeSync.Single(row => row.EntityId == first));
+        workspace.UpdateOverviewSelection(beforeSync);
+        IReadOnlyList<EntityId>? restored = null;
+        workspace.OverviewSelectionRestoreRequested += (_, ids) => restored = ids;
+
+        await shell.RecordRevisionAtSyncStartAsync(harness.DefaultProject.Id);
+        await ApplyIncomingNotesAsync(harness, "Updated by a colleague");
+        await shell.RefreshVisiblePageAfterSyncAsync(harness.DefaultProject.Id);
+
+        Assert.NotSame(beforeSync, workspace.ActiveTable.SourceItems);
+        Assert.All(workspace.ActiveTable.SourceItems, row => Assert.Equal("Updated by a colleague", row.Notes));
+        Assert.Equal(first, workspace.SelectedEntityDetails?.EntityId);
+        Assert.Equal("Updated by a colleague", workspace.SelectedEntityDetails?.Notes);
+        Assert.Equal(2, workspace.SelectedActiveEntityCount);
+        Assert.Equal(new HashSet<EntityId> { first, second }, restored?.ToHashSet());
+    }
+
+    [Fact]
+    public async Task SyncWithNothingNewOrAnOpenEditor_KeepsTheCachedRowsUntilTheyCanReload()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "First entity");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        MainWindowViewModel workspace = shell.CurrentWorkspace!;
+        IReadOnlyList<EntityOverviewRow> cached = workspace.ActiveTable.SourceItems;
+
+        await shell.RecordRevisionAtSyncStartAsync(harness.DefaultProject.Id);
+        await shell.RefreshVisiblePageAfterSyncAsync(harness.DefaultProject.Id);
+        Assert.Same(cached, workspace.ActiveTable.SourceItems);
+
+        workspace.EditOverviewEntityCommand.Execute(Assert.Single(cached));
+        Assert.True(workspace.Editor.IsOpen);
+        await shell.RecordRevisionAtSyncStartAsync(harness.DefaultProject.Id);
+        await ApplyIncomingNotesAsync(harness, "Updated while editing");
+        await shell.RefreshVisiblePageAfterSyncAsync(harness.DefaultProject.Id);
+        Assert.Same(cached, workspace.ActiveTable.SourceItems);
+
+        workspace.Editor.DiscardAndClose();
+        await shell.RefreshVisiblePageAfterSyncAsync(harness.DefaultProject.Id);
+        Assert.Equal("Updated while editing", Assert.Single(workspace.ActiveTable.SourceItems).Notes);
+    }
+
+    [Fact]
+    public async Task SyncWithIncomingData_RefreshesTheVisibleDashboardButNotTheHiddenTracker()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "First entity");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        MainWindowViewModel workspace = shell.CurrentWorkspace!;
+        IReadOnlyList<EntityOverviewRow> cached = workspace.ActiveTable.SourceItems;
+        Assert.True(await shell.NavigateAsync(ShellDestination.ProjectDashboard));
+        object? dashboard = shell.ProjectDashboard;
+
+        await shell.RecordRevisionAtSyncStartAsync(harness.DefaultProject.Id);
+        await ApplyIncomingNotesAsync(harness, "Updated by a colleague");
+        await shell.RefreshVisiblePageAfterSyncAsync(harness.DefaultProject.Id);
+
+        Assert.NotNull(shell.ProjectDashboard);
+        Assert.NotSame(dashboard, shell.ProjectDashboard);
+        Assert.Same(cached, workspace.ActiveTable.SourceItems);
+        Assert.True(await shell.NavigateAsync(ShellDestination.Overview));
+        Assert.Equal("Updated by a colleague", Assert.Single(workspace.ActiveTable.SourceItems).Notes);
+    }
+
+    // Git sync applies its incoming data through this same snapshot store.
+    private static async Task ApplyIncomingNotesAsync(ShellHarness harness, string notes)
+    {
+        ProjectSnapshotRead read = await harness.Snapshots.ReadAsync(harness.DefaultProject.Id);
+        ProjectSnapshot incoming = read.Snapshot! with
+        {
+            Trackers = read.Snapshot!.Trackers.Select(tracker => tracker with
+            {
+                Entities = tracker.Entities.Select(entity => entity with { Notes = notes }).ToArray()
+            }).ToArray()
+        };
+        await harness.Snapshots.ApplyAsync(incoming, read.Revision);
+    }
+
+    [Fact]
     public async Task BulkEdit_AddsAndRemovesADeveloperOnEverySelectedEntityAsAPageDialog()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();

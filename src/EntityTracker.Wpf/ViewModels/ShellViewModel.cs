@@ -42,6 +42,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private Func<Task>? _update;
     // Kept so the refresh timer isn't collected.
     private readonly DispatcherTimer? _syncIndicatorTimer;
+    private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
+    // Each Project's revision when its running sync started, to tell whether the sync brought anything in.
+    private readonly Dictionary<ProjectId, long> _revisionsAtSyncStart = [];
     private readonly ILogger<ShellViewModel> _logger;
     private readonly Dictionary<TrackerId, MainWindowViewModel> _workspaces = [];
     private readonly HashSet<TrackerId> _historyBaselines = [];
@@ -763,15 +766,18 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     private void OnAutoSyncStateChanged(object? sender, ProjectId projectId)
     {
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.HasShutdownStarted) return;
-        if (!dispatcher.CheckAccess())
+        if (_dispatcher.HasShutdownStarted) return;
+        if (!_dispatcher.CheckAccess())
         {
-            dispatcher.BeginInvoke(() => OnAutoSyncStateChanged(sender, projectId));
+            _dispatcher.BeginInvoke(() => OnAutoSyncStateChanged(sender, projectId));
             return;
         }
         RefreshSyncIndicators();
         ProjectSyncState state = _autoSync!.GetState(projectId);
+        if (state.Kind == ProjectSyncStateKind.Syncing)
+            _ = RecordRevisionAtSyncStartAsync(projectId);
+        else if (state.Kind != ProjectSyncStateKind.Unlinked)
+            _ = RefreshVisiblePageAfterSyncAsync(projectId);
         if (state.Kind is ProjectSyncStateKind.DeletionApproval or
             ProjectSyncStateKind.Conflict or ProjectSyncStateKind.AuthenticationRequired or
             ProjectSyncStateKind.ConfigurationInvalid or ProjectSyncStateKind.Failed)
@@ -1156,8 +1162,58 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    internal async Task RecordRevisionAtSyncStartAsync(ProjectId projectId)
+    {
+        if (_projectSnapshots is null) return;
+        try
+        {
+            _revisionsAtSyncStart[projectId] = await _projectSnapshots.GetRevisionAsync(projectId);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "The Project revision could not be read before a sync.");
+        }
+    }
+
+    /// <summary>
+    /// Shows what a finished sync brought in on the page that is open, keeping its details pane and
+    /// selection. Hidden pages stay cached until they are opened, when their own checks reload them.
+    /// </summary>
+    internal async Task RefreshVisiblePageAfterSyncAsync(ProjectId projectId)
+    {
+        try
+        {
+            if (_projectSnapshots is not null && _revisionsAtSyncStart.Remove(projectId, out long before) &&
+                before == await _projectSnapshots.GetRevisionAsync(projectId))
+                return;
+            // Navigation is under way and refreshes the page it opens.
+            if (IsBusy) return;
+
+            if (IsTrackerDestination(SelectedDestination))
+            {
+                if (CurrentWorkspace is { } workspace && SelectedTracker is { } tracker &&
+                    tracker.ProjectId == projectId)
+                    await RefreshWorkspaceIfChangedAsync(workspace, tracker, CancellationToken.None, keepView: true);
+            }
+            else if (SelectedDestination == ShellDestination.Portfolio ||
+                     (SelectedDestination == ShellDestination.ProjectDashboard && SelectedProject?.Id == projectId))
+            {
+                await RefreshVisibleDashboardAsync(CancellationToken.None);
+            }
+            else if (SelectedDestination == ShellDestination.Developers && SelectedProject?.Id == projectId &&
+                     Developers is { IsRetirementOpen: false, IsRetiredDialogOpen: false } developers)
+            {
+                await developers.RefreshAsync(CancellationToken.None);
+            }
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "The open page could not be updated after a sync.");
+        }
+    }
+
     private async Task RefreshWorkspaceIfChangedAsync(
-        MainWindowViewModel workspace, Tracker tracker, CancellationToken cancellationToken)
+        MainWindowViewModel workspace, Tracker tracker, CancellationToken cancellationToken, bool keepView = false)
     {
         // The workspace records the revision it read before its last successful load, including
         // reloads after its own edits; a load it skipped or that failed leaves it stale.
@@ -1166,7 +1222,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             return;
 
         await EnsureHistoryBaselineAsync(tracker.Id, cancellationToken);
-        await workspace.InitializeAsync(cancellationToken);
+        await workspace.InitializeAsync(cancellationToken, keepView);
     }
 
     private async Task EnsureHistoryBaselineAsync(TrackerId trackerId, CancellationToken cancellationToken)

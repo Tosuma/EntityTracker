@@ -139,6 +139,7 @@ public partial class TrackerWorkspaceView : UserControl
 
         _viewModel = viewModel;
         viewModel.OverviewSelectionClearRequested += OnOverviewSelectionClearRequested;
+        viewModel.OverviewSelectionRestoreRequested += OnOverviewSelectionRestoreRequested;
         viewModel.EntityRevealRequested += OnEntityRevealRequested;
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
         viewModel.Editor.PropertyChanged += OnEditorPropertyChanged;
@@ -155,6 +156,7 @@ public partial class TrackerWorkspaceView : UserControl
         }
 
         _viewModel.OverviewSelectionClearRequested -= OnOverviewSelectionClearRequested;
+        _viewModel.OverviewSelectionRestoreRequested -= OnOverviewSelectionRestoreRequested;
         _viewModel.EntityRevealRequested -= OnEntityRevealRequested;
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         _viewModel.Editor.PropertyChanged -= OnEditorPropertyChanged;
@@ -433,6 +435,10 @@ public partial class TrackerWorkspaceView : UserControl
             OverviewDataGrid.SelectedItems.Add(row);
         }
     }
+
+    // After a reload that kept the view, such as one a sync caused: the grid's items are new objects.
+    private void OnOverviewSelectionRestoreRequested(object? sender, IReadOnlyList<EntityId> selectedIds) =>
+        Dispatcher.BeginInvoke(new Action(() => RestoreOverviewSelection(selectedIds)));
 
     private void OnOverviewSelectionClearRequested(object? sender, EventArgs e)
     {
