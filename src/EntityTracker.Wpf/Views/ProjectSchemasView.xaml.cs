@@ -20,6 +20,13 @@ public partial class ProjectSchemasView : UserControl
         menu.IsOpen = true;
     }
 
+    /// <summary>The graph is laid out while hidden, so it is fitted once it is shown and measured.</summary>
+    private void OnSchemaGraphVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is true)
+            Dispatcher.BeginInvoke(SchemaGraphCanvas.FitToView, System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
     private void OnRenameSchema(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is SchemaCard card) Page?.RenameSchema(card.Schema);

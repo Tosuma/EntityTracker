@@ -270,6 +270,8 @@
                     Visibility="{Binding DataContext.IsGraphView, ElementName=SchemaEditorPage, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <Grid>
                     <controls:DependencyGraphCanvas x:Name="SchemaGraphCanvas"
+                                                    ShowStatus="False"
+                                                    IsVisibleChanged="OnSchemaGraphVisibleChanged"
                                                     AutomationProperties.Name="Schema dependency graph"
                                                     AutomationProperties.HelpText="Click an entity to highlight its dependencies. Double-click or press Enter to edit it."
                                                     Graph="{Binding}"
