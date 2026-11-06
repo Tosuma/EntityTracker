@@ -343,6 +343,10 @@
                             DataContext="{Binding Diagnostics}">
                         <StackPanel>
                             <TextBlock FontSize="16" FontWeight="SemiBold" Text="Logs" />
+                            <TextBlock x:Name="AboutTestDataFolder" Margin="0,4,0,4"
+                                       Foreground="{DynamicResource Brush.Review.Warning.Header}" TextWrapping="Wrap"
+                                       Text="{Binding TestDataFolderNote}"
+                                       Visibility="{Binding HasTestDataFolderNote, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             <TextBlock Margin="0,4,0,0" Style="{StaticResource PageDescriptionTextStyle}" TextWrapping="Wrap"
                                        Text="EntityTracker keeps a log of the last 14 days. It helps find out what went wrong when something fails." />
                             <TextBlock Margin="0,8,0,0" Text="{Binding LogFolder}" TextWrapping="Wrap"

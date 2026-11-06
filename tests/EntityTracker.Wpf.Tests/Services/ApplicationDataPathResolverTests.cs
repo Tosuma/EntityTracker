@@ -92,4 +92,68 @@ public sealed class ApplicationDataPathResolverTests
             }
         }
     }
+
+    [Fact]
+    public void ResolvePaths_WithOverride_UsesThatFolderForAllDataAndSkipsTheLegacyCopy()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "EntityTracker.PathTests", Guid.NewGuid().ToString("N"));
+        string localData = Path.Combine(root, "local");
+        string app = Path.Combine(root, "app");
+        string testData = Path.Combine(root, "test data");
+        Directory.CreateDirectory(app);
+        File.WriteAllText(Path.Combine(app, "entity-tracker.db"), "legacy");
+
+        try
+        {
+            ApplicationDataPaths paths =
+                ApplicationDataPathResolver.ResolvePaths(localData, app, "  " + testData + "  ");
+
+            Assert.True(paths.IsTestDataFolder);
+            Assert.Equal("EntityTracker (test data)", paths.WindowTitle);
+            Assert.Equal(testData, paths.RootDirectory);
+            Assert.Equal(Path.Combine(testData, "entity-tracker.db"), paths.DatabasePath);
+            Assert.Equal(Path.Combine(testData, "settings.json"), paths.SettingsPath);
+            Assert.Equal(Path.Combine(testData, "backups"), paths.BackupsDirectory);
+            Assert.Equal(Path.Combine(testData, "logs"), paths.LogsDirectory);
+            Assert.True(Directory.Exists(testData));
+            Assert.False(File.Exists(paths.DatabasePath));
+            Assert.False(Directory.Exists(localData));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ResolvePaths_WithoutOverride_UsesLocalApplicationData(string? dataDirectoryOverride)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "EntityTracker.PathTests", Guid.NewGuid().ToString("N"));
+        string localData = Path.Combine(root, "local");
+        string app = Path.Combine(root, "app");
+        Directory.CreateDirectory(app);
+
+        try
+        {
+            ApplicationDataPaths paths =
+                ApplicationDataPathResolver.ResolvePaths(localData, app, dataDirectoryOverride);
+
+            Assert.False(paths.IsTestDataFolder);
+            Assert.Equal("EntityTracker", paths.WindowTitle);
+            Assert.Equal(Path.Combine(localData, "EntityTracker"), paths.RootDirectory);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
 }
