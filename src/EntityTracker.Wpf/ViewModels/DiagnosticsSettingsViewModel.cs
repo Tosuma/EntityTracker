@@ -33,7 +33,8 @@ public sealed class DiagnosticsSettingsViewModel : INotifyPropertyChanged
         ILogger<DiagnosticsSettingsViewModel>? logger = null,
         NotificationCenter? notifications = null,
         Action<string>? openFolder = null,
-        string? levelOverride = null)
+        string? levelOverride = null,
+        string? testDataFolder = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(initial);
@@ -46,6 +47,7 @@ public sealed class DiagnosticsSettingsViewModel : INotifyPropertyChanged
         _notifications = notifications;
         _openFolder = openFolder ?? OpenInExplorer;
         _override = levelOverride;
+        TestDataFolder = string.IsNullOrWhiteSpace(testDataFolder) ? null : testDataFolder;
         _detailedLogging = initial.DetailedLogging;
         _toggle = new AsyncCommand(ToggleAsync, () => !_isBusy);
         OpenLogFolderCommand = new RelayCommand(OpenLogFolder);
@@ -56,6 +58,17 @@ public sealed class DiagnosticsSettingsViewModel : INotifyPropertyChanged
     public string LogFolder { get; }
 
     public bool DetailedLogging => _detailedLogging;
+
+    /// <summary>Gets the data folder when ENTITYTRACKER_DATA_DIR sets one, and null otherwise.</summary>
+    public string? TestDataFolder { get; }
+
+    /// <summary>Gets a warning that this instance runs on a test data folder, or an empty string.</summary>
+    public string TestDataFolderNote => TestDataFolder is null
+        ? string.Empty
+        : $"Test data folder: {TestDataFolder}. It is set by {ApplicationDataPathResolver.OverrideVariable}, " +
+          "so this instance doesn't use the installed app's data.";
+
+    public bool HasTestDataFolderNote => TestDataFolder is not null;
 
     /// <summary>Gets a note when ENTITYTRACKER_LOG_LEVEL decides the level instead of the switch.</summary>
     public string OverrideNote => LoggingLevels.TryParseOverride(_override, out LogLevel level)

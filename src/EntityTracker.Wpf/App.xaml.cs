@@ -82,6 +82,9 @@ public partial class App : System.Windows.Application
                 RuntimeInformation.OSDescription, RuntimeInformation.FrameworkDescription,
                 dataPaths.RootDirectory,
                 LoggingLevels.Describe(settings.Settings.DetailedLogging, LoggingLevels.ReadOverride()));
+            if (dataPaths.IsTestDataFolder)
+                bootstrapLogger.LogWarning("The data folder is set by {Variable}, so this instance runs on test data.",
+                    ApplicationDataPathResolver.OverrideVariable);
             _ = LogGitVersionAsync(bootstrapLogger);
 
             ServiceCollection services = new();
@@ -189,7 +192,8 @@ public partial class App : System.Windows.Application
                 settingsStore, settings.Settings, logLevel, dataPaths.LogsDirectory,
                 provider.GetRequiredService<ILogger<DiagnosticsSettingsViewModel>>(),
                 provider.GetRequiredService<NotificationCenter>(),
-                levelOverride: LoggingLevels.ReadOverride()));
+                levelOverride: LoggingLevels.ReadOverride(),
+                testDataFolder: dataPaths.IsTestDataFolder ? dataPaths.RootDirectory : null));
             services.AddSingleton(provider => new ResponsibilitySearchSettingsViewModel(
                 settingsStore, settings.Settings, provider.GetRequiredService<NotificationCenter>()));
             services.AddSingleton(provider => new DueDateSettingsViewModel(
@@ -234,6 +238,7 @@ public partial class App : System.Windows.Application
                 _serviceProvider.GetRequiredService<ShellViewModel>();
             MainWindow mainWindow = new(shellViewModel,
                 _serviceProvider.GetRequiredService<AppUpdateService>());
+            mainWindow.Title = dataPaths.WindowTitle;
             MainWindow = mainWindow;
             mainWindow.Show();
 

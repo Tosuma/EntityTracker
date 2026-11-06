@@ -57,6 +57,30 @@ Do not edit or restore the database while EntityTracker is running. If the resto
 newer than the application supports, use a newer compatible application version instead of trying
 to downgrade the schema manually.
 
+## Test a new build on a copy of your data
+
+A development or test build normally opens the same data as the installed app. A build with a newer
+database schema migrates that database, and the installed app then refuses it ("newer than the
+supported version"). A newer Git snapshot format synced to a shared repository is refused by
+colleagues' apps too. To try such a build safely on the same Windows user, give it its own data
+folder with the environment variable `ENTITYTRACKER_DATA_DIR`:
+
+1. Close every running EntityTracker instance.
+2. Copy `%LOCALAPPDATA%\EntityTracker\entity-tracker.db` into an empty folder, for example
+   `%USERPROFILE%\EntityTracker-test`. Don't copy `git-sync-links.v1.json`: without it, no Project
+   in the copy is linked to Git.
+3. Start the test build with `ENTITYTRACKER_DATA_DIR` set to that folder. In PowerShell:
+   `$env:ENTITYTRACKER_DATA_DIR = "$env:USERPROFILE\EntityTracker-test"`, then start the build from
+   the same window.
+
+The test build keeps its settings, backups and logs in that folder too, and can run beside the
+installed app. Its window title reads **EntityTracker (test data)**, and **Settings › About** shows
+the folder. **Never link the test copy to the shared repository**: a sync would push the newer
+snapshot format to your colleagues.
+
+If a test build did open the production database by mistake, restore the pre-migration backup from
+`backups\v<old-schema-version>` as described above.
+
 ## Recover a Project sync
 
 Automatic sync checks linked Projects after startup and every 1, 5, 15, 30, or 60 minutes as
