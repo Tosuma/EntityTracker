@@ -31,10 +31,10 @@ internal sealed class ProjectMergeConflictPresenter(
         for (int index = 0; index < parts.Length; index++)
         {
             string part = parts[index];
-            if (part is "Tracker" or "Entity" or "Developer" && index + 1 < parts.Length)
+            if (part is "Tracker" or "Entity" or "Developer" or "Schema" or "SchemaEntity" && index + 1 < parts.Length)
             {
                 string id = parts[++index];
-                labels.Add(part + ": " + (Guid.TryParse(id, out Guid key)
+                labels.Add((part == "SchemaEntity" ? "Schema entity" : part) + ": " + (Guid.TryParse(id, out Guid key)
                     ? NameOnSides(part, key) : id));
             }
             else if (part is "ResponsibilityPeriod" or "Progress" or "Dependency" or
@@ -73,6 +73,8 @@ internal sealed class ProjectMergeConflictPresenter(
     private static string? Name(ProjectSnapshot? snapshot, string type, Guid id) => type switch
     {
         "Tracker" => snapshot?.Trackers.FirstOrDefault(t => t.Id == id)?.Name,
+        "Schema" => snapshot?.Schemas?.FirstOrDefault(s => s.Id == id)?.Name,
+        "SchemaEntity" => snapshot?.Schemas?.SelectMany(s => s.Entities).FirstOrDefault(e => e.Id == id)?.Name,
         "Entity" => snapshot?.Trackers.SelectMany(t => t.Entities)
             .FirstOrDefault(e => e.Id == id)?.SourceName,
         "Developer" => snapshot?.Developers?.FirstOrDefault(d => d.Id == id) is { } developer

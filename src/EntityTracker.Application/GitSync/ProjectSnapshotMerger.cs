@@ -53,7 +53,9 @@ public sealed class ProjectSnapshotMerger
         ProjectSnapshot merged = new(ProjectSnapshot.CurrentFormatVersion,
             MergeProject(basis?.Project ?? local.Project, local.Project, remote.Project),
             ThreeWayMerge.Keyed("Tracker", basis?.Trackers, local.Trackers, remote.Trackers,
-                t => t.Id, MergeTracker), developers);
+                t => t.Id, MergeTracker), developers,
+            ThreeWayMerge.Keyed("Schema", basis?.Schemas, local.Schemas ?? [], remote.Schemas ?? [],
+                s => s.Id, MergeSchema));
         merged = ResolveRetiredAssignments(merged, basis, local, remote);
         if (_conflicts.Count == 0) ProjectSnapshotValidator.Validate(merged);
         ProjectMergeConflictPresenter presenter = new(basis, local, remote);
@@ -218,6 +220,79 @@ public sealed class ProjectSnapshotMerger
             }).ToArray()
         };
         return MergedPlaceholders.Normalize(merged, b, l, r);
+    }
+
+    private SnapshotSchema? MergeSchema(string path, SnapshotSchema? b,
+        SnapshotSchema? l, SnapshotSchema? r)
+    {
+        if (Same(l, r)) return l;
+        if (!_twoWay && Same(l, b)) return r;
+        if (!_twoWay && Same(r, b)) return l;
+        if (l is null || r is null || b is null)
+            return Object(path, b, l, r, b is null ? ProjectConflictKind.Addition : ProjectConflictKind.Deletion);
+        SnapshotSchema merged = l with
+        {
+            Name = Field(path + "/Name", b.Name, l.Name, r.Name),
+            CreatedAtUtc = Field(path + "/CreatedAtUtc", b.CreatedAtUtc, l.CreatedAtUtc, r.CreatedAtUtc),
+            LifecycleState = Field(path + "/LifecycleState", b.LifecycleState,
+                l.LifecycleState, r.LifecycleState, ProjectConflictKind.Lifecycle),
+            UpdatedAtUtc = l.UpdatedAtUtc > r.UpdatedAtUtc ? l.UpdatedAtUtc : r.UpdatedAtUtc,
+            RecycledAtUtc = Field(path + "/RecycledAtUtc", b.RecycledAtUtc,
+                l.RecycledAtUtc, r.RecycledAtUtc, ProjectConflictKind.Lifecycle),
+            Entities = ThreeWayMerge.Keyed(path + "/SchemaEntity", b.Entities, l.Entities, r.Entities,
+                e => e.Id, MergeSchemaEntity)
+        };
+        return SettleSchema(merged, b);
+    }
+
+    private SnapshotSchemaEntity? MergeSchemaEntity(string path, SnapshotSchemaEntity? b,
+        SnapshotSchemaEntity? l, SnapshotSchemaEntity? r)
+    {
+        if (Same(l, r)) return l;
+        if (!_twoWay && Same(l, b)) return r;
+        if (!_twoWay && Same(r, b)) return l;
+        if (l is null || r is null || b is null)
+            return Object(path, b, l, r, b is null ? ProjectConflictKind.Addition : ProjectConflictKind.Deletion);
+        // A dependency added on one side and another removed on the other both take effect.
+        HashSet<Guid> removed = b.Dependencies.Except(l.Dependencies).Concat(b.Dependencies.Except(r.Dependencies)).ToHashSet();
+        return l with
+        {
+            Name = Field(path + "/Name", b.Name, l.Name, r.Name),
+            GroupName = Field(path + "/GroupName", b.GroupName, l.GroupName, r.GroupName),
+            Dependencies = l.Dependencies.Union(r.Dependencies).Where(d => !removed.Contains(d)).Order().ToArray()
+        };
+    }
+
+    /// <summary>
+    /// Keeps a merged schema valid without asking: a dependency on an entity the other side removed is
+    /// dropped, and two entities both sides added under the same name become one (the one with the lowest
+    /// ID, or the one that already existed), taking the other's dependencies and dependants.
+    /// </summary>
+    private static SnapshotSchema SettleSchema(SnapshotSchema schema, SnapshotSchema? basis)
+    {
+        HashSet<Guid> existed = (basis?.Entities ?? []).Select(e => e.Id).ToHashSet();
+        Dictionary<Guid, Guid> replaced = [];
+        foreach (IGrouping<string, SnapshotSchemaEntity> sameName in schema.Entities
+                     .GroupBy(e => e.Name.Trim().ToUpperInvariant(), StringComparer.Ordinal).Where(g => g.Count() > 1))
+        {
+            SnapshotSchemaEntity kept = sameName.OrderBy(e => existed.Contains(e.Id) ? 0 : 1).ThenBy(e => e.Id).First();
+            foreach (SnapshotSchemaEntity other in sameName.Where(e => e.Id != kept.Id)) replaced[other.Id] = kept.Id;
+        }
+
+        SnapshotSchemaEntity[] entities = schema.Entities.Where(e => !replaced.ContainsKey(e.Id)).ToArray();
+        HashSet<Guid> ids = entities.Select(e => e.Id).ToHashSet();
+        return schema with
+        {
+            Entities = entities.Select(entity => entity with
+            {
+                Dependencies = schema.Entities
+                    .Where(e => e.Id == entity.Id || replaced.GetValueOrDefault(e.Id) == entity.Id)
+                    .SelectMany(e => e.Dependencies)
+                    .Select(d => replaced.GetValueOrDefault(d, d))
+                    .Where(d => d != entity.Id && ids.Contains(d))
+                    .Distinct().Order().ToArray()
+            }).ToArray()
+        };
     }
 
     private SnapshotEntity? MergeEntity(string path, SnapshotEntity? b,

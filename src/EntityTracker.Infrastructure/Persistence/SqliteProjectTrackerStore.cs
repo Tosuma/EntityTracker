@@ -226,6 +226,8 @@ public sealed class SqliteProjectTrackerStore(
             cancellationToken);
         if (project)
         {
+            await SqliteSchemaStore.DeleteAsync(connection, transaction, SqliteSchemaStore.ProjectSchemas, id,
+                cancellationToken);
             await ExecuteDeleteAsync(connection, transaction, "DELETE FROM projects WHERE id = $id;", id, cancellationToken);
         }
 
