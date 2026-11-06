@@ -8,6 +8,9 @@ using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
 
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace EntityTracker.Wpf.ViewModels;
 
 /// <summary>A schema card on the Schemas page.</summary>
@@ -29,13 +32,15 @@ public sealed class ProjectSchemasViewModel : INotifyPropertyChanged
     private readonly CatalogManagementViewModel _catalog;
     private readonly NotificationCenter? _notifications;
     private readonly Func<string, bool>? _confirmDiscard;
+    private readonly ILogger _logger;
     private SchemaEditorViewModel? _editor;
     private bool _isLoading;
 
     public ProjectSchemasViewModel(Project project, SchemaManagementService management,
         SchemaEditingService editing, CatalogManagementViewModel catalog, NotificationCenter? notifications = null,
-        Func<string, bool>? confirmDiscard = null)
+        Func<string, bool>? confirmDiscard = null, ILogger? logger = null)
     {
+        _logger = logger ?? NullLogger.Instance;
         _confirmDiscard = confirmDiscard;
         ArgumentNullException.ThrowIfNull(project);
         Project = project;
@@ -121,10 +126,11 @@ public sealed class ProjectSchemasViewModel : INotifyPropertyChanged
         try
         {
             Editor = new SchemaEditorViewModel(await _editing.GetContentAsync(schemaId, cancellationToken),
-                _editing, _notifications);
+                _editing, _notifications, _logger);
         }
         catch (InvalidOperationException exception)
         {
+            _logger.LogWarning(exception, "A schema could not be opened.");
             _notifications?.Show("Schema could not be opened", exception.Message, NotificationKind.Failure);
             await RefreshAsync(cancellationToken);
         }

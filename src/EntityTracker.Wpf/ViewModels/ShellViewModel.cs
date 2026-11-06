@@ -1184,7 +1184,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             SchemasPage = SelectedProject is null || _schemaManagement is null || _schemaEditing is null
                 ? null
                 : new ProjectSchemasViewModel(SelectedProject, _schemaManagement, _schemaEditing, Catalog,
-                    Notifications, _discardConfirmation.ConfirmDiscard);
+                    Notifications, _discardConfirmation.ConfirmDiscard, _logger);
         SelectedDestination = destination;
         if (CurrentWorkspace is not null && IsTrackerDestination(destination))
         {

@@ -11,6 +11,9 @@ using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
 using EntityTracker.Wpf.Services;
 
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace EntityTracker.Wpf.ViewModels;
 
 /// <summary>A schema entity as the editor's list shows it.</summary>
@@ -32,6 +35,7 @@ public sealed record SchemaEntityRow(SchemaEntity Entity, IReadOnlyList<string> 
 public sealed class SchemaEditorViewModel : INotifyPropertyChanged
 {
     private readonly SchemaEditingService _editing;
+    private readonly ILogger _logger;
     private readonly AsyncCommand _saveCommand;
     private readonly RelayCommand _addDependencyCommand;
     private readonly RelayCommand _requestRemoveCommand;
@@ -53,9 +57,10 @@ public sealed class SchemaEditorViewModel : INotifyPropertyChanged
     private bool _isBusy;
 
     public SchemaEditorViewModel(SchemaContent content, SchemaEditingService editing,
-        NotificationCenter? notifications = null)
+        NotificationCenter? notifications = null, ILogger? logger = null)
     {
         ArgumentNullException.ThrowIfNull(content);
+        _logger = logger ?? NullLogger.Instance;
         _content = content;
         _editing = editing;
         Rows = [];
@@ -386,6 +391,7 @@ public sealed class SchemaEditorViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "A schema entity could not be saved.");
             ErrorMessage = exception.Message;
         }
         finally
@@ -421,6 +427,7 @@ public sealed class SchemaEditorViewModel : INotifyPropertyChanged
         }
         catch (Exception exception)
         {
+            _logger.LogError(exception, "A schema entity could not be removed.");
             ErrorMessage = exception.Message;
         }
         finally
