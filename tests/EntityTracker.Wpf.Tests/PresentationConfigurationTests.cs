@@ -1757,6 +1757,7 @@ public sealed class PresentationConfigurationTests
     [Theory]
     [InlineData("ProjectDevelopersView.xaml")]
     [InlineData("ProjectReportView.xaml")]
+    [InlineData("ProjectSchemasView.xaml")]
     public void ProjectPages_StartTheirHeadingWithABreadcrumbBackToTheDashboard(string view)
     {
         XDocument document = LoadWpfXaml("Views", view);
@@ -1766,6 +1767,45 @@ public sealed class PresentationConfigurationTests
         Assert.Contains(document.Descendants(), element =>
             (string?)element.Attribute("Style") == "{StaticResource BreadcrumbLinkStyle}" &&
             (string?)element.Attribute("CommandParameter") == "{x:Static viewModels:ShellDestination.ProjectDashboard}");
+    }
+
+    [Fact]
+    public void Schemas_AreReachedFromTheDashboardAndEditedInAListWithASidePanel()
+    {
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XDocument dashboard = LoadWpfXaml("Views", "ProjectDashboardView.xaml");
+        XElement open = Assert.Single(dashboard.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "OpenSchemasButton");
+        Assert.Equal("Schemas", (string?)open.Attribute("Content"));
+        Assert.Equal("{Binding CanManageSchemas, Converter={StaticResource BooleanToVisibilityConverter}}",
+            (string?)open.Attribute("Visibility"));
+        Assert.Contains(LoadWpfXaml("MainWindow.xaml").Descendants(), element =>
+            element.Name.LocalName == "ProjectSchemasView" &&
+            (string?)element.Attribute("Visibility") == "{Binding IsSchemas, Converter={StaticResource BooleanToVisibilityConverter}}");
+
+        XDocument page = LoadWpfXaml("Views", "ProjectSchemasView.xaml");
+        XElement Named(string name) => Assert.Single(page.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == name);
+        Assert.Equal("{Binding Schemas}", (string?)Named("SchemaCards").Attribute("ItemsSource"));
+        Assert.Equal("{Binding CreateSchemaCommand}", (string?)Named("CreateSchemaButton").Attribute("Command"));
+        XElement grid = Named("SchemaEntityGrid");
+        Assert.Equal("True", (string?)grid.Attribute("IsReadOnly"));
+        Assert.Equal("{Binding SelectedRow, Mode=TwoWay}", (string?)grid.Attribute("SelectedItem"));
+        // The side panel's fields are labelled, and a dependency is added by typing or choosing a name.
+        Assert.Equal("{Binding ElementName=SchemaEntityNameLabel}",
+            (string?)Named("SchemaEntityNameBox").Attribute("AutomationProperties.LabeledBy"));
+        Assert.Equal("{Binding ElementName=SchemaEntityGroupLabel}",
+            (string?)Named("SchemaEntityGroupBox").Attribute("AutomationProperties.LabeledBy"));
+        Assert.Equal("True", (string?)Named("SchemaDependencyBox").Attribute("IsEditable"));
+        Assert.Contains(Named("SchemaRemoveConfirmation").Descendants(), element =>
+            (string?)element.Attribute("Command") == "{Binding ConfirmRemoveCommand}");
+        Assert.Equal("{Binding}", (string?)Named("SchemaGraphCanvas").Attribute("Graph"));
+
+        XDocument catalog = LoadWpfXaml("Views", "CatalogModalView.xaml");
+        XElement recycled = Assert.Single(catalog.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "RecycledSchemasSection");
+        Assert.Contains(recycled.Descendants(), element => (string?)element.Attribute("Click") == "OnRestoreSchema");
+        Assert.Contains(recycled.Descendants(), element => (string?)element.Attribute("Click") == "OnPurgeSchema");
     }
 
     [Fact]

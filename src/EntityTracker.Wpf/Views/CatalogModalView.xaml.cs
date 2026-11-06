@@ -35,6 +35,14 @@ public partial class CatalogModalView : UserControl
     {
         if ((sender as FrameworkElement)?.DataContext is Project project) await ViewModel.RequestPurgeAsync(project);
     }
+    private async void OnRestoreSchema(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is Schema schema) await ViewModel.RestoreAsync(schema);
+    }
+    private async void OnPurgeSchema(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is Schema schema) await ViewModel.RequestPurgeAsync(schema);
+    }
     private async void OnPurgeTracker(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is Tracker tracker) await ViewModel.RequestPurgeAsync(tracker);

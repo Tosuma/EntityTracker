@@ -30,6 +30,7 @@
                         <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Portfolio lists Projects; a Project dashboard lists its Trackers." />
                         <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Opening a Tracker makes it the context for Overview, Dependency graph and Archived. New entity on Overview or the graph (Ctrl+N) adds an entity to it." />
                         <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Developers and the Project report open from the Project dashboard; their heading leads back to it." />
+                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Schemas, also opened from the Project dashboard, describe which entities a Project has and how they depend on each other, without any progress. A dependency on a new name adds that entity to the schema." />
                         <TextBlock Style="{StaticResource HelpPointStyle}" Text="• An entity can have several responsible developers, and its details show who was responsible and when. Developers can be added, edited, retired and restored." />
                         <TextBlock Style="{StaticResource HelpPointStyle}" Text="• A Tracker copied from another can use Sync from source to take over the source&apos;s later changes; only the copy changes, and progress is never copied." />
                     </StackPanel>

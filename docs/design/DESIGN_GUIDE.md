@@ -188,6 +188,11 @@ Destructive actions require confirmation where the workflow already calls for it
   default order. The whole header takes the click, not only its title. Both show the active sort
   with an up or down arrow in the Windows accent colour (Fluent's `AccentFillColorDefaultBrush`); a
   filter column's filter icon stays and turns the accent colour while the column is filtered or sorted.
+- The Schemas page lists schemas as cards with the size and layout of the dashboard's Tracker
+  cards (name, entity count, Open and a "…" menu). An open schema is a list with a side panel: the
+  entity table on the left, the selected entity's form on the right with Save and Cancel at its foot
+  and the destructive Remove at the far end. Removing asks in place, naming the entities that depend
+  on it. The read-only graph uses the dependency tree, without status colours to explain.
 - Informational overlays use a translucent Dark Green scrim. Focused catalog-management dialogs
   use the stronger scrim semantic so background content cannot compete with the active form.
 - Missing/removal and error states use Coral with Dark Green explanatory text. Synchronization

@@ -143,6 +143,23 @@
                                     </DockPanel>
                                 </DataTemplate></ItemsControl.ItemTemplate>
                             </ItemsControl>
+                            <StackPanel x:Name="RecycledSchemasSection" Margin="0,18,0,0"
+                                        Visibility="{Binding ShowsRecycledSchemas, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="Recycled schemas" />
+                            <TextBlock Margin="0,8,0,12" Style="{StaticResource PageDescriptionTextStyle}" Text="No recycled schemas in this project."
+                                       Visibility="{Binding ShowNoRecycledSchemas, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding RecycledSchemas}">
+                                <ItemsControl.ItemTemplate><DataTemplate>
+                                    <DockPanel Margin="0,3">
+                                        <Button DockPanel.Dock="Right" Margin="8,0,0,0" Click="OnPurgeSchema" Content="Permanently delete" Style="{StaticResource DangerButtonStyle}"
+                                                AutomationProperties.Name="{Binding Name, StringFormat=Permanently delete schema {0}}" />
+                                        <Button DockPanel.Dock="Right" Click="OnRestoreSchema" Content="Restore"
+                                                AutomationProperties.Name="{Binding Name, StringFormat=Restore schema {0}}" />
+                                        <TextBlock VerticalAlignment="Center" Text="{Binding Name}" />
+                                    </DockPanel>
+                                </DataTemplate></ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            </StackPanel>
                             </StackPanel>
 
                             <StackPanel Visibility="{Binding IsRecycleConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}">

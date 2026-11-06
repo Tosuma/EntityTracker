@@ -45,7 +45,9 @@ EntityTracker keeps those concerns separate:
 - **Project portfolio** — compare entity-weighted Project/Tracker progress, persisted trends, and
   normalized entity differences without opening another window or database.
 - **Safe catalog management** — create blank or copied Trackers and rename, recycle, restore, or
-  guardedly purge Projects and Trackers.
+  guardedly purge Projects, Trackers and schemas.
+- **Schemas** — describe a Project's shared structure once: which entities exist, their groups and
+  how they depend on each other.
 - **Local-first reliability** — SQLite persistence, automatic daily and pre-migration backups,
   rolling logs, and documented recovery procedures.
 - **Accessible Fluent workflow** — built-in .NET 10 WPF Fluent controls, Light/Dark/System themes,
@@ -265,6 +267,34 @@ developers and history) stays as it is in each Tracker. After the first sync, on
 appeared since the last sync are listed.
 
 ![Syncing a copied Tracker with its source, one plain choice per difference](images/light/tracker-sync.png)
+
+### Describe a Project's structure with schemas
+
+Open **Schemas** from the Project dashboard to see the Project's schemas. A schema lists which
+entities exist and how they depend on each other, with an optional group for each. It holds no
+progress: statuses, notes and developers belong to the Trackers. **Create schema** names a new one
+and opens it; a card's **…** menu renames it or moves it to the Project's recycle bin, where it can
+be restored or permanently deleted.
+
+![Schemas page with a card per schema](images/light/project-schemas.png)
+
+An open schema lists its entities with their group and number of dependencies; search narrows the
+list by name or group. Select an entity to edit its name, group and dependencies in the panel beside
+the list, or use **New entity**. To add a dependency, type or choose a name and select **Add**. A name
+the schema doesn't have yet is offered as **Add ‹name› to the schema**: saving the entity adds that
+entity too, so a schema never holds unresolved references, and you can fill in the new entity's own
+dependencies afterwards. A dependency that would make a loop is refused and says why. Removing an
+entity that others depend on lists them first, and removes those dependencies with it.
+
+![Schema editor with the entity list and the selected entity's dependencies](images/light/schema-editor.png)
+
+**Graph** shows the whole schema as a dependency tree; double-click an entity to edit it.
+
+![Schema shown as a dependency tree](images/light/schema-graph.png)
+
+Schemas are part of the Project, so Git sync shares them with everyone who has it. Changes made on
+different computers are merged: a dependency one person added and another person removed both take
+effect, and two entities added with the same name become one.
 
 ### Manage Tracker lifecycle
 

@@ -14,6 +14,7 @@ using EntityTracker.Application.Planning;
 using EntityTracker.Application.Projects;
 using EntityTracker.Application.Snapshots;
 using EntityTracker.Application.Ranking;
+using EntityTracker.Application.Schemas;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Application.Workflow;
 using EntityTracker.Domain;
@@ -1668,6 +1669,84 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         public void CopyChart(byte[] png) => CopiedChart = png;
     }
 
+    [Fact]
+    public async Task Schemas_AreCreatedEditedAndRecycledFromTheirPage()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        RecordingDiscardConfirmation confirmation = new(false);
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id), confirmation);
+        await shell.InitializeAsync();
+
+        Assert.True(shell.CanManageSchemas);
+        Assert.True(await shell.NavigateAsync(ShellDestination.Schemas));
+        Assert.True(shell.IsSchemas);
+        // The page is reached from the dashboard, which the sidebar keeps as the location.
+        Assert.Equal(ShellDestination.ProjectDashboard, shell.SelectedSidebarEntry?.Destination);
+        ProjectSchemasViewModel page = Assert.IsType<ProjectSchemasViewModel>(shell.SchemasPage);
+        Assert.True(page.ShowEmptyState);
+
+        // Creating a schema opens it.
+        page.CreateSchemaCommand.Execute(null);
+        Assert.Equal("Create schema", shell.Catalog.DialogTitle);
+        shell.Catalog.Name = "Core model";
+        shell.Catalog.SubmitNameCommand.Execute(null);
+        await WaitUntilAsync(() => Task.FromResult(page.Editor?.SchemaName == "Core model"));
+        SchemaEditorViewModel editor = page.Editor!;
+        Assert.Equal("Core model", Assert.Single(page.Schemas).Name);
+
+        // A dependency on a name the schema doesn't have adds it on save.
+        editor.NewEntityCommand.Execute(null);
+        editor.FormName = "Order";
+        editor.FormGroup = "Sales";
+        editor.NewDependencyText = "Customer";
+        Assert.Equal("Add Customer to the schema", editor.AddDependencyLabel);
+        editor.AddDependencyCommand.Execute(null);
+        Assert.Equal(["Customer"], editor.FormDependencies);
+        Assert.Equal("Saving also adds Customer to the schema.", editor.NewDependencyNamesText);
+        editor.SaveCommand.Execute(null);
+        await WaitUntilAsync(() => Task.FromResult(editor.Rows.Count == 2 && !editor.HasUnsavedChanges));
+        Assert.Equal(["Customer", "Order"], editor.Rows.Select(row => row.Name));
+        Assert.Equal("Order", editor.SelectedRow?.Name);
+        Assert.Equal(1, editor.SelectedRow!.DependencyCount);
+
+        // A cycle is refused with a message, and unsaved changes keep the page until discarded.
+        editor.SelectedRow = editor.Rows.Single(row => row.Name == "Customer");
+        editor.NewDependencyText = "order";
+        Assert.Equal("Add", editor.AddDependencyLabel);
+        editor.AddDependencyCommand.Execute(null);
+        editor.SaveCommand.Execute(null);
+        await WaitUntilAsync(() => Task.FromResult(editor.HasError));
+        Assert.Contains("Order already depends on Customer", editor.ErrorMessage);
+        Assert.True(page.HasUnsavedChanges);
+        Assert.False(await shell.NavigateAsync(ShellDestination.ProjectDashboard));
+        Assert.Equal(1, confirmation.CallCount);
+        Assert.True(shell.IsSchemas);
+        editor.CancelEditCommand.Execute(null);
+        Assert.False(page.HasUnsavedChanges);
+
+        // Removing an entity others depend on names them first.
+        editor.RequestRemoveCommand.Execute(null);
+        Assert.True(editor.IsRemoveConfirmationOpen);
+        Assert.Equal("Order depends on Customer. Removing Customer also removes that dependency.",
+            editor.RemoveConfirmationText);
+        editor.ConfirmRemoveCommand.Execute(null);
+        await WaitUntilAsync(() => Task.FromResult(editor.Rows.Count == 1));
+        Assert.Equal(0, editor.Rows.Single().DependencyCount);
+
+        // Recycling moves the schema to the project's recycle bin.
+        page.BackToListCommand.Execute(null);
+        Assert.True(page.IsListing);
+        page.RecycleSchema(page.Schemas.Single().Schema);
+        Assert.Equal("Recycle schema?", shell.Catalog.DialogTitle);
+        shell.Catalog.ConfirmRecycleCommand.Execute(null);
+        await WaitUntilAsync(() => Task.FromResult(page.Schemas.Count == 0 && page.ShowEmptyState));
+        await shell.Catalog.OpenRecycleBinAsync(harness.DefaultProject);
+        Assert.True(shell.Catalog.ShowsRecycledSchemas);
+        Assert.Equal("Core model", Assert.Single(shell.Catalog.RecycledSchemas).Name);
+        shell.Catalog.CancelCommand.Execute(null);
+    }
+
     private sealed class ShellHarness : IAsyncDisposable
     {
         private readonly string _directory;
@@ -1843,7 +1922,8 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
                 portfolio,
                 projects,
                 trackers,
-                new TrackerSyncService(projects, trackers, entities, dependencies, stateStore, resolver, snapshots, (IDependencyRankingService)ranker));
+                new TrackerSyncService(projects, trackers, entities, dependencies, stateStore, resolver, snapshots, (IDependencyRankingService)ranker),
+                schemaService: new SchemaManagementService(projects, new SqliteSchemaStore(database)));
             AppearanceViewModel appearance = new(
                 settings,
                 new TestThemeService());
@@ -1866,6 +1946,8 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
                 appearance,
                 adapters, developers, identity, periods);
             harness.Entities = entities;
+            harness.SchemaManagement = new SchemaManagementService(projects, new SqliteSchemaStore(database));
+            harness.SchemaEditing = new SchemaEditingService(new SqliteSchemaStore(database));
             harness.ReportBuilder = new EntityTracker.Reporting.ProjectReports.ProjectReportBuilder(
                 // Local, as in the app: the report view model counts days from the local date.
                 projects, trackers, new ProgressReportingService(history, TimeZoneInfo.Local),
@@ -1876,6 +1958,10 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         public EntityTracker.Reporting.ProjectReports.ProjectReportBuilder? ReportBuilder { get; private set; }
 
         public SqliteEntityRepository Entities { get; private set; } = null!;
+
+        public SchemaManagementService SchemaManagement { get; private set; } = null!;
+
+        public SchemaEditingService SchemaEditing { get; private set; } = null!;
 
         public async Task SetFilterActiveAsync(TrackerId trackerId, string name, string filterActive)
         {
@@ -1911,7 +1997,9 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
                 reportBuilder: ReportBuilder,
                 reportFiles: ReportFiles,
                 projectSnapshots: Snapshots,
-                autoSync: autoSync);
+                autoSync: autoSync,
+                schemaManagement: SchemaManagement,
+                schemaEditing: SchemaEditing);
 
         public Task<ProjectDeveloper> CreateDeveloperAsync(string initials) =>
             _developers.CreateAsync(DefaultProject.Id, initials);
