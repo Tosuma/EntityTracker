@@ -25,4 +25,24 @@ public sealed class SingleInstanceCoordinatorTests
         Assert.False(becamePrimary);
         Assert.True(activated.Wait(TimeSpan.FromSeconds(5)));
     }
+
+    [Fact]
+    public void InstancesWithDifferentDataRootsRunSideBySide()
+    {
+        string productionRoot = Path.Combine(Path.GetTempPath(), "entitytracker-instance-test-" + Guid.NewGuid());
+        string testRoot = Path.Combine(Path.GetTempPath(), "entitytracker-instance-test-" + Guid.NewGuid());
+        using SingleInstanceCoordinator production = new(productionRoot);
+        Assert.True(production.TryBecomePrimary(() => { }));
+
+        bool testBecamePrimary = false;
+        Thread otherThread = new(() =>
+        {
+            using SingleInstanceCoordinator test = new(testRoot);
+            testBecamePrimary = test.TryBecomePrimary(() => { });
+        });
+        otherThread.Start();
+        Assert.True(otherThread.Join(TimeSpan.FromSeconds(5)));
+
+        Assert.True(testBecamePrimary);
+    }
 }

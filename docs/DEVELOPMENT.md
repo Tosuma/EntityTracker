@@ -460,12 +460,46 @@ SQLite tools can read the database, but writing to tables with names needs that 
 example `EntityNameCollation.Register` on a `Microsoft.Data.Sqlite` connection).
 
 Running from source and running a published ZIP use the same Local Application Data database for
-the same Windows user. They therefore show the same tracked data unless one process is run under a
-different user profile or its data path is deliberately changed in code.
+the same Windows user. They therefore show the same tracked data, and the same Git sync links,
+unless one process runs under a different user profile or with its own data folder (below).
 
 If the Local Application Data database does not exist and an older `entity-tracker.db` is beside
 the executable, EntityTracker copies that legacy database into the local-data folder once. Later
 launches always use the local-data copy.
+
+### Testing a build with its own data folder
+
+Set the environment variable `ENTITYTRACKER_DATA_DIR` to a folder, and EntityTracker uses that
+folder instead of `%LOCALAPPDATA%\EntityTracker` for everything above: the database, settings,
+backups, logs and Git sync links. It doesn't copy a legacy database from beside the executable. An
+unset or blank variable changes nothing. The single-instance lock belongs to the data folder, so the
+test build can run beside the installed app. The window title then reads **EntityTracker (test
+data)**, **Settings › About** shows the test data folder, and the log's start says so.
+
+To try a new build against a copy of production data:
+
+1. Close EntityTracker.
+2. Copy `%LOCALAPPDATA%\EntityTracker\entity-tracker.db` into an empty folder. Don't copy
+   `git-sync-links.v1.json`, so no Project in the copy is linked to Git.
+3. Start the test build with the variable set to that folder, for example:
+
+   ```powershell
+   $env:ENTITYTRACKER_DATA_DIR = "$env:USERPROFILE\EntityTracker-test"
+   dotnet run --project src/EntityTracker.Wpf/EntityTracker.Wpf.csproj
+   ```
+
+   The variable lasts for that PowerShell window only; the installed app, started from the Start
+   menu, keeps its usual data.
+
+> [!WARNING]
+> - A build with a newer database schema migrates any database it opens. If it opens the production
+>   database, the installed app then refuses it ("newer than the supported version"). Always point a
+>   test build at a copy.
+> - Syncing a linked Project from a build with a newer Git snapshot format pushes that format, and
+>   colleagues' apps refuse the Project until they update.
+> - Never link the test copy to the shared repository.
+
+See also [Test a new build on a copy of your data](operations/RECOVERY.md#test-a-new-build-on-a-copy-of-your-data).
 
 EntityTracker retains the newest 14 daily logs and 14 automatic daily/pre-migration backups. Read
 the [recovery guide](operations/RECOVERY.md) before replacing, restoring, or resetting application

@@ -47,6 +47,24 @@ public sealed class DiagnosticsSettingsViewModelTests
     }
 
     [Fact]
+    public void ATestDataFolderIsShownOnlyWhenTheEnvironmentVariableSetsOne()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "EntityTracker.DiagnosticsTests", Guid.NewGuid().ToString("N"));
+        EntityTrackerSettingsStore store = new(Path.Combine(directory, "settings.json"));
+        DiagnosticsSettingsViewModel production = new(store, EntityTrackerSettings.Default, new LogLevelSwitch(),
+            Path.Combine(directory, "logs"));
+        DiagnosticsSettingsViewModel test = new(store, EntityTrackerSettings.Default, new LogLevelSwitch(),
+            Path.Combine(directory, "logs"), testDataFolder: directory);
+
+        Assert.False(production.HasTestDataFolderNote);
+        Assert.Equal(string.Empty, production.TestDataFolderNote);
+        Assert.True(test.HasTestDataFolderNote);
+        Assert.Equal(
+            $"Test data folder: {directory}. It is set by ENTITYTRACKER_DATA_DIR, so this instance doesn't use the installed app's data.",
+            test.TestDataFolderNote);
+    }
+
+    [Fact]
     public void OpenLogFolder_CreatesAndOpensTheFolder()
     {
         string directory = Path.Combine(Path.GetTempPath(), "EntityTracker.DiagnosticsTests", Guid.NewGuid().ToString("N"));
