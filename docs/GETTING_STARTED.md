@@ -156,17 +156,13 @@ the values you want and choose **Apply**; **Clear filter** unchecks them and kee
 Ordinary search includes current Developer initials and display names by default; turn off
 **Search responsible names** in Settings to search entity names only.
 
-### Sync a copied tracker
+### Turn a copied tracker's source into a schema
 
-On the Project dashboard, choose **Sync from source** on a tracker created with **Copy tracker**.
-Review each entity, dependency, requested priority, and group difference. For each dependency,
-choose **Keep dependency** or **Remove dependency**. To keep separate dependencies added in
-each tracker, choose **Keep dependency** on each row. For other changes, choose the source value
-or keep this tracker's value. Every change needs a choice
-before **Apply sync** is enabled. Removed entities can be archived in the copied tracker or kept;
-their progress and history remain available. Existing status, notes, and developer assignments
-stay with the copied tracker. A declined source change is not offered again unless the source changes;
-new destination edits can still appear in the next review.
+Copy tracker and Sync from source are replaced by schemas. If a tracker has been the source of copies,
+choose **Convert to schema…** in its card's **…** menu on the Project dashboard. The dialog lists what
+happens: a schema is made from the tracker's active entities, the tracker goes to the recycle bin, and
+its copies are linked to the schema with their progress kept. Then open **Schemas**, open the new schema
+and choose **Push to trackers** to bring the copies in line, deciding where a copy changed the same thing.
 
 ## Where data lives
 

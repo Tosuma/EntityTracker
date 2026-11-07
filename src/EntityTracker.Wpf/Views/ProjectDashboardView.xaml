@@ -686,21 +686,12 @@
                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                         Click="OnRenameTracker" Content="Rename"
                         AutomationProperties.Name="{Binding Name, StringFormat=Rename tracker {0}}" />
-                <Button x:Name="SyncTrackerAction" Margin="0,0,0,6"
+                <Button x:Name="ConvertTrackerAction" Margin="0,0,0,6"
                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                        Click="OnSyncTracker" Content="Sync from source"
-                        ToolTip="Bring later changes from the Tracker this one was copied from"
-                        AutomationProperties.Name="{Binding Name, StringFormat=Sync tracker {0} from source}">
-                    <Button.Style>
-                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding CopiedFromTrackerId}" Value="{x:Null}">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
+                        Click="OnConvertTracker" Content="Convert to schema…"
+                        ToolTip="Make a schema from this tracker and link its copies to it"
+                        AutomationProperties.Name="{Binding Name, StringFormat=Convert tracker {0} to a schema}"
+                        Visibility="{Binding CanConvertToSchema, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 <Button x:Name="DetachTrackerAction" Margin="0,0,0,6"
                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                         Click="OnDetachTracker" Content="Detach from schema"

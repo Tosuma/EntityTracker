@@ -32,7 +32,7 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
         TrackedStateChangeSet changeSet,
         CancellationToken cancellationToken = default)
     {
-        await ApplyInternalAsync(trackerId, changeSet, cancellationToken, null);
+        await ApplyInternalAsync(trackerId, changeSet, cancellationToken);
     }
 
     public async Task<TrackerSyncBaseline?> ReadBaselineAsync(
@@ -43,28 +43,10 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
             SqlitePersistenceValues.Format(destinationTrackerId), cancellationToken);
     }
 
-    public async Task<string> FingerprintAsync(
-        TrackerId trackerId, CancellationToken cancellationToken = default)
-    {
-        await using SqliteConnection connection = await _database.OpenConnectionAsync(cancellationToken);
-        await using SqliteTransaction transaction = connection.BeginTransaction(deferred: true);
-        string fingerprint = await FingerprintAsync(connection, transaction, trackerId, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return fingerprint;
-    }
-
-    public async Task ApplyAsync(TrackerSyncCommit commit, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(commit);
-        await ApplyInternalAsync(commit.DestinationTrackerId, commit.ChangeSet,
-            cancellationToken, commit);
-    }
-
     private async Task ApplyInternalAsync(
         TrackerId trackerId,
         TrackedStateChangeSet changeSet,
-        CancellationToken cancellationToken,
-        TrackerSyncCommit? syncCommit)
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(trackerId);
         ArgumentNullException.ThrowIfNull(changeSet);
@@ -77,23 +59,8 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
 
         try
         {
-            if (syncCommit is not null)
-            {
-                string sourceFingerprint = await FingerprintAsync(connection, transaction,
-                    syncCommit.SourceTrackerId, cancellationToken);
-                string destinationFingerprint = await FingerprintAsync(connection, transaction,
-                    trackerId, cancellationToken);
-                if (sourceFingerprint != syncCommit.ExpectedSourceFingerprint ||
-                    destinationFingerprint != syncCommit.ExpectedDestinationFingerprint)
-                    throw new InvalidOperationException(
-                        "A tracker changed after this review opened. Open a new sync review.");
-            }
             await ApplyChangeSetAsync(connection, transaction, trackerId, changeSet, appliedAtUtc,
                 cancellationToken);
-
-            if (syncCommit is not null)
-                await SqliteSyncBaselineRows.WriteAsync(connection, transaction,
-                    SqlitePersistenceValues.Format(trackerId), syncCommit.Baseline, cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);
         }

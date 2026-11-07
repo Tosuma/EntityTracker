@@ -72,6 +72,9 @@ public sealed record TrackerDashboardSummary(
 {
     public bool HasSchema => SchemaName is not null;
 
+    /// <summary>Whether the Tracker can be turned into a schema: one made from a schema can't.</summary>
+    public bool CanConvertToSchema => SchemaName is null;
+
     public string SchemaText => SchemaName is null ? "" : $"Schema: {SchemaName}";
 }
 

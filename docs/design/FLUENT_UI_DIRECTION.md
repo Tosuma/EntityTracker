@@ -50,10 +50,9 @@ EntityTracker will manage more than one implementation tracker.
 The application opens to a portfolio/project experience and keeps the selected Project and Tracker
 visible in the shell. Tracker-scoped pages update in place when the selected tracker changes.
 
-Creating a tracker supports blank creation, initialization from CSV, or a one-time copy from an
-existing tracker. Copying reproduces active entities, dependency facts and corrections, unresolved
-names, groups, and requested priorities. It creates independent identities and resets development
-status, history, notes, and responsible developer. The source and copy do not remain synchronized.
+Creating a tracker starts blank or from one of the Project's schemas. A tracker made from a schema
+stays linked to it, and the schema's later changes are pushed to it in one review. Copying a tracker
+and Sync from source are gone; a tracker that was the source of copies is converted into a schema.
 
 Projects and trackers use a recycle stage before permanent deletion. Permanent purge is separately
 guarded by requiring the exact name. Deleting a project affects its complete tracker hierarchy.
