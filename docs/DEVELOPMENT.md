@@ -336,7 +336,7 @@ appearance and back before capture, exercising live Light-to-Dark and Dark-to-Li
 The utility adds the repository's 125-entity synthetic schema, creates two Projects and three
 related Trackers, creates fixed status and 90-day history data, and captures the portfolio, Project
 dashboard, an illustrative upstream Git repository card with a sample sync duration,
-Tracker copy review, overview, entity, progress, archive, destructive confirmation, Help, and
+schemas, Convert to schema, overview, entity, progress, archive, destructive confirmation, Help, and
 Settings states. It uses a new SQLite database below the
 operating-system temporary directory for each appearance and never reads or changes
 `%LOCALAPPDATA%\EntityTracker`. The application may remain open while the screenshots are

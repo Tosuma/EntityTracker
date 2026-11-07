@@ -24,26 +24,18 @@ public enum CatalogDialogKind
     ProjectName,
     TrackerName,
     TrackerCreation,
-    TrackerSync,
     RecycleBin,
     RecycleConfirmation,
     PurgeConfirmation,
     SchemaName,
-    DetachConfirmation
+    DetachConfirmation,
+    ConvertConfirmation
 }
 
 public enum TrackerCreationMode
 {
     Blank,
-    Copy,
     Schema
-}
-
-public sealed record TrackerCopySourceOption(
-    Tracker Tracker,
-    string ProjectName)
-{
-    public string DisplayName => $"{ProjectName} / {Tracker.Name}";
 }
 
 public sealed class CatalogSelectionRequestedEventArgs(
@@ -66,6 +58,10 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
 {
     private readonly SchemaManagementService? _schemaService;
     private readonly SchemaTrackerService? _schemaTrackers;
+    private readonly SchemaConversionService? _schemaConversion;
+    private readonly AsyncCommand _confirmConvertCommand;
+    private Tracker? _convertTracker;
+    private SchemaConversionPreview? _conversionPreview;
     private readonly AsyncCommand _confirmDetachCommand;
     private Schema? _selectedSchema;
     private Tracker? _detachTracker;
@@ -75,7 +71,6 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     private int _pendingSchemaEntityCount;
     private readonly ProjectManagementService _projectService;
     private readonly TrackerManagementService _trackerService;
-    private readonly TrackerSyncService _trackerSyncService;
     private readonly CatalogNameValidationService _nameValidation;
     private readonly CatalogPurgeImpactService _purgeImpactService;
     private readonly PortfolioQueryService _portfolioQueryService;
@@ -96,20 +91,11 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     private string? _operationMessage;
     private bool _isBusy;
     private Project? _targetProject;
-    private TrackerCopySourceOption? _selectedCopySource;
     private Project? _projectBeingEdited;
     private Tracker? _trackerBeingEdited;
     private Project? _pendingProject;
     private Tracker? _pendingTracker;
     private CatalogPurgeImpact? _purgeImpact;
-    private string _copyPreview = string.Empty;
-    private TrackerSyncReview? _syncReview;
-    private Tracker? _syncTracker;
-    private string _syncSourceName = "its source";
-    private IReadOnlyList<TrackerSyncEntityGroup> _syncGroups = [];
-    private TrackerSyncPreview? _syncPreview;
-    private string? _syncPreviewError;
-    private int _syncChoiceRevision;
 
     public CatalogManagementViewModel(
         ProjectManagementService projectService,
@@ -119,20 +105,22 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         PortfolioQueryService portfolioQueryService,
         IProjectRepository projectRepository,
         ITrackerRepository trackerRepository,
-        TrackerSyncService trackerSyncService,
         ILogger<CatalogManagementViewModel>? logger = null,
         ProjectGitSyncService? gitSync = null,
         SchemaManagementService? schemaService = null,
-        SchemaTrackerService? schemaTrackers = null)
+        SchemaTrackerService? schemaTrackers = null,
+        SchemaConversionService? schemaConversion = null)
     {
         _schemaService = schemaService;
         _schemaTrackers = schemaTrackers;
+        _schemaConversion = schemaConversion;
+        _confirmConvertCommand = new AsyncCommand(ConfirmConvertAsync,
+            () => !IsBusy && _convertTracker is not null && _conversionPreview is not null);
         SchemaOptions = [];
         _confirmDetachCommand = new AsyncCommand(ConfirmDetachAsync, () => !IsBusy && _detachTracker is not null);
         RecycledSchemas = [];
         _projectService = projectService;
         _trackerService = trackerService;
-        _trackerSyncService = trackerSyncService;
         _nameValidation = nameValidation;
         _purgeImpactService = purgeImpactService;
         _portfolioQueryService = portfolioQueryService;
@@ -142,16 +130,11 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         _gitSync = gitSync;
         RecycledProjects = [];
         RecycledTrackers = [];
-        CopySources = [];
         _submitNameCommand = new AsyncCommand(SubmitNameAsync, () => !IsBusy);
         _prepareTrackerCommand = new AsyncCommand(PrepareTrackerAsync, () => !IsBusy);
         _applyTrackerCommand = new AsyncCommand(ApplyTrackerAsync, CanApplyTracker);
         _confirmRecycleCommand = new AsyncCommand(ConfirmRecycleAsync, () => !IsBusy);
         _confirmPurgeCommand = new AsyncCommand(ConfirmPurgeAsync, CanConfirmPurge);
-        ApplySyncCommand = new AsyncCommand(ApplySyncAsync,
-            () => !IsBusy && SyncReview?.CanApply == true && _syncPreview is not null);
-        UseSourceForAllCommand = new RelayCommand(() => ChooseAll(TrackerSyncChoice.Source), HasSyncChanges);
-        KeepCopyForAllCommand = new RelayCommand(() => ChooseAll(TrackerSyncChoice.Destination), HasSyncChanges);
         CancelCommand = new RelayCommand(Close, () => !IsBusy);
     }
 
@@ -194,9 +177,18 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
 
     public ICommand ConfirmDetachCommand => _confirmDetachCommand;
 
+    /// <summary>Whether this app can convert a Tracker into a schema; the tracker card's menu needs it.</summary>
+    public bool CanConvertToSchema => _schemaConversion is not null;
+
+    public bool IsConvertConfirmation => DialogKind == CatalogDialogKind.ConvertConfirmation;
+
+    /// <summary>What converting the Tracker will do, one point per line, shown before it is applied.</summary>
+    public IReadOnlyList<string> ConversionLines => _conversionPreview is not { } preview ? [] : DescribeConversion(preview);
+
+    public ICommand ConfirmConvertCommand => _confirmConvertCommand;
+
     public ObservableCollection<Project> RecycledProjects { get; }
     public ObservableCollection<Tracker> RecycledTrackers { get; }
-    public ObservableCollection<TrackerCopySourceOption> CopySources { get; }
 
     public CatalogDialogKind DialogKind
     {
@@ -208,11 +200,11 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(IsOpen));
                 OnPropertyChanged(nameof(IsNameDialog));
                 OnPropertyChanged(nameof(IsTrackerCreation));
-                OnPropertyChanged(nameof(IsTrackerSync));
                 OnPropertyChanged(nameof(IsRecycleBin));
                 OnPropertyChanged(nameof(IsRecycleConfirmation));
                 OnPropertyChanged(nameof(IsPurgeConfirmation));
                 OnPropertyChanged(nameof(IsDetachConfirmation));
+                OnPropertyChanged(nameof(IsConvertConfirmation));
             }
         }
     }
@@ -226,10 +218,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
             {
                 ResetPreparedCandidate();
                 OnPropertyChanged(nameof(IsBlankMode));
-                OnPropertyChanged(nameof(IsCopyMode));
                 OnPropertyChanged(nameof(IsSchemaMode));
-                OnPropertyChanged(nameof(ShowApplyTracker));
-                OnPropertyChanged(nameof(PrepareTrackerLabel));
                 NotifyCommandsChanged();
             }
         }
@@ -261,20 +250,6 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         }
     }
 
-    public TrackerCopySourceOption? SelectedCopySource
-    {
-        get => _selectedCopySource;
-        set
-        {
-            if (SetField(ref _selectedCopySource, value))
-            {
-                ResetPreparedCandidate();
-                _ = UpdateCopyPreviewAsync();
-                NotifyCommandsChanged();
-            }
-        }
-    }
-
     public string? ErrorMessage
     {
         get => _errorMessage;
@@ -291,12 +266,6 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     {
         get => _operationMessage;
         private set => SetField(ref _operationMessage, value);
-    }
-
-    public string CopyPreview
-    {
-        get => _copyPreview;
-        private set => SetField(ref _copyPreview, value);
     }
 
     public CatalogPurgeImpact? PurgeImpact
@@ -327,155 +296,10 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     public bool IsNameDialog => DialogKind is CatalogDialogKind.ProjectName or CatalogDialogKind.TrackerName
         or CatalogDialogKind.SchemaName;
     public bool IsTrackerCreation => DialogKind == CatalogDialogKind.TrackerCreation;
-    public bool IsTrackerSync => DialogKind == CatalogDialogKind.TrackerSync;
-    public TrackerSyncReview? SyncReview
-    {
-        get => _syncReview;
-        private set
-        {
-            if (ReferenceEquals(_syncReview, value)) return;
-            if (_syncReview is not null)
-                foreach (TrackerSyncChange change in _syncReview.Changes)
-                    change.PropertyChanged -= OnSyncChoiceChanged;
-            _syncReview = value;
-            _syncPreview = null;
-            _syncPreviewError = null;
-            _syncChoiceRevision++;
-            if (value is not null)
-                foreach (TrackerSyncChange change in value.Changes)
-                    change.PropertyChanged += OnSyncChoiceChanged;
-            SyncGroups = value is null
-                ? []
-                : value.Changes
-                    .Select(change => new TrackerSyncChangeItem(change, value, SyncSourceName, SyncCopyName))
-                    .GroupBy(static item => item.Change.EntityName, StringComparer.OrdinalIgnoreCase)
-                    .Select(static group => new TrackerSyncEntityGroup(group.First().Change.EntityName, group.ToArray()))
-                    .ToArray();
-            OnPropertyChanged();
-            NotifySyncTexts();
-            ApplySyncCommand.NotifyCanExecuteChanged();
-            UseSourceForAllCommand.NotifyCanExecuteChanged();
-            KeepCopyForAllCommand.NotifyCanExecuteChanged();
-            if (value?.CanApply == true)
-                _ = UpdateSyncPreviewAsync(_syncChoiceRevision, value);
-        }
-    }
-    public int SyncPendingCount => SyncReview?.Changes.Count(static change => change.Choice is null) ?? 0;
-
-    /// <summary>Gets the name of the Tracker the copy was made from.</summary>
-    public string SyncSourceName
-    {
-        get => _syncSourceName;
-        private set { _syncSourceName = value; OnPropertyChanged(); }
-    }
-
-    /// <summary>Gets the name of the copy being synced.</summary>
-    public string SyncCopyName => _syncTracker?.Name ?? "this Tracker";
-
-    /// <summary>Gets the differences to decide, grouped by entity.</summary>
-    public IReadOnlyList<TrackerSyncEntityGroup> SyncGroups
-    {
-        get => _syncGroups;
-        private set { _syncGroups = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasSyncDifferences)); }
-    }
-
-    public bool HasSyncDifferences => SyncGroups.Count > 0;
-
-    /// <summary>Gets what syncing does, naming both Trackers.</summary>
-    public string SyncIntro =>
-        $"{SyncCopyName} was created as a copy of {SyncSourceName}. Syncing brings {SyncSourceName}'s later changes " +
-        $"into {SyncCopyName}: which entities exist, their dependencies, requested priorities, groups and Filter active.";
-
-    public string SyncSafety =>
-        $"Only {SyncCopyName} changes. {SyncSourceName} is not touched, and progress (statuses, notes, " +
-        "developers and history) stays as it is in each Tracker.";
-
-    /// <summary>Gets which differences are listed, or that there is nothing to sync.</summary>
-    public string SyncScope => SyncReview is null
-        ? "Comparing the two Trackers…"
-        : SyncReview.Changes.Count == 0
-            ? $"{SyncCopyName} already matches {SyncSourceName}. There is nothing to sync."
-            : SyncReview.Baseline is null
-                ? "This is the first sync, so every difference between the two Trackers is listed, including " +
-                  $"changes you made on purpose in {SyncCopyName}."
-                : "Only differences that appeared since the last sync are listed.";
-
-    /// <summary>Gets a line such as "4 of 12 decided".</summary>
-    public string SyncProgressText => SyncReview is null || SyncReview.Changes.Count == 0
-        ? string.Empty
-        : $"{SyncReview.Changes.Count - SyncPendingCount} of {SyncReview.Changes.Count} decided";
-
-    /// <summary>Gets why Apply is not available yet, or nothing when it is.</summary>
-    public string SyncApplyHint => SyncPendingCount switch
-    {
-        0 => string.Empty,
-        1 => "Decide 1 more difference to apply.",
-        int count => $"Decide {count} more differences to apply."
-    };
-
-    public string ApplySyncLabel => $"Apply to {SyncCopyName}";
-
-    /// <summary>Gets the Apply button's text, with "_" doubled so a name is never read as an access key.</summary>
-    public string ApplySyncContent => ApplySyncLabel.Replace("_", "__", StringComparison.Ordinal);
-
-    public string UseSourceForAllLabel => $"Use {SyncSourceName} for all";
-
-    public string KeepCopyForAllLabel => $"Keep {SyncCopyName} for all";
-
-    public RelayCommand UseSourceForAllCommand { get; }
-
-    public RelayCommand KeepCopyForAllCommand { get; }
-
-    /// <summary>Gets what the copy will look like after syncing with the current choices.</summary>
-    public string SyncPreviewMessage
-    {
-        get
-        {
-            if (_syncPreviewError is not null) return _syncPreviewError;
-            if (_syncPreview is null)
-                return SyncReview?.CanApply == true && SyncReview.Changes.Count > 0 ? "Checking dependencies and progress…" : string.Empty;
-            ProgressSnapshotState after = _syncPreview.ResultProgress, before = _syncPreview.CurrentProgress;
-            return $"After syncing, {SyncCopyName} will have " +
-                   $"{Count(after.TotalActiveCount, before.TotalActiveCount, "active entity", "active entities")}, " +
-                   $"{Count(after.ReadyCount, before.ReadyCount, "ready to start", "ready to start")}, " +
-                   $"{Count(after.BlockedCount, before.BlockedCount, "waiting on dependencies", "waiting on dependencies")}, " +
-                   $"{Count(after.ManuallyBlockedCount, before.ManuallyBlockedCount, "blocked", "blocked")}, " +
-                   $"{Count(after.ReworkingCount, before.ReworkingCount, "reworking", "reworking")} and " +
-                   $"{_syncPreview.UnresolvedDependencyCount} unresolved " +
-                   $"{(_syncPreview.UnresolvedDependencyCount == 1 ? "reference" : "references")}.";
-
-            static string Count(int value, int was, string one, string many)
-            {
-                int change = value - was;
-                string difference = change == 0 ? string.Empty : change > 0 ? $" (+{change})" : $" (\u2212{-change})";
-                return $"{value} {(value == 1 ? one : many)}{difference}";
-            }
-        }
-    }
-
-    private bool HasSyncChanges() => !IsBusy && SyncReview is { Changes.Count: > 0 };
-
-    /// <summary>Gives every difference the same outcome; single rows can still be changed afterwards.</summary>
-    private void ChooseAll(TrackerSyncChoice choice)
-    {
-        if (SyncReview is null) return;
-        foreach (TrackerSyncChange change in SyncReview.Changes) change.Choice = choice;
-    }
-
-    private void NotifySyncTexts()
-    {
-        OnPropertyChanged(nameof(SyncPendingCount));
-        OnPropertyChanged(nameof(SyncScope));
-        OnPropertyChanged(nameof(SyncProgressText));
-        OnPropertyChanged(nameof(SyncApplyHint));
-        OnPropertyChanged(nameof(SyncPreviewMessage));
-    }
     public bool IsRecycleBin => DialogKind == CatalogDialogKind.RecycleBin;
     public bool IsRecycleConfirmation => DialogKind == CatalogDialogKind.RecycleConfirmation;
     public bool IsPurgeConfirmation => DialogKind == CatalogDialogKind.PurgeConfirmation;
     public bool IsBlankMode => CreationMode == TrackerCreationMode.Blank;
-    public bool IsCopyMode => CreationMode == TrackerCreationMode.Copy;
-    public bool HasCopySources => CopySources.Count > 0;
     public bool HasRecycledProjects => RecycledProjects.Count > 0;
     public bool HasRecycledTrackers => RecycledTrackers.Count > 0;
     public bool ShowNoRecycledProjects => !HasRecycledProjects;
@@ -485,13 +309,6 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
 
     /// <summary>Whether the recycle bin lists recycled schemas: a Project's recycle bin does.</summary>
     public bool ShowsRecycledSchemas => IsRecycleBin && _targetProject is not null && _schemaService is not null;
-    public bool ShowApplyTracker => CreationMode == TrackerCreationMode.Copy;
-    public string PrepareTrackerLabel => CreationMode switch
-    {
-        TrackerCreationMode.Blank or TrackerCreationMode.Schema => "Create tracker",
-        TrackerCreationMode.Copy => "Review copy",
-        _ => "Prepare"
-    };
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
     public bool IsProjectOperation => _pendingProject is not null || DialogKind == CatalogDialogKind.ProjectName;
     public bool IsRename => _projectBeingEdited is not null || _trackerBeingEdited is not null ||
@@ -508,12 +325,12 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         CatalogDialogKind.TrackerName => "Rename tracker",
         CatalogDialogKind.SchemaName => IsRename ? "Rename schema" : "Create schema",
         CatalogDialogKind.TrackerCreation => "Create tracker",
-        CatalogDialogKind.TrackerSync => _syncTracker is null ? "Sync tracker" : $"Sync {_syncTracker.Name} from {SyncSourceName}",
         CatalogDialogKind.RecycleBin => _targetProject is null ? "Recycle bins" : $"Recycle bin — {_targetProject.Name}",
         CatalogDialogKind.RecycleConfirmation => _pendingProject is not null ? "Recycle project?"
             : _pendingSchema is not null ? "Recycle schema?" : "Recycle tracker?",
         CatalogDialogKind.PurgeConfirmation => "Permanently delete?",
         CatalogDialogKind.DetachConfirmation => "Detach from schema?",
+        CatalogDialogKind.ConvertConfirmation => _convertTracker is null ? "Convert to schema?" : $"Convert {_convertTracker.Name} to a schema?",
         _ => string.Empty
     };
     public string PendingItemName =>
@@ -531,10 +348,8 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
 
     public ICommand SubmitNameCommand => _submitNameCommand;
     public ICommand PrepareTrackerCommand => _prepareTrackerCommand;
-    public ICommand ApplyTrackerCommand => _applyTrackerCommand;
     public ICommand ConfirmRecycleCommand => _confirmRecycleCommand;
     public ICommand ConfirmPurgeCommand => _confirmPurgeCommand;
-    public AsyncCommand ApplySyncCommand { get; }
     public RelayCommand CancelCommand { get; }
 
     public void OpenCreateProject()
@@ -559,67 +374,8 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         ResetDialog();
         _targetProject = project;
         DialogKind = CatalogDialogKind.TrackerCreation;
-        _ = LoadCopySourcesAsync();
         _ = LoadSchemaOptionsAsync(project);
         NotifyDialogChanged();
-    }
-
-    public async Task OpenSyncTrackerAsync(Tracker tracker)
-    {
-        ResetDialog();
-        _syncTracker = tracker;
-        SyncSourceName = tracker.CopiedFromTrackerId is { } sourceId
-            ? (await _trackerRepository.GetAsync(sourceId))?.Name ?? "its source"
-            : "its source";
-        DialogKind = CatalogDialogKind.TrackerSync;
-        foreach (string name in new[] { nameof(SyncCopyName), nameof(SyncIntro), nameof(SyncSafety), nameof(ApplySyncLabel), nameof(ApplySyncContent),
-                     nameof(UseSourceForAllLabel), nameof(KeepCopyForAllLabel) })
-            OnPropertyChanged(name);
-        NotifyDialogChanged();
-        await RunAsync(async () => SyncReview = await _trackerSyncService.ReviewAsync(tracker.Id));
-    }
-
-    private void OnSyncChoiceChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        _syncPreview = null;
-        _syncPreviewError = null;
-        int revision = ++_syncChoiceRevision;
-        NotifySyncTexts();
-        ApplySyncCommand.NotifyCanExecuteChanged();
-        if (SyncReview?.CanApply == true)
-            _ = UpdateSyncPreviewAsync(revision, SyncReview);
-    }
-
-    private async Task UpdateSyncPreviewAsync(int revision, TrackerSyncReview review)
-    {
-        try
-        {
-            TrackerSyncPreview preview = await _trackerSyncService.PreviewAsync(review);
-            if (revision != _syncChoiceRevision) return;
-            _syncPreview = preview;
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "The sync choice preview could not be prepared.");
-            if (revision != _syncChoiceRevision) return;
-            _syncPreviewError = exception.Message;
-        }
-        OnPropertyChanged(nameof(SyncPreviewMessage));
-        ApplySyncCommand.NotifyCanExecuteChanged();
-    }
-
-    private async Task ApplySyncAsync()
-    {
-        if (SyncReview is null || !SyncReview.CanApply) return;
-        await RunAsync(async () =>
-        {
-            await _trackerSyncService.ApplyAsync(SyncReview);
-            ProjectId projectId = _syncTracker?.ProjectId ??
-                throw new InvalidOperationException("The tracker being synced is no longer selected.");
-            Close();
-            SelectionRequested?.Invoke(this,
-                new CatalogSelectionRequestedEventArgs(projectId, null));
-        });
     }
 
     public void OpenRenameTracker(Tracker tracker)
@@ -851,20 +607,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
             return;
         }
 
-        if (CreationMode is TrackerCreationMode.Blank or TrackerCreationMode.Schema)
-        {
-            await ApplyTrackerAsync();
-            return;
-        }
-
-        if (SelectedCopySource is null)
-        {
-            ErrorMessage = "Select a source tracker.";
-            return;
-        }
-
-        OperationMessage = "The copy is ready. Review the copied and reset fields, then create the tracker.";
-        _applyTrackerCommand.NotifyCanExecuteChanged();
+        await ApplyTrackerAsync();
     }
 
     private bool CanApplyTracker() => !IsBusy && _targetProject is not null &&
@@ -872,7 +615,6 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         {
             TrackerCreationMode.Blank => true,
             TrackerCreationMode.Schema => SelectedSchema is not null,
-            TrackerCreationMode.Copy => SelectedCopySource is not null && OperationMessage is not null,
             _ => false
         };
 
@@ -897,11 +639,6 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
             Tracker tracker = CreationMode switch
             {
                 TrackerCreationMode.Blank => await _trackerService.CreateBlankAsync(_targetProject.Id, Name),
-                TrackerCreationMode.Copy => await _trackerService.CopyAsync(
-                    SelectedCopySource?.Tracker.Id ??
-                        throw new InvalidOperationException("Select a source tracker."),
-                    _targetProject.Id,
-                    Name),
                 TrackerCreationMode.Schema => await (_schemaTrackers ??
                         throw new InvalidOperationException("Schemas are not available."))
                     .CreateTrackerAsync(SelectedSchema?.Id ??
@@ -977,6 +714,70 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         });
     }
 
+    /// <summary>Shows what converting the Tracker into a schema will do, and asks before applying it.</summary>
+    public async Task OpenConvertToSchemaAsync(Tracker tracker)
+    {
+        ArgumentNullException.ThrowIfNull(tracker);
+        ResetDialog();
+        _convertTracker = tracker;
+        DialogKind = CatalogDialogKind.ConvertConfirmation;
+        NotifyDialogChanged();
+        if (_schemaConversion is null) return;
+        await RunAsync(async () =>
+        {
+            _conversionPreview = await _schemaConversion.PreviewAsync(tracker.Id);
+            OnPropertyChanged(nameof(ConversionLines));
+            _confirmConvertCommand.NotifyCanExecuteChanged();
+        });
+    }
+
+    private async Task ConfirmConvertAsync()
+    {
+        if (_convertTracker is not { } tracker || _schemaConversion is null) return;
+        await RunAsync(async () =>
+        {
+            await _schemaConversion.ConvertAsync(tracker.Id);
+            Close();
+            SelectionRequested?.Invoke(this, new CatalogSelectionRequestedEventArgs(tracker.ProjectId, null));
+        });
+    }
+
+    internal static IReadOnlyList<string> DescribeConversion(SchemaConversionPreview preview)
+    {
+        string source = preview.Source.Name;
+        List<string> lines =
+        [
+            $"A schema called {preview.SourceProject.SchemaName} is made from {source}'s " +
+            $"{Count(preview.EntityCount, "active entity", "active entities")}" +
+            (preview.PlaceholderCount == 0 ? string.Empty
+                : $" and the {Count(preview.PlaceholderCount, "name", "names")} they depend on that " +
+                  $"{(preview.PlaceholderCount == 1 ? "has" : "have")} no entity yet") +
+            ", with their groups and dependencies."
+        ];
+        if (preview.ArchivedCount > 0)
+            lines.Add($"{Count(preview.ArchivedCount, "archived entity is", "archived entities are")} left out.");
+        lines.Add($"{source} goes to this project's recycle bin. Restoring it brings it back as an independent tracker.");
+        IReadOnlyList<Tracker> copies = preview.SourceProject.Copies;
+        lines.Add(copies.Count == 0
+            ? $"No tracker in this project is a copy of {source}."
+            : $"{Names(copies)} {(copies.Count == 1 ? "is linked to the schema and keeps" : "are linked to the schema and keep")} all progress. " +
+              $"The first push brings the changes to {source} they hadn't synced yet.");
+        foreach (SchemaConversionProject project in preview.OtherProjects)
+            lines.Add($"{project.Project.Name} gets its own copy of the schema, called {project.SchemaName}, " +
+                      $"and {Names(project.Copies)} {(project.Copies.Count == 1 ? "is" : "are")} linked to it.");
+        lines.Add($"Copies of {source} in projects that aren't on this computer keep their link to it, and can be " +
+                  "converted where they are.");
+        return lines;
+
+        static string Count(int count, string one, string many) => count == 1 ? $"1 {one}" : $"{count} {many}";
+
+        static string Names(IReadOnlyList<Tracker> trackers) => trackers.Count switch
+        {
+            1 => trackers[0].Name,
+            _ => $"{string.Join(", ", trackers.Take(trackers.Count - 1).Select(static t => t.Name))} and {trackers[^1].Name}"
+        };
+    }
+
     /// <summary>Asks before detaching a Tracker from the schema it was created from.</summary>
     public void RequestDetach(Tracker tracker, string schemaName)
     {
@@ -1016,42 +817,6 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
             SchemaOptions.Clear();
         }
         OnPropertyChanged(nameof(HasSchemaOptions));
-    }
-
-    private async Task LoadCopySourcesAsync()
-    {
-        Project[] activeProjects = (await _projectRepository.GetAllAsync())
-            .Where(static project => project.LifecycleState == CatalogLifecycleState.Active)
-            .ToArray();
-        Dictionary<ProjectId, string> projectNames = activeProjects.ToDictionary(
-            static project => project.Id,
-            static project => project.Name);
-        Replace(CopySources, (await _trackerRepository.GetAllAsync())
-            .Where(tracker => tracker.LifecycleState == CatalogLifecycleState.Active &&
-                              projectNames.ContainsKey(tracker.ProjectId))
-            .Select(tracker => new TrackerCopySourceOption(
-                tracker,
-                projectNames[tracker.ProjectId])));
-        OnPropertyChanged(nameof(HasCopySources));
-    }
-
-    private async Task UpdateCopyPreviewAsync()
-    {
-        if (SelectedCopySource is null)
-        {
-            CopyPreview = string.Empty;
-            return;
-        }
-
-        Tracker sourceTracker = SelectedCopySource.Tracker;
-        ProjectDashboard? project = await _portfolioQueryService.GetProjectAsync(sourceTracker.ProjectId);
-        TrackerDashboardSummary? source = project?.Trackers.FirstOrDefault(
-            item => item.TrackerId == sourceTracker.Id);
-        CopyPreview = source is null
-            ? string.Empty
-            : $"Copy {source.Progress.ActiveEntityCount} active entities. Dependencies, unresolved references, " +
-              "groups, and requested priorities are copied. New identities are generated; " +
-              "development status resets to Not started and notes, assignments, and history reset.";
     }
 
     private async Task LoadRecycleBinsAsync()
@@ -1120,10 +885,9 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         _schemaBeingEdited = null;
         _pendingSchema = null;
         _pendingSchemaEntityCount = 0;
-        _syncTracker = null;
-        SyncReview = null;
+        _convertTracker = null;
+        _conversionPreview = null;
         _targetProject = null;
-        _selectedCopySource = null;
         _selectedSchema = null;
         _detachTracker = null;
         _detachSchemaName = string.Empty;
@@ -1132,20 +896,16 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         _creationMode = TrackerCreationMode.Blank;
         ErrorMessage = null;
         OperationMessage = null;
-        CopyPreview = string.Empty;
         PurgeImpact = null;
         ResetPreparedCandidate();
         OnPropertyChanged(nameof(Name));
         OnPropertyChanged(nameof(TypedConfirmation));
-        OnPropertyChanged(nameof(SelectedCopySource));
         OnPropertyChanged(nameof(CreationMode));
         OnPropertyChanged(nameof(IsBlankMode));
-        OnPropertyChanged(nameof(IsCopyMode));
         OnPropertyChanged(nameof(IsSchemaMode));
         OnPropertyChanged(nameof(SelectedSchema));
         OnPropertyChanged(nameof(SchemaPreview));
-        OnPropertyChanged(nameof(ShowApplyTracker));
-        OnPropertyChanged(nameof(PrepareTrackerLabel));
+        OnPropertyChanged(nameof(ConversionLines));
         OnPropertyChanged(nameof(CanPermanentlyDelete));
     }
 
@@ -1168,9 +928,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         _confirmRecycleCommand.NotifyCanExecuteChanged();
         _confirmPurgeCommand.NotifyCanExecuteChanged();
         _confirmDetachCommand.NotifyCanExecuteChanged();
-        ApplySyncCommand.NotifyCanExecuteChanged();
-        UseSourceForAllCommand.NotifyCanExecuteChanged();
-        KeepCopyForAllCommand.NotifyCanExecuteChanged();
+        _confirmConvertCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
     }
 

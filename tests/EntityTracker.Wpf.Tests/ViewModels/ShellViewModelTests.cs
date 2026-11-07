@@ -1503,103 +1503,6 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
     }
 
     [Fact]
-    public async Task TrackerSync_StaysOnOwningProjectDashboard()
-    {
-        await using ShellHarness harness = await ShellHarness.CreateAsync();
-        await harness.AddEntityAsync(harness.DefaultTracker.Id, "Original");
-        Tracker copy = await harness.TrackerManagement.CopyAsync(
-            harness.DefaultTracker.Id, harness.DefaultProject.Id, "Copy for dashboard");
-        await harness.AddEntityAsync(harness.DefaultTracker.Id, "Added later");
-        using ShellViewModel shell = harness.CreateShell(
-            new EntityTrackerSettings(lastProjectId: harness.DefaultProject.Id,
-                lastTrackerId: harness.DefaultTracker.Id),
-            new RecordingDiscardConfirmation(true));
-        await shell.InitializeAsync();
-        Assert.True(await shell.NavigateAsync(ShellDestination.ProjectDashboard));
-
-        await shell.Catalog.OpenSyncTrackerAsync(copy);
-        TrackerSyncReview review = Assert.IsType<TrackerSyncReview>(shell.Catalog.SyncReview);
-        Assert.NotEmpty(review.Changes);
-        foreach (TrackerSyncChange change in review.Changes)
-            change.Choice = TrackerSyncChoice.Source;
-        await WaitUntilAsync(() => shell.Catalog.ApplySyncCommand.CanExecute(null));
-        shell.Catalog.ApplySyncCommand.Execute(null);
-        await WaitUntilAsync(() => !shell.Catalog.IsOpen && !shell.Catalog.IsBusy &&
-            shell.SelectedTracker is null && !shell.IsBusy);
-
-        Assert.Equal(harness.DefaultProject.Id, shell.SelectedProject?.Id);
-        Assert.Equal(ShellDestination.ProjectDashboard, shell.SelectedDestination);
-    }
-
-    [Fact]
-    public async Task TrackerSync_CopiesFilterActiveAndLetsTheSourcesNewValueBeTaken()
-    {
-        await using ShellHarness harness = await ShellHarness.CreateAsync();
-        await harness.AddEntityAsync(harness.DefaultTracker.Id, "order", filterActive: "Active only");
-        Tracker copy = await harness.TrackerManagement.CopyAsync(
-            harness.DefaultTracker.Id, harness.DefaultProject.Id, "Copy with filters");
-        Assert.Equal("Active only", Assert.Single(await harness.Entities.GetAllAsync(copy.Id)).FilterActive);
-
-        await harness.SetFilterActiveAsync(harness.DefaultTracker.Id, "order", "Active only, by region");
-        using ShellViewModel shell = harness.CreateShell(
-            new EntityTrackerSettings(lastProjectId: harness.DefaultProject.Id,
-                lastTrackerId: harness.DefaultTracker.Id),
-            new RecordingDiscardConfirmation(true));
-        await shell.InitializeAsync();
-        await shell.Catalog.OpenSyncTrackerAsync(copy);
-        TrackerSyncChangeItem item = Assert.Single(Assert.Single(shell.Catalog.SyncGroups).Changes);
-        Assert.Equal(TrackerSyncChangeKind.FilterActive, item.Change.Kind);
-
-        item.UseSource = true;
-        await WaitUntilAsync(() => shell.Catalog.ApplySyncCommand.CanExecute(null));
-        shell.Catalog.ApplySyncCommand.Execute(null);
-        await WaitUntilAsync(() => !shell.Catalog.IsOpen && !shell.Catalog.IsBusy);
-
-        Assert.Equal("Active only, by region", Assert.Single(await harness.Entities.GetAllAsync(copy.Id)).FilterActive);
-    }
-
-    [Fact]
-    public async Task TrackerSync_NamesBothTrackersAndCanDecideEverythingAtOnce()
-    {
-        await using ShellHarness harness = await ShellHarness.CreateAsync();
-        await harness.AddEntityAsync(harness.DefaultTracker.Id, "Original");
-        Tracker copy = await harness.TrackerManagement.CopyAsync(
-            harness.DefaultTracker.Id, harness.DefaultProject.Id, "Copy for sync");
-        await harness.AddEntityAsync(harness.DefaultTracker.Id, "Added later");
-        await harness.AddEntityAsync(harness.DefaultTracker.Id, "Also added");
-        using ShellViewModel shell = harness.CreateShell(
-            new EntityTrackerSettings(lastProjectId: harness.DefaultProject.Id,
-                lastTrackerId: harness.DefaultTracker.Id),
-            new RecordingDiscardConfirmation(true));
-        await shell.InitializeAsync();
-        string source = harness.DefaultTracker.Name;
-
-        await shell.Catalog.OpenSyncTrackerAsync(copy);
-
-        CatalogManagementViewModel sync = shell.Catalog;
-        Assert.Equal($"Sync Copy for sync from {source}", sync.DialogTitle);
-        Assert.StartsWith($"Copy for sync was created as a copy of {source}.", sync.SyncIntro, StringComparison.Ordinal);
-        Assert.Contains($"Only Copy for sync changes. {source} is not touched", sync.SyncSafety, StringComparison.Ordinal);
-        Assert.Equal("Only differences that appeared since the last sync are listed.", sync.SyncScope);
-        Assert.Equal(["Added later", "Also added"], sync.SyncGroups.Select(group => group.EntityName).Order());
-        Assert.Equal("0 of 2 decided", sync.SyncProgressText);
-        Assert.Equal("Decide 2 more differences to apply.", sync.SyncApplyHint);
-        Assert.Equal("Apply to Copy for sync", sync.ApplySyncLabel);
-        Assert.False(sync.ApplySyncCommand.CanExecute(null));
-
-        sync.UseSourceForAllCommand.Execute(null);
-        Assert.Equal("2 of 2 decided", sync.SyncProgressText);
-        Assert.Equal(string.Empty, sync.SyncApplyHint);
-        TrackerSyncChangeItem one = sync.SyncGroups[0].Changes[0];
-        one.KeepCopy = true;
-        Assert.Equal(TrackerSyncChoice.Destination, one.Change.Choice);
-        one.UseSource = true;
-        await WaitUntilAsync(() => sync.ApplySyncCommand.CanExecute(null));
-        Assert.StartsWith("After syncing, Copy for sync will have 3 active entities (+2)", sync.SyncPreviewMessage,
-            StringComparison.Ordinal);
-    }
-
-    [Fact]
     public async Task Rename_KeepsProgressAndDependenciesThatNameTheEntity()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
@@ -1733,6 +1636,20 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         Assert.True(editor.ShowNoMatches);
         editor.ClearSearchCommand.Execute(null);
         Assert.False(editor.ShowNoMatches);
+
+        // Esc steps out of the search as on the Overview: it leaves the box and keeps the search, closes
+        // the details, then clears the search. On the Dependency graph tab its own search is the one cleared.
+        Assert.Equal(SchemaSearchEscape.None, editor.Escape(searchBoxFocused: false));
+        editor.SelectedViewIndex = 0;
+        editor.SearchText = "order";
+        editor.SelectedRow = editor.Rows.Single(row => row.Name == "Order");
+        Assert.Equal(SchemaSearchEscape.LeaveSearchBox, editor.Escape(searchBoxFocused: true));
+        Assert.Equal("order", editor.SearchText);
+        Assert.Equal(SchemaSearchEscape.CloseDetails, editor.Escape(searchBoxFocused: false));
+        Assert.False(editor.IsDetailsOpen);
+        Assert.Equal(SchemaSearchEscape.ClearSearch, editor.Escape(searchBoxFocused: false));
+        Assert.Equal(string.Empty, editor.SearchText);
+        Assert.Equal(SchemaSearchEscape.None, editor.Escape(searchBoxFocused: false));
         Assert.Equal("2 entities", editor.SearchResultText);
 
         // Selecting an entity shows its details, read-only; Edit opens the dialog.
@@ -1792,6 +1709,36 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
     }
 
     [Fact]
+    public async Task ConvertToSchema_ListsWhatHappensAndConvertsOnConfirm()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id), new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "Order");
+        Tracker copy = await harness.TrackerManagement.CopyAsync(harness.DefaultTracker.Id,
+            harness.DefaultProject.Id, "Team A");
+        await shell.OpenProjectAsync(harness.DefaultProject.Id);
+        Assert.True(shell.Catalog.CanConvertToSchema);
+
+        await shell.Catalog.OpenConvertToSchemaAsync(harness.DefaultTracker);
+        await WaitUntilAsync(() => !shell.Catalog.IsBusy && shell.Catalog.ConversionLines.Count > 0);
+        Assert.True(shell.Catalog.IsConvertConfirmation);
+        Assert.Equal($"Convert {harness.DefaultTracker.Name} to a schema?", shell.Catalog.DialogTitle);
+        Assert.StartsWith($"A schema called {harness.DefaultTracker.Name} is made from {harness.DefaultTracker.Name}'s 1 active entity",
+            shell.Catalog.ConversionLines[0]);
+        Assert.Contains(shell.Catalog.ConversionLines, line => line.StartsWith("Team A is linked to the schema", StringComparison.Ordinal));
+        Assert.True(shell.Catalog.ConfirmConvertCommand.CanExecute(null));
+
+        shell.Catalog.ConfirmConvertCommand.Execute(null);
+        await WaitUntilAsync(async () => !shell.Catalog.IsOpen && !shell.IsBusy &&
+            (await harness.Trackers.GetAsync(copy.Id))?.SchemaId is not null);
+        Assert.Equal(CatalogLifecycleState.Recycled,
+            (await harness.Trackers.GetAsync(harness.DefaultTracker.Id))!.LifecycleState);
+        Assert.Equal(ShellDestination.ProjectDashboard, shell.SelectedDestination);
+    }
+
+    [Fact]
     public async Task Trackers_AreCreatedFromASchemaPushedToAndDetached()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
@@ -1807,8 +1754,6 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         await WaitUntilAsync(() => shell.Catalog.HasSchemaOptions);
         shell.Catalog.Name = "Team A";
         shell.Catalog.CreationMode = TrackerCreationMode.Schema;
-        Assert.Equal("Create tracker", shell.Catalog.PrepareTrackerLabel);
-        Assert.False(shell.Catalog.ShowApplyTracker);
         Assert.Equal("Choose the schema the tracker starts from.", shell.Catalog.SchemaPreview);
         shell.Catalog.SelectedSchema = Assert.Single(shell.Catalog.SchemaOptions);
         Assert.StartsWith("The tracker gets Core model's entities", shell.Catalog.SchemaPreview);
@@ -1933,6 +1878,7 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         public Project DefaultProject { get; }
         public Tracker DefaultTracker { get; }
         public TrackerManagementService TrackerManagement { get; }
+        public ITrackerRepository Trackers => _trackers;
         public EntityTrackerSettingsStore SettingsStore { get; }
 
         public async Task<int> GetProjectCountAsync() =>
@@ -2055,9 +2001,10 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
                 portfolio,
                 projects,
                 trackers,
-                new TrackerSyncService(projects, trackers, entities, dependencies, stateStore, resolver, snapshots, (IDependencyRankingService)ranker),
                 schemaService: new SchemaManagementService(projects, new SqliteSchemaStore(database)),
-                schemaTrackers: schemaTrackers);
+                schemaTrackers: schemaTrackers,
+                schemaConversion: new SchemaConversionService(projects, trackers, entities, dependencies,
+                    new SqliteSchemaStore(database), stateStore, new SqliteSchemaLinkStore(database)));
             AppearanceViewModel appearance = new(
                 settings,
                 new TestThemeService());

@@ -123,7 +123,7 @@ in a scroll area so many skipped versions don't push the rest of the page away. 
 lists: "What's new in 1.1.0" before an update, "What's new since 1.0.0" after one.
 
 A **due date** is shown as day-month-year with leading zeros (`dd-MM-yyyy`, 26-10-2026; `DueDateText`) in
-the Overview's Due column, the details pane, the export and the Sync from source review, and as "—" when
+the Overview's Due column, the details pane and the export, and as "—" when
 there is none. It has no colour or icon: the order already puts the most urgent dates first. Date pickers
 keep the Fluent `DatePicker` and the Windows date format.
 
