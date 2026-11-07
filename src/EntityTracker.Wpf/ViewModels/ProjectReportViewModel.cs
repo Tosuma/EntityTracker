@@ -92,7 +92,7 @@ public sealed class ProjectReportViewModel : INotifyPropertyChanged
     public static IReadOnlyList<ReportAudienceOption> AudienceOptions { get; } =
     [
         new(ReportAudience.Client, "Client report",
-            "For the client: progress, statuses, Filter active, shared notes, dependencies and the dependency graph. Leaves out internal notes, " +
+            "For the client: progress explained in words, statuses, Filter active, shared notes and dependencies. Leaves out internal notes, " +
             "developer names and technical details such as origin and missing references."),
         new(ReportAudience.Internal, "Internal report",
             "For us: everything in the client report, plus internal notes, responsible developers, origin " +

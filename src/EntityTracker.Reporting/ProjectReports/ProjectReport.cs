@@ -52,16 +52,22 @@ public sealed record ProjectReport(
 [JsonDerivedType(typeof(SummarySection), "summary")]
 [JsonDerivedType(typeof(ChartSection), "chart")]
 [JsonDerivedType(typeof(TableSection), "table")]
-[JsonDerivedType(typeof(GraphSection), "graph")]
 public abstract record ReportSection(string Key, string Title, ReportVisibility Visibility);
 
-/// <summary>Headline numbers, per scope.</summary>
+/// <summary>Headline numbers, per scope; <see cref="Notes"/> are shown below them, also in print.</summary>
 public sealed record SummarySection(
     string Key,
     string Title,
     ReportVisibility Visibility,
-    IReadOnlyDictionary<string, IReadOnlyList<SummaryCard>> ByScope)
+    IReadOnlyDictionary<string, IReadOnlyList<SummaryCard>> ByScope,
+    IReadOnlyList<ReportNote>? Notes = null)
     : ReportSection(Key, Title, Visibility);
+
+/// <summary>
+/// A line explaining what a figure means, shown under it on screen and in print. <see cref="Term"/>,
+/// when given, is the word explained, set in bold before the text.
+/// </summary>
+public sealed record ReportNote(string Text, string? Term = null);
 
 /// <param name="Detail">Shown on hover: what the number is made of (Implemented's statuses).</param>
 public sealed record SummaryCard(string Label, int Value, bool Attention = false, string? Detail = null);
@@ -73,15 +79,18 @@ public enum ReportChartType
     Bars
 }
 
-/// <summary>A chart, per scope, as plain data that any renderer can draw.</summary>
-/// <summary>A chart per scope; <see cref="Description"/> is shown when pointing at its title.</summary>
+/// <summary>
+/// A chart per scope, as plain data that any renderer can draw. <see cref="Description"/> is shown
+/// when pointing at its title; <see cref="Notes"/> are shown below it, also in print.
+/// </summary>
 public sealed record ChartSection(
     string Key,
     string Title,
     ReportVisibility Visibility,
     ReportChartType ChartType,
     IReadOnlyDictionary<string, ReportChart> ByScope,
-    string? Description = null)
+    string? Description = null,
+    IReadOnlyList<ReportNote>? Notes = null)
     : ReportSection(Key, Title, Visibility);
 
 /// <summary>Labels along the x axis (or slices) and one or more series of values.</summary>
@@ -125,39 +134,3 @@ public sealed record ReportColumn(
     bool Filter = false,
     bool Scope = false,
     IReadOnlyList<string>? Options = null);
-
-/// <summary>
-/// The dependency tree, one per Tracker, keyed by the Tracker's scope. Positions come from the
-/// app's own tree layout, so the report draws the same tree.
-/// </summary>
-public sealed record GraphSection(
-    string Key,
-    string Title,
-    ReportVisibility Visibility,
-    IReadOnlyDictionary<string, ReportGraph> ByScope)
-    : ReportSection(Key, Title, Visibility);
-
-/// <summary>A Tracker's entities and their links.</summary>
-public sealed record ReportGraph(
-    IReadOnlyList<ReportGraphNode> Nodes,
-    IReadOnlyList<ReportGraphLink> Links);
-
-/// <summary>
-/// An entity, or a dependency no entity has (<see cref="Missing"/>). <see cref="TreeX"/> and
-/// <see cref="TreeY"/> are its tree box's top left corner.
-/// </summary>
-public sealed record ReportGraphNode(
-    string Name,
-    string Status,
-    string Work,
-    string WaitingOn,
-    bool Missing,
-    double TreeX,
-    double TreeY);
-
-/// <summary>
-/// A link from a dependency to the entity using it, by node index. Only essential links are drawn;
-/// <see cref="Route"/> holds the tree's x, y points for them. Implied links still count when
-/// highlighting what an entity leads to.
-/// </summary>
-public sealed record ReportGraphLink(int From, int To, bool Essential, IReadOnlyList<double>? Route = null);

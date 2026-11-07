@@ -79,26 +79,17 @@ public sealed class ProjectReportBuilder
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
-    /// <summary>Gets the sections every report has, in order.</summary>
+    /// <summary>
+    /// Gets the sections every report has, in order. The report is read by clients, so it leaves out
+    /// the dependency graph and the ready vs waiting chart, which the app still shows (#178).
+    /// </summary>
     public static IReadOnlyList<IReportSectionProvider> DefaultProviders { get; } =
     [
         new SummarySectionProvider(),
         new ProgressChartSectionProvider(ProgressChartKind.CurrentStatus),
         new ProgressChartSectionProvider(ProgressChartKind.ImplementedOverTime),
-        new ProgressChartSectionProvider(ProgressChartKind.ReadyAndBlockedOverTime),
         new ProgressChartSectionProvider(ProgressChartKind.WeeklyNetImplementedChange),
         new EntityTableSectionProvider()
-    ];
-
-    /// <summary>
-    /// Gets the default sections with more added after the charts and before the entity table, for
-    /// sections built outside this library, such as the app's dependency graph.
-    /// </summary>
-    public static IReadOnlyList<IReportSectionProvider> DefaultProvidersWith(params IReportSectionProvider[] extra) =>
-    [
-        .. DefaultProviders.Where(static provider => provider is not EntityTableSectionProvider),
-        .. extra,
-        .. DefaultProviders.OfType<EntityTableSectionProvider>()
     ];
 
     public async Task<ProjectReport> BuildAsync(ProjectReportRequest request, CancellationToken cancellationToken = default)

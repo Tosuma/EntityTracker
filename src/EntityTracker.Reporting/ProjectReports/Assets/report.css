@@ -181,63 +181,11 @@ mark { background: var(--highlight); color: inherit; padding: 0; }
 /* A hollow status (Not relevant): out of scope, so no fill, only a dashed edge. */
 .status.hollow { padding: 0 7px; border: 1px dashed var(--swatch-edge); }
 .legend span.hollow::before { background: transparent; border: 1px dashed var(--swatch-edge); box-sizing: border-box; }
-.graph .band.hollow { stroke: var(--swatch-edge); stroke-width: 1.5; stroke-dasharray: 4 3; }
 
-.section-hint { color: var(--muted); margin: -4px 0 12px; font-size: 13px; }
-
-.graph-tools { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin-bottom: 10px; }
-.graph-tools label.inline { display: inline-flex; gap: 6px; align-items: center; }
-.graph-tools button {
-  font: inherit;
-  padding: 5px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--ink);
-  cursor: pointer;
-}
-.graph-tools button:hover:not(:disabled) { background: var(--green-10); }
-.graph-tools button:disabled { color: var(--muted); cursor: default; opacity: 0.6; }
-.graph-tools button:focus-visible, .entity-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.graph-note { color: var(--muted); margin-left: auto; }
-
-.graph-host { border: 1px solid var(--border); border-radius: 8px; background: var(--graph-canvas); overflow: hidden; }
-/* The tree is fitted to the page width and does not move; its height follows from its shape. */
-svg.graph { display: block; width: 100%; height: auto; user-select: none; }
-svg.graph:focus { outline: none; }
-svg.graph:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-
-.graph .links { fill: none; stroke: var(--green-60); stroke-opacity: 0.55; stroke-width: 1; vector-effect: non-scaling-stroke; }
-.graph .links.dim { stroke-opacity: 0.15; }
-.graph .links.hover, .graph .links.strong { stroke: var(--green-100); stroke-opacity: 1; stroke-width: 2; }
-.graph .node { cursor: pointer; }
-.graph .node .halo { fill: none; stroke: none; }
-.graph .card { fill: var(--surface); }
-.graph .outline { fill: none; stroke: var(--green-40); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.graph .node.missing .band { fill: var(--missing-band); }
-.graph .node.missing .outline { stroke: var(--coral); stroke-width: 1.5; stroke-dasharray: 5 3; }
-.graph .card, .graph .band { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-.graph .node.dim { opacity: 0.25; }
-.graph .node.lit .halo, .graph .node.near .halo { stroke: var(--green-100); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-.graph .node.selected .halo { stroke: var(--focus); stroke-width: 3; vector-effect: non-scaling-stroke; }
-.graph .node.match .halo { stroke: var(--focus); stroke-width: 2; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
-.graph .node.selected.match .halo { stroke-dasharray: none; }
-
-.graph-legend .missing::before { border: 1.5px dashed var(--coral); box-sizing: border-box; }
-
-.entity-link {
-  font: inherit;
-  font-weight: 600;
-  color: inherit;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  text-align: left;
-  text-decoration: underline dotted var(--green-40);
-  text-underline-offset: 3px;
-}
-.entity-link:hover { color: var(--green-80); text-decoration-color: currentColor; }
+/* What a figure means, in words: shown on screen and in print, not only on hover. */
+.section-notes { color: var(--muted); margin: 10px 0 0; padding: 0; list-style: none; font-size: 13px; }
+.section-notes li + li { margin-top: 3px; }
+.section-notes strong { color: var(--ink); font-weight: 600; }
 
 footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 24px; }
 
@@ -284,7 +232,7 @@ nav.contents a:hover { text-decoration: underline; }
 @media print {
   body { background: var(--surface); font-size: 11px; }
   main { max-width: none; padding: 0; }
-  .toolbar, .table-tools, .no-print, .chart-tip, .section-hint { display: none !important; }
+  .toolbar, .table-tools, .no-print, .chart-tip { display: none !important; }
   .print-only { display: block; }
   header.report-header { border-radius: 0; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 
@@ -300,11 +248,7 @@ nav.contents a:hover { text-decoration: underline; }
   .charts section.report-section { break-inside: avoid; }
   .chart svg { max-height: 220px; }
   .card, .status, .legend span::before, svg { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-
-  /* The graph prints as a whole on its own page. */
-  #dependency-graph { break-before: page; }
-  .graph-host { border: none; }
-  svg.graph { max-height: 240mm; }
+  .section-notes { font-size: 10px; margin-top: 6px; }
 
   /* The entity table: the rows on screen, with the header repeated on every page. */
   section.report-section:has(table) { break-inside: auto; break-before: page; }
@@ -315,5 +259,4 @@ nav.contents a:hover { text-decoration: underline; }
   thead { display: table-header-group; }
   th { position: static; }
   tr { break-inside: avoid; }
-  .entity-link { text-decoration: none; }
 }

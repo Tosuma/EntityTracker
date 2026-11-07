@@ -15,8 +15,6 @@
   var matchPriority = EntityTrackerSearch.matchPriority;
   // Chart and filter arithmetic lives in report-charts.js, also tested on its own.
   var Charts = EntityTrackerCharts;
-  // Graph highlighting and camera arithmetic lives in report-graph.js, tested against the app.
-  var Graph = EntityTrackerGraph;
 
   // ---- Small DOM helpers ----
 
@@ -90,6 +88,17 @@
 
   // ---- Sections ----
 
+  /** What a figure means, one line per term, under it on screen and on paper. */
+  function notes(section) {
+    if (!section.notes || !section.notes.length) return null;
+    return el("ul", { className: "section-notes" }, section.notes.map(function (note) {
+      var item = el("li");
+      if (note.term) item.appendChild(el("strong", { text: note.term + ": " }));
+      item.appendChild(document.createTextNode(note.text));
+      return item;
+    }));
+  }
+
   function summarySection(section) {
     var cards = el("div", { className: "cards" });
     function render(scope) {
@@ -105,7 +114,7 @@
     }
     render(currentScope);
     scopeListeners.push(render);
-    return el("section", { className: "report-section", id: section.key }, [el("h2", { text: section.title }), cards]);
+    return el("section", { className: "report-section", id: section.key }, [el("h2", { text: section.title }), cards, notes(section)]);
   }
 
   function chartSection(section) {
@@ -127,7 +136,7 @@
     // Pointing at the title shows what the chart shows.
     var heading = el("h2", { text: section.title });
     if (section.description) heading.title = section.description;
-    return el("section", { className: "report-section", id: section.key }, [heading, body]);
+    return el("section", { className: "report-section", id: section.key }, [heading, body, notes(section)]);
   }
 
   /** The legend; its entries and the chart's parts highlight each other. */
@@ -552,14 +561,7 @@
         body.appendChild(el("tr", {}, columns.map(function (column) {
           var value = item.row[column.key] || "";
           var cell = el("td", { className: column.key === "entity" ? "entity" : column.scope ? "scope" : "" });
-          if (column.key === "entity" && hasGraph && value) {
-            var link = el("button", { type: "button", className: "entity-link", text: value, title: "Show in the dependency graph" });
-            link.addEventListener("click", function () {
-              var tracker = item.row.tracker || (scopes.length === 1 ? scopes[0].name : "");
-              graphListeners.show.forEach(function (listener) { listener(tracker, value); });
-            });
-            cell.appendChild(link);
-          } else if ((column.key === "status" || column.key === "work") && value) {
+          if ((column.key === "status" || column.key === "work") && value) {
             var chip = el("span", { className: "status", text: value });
             var colors = (column.key === "work" ? COLORS.work : STATUS_COLORS)[value];
             if (colors) {
@@ -584,11 +586,7 @@
         : "All " + rows.length + " entities.";
     }
 
-    search.addEventListener("input", function () {
-      render();
-      var query = search.value.trim();
-      graphListeners.search.forEach(function (listener) { listener(query); });
-    });
+    search.addEventListener("input", render);
     document.addEventListener("keydown", function (event) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f" && document.activeElement !== search) {
         event.preventDefault();
@@ -610,254 +608,6 @@
     ]);
   }
 
-  // ---- Dependency graph ----
-
-  var graphListeners = { search: [], show: [] };
-
-  /**
-   * The dependency tree, one Tracker at a time, fitted to the width of the page. It does not move or
-   * zoom: point at an entity for its card, click it to highlight what it leads to, Ctrl+click to add
-   * more. The boxes carry no names; the card names the entity.
-   */
-  function graphSection(section) {
-    var available = scopes.filter(function (scope) { return section.byScope[scope.key]; });
-    if (!available.length) return null;
-    var state = { key: available[0].key, mode: "direct", selected: [], hover: -1, query: "" };
-
-    var trackerSelect = el("select", { "aria-label": "Tracker shown in the graph" }, available.map(function (scope) {
-      return el("option", { value: scope.key, text: scope.name });
-    }));
-    var modeSelect = el("select", { "aria-label": "Highlight" }, [
-      el("option", { value: "dependencies", text: "Highlight: Dependencies" }),
-      el("option", { value: "dependents", text: "Highlight: Dependents" }),
-      el("option", { value: "direct", text: "Highlight: Direct links" })
-    ]);
-    modeSelect.value = state.mode;
-    var clearButton = el("button", { type: "button", text: "Clear selection" });
-    var note = el("span", { className: "graph-note", role: "status" });
-    var tools = el("div", { className: "graph-tools no-print" }, [
-      available.length > 1 ? el("label", { className: "inline" }, [document.createTextNode("Tracker "), trackerSelect]) : null,
-      modeSelect, clearButton, note
-    ]);
-
-    var host = el("div", { className: "graph-host" });
-    var canvas = svg("svg", { "class": "graph", role: "img", tabindex: "0", preserveAspectRatio: "xMidYMin meet",
-      "aria-label": "Dependency tree. Point at an entity for its details; click it to highlight its links." });
-    host.appendChild(canvas);
-    var legendNode = el("div", { className: "legend graph-legend" }, [
-      "Not started", "Blocked", "In progress", "Rework needed", "Reworking", "Completed", "Reconciled", "Not relevant", "Missing"
-    ].map(function (label) {
-      var span = el("span", { text: label });
-      span.style.setProperty("--swatch", label === "Missing" ? COLORS.missingSwatch : STATUS_COLORS[label][0]);
-      if (label === "Missing") span.className = "missing";
-      else if (STATUS_COLORS[label][2]) { span.className = "hollow"; span.style.setProperty("--swatch-edge", STATUS_COLORS[label][2]); }
-      return span;
-    }));
-
-    var graph, nodeShapes = [], highlightPath, hoverPath, linkPath, matches = {};
-
-    // The same curve as the app's tree (TreeDependencyLayout.CurveControls): a route is its start, a top
-    // and bottom point per crossed row, and its end. Inside a row the line is straight; between rows it
-    // curves from the slope of the row above to the slope of the row below without moving back the way it
-    // came, leaving and reaching the two entities vertically.
-    function linkD(link) {
-      var route = link.route || [];
-      var points = [];
-      for (var k = 0; k + 1 < route.length; k += 2) points.push([route[k], route[k + 1]]);
-      if (points.length === 0) return "";
-      function slope(j) {
-        if (j === 0 || j === points.length - 1) return [0, 1];
-        var a = j % 2 === 1 ? points[j] : points[j - 1];
-        var b = j % 2 === 1 ? points[j + 1] : points[j];
-        return [(b[0] - a[0]) / (b[1] - a[1]), 1];
-      }
-      var d = "M" + points[0][0] + " " + points[0][1];
-      for (var i = 1; i < points.length; i++) {
-        var s = points[i - 1], e = points[i], c1, c2;
-        if (i % 2 === 0 && i < points.length - 1) {
-          c1 = [s[0] + (e[0] - s[0]) / 3, s[1] + (e[1] - s[1]) / 3];
-          c2 = [e[0] - (e[0] - s[0]) / 3, e[1] - (e[1] - s[1]) / 3];
-        } else {
-          var half = (e[1] - s[1]) / 2, a = slope(i - 1), b = slope(i);
-          var low = Math.min(s[0], e[0]), high = Math.max(s[0], e[0]);
-          c1 = [Math.min(Math.max(s[0] + a[0] * half, low), high), s[1] + half];
-          c2 = [Math.min(Math.max(e[0] - b[0] * half, low), high), e[1] - half];
-          if ((c2[0] - c1[0]) * (e[0] - s[0]) < 0) c1[0] = c2[0] = (c1[0] + c2[0]) / 2;
-        }
-        d += "C" + c1[0] + " " + c1[1] + " " + c2[0] + " " + c2[1] + " " + e[0] + " " + e[1];
-      }
-      return d;
-    }
-
-    function draw() {
-      graph = section.byScope[state.key];
-      canvas.replaceChildren();
-      nodeShapes = [];
-      linkPath = svg("path", { "class": "links" });
-      linkPath.setAttribute("d", graph.links.filter(function (link) { return link.essential; }).map(linkD).join(""));
-      canvas.appendChild(linkPath);
-      hoverPath = svg("path", { "class": "links hover" });
-      highlightPath = svg("path", { "class": "links strong" });
-      canvas.appendChild(hoverPath);
-      canvas.appendChild(highlightPath);
-
-      var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      graph.nodes.forEach(function (node, index) {
-        var group = svg("g", { "class": "node" + (node.missing ? " missing" : ""), "data-index": index,
-          transform: "translate(" + node.treeX + " " + node.treeY + ")" });
-        // As in the app: an empty name area above a band in the status colour, 2/3 and 1/3 of the box.
-        var colors = node.missing ? null : (STATUS_COLORS[node.status] || [COLORS.unknownStatus]);
-        var color = colors && colors[0];
-        var edge = colors && colors[2];
-        group.appendChild(svg("rect", { "class": "halo", x: -6, y: -6, width: TREE_WIDTH + 12, height: TREE_HEIGHT + 12, rx: 14 }));
-        group.appendChild(svg("rect", { "class": "card", width: TREE_WIDTH, height: TREE_HEIGHT, rx: TREE_RADIUS }));
-        var band = svg("path", { "class": "band", d:
-          "M0 " + TREE_NAME + "H" + TREE_WIDTH + "V" + (TREE_HEIGHT - TREE_RADIUS) +
-          "Q" + TREE_WIDTH + " " + TREE_HEIGHT + " " + (TREE_WIDTH - TREE_RADIUS) + " " + TREE_HEIGHT +
-          "H" + TREE_RADIUS + "Q0 " + TREE_HEIGHT + " 0 " + (TREE_HEIGHT - TREE_RADIUS) + "Z" });
-        if (color) band.setAttribute("fill", color);
-        // A hollow status (Not relevant): the band is a dashed edge instead of a fill.
-        if (edge) { band.setAttribute("class", "band hollow"); band.style.setProperty("--swatch-edge", edge); }
-        group.appendChild(band);
-        group.appendChild(svg("rect", { "class": "outline", width: TREE_WIDTH, height: TREE_HEIGHT, rx: TREE_RADIUS }));
-        canvas.appendChild(group);
-        nodeShapes.push(group);
-        minX = Math.min(minX, node.treeX); minY = Math.min(minY, node.treeY);
-        maxX = Math.max(maxX, node.treeX + TREE_WIDTH); maxY = Math.max(maxY, node.treeY + TREE_HEIGHT);
-      });
-      // The whole tree, with a margin, scaled to the width of the page; its height follows.
-      var margin = 20;
-      canvas.setAttribute("viewBox", [minX - margin, minY - margin, maxX - minX + margin * 2, maxY - minY + margin * 2].join(" "));
-      paint();
-    }
-
-    /** The drawn links that start or end at a node; links implied by a longer chain are not drawn. */
-    function drawnLinks(index) {
-      return graph.links.filter(function (link) { return link.essential && (link.from === index || link.to === index); });
-    }
-
-    function paint() {
-      if (!graph) return;
-      var lit = Graph.highlight(graph.links, state.selected, state.mode);
-      var litNodes = {};
-      lit.nodes.forEach(function (index) { litNodes[index] = true; });
-      var hasSelection = state.selected.length > 0;
-      highlightPath.setAttribute("d", lit.links.map(function (index) { return linkD(graph.links[index]); }).join(""));
-      var hoverLinks = !hasSelection && state.hover >= 0 ? drawnLinks(state.hover) : [];
-      hoverPath.setAttribute("d", hoverLinks.map(linkD).join(""));
-      var near = {};
-      hoverLinks.forEach(function (link) { near[link.from] = true; near[link.to] = true; });
-      linkPath.classList.toggle("dim", hasSelection);
-      nodeShapes.forEach(function (shape, index) {
-        shape.classList.toggle("selected", state.selected.indexOf(index) >= 0);
-        shape.classList.toggle("lit", hasSelection && !!litNodes[index] && state.selected.indexOf(index) < 0);
-        shape.classList.toggle("dim", hasSelection && !litNodes[index]);
-        shape.classList.toggle("near", !!near[index] || index === state.hover);
-        shape.classList.toggle("match", !!matches[index]);
-      });
-      var count = Object.keys(matches).length;
-      note.textContent = state.query
-        ? (count === 1 ? "1 entity matches the search" : count + " entities match the search")
-        : hasSelection ? state.selected.length + " selected · Esc clears" : "";
-      clearButton.disabled = !hasSelection;
-    }
-
-    function card(index) {
-      var node = graph.nodes[index];
-      var links = drawnLinks(index);
-      var dependsOn = links.filter(function (link) { return link.to === index; }).length;
-      var usedBy = links.filter(function (link) { return link.from === index; }).length;
-      if (node.missing) return [node.name, "Missing: no entity has this name", usedBy + (usedBy === 1 ? " entity depends" : " entities depend") + " on it"];
-      var lines = [node.name, node.status + " · " + node.work,
-        "Depends on " + dependsOn + " · " + usedBy + (usedBy === 1 ? " depends" : " depend") + " on it"];
-      if (node.waitingOn) lines.push("Waiting on " + node.waitingOn);
-      return lines;
-    }
-
-    function nodeAt(target) {
-      var group = target.closest ? target.closest("g.node") : null;
-      return group ? Number(group.getAttribute("data-index")) : -1;
-    }
-
-    function select(index, add) {
-      if (index < 0) state.selected = [];
-      else if (add) {
-        var at = state.selected.indexOf(index);
-        if (at >= 0) state.selected.splice(at, 1); else state.selected.push(index);
-      } else state.selected = state.selected.length === 1 && state.selected[0] === index ? [] : [index];
-      paint();
-    }
-
-    canvas.addEventListener("pointermove", function (event) {
-      var index = nodeAt(event.target);
-      if (index !== state.hover) { state.hover = index; paint(); }
-      if (index >= 0) showTip(card(index), event.clientX, event.clientY); else hideTip();
-    });
-    canvas.addEventListener("pointerleave", function () {
-      state.hover = -1;
-      hideTip();
-      paint();
-    });
-    canvas.addEventListener("click", function (event) { select(nodeAt(event.target), event.ctrlKey || event.metaKey); });
-    canvas.addEventListener("keydown", function (event) {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      select(-1);
-    });
-    clearButton.addEventListener("click", function () { select(-1); });
-    modeSelect.addEventListener("change", function () { state.mode = modeSelect.value; paint(); });
-
-    function showTracker(key) {
-      state.key = key;
-      trackerSelect.value = key;
-      state.selected = [];
-      refreshMatches();
-      draw();
-    }
-    trackerSelect.addEventListener("change", function () { showTracker(trackerSelect.value); });
-
-    function refreshMatches() {
-      matches = {};
-      if (!state.query) return;
-      section.byScope[state.key].nodes.forEach(function (node, index) {
-        if (matchPriority(node.name, state.query) < NO_MATCH) matches[index] = true;
-      });
-    }
-
-    // The report's search marks matching entities in the tree too.
-    graphListeners.search.push(function (query) {
-      state.query = query;
-      refreshMatches();
-      paint();
-    });
-    // "Show in graph" from the entity table: switch to its Tracker, select it and scroll to it.
-    graphListeners.show.push(function (trackerName, entityName) {
-      var scope = available.filter(function (s) { return s.name === trackerName; })[0] || available[0];
-      if (scope.key !== state.key) showTracker(scope.key);
-      var index = -1;
-      graph.nodes.forEach(function (node, i) { if (!node.missing && node.name === entityName) index = i; });
-      if (index < 0) return;
-      state.selected = [index];
-      paint();
-      nodeShapes[index].scrollIntoView({ behavior: calm ? "auto" : "smooth", block: "center" });
-      canvas.focus({ preventScroll: true });
-    });
-    // Follow "Show progress for" when it names a Tracker the graph has.
-    scopeListeners.push(function (scope) {
-      if (scope !== state.key && section.byScope[scope]) showTracker(scope);
-    });
-
-    draw();
-    return el("section", { className: "report-section", id: section.key }, [
-      el("h2", { text: section.title }),
-      el("p", { className: "section-hint no-print", text: "Point at an entity to see its name and status. Click it to highlight its links; Ctrl+click adds more." }),
-      tools, host, legendNode
-    ]);
-  }
-
-  // The app's tree box: 150 × 81 with the name area taking the top 54 (2/3).
-  var TREE_WIDTH = 150, TREE_HEIGHT = 81, TREE_NAME = 54, TREE_RADIUS = 8;
-
   // ---- Page ----
 
   /** Links to every section; on paper it is the report's table of contents. */
@@ -878,7 +628,6 @@
     document.head.appendChild(style);
   }
 
-  var hasGraph = data.sections.some(function (section) { return section.kind === "graph"; });
   root.appendChild(header());
   root.appendChild(contents());
   var toolbar = scopeToolbar();
@@ -894,7 +643,6 @@
     chartGrid = null;
     if (section.kind === "summary") root.appendChild(summarySection(section));
     else if (section.kind === "table") root.appendChild(tableSection(section));
-    else if (section.kind === "graph") { var graphNode = graphSection(section); if (graphNode) root.appendChild(graphNode); }
   });
   var creator = root.getAttribute("data-creator");
   root.appendChild(el("footer", { text: "Generated by EntityTracker" + (creator ? ", created by " + creator : "") +

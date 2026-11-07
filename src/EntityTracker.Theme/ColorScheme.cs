@@ -186,7 +186,6 @@ public static class ColorScheme
         /// </summary>
         public static readonly IReadOnlyList<string> Categories =
             ["#2A78D6", "#EB6834", "#1BAF7A", "#EDA100", "#E87BA4", "#008300", "#6250D6"];
-        public const string UnknownStatus = Base.Green40;
         public const string TooltipBackground = Base.White;
     }
 
@@ -221,9 +220,6 @@ public static class ColorScheme
         public const string Attention = Base.DeepCoral;
         public const string RowStripe = Base.Snow;
         public const string Highlight = Base.PaleAmber;
-        public const string GraphCanvas = Base.Frost;
-        public const string MissingBand = Base.Blush;
-        public const string MissingSwatch = Base.White;
     }
 
     /// <summary>Gets "#AARRGGBB": the colour with the given opacity built in.</summary>
