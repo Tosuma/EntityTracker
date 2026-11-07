@@ -433,6 +433,25 @@ public sealed class ProgressDemoSeeder
             DELETE FROM progress_snapshots
             WHERE tracker_id = $trackerId;
 
+            -- The dependency history starts at the same baseline, with the dependencies as they are.
+            DELETE FROM entity_dependency_history
+            WHERE tracker_id = $trackerId;
+            INSERT INTO entity_dependency_history
+            (event_id, tracker_id, entity_id, change, dependency_entity_id, lifecycle_state, is_baseline, occurred_at_utc)
+            SELECT lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)), 2) ||
+                         '-a' || substr(hex(randomblob(2)), 2) || '-' || hex(randomblob(6))),
+                   $trackerId, id, 'Lifecycle', NULL, lifecycle_state, 1, $baselineTimestamp
+            FROM tracked_entities WHERE tracker_id = $trackerId;
+            INSERT INTO entity_dependency_history
+            (event_id, tracker_id, entity_id, change, dependency_entity_id, lifecycle_state, is_baseline, occurred_at_utc)
+            SELECT lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)), 2) ||
+                         '-a' || substr(hex(randomblob(2)), 2) || '-' || hex(randomblob(6))),
+                   $trackerId, dependency.dependent_entity_id, 'DependencyAdded', dependency.dependency_entity_id, NULL, 1,
+                   $baselineTimestamp
+            FROM entity_dependencies dependency
+            JOIN tracked_entities entity ON entity.id = dependency.dependent_entity_id
+            WHERE entity.tracker_id = $trackerId;
+
             -- With no status history, every entity is Not started.
             UPDATE tracked_entities
             SET progress_updated_at_utc = $baselineTimestamp

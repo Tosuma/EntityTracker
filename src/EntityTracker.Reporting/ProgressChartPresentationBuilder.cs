@@ -182,7 +182,7 @@ public sealed class ProgressChartPresentationBuilder
         ProgressChartKind.ImplementedOverTime =>
             "Implemented, in progress, not started and blocked entities each day, against today's active total.",
         ProgressChartKind.ReadyAndBlockedOverTime =>
-            "Each day, the entities ready to start and the ones still waiting on a dependency.",
+            "Each day, the entities ready to start and those waiting on a dependency, since changes are recorded.",
         ProgressChartKind.WeeklyNetImplementedChange =>
             "Each week, how many entities became implemented and how many stopped being implemented.",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)

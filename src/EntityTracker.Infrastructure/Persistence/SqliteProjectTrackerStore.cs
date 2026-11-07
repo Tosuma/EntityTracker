@@ -100,6 +100,10 @@ public sealed class SqliteProjectTrackerStore(
                 await command.ExecuteNonQueryAsync(cancellationToken);
             }
 
+            // The new Tracker's entities and dependencies start its dependency history.
+            await SqliteDependencyHistory.RecordAsync(connection, transaction,
+                SqlitePersistenceValues.Format(tracker.Id), timestamp, cancellationToken);
+
             await InsertSnapshotAsync(
                 connection,
                 transaction,
@@ -231,6 +235,7 @@ public sealed class SqliteProjectTrackerStore(
             """, id, cancellationToken);
         await ExecuteDeleteAsync(connection, transaction, $"DELETE FROM entity_status_history WHERE {entityPredicate};", id, cancellationToken);
         await ExecuteDeleteAsync(connection, transaction, $"DELETE FROM progress_snapshots WHERE {trackerPredicate};", id, cancellationToken);
+        await ExecuteDeleteAsync(connection, transaction, $"DELETE FROM entity_dependency_history WHERE {trackerPredicate};", id, cancellationToken);
         await ExecuteDeleteAsync(connection, transaction, $"DELETE FROM tracked_entities WHERE {trackerPredicate};", id, cancellationToken);
         await ExecuteDeleteAsync(
             connection,

@@ -36,8 +36,11 @@ public sealed class ProgressReportingService
             await _repository.GetProgressSnapshotsAsync(trackerId, cancellationToken);
         IReadOnlyList<EntityStatusHistoryEntry> statusHistory =
             await _repository.GetStatusHistoryAsync(trackerId, cancellationToken);
+        IReadOnlyList<DependencyHistoryEntry> dependencyHistory =
+            await _repository.GetDependencyHistoryAsync(trackerId, cancellationToken);
         DateOnly today = DateOnly.FromDateTime(
             TimeZoneInfo.ConvertTime(_timeProvider.GetUtcNow(), _timeZone).DateTime);
-        return _builder.Build(snapshots, range, today, _timeZone, statusHistory);
+        return _builder.Build(snapshots, range, today, _timeZone, statusHistory,
+            ReadinessHistory.Of(statusHistory, dependencyHistory));
     }
 }

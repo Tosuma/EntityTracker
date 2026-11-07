@@ -14,7 +14,8 @@ public sealed class AggregateProgressDashboardBuilder(
         ProgressDateRange range,
         DateOnly today,
         TimeZoneInfo timeZone,
-        IEnumerable<EntityStatusHistoryEntry>? statusHistory = null)
+        IEnumerable<EntityStatusHistoryEntry>? statusHistory = null,
+        ReadinessHistory? readinessHistory = null)
     {
         ArgumentNullException.ThrowIfNull(trackerSnapshots);
         ArgumentNullException.ThrowIfNull(range);
@@ -51,6 +52,6 @@ public sealed class AggregateProgressDashboardBuilder(
             aggregate.Add(new ProgressSnapshot(timestampGroup.Key, state));
         }
 
-        return _dashboardBuilder.Build(aggregate, range, today, timeZone, statusHistory);
+        return _dashboardBuilder.Build(aggregate, range, today, timeZone, statusHistory, readinessHistory);
     }
 }

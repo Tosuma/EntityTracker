@@ -565,7 +565,11 @@ borders between the slices. **Progress over time** shows the implemented entitie
 for the entities in progress, not started and blocked in the same colours as the pie, and a dashed coral
 target line at today's number of active entities, so you can see how far along the work is. **Weekly implemented change** shows two
 bars a week: the entities that became implemented, and the ones that stopped being implemented, each
-counted from the entities' own status changes.
+counted from the entities' own status changes. **Ready to start vs waiting on dependencies** shows, for
+each day, the not started entities that could start and the ones still waiting on a dependency, worked
+out from the statuses, dependencies and archived entities as they were that day. Dependencies entered
+while setting up a Tracker, before its first status change, don't show as movement. The app records
+dependency changes from this version on, so the chart starts on the day you updated to it.
 
 ![Progress charts on the Project report page](images/light/project-report-charts.png)
 

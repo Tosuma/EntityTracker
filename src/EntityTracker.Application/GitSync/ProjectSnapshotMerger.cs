@@ -204,7 +204,14 @@ public sealed class ProjectSnapshotMerger
             ProgressHistory = NormalizeProgress(ThreeWayMerge.Keyed(path + "/Progress",
                 b.ProgressHistory, l.ProgressHistory, r.ProgressHistory,
                 p => p.SnapshotId,
-                MergeProgress))
+                MergeProgress)),
+            // Entries are never changed, only added, so both sides' entries are kept, each once.
+            DependencyHistory = l.DependencyHistory is null && r.DependencyHistory is null ? null
+                : ThreeWayMerge.Keyed(path + "/DependencyHistory",
+                    b.DependencyHistory ?? [], l.DependencyHistory ?? [], r.DependencyHistory ?? [],
+                    e => e.EventId,
+                    (field, basis, local, remote) => Object(field, basis, local, remote, ProjectConflictKind.ProgressHistory))
+                    .OrderBy(e => e.OccurredAtUtc).ThenBy(e => e.EventId).ToArray()
         };
         foreach (ProjectMergeConflict branch in _conflicts.Where(c =>
                      c.Kind == ProjectConflictKind.StatusBranch &&

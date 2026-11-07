@@ -10,12 +10,18 @@ public sealed class ProgressDashboardBuilder
     /// being, implemented. Without it, the weekly changes come from the steps between saved progress
     /// states, where opposite moves in one save cancel out.
     /// </param>
+    /// <param name="readinessHistory">
+    /// The status and dependency history, so each day's ready and waiting entities are worked out from how
+    /// things were that day, starting when that history is known (#179). Without it, they come from the
+    /// saved progress states, which can't tell setting up dependencies from progress.
+    /// </param>
     public ProgressDashboardReport Build(
         IEnumerable<ProgressSnapshot> snapshots,
         ProgressDateRange range,
         DateOnly today,
         TimeZoneInfo timeZone,
-        IEnumerable<EntityStatusHistoryEntry>? statusHistory = null)
+        IEnumerable<EntityStatusHistoryEntry>? statusHistory = null,
+        ReadinessHistory? readinessHistory = null)
     {
         ArgumentNullException.ThrowIfNull(snapshots);
         ArgumentNullException.ThrowIfNull(range);
@@ -124,6 +130,13 @@ public sealed class ProgressDashboardBuilder
                 date,
                 carried.ReadyCount,
                 carried.BlockedCount));
+        }
+
+        if (readinessHistory is not null)
+        {
+            readiness = readinessHistory.Daily(from, to, timeZone)
+                .Select(static day => new ReadinessProgressPoint(day.Date, day.ReadyCount, day.WaitingCount))
+                .ToList();
         }
 
         IEnumerable<(DateOnly Date, int Step)> moves = statusHistory is null

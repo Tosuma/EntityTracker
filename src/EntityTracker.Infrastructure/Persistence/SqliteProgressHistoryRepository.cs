@@ -20,6 +20,17 @@ public sealed class SqliteProgressHistoryRepository : IProgressHistoryRepository
 
     internal SqliteDatabase Database => _database;
 
+    public async Task<IReadOnlyList<DependencyHistoryEntry>> GetDependencyHistoryAsync(
+        TrackerId trackerId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(trackerId);
+        await using SqliteConnection connection =
+            await _database.OpenConnectionAsync(cancellationToken);
+        return await SqliteDependencyHistory.ReadAsync(connection, null,
+            SqlitePersistenceValues.Format(trackerId), cancellationToken);
+    }
+
     public async Task<IReadOnlyList<EntityStatusHistoryEntry>> GetStatusHistoryAsync(
         TrackerId trackerId,
         CancellationToken cancellationToken = default)
