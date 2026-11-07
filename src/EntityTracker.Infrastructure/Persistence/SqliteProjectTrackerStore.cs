@@ -222,6 +222,13 @@ public sealed class SqliteProjectTrackerStore(
             ? "tracker_id IN (SELECT id FROM trackers WHERE project_id = $id)"
             : "tracker_id = $id";
         string entityPredicate = $"entity_id IN (SELECT id FROM tracked_entities WHERE {trackerPredicate})";
+        // Copies of a purged Tracker, in any Project, lose their dormant link to it and its baseline.
+        string purgedTrackers = project ? "SELECT id FROM trackers WHERE project_id = $id" : "SELECT $id";
+        await ExecuteDeleteAsync(connection, transaction, $"""
+            DELETE FROM tracker_sync_baselines WHERE tracker_id IN
+                (SELECT id FROM trackers WHERE copied_from_tracker_id IN ({purgedTrackers}));
+            UPDATE trackers SET copied_from_tracker_id = NULL WHERE copied_from_tracker_id IN ({purgedTrackers});
+            """, id, cancellationToken);
         await ExecuteDeleteAsync(connection, transaction, $"DELETE FROM entity_status_history WHERE {entityPredicate};", id, cancellationToken);
         await ExecuteDeleteAsync(connection, transaction, $"DELETE FROM progress_snapshots WHERE {trackerPredicate};", id, cancellationToken);
         await ExecuteDeleteAsync(connection, transaction, $"DELETE FROM tracked_entities WHERE {trackerPredicate};", id, cancellationToken);

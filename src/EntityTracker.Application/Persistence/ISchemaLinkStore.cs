@@ -33,4 +33,10 @@ public interface ISchemaLinkStore
     Task DetachAsync(TrackerId trackerId, CancellationToken cancellationToken = default);
 
     Task ApplyPushAsync(SchemaPushCommit commit, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Converts a Tracker into schemas in one transaction: creates the schemas, links the copies (whose copy
+    /// link and Sync from source baseline are then dropped), and moves the Tracker to the recycle bin.
+    /// </summary>
+    Task ApplyConversionAsync(SchemaConversionCommit commit, CancellationToken cancellationToken = default);
 }

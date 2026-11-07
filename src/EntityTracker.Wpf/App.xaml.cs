@@ -157,7 +157,7 @@ public partial class App : System.Windows.Application
             services.AddSingleton<EntityTracker.Application.Schemas.SchemaManagementService>();
             services.AddSingleton<EntityTracker.Application.Schemas.SchemaEditingService>();
             services.AddSingleton<EntityTracker.Application.Schemas.SchemaTrackerService>();
-            services.AddSingleton<TrackerSyncService>();
+            services.AddSingleton<EntityTracker.Application.Schemas.SchemaConversionService>();
             services.AddSingleton<CatalogNameValidationService>();
             services.AddSingleton<PortfolioQueryService>();
             services.AddSingleton<ProjectEntityComparisonQueryService>();
