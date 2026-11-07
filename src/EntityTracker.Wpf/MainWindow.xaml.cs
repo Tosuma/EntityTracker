@@ -88,11 +88,14 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnWindowPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (UpdateBlock.Visibility == Visibility.Visible || _viewModel.IsBusy || _viewModel.IsModalOpen ||
-            !_viewModel.IsTrackerWorkspace || _viewModel.CurrentWorkspace is not { } workspace)
+        if (UpdateBlock.Visibility == Visibility.Visible || _viewModel.IsBusy || _viewModel.IsModalOpen) return;
+        // An open schema's page has its own Ctrl+F, Ctrl+N and Esc, wherever the focus is.
+        if (_viewModel.IsSchemas)
         {
+            e.Handled = SchemasView.HandleShortcut(e);
             return;
         }
+        if (!_viewModel.IsTrackerWorkspace || _viewModel.CurrentWorkspace is not { } workspace) return;
 
         Key key = e.Key == Key.System ? e.SystemKey : e.Key;
         bool control = Keyboard.Modifiers == ModifierKeys.Control;

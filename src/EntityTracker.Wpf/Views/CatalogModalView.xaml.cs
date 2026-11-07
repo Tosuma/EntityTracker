@@ -23,10 +23,6 @@ public partial class CatalogModalView : UserControl
     {
         if (DataContext is CatalogManagementViewModel vm) vm.CreationMode = TrackerCreationMode.Schema;
     }
-    private void OnCopyChecked(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is CatalogManagementViewModel vm) vm.CreationMode = TrackerCreationMode.Copy;
-    }
     private async void OnRestoreProject(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is Project project) await ViewModel.RestoreAsync(project);

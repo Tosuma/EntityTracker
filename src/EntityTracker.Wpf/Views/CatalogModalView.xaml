@@ -40,8 +40,6 @@
                                              IsChecked="{Binding IsSchemaMode, Mode=OneWay}" Checked="OnSchemaChecked"
                                              IsEnabled="{Binding HasSchemaOptions}" ToolTip="Create a schema from the Project dashboard first." ToolTipService.ShowOnDisabled="True"
                                              Visibility="{Binding CanCreateFromSchema, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                <RadioButton Content="Copy tracker" GroupName="CreationMode" IsChecked="{Binding IsCopyMode, Mode=OneWay}" Checked="OnCopyChecked"
-                                             IsEnabled="{Binding HasCopySources}" ToolTip="Create or import a tracker before copying." ToolTipService.ShowOnDisabled="True" />
                             </StackPanel>
                             <StackPanel Margin="0,16,0,0" Visibility="{Binding IsSchemaMode, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <Label x:Name="SchemaSourceLabel" Content="Schema" />
@@ -53,77 +51,7 @@
                                     <TextBlock Text="{Binding SchemaPreview}" TextWrapping="Wrap" />
                                 </Border>
                             </StackPanel>
-                            <StackPanel Margin="0,16,0,0" Visibility="{Binding IsCopyMode, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <Label x:Name="CopySourceLabel" Content="Source tracker" />
-                                <ComboBox AutomationProperties.LabeledBy="{Binding ElementName=CopySourceLabel}"
-                                          DisplayMemberPath="DisplayName"
-                                          ItemsSource="{Binding CopySources}"
-                                          SelectedItem="{Binding SelectedCopySource}" />
-                                <Border Margin="0,12,0,0" Padding="12" Style="{StaticResource EntityTrackerCardStyle}">
-                                    <TextBlock Text="{Binding CopyPreview}" TextWrapping="Wrap" />
-                                </Border>
-                            </StackPanel>
                             <TextBlock Margin="0,12,0,0" Text="{Binding OperationMessage}" TextWrapping="Wrap" />
-                            </StackPanel>
-
-                            <StackPanel x:Name="TrackerSyncSection"
-                                        Visibility="{Binding IsTrackerSync, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <Border Padding="12" Margin="0,0,0,12" Style="{StaticResource EntityTrackerCardStyle}">
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding SyncIntro}" TextWrapping="Wrap" />
-                                        <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}"
-                                                   Text="{Binding SyncSafety}" TextWrapping="Wrap" />
-                                    </StackPanel>
-                                </Border>
-                                <TextBlock Margin="0,0,0,10" Text="{Binding SyncScope}" TextWrapping="Wrap"
-                                           AutomationProperties.LiveSetting="Polite" />
-                                <DockPanel Margin="0,0,0,10"
-                                           Visibility="{Binding HasSyncDifferences, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                                        <!-- Labels hold names that may contain "_", so they are plain text, not access keys. -->
-                                        <Button Margin="0,0,8,0" Command="{Binding UseSourceForAllCommand}">
-                                            <TextBlock Text="{Binding UseSourceForAllLabel}" />
-                                        </Button>
-                                        <Button Command="{Binding KeepCopyForAllCommand}">
-                                            <TextBlock Text="{Binding KeepCopyForAllLabel}" />
-                                        </Button>
-                                    </StackPanel>
-                                    <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding SyncProgressText}" />
-                                </DockPanel>
-                                <ItemsControl x:Name="TrackerSyncGroups" ItemsSource="{Binding SyncGroups}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Border Margin="0,0,0,8" Padding="12" Style="{StaticResource EntityTrackerCardStyle}">
-                                                <StackPanel>
-                                                    <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding EntityName}" />
-                                                    <ItemsControl ItemsSource="{Binding Changes}">
-                                                        <ItemsControl.ItemTemplate>
-                                                            <DataTemplate>
-                                                                <StackPanel Margin="0,8,0,0">
-                                                                    <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
-                                                                    <StackPanel Margin="0,4,0,0" Orientation="Horizontal">
-                                                                        <RadioButton Margin="0,0,18,0" GroupName="{Binding ChoiceGroup}"
-                                                                                     AutomationProperties.Name="{Binding UseSourceLabel}"
-                                                                                     IsChecked="{Binding UseSource, Mode=TwoWay}">
-                                                                            <TextBlock Text="{Binding UseSourceLabel}" />
-                                                                        </RadioButton>
-                                                                        <RadioButton GroupName="{Binding ChoiceGroup}"
-                                                                                     AutomationProperties.Name="{Binding KeepCopyLabel}"
-                                                                                     IsChecked="{Binding KeepCopy, Mode=TwoWay}">
-                                                                            <TextBlock Text="{Binding KeepCopyLabel}" />
-                                                                        </RadioButton>
-                                                                    </StackPanel>
-                                                                </StackPanel>
-                                                            </DataTemplate>
-                                                        </ItemsControl.ItemTemplate>
-                                                    </ItemsControl>
-                                                </StackPanel>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                                <TextBlock Margin="0,4,0,0" Text="{Binding SyncPreviewMessage}"
-                                           TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
                             </StackPanel>
 
                             <StackPanel Visibility="{Binding IsRecycleBin, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -181,6 +109,20 @@
                             <TextBlock Margin="0,10,0,0" Text="This is reversible. The item will disappear from active selectors and metrics immediately." TextWrapping="Wrap" />
                             </StackPanel>
 
+                            <StackPanel x:Name="ConvertConfirmationSection"
+                                        Visibility="{Binding IsConvertConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock Margin="0,0,0,10" Style="{StaticResource PageDescriptionTextStyle}" TextWrapping="Wrap"
+                                       Text="Nothing changes until you select Convert." />
+                            <ItemsControl x:Name="ConversionLines" ItemsSource="{Binding ConversionLines}"
+                                          AutomationProperties.Name="What converting does">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Margin="0,0,0,8" Text="{Binding StringFormat=• {0}}" TextWrapping="Wrap" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            </StackPanel>
+
                             <StackPanel x:Name="DetachConfirmationSection"
                                         Visibility="{Binding IsDetachConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <TextBlock Text="{Binding DetachText}" TextWrapping="Wrap" />
@@ -207,19 +149,15 @@
                 </ScrollViewer>
 
                 <StackPanel Grid.Row="2" HorizontalAlignment="Right" Orientation="Horizontal">
-                    <TextBlock VerticalAlignment="Center" Margin="0,0,12,0" Style="{StaticResource PageDescriptionTextStyle}"
-                               Text="{Binding SyncApplyHint}"
-                               Visibility="{Binding IsTrackerSync, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <!-- Commit first, then Cancel; the recycle bin only lists items, so it is closed instead. -->
                     <Button Margin="0,0,8,0" Command="{Binding SubmitNameCommand}" Content="Save" Style="{StaticResource PrimaryButtonStyle}"
                             Visibility="{Binding IsNameDialog, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <Button Margin="0,0,8,0" Command="{Binding PrepareTrackerCommand}" Content="{Binding PrepareTrackerLabel}"
+                    <Button x:Name="CreateTrackerButton" Margin="0,0,8,0" Command="{Binding PrepareTrackerCommand}" Content="Create tracker"
+                            Style="{StaticResource PrimaryButtonStyle}"
                             Visibility="{Binding IsTrackerCreation, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <Button Margin="0,0,8,0" Command="{Binding ApplyTrackerCommand}" Content="Apply and create" Style="{StaticResource PrimaryButtonStyle}"
-                            Visibility="{Binding ShowApplyTracker, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <Button Margin="0,0,8,0" Command="{Binding ApplySyncCommand}" Content="{Binding ApplySyncContent}" Style="{StaticResource PrimaryButtonStyle}"
-                            AutomationProperties.Name="{Binding ApplySyncLabel}"
-                            Visibility="{Binding IsTrackerSync, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <Button x:Name="ConfirmConvertButton" Margin="0,0,8,0" Command="{Binding ConfirmConvertCommand}" Content="Convert"
+                            Style="{StaticResource PrimaryButtonStyle}"
+                            Visibility="{Binding IsConvertConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <Button Margin="0,0,8,0" Command="{Binding ConfirmRecycleCommand}" Content="Recycle" Style="{StaticResource DangerButtonStyle}"
                             Visibility="{Binding IsRecycleConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <Button x:Name="ConfirmDetachButton" Margin="0,0,8,0" Command="{Binding ConfirmDetachCommand}" Content="Detach"

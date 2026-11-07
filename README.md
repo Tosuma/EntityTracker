@@ -44,7 +44,7 @@ EntityTracker keeps those concerns separate:
   entity in one offline web page; copy or save charts as PNG files.
 - **Project portfolio** — compare entity-weighted Project/Tracker progress, persisted trends, and
   normalized entity differences without opening another window or database.
-- **Safe catalog management** — create blank, copied or schema-based Trackers and rename, recycle,
+- **Safe catalog management** — create blank or schema-based Trackers and rename, recycle,
   restore, or guardedly purge Projects, Trackers and schemas.
 - **Schemas** — describe a Project's shared structure once: which entities exist, their groups and
   how they depend on each other. Create Trackers from a schema and push its later changes to all of
@@ -253,22 +253,6 @@ Overview after the normal unsaved-work confirmation.
 
 ![Project entity comparison with labeled statuses and explicit missing entities](images/light/project-comparison.png)
 
-### Sync a copied Tracker
-
-A Tracker created as a copy of another keeps a link to it. **Sync from source** on the Project
-dashboard brings the source's later changes into the copy: which entities exist, their dependencies,
-requested priorities, due dates, groups and Filter active. A copy starts with its source's Filter active. Each difference is a plain sentence naming both Trackers, with two
-outcomes to choose from, such as "Add the dependency on customer" or "Leave it out". An entity that
-exists on only one side is a single choice that brings it whole, with all its dependencies, or leaves
-it out. An entity renamed in the source (or in the copy) since the last sync stays the same entity:
-the new name is one choice, and its progress, notes and dependencies stay with it. If the copy keeps
-its own name, the two names stay paired and the choice isn't asked again. **Use … for all** and **Keep … for all** decide everything at once, and single rows can still be
-changed. Only the copy changes; the source is never touched, and progress (statuses, notes,
-developers and history) stays as it is in each Tracker. After the first sync, only differences that
-appeared since the last sync are listed.
-
-![Syncing a copied Tracker with its source, one plain choice per difference](images/light/tracker-sync.png)
-
 ### Describe a Project's structure with schemas
 
 Open **Schemas** from the Project dashboard to see the Project's schemas. A schema lists which
@@ -290,7 +274,7 @@ beside the list: its group, what it depends on and what depends on it.
 
 ![Schema shown as a dependency tree](images/light/schema-graph.png)
 
-**Edit** in the details, or **New entity** on either tab, opens the entity dialog. As in a Tracker,
+**Edit** in the details, or **New entity** (Ctrl+N) on either tab, opens the entity dialog. As in a Tracker,
 **Create and add another** creates the entity and keeps the dialog open for the next one. To add a
 dependency, type or choose a name and select **Add**. A name the schema doesn't have yet is offered
 as **Add ‹name› to the schema**: saving the entity adds that entity too, so a schema never holds
@@ -342,6 +326,26 @@ A Tracker card's **…** menu has **Detach from schema**. A detached Tracker kee
 but schema changes no longer reach it, and it can't be attached again. Pushes are off while a schema
 is in the recycle bin; permanently deleting it detaches all its Trackers. The links are part of the
 Project, so Git sync shares them too.
+
+### Turn a Tracker into a schema
+
+Earlier versions could create a Tracker as a copy of another and bring the source's later changes
+over with Sync from source. Schemas replace both. If one of your Trackers has been the source of
+copies, choose **Convert to schema…** in its card's **…** menu. The dialog lists what will happen,
+and nothing changes until you select **Convert**:
+
+- A schema with the Tracker's name is made from its active entities and the names they depend on that
+  have no entity yet, with their groups and dependencies. Archived entities are left out.
+- The Tracker goes to the Project's recycle bin. Restoring it brings it back as an independent Tracker.
+- Its copies in the same Project are linked to the schema and keep all their progress. Each copy's
+  entities are linked through its last sync, so the source's changes the copy hadn't synced yet show
+  up in the schema's first push.
+- Each other Project on this computer with copies of it gets its own copy of the schema, and those
+  copies are linked to it the same way.
+- Copies in Projects that aren't on this computer keep their link to the source, and can be converted
+  where they are. A copy's link is dropped when its source is permanently deleted.
+
+![Convert to schema lists what happens before anything changes](images/light/convert-to-schema.png)
 
 ### Manage Tracker lifecycle
 
@@ -414,8 +418,7 @@ depend on it, because it has to be done before them, so it never sorts after an 
 it. The list has no rank number, because the date and priority grouping would make one look
 shuffled; the row order itself is the plan. The **Due** column shows each entity's own due date as day-month-year (26-10-2026). Turn on
 **Show inherited due dates** in **Settings → Tracker** to show the inherited date as well. Set or
-clear a due date in the entity editor or when adding an entity; the export and Sync from source
-include it.
+clear a due date in the entity editor or when adding an entity; the export includes it.
 
 Entity names and each row's **View details** action open a read-only side pane with priorities,
 due dates, assignment, full notes, effective dependencies, blockers, and audit timestamps.

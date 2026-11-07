@@ -99,6 +99,80 @@ public sealed class SqliteSchemaLinkStore(SqliteDatabase database) : ISchemaLink
         }
     }
 
+    public async Task ApplyConversionAsync(SchemaConversionCommit commit, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(commit);
+        string timestamp = SqlitePersistenceValues.FormatTimestamp(database.TimeProvider.GetUtcNow());
+        await using SqliteConnection connection = await database.OpenConnectionAsync(cancellationToken);
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            // The source must still be an active Tracker; recycling it is the last check that nothing moved.
+            using (SqliteCommand recycle = Command(connection, transaction, """
+                       UPDATE trackers SET recycled_at_utc = $timestamp, updated_at_utc = $timestamp
+                       WHERE id = $id AND recycled_at_utc IS NULL
+                         AND NOT EXISTS (SELECT 1 FROM tracker_schemas WHERE tracker_id = $id);
+                       """))
+            {
+                recycle.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(commit.SourceTrackerId));
+                recycle.Parameters.AddWithValue("$timestamp", timestamp);
+                if (await recycle.ExecuteNonQueryAsync(cancellationToken) != 1)
+                    throw new InvalidOperationException("The tracker changed or was recycled. Open Convert to schema again.");
+            }
+
+            foreach (SchemaContent content in commit.Schemas)
+            {
+                Schema schema = content.Schema;
+                using (SqliteCommand insert = Command(connection, transaction, """
+                           INSERT INTO schemas (id, project_id, name, created_at_utc, updated_at_utc, recycled_at_utc)
+                           SELECT $id, $projectId, $name, $created, $updated, NULL
+                           FROM projects WHERE id = $projectId AND recycled_at_utc IS NULL;
+                           """))
+                {
+                    insert.Parameters.AddWithValue("$id", SqlitePersistenceValues.Format(schema.Id));
+                    insert.Parameters.AddWithValue("$projectId", SqlitePersistenceValues.Format(schema.ProjectId));
+                    insert.Parameters.AddWithValue("$name", schema.Name);
+                    insert.Parameters.AddWithValue("$created", SqlitePersistenceValues.FormatTimestamp(schema.CreatedAtUtc));
+                    insert.Parameters.AddWithValue("$updated", SqlitePersistenceValues.FormatTimestamp(schema.UpdatedAtUtc));
+                    if (await insert.ExecuteNonQueryAsync(cancellationToken) != 1)
+                        throw new InvalidOperationException("A project the schema belongs in is no longer active.");
+                }
+                foreach (SchemaEntity entity in content.Entities)
+                    await ExecuteAsync(connection, transaction,
+                        "INSERT INTO schema_entities (id, schema_id, name, group_name) VALUES ($id, $schema, $name, $group);",
+                        cancellationToken, ("$id", SqlitePersistenceValues.Format(entity.Id)),
+                        ("$schema", SqlitePersistenceValues.Format(schema.Id)), ("$name", entity.Name),
+                        ("$group", entity.GroupName));
+                foreach (SchemaDependency dependency in content.Dependencies)
+                    await ExecuteAsync(connection, transaction, """
+                        INSERT INTO schema_entity_dependencies (dependent_entity_id, dependency_entity_id)
+                        VALUES ($dependent, $dependency);
+                        """, cancellationToken,
+                        ("$dependent", SqlitePersistenceValues.Format(dependency.DependentEntityId)),
+                        ("$dependency", SqlitePersistenceValues.Format(dependency.DependencyEntityId)));
+            }
+
+            foreach (TrackerSchemaLink link in commit.Links)
+            {
+                string trackerId = SqlitePersistenceValues.Format(link.TrackerId);
+                // The copy now follows the schema: its link to the source and its Sync from source baseline go.
+                await ExecuteAsync(connection, transaction,
+                    "UPDATE trackers SET copied_from_tracker_id = NULL WHERE id = $tracker;",
+                    cancellationToken, ("$tracker", trackerId));
+                await SqliteSyncBaselineRows.DeleteAsync(connection, transaction, trackerId, cancellationToken);
+                await WriteAsync(connection, transaction, link, cancellationToken);
+            }
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+        {
+            throw new InvalidOperationException(
+                "The tracker could not be converted, because a schema name is taken or a copy changed. Try again.",
+                exception);
+        }
+    }
+
     /// <summary>Replaces the Tracker's link and baseline with <paramref name="link"/>.</summary>
     internal static async Task WriteAsync(SqliteConnection connection, SqliteTransaction transaction,
         TrackerSchemaLink link, CancellationToken cancellationToken)

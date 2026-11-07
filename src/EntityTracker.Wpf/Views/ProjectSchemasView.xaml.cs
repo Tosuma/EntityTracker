@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 
+using EntityTracker.Wpf.Controls;
 using EntityTracker.Wpf.ViewModels;
 
 namespace EntityTracker.Wpf.Views;
@@ -28,19 +29,46 @@ public partial class ProjectSchemasView : UserControl
             Dispatcher.BeginInvoke(SchemaGraphCanvas.FitToView, System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
-    /// <summary>Ctrl+F goes to the open tab's search, as on a Tracker's Overview and graph.</summary>
-    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    /// <summary>
+    /// The open schema's keys, as on a Tracker's pages, called by the window so they work wherever the
+    /// focus is: Ctrl+F goes to the open tab's search and Ctrl+N opens New entity. Esc first closes the
+    /// graph's suggestions, then leaves the search box and keeps the search; the next Esc closes the
+    /// details, and the one after that clears the search. The entity dialog handles its own keys.
+    /// </summary>
+    /// <returns>Whether the key was used.</returns>
+    public bool HandleShortcut(KeyEventArgs e)
     {
-        if (e.Key != Key.F || Keyboard.Modifiers != ModifierKeys.Control ||
-            SchemaEditorPage.DataContext is not SchemaEditorViewModel { Form.IsOpen: false } editor ||
-            !SchemaEditorPage.IsVisible) return;
-        if (editor.IsGraphView) SchemaGraphSearchBox.Focus();
-        else
+        if (SchemaEditorPage.DataContext is not SchemaEditorViewModel { Form.IsOpen: false } editor ||
+            !SchemaEditorPage.IsVisible) return false;
+        bool control = Keyboard.Modifiers == ModifierKeys.Control;
+        switch (e.Key)
         {
-            SchemaSearchBox.Focus();
-            SchemaSearchBox.SelectAll();
+            case Key.F when control:
+                if (editor.IsGraphView) SchemaGraphSearchBox.Focus();
+                else
+                {
+                    SchemaSearchBox.Focus();
+                    SchemaSearchBox.SelectAll();
+                }
+                return true;
+            case Key.N when control:
+                if (!editor.NewEntityCommand.CanExecute(null)) return false;
+                editor.NewEntityCommand.Execute(null);
+                return true;
+            case Key.Escape when Keyboard.Modifiers == ModifierKeys.None:
+                return LeaveSearch(editor);
+            default:
+                return false;
         }
-        e.Handled = true;
+    }
+
+    /// <summary>Takes one step out of the search on Esc; returns whether there was one to take.</summary>
+    private bool LeaveSearch(SchemaEditorViewModel editor)
+    {
+        FrameworkElement searchBox = editor.IsGraphView ? SchemaGraphSearchBox : SchemaSearchBox;
+        SchemaSearchEscape step = editor.Escape(searchBox.IsKeyboardFocusWithin);
+        if (step == SchemaSearchEscape.LeaveSearchBox) TextFieldFocus.Release(searchBox);
+        return step != SchemaSearchEscape.None;
     }
 
     /// <summary>Esc closes the details pane, as in a Tracker.</summary>

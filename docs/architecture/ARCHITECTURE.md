@@ -349,7 +349,10 @@ independent multi-valued facts). Keep it there:
   their recording order in an explicit `sequence`. Dependencies refer to entities by ID.
 - **Atomic values.** The Tracker sync baseline is stored as rows, not a JSON document.
 - **Deliberate exception.** `trackers.copied_from_tracker_id` is not a foreign key: it can name a
-  Tracker in another Project that is not on this machine.
+  Tracker in another Project that is not on this machine. Copy tracker and Sync from source are gone;
+  a copy's link and its sync baseline remain only as a dormant link that Convert to schema reads
+  (`SchemaConversionService`). Converting links the copy to the new schema and drops both; permanently
+  deleting the source drops them too.
 
 The Git snapshot is a document format, not a database: it may carry values the database derives
 (an entity's status, an event's previous status, the baseline as JSON). The snapshot store converts

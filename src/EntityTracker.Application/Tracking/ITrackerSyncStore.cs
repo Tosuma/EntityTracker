@@ -1,23 +1,13 @@
-using EntityTracker.Application.Persistence;
 using EntityTracker.Domain;
 
 namespace EntityTracker.Application.Tracking;
 
-public sealed record TrackerSyncCommit(
-    TrackerId SourceTrackerId,
-    TrackerId DestinationTrackerId,
-    string ExpectedSourceFingerprint,
-    string ExpectedDestinationFingerprint,
-    TrackedStateChangeSet ChangeSet,
-    TrackerSyncBaseline Baseline);
-
+/// <summary>
+/// Reads a copy's Sync from source baseline: what it and its source looked like when it last synced. Copies
+/// made before schemas keep it as their dormant link, which Convert to schema reads.
+/// </summary>
 public interface ITrackerSyncStore
 {
     Task<TrackerSyncBaseline?> ReadBaselineAsync(
         TrackerId destinationTrackerId, CancellationToken cancellationToken = default);
-
-    Task<string> FingerprintAsync(
-        TrackerId trackerId, CancellationToken cancellationToken = default);
-
-    Task ApplyAsync(TrackerSyncCommit commit, CancellationToken cancellationToken = default);
 }

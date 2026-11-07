@@ -25,6 +25,25 @@ public sealed record SchemaEntityRow(SchemaEntity Entity, IReadOnlyList<string> 
     public int DependencyCount => DependencyNames.Count;
 }
 
+/// <summary>What one Esc does on an open schema, as on a Tracker's Overview and graph.</summary>
+public enum SchemaSearchEscape
+{
+    /// <summary>Nothing to step out of; the key is left to others.</summary>
+    None,
+
+    /// <summary>The graph search's suggestion list closes.</summary>
+    CloseSuggestions,
+
+    /// <summary>The focus leaves the search box, and the search stays.</summary>
+    LeaveSearchBox,
+
+    /// <summary>The selected entity's details close.</summary>
+    CloseDetails,
+
+    /// <summary>The search is cleared.</summary>
+    ClearSearch
+}
+
 /// <summary>The selected schema entity as the read-only details pane shows it.</summary>
 public sealed record SchemaEntityDetails(
     SchemaEntityId Id, string Name, string GroupName, IReadOnlyList<string> DependsOn, IReadOnlyList<string> UsedBy)
@@ -179,6 +198,34 @@ public sealed class SchemaEditorViewModel : INotifyPropertyChanged
     public ICommand EditCommand => _editCommand;
     public ICommand CloseDetailsCommand { get; }
     public ICommand ClearSearchCommand { get; }
+
+    /// <summary>
+    /// Takes one step out of the open tab's search on Esc, as on a Tracker's Overview: the graph's suggestions
+    /// close first, then the focus leaves the search box (the view moves it) and the search stays, then the
+    /// details close, and the next Esc clears the search.
+    /// </summary>
+    /// <param name="searchBoxFocused">Whether the open tab's search box has the keyboard focus.</param>
+    public SchemaSearchEscape Escape(bool searchBoxFocused)
+    {
+        if (IsGraphView && Graph.IsSuggestionsOpen)
+        {
+            Graph.IsSuggestionsOpen = false;
+            return SchemaSearchEscape.CloseSuggestions;
+        }
+        if (searchBoxFocused) return SchemaSearchEscape.LeaveSearchBox;
+        if (IsDetailsOpen)
+        {
+            CloseDetails();
+            return SchemaSearchEscape.CloseDetails;
+        }
+        if (IsGraphView ? Graph.SearchText.Length > 0 : SearchText.Length > 0)
+        {
+            if (IsGraphView) Graph.SearchText = string.Empty;
+            else SearchText = string.Empty;
+            return SchemaSearchEscape.ClearSearch;
+        }
+        return SchemaSearchEscape.None;
+    }
 
     /// <summary>Reads the schema again, keeping the selected entity selected while it still exists.</summary>
     public async Task ReloadAsync(CancellationToken cancellationToken = default)

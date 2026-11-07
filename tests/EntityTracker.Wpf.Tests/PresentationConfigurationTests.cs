@@ -1512,25 +1512,28 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
-    public void TrackerSync_OffersTwoNamedOutcomesPerDifferenceAndBulkChoices()
+    public void CreateTracker_OffersBlankAndFromSchema_AndATrackerCanBeConvertedToASchema()
     {
-        XDocument document = LoadWpfXaml("Views", "CatalogModalView.xaml");
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
-        XElement section = Assert.Single(document.Descendants(), element =>
+        XDocument catalog = LoadWpfXaml("Views", "CatalogModalView.xaml");
+        Assert.Equal(["Blank", "From schema"], catalog.Descendants()
+            .Where(static element => element.Name.LocalName == "RadioButton" &&
+                                     (string?)element.Attribute("GroupName") == "CreationMode")
+            .Select(static element => (string?)element.Attribute("Content")));
+        Assert.DoesNotContain(catalog.Descendants(), element =>
             (string?)element.Attribute(x + "Name") == "TrackerSyncSection");
+        XElement Named(XDocument document, string name) => Assert.Single(document.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == name);
+        Assert.Equal("{Binding ConversionLines}", (string?)Named(catalog, "ConversionLines").Attribute("ItemsSource"));
+        Assert.Equal("{Binding ConfirmConvertCommand}", (string?)Named(catalog, "ConfirmConvertButton").Attribute("Command"));
 
-        Assert.DoesNotContain(section.Descendants(), element => element.Name.LocalName == "ComboBox");
-        Assert.Equal(["{Binding UseSource, Mode=TwoWay}", "{Binding KeepCopy, Mode=TwoWay}"], section.Descendants()
-            .Where(element => element.Name.LocalName == "RadioButton")
-            .Select(element => (string?)element.Attribute("IsChecked")));
-        Assert.Contains(section.Descendants(), element => (string?)element.Attribute("Command") == "{Binding UseSourceForAllCommand}");
-        Assert.Contains(section.Descendants(), element => (string?)element.Attribute("Command") == "{Binding KeepCopyForAllCommand}");
-        Assert.Contains(document.Descendants(), element =>
-            (string?)element.Attribute("Command") == "{Binding ApplySyncCommand}" &&
-            (string?)element.Attribute("AutomationProperties.Name") == "{Binding ApplySyncLabel}");
-        // Entity names contain "_", so labels are plain text rather than access-key content.
-        Assert.All(section.Descendants().Where(element => element.Name.LocalName == "RadioButton"),
-            radio => Assert.Null(radio.Attribute("Content")));
+        XDocument dashboard = LoadWpfXaml("Views", "ProjectDashboardView.xaml");
+        Assert.DoesNotContain(dashboard.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "SyncTrackerAction");
+        XElement convert = Named(dashboard, "ConvertTrackerAction");
+        Assert.Equal("OnConvertTracker", (string?)convert.Attribute("Click"));
+        Assert.Equal("{Binding CanConvertToSchema, Converter={StaticResource BooleanToVisibilityConverter}}",
+            (string?)convert.Attribute("Visibility"));
     }
 
     [Fact]
@@ -1831,7 +1834,12 @@ public sealed class PresentationConfigurationTests
         XElement graphSearch = Named("SchemaGraphSearchBox");
         Assert.Equal("{Binding Graph}", (string?)graphSearch.Attribute("DataContext"));
         Assert.Equal("{Binding FindCommand}", (string?)graphSearch.Attribute("SubmitCommand"));
-        Assert.Equal("OnPreviewKeyDown", (string?)page.Root!.Attribute("PreviewKeyDown"));
+        // The window passes the keys on, so Ctrl+F and Esc work wherever the focus is.
+        Assert.Contains(LoadWpfXaml("MainWindow.xaml").Descendants(), static element =>
+            element.Name.LocalName == "ProjectSchemasView" &&
+            element.Attributes().Any(static attribute => attribute.Name.LocalName == "Name" && attribute.Value == "SchemasView"));
+        string window = File.ReadAllText(Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf", "MainWindow.xaml.cs"));
+        Assert.Contains("SchemasView.HandleShortcut(e)", window, StringComparison.Ordinal);
         // New entity is in the toolbar both pages share.
         Assert.Equal("{Binding NewEntityCommand}", (string?)Named("NewSchemaEntityButton").Attribute("Command"));
         // The details pane is read-only: it has text and Edit, no input fields.

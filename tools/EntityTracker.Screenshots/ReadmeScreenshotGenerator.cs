@@ -283,22 +283,6 @@ internal sealed class ReadmeScreenshotGenerator
             await renderer.CaptureAsync("create-tracker-schema.png");
             shell.Catalog.CancelCommand.Execute(null);
 
-            shell.Catalog.OpenCreateTracker(project);
-            shell.Catalog.CreationMode = TrackerCreationMode.Copy;
-            await WaitUntilAsync(
-                () => shell.Catalog.CopySources.Count == 3,
-                "The tracker copy sources did not finish loading.",
-                cancellationToken);
-            shell.Catalog.Name = "Pre-production readiness";
-            shell.Catalog.SelectedCopySource = shell.Catalog.CopySources.Single(
-                item => item.Tracker.Id == tracker.Id);
-            await WaitUntilAsync(
-                () => !string.IsNullOrWhiteSpace(shell.Catalog.CopyPreview),
-                "The tracker copy preview did not finish loading.",
-                cancellationToken);
-            await renderer.CaptureAsync("create-tracker-copy.png");
-            shell.Catalog.CancelCommand.Execute(null);
-
             EntityId featuredEntity = (await provider.GetRequiredService<IEntityRepository>()
                     .GetAllAsync(tracker.Id, cancellationToken))
                 .Single(entity => entity.SourceName == "customer_preference").Id;
@@ -408,7 +392,7 @@ internal sealed class ReadmeScreenshotGenerator
             await renderer.CaptureAsync("app-updated.png", settleMilliseconds: 900);
             provider.GetRequiredService<NotificationCenter>().Dismiss(updatedNotice);
             shell.WhatsNew.ShowComing(SampleVersion(2, 0, 0), SampleRequiredNotes);
-            await CaptureTrackerSyncAsync(provider, shell, tracker, renderer, cancellationToken);
+            await CaptureTrackerConversionAsync(provider, shell, tracker, renderer, cancellationToken);
 
             window.ShowUpdatePreview("app-v2.0.0");
             await renderer.CaptureAsync("app-update-required.png");
@@ -448,7 +432,7 @@ internal sealed class ReadmeScreenshotGenerator
     /// Changes Core schema after Release readiness was copied from it, then shows the sync dialog.
     /// It runs last because it changes Core schema.
     /// </summary>
-    private static async Task CaptureTrackerSyncAsync(
+    private static async Task CaptureTrackerConversionAsync(
         IServiceProvider provider,
         ShellViewModel shell,
         Tracker source,
@@ -475,16 +459,14 @@ internal sealed class ReadmeScreenshotGenerator
                 entitiesWithGroupNameToUpdate: [customer]),
             cancellationToken);
 
+        // The source changed after its copy last synced; converting it shows what happens to the copies.
         await shell.NavigateAsync(ShellDestination.ProjectDashboard, cancellationToken);
-        Tracker copy = (await provider.GetRequiredService<ITrackerRepository>().GetAllAsync(cancellationToken))
-            .Single(tracker => tracker.Name == "Release readiness");
-        await shell.Catalog.OpenSyncTrackerAsync(copy);
+        await shell.Catalog.OpenConvertToSchemaAsync(source);
         await WaitUntilAsync(
-            () => !shell.Catalog.IsBusy &&
-                  shell.Catalog.SyncGroups.Any(group => group.EntityName == "payment_reminder"),
-            "The Tracker sync review did not finish loading.",
+            () => !shell.Catalog.IsBusy && shell.Catalog.ConversionLines.Count > 0,
+            "The Convert to schema preview did not finish loading.",
             cancellationToken);
-        await renderer.CaptureAsync("tracker-sync.png", settleMilliseconds: 400);
+        await renderer.CaptureAsync("convert-to-schema.png", settleMilliseconds: 400);
         shell.Catalog.CancelCommand.Execute(null);
     }
 
