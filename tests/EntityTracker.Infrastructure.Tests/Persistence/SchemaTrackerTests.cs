@@ -193,6 +193,51 @@ public sealed class SchemaTrackerTests
     }
 
     [Fact]
+    public async Task Push_TreatsAnEntityRemovedAndAddedAgainAsTheSameEntity()
+    {
+        await using TemporarySqliteFile file = new();
+        Fixture fixture = await Fixture.CreateAsync(file);
+        Schema schema = await fixture.SchemaAsync("Model", ("Order", "", []));
+        Tracker tracker = await fixture.Trackers.CreateTrackerAsync(schema.Id, "Team A");
+        Assert.True((await fixture.Editing.SaveEntityAsync(schema.Id,
+            new SchemaEntityEdit(null, "Test", "", ["Order"]))).Succeeded);
+        SchemaPushReview review = await fixture.Trackers.ReviewPushAsync(schema.Id);
+        Assert.Single(review.Changes).Choice = SchemaPushChoice.Schema;
+        await fixture.Trackers.ApplyPushAsync(review);
+        TrackedEntity test = (await fixture.EntitiesAsync(tracker.Id)).Single(e => e.SourceName == "Test");
+        await fixture.EditAsync(tracker.Id, entities =>
+        {
+            TrackedEntity entity = entities.Single(e => e.SourceName == "Test");
+            entity.ChangeStatus(DevelopmentStatus.InProgress);
+            return new TrackedStateChangeSet([], [], [], entitiesWithProgressToUpdate: [entity]);
+        });
+
+        // Test is removed from the schema and added again, in another group but with the same dependency.
+        SchemaContent content = await fixture.Editing.GetContentAsync(schema.Id);
+        await fixture.Editing.RemoveEntityAsync(schema.Id, content.Entities.Single(e => e.Name == "Test").Id);
+        Assert.True((await fixture.Editing.SaveEntityAsync(schema.Id,
+            new SchemaEntityEdit(null, "Test", "QA", ["Order"]))).Succeeded);
+
+        // It is the same entity to the tracker: no removal and no addition, only the new group.
+        Assert.Equal(["Moved Test to group QA"], (await fixture.Trackers.GetPendingChangesAsync(schema.Id)).Changes);
+        review = await fixture.Trackers.ReviewPushAsync(schema.Id);
+        SchemaPushChange regroup = Assert.Single(review.Changes);
+        Assert.Equal(SchemaPushChangeKind.Group, regroup.Kind);
+        regroup.Choice = SchemaPushChoice.Schema;
+        await fixture.Trackers.ApplyPushAsync(review);
+
+        TrackedEntity after = (await fixture.EntitiesAsync(tracker.Id)).Single(e => e.SourceName == "Test");
+        Assert.Equal(test.Id, after.Id);
+        Assert.Equal("QA", after.GroupName);
+        Assert.Equal(DevelopmentStatus.InProgress, after.Status);
+        Assert.Equal(EntityLifecycleState.Active, after.LifecycleState);
+        SchemaEntity readded = (await fixture.Editing.GetContentAsync(schema.Id)).Entities.Single(e => e.Name == "Test");
+        TrackerSchemaLink link = (await fixture.Links.GetLinkAsync(tracker.Id))!;
+        Assert.Equal(test.Id, link.Entities.Single(e => e.SchemaEntityId == readded.Id).EntityId);
+        Assert.False((await fixture.Trackers.GetPendingChangesAsync(schema.Id)).HasChanges);
+    }
+
+    [Fact]
     public async Task Push_IsRefusedWithoutWritingWhenTheSchemaOrATrackerChangedAfterTheReview()
     {
         await using TemporarySqliteFile file = new();

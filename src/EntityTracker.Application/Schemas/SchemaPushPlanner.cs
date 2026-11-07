@@ -55,7 +55,9 @@ public static class SchemaPushPlanner
         ArgumentNullException.ThrowIfNull(schema);
         ArgumentNullException.ThrowIfNull(link);
         Dictionary<SchemaEntityId, SchemaEntity> now = schema.Entities.ToDictionary(static e => e.Id);
-        Dictionary<SchemaEntityId, SchemaBaselineEntity> then = link.Entities.ToDictionary(static e => e.SchemaEntityId);
+        Dictionary<SchemaEntityId, SchemaEntityId> readded = Readded(schema, link.Entities, static _ => null);
+        Dictionary<SchemaEntityId, SchemaBaselineEntity> then = link.Entities
+            .Select(e => Swap(e, readded)).ToDictionary(static e => e.SchemaEntityId);
         ILookup<SchemaEntityId, SchemaEntityId> nowDependencies = schema.Dependencies.ToLookup(
             static d => d.DependentEntityId, static d => d.DependencyEntityId);
         string NameOf(SchemaEntityId id) => now.TryGetValue(id, out SchemaEntity? e) ? e.Name
@@ -82,13 +84,49 @@ public static class SchemaPushPlanner
             foreach (SchemaEntityId removed in was.Except(@is).Where(now.ContainsKey))
                 changes.Add($"{entity.Name} no longer depends on {NameOf(removed)}");
         }
-        foreach (SchemaBaselineEntity removed in link.Entities.Where(e => !now.ContainsKey(e.SchemaEntityId))
+        foreach (SchemaBaselineEntity removed in then.Values.Where(e => !now.ContainsKey(e.SchemaEntityId))
                      .OrderBy(static e => e.Name, StringComparer.OrdinalIgnoreCase))
             changes.Add($"Removed {removed.Name}");
         return changes;
     }
 
     internal static string GroupText(string group) => group.Length == 0 ? "no group" : $"group {group}";
+
+    /// <summary>
+    /// Pairs each baseline entity the schema removed with an entity the schema added under the same name: an
+    /// entity removed and added again is the same entity to a Tracker, so the new one takes the old one's
+    /// place in the baseline instead of being a removal and an addition. <paramref name="currentName"/> gives
+    /// the name the Tracker's linked entity has now, where there is one.
+    /// </summary>
+    internal static Dictionary<SchemaEntityId, SchemaEntityId> Readded(SchemaContent schema,
+        IEnumerable<SchemaBaselineEntity> baseline, Func<SchemaBaselineEntity, string?> currentName)
+    {
+        HashSet<SchemaEntityId> inSchema = schema.Entities.Select(static e => e.Id).ToHashSet();
+        SchemaBaselineEntity[] old = baseline.ToArray();
+        HashSet<SchemaEntityId> inBaseline = old.Select(static e => e.SchemaEntityId).ToHashSet();
+        Dictionary<SchemaEntityId, SchemaEntityId> replaced = [];
+        HashSet<SchemaEntityId> taken = [];
+        foreach (SchemaBaselineEntity removed in old.Where(e => !inSchema.Contains(e.SchemaEntityId)))
+        {
+            string[] names = new[] { removed.Name, currentName(removed) }.OfType<string>()
+                .Select(static name => EntitySourceKey.From(name).Value).Distinct().ToArray();
+            SchemaEntity? added = schema.Entities.FirstOrDefault(e =>
+                !inBaseline.Contains(e.Id) && !taken.Contains(e.Id) &&
+                names.Contains(EntitySourceKey.From(e.Name).Value));
+            if (added is null) continue;
+            replaced[removed.SchemaEntityId] = added.Id;
+            taken.Add(added.Id);
+        }
+        return replaced;
+    }
+
+    /// <summary>The baseline entity with the replaced schema entities swapped in, its own ID included.</summary>
+    private static SchemaBaselineEntity Swap(SchemaBaselineEntity entity, IReadOnlyDictionary<SchemaEntityId, SchemaEntityId> replaced) =>
+        entity with
+        {
+            SchemaEntityId = replaced.GetValueOrDefault(entity.SchemaEntityId, entity.SchemaEntityId),
+            Dependencies = entity.Dependencies.Select(d => replaced.GetValueOrDefault(d, d)).Distinct().ToArray()
+        };
 
     /// <summary>One schema entity in the Tracker's baseline as the push leaves it.</summary>
     private sealed class BaselineEntry(EntityId? entityId, string name, string group, IEnumerable<SchemaEntityId> dependencies)
@@ -137,8 +175,12 @@ public static class SchemaPushPlanner
                 static d => d.DependencyEntityId);
             _byId = entities.ToDictionary(static e => e.Id);
             _byKey = entities.ToDictionary(static e => EntitySourceKey.From(e.SourceName));
-            foreach (SchemaBaselineEntity old in link?.Entities ?? [])
+            IReadOnlyList<SchemaBaselineEntity> baseline = link?.Entities ?? [];
+            Dictionary<SchemaEntityId, SchemaEntityId> readded = Readded(schema, baseline, old =>
+                old.EntityId is { } linked && _byId.TryGetValue(linked, out TrackedEntity? e) ? e.SourceName : null);
+            foreach (SchemaBaselineEntity read in baseline)
             {
+                SchemaBaselineEntity old = Swap(read, readded);
                 _old[old.SchemaEntityId] = old;
                 // A link counts while its entity is still a real entity of the Tracker.
                 if (old.EntityId is { } id && _byId.TryGetValue(id, out TrackedEntity? entity) && !entity.IsPlaceholder)

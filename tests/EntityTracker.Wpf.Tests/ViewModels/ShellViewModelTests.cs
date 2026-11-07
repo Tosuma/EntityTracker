@@ -1633,6 +1633,20 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         Assert.True(editor.ShowNoMatches);
         editor.ClearSearchCommand.Execute(null);
         Assert.False(editor.ShowNoMatches);
+
+        // Esc steps out of the search as on the Overview: it leaves the box and keeps the search, closes
+        // the details, then clears the search. On the Dependency graph tab its own search is the one cleared.
+        Assert.Equal(SchemaSearchEscape.None, editor.Escape(searchBoxFocused: false));
+        editor.SelectedViewIndex = 0;
+        editor.SearchText = "order";
+        editor.SelectedRow = editor.Rows.Single(row => row.Name == "Order");
+        Assert.Equal(SchemaSearchEscape.LeaveSearchBox, editor.Escape(searchBoxFocused: true));
+        Assert.Equal("order", editor.SearchText);
+        Assert.Equal(SchemaSearchEscape.CloseDetails, editor.Escape(searchBoxFocused: false));
+        Assert.False(editor.IsDetailsOpen);
+        Assert.Equal(SchemaSearchEscape.ClearSearch, editor.Escape(searchBoxFocused: false));
+        Assert.Equal(string.Empty, editor.SearchText);
+        Assert.Equal(SchemaSearchEscape.None, editor.Escape(searchBoxFocused: false));
         Assert.Equal("2 entities", editor.SearchResultText);
 
         // Selecting an entity shows its details, read-only; Edit opens the dialog.
