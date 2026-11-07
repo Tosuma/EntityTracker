@@ -40,8 +40,8 @@ EntityTracker keeps those concerns separate:
   Work status; sort workflow statuses in their defined order; click the Entity header to sort
   names A–Z, then Z–A, then back to the default order; and search by entity or responsible name.
 - **Progress reporting** — share a Project report with the client or the team: current status,
-  implementation history, ready-versus-blocked trends, weekly change, the dependency graph and every
-  entity in one offline web page; copy or save charts as PNG files.
+  implementation history and weekly change, each explained in plain words, and every entity in one
+  offline web page; copy or save charts as PNG files.
 - **Project portfolio** — compare entity-weighted Project/Tracker progress, persisted trends, and
   normalized entity differences without opening another window or database.
 - **Safe catalog management** — create blank or schema-based Trackers and rename, recycle,
@@ -107,7 +107,7 @@ archived entities, without deleting their history.
     </td>
     <td width="50%">
       <strong>Report progress to the client</strong><br />
-      Export summaries, charts, the dependency graph, and entities as one offline web page.<br /><br />
+      Export summaries, explained charts and entities as one offline web page.<br /><br />
       <img src="images/light/project-report.png" alt="Project report page with Tracker selection, audience, progress period and chart images" />
     </td>
   </tr>
@@ -526,25 +526,38 @@ work just as in the solar system. The chosen view is remembered.
 Open **Project report** from the Project dashboard to create a report for the client, who never
 needs EntityTracker. Tick the Trackers to include (one, a few or all), choose who it is for, and
 pick the progress period: all history, the last 30, 60 or 90 days, or a custom range. **Export HTML…** saves a single web page that works completely offline:
-it holds the summary, every progress chart (for all selected Trackers together or one at a time),
+it holds the summary, three progress charts (for all selected Trackers together or one at a time),
 and a table of the entities with search and filters. The search matches names the same way as the
 app, so "cust pref" and "legalentity" work there too. The status filters always list every status
 with its count, so the reader can pick "Reworking" even when nothing is being reworked. Point at a
-chart, or focus it and use the arrow keys, to read its values.
+chart, or focus it and use the arrow keys, to read its values. **Preview in browser** opens the same
+page without saving it.
 
-The report also holds each Tracker's **dependency tree**, laid out as in the app and fitted to the
-width of the page. The boxes show each entity's status colour; point at one for its name, status and
-links, and click it to highlight its dependencies, dependents or direct links (Ctrl+click adds more).
-The tree does not pan or zoom, so it prints exactly as it looks. The search marks matching entities
-in the tree, and clicking an entity's name in the table shows it there. **Preview in browser** opens the same page without saving it.
+The report is written for a client, so its figures explain themselves in words under each one, on
+screen and on paper:
+
+- the **summary** says that it covers the technical implementation only, not workshops, mapping
+  meetings or other non-technical work;
+- **Entities by development status** explains each status. Blocked means work was started and then
+  stopped; an entity waiting on a dependency is not blocked. Completed is not final: it can change if
+  the physical data model changes;
+- **Progress over time** says that implemented entities are those that can be migrated with the tool
+  (Rework needed, Reworking, Completed and Reconciled), and that the dashed Active entities line is the
+  projected number to migrate, updated during the project;
+- **Weekly implemented change** shows two bars a week: the **net change** (entities that became
+  implemented minus those that stopped being implemented, below zero in a week that went backwards)
+  and the entities **in progress** at the end of the week.
+
+The report leaves out the dependency graph and the ready vs waiting chart, which clients found hard to
+read; both stay in the app.
 
 To get a PDF, use **Print / Save as PDF** in the report. The printed report starts with its title,
-the chosen Trackers, a contents list and the summary; charts sit two per row and are never split;
-the dependency tree gets a page of its own; and the entity table prints the rows you have searched
-or filtered for, says which ones, and repeats its header on every page. Each page carries the
-report's name and a page number.
+the chosen Trackers, a contents list and the summary; charts sit two per row with their explanations
+and are never split; and the entity table prints the rows you have searched or filtered for, says
+which ones, and repeats its header on every page. Each page carries the report's name and a page
+number.
 
-Under **Progress charts** on the same page, the report's four charts are shown live in the app for the
+Under **Progress charts** on the same page, the app's four progress charts are shown live for the
 chosen period: for all chosen Trackers together or for one of them. Point at a chart to read its values,
 and save or copy any chart as a PNG image for slides or e-mails. Point at a chart's title for a short
 description of what it shows. The pie of development statuses uses standard chart colours, without

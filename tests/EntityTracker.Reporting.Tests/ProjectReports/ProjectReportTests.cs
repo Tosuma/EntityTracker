@@ -84,7 +84,6 @@ public sealed class ProjectReportTests
         Assert.Contains("counter(page) \" of \" counter(pages)", html, StringComparison.Ordinal);
         Assert.Contains("thead { display: table-header-group; }", html, StringComparison.Ordinal);
         Assert.Contains(".charts section.report-section { break-inside: avoid; }", html, StringComparison.Ordinal);
-        Assert.Contains("#dependency-graph { break-before: page; }", html, StringComparison.Ordinal);
         Assert.Contains("print-note", html, StringComparison.Ordinal);
     }
 
@@ -95,18 +94,6 @@ public sealed class ProjectReportTests
 
         Assert.Contains("<main id=\"report\" data-creator=\"Tobias Surland\">", html, StringComparison.Ordinal);
         Assert.Contains("\", created by \" + creator", html, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void TreeBoxesLookLikeTheAppsWithANameAreaAboveAStatusBand()
-    {
-        string html = ProjectReportHtmlWriter.Write(Report());
-
-        Assert.Contains("TREE_WIDTH = 150, TREE_HEIGHT = 81, TREE_NAME = 54", html, StringComparison.Ordinal);
-        Assert.Contains("\"class\": \"card\"", html, StringComparison.Ordinal);
-        Assert.Contains("\"class\": \"band\"", html, StringComparison.Ordinal);
-        Assert.Contains("\"class\": \"outline\"", html, StringComparison.Ordinal);
-        Assert.Contains($".graph .card {{ fill: {ColorScheme.Report.Surface}; }}", html, StringComparison.Ordinal);
     }
 
     [Fact]

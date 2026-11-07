@@ -1149,9 +1149,12 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
             Assert.Contains("Agreed: migrate in June", html, StringComparison.Ordinal);
             Assert.DoesNotContain("not_in_the_report", html, StringComparison.Ordinal);
             Assert.DoesNotContain("vendor contract", html, StringComparison.Ordinal);
-            // Each chosen Tracker gets its own dependency graph, and the unchosen one none.
-            Assert.Contains("\"kind\":\"graph\"", html, StringComparison.Ordinal);
-            Assert.Contains("\"" + EntityTracker.Reporting.ProjectReports.ReportContext.ScopeKey(second.Id) + "\":{\"nodes\"", html, StringComparison.Ordinal);
+            // Each chosen Tracker is a scope of its own, and the unchosen one isn't; the report has no
+            // dependency graph or ready vs waiting chart, and explains its figures (#178).
+            Assert.Contains("\"" + EntityTracker.Reporting.ProjectReports.ReportContext.ScopeKey(second.Id) + "\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"kind\":\"graph\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"ready-vs-blocked\"", html, StringComparison.Ordinal);
+            Assert.Contains("technical implementation only", html, StringComparison.Ordinal);
             Assert.DoesNotContain(EntityTracker.Reporting.ProjectReports.ReportContext.ScopeKey(third.Id), html, StringComparison.Ordinal);
             Assert.Contains("Client report", harness.ReportFiles.SuggestedName, StringComparison.Ordinal);
             Assert.Contains(shell.Notifications.Items, item => item.Title == "Project report" && item.Kind == NotificationKind.Success);
@@ -2030,7 +2033,7 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
             harness.ReportBuilder = new EntityTracker.Reporting.ProjectReports.ProjectReportBuilder(
                 // Local, as in the app: the report view model counts days from the local date.
                 projects, trackers, new ProgressReportingService(history, TimeZoneInfo.Local),
-                aggregateReporting, overview, DependencyGraphReportSectionProvider.AppSections);
+                aggregateReporting, overview);
             return harness;
         }
 

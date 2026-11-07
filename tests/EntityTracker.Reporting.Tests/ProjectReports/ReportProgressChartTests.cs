@@ -40,17 +40,54 @@ public sealed class ReportProgressChartTests
         Assert.Contains("if (series.dashed)", ProjectReportHtmlWriter.Asset("report.js"), StringComparison.Ordinal);
 
     [Fact]
-    public void TheWeeklyChartHasAnIncreaseAndADecreaseBarEachWeek()
+    public void TheWeeklyChartHasANetChangeAndAnInProgressBarEachWeek()
     {
         ChartSection section = Section(ProgressChartKind.WeeklyNetImplementedChange);
         ReportChart chart = section.ByScope[ReportScope.AllKey];
 
         Assert.Equal("Weekly implemented change", section.Title);
         Assert.Equal(ReportChartType.Bars, section.ChartType);
-        Assert.Equal(["Increase", "Decrease"], chart.Series.Select(series => series.Name));
-        Assert.Equal([ColorScheme.Chart.Increase, ColorScheme.Chart.Decrease], chart.Series.Select(series => series.Color));
-        Assert.Equal([3d, 1d], chart.Series[0].Values);
-        Assert.Equal([2d, 0d], chart.Series[1].Values);
+        Assert.Equal(["Net change", "In progress"], chart.Series.Select(series => series.Name));
+        Assert.Equal([ColorScheme.Chart.Implemented, ProgressChartPalette.Category(ProgressStatusCategory.InProgress)],
+            chart.Series.Select(series => series.Color));
+        // 3 up and 2 down, then 1 up and 3 down: a week can go backwards.
+        Assert.Equal([1d, -2d], chart.Series[0].Values);
+        // In progress on the week's last day with data: Tuesday of the first week, Monday of the second.
+        Assert.Equal([3d, 1d], chart.Series[1].Values);
+    }
+
+    [Fact]
+    public void ANegativeWeekDrawsBelowTheZeroLine()
+    {
+        string script = ProjectReportHtmlWriter.Asset("report.js");
+
+        // The axis takes in zero and every value below it, and a bar grows down from zero.
+        Assert.Contains("var e = extent(chart, true);", script, StringComparison.Ordinal);
+        Assert.Contains("return [Math.min(0, min)", script, StringComparison.Ordinal);
+        Assert.Contains("y: Math.min(zero, box.y(v))", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheChartsExplainTheirTermsInWords()
+    {
+        IReadOnlyList<ReportNote> implemented = Section(ProgressChartKind.ImplementedOverTime).Notes!;
+        IReadOnlyList<ReportNote> statuses = Section(ProgressChartKind.CurrentStatus).Notes!;
+        IReadOnlyList<ReportNote> weekly = Section(ProgressChartKind.WeeklyNetImplementedChange).Notes!;
+
+        Assert.Equal(["Implemented", "Active entities"], implemented.Select(note => note.Term));
+        Assert.Contains("Rework needed, Reworking, Completed and Reconciled", implemented[0].Text, StringComparison.Ordinal);
+        Assert.Contains("projected number of entities to be migrated", implemented[1].Text, StringComparison.Ordinal);
+
+        // One line per status the pie can show, in its order.
+        Assert.Equal(
+            ["Not started", "In progress", "Rework needed", "Reworking", "Completed", "Reconciled", "Blocked"],
+            statuses.Select(note => note.Term));
+        Assert.Contains("waiting on a dependency is not blocked",
+            statuses.Single(note => note.Term == "Blocked").Text, StringComparison.Ordinal);
+        Assert.Contains("can change if the physical data model changes",
+            statuses.Single(note => note.Term == "Completed").Text, StringComparison.Ordinal);
+
+        Assert.Equal(["Net change", "In progress"], weekly.Select(note => note.Term));
     }
 
     [Fact]
@@ -65,9 +102,13 @@ public sealed class ReportProgressChartTests
     [InlineData(ProgressChartKind.CurrentStatus)]
     [InlineData(ProgressChartKind.ImplementedOverTime)]
     [InlineData(ProgressChartKind.ReadyAndBlockedOverTime)]
-    [InlineData(ProgressChartKind.WeeklyNetImplementedChange)]
     public void EveryChartCarriesItsDescriptionForTheTitleHint(ProgressChartKind kind) =>
         Assert.Equal(ProgressChartPresentationBuilder.GetDescription(kind), Section(kind).Description);
+
+    [Fact]
+    public void TheWeeklyChartDescribesTheReportsOwnBars() =>
+        Assert.Equal(ProgressChartSectionProvider.WeeklyDescription,
+            Section(ProgressChartKind.WeeklyNetImplementedChange).Description);
 
     [Fact]
     public void TheReportScriptShowsTheDescriptionWhenPointingAtTheTitle()
@@ -91,7 +132,7 @@ public sealed class ReportProgressChartTests
             ],
             [new(Monday, 3, 2, 6, 1), new(Monday.AddDays(1), 4, 3, 5, 1), new(Monday.AddDays(7), 5, 1, 4, 0)],
             [],
-            [new(Monday, 3, 2), new(Monday.AddDays(7), 1, 0)],
+            [new(Monday, 3, 2), new(Monday.AddDays(7), 1, 3)],
             Monday,
             Monday.AddDays(7));
         ReportContext context = new(

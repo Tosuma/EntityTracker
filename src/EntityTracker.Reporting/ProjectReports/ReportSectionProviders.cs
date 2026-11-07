@@ -12,7 +12,15 @@ public sealed class SummarySectionProvider : IReportSectionProvider
 {
     public ReportSection Build(ReportContext context) => new SummarySection("summary", "Summary",
         ReportVisibility.Everyone,
-        context.Scopes.ToDictionary(scope => scope.Key, scope => Cards(context.ReportFor(scope).ManagerSummary)));
+        context.Scopes.ToDictionary(scope => scope.Key, scope => Cards(context.ReportFor(scope).ManagerSummary)),
+        Notes);
+
+    /// <summary>Gets what the summary covers, so it isn't read as the progress of the whole migration.</summary>
+    public static IReadOnlyList<ReportNote> Notes { get; } =
+    [
+        new("This report covers the technical implementation only. It does not include workshops, mapping " +
+            "meetings or other non-technical work.")
+    ];
 
     private static IReadOnlyList<SummaryCard> Cards(ProgressManagerSummary summary) =>
     [
@@ -28,9 +36,18 @@ public sealed class SummarySectionProvider : IReportSectionProvider
     ];
 }
 
-/// <summary>One of the progress charts the app shows, for every scope.</summary>
+/// <summary>
+/// One of the progress charts the app shows, for every scope, with the notes a client needs to read
+/// it. The weekly chart is the report's own: the net change and the entities in progress, where the
+/// app shows increases and decreases.
+/// </summary>
 public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IReportSectionProvider
 {
+    /// <summary>Gets the weekly chart's description in the report, where its bars differ from the app's.</summary>
+    public const string WeeklyDescription =
+        "Each week, how many more entities are implemented than at the start of the week, and how many are in " +
+        "progress at its end.";
+
     public ReportSection Build(ReportContext context) => new ChartSection(
         ProgressChartPresentationBuilder.GetFileNameSegment(kind),
         ProgressChartPresentationBuilder.GetTitle(kind),
@@ -42,7 +59,41 @@ public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IRepo
             _ => ReportChartType.Line
         },
         context.Scopes.ToDictionary(scope => scope.Key, scope => Chart(context.ReportFor(scope))),
-        ProgressChartPresentationBuilder.GetDescription(kind));
+        kind == ProgressChartKind.WeeklyNetImplementedChange
+            ? WeeklyDescription
+            : ProgressChartPresentationBuilder.GetDescription(kind),
+        NotesFor(kind));
+
+    /// <summary>Gets the lines shown under a chart that explain its terms, or null when it needs none.</summary>
+    public static IReadOnlyList<ReportNote>? NotesFor(ProgressChartKind kind) => kind switch
+    {
+        ProgressChartKind.ImplementedOverTime =>
+        [
+            new("Entities that can be migrated with the tool. This includes entities in Rework needed, Reworking, " +
+                "Completed and Reconciled.", "Implemented"),
+            new("The dashed line: the projected number of entities to be migrated. It will be updated during the " +
+                "project.", "Active entities")
+        ],
+        ProgressChartKind.CurrentStatus =>
+        [
+            new("Work on the entity hasn't begun.", "Not started"),
+            new("The entity is being developed.", "In progress"),
+            new("Development was done, but the entity needs changes.", "Rework needed"),
+            new("The needed changes are being made.", "Reworking"),
+            new("Development is done. This is not final: it can change if the physical data model changes.",
+                "Completed"),
+            new("Development is done and the entity has been reconciled.", "Reconciled"),
+            new("Work on the entity was started and then stopped. An entity that hasn't started because it is " +
+                "waiting on a dependency is not blocked.", "Blocked")
+        ],
+        ProgressChartKind.WeeklyNetImplementedChange =>
+        [
+            new("Entities that became implemented that week, minus those that stopped being implemented. It is " +
+                "below zero when more stopped than became implemented.", "Net change"),
+            new("Entities in progress at the end of the week, or today for the current week.", "In progress")
+        ],
+        _ => null
+    };
 
     private ReportChart Chart(ProgressDashboardReport report) => kind switch
     {
@@ -79,13 +130,23 @@ public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IRepo
         ProgressChartKind.WeeklyNetImplementedChange => new ReportChart(
             report.WeeklyNetImplementedChange.Select(week => Date(week.WeekStartingMonday)).ToArray(),
             [
-                new ReportSeries("Increase", ColorScheme.Chart.Increase,
-                    report.WeeklyNetImplementedChange.Select(week => (double)week.Increase).ToArray()),
-                new ReportSeries("Decrease", ColorScheme.Chart.Decrease,
-                    report.WeeklyNetImplementedChange.Select(week => (double)week.Decrease).ToArray())
+                new ReportSeries("Net change", ColorScheme.Chart.Implemented,
+                    report.WeeklyNetImplementedChange.Select(week => (double)(week.Increase - week.Decrease)).ToArray()),
+                // In the colour the progress chart and the pie give In progress.
+                new ReportSeries("In progress", ReportLabels.SliceColor(ProgressStatusCategory.InProgress),
+                    report.WeeklyNetImplementedChange
+                        .Select(week => (double)InProgressAtEndOf(week.WeekStartingMonday, report.ImplementedOverTime))
+                        .ToArray())
             ]),
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
     };
+
+    /// <summary>
+    /// The entities in progress on the week's last day with data: its Sunday, or the last day of the
+    /// period when the week isn't over.
+    /// </summary>
+    private static int InProgressAtEndOf(DateOnly monday, IReadOnlyList<ImplementedProgressPoint> days) =>
+        days.LastOrDefault(day => day.Date >= monday && day.Date < monday.AddDays(7))?.InProgressCount ?? 0;
 
     private static string Date(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 }

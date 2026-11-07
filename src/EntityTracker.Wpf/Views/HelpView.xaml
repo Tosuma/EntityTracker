@@ -50,7 +50,7 @@
                 <Border Margin="0,0,6,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
                     <StackPanel>
                         <TextBlock Style="{StaticResource HelpCardTitleStyle}" Text="Reports" />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• The Project report shows progress, the dependency graph and every entity for the Trackers you choose." />
+                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• The Project report shows progress, with each figure explained in words, and every entity for the Trackers you choose." />
                         <TextBlock Style="{StaticResource HelpPointStyle}" Text="• It saves as one offline web page, for the client (without internal notes and developer names) or for the team." />
                         <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Each progress chart can be saved or copied as an image." />
                         <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Overview's Export saves the entities as a spreadsheet, internal notes and developer names included." />
