@@ -1808,6 +1808,30 @@ public sealed class PresentationConfigurationTests
         Assert.Equal(["Entities", "Dependency graph"], tabs.Elements()
             .Where(static element => element.Name.LocalName == "TabItem")
             .Select(static element => (string?)element.Attribute("Header")));
+        // The tabs highlight on hover like the app's buttons, and mark the selected tab with a bar, not a
+        // filled box.
+        XElement tabTemplate = Assert.Single(tabs.Descendants(), static element =>
+            element.Name.LocalName == "ControlTemplate" && (string?)element.Attribute("TargetType") == "TabItem");
+        XElement hover = Assert.Single(tabTemplate.Descendants(), static element =>
+            element.Name.LocalName == "Trigger" && (string?)element.Attribute("Property") == "IsMouseOver");
+        Assert.Contains(hover.Elements(), static setter =>
+            (string?)setter.Attribute("Value") == "{DynamicResource Brush.Surface.Hover}");
+        XElement selected = Assert.Single(tabTemplate.Descendants(), static element =>
+            element.Name.LocalName == "Trigger" && (string?)element.Attribute("Property") == "IsSelected");
+        Assert.DoesNotContain(selected.Elements(), static setter => (string?)setter.Attribute("Property") == "Background");
+        Assert.Contains(selected.Elements(), static setter => (string?)setter.Attribute("TargetName") == "SelectionBar");
+        // Both tabs search as a Tracker's pages do: the Entities tab filters, with a count and a no-matches
+        // state; the graph finds an entity; Ctrl+F goes to the open tab's search.
+        Assert.Equal("{Binding SearchText, UpdateSourceTrigger=PropertyChanged}",
+            (string?)Named("SchemaSearchBox").Attribute("Text"));
+        Assert.Equal("Search entities (Ctrl+F)", Named("SchemaSearchBox").Attributes()
+            .Single(static attribute => attribute.Name.LocalName == "Placeholder.Text").Value);
+        Assert.Contains(Named("SchemaNoMatches").Descendants(), static element =>
+            (string?)element.Attribute("Command") == "{Binding ClearSearchCommand}");
+        XElement graphSearch = Named("SchemaGraphSearchBox");
+        Assert.Equal("{Binding Graph}", (string?)graphSearch.Attribute("DataContext"));
+        Assert.Equal("{Binding FindCommand}", (string?)graphSearch.Attribute("SubmitCommand"));
+        Assert.Equal("OnPreviewKeyDown", (string?)page.Root!.Attribute("PreviewKeyDown"));
         // New entity is in the toolbar both pages share.
         Assert.Equal("{Binding NewEntityCommand}", (string?)Named("NewSchemaEntityButton").Attribute("Command"));
         // The details pane is read-only: it has text and Edit, no input fields.

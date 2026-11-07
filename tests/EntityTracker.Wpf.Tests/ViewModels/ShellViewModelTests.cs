@@ -1722,6 +1722,16 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         Assert.False(form.IsOpen);
         Assert.Equal(["Customer", "Order"], editor.Rows.Select(row => row.Name));
 
+        // The search says how many entities it shows, as on a Tracker's Overview, and can be cleared.
+        Assert.Equal("2 entities", editor.SearchResultText);
+        editor.SearchText = "cust";
+        Assert.Equal("1 of 2 entities", editor.SearchResultText);
+        editor.SearchText = "invoice";
+        Assert.True(editor.ShowNoMatches);
+        editor.ClearSearchCommand.Execute(null);
+        Assert.False(editor.ShowNoMatches);
+        Assert.Equal("2 entities", editor.SearchResultText);
+
         // Selecting an entity shows its details, read-only; Edit opens the dialog.
         editor.SelectedViewIndex = 0;
         Assert.False(editor.IsGraphView);
