@@ -9,6 +9,7 @@ using EntityTracker.Application.History;
 using EntityTracker.Application.GitSync;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Projects;
+using EntityTracker.Application.Schemas;
 using EntityTracker.Application.Snapshots;
 using EntityTracker.Domain;
 using EntityTracker.Infrastructure.Configuration;
@@ -97,8 +98,12 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         DiagnosticsSettingsViewModel? diagnostics = null,
         ProjectSyncIndicators? syncIndicators = null,
         DueDateSettingsViewModel? dueDates = null,
-        IProjectSnapshotStore? projectSnapshots = null)
+        IProjectSnapshotStore? projectSnapshots = null,
+        SchemaManagementService? schemaManagement = null,
+        SchemaEditingService? schemaEditing = null)
     {
+        _schemaManagement = schemaManagement;
+        _schemaEditing = schemaEditing;
         Diagnostics = diagnostics;
         _reportBuilder = reportBuilder;
         _reportFiles = reportFiles;
@@ -158,6 +163,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 IconKey: "Icon.Board", DisabledHint: "Select a Project to open its dashboard."),
             new(ShellDestination.Developers, string.Empty, "Developers", true, false, InSidebar: false),
             new(ShellDestination.ProjectReport, string.Empty, "Project report", true, false, InSidebar: false),
+            new(ShellDestination.Schemas, string.Empty, "Schemas", true, false, InSidebar: false),
             new(ShellDestination.Overview, "Tracker", "Overview", true, true,
                 IconKey: "Icon.Table", DisabledHint: "Select a Tracker to open Overview.", Shortcut: "Ctrl+1"),
             new(ShellDestination.DependencyGraph, "Tracker", "Dependency graph", true, true,
@@ -186,6 +192,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         Catalog.Changed += OnCatalogChanged;
         Catalog.PropertyChanged += OnModalSourceChanged;
         Catalog.SelectionRequested += OnCatalogSelectionRequested;
+        Catalog.SchemasChanged += OnSchemasChanged;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -206,7 +213,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public IReadOnlyList<ShellNavigationEntry> UtilityItems { get; }
 
     /// <summary>
-    /// The main list's current location; Developers and Project report show the Project dashboard.
+    /// The main list's current location; Developers, Project report and Schemas show the Project dashboard.
     /// Choosing another entry navigates there, and the list goes back if navigation is refused.
     /// </summary>
     public ShellNavigationEntry? SelectedSidebarEntry
@@ -348,6 +355,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private readonly EntityTracker.Reporting.ProjectReports.ProjectReportBuilder? _reportBuilder;
     private readonly IProjectReportFiles? _reportFiles;
     private ProjectReportViewModel? _projectReport;
+    private readonly SchemaManagementService? _schemaManagement;
+    private readonly SchemaEditingService? _schemaEditing;
+    private ProjectSchemasViewModel? _schemasPage;
 
     public ProjectDevelopersViewModel? Developers
     {
@@ -534,6 +544,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(IsProjectDashboard));
                 OnPropertyChanged(nameof(IsDevelopers));
                 OnPropertyChanged(nameof(IsProjectReport));
+                OnPropertyChanged(nameof(IsSchemas));
                 OnPropertyChanged(nameof(IsOverview));
                 OnPropertyChanged(nameof(IsDependencyGraph));
                 OnPropertyChanged(nameof(IsArchived));
@@ -609,6 +620,18 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         get => _projectReport;
         private set => SetField(ref _projectReport, value);
     }
+    public bool IsSchemas => SelectedDestination == ShellDestination.Schemas;
+
+    /// <summary>Gets whether this app manages schemas; the dashboard's Schemas button needs it.</summary>
+    public bool CanManageSchemas => _schemaManagement is not null && _schemaEditing is not null;
+
+    /// <summary>Gets the Schemas page, made fresh each time it opens.</summary>
+    public ProjectSchemasViewModel? SchemasPage
+    {
+        get => _schemasPage;
+        private set => SetField(ref _schemasPage, value);
+    }
+
     public bool IsOverview => SelectedDestination == ShellDestination.Overview;
     public bool IsDependencyGraph => SelectedDestination == ShellDestination.DependencyGraph;
     public bool IsArchived => SelectedDestination == ShellDestination.Archived;
@@ -742,6 +765,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 await RefreshVisibleDashboardAsync(cancellationToken);
             if (destination == ShellDestination.Developers && Developers is not null)
                 await Developers.RefreshAsync(cancellationToken);
+            if (destination == ShellDestination.Schemas && SchemasPage is not null)
+                await SchemasPage.RefreshAsync(cancellationToken);
             if (destination == ShellDestination.Settings)
                 await SetSettingsProjectAsync(SelectedProject, cancellationToken);
 
@@ -973,6 +998,12 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             Developers.Cancel();
             Developers.CancelRetirement();
         }
+        if (SelectedDestination == ShellDestination.Schemas && SchemasPage?.HasUnsavedChanges == true)
+        {
+            if (!_discardConfirmation.ConfirmDiscard("The schema entity has unsaved changes."))
+                return false;
+            SchemasPage.DiscardChanges();
+        }
         if (CurrentWorkspace?.HasUnsavedWork != true)
         {
             return true;
@@ -991,6 +1022,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private bool WouldLeaveDirtyFlow(ShellDestination destination) =>
         destination != SelectedDestination &&
         (CurrentWorkspace?.HasUnsavedWork == true ||
+         SelectedDestination == ShellDestination.Schemas && SchemasPage?.HasUnsavedChanges == true ||
          SelectedDestination == ShellDestination.Developers &&
          (Developers?.HasUnsavedForm == true || Developers?.IsRetirementOpen == true));
 
@@ -1148,6 +1180,11 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                 ? null
                 : new ProjectReportViewModel(SelectedProject.Id, SelectedProject.Name, Trackers,
                     _reportBuilder, _reportFiles, Notifications);
+        if (destination == ShellDestination.Schemas)
+            SchemasPage = SelectedProject is null || _schemaManagement is null || _schemaEditing is null
+                ? null
+                : new ProjectSchemasViewModel(SelectedProject, _schemaManagement, _schemaEditing, Catalog,
+                    Notifications, _discardConfirmation.ConfirmDiscard, _logger);
         SelectedDestination = destination;
         if (CurrentWorkspace is not null && IsTrackerDestination(destination))
         {
@@ -1185,6 +1222,12 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             {
                 if (await HasNewerRevisionThanShownAsync(SelectedDestination, projectId))
                     await RefreshVisibleDashboardAsync(CancellationToken.None);
+            }
+            else if (SelectedDestination == ShellDestination.Schemas && SelectedProject?.Id == projectId &&
+                     SchemasPage is { HasUnsavedChanges: false } schemas)
+            {
+                if (await HasNewerRevisionThanShownAsync(SelectedDestination, projectId))
+                    await schemas.RefreshAsync(CancellationToken.None);
             }
             else if (SelectedDestination == ShellDestination.Developers && SelectedProject?.Id == projectId &&
                      Developers is { IsRetirementOpen: false, IsRetiredDialogOpen: false } developers)
@@ -1411,6 +1454,26 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    /// <summary>A schema was created, renamed or moved in or out of the recycle bin: the open Schemas page
+    /// shows it, and a schema just created opens.</summary>
+    private async void OnSchemasChanged(object? sender, SchemaCatalogChangedEventArgs e)
+    {
+        try
+        {
+            if (SelectedDestination != ShellDestination.Schemas || SchemasPage is not { } page ||
+                page.Project.Id != e.ProjectId)
+                return;
+            await page.RefreshAsync();
+            if (e.OpenSchemaId is { } schemaId)
+                await page.OpenAsync(schemaId);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "The Schemas page could not be refreshed.");
+            Notifications.Show("Schemas could not be refreshed", exception.Message, NotificationKind.Failure);
+        }
+    }
+
     private async void OnCatalogSelectionRequested(object? sender, CatalogSelectionRequestedEventArgs e)
     {
         await ReloadCatalogAsync(CancellationToken.None);
@@ -1452,7 +1515,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private void RefreshNavigationEntries()
     {
         if (SidebarItems is null || UtilityItems is null) return;
-        ShellDestination location = SelectedDestination is ShellDestination.Developers or ShellDestination.ProjectReport
+        ShellDestination location = SelectedDestination is ShellDestination.Developers or
+            ShellDestination.ProjectReport or ShellDestination.Schemas
             ? ShellDestination.ProjectDashboard
             : SelectedDestination;
         foreach (ShellNavigationEntry entry in SidebarItems.Concat(UtilityItems))

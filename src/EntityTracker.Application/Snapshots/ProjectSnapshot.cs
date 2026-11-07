@@ -6,7 +6,9 @@ public sealed record ProjectSnapshot(
     int FormatVersion,
     SnapshotProject Project,
     IReadOnlyList<SnapshotTracker> Trackers,
-    IReadOnlyList<SnapshotDeveloper>? Developers = null)
+    IReadOnlyList<SnapshotDeveloper>? Developers = null,
+    // Format 11 and later: the Project's schemas. Null or empty in older formats.
+    IReadOnlyList<SnapshotSchema>? Schemas = null)
 {
     /// <summary>
     /// Format 6 stores each entity's dependencies as one list of entity IDs; a name no entity has yet is
@@ -21,8 +23,13 @@ public sealed record ProjectSnapshot(
     /// would drop it, so they must not read a format 9 Project.
     /// Format 10 keeps entity IDs in a Sync from source baseline, and the source name a copy's entity was
     /// paired with, so a rename is recognised; older apps refuse the unknown properties.
+    /// Format 11 adds the Project's schemas (schemas/&lt;id&gt;/schema.json and their entities); older apps
+    /// would drop them, so they must not read a format 11 Project.
     /// </summary>
-    public const int CurrentFormatVersion = 10;
+    public const int CurrentFormatVersion = 11;
+
+    /// <summary>The first format that may hold schemas.</summary>
+    public const int FirstSchemaFormatVersion = 11;
 
     /// <summary>The first format that may hold the development status NotRelevant.</summary>
     public const int FirstNotRelevantFormatVersion = 8;
@@ -42,6 +49,16 @@ public sealed record ProjectSnapshot(
     public static bool IsSupportedFormat(int formatVersion) =>
         formatVersion is >= 1 and <= CurrentFormatVersion;
 }
+
+/// <summary>A Project's schema: its catalog fields and its entities.</summary>
+public sealed record SnapshotSchema(
+    Guid Id, Guid ProjectId, string Name, string LifecycleState,
+    DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, DateTimeOffset? RecycledAtUtc,
+    IReadOnlyList<SnapshotSchemaEntity> Entities);
+
+/// <summary>A schema entity: its name, group and the IDs of the schema entities it depends on.</summary>
+public sealed record SnapshotSchemaEntity(
+    Guid Id, Guid SchemaId, string Name, string GroupName, IReadOnlyList<Guid> Dependencies);
 
 public sealed record SnapshotDeveloper(
     Guid Id, Guid ProjectId, string Initials, string DisplayName, bool IsRetired);

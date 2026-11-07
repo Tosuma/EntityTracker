@@ -154,6 +154,8 @@ public partial class App : System.Windows.Application
             services.AddSingleton<LocalProjectIdentityService>();
             services.AddSingleton<LocalProjectIdentitySettingsViewModel>();
             services.AddSingleton<TrackerManagementService>();
+            services.AddSingleton<EntityTracker.Application.Schemas.SchemaManagementService>();
+            services.AddSingleton<EntityTracker.Application.Schemas.SchemaEditingService>();
             services.AddSingleton<TrackerSyncService>();
             services.AddSingleton<CatalogNameValidationService>();
             services.AddSingleton<PortfolioQueryService>();
@@ -295,6 +297,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IProjectDeveloperStore, SqliteProjectDeveloperStore>();
         services.AddSingleton<ITrackerRepository, SqliteTrackerRepository>();
         services.AddSingleton<IProjectTrackerStore, SqliteProjectTrackerStore>();
+        services.AddSingleton<ISchemaStore, SqliteSchemaStore>();
         services.AddSingleton<EntityTracker.Application.Snapshots.IProjectSnapshotStore, SqliteProjectSnapshotStore>();
         services.AddSingleton<EntityTracker.Application.Snapshots.IProjectSnapshotCodec,
             EntityTracker.Infrastructure.Snapshots.ProjectSnapshotJsonCodec>();

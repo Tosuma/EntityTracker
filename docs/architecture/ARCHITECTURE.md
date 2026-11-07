@@ -166,6 +166,8 @@ Likely domain concepts include:
 - dependency relationship (always between entity IDs)
 - development status
 - placeholder entity for a dependency on a name no entity has yet
+- schema: a Project's shared structure of entities and dependencies, without progress; unlike a
+  Tracker it never holds a placeholder
 - status transition
 - entity lifecycle state
 
@@ -336,7 +338,7 @@ independent multi-valued facts). Keep it there:
 - **No derived columns.** A column must not be computable from other columns of its row. Names are
   compared with the `ENTITY_NAME` collation (trimmed, culture-invariant upper case, ordinal — the
   app's `EntitySourceKey` rule), so `UNIQUE (tracker_id, source_name)` enforces the rule without a
-  separate key column. A Project or Tracker is recycled exactly when `recycled_at_utc` is set.
+  separate key column. A Project, Tracker or schema is recycled exactly when `recycled_at_utc` is set.
 - **One record of each fact.** An entity's development status is its newest status event
   (view `entity_current_status`); changing the status appends an event. An event's previous status
   is the new status of the event it follows (`previous_event_id`).

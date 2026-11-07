@@ -1757,6 +1757,7 @@ public sealed class PresentationConfigurationTests
     [Theory]
     [InlineData("ProjectDevelopersView.xaml")]
     [InlineData("ProjectReportView.xaml")]
+    [InlineData("ProjectSchemasView.xaml")]
     public void ProjectPages_StartTheirHeadingWithABreadcrumbBackToTheDashboard(string view)
     {
         XDocument document = LoadWpfXaml("Views", view);
@@ -1766,6 +1767,100 @@ public sealed class PresentationConfigurationTests
         Assert.Contains(document.Descendants(), element =>
             (string?)element.Attribute("Style") == "{StaticResource BreadcrumbLinkStyle}" &&
             (string?)element.Attribute("CommandParameter") == "{x:Static viewModels:ShellDestination.ProjectDashboard}");
+        // The heading is centred in a row as tall as a toolbar, as on the dashboard, so the breadcrumb
+        // doesn't sit higher on a page without toolbar buttons beside it.
+        Assert.All(document.Descendants().Where(static element =>
+                (string?)element.Attribute("Style") == "{StaticResource PageHeadingTextStyle}"),
+            static heading => Assert.True(
+                (string?)heading.Attribute("VerticalAlignment") == "Center" ||
+                (string?)heading.Parent?.Attribute("VerticalAlignment") == "Center",
+                "A page heading must be vertically centred in its row."));
+    }
+
+    [Fact]
+    public void Schemas_AreReachedFromTheDashboardAndEditedThroughDetailsAndADialog()
+    {
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XDocument dashboard = LoadWpfXaml("Views", "ProjectDashboardView.xaml");
+        XElement open = Assert.Single(dashboard.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "OpenSchemasButton");
+        Assert.Equal("Schemas", (string?)open.Attribute("Content"));
+        Assert.Equal("{Binding CanManageSchemas, Converter={StaticResource BooleanToVisibilityConverter}}",
+            (string?)open.Attribute("Visibility"));
+        Assert.Contains(LoadWpfXaml("MainWindow.xaml").Descendants(), element =>
+            element.Name.LocalName == "ProjectSchemasView" &&
+            (string?)element.Attribute("Visibility") == "{Binding IsSchemas, Converter={StaticResource BooleanToVisibilityConverter}}");
+
+        XDocument page = LoadWpfXaml("Views", "ProjectSchemasView.xaml");
+        XElement Named(string name) => Assert.Single(page.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == name);
+        Assert.Equal("{Binding Schemas}", (string?)Named("SchemaCards").Attribute("ItemsSource"));
+        Assert.Equal("{Binding CreateSchemaCommand}", (string?)Named("CreateSchemaButton").Attribute("Command"));
+        XElement grid = Named("SchemaEntityGrid");
+        Assert.Equal("True", (string?)grid.Attribute("IsReadOnly"));
+        Assert.Equal("{Binding SelectedRow, Mode=TwoWay}", (string?)grid.Attribute("SelectedItem"));
+        // Entities and Dependency graph are tabs, not a radio-button switch.
+        Assert.DoesNotContain(page.Descendants(), element => element.Name.LocalName == "RadioButton" &&
+            (string?)element.Attribute("GroupName") == "SchemaView");
+        XElement tabs = Named("SchemaViewTabs");
+        Assert.Equal("TabControl", tabs.Name.LocalName);
+        Assert.Equal("{Binding SelectedViewIndex, Mode=TwoWay}", (string?)tabs.Attribute("SelectedIndex"));
+        Assert.Equal(["Entities", "Dependency graph"], tabs.Elements()
+            .Where(static element => element.Name.LocalName == "TabItem")
+            .Select(static element => (string?)element.Attribute("Header")));
+        // The tabs highlight on hover like the app's buttons, and mark the selected tab with a bar, not a
+        // filled box.
+        XElement tabTemplate = Assert.Single(tabs.Descendants(), static element =>
+            element.Name.LocalName == "ControlTemplate" && (string?)element.Attribute("TargetType") == "TabItem");
+        XElement hover = Assert.Single(tabTemplate.Descendants(), static element =>
+            element.Name.LocalName == "Trigger" && (string?)element.Attribute("Property") == "IsMouseOver");
+        Assert.Contains(hover.Elements(), static setter =>
+            (string?)setter.Attribute("Value") == "{DynamicResource Brush.Surface.Hover}");
+        XElement selected = Assert.Single(tabTemplate.Descendants(), static element =>
+            element.Name.LocalName == "Trigger" && (string?)element.Attribute("Property") == "IsSelected");
+        Assert.DoesNotContain(selected.Elements(), static setter => (string?)setter.Attribute("Property") == "Background");
+        Assert.Contains(selected.Elements(), static setter => (string?)setter.Attribute("TargetName") == "SelectionBar");
+        // Both tabs search as a Tracker's pages do: the Entities tab filters, with a count and a no-matches
+        // state; the graph finds an entity; Ctrl+F goes to the open tab's search.
+        Assert.Equal("{Binding SearchText, UpdateSourceTrigger=PropertyChanged}",
+            (string?)Named("SchemaSearchBox").Attribute("Text"));
+        Assert.Equal("Search entities (Ctrl+F)", Named("SchemaSearchBox").Attributes()
+            .Single(static attribute => attribute.Name.LocalName == "Placeholder.Text").Value);
+        Assert.Contains(Named("SchemaNoMatches").Descendants(), static element =>
+            (string?)element.Attribute("Command") == "{Binding ClearSearchCommand}");
+        XElement graphSearch = Named("SchemaGraphSearchBox");
+        Assert.Equal("{Binding Graph}", (string?)graphSearch.Attribute("DataContext"));
+        Assert.Equal("{Binding FindCommand}", (string?)graphSearch.Attribute("SubmitCommand"));
+        Assert.Equal("OnPreviewKeyDown", (string?)page.Root!.Attribute("PreviewKeyDown"));
+        // New entity is in the toolbar both pages share.
+        Assert.Equal("{Binding NewEntityCommand}", (string?)Named("NewSchemaEntityButton").Attribute("Command"));
+        // The details pane is read-only: it has text and Edit, no input fields.
+        XElement details = Named("SchemaEntityDetailsPane");
+        Assert.DoesNotContain(details.Descendants(), element => element.Name.LocalName is "TextBox" or "ComboBox");
+        Assert.Equal("{Binding DataContext.EditCommand, ElementName=SchemaEditorPage}",
+            (string?)Named("EditSchemaEntityButton").Attribute("Command"));
+        // The dialog's fields are labelled, a dependency is added by typing or choosing a name, and a new
+        // entity can be created with the dialog kept open, as in a Tracker.
+        Assert.Equal("{Binding Form}", (string?)Named("SchemaEntityDialog").Attribute("DataContext"));
+        // Esc closes the dialog from any field, before a field can take the key.
+        Assert.Equal("OnDialogPreviewKeyDown", (string?)Named("SchemaEntityDialog").Attribute("PreviewKeyDown"));
+        Assert.Equal("{Binding CreateAnotherCommand}",
+            (string?)Named("CreateAnotherSchemaEntityButton").Attribute("Command"));
+        Assert.Equal("Create and add another", (string?)Named("CreateAnotherSchemaEntityButton").Attribute("Content"));
+        Assert.Equal("{Binding ElementName=SchemaEntityNameLabel}",
+            (string?)Named("SchemaEntityNameBox").Attribute("AutomationProperties.LabeledBy"));
+        Assert.Equal("{Binding ElementName=SchemaEntityGroupLabel}",
+            (string?)Named("SchemaEntityGroupBox").Attribute("AutomationProperties.LabeledBy"));
+        Assert.Equal("True", (string?)Named("SchemaDependencyBox").Attribute("IsEditable"));
+        Assert.Contains(Named("SchemaRemoveConfirmation").Descendants(), element =>
+            (string?)element.Attribute("Command") == "{Binding ConfirmRemoveCommand}");
+        Assert.Equal("{Binding}", (string?)Named("SchemaGraphCanvas").Attribute("Graph"));
+
+        XDocument catalog = LoadWpfXaml("Views", "CatalogModalView.xaml");
+        XElement recycled = Assert.Single(catalog.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "RecycledSchemasSection");
+        Assert.Contains(recycled.Descendants(), element => (string?)element.Attribute("Click") == "OnRestoreSchema");
+        Assert.Contains(recycled.Descendants(), element => (string?)element.Attribute("Click") == "OnPurgeSchema");
     }
 
     [Fact]

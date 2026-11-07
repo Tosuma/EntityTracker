@@ -36,6 +36,12 @@ public sealed class DependencyGraphCanvas : FrameworkElement
     public static readonly DependencyProperty CardBackgroundProperty = RegisterBrush(nameof(CardBackground));
     public static readonly DependencyProperty SelectionBrushProperty = RegisterBrush(nameof(SelectionBrush));
 
+    /// <summary>
+    /// Whether the tree's boxes name each entity's development status. A schema has no progress, so its
+    /// graph leaves the status out.
+    /// </summary>
+    public bool ShowStatus { get; set; } = true;
+
     /// <summary>The amber used when no selection colour is set; no development status uses it.</summary>
     internal static readonly Color DefaultSelectionColor =
         (Color)ColorConverter.ConvertFromString(ColorScheme.App.Graph.Selection);
@@ -591,6 +597,12 @@ public sealed class DependencyGraphCanvas : FrameworkElement
         {
             context.DrawText(line, new Point((TreeDependencyLayout.BoxWidth - line.Width) / 2, y));
             y += lineHeight;
+        }
+
+        if (!ShowStatus && !node.IsPlaceholder)
+        {
+            context.Pop();
+            return;
         }
 
         string status = node.IsPlaceholder ? "Missing" : DependencyGraphViewModel.StatusLabel(node.Status);

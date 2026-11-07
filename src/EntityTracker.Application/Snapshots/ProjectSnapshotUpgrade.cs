@@ -61,7 +61,7 @@ public static class ProjectSnapshotUpgrade
             }).ToArray()
         }).ToArray();
         ProjectSnapshot result = new(ProjectSnapshot.CurrentFormatVersion, snapshot.Project,
-            trackers, developers);
+            trackers, developers, snapshot.Schemas ?? []);
         ProjectSnapshotValidator.Validate(result);
         return result;
     }

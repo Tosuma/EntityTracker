@@ -16,7 +16,8 @@
                 <Button DockPanel.Dock="Right" VerticalAlignment="Center" Content="Retired developers"
                         Command="{Binding Developers.OpenRetiredCommand}"
                         AutomationProperties.HelpText="Show retired developers, to edit or restore them" />
-                <TextBlock Style="{StaticResource PageHeadingTextStyle}">
+                <!-- Centred beside the button, as the dashboard's and other pages' headings are beside their toolbars. -->
+                <TextBlock x:Name="DevelopersHeading" VerticalAlignment="Center" Style="{StaticResource PageHeadingTextStyle}">
                     <Hyperlink Command="{Binding NavigateCommand}"
                                CommandParameter="{x:Static viewModels:ShellDestination.ProjectDashboard}"
                                AutomationProperties.HelpText="Go back to the project dashboard"
