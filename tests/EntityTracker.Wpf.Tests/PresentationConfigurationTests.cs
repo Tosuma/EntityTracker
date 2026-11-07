@@ -1864,6 +1864,55 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void Trackers_AreCreatedFromASchemaPushedToAndDetached()
+    {
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement Named(XDocument document, string name) => Assert.Single(document.Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == name);
+
+        XDocument catalog = LoadWpfXaml("Views", "CatalogModalView.xaml");
+        XElement fromSchema = Named(catalog, "FromSchemaOption");
+        Assert.Equal("From schema", (string?)fromSchema.Attribute("Content"));
+        Assert.Equal("OnSchemaChecked", (string?)fromSchema.Attribute("Checked"));
+        XElement schemaBox = Named(catalog, "SchemaSourceBox");
+        Assert.Equal("{Binding ElementName=SchemaSourceLabel}", (string?)schemaBox.Attribute("AutomationProperties.LabeledBy"));
+        Assert.Equal("{Binding SelectedSchema}", (string?)schemaBox.Attribute("SelectedItem"));
+        Assert.Equal("{Binding ConfirmDetachCommand}", (string?)Named(catalog, "ConfirmDetachButton").Attribute("Command"));
+        Assert.Contains(Named(catalog, "DetachConfirmationSection").Descendants(), element =>
+            (string?)element.Attribute("Text") == "{Binding DetachText}");
+
+        XDocument dashboard = LoadWpfXaml("Views", "ProjectDashboardView.xaml");
+        Assert.Equal("{Binding SchemaText}", (string?)Named(dashboard, "TrackerSchemaText").Attribute("Text"));
+        XElement detach = Named(dashboard, "DetachTrackerAction");
+        Assert.Equal("OnDetachTracker", (string?)detach.Attribute("Click"));
+        Assert.Equal("{Binding HasSchema, Converter={StaticResource BooleanToVisibilityConverter}}",
+            (string?)detach.Attribute("Visibility"));
+
+        XDocument schemas = LoadWpfXaml("Views", "ProjectSchemasView.xaml");
+        Assert.Equal("{Binding OpenReviewCommand}", (string?)Named(schemas, "PushSchemaButton").Attribute("Command"));
+        Assert.Equal("{Binding PendingChanges}", (string?)Named(schemas, "SchemaPendingChanges")
+            .Descendants().Single(element => element.Name.LocalName == "ItemsControl").Attribute("ItemsSource"));
+        XElement review = Named(schemas, "SchemaPushReview");
+        Assert.Equal("{Binding Push}", (string?)review.Attribute("DataContext"));
+        // The review covers the details pane, so its buttons are never hidden; the entity dialog stays on top.
+        int ZIndex(string name) => int.Parse((string?)Named(schemas, name).Attribute("Panel.ZIndex") ?? "0",
+            System.Globalization.CultureInfo.InvariantCulture);
+        Assert.True(ZIndex("SchemaPushReview") > ZIndex("SchemaEntityDetailsPane"));
+        Assert.True(ZIndex("SchemaEntityDialog") > ZIndex("SchemaPushReview"));
+        Assert.Equal("{Binding ApplyCommand}", (string?)Named(schemas, "ApplyPushButton").Attribute("Command"));
+        Assert.Contains(review.Descendants(), element =>
+            (string?)element.Attribute("Command") == "{Binding UseSchemaForAllCommand}");
+        Assert.Contains(review.Descendants(), element =>
+            (string?)element.Attribute("Command") == "{Binding KeepTrackersForAllCommand}");
+        // Each tracker can take or decline all its changes, or be left for later; the untouched fields are a
+        // line of their own.
+        Assert.Contains(review.Descendants(), element =>
+            (string?)element.Attribute("Command") == "{Binding DecideLaterCommand}");
+        Assert.Equal("A push never changes statuses, notes, developers, priorities, due dates or Filter active.",
+            (string?)Named(schemas, "SchemaPushUntouched").Attribute("Text"));
+    }
+
+    [Fact]
     public void NewEntity_OpensAnOverlayFromTheOverviewAndGraphToolbars()
     {
         XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");

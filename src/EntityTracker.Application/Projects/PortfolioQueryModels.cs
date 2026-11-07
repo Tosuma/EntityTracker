@@ -66,7 +66,14 @@ public sealed record TrackerDashboardSummary(
     ProjectId ProjectId,
     string Name,
     TrackerProgressSummary Progress,
-    TrackerId? CopiedFromTrackerId);
+    TrackerId? CopiedFromTrackerId,
+    // The schema the Tracker was created from, while it is linked.
+    string? SchemaName = null)
+{
+    public bool HasSchema => SchemaName is not null;
+
+    public string SchemaText => SchemaName is null ? "" : $"Schema: {SchemaName}";
+}
 
 public sealed record ProjectPortfolioSummary(
     ProjectId ProjectId,

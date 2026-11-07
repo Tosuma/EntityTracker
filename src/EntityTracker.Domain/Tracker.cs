@@ -10,7 +10,8 @@ public sealed class Tracker
         DateTimeOffset updatedAtUtc,
         CatalogLifecycleState lifecycleState = CatalogLifecycleState.Active,
         DateTimeOffset? recycledAtUtc = null,
-        TrackerId? copiedFromTrackerId = null)
+        TrackerId? copiedFromTrackerId = null,
+        SchemaId? schemaId = null)
     {
         ArgumentNullException.ThrowIfNull(id);
         ArgumentNullException.ThrowIfNull(projectId);
@@ -23,6 +24,7 @@ public sealed class Tracker
         LifecycleState = lifecycleState;
         RecycledAtUtc = recycledAtUtc;
         CopiedFromTrackerId = copiedFromTrackerId;
+        SchemaId = schemaId;
     }
 
     public TrackerId Id { get; }
@@ -40,4 +42,7 @@ public sealed class Tracker
     public DateTimeOffset? RecycledAtUtc { get; }
 
     public TrackerId? CopiedFromTrackerId { get; }
+
+    /// <summary>The schema the Tracker was created from, until it is detached or the schema is purged.</summary>
+    public SchemaId? SchemaId { get; }
 }

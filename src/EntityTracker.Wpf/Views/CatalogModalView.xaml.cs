@@ -19,6 +19,10 @@ public partial class CatalogModalView : UserControl
     {
         if (DataContext is CatalogManagementViewModel vm) vm.CreationMode = TrackerCreationMode.Blank;
     }
+    private void OnSchemaChecked(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is CatalogManagementViewModel vm) vm.CreationMode = TrackerCreationMode.Schema;
+    }
     private void OnCopyChecked(object sender, RoutedEventArgs e)
     {
         if (DataContext is CatalogManagementViewModel vm) vm.CreationMode = TrackerCreationMode.Copy;

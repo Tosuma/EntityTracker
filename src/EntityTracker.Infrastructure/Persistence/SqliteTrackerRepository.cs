@@ -105,13 +105,15 @@ public sealed class SqliteTrackerRepository(SqliteDatabase database) : ITrackerR
         reader.IsDBNull(6)
             ? null
             : SqlitePersistenceValues.ParseTimestamp(reader.GetString(6), "tracker recycle timestamp"),
-        reader.IsDBNull(7) ? null : SqlitePersistenceValues.ParseTrackerId(reader.GetString(7)));
+        reader.IsDBNull(7) ? null : SqlitePersistenceValues.ParseTrackerId(reader.GetString(7)),
+        reader.IsDBNull(8) ? null : SqlitePersistenceValues.ParseSchemaId(reader.GetString(8)));
 
     private const string SelectSql = """
         SELECT tracker.id, tracker.project_id, tracker.name,
                CASE WHEN tracker.recycled_at_utc IS NULL THEN 'Active' ELSE 'Recycled' END,
                tracker.created_at_utc, tracker.updated_at_utc, tracker.recycled_at_utc,
-               tracker.copied_from_tracker_id
+               tracker.copied_from_tracker_id, link.schema_id
         FROM trackers tracker
+        LEFT JOIN tracker_schemas link ON link.tracker_id = tracker.id
         """;
 }
