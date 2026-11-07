@@ -75,6 +75,7 @@ public sealed class SchemaEditorViewModel : INotifyPropertyChanged
         _newEntityCommand = new RelayCommand(StartNewEntity, () => IsEditable);
         _editCommand = new RelayCommand(EditSelected, () => IsEditable && _selectedRow is not null);
         CloseDetailsCommand = new RelayCommand(CloseDetails);
+        ClearSearchCommand = new RelayCommand(() => SearchText = string.Empty);
         Load(content);
     }
 
@@ -91,6 +92,16 @@ public sealed class SchemaEditorViewModel : INotifyPropertyChanged
     public bool ShowNoEntities => !HasEntities;
     public string EntityCountText => Rows.Count == 1 ? "1 entity" : $"{Rows.Count} entities";
 
+    /// <summary>How many entities the search shows, as on a Tracker's Overview: "3 of 11 entities".</summary>
+    public string SearchResultText => SearchText.Trim().Length == 0
+        ? EntityCountText
+        : $"{MatchCount} of {EntityCountText}";
+
+    /// <summary>Whether the search hides every entity, so the page says so and offers to clear it.</summary>
+    public bool ShowNoMatches => HasEntities && MatchCount == 0;
+
+    private int MatchCount => Rows.Count(Matches);
+
     public DependencyGraphViewModel Graph { get; }
 
     /// <summary>The entity dialog, for a new entity or the selected one.</summary>
@@ -101,7 +112,9 @@ public sealed class SchemaEditorViewModel : INotifyPropertyChanged
         get => _searchText;
         set
         {
-            if (SetField(ref _searchText, value ?? string.Empty)) RowsView.Refresh();
+            if (!SetField(ref _searchText, value ?? string.Empty)) return;
+            RowsView.Refresh();
+            OnSearchChanged();
         }
     }
 
@@ -158,6 +171,7 @@ public sealed class SchemaEditorViewModel : INotifyPropertyChanged
     public ICommand NewEntityCommand => _newEntityCommand;
     public ICommand EditCommand => _editCommand;
     public ICommand CloseDetailsCommand { get; }
+    public ICommand ClearSearchCommand { get; }
 
     /// <summary>Reads the schema again, keeping the selected entity selected while it still exists.</summary>
     public async Task ReloadAsync(CancellationToken cancellationToken = default)
@@ -204,12 +218,19 @@ public sealed class SchemaEditorViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(HasEntities));
         OnPropertyChanged(nameof(ShowNoEntities));
         OnPropertyChanged(nameof(EntityCountText));
+        OnSearchChanged();
 
         _selectedRow = selectedId is null ? null : Rows.FirstOrDefault(row => row.Id == selectedId);
         OnPropertyChanged(nameof(SelectedRow));
         UpdateDetails();
         Form.OnSchemaChanged();
         _newEntityCommand.NotifyCanExecuteChanged();
+    }
+
+    private void OnSearchChanged()
+    {
+        OnPropertyChanged(nameof(SearchResultText));
+        OnPropertyChanged(nameof(ShowNoMatches));
     }
 
     private void UpdateDetails()

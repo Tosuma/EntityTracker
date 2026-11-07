@@ -279,13 +279,13 @@ be restored or permanently deleted.
 ![Schemas page with a card per schema](images/light/project-schemas.png)
 
 An open schema has two tabs. **Entities** lists the schema's entities with their group and number
-of dependencies; search narrows the list by name or group. Selecting an entity shows its details
+of dependencies; search (Ctrl+F) narrows the list by name or group and says how many entities it shows. Selecting an entity shows its details
 beside the list: its group, what it depends on and what depends on it.
 
 ![Schema Entities tab with the selected entity's details](images/light/schema-editor.png)
 
-**Dependency graph** shows the whole schema as a dependency tree; double-click an entity to show its
-details.
+**Dependency graph** shows the whole schema as a dependency tree; find an entity with its search box
+(Ctrl+F), as in a Tracker's graph, and double-click an entity to show its details.
 
 ![Schema shown as a dependency tree](images/light/schema-graph.png)
 

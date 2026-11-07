@@ -28,6 +28,21 @@ public partial class ProjectSchemasView : UserControl
             Dispatcher.BeginInvoke(SchemaGraphCanvas.FitToView, System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
+    /// <summary>Ctrl+F goes to the open tab's search, as on a Tracker's Overview and graph.</summary>
+    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.F || Keyboard.Modifiers != ModifierKeys.Control ||
+            SchemaEditorPage.DataContext is not SchemaEditorViewModel { Form.IsOpen: false } editor ||
+            !SchemaEditorPage.IsVisible) return;
+        if (editor.IsGraphView) SchemaGraphSearchBox.Focus();
+        else
+        {
+            SchemaSearchBox.Focus();
+            SchemaSearchBox.SelectAll();
+        }
+        e.Handled = true;
+    }
+
     /// <summary>Esc closes the details pane, as in a Tracker.</summary>
     private void OnDetailsKeyDown(object sender, KeyEventArgs e)
     {
