@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 
 using EntityTracker.Wpf.ViewModels;
 
@@ -25,6 +26,33 @@ public partial class ProjectSchemasView : UserControl
     {
         if (e.NewValue is true)
             Dispatcher.BeginInvoke(SchemaGraphCanvas.FitToView, System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    /// <summary>Esc closes the details pane, as in a Tracker.</summary>
+    private void OnDetailsKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape || SchemaEditorPage.DataContext is not SchemaEditorViewModel editor) return;
+        editor.CloseDetailsCommand.Execute(null);
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Esc cancels the entity dialog from any of its fields, as in a Tracker's New entity dialog. An open
+    /// drop-down takes the first Esc to close itself.
+    /// </summary>
+    private void OnDialogPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape || SchemaDependencyBox.IsDropDownOpen ||
+            SchemaEntityDialog.DataContext is not SchemaEntityFormViewModel form) return;
+        if (form.CancelCommand.CanExecute(null)) form.CancelCommand.Execute(null);
+        e.Handled = true;
+    }
+
+    /// <summary>The dialog starts in its name box.</summary>
+    private void OnDialogVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is true)
+            Dispatcher.BeginInvoke(() => SchemaEntityNameBox.Focus(), System.Windows.Threading.DispatcherPriority.Input);
     }
 
     private void OnRenameSchema(object sender, RoutedEventArgs e)

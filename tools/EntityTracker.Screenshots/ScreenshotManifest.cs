@@ -22,6 +22,7 @@ internal static class ScreenshotManifest
         "project-schemas.png",
         "schema-editor.png",
         "schema-graph.png",
+        "schema-entity-edit.png",
         "schema-push.png",
         "project-git-repository.png",
         "project-sync-progress.png",

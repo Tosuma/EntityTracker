@@ -279,19 +279,26 @@ be restored or permanently deleted.
 
 ![Schemas page with a card per schema](images/light/project-schemas.png)
 
-An open schema lists its entities with their group and number of dependencies; search narrows the
-list by name or group. Select an entity to edit its name, group and dependencies in the panel beside
-the list, or use **New entity**. To add a dependency, type or choose a name and select **Add**. A name
-the schema doesn't have yet is offered as **Add ‹name› to the schema**: saving the entity adds that
-entity too, so a schema never holds unresolved references, and you can fill in the new entity's own
-dependencies afterwards. A dependency that would make a loop is refused and says why. Removing an
-entity that others depend on lists them first, and removes those dependencies with it.
+An open schema has two tabs. **Entities** lists the schema's entities with their group and number
+of dependencies; search narrows the list by name or group. Selecting an entity shows its details
+beside the list: its group, what it depends on and what depends on it.
 
-![Schema editor with the entity list and the selected entity's dependencies](images/light/schema-editor.png)
+![Schema Entities tab with the selected entity's details](images/light/schema-editor.png)
 
-**Graph** shows the whole schema as a dependency tree; double-click an entity to edit it.
+**Dependency graph** shows the whole schema as a dependency tree; double-click an entity to show its
+details.
 
 ![Schema shown as a dependency tree](images/light/schema-graph.png)
+
+**Edit** in the details, or **New entity** on either tab, opens the entity dialog. As in a Tracker,
+**Create and add another** creates the entity and keeps the dialog open for the next one. To add a
+dependency, type or choose a name and select **Add**. A name the schema doesn't have yet is offered
+as **Add ‹name› to the schema**: saving the entity adds that entity too, so a schema never holds
+unresolved references, and you can fill in the new entity's own dependencies afterwards. A dependency
+that would make a loop is refused and says why. Removing an entity that others depend on lists them
+first, and removes those dependencies with it.
+
+![Editing a schema entity in its dialog](images/light/schema-entity-edit.png)
 
 Schemas are part of the Project, so Git sync shares them with everyone who has it. Changes made on
 different computers are merged: a dependency one person added and another person removed both take

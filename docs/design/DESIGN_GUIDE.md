@@ -189,15 +189,20 @@ Destructive actions require confirmation where the workflow already calls for it
   with an up or down arrow in the Windows accent colour (Fluent's `AccentFillColorDefaultBrush`); a
   filter column's filter icon stays and turns the accent colour while the column is filtered or sorted.
 - The Schemas page lists schemas as cards with the size and layout of the dashboard's Tracker
-  cards (name, entity count, Open and a "…" menu). An open schema is a list with a side panel: the
-  entity table on the left, the selected entity's form on the right with Save and Cancel at its foot
-  and the destructive Remove at the far end. Removing asks in place, naming the entities that depend
-  on it. The read-only graph uses the dependency tree, without status colours to explain.
-  Between the toolbar and the list, a card says whether the schema's Trackers are up to date; when
+  cards (name, entity count, Open and a "…" menu). An open schema has two tabs under its breadcrumb,
+  Entities and Dependency graph (the built-in Fluent tab strip). The schema is a page of the Project
+  dashboard, so it gets no sidebar section of its own. Both tabs work like a Tracker's Overview and
+  Dependency graph: selecting
+  an entity shows its read-only details in a pane on the right (group, depends on, used by) with Edit,
+  and Edit or New entity opens the entity dialog. The dialog has Create entity, Create and add another
+  and Cancel for a new entity, and Save, Cancel and the destructive Remove at the far left for an
+  existing one; removing asks in place, naming the entities that depend on it. The graph uses the
+  dependency tree, without status colours to explain.
+  Between the heading and the tabs, a card says whether the schema's Trackers are up to date; when
   they aren't, it expands to list the unpushed changes, with Push to trackers at its right. The push
-  review covers the list or graph, one card per Tracker like the Sync from source dialog: the
-  changes that apply without asking, then each difference with Use schema and Keep tracker radio
-  buttons, and the bulk buttons above.
+  review covers either tab, one card per Tracker like the Sync from source dialog: the changes that
+  apply without asking, then each difference with Use schema and Keep tracker radio buttons, and the
+  bulk buttons above.
 - Informational overlays use a translucent Dark Green scrim. Focused catalog-management dialogs
   use the stronger scrim semantic so background content cannot compete with the active form.
 - Missing/removal and error states use Coral with Dark Green explanatory text. Synchronization

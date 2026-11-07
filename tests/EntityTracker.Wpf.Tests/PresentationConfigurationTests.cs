@@ -1767,10 +1767,18 @@ public sealed class PresentationConfigurationTests
         Assert.Contains(document.Descendants(), element =>
             (string?)element.Attribute("Style") == "{StaticResource BreadcrumbLinkStyle}" &&
             (string?)element.Attribute("CommandParameter") == "{x:Static viewModels:ShellDestination.ProjectDashboard}");
+        // The heading is centred in a row as tall as a toolbar, as on the dashboard, so the breadcrumb
+        // doesn't sit higher on a page without toolbar buttons beside it.
+        Assert.All(document.Descendants().Where(static element =>
+                (string?)element.Attribute("Style") == "{StaticResource PageHeadingTextStyle}"),
+            static heading => Assert.True(
+                (string?)heading.Attribute("VerticalAlignment") == "Center" ||
+                (string?)heading.Parent?.Attribute("VerticalAlignment") == "Center",
+                "A page heading must be vertically centred in its row."));
     }
 
     [Fact]
-    public void Schemas_AreReachedFromTheDashboardAndEditedInAListWithASidePanel()
+    public void Schemas_AreReachedFromTheDashboardAndEditedThroughDetailsAndADialog()
     {
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
         XDocument dashboard = LoadWpfXaml("Views", "ProjectDashboardView.xaml");
@@ -1791,7 +1799,30 @@ public sealed class PresentationConfigurationTests
         XElement grid = Named("SchemaEntityGrid");
         Assert.Equal("True", (string?)grid.Attribute("IsReadOnly"));
         Assert.Equal("{Binding SelectedRow, Mode=TwoWay}", (string?)grid.Attribute("SelectedItem"));
-        // The side panel's fields are labelled, and a dependency is added by typing or choosing a name.
+        // Entities and Dependency graph are tabs, not a radio-button switch.
+        Assert.DoesNotContain(page.Descendants(), element => element.Name.LocalName == "RadioButton" &&
+            (string?)element.Attribute("GroupName") == "SchemaView");
+        XElement tabs = Named("SchemaViewTabs");
+        Assert.Equal("TabControl", tabs.Name.LocalName);
+        Assert.Equal("{Binding SelectedViewIndex, Mode=TwoWay}", (string?)tabs.Attribute("SelectedIndex"));
+        Assert.Equal(["Entities", "Dependency graph"], tabs.Elements()
+            .Where(static element => element.Name.LocalName == "TabItem")
+            .Select(static element => (string?)element.Attribute("Header")));
+        // New entity is in the toolbar both pages share.
+        Assert.Equal("{Binding NewEntityCommand}", (string?)Named("NewSchemaEntityButton").Attribute("Command"));
+        // The details pane is read-only: it has text and Edit, no input fields.
+        XElement details = Named("SchemaEntityDetailsPane");
+        Assert.DoesNotContain(details.Descendants(), element => element.Name.LocalName is "TextBox" or "ComboBox");
+        Assert.Equal("{Binding DataContext.EditCommand, ElementName=SchemaEditorPage}",
+            (string?)Named("EditSchemaEntityButton").Attribute("Command"));
+        // The dialog's fields are labelled, a dependency is added by typing or choosing a name, and a new
+        // entity can be created with the dialog kept open, as in a Tracker.
+        Assert.Equal("{Binding Form}", (string?)Named("SchemaEntityDialog").Attribute("DataContext"));
+        // Esc closes the dialog from any field, before a field can take the key.
+        Assert.Equal("OnDialogPreviewKeyDown", (string?)Named("SchemaEntityDialog").Attribute("PreviewKeyDown"));
+        Assert.Equal("{Binding CreateAnotherCommand}",
+            (string?)Named("CreateAnotherSchemaEntityButton").Attribute("Command"));
+        Assert.Equal("Create and add another", (string?)Named("CreateAnotherSchemaEntityButton").Attribute("Content"));
         Assert.Equal("{Binding ElementName=SchemaEntityNameLabel}",
             (string?)Named("SchemaEntityNameBox").Attribute("AutomationProperties.LabeledBy"));
         Assert.Equal("{Binding ElementName=SchemaEntityGroupLabel}",
@@ -1839,6 +1870,11 @@ public sealed class PresentationConfigurationTests
             .Descendants().Single(element => element.Name.LocalName == "ItemsControl").Attribute("ItemsSource"));
         XElement review = Named(schemas, "SchemaPushReview");
         Assert.Equal("{Binding Push}", (string?)review.Attribute("DataContext"));
+        // The review covers the details pane, so its buttons are never hidden; the entity dialog stays on top.
+        int ZIndex(string name) => int.Parse((string?)Named(schemas, name).Attribute("Panel.ZIndex") ?? "0",
+            System.Globalization.CultureInfo.InvariantCulture);
+        Assert.True(ZIndex("SchemaPushReview") > ZIndex("SchemaEntityDetailsPane"));
+        Assert.True(ZIndex("SchemaEntityDialog") > ZIndex("SchemaPushReview"));
         Assert.Equal("{Binding ApplyCommand}", (string?)Named(schemas, "ApplyPushButton").Attribute("Command"));
         Assert.Contains(review.Descendants(), element =>
             (string?)element.Attribute("Command") == "{Binding UseSchemaForAllCommand}");
