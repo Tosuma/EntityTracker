@@ -53,7 +53,7 @@ public sealed class SchemaEditorViewModel : INotifyPropertyChanged
     private bool _isGraphView;
 
     public SchemaEditorViewModel(SchemaContent content, SchemaEditingService editing,
-        NotificationCenter? notifications = null, ILogger? logger = null)
+        NotificationCenter? notifications = null, ILogger? logger = null, SchemaTrackerService? trackers = null)
     {
         ArgumentNullException.ThrowIfNull(content);
         _content = content;
@@ -76,6 +76,9 @@ public sealed class SchemaEditorViewModel : INotifyPropertyChanged
         _editCommand = new RelayCommand(EditSelected, () => IsEditable && _selectedRow is not null);
         CloseDetailsCommand = new RelayCommand(CloseDetails);
         ClearSearchCommand = new RelayCommand(() => SearchText = string.Empty);
+        Push = trackers is null
+            ? null
+            : new SchemaPushViewModel(content.Schema.Id, trackers, IsEditable, notifications, logger);
         Load(content);
     }
 
@@ -106,6 +109,10 @@ public sealed class SchemaEditorViewModel : INotifyPropertyChanged
 
     /// <summary>The entity dialog, for a new entity or the selected one.</summary>
     public SchemaEntityFormViewModel Form { get; }
+
+    /// <summary>The schema's unpushed changes and the push review; null where pushing isn't available.</summary>
+    public SchemaPushViewModel? Push { get; }
+    public bool HasPush => Push is not null;
 
     public string SearchText
     {
@@ -177,7 +184,12 @@ public sealed class SchemaEditorViewModel : INotifyPropertyChanged
     public async Task ReloadAsync(CancellationToken cancellationToken = default)
     {
         Load(await _editing.GetContentAsync(Schema.Id, cancellationToken));
+        await RefreshPushAsync(cancellationToken);
     }
+
+    /// <summary>Reads the changes since the last push again.</summary>
+    public Task RefreshPushAsync(CancellationToken cancellationToken = default) =>
+        Push?.RefreshAsync(IsEditable, cancellationToken) ?? Task.CompletedTask;
 
     /// <summary>Throws away the dialog's unsaved changes.</summary>
     public void DiscardChanges() => Form.Close();

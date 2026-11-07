@@ -1,6 +1,7 @@
 using System.Globalization;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Application.Dependencies;
+using EntityTracker.Application.Schemas;
 using EntityTracker.Application.Snapshots;
 using EntityTracker.Domain;
 using Microsoft.Data.Sqlite;
@@ -90,6 +91,13 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
             JOIN schemas owner ON owner.id = entity.schema_id
             WHERE owner.project_id = $projectId;
             """, id, cancellationToken);
+        Dictionary<string, SnapshotSchemaLink> schemaLinks = (await SqliteSchemaLinkStore.ReadAsync(connection,
+                transaction, "tracker_id IN (SELECT id FROM trackers WHERE project_id = $id)", id, cancellationToken))
+            .ToDictionary(static link => SqlitePersistenceValues.Format(link.TrackerId), static link =>
+                new SnapshotSchemaLink(link.SchemaId.Value, link.Entities.Select(static entity =>
+                    new SnapshotSchemaLinkEntity(entity.SchemaEntityId.Value, entity.EntityId?.Value, entity.Name,
+                        entity.GroupName, entity.Dependencies.Select(static d => d.Value).ToArray())).ToArray())
+                    .Normalize(), StringComparer.Ordinal);
         Dictionary<string, TrackerSyncBaseline> baselines = new(StringComparer.Ordinal);
         foreach (Row tracker in trackerRows)
         {
@@ -148,7 +156,8 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                         p.Int("rework_needed_count"), p.Int("development_completed_count"),
                         p.Int("reconciled_count"), order, p.Int("manually_blocked_count"),
                         p.Int("reworking_count"))).ToArray(),
-                baselines.GetValueOrDefault(trackerId));
+                baselines.GetValueOrDefault(trackerId),
+                SchemaLink: schemaLinks.GetValueOrDefault(trackerId));
         }).ToArray();
         SnapshotDeveloper[] developers = developerRows.Select(row => new SnapshotDeveloper(
             row.Guid("id"), row.Guid("project_id"), row.Str("initials"),
@@ -262,6 +271,15 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                     ["dependent_entity_id", "dependency_entity_id"], [Id(entity.Id), Id(dependency)],
                     cancellationToken);
         }
+        // Links last: they refer to the schemas and to the Trackers' entities.
+        foreach (SnapshotTracker tracker in snapshot.Trackers)
+            if (tracker.SchemaLink is { } link)
+                await SqliteSchemaLinkStore.WriteAsync(connection, transaction, new TrackerSchemaLink(
+                    new TrackerId(tracker.Id), new SchemaId(link.SchemaId), link.Entities.Select(static entity =>
+                        new SchemaBaselineEntity(new SchemaEntityId(entity.SchemaEntityId),
+                            entity.EntityId is { } entityId ? new EntityId(entityId) : null, entity.Name,
+                            entity.GroupName, entity.Dependencies.Select(static d => new SchemaEntityId(d)).ToArray()))
+                        .ToArray()), cancellationToken);
         return await CommitRevisionAsync(connection, transaction, projectId, cancellationToken);
     }
 

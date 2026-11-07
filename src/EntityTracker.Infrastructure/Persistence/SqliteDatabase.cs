@@ -7,7 +7,7 @@ namespace EntityTracker.Infrastructure.Persistence;
 
 public sealed class SqliteDatabase
 {
-    internal const int CurrentSchemaVersion = 27;
+    internal const int CurrentSchemaVersion = 28;
 
     private const string InitialSchemaSql = """
         CREATE TABLE tracked_entities
@@ -1040,6 +1040,10 @@ public sealed class SqliteDatabase
             // Version 27: a Project's schemas, their entities and dependencies.
             if (schemaVersion < 27)
                 await SqliteSchemaMigration.MigrateAsync(connection, transaction, cancellationToken);
+
+            // Version 28: Trackers created from a schema keep a link to it and a baseline.
+            if (schemaVersion < 28)
+                await SqliteSchemaLinkMigration.MigrateAsync(connection, transaction, cancellationToken);
 
             if (newDatabase && StartNewDatabaseWithoutProjects)
             {

@@ -1788,6 +1788,91 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         shell.Catalog.CancelCommand.Execute(null);
     }
 
+    [Fact]
+    public async Task Trackers_AreCreatedFromASchemaPushedToAndDetached()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id), new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        Schema schema = await harness.SchemaManagement.CreateAsync(harness.DefaultProject.Id, "Core model");
+        Assert.True((await harness.SchemaEditing.SaveEntityAsync(schema.Id,
+            new SchemaEntityEdit(null, "Order", "Sales", ["Customer"]))).Succeeded);
+
+        // Create tracker offers the Project's schemas as a starting point.
+        shell.Catalog.OpenCreateTracker(harness.DefaultProject);
+        await WaitUntilAsync(() => shell.Catalog.HasSchemaOptions);
+        shell.Catalog.Name = "Team A";
+        shell.Catalog.CreationMode = TrackerCreationMode.Schema;
+        Assert.Equal("Create tracker", shell.Catalog.PrepareTrackerLabel);
+        Assert.False(shell.Catalog.ShowApplyTracker);
+        Assert.Equal("Choose the schema the tracker starts from.", shell.Catalog.SchemaPreview);
+        shell.Catalog.SelectedSchema = Assert.Single(shell.Catalog.SchemaOptions);
+        Assert.StartsWith("The tracker gets Core model's entities", shell.Catalog.SchemaPreview);
+        shell.Catalog.PrepareTrackerCommand.Execute(null);
+        await WaitUntilAsync(() => shell.SelectedTracker?.Name == "Team A" && !shell.Catalog.IsOpen && !shell.IsBusy);
+        Tracker teamA = shell.SelectedTracker!;
+        Assert.Equal(schema.Id, teamA.SchemaId);
+        Assert.Equal(["Customer", "Order"],
+            (await harness.Entities.GetAllAsync(teamA.Id)).Select(e => e.SourceName).Order());
+
+        // The schema editor shows what isn't pushed yet, and the review asks only about the conflict.
+        Assert.True(await shell.NavigateAsync(ShellDestination.Schemas));
+        ProjectSchemasViewModel page = shell.SchemasPage!;
+        await page.OpenAsync(schema.Id);
+        SchemaEditorViewModel editor = page.Editor!;
+        SchemaPushViewModel push = Assert.IsType<SchemaPushViewModel>(editor.Push);
+        Assert.Equal("The tracker made from this schema is up to date.", push.Summary);
+        Assert.False(push.OpenReviewCommand.CanExecute(null));
+
+        await harness.SetGroupAsync(teamA.Id, "Order", "Billing");
+        editor.SelectedRow = editor.Rows.Single(row => row.Name == "Order");
+        editor.EditCommand.Execute(null);
+        editor.Form.Group = "Commerce";
+        editor.Form.SaveCommand.Execute(null);
+        await WaitUntilAsync(() => !editor.Form.IsOpen && push.HasPendingChanges);
+        Assert.Equal("1 change not yet pushed to 1 tracker", push.Summary);
+        Assert.Equal(["Moved Order to group Commerce"], push.PendingChanges);
+
+        push.OpenReviewCommand.Execute(null);
+        await WaitUntilAsync(() => push.IsReviewOpen);
+        SchemaPushTrackerItem tracker = Assert.Single(push.ReviewTrackers);
+        Assert.Equal("Team A", tracker.TrackerName);
+        SchemaPushChangeItem change = Assert.Single(tracker.Changes);
+        Assert.Equal("Use group Commerce", change.UseSchemaLabel);
+        Assert.Equal("Keep group Billing", change.KeepTrackerLabel);
+        Assert.Equal(" This tracker changed it too.", change.ConflictNote);
+        // Nothing is preselected: undecided, the tracker is left for a later push.
+        Assert.False(change.UseSchema || change.KeepTracker);
+        Assert.Equal("Nothing decided: this tracker is left for a later push.", tracker.DecidedText);
+        Assert.StartsWith("0 of 1 change decided.", push.ReviewSummary);
+        Assert.False(push.ApplyCommand.CanExecute(null));
+        tracker.KeepTrackerForAllCommand.Execute(null);
+        Assert.True(change.KeepTracker);
+        Assert.Equal("1 of 1 decided", tracker.DecidedText);
+        Assert.True(push.ApplyCommand.CanExecute(null));
+        tracker.DecideLaterCommand.Execute(null);
+        Assert.False(push.ApplyCommand.CanExecute(null));
+        push.UseSchemaForAllCommand.Execute(null);
+        Assert.True(change.UseSchema);
+        Assert.Equal("All 1 change decided.", push.ReviewSummary);
+        push.ApplyCommand.Execute(null);
+        await WaitUntilAsync(() => !push.IsReviewOpen && !push.HasPendingChanges);
+        Assert.Equal("Commerce", (await harness.Entities.GetAllAsync(teamA.Id)).Single(e => e.SourceName == "Order").GroupName);
+        Assert.Equal("The tracker made from this schema is up to date.", push.Summary);
+
+        // Detaching asks first, then leaves the tracker independent.
+        shell.Catalog.RequestDetach(teamA, "Core model");
+        Assert.Equal("Detach from schema?", shell.Catalog.DialogTitle);
+        Assert.Contains("can't be attached to a schema again", shell.Catalog.DetachText);
+        shell.Catalog.ConfirmDetachCommand.Execute(null);
+        await WaitUntilAsync(async () => !shell.Catalog.IsOpen &&
+            (await harness.SchemaTrackers.GetPendingChangesAsync(schema.Id)).LinkedTrackerCount == 0);
+        Assert.Equal(2, (await harness.Entities.GetAllAsync(teamA.Id)).Count);
+        await page.OpenAsync(schema.Id);
+        await WaitUntilAsync(() => page.Editor?.Push?.Summary.StartsWith("No trackers", StringComparison.Ordinal) == true);
+    }
+
     private sealed class ShellHarness : IAsyncDisposable
     {
         private readonly string _directory;
@@ -1907,7 +1992,11 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
                 dependencies,
                 history,
                 resolver,
-                snapshots);
+                snapshots,
+                new SqliteSchemaStore(database));
+            SchemaTrackerService schemaTrackers = new(projects, trackers, entities, dependencies,
+                new SqliteSchemaStore(database), new SqliteSchemaLinkStore(database), catalogStore,
+                resolver, snapshots, ranker);
             ProgressHistoryInitializer historyInitializer = new(
                 entities,
                 dependencies,
@@ -1964,7 +2053,8 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
                 projects,
                 trackers,
                 new TrackerSyncService(projects, trackers, entities, dependencies, stateStore, resolver, snapshots, (IDependencyRankingService)ranker),
-                schemaService: new SchemaManagementService(projects, new SqliteSchemaStore(database)));
+                schemaService: new SchemaManagementService(projects, new SqliteSchemaStore(database)),
+                schemaTrackers: schemaTrackers);
             AppearanceViewModel appearance = new(
                 settings,
                 new TestThemeService());
@@ -1989,6 +2079,7 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
             harness.Entities = entities;
             harness.SchemaManagement = new SchemaManagementService(projects, new SqliteSchemaStore(database));
             harness.SchemaEditing = new SchemaEditingService(new SqliteSchemaStore(database));
+            harness.SchemaTrackers = schemaTrackers;
             harness.ReportBuilder = new EntityTracker.Reporting.ProjectReports.ProjectReportBuilder(
                 // Local, as in the app: the report view model counts days from the local date.
                 projects, trackers, new ProgressReportingService(history, TimeZoneInfo.Local),
@@ -2003,6 +2094,16 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         public SchemaManagementService SchemaManagement { get; private set; } = null!;
 
         public SchemaEditingService SchemaEditing { get; private set; } = null!;
+
+        public SchemaTrackerService SchemaTrackers { get; private set; } = null!;
+
+        public async Task SetGroupAsync(TrackerId trackerId, string name, string group)
+        {
+            TrackedEntity entity = (await Entities.GetAllAsync(trackerId)).Single(item => item.SourceName == name);
+            entity.ChangeGroupName(group);
+            await _stateStore.ApplyAsync(trackerId, new TrackedStateChangeSet([], [], [],
+                entitiesWithGroupNameToUpdate: [entity]));
+        }
 
         public async Task SetFilterActiveAsync(TrackerId trackerId, string name, string filterActive)
         {
@@ -2040,7 +2141,8 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
                 projectSnapshots: Snapshots,
                 autoSync: autoSync,
                 schemaManagement: SchemaManagement,
-                schemaEditing: SchemaEditing);
+                schemaEditing: SchemaEditing,
+                schemaTrackers: SchemaTrackers);
 
         public Task<ProjectDeveloper> CreateDeveloperAsync(string initials) =>
             _developers.CreateAsync(DefaultProject.Id, initials);

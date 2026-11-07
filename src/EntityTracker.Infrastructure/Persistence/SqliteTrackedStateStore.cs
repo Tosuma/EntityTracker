@@ -70,7 +70,6 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
         ArgumentNullException.ThrowIfNull(changeSet);
 
         DateTimeOffset appliedAtUtc = _database.TimeProvider.GetUtcNow();
-        string timestamp = SqlitePersistenceValues.FormatTimestamp(appliedAtUtc);
         await using SqliteConnection connection =
             await _database.OpenConnectionAsync(cancellationToken);
         await using SqliteTransaction transaction =
@@ -89,170 +88,8 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
                     throw new InvalidOperationException(
                         "A tracker changed after this review opened. Open a new sync review.");
             }
-            await ValidateScopeAsync(
-                connection,
-                transaction,
-                trackerId,
-                changeSet,
+            await ApplyChangeSetAsync(connection, transaction, trackerId, changeSet, appliedAtUtc,
                 cancellationToken);
-            foreach (TrackedEntity entity in changeSet.EntitiesToAdd)
-            {
-                await InsertEntityAsync(
-                    connection,
-                    transaction,
-                    trackerId,
-                    entity,
-                    timestamp,
-                    cancellationToken);
-                if (entity.IsPlaceholder) continue;
-                await InsertStatusHistoryAsync(
-                    connection,
-                    transaction,
-                    entity.Id,
-                    null,
-                    entity.Status,
-                    StatusHistoryEntryKind.Created,
-                    timestamp,
-                    cancellationToken);
-            }
-
-            // Dependencies change before entities are updated: a rename onto a placeholder's name
-            // needs the placeholder's dependents moved, and the placeholder gone, first.
-            foreach (EntityId ownerId in changeSet.DependencyOwnerIds)
-            {
-                EntityDependency[] desired = changeSet.Dependencies
-                    .Where(item => item.DependentEntityId == ownerId)
-                    .ToArray();
-
-                await DeleteRemovedDependenciesAsync(
-                    connection,
-                    transaction,
-                    ownerId,
-                    desired,
-                    cancellationToken);
-                foreach (EntityDependency dependency in desired)
-                {
-                    await UpsertDependencyAsync(
-                        connection,
-                        transaction,
-                        dependency,
-                        timestamp,
-                        cancellationToken);
-                }
-            }
-
-            await DeleteUnreferencedPlaceholdersAsync(connection, transaction, trackerId, cancellationToken);
-
-            foreach (ResponsibilitySelection selection in changeSet.ResponsibilitySelections)
-                await SqliteResponsibilityWriter.ApplySelectionAsync(connection, transaction,
-                    trackerId, selection, appliedAtUtc.ToUniversalTime(), cancellationToken);
-
-            foreach (ResponsibilityAddition addition in changeSet.ResponsibilityAdditions)
-                await SqliteResponsibilityWriter.AddCurrentAsync(connection, transaction,
-                    trackerId, addition, appliedAtUtc.ToUniversalTime(), cancellationToken);
-
-            foreach (ResponsibilityRemoval removal in changeSet.ResponsibilityRemovals)
-                await SqliteResponsibilityWriter.RemoveCurrentAsync(connection, transaction,
-                    trackerId, removal, appliedAtUtc.ToUniversalTime(), cancellationToken);
-
-            foreach (TrackedEntity entity in changeSet.EntitiesToUpdate)
-            {
-                await UpdateEntityAsync(
-                    connection,
-                    transaction,
-                    entity,
-                    timestamp,
-                    cancellationToken);
-            }
-
-            foreach (TrackedEntity entity in changeSet.EntitiesWithProgressToUpdate)
-            {
-                bool statusChanged = await SqliteStatusEvents.AppendAsync(
-                    connection,
-                    transaction,
-                    entity.Id,
-                    entity.Status,
-                    StatusHistoryEntryKind.Transition,
-                    timestamp,
-                    cancellationToken);
-                await UpdateProgressAsync(
-                    connection,
-                    transaction,
-                    entity,
-                    statusChanged,
-                    timestamp,
-                    cancellationToken);
-            }
-
-            foreach (TrackedEntity entity in changeSet.EntitiesWithRequestedPriorityToUpdate)
-            {
-                await UpdateRequestedPriorityAsync(
-                    connection,
-                    transaction,
-                    entity,
-                    cancellationToken);
-            }
-
-            foreach (TrackedEntity entity in changeSet.EntitiesWithGroupNameToUpdate)
-            {
-                await UpdateGroupNameAsync(
-                    connection,
-                    transaction,
-                    entity,
-                    cancellationToken);
-            }
-
-            foreach (TrackedEntity entity in changeSet.EntitiesWithDueDateToUpdate)
-            {
-                await UpdateDueDateAsync(
-                    connection,
-                    transaction,
-                    entity,
-                    cancellationToken);
-            }
-
-            foreach (EntityId entityId in changeSet.EntityIdsToArchive)
-            {
-                await ArchiveEntityAsync(
-                    connection,
-                    transaction,
-                    entityId,
-                    timestamp,
-                    cancellationToken);
-            }
-
-            foreach (EntityId entityId in changeSet.EntityIdsToRestore)
-            {
-                await RestoreEntityAsync(
-                    connection,
-                    transaction,
-                    entityId,
-                    timestamp,
-                    cancellationToken);
-            }
-
-            foreach (EntityId entityId in changeSet.EntityIdsToPurge)
-            {
-                await PurgeArchivedEntityAsync(
-                    connection,
-                    transaction,
-                    trackerId,
-                    entityId,
-                    cancellationToken);
-            }
-
-            await DeleteUnreferencedPlaceholdersAsync(connection, transaction, trackerId, cancellationToken);
-
-            if (changeSet.ProgressSnapshotAfterChanges is not null)
-            {
-                await InsertSnapshotIfChangedAsync(
-                    connection,
-                    transaction,
-                    trackerId,
-                    changeSet.ProgressSnapshotAfterChanges,
-                    timestamp,
-                    cancellationToken);
-            }
 
             if (syncCommit is not null)
                 await SqliteSyncBaselineRows.WriteAsync(connection, transaction,
@@ -268,7 +105,183 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
         }
     }
 
-    private static async Task<string> FingerprintAsync(
+    /// <summary>Applies a validated change set to a Tracker within the caller's transaction.</summary>
+    internal static async Task ApplyChangeSetAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        TrackerId trackerId,
+        TrackedStateChangeSet changeSet,
+        DateTimeOffset appliedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        string timestamp = SqlitePersistenceValues.FormatTimestamp(appliedAtUtc);
+        await ValidateScopeAsync(
+            connection,
+            transaction,
+            trackerId,
+            changeSet,
+            cancellationToken);
+        foreach (TrackedEntity entity in changeSet.EntitiesToAdd)
+        {
+            await InsertEntityAsync(
+                connection,
+                transaction,
+                trackerId,
+                entity,
+                timestamp,
+                cancellationToken);
+            if (entity.IsPlaceholder) continue;
+            await InsertStatusHistoryAsync(
+                connection,
+                transaction,
+                entity.Id,
+                null,
+                entity.Status,
+                StatusHistoryEntryKind.Created,
+                timestamp,
+                cancellationToken);
+        }
+
+        // Dependencies change before entities are updated: a rename onto a placeholder's name
+        // needs the placeholder's dependents moved, and the placeholder gone, first.
+        foreach (EntityId ownerId in changeSet.DependencyOwnerIds)
+        {
+            EntityDependency[] desired = changeSet.Dependencies
+                .Where(item => item.DependentEntityId == ownerId)
+                .ToArray();
+
+            await DeleteRemovedDependenciesAsync(
+                connection,
+                transaction,
+                ownerId,
+                desired,
+                cancellationToken);
+            foreach (EntityDependency dependency in desired)
+            {
+                await UpsertDependencyAsync(
+                    connection,
+                    transaction,
+                    dependency,
+                    timestamp,
+                    cancellationToken);
+            }
+        }
+
+        await DeleteUnreferencedPlaceholdersAsync(connection, transaction, trackerId, cancellationToken);
+
+        foreach (ResponsibilitySelection selection in changeSet.ResponsibilitySelections)
+            await SqliteResponsibilityWriter.ApplySelectionAsync(connection, transaction,
+                trackerId, selection, appliedAtUtc.ToUniversalTime(), cancellationToken);
+
+        foreach (ResponsibilityAddition addition in changeSet.ResponsibilityAdditions)
+            await SqliteResponsibilityWriter.AddCurrentAsync(connection, transaction,
+                trackerId, addition, appliedAtUtc.ToUniversalTime(), cancellationToken);
+
+        foreach (ResponsibilityRemoval removal in changeSet.ResponsibilityRemovals)
+            await SqliteResponsibilityWriter.RemoveCurrentAsync(connection, transaction,
+                trackerId, removal, appliedAtUtc.ToUniversalTime(), cancellationToken);
+
+        foreach (TrackedEntity entity in changeSet.EntitiesToUpdate)
+        {
+            await UpdateEntityAsync(
+                connection,
+                transaction,
+                entity,
+                timestamp,
+                cancellationToken);
+        }
+
+        foreach (TrackedEntity entity in changeSet.EntitiesWithProgressToUpdate)
+        {
+            bool statusChanged = await SqliteStatusEvents.AppendAsync(
+                connection,
+                transaction,
+                entity.Id,
+                entity.Status,
+                StatusHistoryEntryKind.Transition,
+                timestamp,
+                cancellationToken);
+            await UpdateProgressAsync(
+                connection,
+                transaction,
+                entity,
+                statusChanged,
+                timestamp,
+                cancellationToken);
+        }
+
+        foreach (TrackedEntity entity in changeSet.EntitiesWithRequestedPriorityToUpdate)
+        {
+            await UpdateRequestedPriorityAsync(
+                connection,
+                transaction,
+                entity,
+                cancellationToken);
+        }
+
+        foreach (TrackedEntity entity in changeSet.EntitiesWithGroupNameToUpdate)
+        {
+            await UpdateGroupNameAsync(
+                connection,
+                transaction,
+                entity,
+                cancellationToken);
+        }
+
+        foreach (TrackedEntity entity in changeSet.EntitiesWithDueDateToUpdate)
+        {
+            await UpdateDueDateAsync(
+                connection,
+                transaction,
+                entity,
+                cancellationToken);
+        }
+
+        foreach (EntityId entityId in changeSet.EntityIdsToArchive)
+        {
+            await ArchiveEntityAsync(
+                connection,
+                transaction,
+                entityId,
+                timestamp,
+                cancellationToken);
+        }
+
+        foreach (EntityId entityId in changeSet.EntityIdsToRestore)
+        {
+            await RestoreEntityAsync(
+                connection,
+                transaction,
+                entityId,
+                timestamp,
+                cancellationToken);
+        }
+
+        foreach (EntityId entityId in changeSet.EntityIdsToPurge)
+        {
+            await PurgeArchivedEntityAsync(
+                connection,
+                transaction,
+                trackerId,
+                entityId,
+                cancellationToken);
+        }
+
+        await DeleteUnreferencedPlaceholdersAsync(connection, transaction, trackerId, cancellationToken);
+
+        if (changeSet.ProgressSnapshotAfterChanges is not null)
+        {
+            await InsertSnapshotIfChangedAsync(
+                connection,
+                transaction,
+                trackerId,
+                changeSet.ProgressSnapshotAfterChanges,
+                timestamp,
+                cancellationToken);
+        }
+    }
+
+    internal static async Task<string> FingerprintAsync(
         SqliteConnection connection, SqliteTransaction transaction,
         TrackerId trackerId, CancellationToken cancellationToken)
     {
@@ -280,7 +293,8 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
             "SELECT e.id, e.source_name, s.development_status, e.notes, e.filter_active, e.shared_notes, e.lifecycle_state, e.requested_priority, e.due_date, e.group_name, e.schema_updated_at_utc, e.progress_updated_at_utc FROM tracked_entities e JOIN entity_current_status s ON s.entity_id = e.id WHERE e.tracker_id = $id ORDER BY e.id;",
             "SELECT d.dependent_entity_id, d.dependency_entity_id, d.updated_at_utc FROM entity_dependencies d JOIN tracked_entities e ON e.id = d.dependent_entity_id WHERE e.tracker_id = $id ORDER BY d.dependent_entity_id, d.dependency_entity_id;",
             "SELECT b.side, b.name, b.is_active, b.requested_priority, b.due_date, b.group_name, b.filter_active, d.dependency_name FROM tracker_sync_baseline_entities b LEFT JOIN tracker_sync_baseline_dependencies d ON d.baseline_entity_id = b.id WHERE b.tracker_id = $id ORDER BY b.side, b.name, d.dependency_name;",
-            "SELECT p.id, p.entity_id, p.developer_id, p.started_at_utc, p.ended_at_utc FROM responsibility_periods p JOIN tracked_entities e ON e.id = p.entity_id WHERE e.tracker_id = $id ORDER BY p.id;"
+            "SELECT p.id, p.entity_id, p.developer_id, p.started_at_utc, p.ended_at_utc FROM responsibility_periods p JOIN tracked_entities e ON e.id = p.entity_id WHERE e.tracker_id = $id ORDER BY p.id;",
+            "SELECT l.schema_id, b.schema_entity_id, b.entity_id, b.name, b.group_name, d.dependency_schema_entity_id FROM tracker_schemas l LEFT JOIN tracker_schema_entities b ON b.tracker_id = l.tracker_id LEFT JOIN tracker_schema_dependencies d ON d.tracker_id = b.tracker_id AND d.dependent_schema_entity_id = b.schema_entity_id WHERE l.tracker_id = $id ORDER BY b.schema_entity_id, d.dependency_schema_entity_id;"
         ];
         foreach (string query in queries)
         {
@@ -695,6 +709,9 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
         using SqliteCommand history = CreateCommand(connection, transaction, """
             DELETE FROM entity_status_history
             WHERE entity_id = $entityId;
+            -- A permanently deleted entity is no longer linked to its schema entity, also when it stays
+            -- as a placeholder.
+            UPDATE tracker_schema_entities SET entity_id = NULL WHERE entity_id = $entityId;
             """);
         history.Parameters.AddWithValue("$entityId", SqlitePersistenceValues.Format(entityId));
         await history.ExecuteNonQueryAsync(cancellationToken);

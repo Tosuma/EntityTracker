@@ -112,6 +112,13 @@ public sealed class SqliteProjectTrackerStore(
                 await SqliteSyncBaselineRows.WriteAsync(connection, transaction,
                     SqlitePersistenceValues.Format(tracker.Id), syncBaseline, cancellationToken);
 
+            if (creation.SchemaLink is { } schemaLink)
+            {
+                if (schemaLink.TrackerId != tracker.Id || schemaLink.SchemaId != tracker.SchemaId)
+                    throw new InvalidOperationException("The schema link belongs to another tracker.");
+                await SqliteSchemaLinkStore.WriteAsync(connection, transaction, schemaLink, cancellationToken);
+            }
+
             await transaction.CommitAsync(cancellationToken);
         }
         catch (SqliteException exception) when (exception.SqliteErrorCode == 19)

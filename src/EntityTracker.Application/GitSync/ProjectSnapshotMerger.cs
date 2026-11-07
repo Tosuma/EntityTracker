@@ -56,6 +56,7 @@ public sealed class ProjectSnapshotMerger
                 t => t.Id, MergeTracker), developers,
             ThreeWayMerge.Keyed("Schema", basis?.Schemas, local.Schemas ?? [], remote.Schemas ?? [],
                 s => s.Id, MergeSchema));
+        merged = SettleSchemaLinks(merged);
         merged = ResolveRetiredAssignments(merged, basis, local, remote);
         if (_conflicts.Count == 0) ProjectSnapshotValidator.Validate(merged);
         ProjectMergeConflictPresenter presenter = new(basis, local, remote);
@@ -193,6 +194,7 @@ public sealed class ProjectSnapshotMerger
             CopiedFromTrackerId = Field(path + "/CopiedFromTrackerId", b.CopiedFromTrackerId,
                 l.CopiedFromTrackerId, r.CopiedFromTrackerId),
             SyncBaseline = MergeBaseline(b.SyncBaseline, l.SyncBaseline, r.SyncBaseline),
+            SchemaLink = MergeSchemaLink(b.SchemaLink, l.SchemaLink, r.SchemaLink),
             Entities = ThreeWayMerge.Keyed(path + "/Entity", b.Entities, l.Entities, r.Entities,
                 e => e.Id, MergeEntity)
         };
@@ -503,6 +505,75 @@ public sealed class ProjectSnapshotMerger
                 byName.TryAdd(TrackerSyncPlanner.Key(entity.Name), entity);
             return byName;
         }
+    }
+
+    /// <summary>
+    /// Merges a Tracker's schema link without asking: like the Sync from source baseline, it is bookkeeping.
+    /// A detach on either side wins, since it was someone's decision. A schema entity both sides pushed
+    /// differently is left out of the baseline, so the next push links it again by name and asks about any
+    /// difference.
+    /// </summary>
+    private SnapshotSchemaLink? MergeSchemaLink(SnapshotSchemaLink? basis, SnapshotSchemaLink? local,
+        SnapshotSchemaLink? remote)
+    {
+        basis = _twoWay ? null : basis?.Normalize();
+        local = local?.Normalize();
+        remote = remote?.Normalize();
+        if (Same(local, remote)) return local;
+        if (!_twoWay && Same(local, basis)) return remote;
+        if (!_twoWay && Same(remote, basis)) return local;
+        if (local is null || remote is null || local.SchemaId != remote.SchemaId) return null;
+
+        Dictionary<Guid, SnapshotSchemaLinkEntity> b = (basis?.SchemaId == local.SchemaId ? basis.Entities : [])
+            .ToDictionary(static e => e.SchemaEntityId);
+        Dictionary<Guid, SnapshotSchemaLinkEntity> l = local.Entities.ToDictionary(static e => e.SchemaEntityId);
+        Dictionary<Guid, SnapshotSchemaLinkEntity> r = remote.Entities.ToDictionary(static e => e.SchemaEntityId);
+        List<SnapshotSchemaLinkEntity> kept = [];
+        foreach (Guid id in l.Keys.Union(r.Keys).Union(b.Keys))
+        {
+            l.TryGetValue(id, out SnapshotSchemaLinkEntity? lv);
+            r.TryGetValue(id, out SnapshotSchemaLinkEntity? rv);
+            b.TryGetValue(id, out SnapshotSchemaLinkEntity? bv);
+            SnapshotSchemaLinkEntity? entity = Same(lv, rv) ? lv
+                : !_twoWay && Same(lv, bv) ? rv
+                : !_twoWay && Same(rv, bv) ? lv
+                : null;
+            if (entity is not null) kept.Add(entity);
+        }
+        return new SnapshotSchemaLink(local.SchemaId, kept).Normalize();
+    }
+
+    /// <summary>
+    /// After a merge, a link to a schema that is gone is dropped, a link to an entity that is gone or
+    /// linked twice is cleared, and a baseline dependency on a schema entity the baseline lost is dropped.
+    /// </summary>
+    private static ProjectSnapshot SettleSchemaLinks(ProjectSnapshot merged)
+    {
+        HashSet<Guid> schemas = (merged.Schemas ?? []).Select(static s => s.Id).ToHashSet();
+        return merged with
+        {
+            Trackers = merged.Trackers.Select(tracker =>
+            {
+                if (tracker.SchemaLink is not { } link) return tracker;
+                if (!schemas.Contains(link.SchemaId)) return tracker with { SchemaLink = null };
+                HashSet<Guid> entities = tracker.Entities
+                    .Where(static e => e.LifecycleState != nameof(EntityTracker.Domain.EntityLifecycleState.Placeholder))
+                    .Select(static e => e.Id).ToHashSet();
+                HashSet<Guid> baseline = link.Entities.Select(static e => e.SchemaEntityId).ToHashSet();
+                HashSet<Guid> linked = [];
+                return tracker with
+                {
+                    SchemaLink = link with
+                    {
+                        Entities = link.Entities.Select(e => e with
+                        {
+                            EntityId = e.EntityId is { } id && entities.Contains(id) && linked.Add(id) ? id : null,
+                            Dependencies = e.Dependencies.Where(baseline.Contains).ToArray()
+                        }).ToArray()
+                    }
+                };
+            }).ToArray()
+        };
     }
 
     private T Field<T>(string path, T basis, T local, T remote,

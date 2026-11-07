@@ -388,14 +388,26 @@ A linked Project is stored in its repository under `.entitytracker/`, one JSON f
 - each developer;
 - each Tracker (`tracker.json`), with one file per entity, status history event and progress record
   under it;
-- each schema (`schemas/<id>/schema.json`), with one file per schema entity under it.
+- each schema (`schemas/<id>/schema.json`), with one file per schema entity under it;
+- a Tracker made from a schema keeps its link in `tracker.json` (`schemaLink`): the schema's ID and,
+  per schema entity, the linked Tracker entity and the name, group and dependencies it last took from
+  the schema.
 
 Schemas merge field by field like Trackers. A schema entity's dependencies merge as a set (an
 addition on one side and a removal on the other both take effect), a dependency on an entity the
 other side removed is dropped, and entities both sides added with the same name are folded into one
 (`ProjectSnapshotMerger.SettleSchema`).
 
+A Tracker's schema link merges without asking, like the Sync from source baseline: a detach on either
+side wins, and a schema entity both sides pushed differently is left out of the baseline, so the next
+push links it again by name and asks about any difference (`ProjectSnapshotMerger.MergeSchemaLink`).
+After the merge, a link to a schema that is gone is dropped (`SettleSchemaLinks`).
+
 `ProjectSnapshotJsonCodec` writes them; `ProjectSnapshot.CurrentFormatVersion` is the format.
+- **Format 12:** adds a Tracker's schema link (`schemaLink` in `tracker.json`). An older app refuses
+  the unknown property, so a format 12 Project needs this version or later. The SQLite schema is
+  version 28 (`tracker_schemas`, `tracker_schema_entities` and `tracker_schema_dependencies`, with
+  revision triggers).
 - **Format 11:** adds the Project's schemas: `schemas/<id>/schema.json` (name, lifecycle and
   timestamps) and `schemas/<id>/entities/<id>.json` (name, group and the IDs of the entities it depends
   on). An older app would drop them, so a format 11 Project needs this version or later. The SQLite
