@@ -17,6 +17,18 @@ internal static class SqlitePersistenceValues
     public static string Format(TrackerId trackerId) =>
         trackerId.Value.ToString("D", CultureInfo.InvariantCulture);
 
+    public static string Format(SchemaId schemaId) =>
+        schemaId.Value.ToString("D", CultureInfo.InvariantCulture);
+
+    public static string Format(SchemaEntityId entityId) =>
+        entityId.Value.ToString("D", CultureInfo.InvariantCulture);
+
+    public static SchemaId ParseSchemaId(string value) =>
+        new(ParseGuid(value, "schema"));
+
+    public static SchemaEntityId ParseSchemaEntityId(string value) =>
+        new(ParseGuid(value, "schema entity"));
+
     public static EntityId ParseEntityId(string value)
     {
         if (!Guid.TryParseExact(value, "D", out Guid id))

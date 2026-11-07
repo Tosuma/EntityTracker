@@ -38,7 +38,7 @@ public sealed class Project
         string normalized = name.Trim();
         if (normalized.Length == 0)
         {
-            throw new ArgumentException("A project or tracker name cannot be empty.", nameof(name));
+            throw new ArgumentException("A project, tracker or schema name cannot be empty.", nameof(name));
         }
 
         return normalized;

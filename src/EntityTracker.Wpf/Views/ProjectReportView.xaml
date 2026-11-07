@@ -10,7 +10,10 @@
     </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <StackPanel MaxWidth="1100" HorizontalAlignment="Left" DataContext="{Binding ProjectReport}" controls:ChartThemeFollower.Target="{Binding Charts}">
-            <TextBlock Style="{StaticResource PageHeadingTextStyle}">
+            <!-- The heading row is as tall as a toolbar, with the heading centred, so the breadcrumb sits where
+                 it does on the dashboard and the other pages that have a toolbar. -->
+            <Grid x:Name="ReportHeadingRow" MinHeight="{DynamicResource Height.Control}">
+            <TextBlock VerticalAlignment="Center" Style="{StaticResource PageHeadingTextStyle}">
                 <Hyperlink Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                            CommandParameter="{x:Static viewModels:ShellDestination.ProjectDashboard}"
                            AutomationProperties.HelpText="Go back to the project dashboard"
@@ -19,6 +22,7 @@
                 <Run Foreground="{DynamicResource Brush.Text.Secondary}" Text=" › " />
                 <Run Text="Project report" />
             </TextBlock>
+            </Grid>
             <TextBlock Margin="0,4,0,18" Style="{StaticResource PageDescriptionTextStyle}" TextWrapping="Wrap"
                        Text="Create a report of this Project to share. It is one web page that works offline: open it in any browser, search it, and print it to PDF if a document is needed." />
 

@@ -387,9 +387,20 @@ A linked Project is stored in its repository under `.entitytracker/`, one JSON f
 - the manifest and the Project;
 - each developer;
 - each Tracker (`tracker.json`), with one file per entity, status history event and progress record
-  under it.
+  under it;
+- each schema (`schemas/<id>/schema.json`), with one file per schema entity under it.
+
+Schemas merge field by field like Trackers. A schema entity's dependencies merge as a set (an
+addition on one side and a removal on the other both take effect), a dependency on an entity the
+other side removed is dropped, and entities both sides added with the same name are folded into one
+(`ProjectSnapshotMerger.SettleSchema`).
 
 `ProjectSnapshotJsonCodec` writes them; `ProjectSnapshot.CurrentFormatVersion` is the format.
+- **Format 11:** adds the Project's schemas: `schemas/<id>/schema.json` (name, lifecycle and
+  timestamps) and `schemas/<id>/entities/<id>.json` (name, group and the IDs of the entities it depends
+  on). An older app would drop them, so a format 11 Project needs this version or later. The SQLite
+  schema is version 27 (`schemas`, `schema_entities` and `schema_entity_dependencies`, with revision
+  triggers).
 - **Format 10:** a Sync from source baseline keeps each entity's ID (`id`), and for a copy's entity
   that kept another name, the source name it is paired with (`sourceName`), so a rename is recognised.
   An older app refuses the unknown properties, so a format 10 Project needs this version or later.

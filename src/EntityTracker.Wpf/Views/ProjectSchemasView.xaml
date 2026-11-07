@@ -1,0 +1,436 @@
+<UserControl x:Class="EntityTracker.Wpf.Views.ProjectSchemasView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels"
+             xmlns:controls="clr-namespace:EntityTracker.Wpf.Controls"
+             PreviewKeyDown="OnPreviewKeyDown">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <Style TargetType="DataGrid" BasedOn="{StaticResource EntityTrackerDataGridStyle}" />
+    </UserControl.Resources>
+    <!-- The page's DataContext is the shell, for the breadcrumb back to the dashboard; the rest binds the
+         Schemas page. -->
+    <Grid x:Name="SchemasRoot" DataContext="{Binding SchemasPage}">
+
+        <!-- The list: one card per schema. -->
+        <Grid x:Name="SchemaListPage" Visibility="{Binding IsListing, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <DockPanel Margin="0,0,0,18">
+                <WrapPanel Style="{StaticResource PageToolbarStyle}">
+                    <Button x:Name="CreateSchemaButton" Command="{Binding CreateSchemaCommand}" Content="Create schema"
+                            Style="{StaticResource PrimaryButtonStyle}" />
+                </WrapPanel>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource PageHeadingTextStyle}">
+                        <Hyperlink Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                   CommandParameter="{x:Static viewModels:ShellDestination.ProjectDashboard}"
+                                   AutomationProperties.HelpText="Go back to the project dashboard"
+                                   ToolTip="Back to the project dashboard"
+                                   Style="{StaticResource BreadcrumbLinkStyle}"><Run Text="{Binding ProjectName, Mode=OneWay}" /></Hyperlink>
+                        <Run Foreground="{DynamicResource Brush.Text.Secondary}" Text=" › " />
+                        <Run Text="Schemas" />
+                    </TextBlock>
+                </StackPanel>
+            </DockPanel>
+            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Margin="0,0,0,18" MaxWidth="900" HorizontalAlignment="Left" TextWrapping="Wrap"
+                               Style="{StaticResource PageDescriptionTextStyle}"
+                               Text="A schema lists which entities exist in this project and how they depend on each other. It holds no progress: trackers keep their own statuses, notes and developers." />
+                    <Border x:Name="SchemasEmptyState" MaxWidth="560" HorizontalAlignment="Left" Padding="18"
+                            Style="{StaticResource EntityTrackerCardStyle}"
+                            Visibility="{Binding ShowEmptyState, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <StackPanel>
+                            <TextBlock FontSize="17" FontWeight="SemiBold" Text="No schemas yet" />
+                            <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Style="{StaticResource PageDescriptionTextStyle}"
+                                       Text="Create a schema to describe the entities your trackers share." />
+                        </StackPanel>
+                    </Border>
+                    <ItemsControl x:Name="SchemaCards" ItemsSource="{Binding Schemas}" AutomationProperties.Name="Schemas">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type viewModels:SchemaCard}">
+                                <Border Width="390" MinHeight="170" Margin="0,0,14,14" Padding="18"
+                                        Style="{StaticResource EntityTrackerCardStyle}">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="*" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock FontSize="19" FontWeight="SemiBold" Text="{Binding Name}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <StackPanel Grid.Row="1" Margin="0,12">
+                                            <TextBlock Text="{Binding EntityCountText}" />
+                                            <TextBlock Margin="0,7,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                       Text="{Binding UpdatedText}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="2" Orientation="Horizontal">
+                                            <Button Margin="0,0,8,0" Content="Open"
+                                                    Command="{Binding DataContext.OpenSchemaCommand, ElementName=SchemasRoot}"
+                                                    CommandParameter="{Binding}"
+                                                    AutomationProperties.Name="{Binding Name, StringFormat=Open schema {0}}"
+                                                    Style="{StaticResource PrimaryButtonStyle}" />
+                                            <Button Click="OnSchemaActionsClick" ToolTip="Schema actions"
+                                                    AutomationProperties.Name="{Binding Name, StringFormat=Actions for schema {0}}"
+                                                    Style="{StaticResource SecondaryIconButtonStyle}">
+                                                <controls:Icon IconKey="Icon.MoreHorizontal" Size="18" />
+                                                <Button.ContextMenu>
+                                                    <ContextMenu Placement="Bottom">
+                                                        <MenuItem Header="_Rename schema…" Click="OnRenameSchema" />
+                                                        <MenuItem Header="Re_cycle schema…" Click="OnRecycleSchema" />
+                                                    </ContextMenu>
+                                                </Button.ContextMenu>
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- The open schema, on its Entities or Dependency graph tab, with the selected entity's details
+             beside it and the entity dialog over it. -->
+        <Grid x:Name="SchemaEditorPage" DataContext="{Binding Editor}"
+              Visibility="{Binding DataContext.IsEditing, ElementName=SchemasRoot, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <DockPanel Margin="0,0,0,12">
+                <WrapPanel Style="{StaticResource PageToolbarStyle}">
+                    <!-- The page's search, as on a Tracker's Overview: focused by Ctrl+F, with how many entities it
+                         shows. The Dependency graph tab finds an entity the way a Tracker's graph does. -->
+                    <StackPanel Orientation="Horizontal"
+                                Visibility="{Binding IsListView, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <TextBlock Margin="0,0,12,0" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Text="{Binding SearchResultText}" AutomationProperties.LiveSetting="Polite" />
+                        <controls:Icon Margin="0,0,6,0" VerticalAlignment="Center" Size="16"
+                                       Foreground="{DynamicResource Brush.Text.Secondary}" IconKey="Icon.Search" />
+                        <TextBox x:Name="SchemaSearchBox" Width="240" Margin="0,0,8,0" VerticalAlignment="Center"
+                                 AutomationProperties.Name="Search schema entities"
+                                 AutomationProperties.HelpText="Search by entity name or group"
+                                 controls:Placeholder.Text="Search entities (Ctrl+F)"
+                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                    <controls:SuggestionComboBox x:Name="SchemaGraphSearchBox" DataContext="{Binding Graph}"
+                                                 controls:Placeholder.Text="Find an entity (Ctrl+F)"
+                                                 Width="240" Margin="0,0,8,0" VerticalAlignment="Center"
+                                                 AutomationProperties.Name="Find entity in schema graph"
+                                                 AutomationProperties.HelpText="Type part of a name; use the arrow keys and Enter to choose."
+                                                 IsEditable="True"
+                                                 IsTextSearchEnabled="False"
+                                                 Style="{StaticResource SuggestionComboBoxStyle}"
+                                                 DisplayMemberPath="Label"
+                                                 TextSearch.TextPath="Label"
+                                                 ItemsSource="{Binding Suggestions}"
+                                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                                 IsDropDownOpen="{Binding IsSuggestionsOpen}"
+                                                 ChooseCommand="{Binding ChooseSuggestionCommand}"
+                                                 SubmitCommand="{Binding FindCommand}"
+                                                 RefreshCommand="{Binding RefreshSuggestionsCommand}"
+                                                 Visibility="{Binding DataContext.IsGraphView, ElementName=SchemaEditorPage, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <Button x:Name="FitSchemaGraphButton" Margin="0,0,8,0" Command="{Binding Graph.FitToViewCommand}"
+                            Content="Fit to view" Style="{StaticResource SecondaryButtonStyle}"
+                            Visibility="{Binding IsGraphView, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <Button x:Name="NewSchemaEntityButton" Command="{Binding NewEntityCommand}" Content="New entity"
+                            ToolTip="Add an entity to this schema"
+                            Style="{StaticResource PrimaryButtonStyle}" />
+                </WrapPanel>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource PageHeadingTextStyle}">
+                        <Hyperlink Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                   CommandParameter="{x:Static viewModels:ShellDestination.ProjectDashboard}"
+                                   AutomationProperties.HelpText="Go back to the project dashboard"
+                                   ToolTip="Back to the project dashboard"
+                                   Style="{StaticResource BreadcrumbLinkStyle}"><Run Text="{Binding DataContext.ProjectName, ElementName=SchemasRoot, Mode=OneWay}" /></Hyperlink>
+                        <Run Foreground="{DynamicResource Brush.Text.Secondary}" Text=" › " />
+                        <Hyperlink Command="{Binding DataContext.BackToListCommand, ElementName=SchemasRoot}"
+                                   AutomationProperties.HelpText="Go back to the list of schemas"
+                                   ToolTip="Back to the schemas"
+                                   Style="{StaticResource BreadcrumbLinkStyle}"><Run Text="Schemas" /></Hyperlink>
+                        <Run Foreground="{DynamicResource Brush.Text.Secondary}" Text=" › " />
+                        <Run Text="{Binding SchemaName, Mode=OneWay}" />
+                    </TextBlock>
+                </StackPanel>
+            </DockPanel>
+
+            <!-- The tabs only switch the view below them, so the details pane can start under them. -->
+            <TabControl x:Name="SchemaViewTabs" Grid.Row="1" Margin="0,0,0,12" Padding="0"
+                        BorderThickness="0" Background="Transparent"
+                        AutomationProperties.Name="Schema view"
+                        SelectedIndex="{Binding SelectedViewIndex, Mode=TwoWay}">
+                <TabControl.Resources>
+                    <!-- Text tabs: the hover highlight of the app's buttons, and for the selected tab a
+                         semibold label over a short bar, as the sidebar marks its selected page. -->
+                    <Style TargetType="TabItem">
+                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+                        <Setter Property="Padding" Value="12,7" />
+                        <Setter Property="Margin" Value="0,0,4,0" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="TabItem">
+                                    <Border x:Name="TabSurface" Background="Transparent" CornerRadius="4"
+                                            SnapsToDevicePixels="True">
+                                        <Grid>
+                                            <ContentPresenter x:Name="TabHeader" Margin="{TemplateBinding Padding}"
+                                                              ContentSource="Header" RecognizesAccessKey="True"
+                                                              HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            <Border x:Name="SelectionBar" Height="3" Margin="12,0,12,1"
+                                                    VerticalAlignment="Bottom" CornerRadius="1.5"
+                                                    Background="{DynamicResource Brush.Text.Primary}"
+                                                    Visibility="Collapsed" />
+                                        </Grid>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="TabSurface" Property="Background"
+                                                    Value="{DynamicResource Brush.Surface.Hover}" />
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                            <Setter TargetName="SelectionBar" Property="Visibility" Value="Visible" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </TabControl.Resources>
+                <TabItem x:Name="SchemaEntitiesTab" Header="Entities" />
+                <TabItem x:Name="SchemaGraphTab" Header="Dependency graph" />
+            </TabControl>
+
+            <!-- Entities tab. -->
+            <Grid Grid.Row="2" Visibility="{Binding IsListView, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <DataGrid x:Name="SchemaEntityGrid"
+                          AutomationProperties.Name="Schema entities"
+                          ItemsSource="{Binding RowsView}"
+                          SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
+                          IsReadOnly="True"
+                          AutoGenerateColumns="False"
+                          SelectionMode="Single"
+                          SelectionUnit="FullRow">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Width="2*" MinWidth="160" Binding="{Binding Name}" Header="Entity" />
+                        <DataGridTextColumn Width="*" MinWidth="100" Binding="{Binding GroupDisplay}" Header="Group" />
+                        <DataGridTextColumn Width="110" Binding="{Binding DependencyCount}" Header="Dependencies"
+                                            ElementStyle="{StaticResource CenteredCellTextStyle}" />
+                    </DataGrid.Columns>
+                </DataGrid>
+                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap"
+                           Foreground="{DynamicResource Brush.Text.Secondary}"
+                           Text="This schema has no entities yet. Use New entity to add the first one."
+                           Visibility="{Binding ShowNoEntities, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                <StackPanel x:Name="SchemaNoMatches" HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Visibility="{Binding ShowNoMatches, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <TextBlock HorizontalAlignment="Center" FontSize="18" FontWeight="SemiBold" Text="No matching entities" />
+                    <TextBlock Margin="0,4,0,12" HorizontalAlignment="Center" Foreground="{DynamicResource Brush.Text.Secondary}"
+                               Text="No entity's name or group contains the search." />
+                    <Button HorizontalAlignment="Center" Command="{Binding ClearSearchCommand}" Content="Clear search"
+                            Style="{StaticResource SecondaryButtonStyle}" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Dependency graph tab. -->
+            <Border Grid.Row="2" BorderBrush="{DynamicResource Brush.Border.Default}" BorderThickness="1"
+                    CornerRadius="6" ClipToBounds="True" DataContext="{Binding Graph}"
+                    Visibility="{Binding DataContext.IsGraphView, ElementName=SchemaEditorPage, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Grid>
+                    <controls:DependencyGraphCanvas x:Name="SchemaGraphCanvas"
+                                                    ShowStatus="False"
+                                                    IsVisibleChanged="OnSchemaGraphVisibleChanged"
+                                                    AutomationProperties.Name="Schema dependency graph"
+                                                    AutomationProperties.HelpText="Click an entity to highlight its dependencies. Double-click or press Enter to show its details."
+                                                    Graph="{Binding}"
+                                                    Background="{DynamicResource Brush.Surface.Card}"
+                                                    LabelBrush="{DynamicResource Brush.Text.Primary}"
+                                                    EdgeBrush="{DynamicResource Brush.Border.Strong}"
+                                                    HighlightBrush="{DynamicResource Brush.Text.Primary}"
+                                                    SelectionBrush="{DynamicResource Brush.Graph.Selection}"
+                                                    PlaceholderBrush="{DynamicResource Brush.Text.Secondary}"
+                                                    CardBackground="{DynamicResource Brush.Surface.Page}" />
+                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Foreground="{DynamicResource Brush.Text.Secondary}"
+                               Text="This schema has no entities yet. Use New entity to add the first one."
+                               Visibility="{Binding DataContext.ShowNoEntities, ElementName=SchemaEditorPage, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                </Grid>
+            </Border>
+
+            <!-- The selected entity's details, read-only, over the right of either tab, as in a Tracker. -->
+            <Border x:Name="SchemaEntityDetailsPane" Grid.Row="2" Width="400" Padding="20"
+                    Panel.ZIndex="50" HorizontalAlignment="Right" VerticalAlignment="Stretch"
+                    AutomationProperties.LiveSetting="Polite"
+                    Background="{DynamicResource Brush.Surface.Page}"
+                    BorderBrush="{DynamicResource Brush.Border.Strong}" BorderThickness="1" CornerRadius="6"
+                    DataContext="{Binding Details}" KeyDown="OnDetailsKeyDown"
+                    Visibility="{Binding DataContext.IsDetailsOpen, ElementName=SchemaEditorPage, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <DockPanel>
+                    <Grid DockPanel.Dock="Top" Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" AutomationProperties.HeadingLevel="Level2"
+                                   FontSize="20" FontWeight="SemiBold" Text="{Binding Name}" TextWrapping="Wrap" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                            <Button x:Name="EditSchemaEntityButton" Margin="8,0,8,0" Content="Edit"
+                                    AutomationProperties.Name="{Binding Name, StringFormat=Edit entity {0}}"
+                                    Command="{Binding DataContext.EditCommand, ElementName=SchemaEditorPage}"
+                                    Style="{StaticResource PrimaryButtonStyle}" />
+                            <Button x:Name="CloseSchemaEntityDetailsButton" Width="34" Height="34" Padding="0"
+                                    AutomationProperties.Name="Close entity details"
+                                    Command="{Binding DataContext.CloseDetailsCommand, ElementName=SchemaEditorPage}"
+                                    Style="{StaticResource SecondaryButtonStyle}" ToolTip="Close details (Esc)">
+                                <controls:Icon IconKey="Icon.Dismiss" Size="14" />
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <TextBlock FontWeight="SemiBold" Text="Group" />
+                            <TextBlock Margin="0,4,0,0" Text="{Binding GroupDisplay}" TextWrapping="Wrap" />
+                            <TextBlock Margin="0,16,0,0" FontWeight="SemiBold" Text="Depends on" />
+                            <TextBlock Margin="0,4,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="No dependencies."
+                                       Visibility="{Binding ShowNoDependsOn, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <ItemsControl x:Name="SchemaEntityDependsOn" Margin="0,4,0,0" ItemsSource="{Binding DependsOn}"
+                                          AutomationProperties.Name="Depends on">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate><TextBlock Margin="0,2" Text="{Binding}" TextWrapping="Wrap" /></DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Margin="0,16,0,0" FontWeight="SemiBold" Text="Used by" />
+                            <TextBlock Margin="0,4,0,0" Style="{StaticResource PageDescriptionTextStyle}" Text="No entity depends on it."
+                                       Visibility="{Binding ShowNoUsedBy, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <ItemsControl x:Name="SchemaEntityUsedBy" Margin="0,4,0,0" ItemsSource="{Binding UsedBy}"
+                                          AutomationProperties.Name="Used by">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate><TextBlock Margin="0,2" Text="{Binding}" TextWrapping="Wrap" /></DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+
+            <!-- The entity dialog, for New entity and Edit, as a Tracker's New entity dialog. -->
+            <Grid x:Name="SchemaEntityDialog" Grid.RowSpan="3" Panel.ZIndex="100"
+                  Background="{DynamicResource Brush.Overlay}"
+                  FocusManager.IsFocusScope="True"
+                  KeyboardNavigation.TabNavigation="Cycle"
+                  DataContext="{Binding Form}" PreviewKeyDown="OnDialogPreviewKeyDown"
+                  IsVisibleChanged="OnDialogVisibleChanged"
+                  Visibility="{Binding IsOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Border x:Name="SchemaEntityForm" Width="560" MaxHeight="700" Margin="24" Padding="22"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Background="{DynamicResource Brush.Surface.Page}"
+                        BorderBrush="{DynamicResource Brush.Border.Medium}" BorderThickness="1" CornerRadius="7">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Margin="0,0,0,14" FontSize="20" FontWeight="SemiBold"
+                                   AutomationProperties.HeadingLevel="Level2"
+                                   Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                        <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+                            <Border Margin="0,0,0,12" Style="{StaticResource ErrorMessageStyle}"
+                                    Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <TextBlock AutomationProperties.LiveSetting="Assertive" Text="{Binding ErrorMessage}" TextWrapping="Wrap" />
+                            </Border>
+                            <Border x:Name="SchemaRemoveConfirmation" Margin="0,0,0,12" Padding="12"
+                                    Style="{StaticResource EntityTrackerCardStyle}"
+                                    Visibility="{Binding IsRemoveConfirmationOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding RemoveConfirmationText}" TextWrapping="Wrap"
+                                               AutomationProperties.LiveSetting="Polite" />
+                                    <StackPanel Margin="0,10,0,0" Orientation="Horizontal">
+                                        <Button Margin="0,0,8,0" Command="{Binding ConfirmRemoveCommand}" Content="Remove entity"
+                                                Style="{StaticResource DangerButtonStyle}" />
+                                        <Button Command="{Binding CancelRemoveCommand}" Content="Keep it"
+                                                Style="{StaticResource SecondaryButtonStyle}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                            <DockPanel>
+                                <Button DockPanel.Dock="Left" Command="{Binding RequestRemoveCommand}" Content="Remove…"
+                                        AutomationProperties.Name="Remove entity from the schema"
+                                        Style="{StaticResource DangerButtonStyle}"
+                                        Visibility="{Binding IsExistingEntity, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                                    <Button x:Name="SaveSchemaEntityButton" Margin="0,0,8,0" Command="{Binding SaveCommand}"
+                                            Content="{Binding SaveLabel}" Style="{StaticResource PrimaryButtonStyle}" />
+                                    <Button x:Name="CreateAnotherSchemaEntityButton" Margin="0,0,8,0"
+                                            Command="{Binding CreateAnotherCommand}" Content="Create and add another"
+                                            AutomationProperties.HelpText="Create this entity and keep the dialog open for the next one"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Visibility="{Binding IsNewEntity, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                    <Button Command="{Binding CancelCommand}" Content="Cancel"
+                                            Style="{StaticResource SecondaryButtonStyle}" />
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Margin="0,0,0,12" TextWrapping="Wrap" Text="{Binding OperationMessage}"
+                                           AutomationProperties.LiveSetting="Polite"
+                                           Visibility="{Binding HasOperationMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <Label x:Name="SchemaEntityNameLabel" Padding="0,0,0,4" Content="_Name"
+                                       Target="{Binding ElementName=SchemaEntityNameBox}" />
+                                <TextBox x:Name="SchemaEntityNameBox"
+                                         controls:Placeholder.Text="Name of the entity"
+                                         AutomationProperties.LabeledBy="{Binding ElementName=SchemaEntityNameLabel}"
+                                         Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+                                <Label x:Name="SchemaEntityGroupLabel" Margin="0,12,0,0" Padding="0,0,0,4" Content="_Group"
+                                       Target="{Binding ElementName=SchemaEntityGroupBox}" />
+                                <TextBox x:Name="SchemaEntityGroupBox"
+                                         controls:Placeholder.Text="Optional group, such as Sales"
+                                         AutomationProperties.LabeledBy="{Binding ElementName=SchemaEntityGroupLabel}"
+                                         Text="{Binding Group, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Margin="0,16,0,6" FontWeight="SemiBold" Text="Depends on" />
+                                <TextBlock Margin="0,0,0,6" Style="{StaticResource PageDescriptionTextStyle}"
+                                           Text="No dependencies."
+                                           Visibility="{Binding ShowNoDependencies, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <ItemsControl x:Name="SchemaEntityDependencies" ItemsSource="{Binding Dependencies}"
+                                              AutomationProperties.Name="Dependencies">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <DockPanel Margin="0,2">
+                                                <Button DockPanel.Dock="Right" ToolTip="Remove this dependency"
+                                                        AutomationProperties.Name="{Binding StringFormat=Remove dependency on {0}}"
+                                                        Command="{Binding DataContext.RemoveDependencyCommand, ElementName=SchemaEntityDialog}"
+                                                        CommandParameter="{Binding}"
+                                                        Style="{StaticResource SecondaryIconButtonStyle}">
+                                                    <controls:Icon IconKey="Icon.Dismiss" Size="14" />
+                                                </Button>
+                                                <TextBlock VerticalAlignment="Center" Text="{Binding}" TextTrimming="CharacterEllipsis" />
+                                            </DockPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <DockPanel Margin="0,8,0,0">
+                                    <Button DockPanel.Dock="Right" Margin="8,0,0,0" Command="{Binding AddDependencyCommand}"
+                                            IsDefault="{Binding IsKeyboardFocusWithin, ElementName=SchemaDependencyBox}">
+                                        <TextBlock Text="{Binding AddDependencyLabel}" TextTrimming="CharacterEllipsis" MaxWidth="220" />
+                                    </Button>
+                                    <ComboBox x:Name="SchemaDependencyBox" IsEditable="True" IsTextSearchEnabled="True"
+                                              controls:Placeholder.Text="Entity name, new or existing"
+                                              AutomationProperties.Name="Add a dependency"
+                                              ItemsSource="{Binding DependencyChoices}"
+                                              Text="{Binding NewDependencyText, UpdateSourceTrigger=PropertyChanged}" />
+                                </DockPanel>
+                                <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Style="{StaticResource PageDescriptionTextStyle}"
+                                           Text="{Binding NewDependencyNamesText}"
+                                           Visibility="{Binding HasNewDependencyNames, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

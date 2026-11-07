@@ -10,6 +10,7 @@ using EntityTracker.Application.Lifecycle;
 using EntityTracker.Application.ManualCreation;
 using EntityTracker.Application.Persistence;
 using EntityTracker.Application.Projects;
+using EntityTracker.Application.Schemas;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Application.GitSync;
 using EntityTracker.Wpf.Views;
@@ -152,6 +153,22 @@ internal sealed class ReadmeScreenshotGenerator
             }
 
             shell.ProjectReport!.Audience = EntityTracker.Reporting.ProjectReports.ReportAudience.Client;
+
+            // The Schemas page, and a schema open in its editor and as a graph.
+            SchemaId orderModel = await SeedSchemasAsync(provider, project.Id, cancellationToken);
+            await shell.NavigateAsync(ShellDestination.Schemas, cancellationToken);
+            await renderer.CaptureAsync("project-schemas.png", settleMilliseconds: 500);
+            await shell.SchemasPage!.OpenAsync(orderModel, cancellationToken);
+            SchemaEditorViewModel schemaEditor = shell.SchemasPage.Editor!;
+            schemaEditor.SelectedRow = schemaEditor.Rows.Single(row => row.Name == "Order line");
+            await renderer.CaptureAsync("schema-editor.png", settleMilliseconds: 500);
+            schemaEditor.SelectedViewIndex = 1;
+            await renderer.CaptureAsync("schema-graph.png", settleMilliseconds: 1500);
+            schemaEditor.SelectedViewIndex = 0;
+            schemaEditor.EditCommand.Execute(null);
+            await renderer.CaptureAsync("schema-entity-edit.png", settleMilliseconds: 500);
+            schemaEditor.Form.CancelCommand.Execute(null);
+            shell.SchemasPage.CloseEditor();
             await shell.NavigateAsync(ShellDestination.ProjectDashboard, cancellationToken);
             // Synced as of now, so the card shows the synced icon after the earlier screenshots' edits.
             ProjectSyncLink repositoryFixture = await SyncedLinkAsync();
@@ -898,6 +915,36 @@ internal sealed class ReadmeScreenshotGenerator
         themeService.Apply(appearance);
         await Dispatcher.Yield(DispatcherPriority.Render);
         await Task.Delay(100, cancellationToken);
+    }
+
+    /// <summary>Two schemas for the Schemas page; returns the larger one, which the editor shows.</summary>
+    private static async Task<SchemaId> SeedSchemasAsync(IServiceProvider provider, ProjectId projectId,
+        CancellationToken cancellationToken)
+    {
+        SchemaManagementService schemas = provider.GetRequiredService<SchemaManagementService>();
+        SchemaEditingService editing = provider.GetRequiredService<SchemaEditingService>();
+        Schema orderModel = await schemas.CreateAsync(projectId, "Order platform model", cancellationToken);
+        (string Name, string Group, string[] Dependencies)[] entities =
+        [
+            ("Country", "Reference data", []),
+            ("Currency", "Reference data", []),
+            ("Customer", "Sales", ["Country"]),
+            ("Address", "Sales", ["Country"]),
+            ("Product", "Catalogue", ["Currency"]),
+            ("Price list", "Catalogue", ["Product", "Currency"]),
+            ("Order", "Sales", ["Customer", "Address", "Product"]),
+            ("Order line", "Sales", ["Order", "Product", "Price list"]),
+            ("Invoice", "Finance", ["Order", "Customer"]),
+            ("Payment", "Finance", ["Invoice", "Currency"])
+        ];
+        foreach ((string name, string group, string[] dependencies) in entities)
+            await editing.SaveEntityAsync(orderModel.Id, new SchemaEntityEdit(null, name, group, dependencies),
+                cancellationToken);
+
+        Schema reporting = await schemas.CreateAsync(projectId, "Reporting model", cancellationToken);
+        await editing.SaveEntityAsync(reporting.Id,
+            new SchemaEntityEdit(null, "Sales summary", "Reports", ["Order export", "Invoice export"]), cancellationToken);
+        return orderModel.Id;
     }
 
     private static async Task WaitUntilAsync(

@@ -77,6 +77,19 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
             WHERE tracker.project_id = $projectId
             ORDER BY snapshot.recorded_at_utc, snapshot.sequence;
             """, id, cancellationToken);
+        List<Row> schemaRows = await RowsAsync(connection, transaction,
+            "SELECT *, CASE WHEN recycled_at_utc IS NULL THEN 'Active' ELSE 'Recycled' END AS lifecycle_state FROM schemas WHERE project_id = $projectId;", id, cancellationToken);
+        List<Row> schemaEntityRows = await RowsAsync(connection, transaction, """
+            SELECT entity.* FROM schema_entities entity
+            JOIN schemas owner ON owner.id = entity.schema_id
+            WHERE owner.project_id = $projectId;
+            """, id, cancellationToken);
+        List<Row> schemaDependencyRows = await RowsAsync(connection, transaction, """
+            SELECT dependency.* FROM schema_entity_dependencies dependency
+            JOIN schema_entities entity ON entity.id = dependency.dependent_entity_id
+            JOIN schemas owner ON owner.id = entity.schema_id
+            WHERE owner.project_id = $projectId;
+            """, id, cancellationToken);
         Dictionary<string, TrackerSyncBaseline> baselines = new(StringComparer.Ordinal);
         foreach (Row tracker in trackerRows)
         {
@@ -140,8 +153,20 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         SnapshotDeveloper[] developers = developerRows.Select(row => new SnapshotDeveloper(
             row.Guid("id"), row.Guid("project_id"), row.Str("initials"),
             row.Str("display_name"), row.Int("is_retired") != 0)).ToArray();
+        var schemaEntitiesBySchema = schemaEntityRows.ToLookup(row => row.Str("schema_id"), StringComparer.Ordinal);
+        var schemaDependenciesByEntity = schemaDependencyRows.ToLookup(
+            row => row.Str("dependent_entity_id"), StringComparer.Ordinal);
+        SnapshotSchema[] schemas = schemaRows.Select(schema => new SnapshotSchema(
+            schema.Guid("id"), schema.Guid("project_id"), schema.Str("name"), schema.Str("lifecycle_state"),
+            schema.Time("created_at_utc"), schema.Time("updated_at_utc"), schema.TimeOrNull("recycled_at_utc"),
+            schemaEntitiesBySchema[schema.Str("id")].Select(entity => new SnapshotSchemaEntity(
+                    entity.Guid("id"), entity.Guid("schema_id"), entity.Str("name"), entity.Str("group_name"),
+                    schemaDependenciesByEntity[entity.Str("id")].Select(d => d.Guid("dependency_entity_id"))
+                        .Order().ToArray()))
+                .OrderBy(entity => entity.Id).ToArray()))
+            .OrderBy(schema => schema.Id).ToArray();
         ProjectSnapshot snapshot = new(ProjectSnapshot.CurrentFormatVersion, projectModel,
-            trackers, developers);
+            trackers, developers, schemas);
         ProjectSnapshotValidator.Validate(snapshot);
         return new ProjectSnapshotRead(snapshot, revision);
     }
@@ -220,6 +245,22 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         foreach (SnapshotTracker tracker in snapshot.Trackers)
         {
             await InsertTrackerContentsAsync(connection, transaction, tracker, cancellationToken);
+        }
+        foreach (SnapshotSchema schema in snapshot.Schemas ?? [])
+        {
+            await InsertAsync(connection, transaction, "schemas",
+                ["id", "project_id", "name", "created_at_utc", "updated_at_utc", "recycled_at_utc"],
+                [Id(schema.Id), projectId, schema.Name, Time(schema.CreatedAtUtc), Time(schema.UpdatedAtUtc),
+                 TimeOrNull(schema.RecycledAtUtc)], cancellationToken);
+            foreach (SnapshotSchemaEntity entity in schema.Entities)
+                await InsertAsync(connection, transaction, "schema_entities",
+                    ["id", "schema_id", "name", "group_name"],
+                    [Id(entity.Id), Id(schema.Id), entity.Name, entity.GroupName], cancellationToken);
+            foreach (SnapshotSchemaEntity entity in schema.Entities)
+            foreach (Guid dependency in entity.Dependencies)
+                await InsertAsync(connection, transaction, "schema_entity_dependencies",
+                    ["dependent_entity_id", "dependency_entity_id"], [Id(entity.Id), Id(dependency)],
+                    cancellationToken);
         }
         return await CommitRevisionAsync(connection, transaction, projectId, cancellationToken);
     }
@@ -300,6 +341,8 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         SqliteConnection connection, SqliteTransaction transaction, string projectId,
         CancellationToken cancellationToken)
     {
+        await SqliteSchemaStore.DeleteAsync(connection, transaction,
+            SqliteSchemaStore.ProjectSchemas, projectId, cancellationToken);
         string trackerIds = "SELECT id FROM trackers WHERE project_id = $projectId";
         string entityIds = $"SELECT id FROM tracked_entities WHERE tracker_id IN ({trackerIds})";
         foreach (string sql in new[]

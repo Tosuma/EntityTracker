@@ -81,6 +81,16 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                 files[prefix + "schema-import-summary.json"] =
                     JsonSerializer.SerializeToUtf8Bytes(summary, JsonOptions);
         }
+        if (snapshot.FormatVersion >= ProjectSnapshot.FirstSchemaFormatVersion)
+            foreach (SnapshotSchema schema in (snapshot.Schemas ?? []).OrderBy(s => s.Id))
+            {
+                string prefix = SchemaPrefix(schema.Id);
+                files[prefix + "schema.json"] = JsonSerializer.SerializeToUtf8Bytes(
+                    SchemaDocument.From(schema), JsonOptions);
+                foreach (SnapshotSchemaEntity entity in schema.Entities.OrderBy(e => e.Id))
+                    files[prefix + $"entities/{entity.Id:D}.json"] = JsonSerializer.SerializeToUtf8Bytes(
+                        entity with { Dependencies = entity.Dependencies.Order().ToArray() }, JsonOptions);
+            }
         return new ProjectSnapshotPackage(files, ContentHash(files));
     }
 
@@ -95,7 +105,8 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
             throw new InvalidDataException("The manifest Project ID does not match project.json.");
 
         List<SnapshotTracker> trackers = [];
-        foreach (string trackerPath in files.Keys.Where(p => p.EndsWith("/tracker.json", StringComparison.Ordinal))
+        foreach (string trackerPath in files.Keys.Where(p => p.StartsWith(Root + "trackers/", StringComparison.Ordinal) &&
+                                                             p.EndsWith("/tracker.json", StringComparison.Ordinal))
                      .Order(StringComparer.Ordinal))
         {
             TrackerDocument doc = Read<TrackerDocument>(files, trackerPath);
@@ -126,7 +137,23 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
             ? files.Keys.Where(p => p.StartsWith(Root + "developers/", StringComparison.Ordinal))
                 .Order(StringComparer.Ordinal).Select(p => Read<SnapshotDeveloper>(files, p)).ToArray()
             : null;
-        ProjectSnapshot snapshot = new(manifest.FormatVersion, project, trackers, developers);
+        List<SnapshotSchema>? schemas = manifest.FormatVersion >= ProjectSnapshot.FirstSchemaFormatVersion ? [] : null;
+        foreach (string schemaPath in files.Keys.Where(p => p.StartsWith(Root + "schemas/", StringComparison.Ordinal) &&
+                                                            p.EndsWith("/schema.json", StringComparison.Ordinal))
+                     .Order(StringComparer.Ordinal))
+        {
+            if (schemas is null)
+                throw new InvalidDataException("Schemas are not supported in this snapshot format.");
+            SchemaDocument doc = Read<SchemaDocument>(files, schemaPath);
+            string prefix = SchemaPrefix(doc.Id);
+            if (schemaPath != prefix + "schema.json")
+                throw new InvalidDataException("A schema document path does not match its ID.");
+            SnapshotSchemaEntity[] entities = files.Keys
+                .Where(p => p.StartsWith(prefix + "entities/", StringComparison.Ordinal))
+                .Order(StringComparer.Ordinal).Select(p => Read<SnapshotSchemaEntity>(files, p)).ToArray();
+            schemas.Add(doc.ToSnapshotSchema(entities));
+        }
+        ProjectSnapshot snapshot = new(manifest.FormatVersion, project, trackers, developers, schemas);
         ProjectSnapshotValidator.Validate(snapshot);
 
         ProjectSnapshotPackage canonical = Encode(snapshot);
@@ -248,6 +275,8 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
     }
 
     private static string TrackerPrefix(Guid id) => Root + $"trackers/{id:D}/";
+
+    private static string SchemaPrefix(Guid id) => Root + $"schemas/{id:D}/";
 
     /// <summary>
     /// The hash names the content, not the layout: it is taken over each document written compactly,
@@ -380,6 +409,18 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
             string.Empty, GroupName, CreatedAtUtc, SchemaUpdatedAtUtc,
             ProgressUpdatedAtUtc, Dependencies, ResponsibilityPeriods, FilterActive, SharedNotes ?? "",
             DueDate: DueDate);
+    }
+
+    /// <summary>Format 11: a schema's catalog fields; its entities are documents of their own.</summary>
+    private sealed record SchemaDocument(
+        Guid Id, Guid ProjectId, string Name, string LifecycleState,
+        DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, DateTimeOffset? RecycledAtUtc)
+    {
+        public static SchemaDocument From(SnapshotSchema schema) => new(schema.Id, schema.ProjectId,
+            schema.Name, schema.LifecycleState, schema.CreatedAtUtc, schema.UpdatedAtUtc, schema.RecycledAtUtc);
+
+        public SnapshotSchema ToSnapshotSchema(IReadOnlyList<SnapshotSchemaEntity> entities) => new(Id, ProjectId,
+            Name, LifecycleState, CreatedAtUtc, UpdatedAtUtc, RecycledAtUtc, entities);
     }
 
     private sealed record TrackerDocument(

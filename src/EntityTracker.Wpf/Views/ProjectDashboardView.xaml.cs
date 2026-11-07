@@ -173,6 +173,9 @@ public partial class ProjectDashboardView : UserControl
     private async void OnOpenDevelopers(object sender, RoutedEventArgs e) =>
         await Shell.NavigateAsync(ShellDestination.Developers);
 
+    private async void OnOpenSchemas(object sender, RoutedEventArgs e) =>
+        await Shell.NavigateAsync(ShellDestination.Schemas);
+
     private async void OnOpenProjectReport(object sender, RoutedEventArgs e) =>
         await Shell.NavigateAsync(ShellDestination.ProjectReport);
 

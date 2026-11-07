@@ -7,6 +7,7 @@ using EntityTracker.Application.Projects;
 using EntityTracker.Application.GitSync;
 using EntityTracker.Application.History;
 using EntityTracker.Application.Persistence;
+using EntityTracker.Application.Schemas;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
 using EntityTracker.Wpf.Commands;
@@ -26,7 +27,8 @@ public enum CatalogDialogKind
     TrackerSync,
     RecycleBin,
     RecycleConfirmation,
-    PurgeConfirmation
+    PurgeConfirmation,
+    SchemaName
 }
 
 public enum TrackerCreationMode
@@ -50,8 +52,20 @@ public sealed class CatalogSelectionRequestedEventArgs(
     public TrackerId? TrackerId { get; } = trackerId;
 }
 
+/// <summary>A schema was created, renamed, recycled, restored or purged. <see cref="OpenSchemaId"/> is the
+/// schema to open: the one just created.</summary>
+public sealed class SchemaCatalogChangedEventArgs(ProjectId projectId, SchemaId? openSchemaId) : EventArgs
+{
+    public ProjectId ProjectId { get; } = projectId;
+    public SchemaId? OpenSchemaId { get; } = openSchemaId;
+}
+
 public sealed class CatalogManagementViewModel : INotifyPropertyChanged
 {
+    private readonly SchemaManagementService? _schemaService;
+    private Schema? _schemaBeingEdited;
+    private Schema? _pendingSchema;
+    private int _pendingSchemaEntityCount;
     private readonly ProjectManagementService _projectService;
     private readonly TrackerManagementService _trackerService;
     private readonly TrackerSyncService _trackerSyncService;
@@ -100,8 +114,11 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         ITrackerRepository trackerRepository,
         TrackerSyncService trackerSyncService,
         ILogger<CatalogManagementViewModel>? logger = null,
-        ProjectGitSyncService? gitSync = null)
+        ProjectGitSyncService? gitSync = null,
+        SchemaManagementService? schemaService = null)
     {
+        _schemaService = schemaService;
+        RecycledSchemas = [];
         _projectService = projectService;
         _trackerService = trackerService;
         _trackerSyncService = trackerSyncService;
@@ -130,6 +147,9 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
     public event EventHandler? Changed;
     public event EventHandler<CatalogSelectionRequestedEventArgs>? SelectionRequested;
+    public event EventHandler<SchemaCatalogChangedEventArgs>? SchemasChanged;
+
+    public ObservableCollection<Schema> RecycledSchemas { get; }
 
     public ObservableCollection<Project> RecycledProjects { get; }
     public ObservableCollection<Tracker> RecycledTrackers { get; }
@@ -259,7 +279,8 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     }
 
     public bool IsOpen => DialogKind != CatalogDialogKind.None;
-    public bool IsNameDialog => DialogKind is CatalogDialogKind.ProjectName or CatalogDialogKind.TrackerName;
+    public bool IsNameDialog => DialogKind is CatalogDialogKind.ProjectName or CatalogDialogKind.TrackerName
+        or CatalogDialogKind.SchemaName;
     public bool IsTrackerCreation => DialogKind == CatalogDialogKind.TrackerCreation;
     public bool IsTrackerSync => DialogKind == CatalogDialogKind.TrackerSync;
     public TrackerSyncReview? SyncReview
@@ -414,6 +435,11 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     public bool HasRecycledTrackers => RecycledTrackers.Count > 0;
     public bool ShowNoRecycledProjects => !HasRecycledProjects;
     public bool ShowNoRecycledTrackers => !HasRecycledTrackers;
+    public bool HasRecycledSchemas => RecycledSchemas.Count > 0;
+    public bool ShowNoRecycledSchemas => !HasRecycledSchemas;
+
+    /// <summary>Whether the recycle bin lists recycled schemas: a Project's recycle bin does.</summary>
+    public bool ShowsRecycledSchemas => IsRecycleBin && _targetProject is not null && _schemaService is not null;
     public bool ShowApplyTracker => CreationMode != TrackerCreationMode.Blank;
     public string PrepareTrackerLabel => CreationMode switch
     {
@@ -423,7 +449,8 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     };
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
     public bool IsProjectOperation => _pendingProject is not null || DialogKind == CatalogDialogKind.ProjectName;
-    public bool IsRename => _projectBeingEdited is not null || _trackerBeingEdited is not null;
+    public bool IsRename => _projectBeingEdited is not null || _trackerBeingEdited is not null ||
+                            _schemaBeingEdited is not null;
     /// <summary>
     /// Whether the recycle bin lists recycled Projects: only the Portfolio's does; a Project's recycle bin
     /// lists that Project's Trackers.
@@ -434,17 +461,23 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     {
         CatalogDialogKind.ProjectName => IsRename ? "Rename project" : "Create project",
         CatalogDialogKind.TrackerName => "Rename tracker",
+        CatalogDialogKind.SchemaName => IsRename ? "Rename schema" : "Create schema",
         CatalogDialogKind.TrackerCreation => "Create tracker",
         CatalogDialogKind.TrackerSync => _syncTracker is null ? "Sync tracker" : $"Sync {_syncTracker.Name} from {SyncSourceName}",
         CatalogDialogKind.RecycleBin => _targetProject is null ? "Recycle bins" : $"Recycle bin — {_targetProject.Name}",
-        CatalogDialogKind.RecycleConfirmation => _pendingProject is null ? "Recycle tracker?" : "Recycle project?",
+        CatalogDialogKind.RecycleConfirmation => _pendingProject is not null ? "Recycle project?"
+            : _pendingSchema is not null ? "Recycle schema?" : "Recycle tracker?",
         CatalogDialogKind.PurgeConfirmation => "Permanently delete?",
         _ => string.Empty
     };
-    public string PendingItemName => _pendingProject?.Name ?? _pendingTracker?.Name ?? string.Empty;
+    public string PendingItemName =>
+        _pendingProject?.Name ?? _pendingTracker?.Name ?? _pendingSchema?.Name ?? string.Empty;
     public bool CanPermanentlyDelete =>
         TypedConfirmation == PendingItemName && !string.IsNullOrEmpty(PendingItemName);
-    public string PurgeImpactSummary => PurgeImpact is null
+    public string PurgeImpactSummary => _pendingSchema is not null
+        ? $"The schema and its {_pendingSchemaEntityCount} {(_pendingSchemaEntityCount == 1 ? "entity" : "entities")} " +
+          "will be permanently removed. Trackers are not changed."
+        : PurgeImpact is null
         ? "Calculating affected data…"
         : $"{PurgeImpact.TrackerCount} tracker(s), {PurgeImpact.EntityCount} entities " +
           $"({PurgeImpact.ArchivedEntityCount} archived) and {PurgeImpact.HistoryCount} history records " +
@@ -552,6 +585,55 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         NotifyDialogChanged();
     }
 
+    public void OpenCreateSchema(Project project)
+    {
+        ResetDialog();
+        _targetProject = project;
+        DialogKind = CatalogDialogKind.SchemaName;
+        NotifyDialogChanged();
+    }
+
+    public void OpenRenameSchema(Schema schema)
+    {
+        ResetDialog();
+        _schemaBeingEdited = schema;
+        _name = schema.Name;
+        OnPropertyChanged(nameof(Name));
+        DialogKind = CatalogDialogKind.SchemaName;
+        NotifyDialogChanged();
+    }
+
+    public void RequestRecycle(Schema schema)
+    {
+        ResetDialog();
+        _pendingSchema = schema;
+        DialogKind = CatalogDialogKind.RecycleConfirmation;
+        NotifyDialogChanged();
+    }
+
+    public async Task RestoreAsync(Schema schema)
+    {
+        if (_schemaService is null) return;
+        await RunAsync(async () =>
+        {
+            await _schemaService.RestoreAsync(schema.Id);
+            await LoadRecycleBinsAsync();
+            SchemasChanged?.Invoke(this, new SchemaCatalogChangedEventArgs(schema.ProjectId, null));
+        });
+    }
+
+    public async Task RequestPurgeAsync(Schema schema)
+    {
+        if (_schemaService is null) return;
+        ResetDialog();
+        _pendingSchema = schema;
+        DialogKind = CatalogDialogKind.PurgeConfirmation;
+        _pendingSchemaEntityCount = (await _schemaService.GetByProjectAsync(schema.ProjectId))
+            .FirstOrDefault(summary => summary.Schema.Id == schema.Id)?.EntityCount ?? 0;
+        OnPropertyChanged(nameof(PurgeImpactSummary));
+        NotifyDialogChanged();
+    }
+
     public async Task OpenRecycleBinAsync(Project? project = null)
     {
         ResetDialog();
@@ -646,6 +728,31 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
 
                 Close();
                 SelectionRequested?.Invoke(this, new CatalogSelectionRequestedEventArgs(project.Id, null));
+            });
+            return;
+        }
+
+        if (DialogKind == CatalogDialogKind.SchemaName && _schemaService is not null)
+        {
+            ProjectId projectId = _schemaBeingEdited?.ProjectId ?? _targetProject?.Id ??
+                throw new InvalidOperationException("No project is selected for the schema.");
+            CatalogNameValidationResult validation = await _schemaService.ValidateNameAsync(
+                projectId, Name, _schemaBeingEdited?.Id);
+            if (!validation.IsValid)
+            {
+                ErrorMessage = validation.ErrorMessage;
+                return;
+            }
+
+            await RunAsync(async () =>
+            {
+                SchemaId? created = null;
+                if (_schemaBeingEdited is null)
+                    created = (await _schemaService.CreateAsync(projectId, Name)).Id;
+                else
+                    await _schemaService.RenameAsync(_schemaBeingEdited.Id, Name);
+                Close();
+                SchemasChanged?.Invoke(this, new SchemaCatalogChangedEventArgs(projectId, created));
             });
             return;
         }
@@ -758,6 +865,14 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
             {
                 await _projectService.RecycleAsync(_pendingProject.Id);
             }
+            else if (_pendingSchema is not null && _schemaService is not null)
+            {
+                Schema schema = _pendingSchema;
+                await _schemaService.RecycleAsync(schema.Id);
+                Close();
+                SchemasChanged?.Invoke(this, new SchemaCatalogChangedEventArgs(schema.ProjectId, null));
+                return;
+            }
             else if (_pendingTracker is not null)
             {
                 ProjectId projectId = _pendingTracker.ProjectId;
@@ -789,6 +904,14 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
             else if (_pendingTracker is not null)
             {
                 await _trackerService.PurgeAsync(new PurgeTrackerRequest(_pendingTracker.Id));
+            }
+            else if (_pendingSchema is not null && _schemaService is not null)
+            {
+                Schema schema = _pendingSchema;
+                await _schemaService.PurgeAsync(schema.Id);
+                Close();
+                SchemasChanged?.Invoke(this, new SchemaCatalogChangedEventArgs(schema.ProjectId, null));
+                return;
             }
 
             Close();
@@ -844,6 +967,13 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         }
 
         Replace(RecycledTrackers, recycled);
+        Replace(RecycledSchemas, _targetProject is null || _schemaService is null
+            ? Enumerable.Empty<Schema>()
+            : (await _schemaService.GetByProjectAsync(_targetProject.Id))
+                .Select(static summary => summary.Schema)
+                .Where(static schema => schema.LifecycleState == CatalogLifecycleState.Recycled));
+        OnPropertyChanged(nameof(HasRecycledSchemas));
+        OnPropertyChanged(nameof(ShowNoRecycledSchemas));
         OnPropertyChanged(nameof(HasRecycledProjects));
         OnPropertyChanged(nameof(HasRecycledTrackers));
         OnPropertyChanged(nameof(ShowNoRecycledProjects));
@@ -888,6 +1018,9 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         _trackerBeingEdited = null;
         _pendingProject = null;
         _pendingTracker = null;
+        _schemaBeingEdited = null;
+        _pendingSchema = null;
+        _pendingSchemaEntityCount = 0;
         _syncTracker = null;
         SyncReview = null;
         _targetProject = null;
@@ -915,6 +1048,8 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
     {
         OnPropertyChanged(nameof(DialogTitle));
         OnPropertyChanged(nameof(ShowsRecycledProjects));
+        OnPropertyChanged(nameof(ShowsRecycledSchemas));
+        OnPropertyChanged(nameof(PurgeImpactSummary));
         OnPropertyChanged(nameof(IsRename));
         OnPropertyChanged(nameof(IsProjectOperation));
         OnPropertyChanged(nameof(PendingItemName));

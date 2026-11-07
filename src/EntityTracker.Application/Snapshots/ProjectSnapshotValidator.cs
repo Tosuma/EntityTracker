@@ -216,6 +216,43 @@ public static class ProjectSnapshotValidator
         }
         if (snapshot.Trackers.Select(t => t.Name.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() != snapshot.Trackers.Count)
             throw new InvalidDataException("Tracker names must be unique within a Project.");
+        ValidateSchemas(snapshot);
+    }
+
+    /// <summary>
+    /// Format 11: schemas. Every entity name is unique within its schema, and every dependency points at
+    /// another entity of the same schema.
+    /// </summary>
+    private static void ValidateSchemas(ProjectSnapshot snapshot)
+    {
+        IReadOnlyList<SnapshotSchema> schemas = snapshot.Schemas ?? [];
+        if (schemas.Count > 0 && snapshot.FormatVersion < ProjectSnapshot.FirstSchemaFormatVersion)
+            throw new InvalidDataException("Schemas are not supported in this snapshot format.");
+        HashSet<Guid> schemaIds = [];
+        HashSet<Guid> allEntityIds = [];
+        HashSet<string> schemaNames = new(StringComparer.OrdinalIgnoreCase);
+        foreach (SnapshotSchema schema in schemas)
+        {
+            if (schema is null || schema.Id == Guid.Empty || schema.ProjectId != snapshot.Project.Id ||
+                !schemaIds.Add(schema.Id) || schema.Entities is null || schema.Name is null ||
+                schema.Name != schema.Name.Trim() || !schemaNames.Add(schema.Name))
+                throw new InvalidDataException("The snapshot has invalid or duplicate schemas.");
+            ValidateCatalog(schema.Name, schema.LifecycleState,
+                schema.CreatedAtUtc, schema.UpdatedAtUtc, schema.RecycledAtUtc);
+            HashSet<string> names = new(StringComparer.OrdinalIgnoreCase);
+            HashSet<Guid> entityIds = schema.Entities.Where(static e => e is not null).Select(static e => e.Id).ToHashSet();
+            foreach (SnapshotSchemaEntity entity in schema.Entities)
+            {
+                if (entity is null || entity.Id == Guid.Empty || entity.SchemaId != schema.Id ||
+                    !allEntityIds.Add(entity.Id) || string.IsNullOrWhiteSpace(entity.Name) ||
+                    entity.Name != entity.Name.Trim() || !names.Add(entity.Name) ||
+                    entity.GroupName is null || entity.GroupName != entity.GroupName.Trim() ||
+                    entity.Dependencies is null ||
+                    entity.Dependencies.Distinct().Count() != entity.Dependencies.Count ||
+                    entity.Dependencies.Any(target => target == entity.Id || !entityIds.Contains(target)))
+                    throw new InvalidDataException("The snapshot has an invalid schema entity.");
+            }
+        }
     }
 
     /// <summary>
