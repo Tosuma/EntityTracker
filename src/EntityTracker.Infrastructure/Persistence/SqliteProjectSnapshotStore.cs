@@ -72,6 +72,12 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
             WHERE tracker.project_id = $projectId
             ORDER BY entry.occurred_at_utc, entry.sequence;
             """, id, cancellationToken);
+        List<Row> dependencyHistory = await RowsAsync(connection, transaction, """
+            SELECT entry.* FROM entity_dependency_history entry
+            JOIN trackers tracker ON tracker.id = entry.tracker_id
+            WHERE tracker.project_id = $projectId
+            ORDER BY entry.occurred_at_utc, entry.event_id;
+            """, id, cancellationToken);
         List<Row> progress = await RowsAsync(connection, transaction, """
             SELECT snapshot.* FROM progress_snapshots snapshot
             JOIN trackers tracker ON tracker.id = snapshot.tracker_id
@@ -112,6 +118,7 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         var dependenciesByEntity = dependencies.ToLookup(row => row.Str("dependent_entity_id"), StringComparer.Ordinal);
         var historyByTracker = history.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
         var progressByTracker = progress.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
+        var dependencyHistoryByTracker = dependencyHistory.ToLookup(row => row.Str("tracker_id"), StringComparer.Ordinal);
 
         SnapshotProject projectModel = new(project.Guid("id"), canonicalName ?? project.Str("name"),
             project.Str("lifecycle_state"), project.Time("created_at_utc"),
@@ -157,7 +164,11 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                         p.Int("reconciled_count"), order, p.Int("manually_blocked_count"),
                         p.Int("reworking_count"))).ToArray(),
                 baselines.GetValueOrDefault(trackerId),
-                SchemaLink: schemaLinks.GetValueOrDefault(trackerId));
+                SchemaLink: schemaLinks.GetValueOrDefault(trackerId),
+                DependencyHistory: dependencyHistoryByTracker[trackerId]
+                    .Select(e => new SnapshotDependencyEvent(e.Guid("event_id"), e.Guid("entity_id"), e.Str("change"),
+                        e.GuidOrNull("dependency_entity_id"), e.StrOrNull("lifecycle_state"), e.Int("is_baseline") == 1,
+                        e.Time("occurred_at_utc"))).ToArray());
         }).ToArray();
         SnapshotDeveloper[] developers = developerRows.Select(row => new SnapshotDeveloper(
             row.Guid("id"), row.Guid("project_id"), row.Str("initials"),
@@ -342,6 +353,12 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
                  progress.BlockedCount, progress.InProgressCount, progress.ReworkNeededCount,
                  progress.DevelopmentCompletedCount, progress.ReconciledCount, Id(progress.SnapshotId),
                  progress.ManuallyBlockedCount, progress.ReworkingCount], cancellationToken);
+        foreach (SnapshotDependencyEvent entry in tracker.DependencyHistory ?? [])
+            await InsertAsync(connection, transaction, "entity_dependency_history",
+                ["event_id", "tracker_id", "entity_id", "change", "dependency_entity_id", "lifecycle_state", "is_baseline", "occurred_at_utc"],
+                [Id(entry.EventId), Id(tracker.Id), Id(entry.EntityId), entry.Change,
+                 entry.DependencyEntityId is { } dependency ? Id(dependency) : null, entry.LifecycleState,
+                 entry.IsBaseline ? 1 : 0, Time(entry.OccurredAtUtc)], cancellationToken);
         if (tracker.SyncBaseline is { } baseline)
             await SqliteSyncBaselineRows.WriteAsync(connection, transaction, Id(tracker.Id),
                 baseline, cancellationToken);
@@ -367,6 +384,7 @@ public sealed class SqliteProjectSnapshotStore(SqliteDatabase database) : IProje
         {
             $"DELETE FROM entity_status_history WHERE entity_id IN ({entityIds});",
             $"DELETE FROM progress_snapshots WHERE tracker_id IN ({trackerIds});",
+            $"DELETE FROM entity_dependency_history WHERE tracker_id IN ({trackerIds});",
             $"DELETE FROM tracked_entities WHERE tracker_id IN ({trackerIds});",
             "DELETE FROM trackers WHERE project_id = $projectId;",
             "DELETE FROM projects WHERE id = $projectId;"

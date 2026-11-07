@@ -345,6 +345,16 @@ independent multi-valued facts). Keep it there:
 - **One record of each fact.** An entity's development status is its newest status event
   (view `entity_current_status`); changing the status appends an event. An event's previous status
   is the new status of the event it follows (`previous_event_id`).
+- **History of what decides readiness.** `entity_dependency_history` is append-only, like the status
+  history: each entry is a dependency added or removed, an entity's lifecycle state, or an entity
+  leaving its Tracker. One writer (`SqliteDependencyHistory.RecordAsync`) compares the Tracker with
+  what its history says at the end of every change, in the same transaction, so every path that
+  changes dependencies is recorded and an unchanged save records nothing. Entries keep their entity's
+  ID without a foreign key, so a placeholder that is gone still explains the days it blocked. The
+  ready vs waiting chart replays the status and dependency histories for each day
+  (`ReadinessHistory`), with the same rules as today's work status; until a Tracker's first status
+  change, everything recorded counts as its starting state, so setting it up isn't shown as progress.
+  The history starts at the version 29 migration (a baseline), and the chart starts there.
 - **Identity by ID.** Every table is keyed by its GUID; status events and progress snapshots keep
   their recording order in an explicit `sequence`. Dependencies refer to entities by ID.
 - **Atomic values.** The Tracker sync baseline is stored as rows, not a JSON document.

@@ -27,8 +27,14 @@ public sealed record ProjectSnapshot(
     /// would drop them, so they must not read a format 11 Project.
     /// Format 12 adds a Tracker's link to the schema it was created from, with its baseline, in
     /// tracker.json; older apps refuse the unknown property.
+    /// Format 13 adds a Tracker's dependency history (trackers/&lt;id&gt;/dependency-history/&lt;eventId&gt;.json),
+    /// which the ready vs waiting chart is worked out from; older apps would drop it, so they must not
+    /// read a format 13 Project.
     /// </summary>
-    public const int CurrentFormatVersion = 12;
+    public const int CurrentFormatVersion = 13;
+
+    /// <summary>The first format that may hold a Tracker's dependency history.</summary>
+    public const int FirstDependencyHistoryFormatVersion = 13;
 
     /// <summary>The first format that may hold a Tracker's schema link.</summary>
     public const int FirstSchemaLinkFormatVersion = 12;
@@ -103,7 +109,9 @@ public sealed record SnapshotTracker(
     // Formats 1–5 only: the last CSV import, which format 6 no longer keeps.
     SnapshotImportSummary? LegacyImportSummary = null,
     // Format 12 and later: the schema the Tracker was created from, and its baseline.
-    SnapshotSchemaLink? SchemaLink = null);
+    SnapshotSchemaLink? SchemaLink = null,
+    // Format 13 and later: the dependency history. Null or empty in older formats.
+    IReadOnlyList<SnapshotDependencyEvent>? DependencyHistory = null);
 
 public sealed record SnapshotEntity(
     Guid Id, Guid TrackerId, string SourceName, string DevelopmentStatus,
@@ -157,6 +165,15 @@ public sealed record SnapshotStatusEvent(
     Guid EventId, Guid EntityId, Guid? PreviousEventId,
     string? PreviousStatus, string NewStatus, string Kind,
     DateTimeOffset OccurredAtUtc, int Order);
+
+/// <summary>
+/// Format 13 and later: an entry of a Tracker's dependency history: a dependency added or removed
+/// (<see cref="DependencyEntityId"/>), an entity's lifecycle state (<see cref="LifecycleState"/>), or an
+/// entity leaving the Tracker. The entity may no longer exist; the history keeps it.
+/// </summary>
+public sealed record SnapshotDependencyEvent(
+    Guid EventId, Guid EntityId, string Change, Guid? DependencyEntityId, string? LifecycleState,
+    bool IsBaseline, DateTimeOffset OccurredAtUtc);
 
 public sealed record SnapshotProgress(
     Guid SnapshotId, DateTimeOffset RecordedAtUtc,

@@ -236,6 +236,10 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
 
         await DeleteUnreferencedPlaceholdersAsync(connection, transaction, trackerId, cancellationToken);
 
+        // Whatever changed the dependencies or the entities' lifecycles, the dependency history records it.
+        await SqliteDependencyHistory.RecordAsync(connection, transaction,
+            SqlitePersistenceValues.Format(trackerId), timestamp, cancellationToken);
+
         if (changeSet.ProgressSnapshotAfterChanges is not null)
         {
             await InsertSnapshotIfChangedAsync(
@@ -313,6 +317,10 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
             trackerId,
             entityArray,
             cancellationToken);
+
+        // A Tracker without a dependency history (one that came from an older snapshot) starts one now.
+        await SqliteDependencyHistory.RecordAsync(connection, transaction,
+            SqlitePersistenceValues.Format(trackerId), timestamp, cancellationToken);
 
         // Unresolved references have no progress of their own and must remain removable.
         entityArray = entityArray.Where(static entity => !entity.IsPlaceholder).ToArray();

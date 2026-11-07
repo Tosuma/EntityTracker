@@ -386,8 +386,8 @@ placeholder into the entity.
 A linked Project is stored in its repository under `.entitytracker/`, one JSON file per document:
 - the manifest and the Project;
 - each developer;
-- each Tracker (`tracker.json`), with one file per entity, status history event and progress record
-  under it;
+- each Tracker (`tracker.json`), with one file per entity, status history event, dependency history
+  entry and progress record under it;
 - each schema (`schemas/<id>/schema.json`), with one file per schema entity under it;
 - a Tracker made from a schema keeps its link in `tracker.json` (`schemaLink`): the schema's ID and,
   per schema entity, the linked Tracker entity and the name, group and dependencies it last took from
@@ -403,7 +403,16 @@ side wins, and a schema entity both sides pushed differently is left out of the 
 push links it again by name and asks about any difference (`ProjectSnapshotMerger.MergeSchemaLink`).
 After the merge, a link to a schema that is gone is dropped (`SettleSchemaLinks`).
 
+A Tracker's dependency history is only ever added to, so a merge keeps every entry of both sides,
+once, in time order.
+
 `ProjectSnapshotJsonCodec` writes them; `ProjectSnapshot.CurrentFormatVersion` is the format.
+- **Format 13:** adds a Tracker's dependency history: `trackers/<id>/dependency-history/<id>.json`, one
+  file per entry. Each entry is a dependency added or removed, an entity's lifecycle state (active,
+  archived or placeholder) or an entity leaving the Tracker, at a UTC time, marked as a baseline when
+  it records how things already were. An older app would drop it, so a format 13 Project needs this
+  version or later. The SQLite schema is version 29 (`entity_dependency_history`, with revision
+  triggers); the migration gives every Tracker a baseline of its dependencies and entities as they are.
 - **Format 12:** adds a Tracker's schema link (`schemaLink` in `tracker.json`). An older app refuses
   the unknown property, so a format 12 Project needs this version or later. The SQLite schema is
   version 28 (`tracker_schemas`, `tracker_schema_entities` and `tracker_schema_dependencies`, with

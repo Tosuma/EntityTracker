@@ -80,6 +80,10 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
             foreach (SnapshotProgress progress in tracker.ProgressHistory.OrderBy(p => p.SnapshotId))
                 files[prefix + $"progress-history/{progress.SnapshotId:D}.json"] =
                     JsonSerializer.SerializeToUtf8Bytes(progress, JsonOptions);
+            if (snapshot.FormatVersion >= ProjectSnapshot.FirstDependencyHistoryFormatVersion)
+                foreach (SnapshotDependencyEvent entry in (tracker.DependencyHistory ?? []).OrderBy(e => e.EventId))
+                    files[prefix + $"dependency-history/{entry.EventId:D}.json"] =
+                        JsonSerializer.SerializeToUtf8Bytes(entry, JsonOptions);
             if (tracker.LegacyImportSummary is { } summary)
                 files[prefix + "schema-import-summary.json"] =
                     JsonSerializer.SerializeToUtf8Bytes(summary, JsonOptions);
@@ -127,6 +131,12 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                 .Order(StringComparer.Ordinal).Select(p => Read<SnapshotStatusEvent>(files, p)).ToArray();
             SnapshotProgress[] progress = files.Keys.Where(p => p.StartsWith(prefix + "progress-history/", StringComparison.Ordinal))
                 .Order(StringComparer.Ordinal).Select(p => Read<SnapshotProgress>(files, p)).ToArray();
+            SnapshotDependencyEvent[]? dependencyHistory =
+                manifest.FormatVersion >= ProjectSnapshot.FirstDependencyHistoryFormatVersion
+                    ? files.Keys.Where(p => p.StartsWith(prefix + "dependency-history/", StringComparison.Ordinal))
+                        .Order(StringComparer.Ordinal).Select(p => Read<SnapshotDependencyEvent>(files, p))
+                        .OrderBy(e => e.OccurredAtUtc).ThenBy(e => e.EventId).ToArray()
+                    : null;
             string summaryPath = prefix + "schema-import-summary.json";
             SnapshotImportSummary? summary = files.ContainsKey(summaryPath)
                 ? Read<SnapshotImportSummary>(files, summaryPath) : null;
@@ -134,7 +144,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                 doc.CreatedAtUtc, doc.UpdatedAtUtc, doc.RecycledAtUtc, doc.CopiedFromTrackerId,
                 entities, events, progress,
                 manifest.FormatVersion >= 7 ? doc.SyncBaseline?.Normalize() : ReadBaselineText(doc.SyncBaselineJson),
-                summary, doc.SchemaLink?.Normalize()));
+                summary, doc.SchemaLink?.Normalize(), dependencyHistory));
         }
         SnapshotDeveloper[]? developers = manifest.FormatVersion >= 2
             ? files.Keys.Where(p => p.StartsWith(Root + "developers/", StringComparison.Ordinal))

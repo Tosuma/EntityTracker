@@ -211,7 +211,7 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Ready to start vs waiting on dependencies over time"
-                               ToolTip="Each day, the entities ready to start and the ones still waiting on a dependency." AutomationProperties.HelpText="Each day, the entities ready to start and the ones still waiting on a dependency." />
+                               ToolTip="Each day, the entities ready to start and those waiting on a dependency, since changes are recorded." AutomationProperties.HelpText="Each day, the entities ready to start and those waiting on a dependency, since changes are recorded." />
                                     <!-- Save image… and Copy image in one menu, so each chart header has one quiet button. -->
                                     <Button Grid.Column="2" Margin="8,0,0,0" Click="OnChartActionsClick"
                                             ToolTip="Save or copy this chart as an image"

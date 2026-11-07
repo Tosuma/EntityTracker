@@ -183,6 +183,7 @@ public static class ProjectSnapshotValidator
                     }
                 }
             }
+            ValidateDependencyHistory(snapshot.FormatVersion, tracker, allEventIds);
             HashSet<Guid> progressIds = [];
             foreach (SnapshotProgress progress in tracker.ProgressHistory)
             {
@@ -395,6 +396,32 @@ public static class ProjectSnapshotValidator
         if (recycled is { } value) Utc(value);
         if ((state == nameof(CatalogLifecycleState.Recycled)) != (recycled is not null))
             throw new InvalidDataException("A catalog lifecycle timestamp is inconsistent.");
+    }
+
+    /// <summary>
+    /// A dependency history entry names its change and only what that change needs, at a UTC time. Its
+    /// entity may be gone, so the entity isn't required to exist.
+    /// </summary>
+    private static void ValidateDependencyHistory(int formatVersion, SnapshotTracker tracker, HashSet<Guid> allEventIds)
+    {
+        if (tracker.DependencyHistory is not { Count: > 0 } history) return;
+        if (formatVersion < ProjectSnapshot.FirstDependencyHistoryFormatVersion)
+            throw new InvalidDataException("A dependency history is not supported in this snapshot format.");
+        foreach (SnapshotDependencyEvent entry in history)
+        {
+            if (entry is null || entry.EventId == Guid.Empty || entry.EntityId == Guid.Empty ||
+                !allEventIds.Add(entry.EventId))
+                throw new InvalidDataException("A dependency history event ID or entity reference is invalid.");
+            EnumValue<DependencyHistoryChange>(entry.Change);
+            bool isDependency = entry.Change is nameof(DependencyHistoryChange.DependencyAdded)
+                or nameof(DependencyHistoryChange.DependencyRemoved);
+            if (isDependency != entry.DependencyEntityId is not null ||
+                (entry.Change == nameof(DependencyHistoryChange.Lifecycle)) != entry.LifecycleState is not null ||
+                entry.DependencyEntityId == Guid.Empty || entry.DependencyEntityId == entry.EntityId)
+                throw new InvalidDataException("A dependency history event is inconsistent.");
+            if (entry.LifecycleState is { } state) EnumValue<EntityLifecycleState>(state);
+            Utc(entry.OccurredAtUtc);
+        }
     }
 
     private static void Utc(DateTimeOffset timestamp)

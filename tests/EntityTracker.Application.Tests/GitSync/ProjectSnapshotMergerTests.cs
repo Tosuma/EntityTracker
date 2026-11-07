@@ -504,6 +504,29 @@ public sealed class ProjectSnapshotMergerTests
     }
 
     [Fact]
+    public void DependencyHistoryKeepsBothSidesEntriesOnceInTimeOrder()
+    {
+        // #179: entries are only ever added, so a merge keeps every entry from both sides, once.
+        ProjectSnapshot basis = Snapshot();
+        SnapshotTracker tracker = basis.Trackers[0];
+        Guid entity = tracker.Entities[0].Id;
+        SnapshotDependencyEvent shared = Event(entity, Time);
+        SnapshotDependencyEvent ours = Event(entity, Time.AddMinutes(2));
+        SnapshotDependencyEvent theirs = Event(entity, Time.AddMinutes(1));
+        basis = basis with { Trackers = [tracker with { DependencyHistory = [shared] }] };
+        ProjectSnapshot local = basis with { Trackers = [basis.Trackers[0] with { DependencyHistory = [shared, ours] }] };
+        ProjectSnapshot remote = basis with { Trackers = [basis.Trackers[0] with { DependencyHistory = [shared, theirs] }] };
+
+        ProjectMergeResult merged = new ProjectSnapshotMerger().Merge(basis, local, remote);
+
+        Assert.Empty(merged.Conflicts);
+        Assert.Equal([shared, theirs, ours], merged.Snapshot.Trackers[0].DependencyHistory);
+
+        static SnapshotDependencyEvent Event(Guid entity, DateTimeOffset at) =>
+            new(Guid.NewGuid(), entity, "Lifecycle", null, "Active", false, at);
+    }
+
+    [Fact]
     public void RelationshipChangesAndLifecycleConflictsHaveTypedChoices()
     {
         ProjectSnapshot basis = Snapshot();
