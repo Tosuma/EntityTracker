@@ -1904,6 +1904,12 @@ public sealed class PresentationConfigurationTests
             (string?)element.Attribute("Command") == "{Binding UseSchemaForAllCommand}");
         Assert.Contains(review.Descendants(), element =>
             (string?)element.Attribute("Command") == "{Binding KeepTrackersForAllCommand}");
+        // Each tracker can take or decline all its changes, or be left for later; the untouched fields are a
+        // line of their own.
+        Assert.Contains(review.Descendants(), element =>
+            (string?)element.Attribute("Command") == "{Binding DecideLaterCommand}");
+        Assert.Equal("A push never changes statuses, notes, developers, priorities, due dates or Filter active.",
+            (string?)Named(schemas, "SchemaPushUntouched").Attribute("Text"));
     }
 
     [Fact]

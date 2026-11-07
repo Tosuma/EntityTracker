@@ -357,17 +357,20 @@
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
                         <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="Push to trackers" />
-                        <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" TextWrapping="Wrap"
-                                   Text="Changes only the schema made apply without asking. Where a tracker changed the same thing, choose which to keep. Statuses, notes, developers, priorities, due dates and Filter active are never changed." />
+                        <TextBlock x:Name="SchemaPushIntro" Margin="0,6,0,0" TextWrapping="Wrap"
+                                   Text="These are the schema's changes since its last push that each tracker doesn't have yet. Choose Use schema to bring a change into the tracker, or Keep tracker to decline it. A change you leave undecided isn't pushed now and is offered again next time, so each tracker can be handled when it suits." />
+                        <TextBlock x:Name="SchemaPushUntouched" Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}"
+                                   TextWrapping="Wrap"
+                                   Text="A push never changes statuses, notes, developers, priorities, due dates or Filter active." />
                     </StackPanel>
                     <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
-                                    Visibility="{Binding HasConflicts, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    Visibility="{Binding HasReviewChanges, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <Button Margin="0,0,8,0" Command="{Binding UseSchemaForAllCommand}" Content="Use schema for all" />
                             <Button Command="{Binding KeepTrackersForAllCommand}" Content="Keep trackers for all" />
                         </StackPanel>
                         <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding ReviewSummary}"
-                                   AutomationProperties.LiveSetting="Polite" />
+                                   TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
                     </DockPanel>
                     <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
                         <Border Margin="0,0,0,12" Style="{StaticResource ErrorMessageStyle}"
@@ -386,26 +389,35 @@
                                 <DataTemplate>
                                     <Border Margin="0,0,0,8" Padding="12" Style="{StaticResource EntityTrackerCardStyle}">
                                         <StackPanel>
-                                            <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding TrackerName}" />
-                                            <TextBlock Margin="0,6,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
-                                                       Text="Already up to date."
-                                                       Visibility="{Binding IsUpToDate, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                            <StackPanel Margin="0,6,0,0"
-                                                        Visibility="{Binding HasAutomaticChanges, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="{Binding AutomaticHeading}" />
-                                                <ItemsControl ItemsSource="{Binding AutomaticChanges}">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate>
-                                                            <TextBlock Margin="0,2,0,0" Text="{Binding StringFormat=• {0}}" TextWrapping="Wrap" />
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-                                            </StackPanel>
-                                            <ItemsControl ItemsSource="{Binding Conflicts}">
+                                            <DockPanel>
+                                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                                                            Visibility="{Binding HasChanges, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                    <Button Margin="0,0,8,0" Command="{Binding UseSchemaForAllCommand}" Content="Use schema for all"
+                                                            AutomationProperties.Name="{Binding TrackerName, StringFormat=Use the schema for all changes to {0}}" />
+                                                    <Button Margin="0,0,8,0" Command="{Binding KeepTrackerForAllCommand}" Content="Keep tracker for all"
+                                                            AutomationProperties.Name="{Binding TrackerName, StringFormat=Keep {0} for all changes}" />
+                                                    <Button Command="{Binding DecideLaterCommand}" Content="Decide later"
+                                                            ToolTip="Clear this tracker's choices, so it is left for a later push"
+                                                            AutomationProperties.Name="{Binding TrackerName, StringFormat=Decide later for {0}}" />
+                                                </StackPanel>
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding TrackerName}" />
+                                                    <TextBlock Margin="0,2,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                               Text="{Binding DecidedText}"
+                                                               Visibility="{Binding HasChanges, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                    <TextBlock Margin="0,2,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                               Text="Already up to date."
+                                                               Visibility="{Binding IsUpToDate, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                </StackPanel>
+                                            </DockPanel>
+                                            <ItemsControl ItemsSource="{Binding Changes}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate>
                                                         <StackPanel Margin="0,10,0,0">
-                                                            <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
+                                                            <TextBlock TextWrapping="Wrap">
+                                                                <Run Text="{Binding Description, Mode=OneWay}" />
+                                                                <Run Foreground="{DynamicResource Brush.Text.Secondary}" Text="{Binding ConflictNote, Mode=OneWay}" />
+                                                            </TextBlock>
                                                             <StackPanel Margin="0,4,0,0" Orientation="Horizontal">
                                                                 <!-- Labels hold names that may contain "_", so they are plain text, not access keys. -->
                                                                 <RadioButton Margin="0,0,18,0" GroupName="{Binding ChoiceGroup}"

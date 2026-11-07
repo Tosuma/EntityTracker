@@ -35,7 +35,7 @@ public sealed class SchemaTrackerService(
         SchemaContent content = await RequireActiveSchemaAsync(schemaId, cancellationToken);
         DateTimeOffset now = _timeProvider.GetUtcNow().ToUniversalTime();
         Tracker tracker = new(TrackerId.New(), content.Schema.ProjectId, name, now, now, schemaId: schemaId);
-        TrackerPushOutcome outcome = SchemaPushPlanner.Plan(content, tracker, [], [], null);
+        TrackerPushOutcome outcome = SchemaPushPlanner.Plan(content, tracker, [], [], null, SchemaPushPlanner.UseSchema);
         TrackedEntity[] entities = outcome.ChangeSet.EntitiesToAdd.ToArray();
         EntityDependency[] dependencies = outcome.ChangeSet.Dependencies.ToArray();
         ProgressSnapshotState snapshot = snapshotCalculator.Calculate(entities,
@@ -78,8 +78,8 @@ public sealed class SchemaTrackerService(
     }
 
     /// <summary>
-    /// Reviews a push to every active Tracker linked to the schema: what applies without asking, and the
-    /// conflicts to choose for.
+    /// Reviews a push to every active Tracker linked to the schema: each change the Tracker doesn't have yet,
+    /// all undecided.
     /// </summary>
     public async Task<SchemaPushReview> ReviewPushAsync(
         SchemaId schemaId, CancellationToken cancellationToken = default)
@@ -89,9 +89,9 @@ public sealed class SchemaTrackerService(
         List<TrackerPushPlan> plans = [];
         foreach (TrackerSchemaLink link in await ActiveLinksAsync(schemaId, cancellationToken))
         {
-            (Tracker tracker, string fingerprint, TrackerPushOutcome outcome) =
-                await PlanAsync(content, link.TrackerId, null, cancellationToken);
-            plans.Add(new TrackerPushPlan(tracker, fingerprint, outcome.AutomaticChanges, outcome.Conflicts));
+            (Tracker tracker, string fingerprint, TrackerSchemaLink current, TrackerPushOutcome outcome) =
+                await PlanAsync(content, link.TrackerId, SchemaPushPlanner.Undecided, cancellationToken);
+            plans.Add(new TrackerPushPlan(tracker, fingerprint, outcome.Changes, !SameLink(current, outcome.Link)));
         }
         if (schemaFingerprint != await linkStore.FingerprintSchemaAsync(schemaId, cancellationToken))
             throw new InvalidOperationException("The schema changed while the review was loading. Open it again.");
@@ -100,21 +100,24 @@ public sealed class SchemaTrackerService(
     }
 
     /// <summary>
-    /// Applies a reviewed push to all its Trackers at once. Nothing is written if the schema or a Tracker
-    /// changed since the review opened.
+    /// Applies a reviewed push to all its Trackers at once: the changes decided for each, while undecided ones
+    /// wait for a later push. Nothing is written if the schema or a Tracker changed since the review opened.
     /// </summary>
     public async Task ApplyPushAsync(SchemaPushReview review, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(review);
         if (!review.CanApply)
-            throw new InvalidOperationException("Choose Use schema or Keep tracker for every difference before pushing.");
+            throw new InvalidOperationException("Choose Use schema or Keep tracker for at least one change before pushing.");
         SchemaId schemaId = review.Schema.Schema.Id;
         await RequireActiveSchemaAsync(schemaId, cancellationToken);
         List<TrackerPushCommit> commits = [];
+        Func<SchemaPushChange, SchemaPushChoice?> choices = SchemaPushPlanner.ChoicesOf(review.Changes);
         foreach (TrackerPushPlan plan in review.Trackers)
         {
-            (_, string fingerprint, TrackerPushOutcome outcome) =
-                await PlanAsync(review.Schema, plan.Tracker.Id, review.Conflicts, cancellationToken);
+            // A Tracker with nothing decided, and a baseline that doesn't move by itself, is left as it is.
+            if (!plan.HasBaselineUpdate && plan.Changes.All(static change => change.Choice is null)) continue;
+            (_, string fingerprint, _, TrackerPushOutcome outcome) =
+                await PlanAsync(review.Schema, plan.Tracker.Id, choices, cancellationToken);
             if (fingerprint != plan.Fingerprint)
                 throw new InvalidOperationException(
                     $"{plan.Tracker.Name} changed after this review opened. Open a new review.");
@@ -137,8 +140,8 @@ public sealed class SchemaTrackerService(
             cancellationToken);
     }
 
-    private async Task<(Tracker, string, TrackerPushOutcome)> PlanAsync(SchemaContent content,
-        TrackerId trackerId, IReadOnlyList<SchemaPushConflict>? choices, CancellationToken cancellationToken)
+    private async Task<(Tracker, string, TrackerSchemaLink, TrackerPushOutcome)> PlanAsync(SchemaContent content,
+        TrackerId trackerId, Func<SchemaPushChange, SchemaPushChoice?> choices, CancellationToken cancellationToken)
     {
         string fingerprint = await linkStore.FingerprintTrackerAsync(trackerId, cancellationToken);
         Tracker tracker = await trackerRepository.GetAsync(trackerId, cancellationToken) ??
@@ -149,9 +152,19 @@ public sealed class SchemaTrackerService(
         EntityDependency[] dependencies = (await dependencyRepository.GetAllAsync(trackerId, cancellationToken)).ToArray();
         if (fingerprint != await linkStore.FingerprintTrackerAsync(trackerId, cancellationToken))
             throw new InvalidOperationException($"{tracker.Name} changed while the review was loading. Open it again.");
-        return (tracker, fingerprint,
+        return (tracker, fingerprint, link,
             SchemaPushPlanner.Plan(content, tracker, entities, dependencies, link, choices));
     }
+
+    private static bool SameLink(TrackerSchemaLink a, TrackerSchemaLink b) =>
+        a.SchemaId == b.SchemaId && a.Entities.Count == b.Entities.Count &&
+        a.Entities.OrderBy(static e => e.SchemaEntityId.Value).Zip(b.Entities.OrderBy(static e => e.SchemaEntityId.Value))
+            .All(static pair => pair.First.SchemaEntityId == pair.Second.SchemaEntityId &&
+                                pair.First.EntityId == pair.Second.EntityId &&
+                                pair.First.Name == pair.Second.Name &&
+                                pair.First.GroupName == pair.Second.GroupName &&
+                                pair.First.Dependencies.Select(static d => d.Value).Order()
+                                    .SequenceEqual(pair.Second.Dependencies.Select(static d => d.Value).Order()));
 
     /// <summary>The links of the schema's active Trackers. A recycled Tracker catches up when it is next pushed to.</summary>
     private async Task<TrackerSchemaLink[]> ActiveLinksAsync(SchemaId schemaId, CancellationToken cancellationToken)

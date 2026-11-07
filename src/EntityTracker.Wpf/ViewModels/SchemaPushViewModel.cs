@@ -13,15 +13,15 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace EntityTracker.Wpf.ViewModels;
 
-/// <summary>One conflict in the push review, with its two choices as radio buttons.</summary>
-public sealed class SchemaPushConflictItem : INotifyPropertyChanged
+/// <summary>One change in the push review, with its two choices as radio buttons; neither is preselected.</summary>
+public sealed class SchemaPushChangeItem : INotifyPropertyChanged
 {
-    public SchemaPushConflictItem(SchemaPushConflict conflict)
+    public SchemaPushChangeItem(SchemaPushChange change)
     {
-        Conflict = conflict ?? throw new ArgumentNullException(nameof(conflict));
-        conflict.PropertyChanged += (_, e) =>
+        Change = change ?? throw new ArgumentNullException(nameof(change));
+        change.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName != nameof(SchemaPushConflict.Choice)) return;
+            if (e.PropertyName != nameof(SchemaPushChange.Choice)) return;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(UseSchema)));
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(KeepTracker)));
         };
@@ -29,47 +29,80 @@ public sealed class SchemaPushConflictItem : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public SchemaPushConflict Conflict { get; }
+    public SchemaPushChange Change { get; }
 
-    /// <summary>A unique group for this conflict's two radio buttons.</summary>
+    /// <summary>A unique group for this change's two radio buttons.</summary>
     public string ChoiceGroup { get; } = Guid.NewGuid().ToString("N");
 
-    public string Description => Conflict.Description;
-    public string UseSchemaLabel => Conflict.UseSchemaLabel;
-    public string KeepTrackerLabel => Conflict.KeepTrackerLabel;
+    public string Description => Change.Description;
+    public bool IsConflict => Change.IsConflict;
+
+    /// <summary>Marks a change the Tracker made too, so its own value is about to be replaced.</summary>
+    public string ConflictNote => Change.IsConflict ? " This tracker changed it too." : string.Empty;
+    public string UseSchemaLabel => Change.UseSchemaLabel;
+    public string KeepTrackerLabel => Change.KeepTrackerLabel;
 
     public bool UseSchema
     {
-        get => Conflict.Choice == SchemaPushChoice.Schema;
-        set { if (value) Conflict.Choice = SchemaPushChoice.Schema; }
+        get => Change.Choice == SchemaPushChoice.Schema;
+        set { if (value) Change.Choice = SchemaPushChoice.Schema; }
     }
 
     public bool KeepTracker
     {
-        get => Conflict.Choice == SchemaPushChoice.Tracker;
-        set { if (value) Conflict.Choice = SchemaPushChoice.Tracker; }
+        get => Change.Choice == SchemaPushChoice.Tracker;
+        set { if (value) Change.Choice = SchemaPushChoice.Tracker; }
     }
 }
 
-/// <summary>What a push does to one Tracker, as the review shows it.</summary>
-public sealed record SchemaPushTrackerItem(
-    string TrackerName,
-    IReadOnlyList<string> AutomaticChanges,
-    IReadOnlyList<SchemaPushConflictItem> Conflicts)
+/// <summary>What a push offers one Tracker, with choices for all its changes at once.</summary>
+public sealed class SchemaPushTrackerItem : INotifyPropertyChanged
 {
-    public bool HasAutomaticChanges => AutomaticChanges.Count > 0;
-    public bool HasConflicts => Conflicts.Count > 0;
-    public bool IsUpToDate => !HasAutomaticChanges && !HasConflicts;
+    public SchemaPushTrackerItem(string trackerName, IReadOnlyList<SchemaPushChangeItem> changes)
+    {
+        TrackerName = trackerName;
+        Changes = changes;
+        UseSchemaForAllCommand = new RelayCommand(() => Choose(SchemaPushChoice.Schema), () => HasChanges);
+        KeepTrackerForAllCommand = new RelayCommand(() => Choose(SchemaPushChoice.Tracker), () => HasChanges);
+        DecideLaterCommand = new RelayCommand(() => Choose(null), () => HasChanges);
+        foreach (SchemaPushChangeItem change in changes)
+            change.Change.PropertyChanged += (_, _) =>
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DecidedText)));
+    }
 
-    public string AutomaticHeading => AutomaticChanges.Count == 1
-        ? "1 change applies without asking:"
-        : $"{AutomaticChanges.Count} changes apply without asking:";
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public string TrackerName { get; }
+    public IReadOnlyList<SchemaPushChangeItem> Changes { get; }
+    public bool HasChanges => Changes.Count > 0;
+    public bool IsUpToDate => !HasChanges;
+
+    /// <summary>How far this Tracker's changes are decided: "2 of 3 decided", or that it is skipped.</summary>
+    public string DecidedText
+    {
+        get
+        {
+            int decided = Changes.Count(static change => change.Change.Choice is not null);
+            return decided == 0
+                ? "Nothing decided: this tracker is left for a later push."
+                : $"{decided} of {Changes.Count} decided";
+        }
+    }
+
+    public ICommand UseSchemaForAllCommand { get; }
+    public ICommand KeepTrackerForAllCommand { get; }
+    public ICommand DecideLaterCommand { get; }
+
+    private void Choose(SchemaPushChoice? choice)
+    {
+        foreach (SchemaPushChangeItem change in Changes) change.Change.Choice = choice;
+    }
 }
 
 /// <summary>
 /// The schema's changes since its last push, and the push review: one review for every Tracker made from
-/// the schema. Changes only the schema made apply without asking; where a Tracker changed the same thing,
-/// the review asks whether to use the schema's value or keep the Tracker's.
+/// the schema, where each change is decided per Tracker. Use schema applies it, Keep tracker declines it, and
+/// a change left undecided is offered again at a later push.
 /// </summary>
 public sealed class SchemaPushViewModel : INotifyPropertyChanged
 {
@@ -99,8 +132,8 @@ public sealed class SchemaPushViewModel : INotifyPropertyChanged
         ReviewTrackers = [];
         _openReviewCommand = new AsyncCommand(OpenReviewAsync, () => !_isBusy && CanPush);
         _applyCommand = new AsyncCommand(ApplyAsync, () => !_isBusy && _review?.CanApply == true);
-        _useSchemaForAllCommand = new RelayCommand(() => ChooseAll(SchemaPushChoice.Schema), () => HasConflicts);
-        _keepTrackersForAllCommand = new RelayCommand(() => ChooseAll(SchemaPushChoice.Tracker), () => HasConflicts);
+        _useSchemaForAllCommand = new RelayCommand(() => ChooseAll(SchemaPushChoice.Schema), () => HasReviewChanges);
+        _keepTrackersForAllCommand = new RelayCommand(() => ChooseAll(SchemaPushChoice.Tracker), () => HasReviewChanges);
         CancelReviewCommand = new RelayCommand(CloseReview, () => !_isBusy);
     }
 
@@ -127,12 +160,16 @@ public sealed class SchemaPushViewModel : INotifyPropertyChanged
 
     public ObservableCollection<SchemaPushTrackerItem> ReviewTrackers { get; }
     public bool IsReviewOpen => _review is not null;
-    public bool HasConflicts => _review?.Conflicts.Count > 0;
-    public int PendingChoiceCount => _review?.Conflicts.Count(static c => c.Choice is null) ?? 0;
+    public bool HasReviewChanges => _review?.HasChanges == true;
+    public int PendingChoiceCount => _review?.Changes.Count(static c => c.Choice is null) ?? 0;
 
-    public string ReviewSummary => _review is null ? "" : HasConflicts
-        ? $"{Count(_review.Conflicts.Count, "difference")} to decide, {PendingChoiceCount} left."
-        : "Nothing to decide: every change applies without asking.";
+    /// <summary>How many changes are decided; the undecided ones wait for a later push.</summary>
+    public string ReviewSummary => _review is null ? "" : !_review.HasChanges
+        ? "Nothing to decide: the trackers already have these changes, so the push only records that."
+        : PendingChoiceCount == 0
+            ? $"All {Count(_review.Changes.Count, "change")} decided."
+            : $"{_review.DecidedCount} of {Count(_review.Changes.Count, "change")} decided. " +
+              "Undecided changes aren't pushed now and are offered again next time.";
 
     public string? ErrorMessage
     {
@@ -188,7 +225,8 @@ public sealed class SchemaPushViewModel : INotifyPropertyChanged
         await RunAsync(async () =>
         {
             await _service.ApplyPushAsync(review);
-            int trackers = review.Trackers.Count(static tracker => tracker.HasChanges);
+            int trackers = review.Trackers.Count(static tracker =>
+                tracker.HasBaselineUpdate || tracker.Changes.Any(static change => change.Choice is not null));
             SetReview(null);
             _notifications?.Show("Schema pushed",
                 $"{review.Schema.Schema.Name} was pushed to {Count(trackers, "tracker")}.", NotificationKind.Success);
@@ -199,7 +237,7 @@ public sealed class SchemaPushViewModel : INotifyPropertyChanged
 
     private void ChooseAll(SchemaPushChoice choice)
     {
-        foreach (SchemaPushConflict conflict in _review?.Conflicts ?? []) conflict.Choice = choice;
+        foreach (SchemaPushChange change in _review?.Changes ?? []) change.Choice = choice;
     }
 
     private void CloseReview()
@@ -211,18 +249,18 @@ public sealed class SchemaPushViewModel : INotifyPropertyChanged
     private void SetReview(SchemaPushReview? review)
     {
         if (_review is not null)
-            foreach (SchemaPushConflict conflict in _review.Conflicts) conflict.PropertyChanged -= OnChoiceChanged;
+            foreach (SchemaPushChange change in _review.Changes) change.PropertyChanged -= OnChoiceChanged;
         _review = review;
         ReviewTrackers.Clear();
         if (review is not null)
         {
-            foreach (SchemaPushConflict conflict in review.Conflicts) conflict.PropertyChanged += OnChoiceChanged;
+            foreach (SchemaPushChange change in review.Changes) change.PropertyChanged += OnChoiceChanged;
             foreach (TrackerPushPlan plan in review.Trackers)
-                ReviewTrackers.Add(new SchemaPushTrackerItem(plan.Tracker.Name, plan.AutomaticChanges,
-                    plan.Conflicts.Select(static conflict => new SchemaPushConflictItem(conflict)).ToArray()));
+                ReviewTrackers.Add(new SchemaPushTrackerItem(plan.Tracker.Name,
+                    plan.Changes.Select(static change => new SchemaPushChangeItem(change)).ToArray()));
         }
         OnPropertyChanged(nameof(IsReviewOpen));
-        OnPropertyChanged(nameof(HasConflicts));
+        OnPropertyChanged(nameof(HasReviewChanges));
         OnChoiceChanged(null, EventArgs.Empty);
     }
 

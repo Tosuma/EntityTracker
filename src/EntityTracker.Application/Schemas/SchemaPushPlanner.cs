@@ -6,35 +6,48 @@ namespace EntityTracker.Application.Schemas;
 
 /// <summary>What a push does to one Tracker, as a change set and the Tracker's new baseline.</summary>
 public sealed record TrackerPushOutcome(
-    IReadOnlyList<string> AutomaticChanges,
-    IReadOnlyList<SchemaPushConflict> Conflicts,
+    IReadOnlyList<SchemaPushChange> Changes,
     TrackedStateChangeSet ChangeSet,
     IReadOnlyList<TrackedEntity> ResultEntities,
     IReadOnlyList<EntityDependency> ResultDependencies,
     TrackerSchemaLink Link);
 
 /// <summary>
-/// Compares a schema, a linked Tracker and the Tracker's baseline, entity by entity through the links by
-/// ID. A change only the schema made is applied; a change only the Tracker made is kept; where both
-/// changed the same thing differently, a conflict asks which to keep. Statuses, notes, developers,
-/// priorities, due dates and Filter active are never touched.
+/// Compares a schema, a linked Tracker and the Tracker's baseline, entity by entity through the links by ID,
+/// and lists each change the schema made since the baseline that the Tracker doesn't have yet. Every change
+/// is decided per Tracker: Use schema applies it, Keep tracker declines it until the schema changes the same
+/// thing again, and an undecided change is left for a later push. A change only the Tracker made is never
+/// offered. Statuses, notes, developers, priorities, due dates and Filter active are never touched.
 /// </summary>
 public static class SchemaPushPlanner
 {
-    /// <param name="choices">The choices made in a review, by conflict; null while reviewing, which
-    /// keeps the Tracker's side of every conflict.</param>
+    /// <summary>Every change undecided: what a review lists.</summary>
+    public static readonly Func<SchemaPushChange, SchemaPushChoice?> Undecided = static _ => null;
+
+    /// <summary>Every change taken from the schema: a Tracker created from it.</summary>
+    public static readonly Func<SchemaPushChange, SchemaPushChoice?> UseSchema = static _ => SchemaPushChoice.Schema;
+
+    /// <param name="choose">The choice for each change: undecided while reviewing, or the review's choices when
+    /// applying.</param>
     public static TrackerPushOutcome Plan(
         SchemaContent schema,
         Tracker tracker,
         IReadOnlyList<TrackedEntity> entities,
         IReadOnlyList<EntityDependency> dependencies,
         TrackerSchemaLink? link,
-        IReadOnlyList<SchemaPushConflict>? choices = null)
+        Func<SchemaPushChange, SchemaPushChoice?> choose)
     {
         ArgumentNullException.ThrowIfNull(schema);
         ArgumentNullException.ThrowIfNull(tracker);
-        return new Planning(schema, tracker, entities, dependencies, link, choices).Run();
+        ArgumentNullException.ThrowIfNull(choose);
+        return new Planning(schema, tracker, entities, dependencies, link, choose).Run();
     }
+
+    /// <summary>The choices of a review, for applying it: a change the review didn't list means it is stale.</summary>
+    public static Func<SchemaPushChange, SchemaPushChoice?> ChoicesOf(IReadOnlyList<SchemaPushChange> reviewed) => change =>
+        (reviewed.FirstOrDefault(item => item.TrackerId == change.TrackerId && item.Key == change.Key) ??
+         throw new InvalidOperationException("The schema or a tracker changed after this review opened. Open a new review."))
+        .Choice;
 
     /// <summary>The schema's changes since a baseline, described for the schema editor.</summary>
     public static IReadOnlyList<string> DescribeChanges(SchemaContent schema, TrackerSchemaLink link)
@@ -60,6 +73,8 @@ public static class SchemaPushPlanner
                 changes.Add($"Renamed {old.Name} to {entity.Name}");
             if (!string.Equals(old.GroupName, entity.GroupName, StringComparison.Ordinal))
                 changes.Add($"Moved {entity.Name} to {GroupText(entity.GroupName)}");
+            // A declined addition holds no dependencies of its own.
+            if (old.EntityId is null) continue;
             HashSet<SchemaEntityId> was = old.Dependencies.ToHashSet();
             HashSet<SchemaEntityId> @is = nowDependencies[entity.Id].ToHashSet();
             foreach (SchemaEntityId added in @is.Except(was))
@@ -75,22 +90,33 @@ public static class SchemaPushPlanner
 
     internal static string GroupText(string group) => group.Length == 0 ? "no group" : $"group {group}";
 
+    /// <summary>One schema entity in the Tracker's baseline as the push leaves it.</summary>
+    private sealed class BaselineEntry(EntityId? entityId, string name, string group, IEnumerable<SchemaEntityId> dependencies)
+    {
+        public EntityId? EntityId { get; } = entityId;
+        public string Name { get; set; } = name;
+        public string Group { get; set; } = group;
+        public HashSet<SchemaEntityId> Dependencies { get; } = dependencies.ToHashSet();
+    }
+
     private sealed class Planning
     {
         private readonly SchemaContent _schema;
         private readonly Tracker _tracker;
         private readonly IReadOnlyList<EntityDependency> _dependencies;
-        private readonly IReadOnlyList<SchemaPushConflict>? _choices;
+        private readonly Func<SchemaPushChange, SchemaPushChoice?> _choose;
         private readonly Dictionary<SchemaEntityId, SchemaEntity> _schemaEntities;
         private readonly ILookup<SchemaEntityId, SchemaEntityId> _schemaDependencies;
         private readonly Dictionary<EntityId, TrackedEntity> _byId;
         private readonly Dictionary<EntitySourceKey, TrackedEntity> _byKey;
+        private readonly Dictionary<SchemaEntityId, SchemaBaselineEntity> _old = [];
         private readonly Dictionary<SchemaEntityId, (SchemaBaselineEntity Old, TrackedEntity Entity)> _linked = [];
         private readonly Dictionary<SchemaEntityId, TrackedEntity> _targets = [];
+        private readonly Dictionary<SchemaEntityId, BaselineEntry> _baseline = [];
+        // Entities linked by name in this push: the Tracker's own values stand in for the missing baseline.
         private readonly HashSet<SchemaEntityId> _linkedByName = [];
         private readonly HashSet<EntityId> _created = [];
-        private readonly List<string> _automatic = [];
-        private readonly List<SchemaPushConflict> _conflicts = [];
+        private readonly List<SchemaPushChange> _changes = [];
         private readonly List<TrackedEntity> _additions = [];
         private readonly List<TrackedEntity> _renames = [];
         private readonly List<TrackedEntity> _regrouped = [];
@@ -100,22 +126,24 @@ public static class SchemaPushPlanner
 
         public Planning(SchemaContent schema, Tracker tracker, IReadOnlyList<TrackedEntity> entities,
             IReadOnlyList<EntityDependency> dependencies, TrackerSchemaLink? link,
-            IReadOnlyList<SchemaPushConflict>? choices)
+            Func<SchemaPushChange, SchemaPushChoice?> choose)
         {
             _schema = schema;
             _tracker = tracker;
             _dependencies = dependencies;
-            _choices = choices;
+            _choose = choose;
             _schemaEntities = schema.Entities.ToDictionary(static e => e.Id);
             _schemaDependencies = schema.Dependencies.ToLookup(static d => d.DependentEntityId,
                 static d => d.DependencyEntityId);
             _byId = entities.ToDictionary(static e => e.Id);
             _byKey = entities.ToDictionary(static e => EntitySourceKey.From(e.SourceName));
-            // A link counts while its entity is still a real entity of the Tracker; otherwise the schema
-            // entity is new to the Tracker again.
             foreach (SchemaBaselineEntity old in link?.Entities ?? [])
+            {
+                _old[old.SchemaEntityId] = old;
+                // A link counts while its entity is still a real entity of the Tracker.
                 if (old.EntityId is { } id && _byId.TryGetValue(id, out TrackedEntity? entity) && !entity.IsPlaceholder)
                     _linked[old.SchemaEntityId] = (old, entity);
+            }
         }
 
         public TrackerPushOutcome Run()
@@ -131,7 +159,7 @@ public static class SchemaPushPlanner
             foreach ((SchemaEntityId id, (SchemaBaselineEntity old, TrackedEntity entity)) in Ordered(_linked))
                 if (!_schemaEntities.ContainsKey(id) && !_targets.Values.Contains(entity)) Removed(old, entity);
             foreach (SchemaEntity entity in _schema.Entities.OrderBy(static e => e.Name, StringComparer.OrdinalIgnoreCase))
-                ReconcileDependencies(entity);
+                if (_targets.ContainsKey(entity.Id)) ReconcileDependencies(entity);
             RedirectReplacedPlaceholders();
             return Outcome();
         }
@@ -139,37 +167,43 @@ public static class SchemaPushPlanner
         private void UpdateLinked(SchemaBaselineEntity old, SchemaEntity now, TrackedEntity entity)
         {
             _targets[now.Id] = entity;
-            string currentName = entity.SourceName;
-            if (Settle(old.Name, now.Name, entity.SourceName) is { } nameConflict)
-            {
-                if (nameConflict)
-                {
-                    if (Decide(now.Id, null, SchemaPushConflictKind.Name, entity.SourceName,
-                            $"The schema renamed {old.Name} to {now.Name}; this tracker calls it {entity.SourceName}.",
-                            $"Rename it {now.Name}", $"Keep {entity.SourceName}"))
-                        Rename(entity, now.Name);
-                }
-                else
-                {
-                    _automatic.Add($"Renamed {currentName} to {now.Name}");
-                    Rename(entity, now.Name);
-                }
-            }
-            if (Settle(old.GroupName, now.GroupName, entity.GroupName) is { } groupConflict)
-            {
-                if (groupConflict)
-                {
-                    if (Decide(now.Id, null, SchemaPushConflictKind.Group, entity.SourceName,
-                            $"The schema moved {entity.SourceName} to {GroupText(now.GroupName)}; this tracker has it in {GroupText(entity.GroupName)}.",
-                            $"Use {GroupText(now.GroupName)}", $"Keep {GroupText(entity.GroupName)}"))
-                        Regroup(entity, now.GroupName);
-                }
-                else
-                {
-                    _automatic.Add($"Moved {entity.SourceName} to {GroupText(now.GroupName)}");
-                    Regroup(entity, now.GroupName);
-                }
-            }
+            BaselineEntry entry = new(entity.Id, old.Name, old.GroupName, old.Dependencies);
+            _baseline[now.Id] = entry;
+            entry.Name = SettleName(now, old.Name, entity) ?? entry.Name;
+            entry.Group = SettleGroup(now, old.GroupName, entity) ?? entry.Group;
+        }
+
+        /// <summary>Offers the schema's name if it changed it; returns the name the baseline takes, or null to keep it.</summary>
+        private string? SettleName(SchemaEntity now, string old, TrackedEntity entity)
+        {
+            if (string.Equals(old, now.Name, StringComparison.Ordinal) ||
+                string.Equals(entity.SourceName, now.Name, StringComparison.Ordinal))
+                return now.Name;
+            bool conflict = !string.Equals(entity.SourceName, old, StringComparison.Ordinal);
+            string current = entity.SourceName;
+            SchemaPushChoice? choice = Decide(now.Id, null, SchemaPushChangeKind.Name, current, conflict,
+                conflict
+                    ? $"The schema renamed {old} to {now.Name}; this tracker calls it {current}."
+                    : $"The schema renamed {current} to {now.Name}.",
+                $"Rename it {now.Name}", $"Keep {current}");
+            if (choice == SchemaPushChoice.Schema) Rename(entity, now.Name);
+            return choice is null ? null : now.Name;
+        }
+
+        /// <summary>Offers the schema's group if it changed it; returns the group the baseline takes, or null to keep it.</summary>
+        private string? SettleGroup(SchemaEntity now, string old, TrackedEntity entity)
+        {
+            if (string.Equals(old, now.GroupName, StringComparison.Ordinal) ||
+                string.Equals(entity.GroupName, now.GroupName, StringComparison.Ordinal))
+                return now.GroupName;
+            bool conflict = !string.Equals(entity.GroupName, old, StringComparison.Ordinal);
+            SchemaPushChoice? choice = Decide(now.Id, null, SchemaPushChangeKind.Group, entity.SourceName, conflict,
+                conflict
+                    ? $"The schema has {entity.SourceName} in {GroupText(now.GroupName)}; this tracker has it in {GroupText(entity.GroupName)}."
+                    : $"The schema moved {entity.SourceName} to {GroupText(now.GroupName)}.",
+                $"Use {GroupText(now.GroupName)}", $"Keep {GroupText(entity.GroupName)}");
+            if (choice == SchemaPushChoice.Schema) Regroup(entity, now.GroupName);
+            return choice is null ? null : now.GroupName;
         }
 
         private void Removed(SchemaBaselineEntity old, TrackedEntity entity)
@@ -183,19 +217,29 @@ public static class SchemaPushPlanner
             bool changed = !string.Equals(entity.SourceName, old.Name, StringComparison.Ordinal) ||
                            !string.Equals(entity.GroupName, old.GroupName, StringComparison.Ordinal) ||
                            !was.SetEquals(@is);
-            if (!changed)
-            {
-                _automatic.Add($"Archived {entity.SourceName}, which was removed from the schema");
-                _archives.Add(entity.Id);
-            }
-            else if (Decide(old.SchemaEntityId, null, SchemaPushConflictKind.Removed, entity.SourceName,
-                         $"The schema removed {old.Name}, but this tracker changed {entity.SourceName} since the last push.",
-                         $"Archive {entity.SourceName}", "Keep it in this tracker only"))
-                _archives.Add(entity.Id);
+            SchemaPushChoice? choice = Decide(old.SchemaEntityId, null, SchemaPushChangeKind.Removed, entity.SourceName,
+                changed,
+                changed
+                    ? $"The schema removed {old.Name}, but this tracker changed {entity.SourceName} since the last push."
+                    : $"The schema removed {old.Name}.",
+                $"Archive {entity.SourceName}", "Keep it in this tracker only");
+            if (choice == SchemaPushChoice.Schema) _archives.Add(entity.Id);
+            // Undecided, it stays linked as it was, so the removal is offered again.
+            if (choice is null)
+                _baseline[old.SchemaEntityId] = new BaselineEntry(old.EntityId, old.Name, old.GroupName, old.Dependencies);
         }
 
         private void AddOrLink(SchemaEntity added)
         {
+            // An addition this Tracker declined stays declined until the schema changes the entity.
+            if (_old.TryGetValue(added.Id, out SchemaBaselineEntity? declined) && declined.EntityId is null &&
+                string.Equals(declined.Name, added.Name, StringComparison.Ordinal) &&
+                string.Equals(declined.GroupName, added.GroupName, StringComparison.Ordinal))
+            {
+                _baseline[added.Id] = new BaselineEntry(null, declined.Name, declined.GroupName, []);
+                return;
+            }
+
             EntitySourceKey key = EntitySourceKey.From(added.Name);
             _byKey.TryGetValue(key, out TrackedEntity? existing);
             if (existing is { IsPlaceholder: false } &&
@@ -206,25 +250,30 @@ public static class SchemaPushPlanner
 
             if (existing is { IsPlaceholder: false })
             {
-                // An entity the Tracker already has, but not from the schema, is linked to it. With no
-                // baseline, every difference is asked about.
+                // An entity the Tracker already has, but not from the schema, can be linked to it. Its own name,
+                // group and dependencies become its baseline, so the next push offers any difference.
+                SchemaPushChoice? link = Decide(added.Id, null, SchemaPushChangeKind.Linked, existing.SourceName, false,
+                    (existing.LifecycleState == EntityLifecycleState.Active
+                        ? $"The schema added {added.Name}, and this tracker already has {existing.SourceName}."
+                        : $"The schema added {added.Name}, and this tracker has {existing.SourceName} archived.") +
+                    " Once it is linked, the next push offers any difference.",
+                    $"Link {existing.SourceName} to the schema", "Leave it unlinked");
+                if (link == SchemaPushChoice.Tracker) Decline(added);
+                if (link != SchemaPushChoice.Schema) return;
                 _targets[added.Id] = existing;
                 _linkedByName.Add(added.Id);
-                _automatic.Add(existing.LifecycleState == EntityLifecycleState.Active
-                    ? $"Linked {existing.SourceName} to the schema's {added.Name}"
-                    : $"Linked the archived {existing.SourceName} to the schema's {added.Name}");
-                if (!string.Equals(existing.SourceName, added.Name, StringComparison.Ordinal) &&
-                    Decide(added.Id, null, SchemaPushConflictKind.Name, existing.SourceName,
-                        $"The schema calls {existing.SourceName} {added.Name}.",
-                        $"Rename it {added.Name}", $"Keep {existing.SourceName}"))
-                    Rename(existing, added.Name);
-                if (!string.Equals(existing.GroupName, added.GroupName, StringComparison.Ordinal) &&
-                    Decide(added.Id, null, SchemaPushConflictKind.Group, existing.SourceName,
-                        $"The schema has {existing.SourceName} in {GroupText(added.GroupName)}; this tracker has it in {GroupText(existing.GroupName)}.",
-                        $"Use {GroupText(added.GroupName)}", $"Keep {GroupText(existing.GroupName)}"))
-                    Regroup(existing, added.GroupName);
+                _baseline[added.Id] = new BaselineEntry(existing.Id, existing.SourceName, existing.GroupName, []);
                 return;
             }
+
+            SchemaPushChoice? choice = Decide(added.Id, null, SchemaPushChangeKind.Added, added.Name, false,
+                _schemaDependencies[added.Id].Any()
+                    ? $"The schema added {added.Name} ({GroupText(added.GroupName)}), which depends on " +
+                      $"{string.Join(", ", _schemaDependencies[added.Id].Select(NameOf).Order(StringComparer.OrdinalIgnoreCase))}."
+                    : $"The schema added {added.Name} ({GroupText(added.GroupName)}).",
+                $"Add {added.Name}", "Leave it out");
+            if (choice == SchemaPushChoice.Tracker) Decline(added);
+            if (choice != SchemaPushChoice.Schema) return;
 
             // A placeholder with the name becomes the entity, keeping its ID, so what depended on the
             // name depends on the entity.
@@ -235,59 +284,73 @@ public static class SchemaPushPlanner
             _additions.Add(entity);
             _created.Add(entity.Id);
             _targets[added.Id] = entity;
-            _automatic.Add($"Added {added.Name}");
+            _baseline[added.Id] = new BaselineEntry(entity.Id, added.Name, added.GroupName, []);
         }
+
+        /// <summary>Remembers a declined addition in the baseline, without an entity.</summary>
+        private void Decline(SchemaEntity added) =>
+            _baseline[added.Id] = new BaselineEntry(null, added.Name, added.GroupName, []);
 
         private void ReconcileDependencies(SchemaEntity schemaEntity)
         {
             TrackedEntity owner = _targets[schemaEntity.Id];
+            BaselineEntry entry = _baseline[schemaEntity.Id];
             HashSet<SchemaEntityId> now = _schemaDependencies[schemaEntity.Id].ToHashSet();
             if (_created.Contains(owner.Id))
             {
+                // A new entity comes with the schema's dependencies on the entities this Tracker has from it.
                 foreach (SchemaEntityId dependency in now)
-                    Desired(owner.Id).Add(_targets[dependency].Id);
+                    if (_targets.TryGetValue(dependency, out TrackedEntity? target))
+                    {
+                        Desired(owner.Id).Add(target.Id);
+                        entry.Dependencies.Add(dependency);
+                    }
                 return;
             }
 
             HashSet<EntityId> current = DependenciesOf(owner.Id).ToHashSet();
             if (_linkedByName.Contains(schemaEntity.Id))
             {
-                foreach (SchemaEntityId dependency in now.OrderBy(NameOf, StringComparer.OrdinalIgnoreCase))
-                {
-                    TrackedEntity target = _targets[dependency];
-                    if (!current.Contains(target.Id) &&
-                        Decide(schemaEntity.Id, dependency, SchemaPushConflictKind.Dependency, owner.SourceName,
-                            $"In the schema, {owner.SourceName} depends on {target.SourceName}; in this tracker it doesn't.",
-                            "Add the dependency", "Leave it out"))
-                        Desired(owner.Id).Add(target.Id);
-                }
-                foreach ((SchemaEntityId other, TrackedEntity target) in _targets
-                             .Where(pair => !now.Contains(pair.Key) && current.Contains(pair.Value.Id))
-                             .OrderBy(pair => pair.Value.SourceName, StringComparer.OrdinalIgnoreCase))
-                {
-                    if (Decide(schemaEntity.Id, other, SchemaPushConflictKind.Dependency, owner.SourceName,
-                            $"In this tracker, {owner.SourceName} depends on {target.SourceName}; in the schema it doesn't.",
-                            "Remove the dependency", "Keep the dependency"))
-                        Desired(owner.Id).Remove(target.Id);
-                }
+                // Linked by name: what it depends on among the schema's entities becomes its baseline.
+                entry.Dependencies.UnionWith(_targets.Where(pair => current.Contains(pair.Value.Id))
+                    .Select(static pair => pair.Key));
                 return;
             }
-
-            // A linked entity: a dependency the schema added or removed since the baseline follows the
-            // schema unless the Tracker already has it that way. A yes-or-no can't conflict.
             HashSet<SchemaEntityId> was = _linked[schemaEntity.Id].Old.Dependencies.ToHashSet();
+            entry.Dependencies.Clear();
+            entry.Dependencies.UnionWith(was);
             foreach (SchemaEntityId dependency in now.Union(was).OrderBy(NameOf, StringComparer.OrdinalIgnoreCase))
             {
                 bool has = now.Contains(dependency);
                 if (was.Contains(dependency) == has) continue;
                 TrackedEntity? target = _targets.GetValueOrDefault(dependency) ??
                     (_linked.TryGetValue(dependency, out var old) ? old.Entity : null);
-                if (target is null || current.Contains(target.Id) == has) continue;
-                if (has) Desired(owner.Id).Add(target.Id);
-                else Desired(owner.Id).Remove(target.Id);
-                _automatic.Add(has
-                    ? $"{owner.SourceName} now depends on {target.SourceName}"
-                    : $"{owner.SourceName} no longer depends on {target.SourceName}");
+                if (target is null) continue;
+                if (current.Contains(target.Id) == has)
+                {
+                    Settle(entry, dependency, has);
+                    continue;
+                }
+                SchemaPushChoice? choice = Decide(schemaEntity.Id, dependency,
+                    has ? SchemaPushChangeKind.DependencyAdded : SchemaPushChangeKind.DependencyRemoved,
+                    owner.SourceName, false,
+                    has
+                        ? $"In the schema, {owner.SourceName} depends on {target.SourceName}; in this tracker it doesn't."
+                        : $"In the schema, {owner.SourceName} no longer depends on {target.SourceName}.",
+                    has ? "Add the dependency" : "Remove the dependency",
+                    has ? "Leave it out" : "Keep the dependency");
+                if (choice == SchemaPushChoice.Schema)
+                {
+                    if (has) Desired(owner.Id).Add(target.Id);
+                    else Desired(owner.Id).Remove(target.Id);
+                }
+                if (choice is not null) Settle(entry, dependency, has);
+            }
+
+            static void Settle(BaselineEntry entry, SchemaEntityId dependency, bool has)
+            {
+                if (has) entry.Dependencies.Add(dependency);
+                else entry.Dependencies.Remove(dependency);
             }
         }
 
@@ -327,39 +390,31 @@ public static class SchemaPushPlanner
             TrackedStateChangeSet changes = new(_additions, _renames, _archives,
                 _reconciled.Keys.ToArray(), desired,
                 entitiesWithGroupNameToUpdate: _regrouped);
-            TrackerSchemaLink link = new(_tracker.Id, _schema.Schema.Id, _schema.Entities
-                .OrderBy(static e => e.Id.Value)
-                .Select(e => new SchemaBaselineEntity(e.Id, _targets[e.Id].Id, e.Name, e.GroupName,
-                    _schemaDependencies[e.Id].OrderBy(static d => d.Value).ToArray()))
+            // A removed entity stays in the baseline while an undecided dependency still refers to it, so that
+            // dependency is offered again.
+            foreach (SchemaEntityId referenced in _baseline.Values.SelectMany(static entry => entry.Dependencies)
+                         .Where(id => !_baseline.ContainsKey(id)).Distinct().ToArray())
+                if (_old.TryGetValue(referenced, out SchemaBaselineEntity? kept))
+                    _baseline[referenced] = new BaselineEntry(kept.EntityId, kept.Name, kept.GroupName, []);
+            TrackerSchemaLink link = new(_tracker.Id, _schema.Schema.Id, _baseline
+                .OrderBy(static pair => pair.Key.Value)
+                .Select(pair => new SchemaBaselineEntity(pair.Key, pair.Value.EntityId, pair.Value.Name,
+                    pair.Value.Group, pair.Value.Dependencies
+                        .Where(d => d != pair.Key && _baseline.ContainsKey(d))
+                        .OrderBy(static d => d.Value).ToArray()))
                 .ToArray());
-            return new TrackerPushOutcome(_automatic, _conflicts, changes, result, resultDependencies, link);
+            return new TrackerPushOutcome(_changes, changes, result, resultDependencies, link);
         }
 
-        /// <summary>
-        /// Whether a field needs a change: null when the schema didn't change it or the Tracker already has
-        /// the schema's value; otherwise whether the Tracker changed it too.
-        /// </summary>
-        private static bool? Settle(string old, string now, string tracker)
+        /// <summary>Lists a change, and returns the choice made for it: null while it is undecided.</summary>
+        private SchemaPushChoice? Decide(SchemaEntityId id, SchemaEntityId? dependency, SchemaPushChangeKind kind,
+            string entityName, bool conflict, string description, string useSchema, string keepTracker)
         {
-            if (string.Equals(old, now, StringComparison.Ordinal) ||
-                string.Equals(tracker, now, StringComparison.Ordinal))
-                return null;
-            return !string.Equals(tracker, old, StringComparison.Ordinal);
-        }
-
-        /// <summary>Records a conflict, and returns whether the schema's side was chosen.</summary>
-        private bool Decide(SchemaEntityId id, SchemaEntityId? dependency, SchemaPushConflictKind kind,
-            string entityName, string description, string useSchema, string keepTracker)
-        {
-            SchemaPushConflict conflict = new(_tracker.Id, _tracker.Name, id, dependency, kind, entityName,
+            SchemaPushChange change = new(_tracker.Id, _tracker.Name, id, dependency, kind, entityName, conflict,
                 description, useSchema, keepTracker);
-            _conflicts.Add(conflict);
-            if (_choices is null) return false;
-            SchemaPushConflict chosen = _choices.FirstOrDefault(c => c.TrackerId == _tracker.Id && c.Key == conflict.Key) ??
-                throw new InvalidOperationException("The schema or a tracker changed after this review opened. Open a new review.");
-            conflict.Choice = chosen.Choice ??
-                throw new InvalidOperationException("Choose Use schema or Keep tracker for every difference before pushing.");
-            return chosen.Choice == SchemaPushChoice.Schema;
+            _changes.Add(change);
+            change.Choice = _choose(change);
+            return change.Choice;
         }
 
         private void Rename(TrackedEntity entity, string name)
@@ -392,7 +447,7 @@ public static class SchemaPushPlanner
 
         private string NameOf(SchemaEntityId id) => _schemaEntities.TryGetValue(id, out SchemaEntity? entity)
             ? entity.Name
-            : _linked.TryGetValue(id, out var old) ? old.Old.Name : "";
+            : _old.TryGetValue(id, out SchemaBaselineEntity? old) ? old.Name : "";
 
         private static IEnumerable<KeyValuePair<SchemaEntityId, (SchemaBaselineEntity Old, TrackedEntity Entity)>> Ordered(
             Dictionary<SchemaEntityId, (SchemaBaselineEntity Old, TrackedEntity Entity)> linked) =>

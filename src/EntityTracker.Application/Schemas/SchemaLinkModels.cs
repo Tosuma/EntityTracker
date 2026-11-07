@@ -6,8 +6,8 @@ namespace EntityTracker.Application.Schemas;
 
 /// <summary>
 /// One schema entity as a linked Tracker last took it from its schema: its name, group and dependencies
-/// then, and the Tracker entity linked to it. <see cref="EntityId"/> is null when the linked entity was
-/// permanently deleted.
+/// then, and the Tracker entity linked to it. <see cref="EntityId"/> is null for an addition the Tracker
+/// declined (Keep tracker), and when the linked entity was permanently deleted.
 /// </summary>
 public sealed record SchemaBaselineEntity(
     SchemaEntityId SchemaEntityId,
@@ -28,36 +28,47 @@ public sealed record TrackerSchemaLink(
 
 public enum SchemaPushChoice { Schema, Tracker }
 
-public enum SchemaPushConflictKind
+public enum SchemaPushChangeKind
 {
-    /// <summary>The schema renamed an entity the Tracker renamed differently.</summary>
+    /// <summary>The schema added an entity the Tracker doesn't have.</summary>
+    Added,
+
+    /// <summary>The schema added an entity the Tracker already has under that name, not linked yet.</summary>
+    Linked,
+
+    /// <summary>The schema renamed an entity.</summary>
     Name,
 
-    /// <summary>The schema regrouped an entity the Tracker regrouped differently.</summary>
+    /// <summary>The schema moved an entity to another group.</summary>
     Group,
 
-    /// <summary>A dependency differs on an entity linked by name, which has no baseline yet.</summary>
-    Dependency,
+    /// <summary>The schema added a dependency.</summary>
+    DependencyAdded,
 
-    /// <summary>The schema removed an entity the Tracker changed.</summary>
+    /// <summary>The schema removed a dependency.</summary>
+    DependencyRemoved,
+
+    /// <summary>The schema removed an entity.</summary>
     Removed
 }
 
 /// <summary>
-/// A difference a push can't settle alone: the schema changed something the Tracker changed too. Its
-/// <see cref="Choice"/> says whether the schema's value or the Tracker's is kept.
+/// One change the schema made that a Tracker doesn't have yet. Each is decided per Tracker: Use schema
+/// applies it, Keep tracker declines it until the schema changes the same thing again, and leaving it
+/// undecided keeps it for a later push. <see cref="IsConflict"/> says the Tracker changed the same thing.
 /// </summary>
-public sealed class SchemaPushConflict : INotifyPropertyChanged
+public sealed class SchemaPushChange : INotifyPropertyChanged
 {
     private SchemaPushChoice? _choice;
 
-    public SchemaPushConflict(
+    public SchemaPushChange(
         TrackerId trackerId,
         string trackerName,
         SchemaEntityId schemaEntityId,
         SchemaEntityId? dependencyId,
-        SchemaPushConflictKind kind,
+        SchemaPushChangeKind kind,
         string entityName,
+        bool isConflict,
         string description,
         string useSchemaLabel,
         string keepTrackerLabel)
@@ -68,6 +79,7 @@ public sealed class SchemaPushConflict : INotifyPropertyChanged
         DependencyId = dependencyId;
         Kind = kind;
         EntityName = entityName;
+        IsConflict = isConflict;
         Description = description;
         UseSchemaLabel = useSchemaLabel;
         KeepTrackerLabel = keepTrackerLabel;
@@ -79,15 +91,17 @@ public sealed class SchemaPushConflict : INotifyPropertyChanged
     public string TrackerName { get; }
     public SchemaEntityId SchemaEntityId { get; }
     public SchemaEntityId? DependencyId { get; }
-    public SchemaPushConflictKind Kind { get; }
+    public SchemaPushChangeKind Kind { get; }
     public string EntityName { get; }
+    public bool IsConflict { get; }
     public string Description { get; }
     public string UseSchemaLabel { get; }
     public string KeepTrackerLabel { get; }
 
-    /// <summary>Identifies the conflict within its Tracker's plan, so a choice can be carried over.</summary>
-    internal (SchemaEntityId, SchemaPushConflictKind, SchemaEntityId?) Key => (SchemaEntityId, Kind, DependencyId);
+    /// <summary>Identifies the change within its Tracker's plan, so a choice can be carried over.</summary>
+    internal (SchemaEntityId, SchemaPushChangeKind, SchemaEntityId?) Key => (SchemaEntityId, Kind, DependencyId);
 
+    /// <summary>Use schema, Keep tracker, or null: left for a later push.</summary>
     public SchemaPushChoice? Choice
     {
         get => _choice;
@@ -100,14 +114,17 @@ public sealed class SchemaPushConflict : INotifyPropertyChanged
     }
 }
 
-/// <summary>What a push does to one linked Tracker: the changes it makes without asking, and its conflicts.</summary>
+/// <summary>
+/// What a push offers one linked Tracker. <see cref="HasBaselineUpdate"/> says its baseline moves on even
+/// without a choice: the Tracker already has some of the schema's changes.
+/// </summary>
 public sealed record TrackerPushPlan(
     Tracker Tracker,
     string Fingerprint,
-    IReadOnlyList<string> AutomaticChanges,
-    IReadOnlyList<SchemaPushConflict> Conflicts)
+    IReadOnlyList<SchemaPushChange> Changes,
+    bool HasBaselineUpdate)
 {
-    public bool HasChanges => AutomaticChanges.Count > 0 || Conflicts.Count > 0;
+    public bool HasChanges => Changes.Count > 0;
 }
 
 /// <summary>A push of a schema to every active Tracker linked to it, as reviewed before it is applied.</summary>
@@ -119,10 +136,13 @@ public sealed class SchemaPushReview(
     public SchemaContent Schema { get; } = schema;
     public string SchemaFingerprint { get; } = schemaFingerprint;
     public IReadOnlyList<TrackerPushPlan> Trackers { get; } = trackers;
-    public IReadOnlyList<SchemaPushConflict> Conflicts { get; } =
-        trackers.SelectMany(static tracker => tracker.Conflicts).ToArray();
-    public bool HasChanges => Trackers.Any(static tracker => tracker.HasChanges);
-    public bool CanApply => Conflicts.All(static conflict => conflict.Choice is not null);
+    public IReadOnlyList<SchemaPushChange> Changes { get; } =
+        trackers.SelectMany(static tracker => tracker.Changes).ToArray();
+    public bool HasChanges => Changes.Count > 0;
+    public int DecidedCount => Changes.Count(static change => change.Choice is not null);
+
+    /// <summary>Whether pushing does anything: a change is decided, or a baseline moves on by itself.</summary>
+    public bool CanApply => DecidedCount > 0 || Trackers.Any(static tracker => tracker.HasBaselineUpdate);
 }
 
 /// <summary>
