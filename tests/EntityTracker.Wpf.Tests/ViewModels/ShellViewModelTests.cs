@@ -1625,6 +1625,16 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         Assert.False(form.IsOpen);
         Assert.Equal(["Customer", "Order"], editor.Rows.Select(row => row.Name));
 
+        // The search says how many entities it shows, as on a Tracker's Overview, and can be cleared.
+        Assert.Equal("2 entities", editor.SearchResultText);
+        editor.SearchText = "cust";
+        Assert.Equal("1 of 2 entities", editor.SearchResultText);
+        editor.SearchText = "invoice";
+        Assert.True(editor.ShowNoMatches);
+        editor.ClearSearchCommand.Execute(null);
+        Assert.False(editor.ShowNoMatches);
+        Assert.Equal("2 entities", editor.SearchResultText);
+
         // Selecting an entity shows its details, read-only; Edit opens the dialog.
         editor.SelectedViewIndex = 0;
         Assert.False(editor.IsGraphView);
@@ -1759,16 +1769,24 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         await WaitUntilAsync(() => push.IsReviewOpen);
         SchemaPushTrackerItem tracker = Assert.Single(push.ReviewTrackers);
         Assert.Equal("Team A", tracker.TrackerName);
-        SchemaPushConflictItem conflict = Assert.Single(tracker.Conflicts);
-        Assert.Equal("Use group Commerce", conflict.UseSchemaLabel);
-        Assert.Equal("Keep group Billing", conflict.KeepTrackerLabel);
-        Assert.Equal("1 difference to decide, 1 left.", push.ReviewSummary);
+        SchemaPushChangeItem change = Assert.Single(tracker.Changes);
+        Assert.Equal("Use group Commerce", change.UseSchemaLabel);
+        Assert.Equal("Keep group Billing", change.KeepTrackerLabel);
+        Assert.Equal(" This tracker changed it too.", change.ConflictNote);
+        // Nothing is preselected: undecided, the tracker is left for a later push.
+        Assert.False(change.UseSchema || change.KeepTracker);
+        Assert.Equal("Nothing decided: this tracker is left for a later push.", tracker.DecidedText);
+        Assert.StartsWith("0 of 1 change decided.", push.ReviewSummary);
         Assert.False(push.ApplyCommand.CanExecute(null));
-        push.KeepTrackersForAllCommand.Execute(null);
-        Assert.True(conflict.KeepTracker);
+        tracker.KeepTrackerForAllCommand.Execute(null);
+        Assert.True(change.KeepTracker);
+        Assert.Equal("1 of 1 decided", tracker.DecidedText);
         Assert.True(push.ApplyCommand.CanExecute(null));
+        tracker.DecideLaterCommand.Execute(null);
+        Assert.False(push.ApplyCommand.CanExecute(null));
         push.UseSchemaForAllCommand.Execute(null);
-        Assert.True(conflict.UseSchema);
+        Assert.True(change.UseSchema);
+        Assert.Equal("All 1 change decided.", push.ReviewSummary);
         push.ApplyCommand.Execute(null);
         await WaitUntilAsync(() => !push.IsReviewOpen && !push.HasPendingChanges);
         Assert.Equal("Commerce", (await harness.Entities.GetAllAsync(teamA.Id)).Single(e => e.SourceName == "Order").GroupName);

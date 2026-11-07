@@ -264,13 +264,13 @@ be restored or permanently deleted.
 ![Schemas page with a card per schema](images/light/project-schemas.png)
 
 An open schema has two tabs. **Entities** lists the schema's entities with their group and number
-of dependencies; search narrows the list by name or group. Selecting an entity shows its details
+of dependencies; search (Ctrl+F) narrows the list by name or group and says how many entities it shows. Selecting an entity shows its details
 beside the list: its group, what it depends on and what depends on it.
 
 ![Schema Entities tab with the selected entity's details](images/light/schema-editor.png)
 
-**Dependency graph** shows the whole schema as a dependency tree; double-click an entity to show its
-details.
+**Dependency graph** shows the whole schema as a dependency tree; find an entity with its search box
+(Ctrl+F), as in a Tracker's graph, and double-click an entity to show its details.
 
 ![Schema shown as a dependency tree](images/light/schema-graph.png)
 
@@ -300,22 +300,27 @@ archive entities as it needs.
 
 The schema editor shows the schema's changes since they were last pushed. **Push to trackers** opens
 one review for every Tracker made from the schema. Each Tracker entity stays linked to its schema
-entity by ID, and the push compares three states: the schema now, the schema as it was at the last
-push, and the Tracker. Changes only the schema made apply without asking, and changes only the
-Tracker made are kept. Where both changed the same thing differently, the review asks: **Use
-schema** or **Keep tracker**, one at a time or for all.
+entity by ID, and the push compares three states: the schema now, the schema as each Tracker last took
+it, and the Tracker. It lists every change the schema made that a Tracker doesn't have yet, and
+nothing is chosen for you: for each change, **Use schema** brings it into the Tracker and **Keep
+tracker** declines it. A change the Tracker made itself too is marked. Changes only the Tracker made
+are never offered.
 
+- A change you leave undecided isn't pushed now and is offered again next time. A Tracker with
+  nothing decided is skipped, so whoever looks after that Tracker can push its changes later.
+- Each Tracker has **Use schema for all**, **Keep tracker for all** and **Decide later**; the same
+  choices for every Tracker are above the list.
 - An entity added to the schema is added as Not started. If the Tracker already has an entity with
-  that name that isn't linked yet, it is linked to it instead, and any difference is asked about.
-- An entity removed from the schema is archived in the Tracker, so its progress can be restored. If
-  the Tracker changed it since the last push, the review asks first; Keep tracker leaves it as the
-  Tracker's own entity.
-- After a push every Tracker is in step with the schema, also where you kept the Tracker's value:
-  that difference isn't asked about again until the schema changes it again.
+  that name that isn't linked yet, you can link it instead; the next push then offers any difference.
+  A declined addition isn't offered again until the schema changes that entity.
+- An entity removed from the schema is archived in the Tracker, so its progress can be restored; Keep
+  tracker leaves it as the Tracker's own entity.
+- A declined change isn't asked about again until the schema changes the same thing again.
+- A push never changes statuses, notes, developers, priorities, due dates or Filter active.
 - A push is refused, and changes nothing, if the schema or a Tracker changed after the review
   opened. Open the review again.
 
-![Push review: what applies to each Tracker, and a difference to decide](images/light/schema-push.png)
+![Push review: each change to decide per Tracker, or leave for later](images/light/schema-push.png)
 
 A Tracker card's **…** menu has **Detach from schema**. A detached Tracker keeps everything it has,
 but schema changes no longer reach it, and it can't be attached again. Pushes are off while a schema

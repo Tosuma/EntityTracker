@@ -45,7 +45,7 @@ public sealed class SchemaTrackerTests
     }
 
     [Fact]
-    public async Task Push_AppliesSchemaChangesKeepsTrackerChangesAndAsksOnlyAboutConflicts()
+    public async Task Push_OffersEachChangePerTrackerAndKeepsUndecidedOnesForLater()
     {
         await using TemporarySqliteFile file = new();
         Fixture fixture = await Fixture.CreateAsync(file);
@@ -83,14 +83,22 @@ public sealed class SchemaTrackerTests
 
         SchemaPushReview review = await fixture.Trackers.ReviewPushAsync(schema.Id);
         Assert.Equal(["Team A", "Team B"], review.Trackers.Select(t => t.Tracker.Name));
-        // Only Team A changed Order's group too; everything else applies without asking.
-        SchemaPushConflict conflict = Assert.Single(review.Conflicts);
-        Assert.Equal(a.Id, conflict.TrackerId);
-        Assert.Equal(SchemaPushConflictKind.Group, conflict.Kind);
-        Assert.Contains("Renamed Order to Sales order", review.Trackers[0].AutomaticChanges);
+        // Every change is offered to each tracker, undecided. Only Team A changed Order's group too.
+        SchemaPushChangeKind[] expected =
+        [
+            SchemaPushChangeKind.Name, SchemaPushChangeKind.Group,
+            SchemaPushChangeKind.DependencyRemoved, SchemaPushChangeKind.Added
+        ];
+        Assert.All(review.Trackers, plan => Assert.Equal(expected.Order(), plan.Changes.Select(c => c.Kind).Order()));
+        Assert.All(review.Changes, change => Assert.Null(change.Choice));
+        Assert.Equal([a.Id], review.Changes.Where(c => c.IsConflict).Select(c => c.TrackerId));
         Assert.False(review.CanApply);
         await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Trackers.ApplyPushAsync(review));
-        conflict.Choice = SchemaPushChoice.Tracker;
+
+        // Team A takes everything but the group; Team B is left for a later push.
+        foreach (SchemaPushChange change in review.Trackers[0].Changes)
+            change.Choice = change.Kind == SchemaPushChangeKind.Group ? SchemaPushChoice.Tracker : SchemaPushChoice.Schema;
+        Assert.True(review.CanApply);
         await fixture.Trackers.ApplyPushAsync(review);
 
         TrackedEntity[] teamA = await fixture.EntitiesAsync(a.Id);
@@ -104,19 +112,27 @@ public sealed class SchemaTrackerTests
         Assert.Equal(DevelopmentStatus.NotStarted, invoice.Status);
         EntityDependency[] dependenciesA = await fixture.DependenciesAsync(a.Id);
         Assert.Equal(new EntityDependency(invoice.Id, orderA.Id), Assert.Single(dependenciesA));
-        Assert.Equal("Commerce", (await fixture.EntitiesAsync(b.Id)).Single(e => e.SourceName == "Sales order").GroupName);
+        TrackedEntity orderB = (await fixture.EntitiesAsync(b.Id)).Single(e => e.SourceName == "Order");
+        Assert.Equal("Sales", orderB.GroupName);
 
-        // A kept difference isn't raised again until the schema changes it again.
-        Assert.False((await fixture.Trackers.GetPendingChangesAsync(schema.Id)).HasChanges);
-        Assert.Empty((await fixture.Trackers.ReviewPushAsync(schema.Id)).Conflicts);
+        // Team B still has the changes waiting; Team A's kept group isn't raised again.
+        SchemaPendingChanges after = await fixture.Trackers.GetPendingChangesAsync(schema.Id);
+        Assert.Equal(1, after.TrackersBehindCount);
+        review = await fixture.Trackers.ReviewPushAsync(schema.Id);
+        Assert.Empty(review.Trackers.Single(t => t.Tracker.Id == a.Id).Changes);
+        Assert.Equal(4, review.Trackers.Single(t => t.Tracker.Id == b.Id).Changes.Count);
+
+        // Once the schema changes the group again, Team A is asked again.
         Assert.True((await fixture.Editing.SaveEntityAsync(schema.Id,
             new SchemaEntityEdit(schemaOrder.Id, "Sales order", "Retail", []))).Succeeded);
         review = await fixture.Trackers.ReviewPushAsync(schema.Id);
-        Assert.Equal("Use group Retail", Assert.Single(review.Conflicts).UseSchemaLabel);
+        SchemaPushChange regroup = Assert.Single(review.Trackers.Single(t => t.Tracker.Id == a.Id).Changes);
+        Assert.Equal("Use group Retail", regroup.UseSchemaLabel);
+        Assert.True(regroup.IsConflict);
     }
 
     [Fact]
-    public async Task Push_ArchivesRemovedEntitiesAndLinksAddedOnesByName()
+    public async Task Push_ArchivesRemovedEntitiesLinksByNameAndRemembersDeclinedAdditions()
     {
         await using TemporarySqliteFile file = new();
         Fixture fixture = await Fixture.CreateAsync(file);
@@ -138,27 +154,42 @@ public sealed class SchemaTrackerTests
         await fixture.Editing.RemoveEntityAsync(schema.Id, content.Entities.Single(e => e.Name == "Payment").Id);
         Assert.True((await fixture.Editing.SaveEntityAsync(schema.Id,
             new SchemaEntityEdit(null, "product", "", []))).Succeeded);
+        Assert.True((await fixture.Editing.SaveEntityAsync(schema.Id,
+            new SchemaEntityEdit(null, "Refund", "", []))).Succeeded);
 
         SchemaPushReview review = await fixture.Trackers.ReviewPushAsync(schema.Id);
-        TrackerPushPlan plan = Assert.Single(review.Trackers);
-        Assert.Contains("Archived Customer, which was removed from the schema", plan.AutomaticChanges);
-        Assert.Contains("Linked Product to the schema's product", plan.AutomaticChanges);
-        // Payment was changed in the tracker, so its removal is asked about; the name's case too.
-        Assert.Equal([SchemaPushConflictKind.Name, SchemaPushConflictKind.Removed],
-            review.Conflicts.Select(c => c.Kind).Order());
-        review.Conflicts.Single(c => c.Kind == SchemaPushConflictKind.Removed).Choice = SchemaPushChoice.Tracker;
-        review.Conflicts.Single(c => c.Kind == SchemaPushConflictKind.Name).Choice = SchemaPushChoice.Tracker;
+        IReadOnlyList<SchemaPushChange> changes = Assert.Single(review.Trackers).Changes;
+        SchemaPushChange Change(SchemaPushChangeKind kind, string entity) =>
+            changes.Single(c => c.Kind == kind && c.EntityName == entity);
+        // Payment was changed in the tracker, so its removal is marked as changed in both.
+        Assert.False(Change(SchemaPushChangeKind.Removed, "Customer").IsConflict);
+        Assert.True(Change(SchemaPushChangeKind.Removed, "Payment").IsConflict);
+        Change(SchemaPushChangeKind.Removed, "Customer").Choice = SchemaPushChoice.Schema;
+        Change(SchemaPushChangeKind.Removed, "Payment").Choice = SchemaPushChoice.Tracker;
+        Change(SchemaPushChangeKind.Linked, "Product").Choice = SchemaPushChoice.Schema;
+        Change(SchemaPushChangeKind.Added, "Refund").Choice = SchemaPushChoice.Tracker;
+        // Order's dependency on Customer stays undecided.
+        Assert.Null(Change(SchemaPushChangeKind.DependencyRemoved, "Order").Choice);
         await fixture.Trackers.ApplyPushAsync(review);
 
         TrackedEntity[] entities = await fixture.EntitiesAsync(tracker.Id);
         Assert.Equal(EntityLifecycleState.Archived, entities.Single(e => e.SourceName == "Customer").LifecycleState);
         Assert.Equal(EntityLifecycleState.Active, entities.Single(e => e.SourceName == "Payment").LifecycleState);
+        Assert.DoesNotContain(entities, e => e.SourceName == "Refund");
         TrackedEntity product = entities.Single(e => e.SourceName == "Product");
         Assert.Equal(DevelopmentStatus.InProgress, product.Status);
         TrackerSchemaLink link = Assert.IsType<TrackerSchemaLink>(await fixture.Links.GetLinkAsync(tracker.Id));
-        Assert.Equal(["Order", "product"], link.Entities.Select(e => e.Name).Order());
         Assert.Contains(link.Entities, e => e.EntityId == product.Id);
         Assert.DoesNotContain(link.Entities, e => e.EntityId == entities.Single(x => x.SourceName == "Payment").Id);
+
+        // Next time: the linked entity's name difference and the undecided dependency are offered; the
+        // declined Refund isn't.
+        review = await fixture.Trackers.ReviewPushAsync(schema.Id);
+        changes = Assert.Single(review.Trackers).Changes;
+        Assert.Equal([SchemaPushChangeKind.Name, SchemaPushChangeKind.DependencyRemoved],
+            changes.Select(c => c.Kind).Order());
+        Assert.Equal("Rename it product", changes.Single(c => c.Kind == SchemaPushChangeKind.Name).UseSchemaLabel);
+        Assert.DoesNotContain("Added Refund", (await fixture.Trackers.GetPendingChangesAsync(schema.Id)).Changes);
     }
 
     [Fact]
@@ -172,6 +203,7 @@ public sealed class SchemaTrackerTests
             .Succeeded);
 
         SchemaPushReview review = await fixture.Trackers.ReviewPushAsync(schema.Id);
+        Assert.Single(review.Changes).Choice = SchemaPushChoice.Schema;
         await fixture.EditAsync(tracker.Id, entities =>
         {
             TrackedEntity order = entities.Single();
@@ -184,6 +216,7 @@ public sealed class SchemaTrackerTests
         Assert.Single(await fixture.EntitiesAsync(tracker.Id));
 
         review = await fixture.Trackers.ReviewPushAsync(schema.Id);
+        Assert.Single(review.Changes).Choice = SchemaPushChoice.Schema;
         Assert.True((await fixture.Editing.SaveEntityAsync(schema.Id, new SchemaEntityEdit(null, "Payment", "", [])))
             .Succeeded);
         await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Trackers.ApplyPushAsync(review));

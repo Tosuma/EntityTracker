@@ -77,9 +77,10 @@ public sealed class SchemaConversionTests
         // The source's changes Team A hadn't synced show up in the first push; its progress stays.
         SchemaPushReview review = await fixture.Push.ReviewPushAsync(schemaId);
         TrackerPushPlan plan = Assert.Single(review.Trackers);
-        Assert.Contains("Renamed Customer to Client", plan.AutomaticChanges);
-        Assert.Contains("Added Invoice", plan.AutomaticChanges);
-        Assert.Empty(review.Conflicts);
+        Assert.Contains(plan.Changes, c => c.Kind == SchemaPushChangeKind.Name && c.UseSchemaLabel == "Rename it Client");
+        Assert.Contains(plan.Changes, c => c.Kind == SchemaPushChangeKind.Added && c.EntityName == "Invoice");
+        Assert.DoesNotContain(plan.Changes, c => c.IsConflict);
+        foreach (SchemaPushChange change in plan.Changes) change.Choice = SchemaPushChoice.Schema;
         await fixture.Push.ApplyPushAsync(review);
         TrackedEntity[] teamA = await fixture.EntitiesAsync(copy.Id);
         Assert.Contains(teamA, e => e.SourceName == "Client");
