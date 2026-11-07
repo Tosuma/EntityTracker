@@ -58,7 +58,6 @@ public static partial class ProjectReportHtmlWriter
             .AppendLine("</script>");
         html.Append("<script>").Append(Asset("report-search.js")).AppendLine("</script>");
         html.Append("<script>").Append(Asset("report-charts.js")).AppendLine("</script>");
-        html.Append("<script>").Append(Asset("report-graph.js")).AppendLine("</script>");
         html.Append("<script>").Append(Asset("report.js")).AppendLine("</script>");
         html.AppendLine("</body>");
         html.AppendLine("</html>");
@@ -119,9 +118,7 @@ public static partial class ProjectReportHtmlWriter
             [ReportLabels.WorkStatus(EntityWorkflowState.NotRelevant)] = Pair(ColorScheme.ReportWorkStatus.NotRelevant)
         },
         ColorScheme.Chart.Canvas,
-        ColorScheme.Chart.Grid,
-        ColorScheme.Chart.UnknownStatus,
-        ColorScheme.Report.MissingSwatch);
+        ColorScheme.Chart.Grid);
 
     // [fill, text], and the dashed edge of a hollow status (Not relevant) as a third entry.
     private static string[] Pair(StatusColor color) =>
@@ -149,6 +146,4 @@ public sealed record ReportColors(
     IReadOnlyDictionary<string, string[]> Status,
     IReadOnlyDictionary<string, string[]> Work,
     string Canvas,
-    string Grid,
-    string UnknownStatus,
-    string MissingSwatch);
+    string Grid);
