@@ -162,8 +162,12 @@ internal sealed class ReadmeScreenshotGenerator
             SchemaEditorViewModel schemaEditor = shell.SchemasPage.Editor!;
             schemaEditor.SelectedRow = schemaEditor.Rows.Single(row => row.Name == "Order line");
             await renderer.CaptureAsync("schema-editor.png", settleMilliseconds: 500);
-            schemaEditor.IsGraphView = true;
+            schemaEditor.SelectedViewIndex = 1;
             await renderer.CaptureAsync("schema-graph.png", settleMilliseconds: 1500);
+            schemaEditor.SelectedViewIndex = 0;
+            schemaEditor.EditCommand.Execute(null);
+            await renderer.CaptureAsync("schema-entity-edit.png", settleMilliseconds: 500);
+            schemaEditor.Form.CancelCommand.Execute(null);
             shell.SchemasPage.CloseEditor();
             await shell.NavigateAsync(ShellDestination.ProjectDashboard, cancellationToken);
             // Synced as of now, so the card shows the synced icon after the earlier screenshots' edits.

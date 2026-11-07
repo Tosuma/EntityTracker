@@ -1670,14 +1670,13 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
     }
 
     [Fact]
-    public async Task Schemas_AreCreatedEditedAndRecycledFromTheirPage()
+    public async Task Schemas_AreCreatedEditedAndRecycledFromTheirPages()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
         RecordingDiscardConfirmation confirmation = new(false);
         using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
             lastProjectId: harness.DefaultProject.Id), confirmation);
         await shell.InitializeAsync();
-
         Assert.True(shell.CanManageSchemas);
         Assert.True(await shell.NavigateAsync(ShellDestination.Schemas));
         Assert.True(shell.IsSchemas);
@@ -1686,53 +1685,85 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         ProjectSchemasViewModel page = Assert.IsType<ProjectSchemasViewModel>(shell.SchemasPage);
         Assert.True(page.ShowEmptyState);
 
-        // Creating a schema opens it.
+        // Creating a schema opens it on its Entities tab; the sidebar still shows the dashboard.
         page.CreateSchemaCommand.Execute(null);
         Assert.Equal("Create schema", shell.Catalog.DialogTitle);
         shell.Catalog.Name = "Core model";
         shell.Catalog.SubmitNameCommand.Execute(null);
         await WaitUntilAsync(() => Task.FromResult(page.Editor?.SchemaName == "Core model"));
         SchemaEditorViewModel editor = page.Editor!;
+        Assert.Equal(0, editor.SelectedViewIndex);
+        Assert.Equal(ShellDestination.ProjectDashboard, shell.SelectedSidebarEntry?.Destination);
         Assert.Equal("Core model", Assert.Single(page.Schemas).Name);
 
-        // A dependency on a name the schema doesn't have adds it on save.
+        // New entity works from the Dependency graph tab too: it opens the dialog. A dependency on a
+        // name the schema doesn't have adds it on save, and Create and add another keeps the dialog open.
+        editor.SelectedViewIndex = 1;
+        Assert.True(editor.IsGraphView);
         editor.NewEntityCommand.Execute(null);
-        editor.FormName = "Order";
-        editor.FormGroup = "Sales";
-        editor.NewDependencyText = "Customer";
-        Assert.Equal("Add Customer to the schema", editor.AddDependencyLabel);
-        editor.AddDependencyCommand.Execute(null);
-        Assert.Equal(["Customer"], editor.FormDependencies);
-        Assert.Equal("Saving also adds Customer to the schema.", editor.NewDependencyNamesText);
-        editor.SaveCommand.Execute(null);
-        await WaitUntilAsync(() => Task.FromResult(editor.Rows.Count == 2 && !editor.HasUnsavedChanges));
+        SchemaEntityFormViewModel form = editor.Form;
+        Assert.True(form.IsOpen);
+        Assert.Equal("New entity", form.Title);
+        Assert.Equal("Create entity", form.SaveLabel);
+        form.Name = "Order";
+        form.Group = "Sales";
+        form.NewDependencyText = "Customer";
+        Assert.Equal("Add Customer to the schema", form.AddDependencyLabel);
+        form.AddDependencyCommand.Execute(null);
+        Assert.Equal(["Customer"], form.Dependencies);
+        Assert.Equal("Saving also adds Customer to the schema.", form.NewDependencyNamesText);
+        form.CreateAnotherCommand.Execute(null);
+        await WaitUntilAsync(() => Task.FromResult(editor.Rows.Count == 2 && form.HasOperationMessage));
+        Assert.True(form.IsOpen);
+        Assert.Equal("Created Order and Customer. Add the next entity.", form.OperationMessage);
+        Assert.Equal(string.Empty, form.Name);
+        Assert.Empty(form.Dependencies);
+        form.CancelCommand.Execute(null);
+        Assert.False(form.IsOpen);
         Assert.Equal(["Customer", "Order"], editor.Rows.Select(row => row.Name));
-        Assert.Equal("Order", editor.SelectedRow?.Name);
-        Assert.Equal(1, editor.SelectedRow!.DependencyCount);
+
+        // Selecting an entity shows its details, read-only; Edit opens the dialog.
+        editor.SelectedViewIndex = 0;
+        Assert.False(editor.IsGraphView);
+        editor.SelectedRow = editor.Rows.Single(row => row.Name == "Customer");
+        SchemaEntityDetails details = Assert.IsType<SchemaEntityDetails>(editor.Details);
+        Assert.Equal(["Order"], details.UsedBy);
+        Assert.True(details.ShowNoDependsOn);
+        Assert.False(form.IsOpen);
+        editor.EditCommand.Execute(null);
+        Assert.Equal("Edit Customer", form.Title);
+        Assert.Equal("Save", form.SaveLabel);
 
         // A cycle is refused with a message, and unsaved changes keep the page until discarded.
-        editor.SelectedRow = editor.Rows.Single(row => row.Name == "Customer");
-        editor.NewDependencyText = "order";
-        Assert.Equal("Add", editor.AddDependencyLabel);
-        editor.AddDependencyCommand.Execute(null);
-        editor.SaveCommand.Execute(null);
-        await WaitUntilAsync(() => Task.FromResult(editor.HasError));
-        Assert.Contains("Order already depends on Customer", editor.ErrorMessage);
+        form.NewDependencyText = "order";
+        Assert.Equal("Add", form.AddDependencyLabel);
+        form.AddDependencyCommand.Execute(null);
+        form.SaveCommand.Execute(null);
+        await WaitUntilAsync(() => Task.FromResult(form.HasError));
+        Assert.Contains("Order already depends on Customer", form.ErrorMessage);
         Assert.True(page.HasUnsavedChanges);
         Assert.False(await shell.NavigateAsync(ShellDestination.ProjectDashboard));
         Assert.Equal(1, confirmation.CallCount);
         Assert.True(shell.IsSchemas);
-        editor.CancelEditCommand.Execute(null);
+        form.CancelCommand.Execute(null);
         Assert.False(page.HasUnsavedChanges);
 
+        // Saving an edit closes the dialog and shows the details.
+        editor.EditCommand.Execute(null);
+        form.Group = "Customers";
+        form.SaveCommand.Execute(null);
+        await WaitUntilAsync(() => Task.FromResult(!form.IsOpen && editor.Details?.GroupName == "Customers"));
+
         // Removing an entity others depend on names them first.
-        editor.RequestRemoveCommand.Execute(null);
-        Assert.True(editor.IsRemoveConfirmationOpen);
+        editor.EditCommand.Execute(null);
+        form.RequestRemoveCommand.Execute(null);
+        Assert.True(form.IsRemoveConfirmationOpen);
         Assert.Equal("Order depends on Customer. Removing Customer also removes that dependency.",
-            editor.RemoveConfirmationText);
-        editor.ConfirmRemoveCommand.Execute(null);
-        await WaitUntilAsync(() => Task.FromResult(editor.Rows.Count == 1));
+            form.RemoveConfirmationText);
+        form.ConfirmRemoveCommand.Execute(null);
+        await WaitUntilAsync(() => Task.FromResult(editor.Rows.Count == 1 && !form.IsOpen));
         Assert.Equal(0, editor.Rows.Single().DependencyCount);
+        Assert.False(editor.IsDetailsOpen);
 
         // Recycling moves the schema to the project's recycle bin.
         page.BackToListCommand.Execute(null);
