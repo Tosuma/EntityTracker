@@ -168,6 +168,9 @@ Likely domain concepts include:
 - placeholder entity for a dependency on a name no entity has yet
 - schema: a Project's shared structure of entities and dependencies, without progress; unlike a
   Tracker it never holds a placeholder
+- schema link: a Tracker made from a schema links each of its entities to a schema entity by ID, and
+  keeps a baseline, the schema as it was when last pushed; a push is a three-way comparison of the
+  schema, the baseline and the Tracker (`SchemaPushPlanner`)
 - status transition
 - entity lifecycle state
 

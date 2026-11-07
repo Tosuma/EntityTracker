@@ -193,6 +193,11 @@ Destructive actions require confirmation where the workflow already calls for it
   entity table on the left, the selected entity's form on the right with Save and Cancel at its foot
   and the destructive Remove at the far end. Removing asks in place, naming the entities that depend
   on it. The read-only graph uses the dependency tree, without status colours to explain.
+  Between the toolbar and the list, a card says whether the schema's Trackers are up to date; when
+  they aren't, it expands to list the unpushed changes, with Push to trackers at its right. The push
+  review covers the list or graph, one card per Tracker like the Sync from source dialog: the
+  changes that apply without asking, then each difference with Use schema and Keep tracker radio
+  buttons, and the bulk buttons above.
 - Informational overlays use a translucent Dark Green scrim. Focused catalog-management dialogs
   use the stronger scrim semantic so background content cannot compete with the active form.
 - Missing/removal and error states use Coral with Dark Green explanatory text. Synchronization

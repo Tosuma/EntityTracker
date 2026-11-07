@@ -46,7 +46,10 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                     tracker.LifecycleState, tracker.CreatedAtUtc, tracker.UpdatedAtUtc,
                     tracker.RecycledAtUtc, tracker.CopiedFromTrackerId,
                     snapshot.FormatVersion >= 7 ? tracker.SyncBaseline?.Normalize() : null,
-                    snapshot.FormatVersion >= 7 ? null : BaselineText(tracker.SyncBaseline)), JsonOptions);
+                    snapshot.FormatVersion >= 7 ? null : BaselineText(tracker.SyncBaseline),
+                    snapshot.FormatVersion >= ProjectSnapshot.FirstSchemaLinkFormatVersion
+                        ? tracker.SchemaLink?.Normalize()
+                        : null), JsonOptions);
             foreach (SnapshotEntity entity in tracker.Entities.OrderBy(e => e.Id))
             {
                 SnapshotEntity ordered = entity with
@@ -131,7 +134,7 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
                 doc.CreatedAtUtc, doc.UpdatedAtUtc, doc.RecycledAtUtc, doc.CopiedFromTrackerId,
                 entities, events, progress,
                 manifest.FormatVersion >= 7 ? doc.SyncBaseline?.Normalize() : ReadBaselineText(doc.SyncBaselineJson),
-                summary));
+                summary, doc.SchemaLink?.Normalize()));
         }
         SnapshotDeveloper[]? developers = manifest.FormatVersion >= 2
             ? files.Keys.Where(p => p.StartsWith(Root + "developers/", StringComparison.Ordinal))
@@ -432,5 +435,8 @@ public sealed class ProjectSnapshotJsonCodec : IProjectSnapshotCodec
         TrackerSyncBaseline? SyncBaseline = null,
         // Formats 1–6: the baseline as one JSON string.
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        string? SyncBaselineJson = null);
+        string? SyncBaselineJson = null,
+        // Format 12: the schema the Tracker was created from, and its baseline.
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        SnapshotSchemaLink? SchemaLink = null);
 }

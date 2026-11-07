@@ -206,6 +206,14 @@ public partial class ProjectDashboardView : UserControl
         if (tracker is not null) await Shell.Catalog.OpenSyncTrackerAsync(tracker);
     }
 
+    private void OnDetachTracker(object sender, RoutedEventArgs e)
+    {
+        var item = (sender as FrameworkElement)?.DataContext as TrackerDashboardSummary;
+        var tracker = item is null ? null : Shell.Trackers.FirstOrDefault(candidate => candidate.Id == item.TrackerId);
+        CloseTrackerActions(sender);
+        if (tracker is not null && item?.SchemaName is { } schemaName) Shell.Catalog.RequestDetach(tracker, schemaName);
+    }
+
     private void OnRecycleTracker(object sender, RoutedEventArgs e)
     {
         var tracker = sender is FrameworkElement { DataContext: TrackerDashboardSummary item }
@@ -231,6 +239,7 @@ public partial class ProjectDashboardView : UserControl
         TrackerActionsMenu.Tag = toggle;
         RenameTrackerAction.Tag = toggle;
         SyncTrackerAction.Tag = toggle;
+        DetachTrackerAction.Tag = toggle;
         RecycleTrackerAction.Tag = toggle;
         PositionTrackerActionsMenu();
         Dispatcher.BeginInvoke(new Action(() =>

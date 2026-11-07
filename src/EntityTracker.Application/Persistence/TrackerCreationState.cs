@@ -1,4 +1,5 @@
 using EntityTracker.Application.History;
+using EntityTracker.Application.Schemas;
 using EntityTracker.Application.Tracking;
 using EntityTracker.Domain;
 
@@ -8,4 +9,5 @@ public sealed record TrackerCreationState(
     Tracker Tracker,
     TrackedStateChangeSet ChangeSet,
     ProgressSnapshotState InitialSnapshot,
-    TrackerSyncBaseline? SyncBaseline = null);
+    TrackerSyncBaseline? SyncBaseline = null,
+    TrackerSchemaLink? SchemaLink = null);

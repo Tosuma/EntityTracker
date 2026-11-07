@@ -28,13 +28,15 @@ public enum CatalogDialogKind
     RecycleBin,
     RecycleConfirmation,
     PurgeConfirmation,
-    SchemaName
+    SchemaName,
+    DetachConfirmation
 }
 
 public enum TrackerCreationMode
 {
     Blank,
-    Copy
+    Copy,
+    Schema
 }
 
 public sealed record TrackerCopySourceOption(
@@ -63,6 +65,11 @@ public sealed class SchemaCatalogChangedEventArgs(ProjectId projectId, SchemaId?
 public sealed class CatalogManagementViewModel : INotifyPropertyChanged
 {
     private readonly SchemaManagementService? _schemaService;
+    private readonly SchemaTrackerService? _schemaTrackers;
+    private readonly AsyncCommand _confirmDetachCommand;
+    private Schema? _selectedSchema;
+    private Tracker? _detachTracker;
+    private string _detachSchemaName = string.Empty;
     private Schema? _schemaBeingEdited;
     private Schema? _pendingSchema;
     private int _pendingSchemaEntityCount;
@@ -115,9 +122,13 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         TrackerSyncService trackerSyncService,
         ILogger<CatalogManagementViewModel>? logger = null,
         ProjectGitSyncService? gitSync = null,
-        SchemaManagementService? schemaService = null)
+        SchemaManagementService? schemaService = null,
+        SchemaTrackerService? schemaTrackers = null)
     {
         _schemaService = schemaService;
+        _schemaTrackers = schemaTrackers;
+        SchemaOptions = [];
+        _confirmDetachCommand = new AsyncCommand(ConfirmDetachAsync, () => !IsBusy && _detachTracker is not null);
         RecycledSchemas = [];
         _projectService = projectService;
         _trackerService = trackerService;
@@ -151,6 +162,38 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
 
     public ObservableCollection<Schema> RecycledSchemas { get; }
 
+    /// <summary>The Project's active schemas a Tracker can be created from.</summary>
+    public ObservableCollection<Schema> SchemaOptions { get; }
+
+    public Schema? SelectedSchema
+    {
+        get => _selectedSchema;
+        set
+        {
+            if (!SetField(ref _selectedSchema, value)) return;
+            ResetPreparedCandidate();
+            OnPropertyChanged(nameof(SchemaPreview));
+            NotifyCommandsChanged();
+        }
+    }
+
+    public bool IsSchemaMode => CreationMode == TrackerCreationMode.Schema;
+    public bool CanCreateFromSchema => _schemaTrackers is not null;
+    public bool HasSchemaOptions => SchemaOptions.Count > 0;
+
+    public string SchemaPreview => SelectedSchema is null
+        ? "Choose the schema the tracker starts from."
+        : $"The tracker gets {SelectedSchema.Name}'s entities with their groups and dependencies, all Not started. " +
+          "Later changes to the schema are pushed from its page, and the tracker stays free to change.";
+
+    public bool IsDetachConfirmation => DialogKind == CatalogDialogKind.DetachConfirmation;
+
+    public string DetachText => _detachTracker is null ? string.Empty
+        : $"{_detachTracker.Name} keeps its entities, dependencies and progress, but changes to {_detachSchemaName} " +
+          "no longer reach it. It can't be attached to a schema again.";
+
+    public ICommand ConfirmDetachCommand => _confirmDetachCommand;
+
     public ObservableCollection<Project> RecycledProjects { get; }
     public ObservableCollection<Tracker> RecycledTrackers { get; }
     public ObservableCollection<TrackerCopySourceOption> CopySources { get; }
@@ -169,6 +212,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(IsRecycleBin));
                 OnPropertyChanged(nameof(IsRecycleConfirmation));
                 OnPropertyChanged(nameof(IsPurgeConfirmation));
+                OnPropertyChanged(nameof(IsDetachConfirmation));
             }
         }
     }
@@ -183,6 +227,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
                 ResetPreparedCandidate();
                 OnPropertyChanged(nameof(IsBlankMode));
                 OnPropertyChanged(nameof(IsCopyMode));
+                OnPropertyChanged(nameof(IsSchemaMode));
                 OnPropertyChanged(nameof(ShowApplyTracker));
                 OnPropertyChanged(nameof(PrepareTrackerLabel));
                 NotifyCommandsChanged();
@@ -440,10 +485,10 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
 
     /// <summary>Whether the recycle bin lists recycled schemas: a Project's recycle bin does.</summary>
     public bool ShowsRecycledSchemas => IsRecycleBin && _targetProject is not null && _schemaService is not null;
-    public bool ShowApplyTracker => CreationMode != TrackerCreationMode.Blank;
+    public bool ShowApplyTracker => CreationMode == TrackerCreationMode.Copy;
     public string PrepareTrackerLabel => CreationMode switch
     {
-        TrackerCreationMode.Blank => "Create tracker",
+        TrackerCreationMode.Blank or TrackerCreationMode.Schema => "Create tracker",
         TrackerCreationMode.Copy => "Review copy",
         _ => "Prepare"
     };
@@ -468,6 +513,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         CatalogDialogKind.RecycleConfirmation => _pendingProject is not null ? "Recycle project?"
             : _pendingSchema is not null ? "Recycle schema?" : "Recycle tracker?",
         CatalogDialogKind.PurgeConfirmation => "Permanently delete?",
+        CatalogDialogKind.DetachConfirmation => "Detach from schema?",
         _ => string.Empty
     };
     public string PendingItemName =>
@@ -476,7 +522,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         TypedConfirmation == PendingItemName && !string.IsNullOrEmpty(PendingItemName);
     public string PurgeImpactSummary => _pendingSchema is not null
         ? $"The schema and its {_pendingSchemaEntityCount} {(_pendingSchemaEntityCount == 1 ? "entity" : "entities")} " +
-          "will be permanently removed. Trackers are not changed."
+          "will be permanently removed. Trackers made from it become independent and keep their entities and progress."
         : PurgeImpact is null
         ? "Calculating affected data…"
         : $"{PurgeImpact.TrackerCount} tracker(s), {PurgeImpact.EntityCount} entities " +
@@ -514,6 +560,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         _targetProject = project;
         DialogKind = CatalogDialogKind.TrackerCreation;
         _ = LoadCopySourcesAsync();
+        _ = LoadSchemaOptionsAsync(project);
         NotifyDialogChanged();
     }
 
@@ -798,7 +845,13 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
             return;
         }
 
-        if (CreationMode == TrackerCreationMode.Blank)
+        if (CreationMode == TrackerCreationMode.Schema && SelectedSchema is null)
+        {
+            ErrorMessage = "Select a schema.";
+            return;
+        }
+
+        if (CreationMode is TrackerCreationMode.Blank or TrackerCreationMode.Schema)
         {
             await ApplyTrackerAsync();
             return;
@@ -818,6 +871,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         !string.IsNullOrWhiteSpace(Name) && CreationMode switch
         {
             TrackerCreationMode.Blank => true,
+            TrackerCreationMode.Schema => SelectedSchema is not null,
             TrackerCreationMode.Copy => SelectedCopySource is not null && OperationMessage is not null,
             _ => false
         };
@@ -848,6 +902,10 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
                         throw new InvalidOperationException("Select a source tracker."),
                     _targetProject.Id,
                     Name),
+                TrackerCreationMode.Schema => await (_schemaTrackers ??
+                        throw new InvalidOperationException("Schemas are not available."))
+                    .CreateTrackerAsync(SelectedSchema?.Id ??
+                        throw new InvalidOperationException("Select a schema."), Name),
                 _ => throw new InvalidOperationException("Unknown tracker creation mode.")
             };
             Close();
@@ -917,6 +975,47 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
             Close();
             Changed?.Invoke(this, EventArgs.Empty);
         });
+    }
+
+    /// <summary>Asks before detaching a Tracker from the schema it was created from.</summary>
+    public void RequestDetach(Tracker tracker, string schemaName)
+    {
+        ArgumentNullException.ThrowIfNull(tracker);
+        ResetDialog();
+        _detachTracker = tracker;
+        _detachSchemaName = schemaName;
+        DialogKind = CatalogDialogKind.DetachConfirmation;
+        OnPropertyChanged(nameof(DetachText));
+        _confirmDetachCommand.NotifyCanExecuteChanged();
+        NotifyDialogChanged();
+    }
+
+    private async Task ConfirmDetachAsync()
+    {
+        if (_detachTracker is not { } tracker || _schemaTrackers is null) return;
+        await RunAsync(async () =>
+        {
+            await _schemaTrackers.DetachAsync(tracker.Id);
+            Close();
+            Changed?.Invoke(this, EventArgs.Empty);
+        });
+    }
+
+    private async Task LoadSchemaOptionsAsync(Project project)
+    {
+        if (_schemaService is null || _schemaTrackers is null) return;
+        try
+        {
+            Replace(SchemaOptions, (await _schemaService.GetByProjectAsync(project.Id))
+                .Select(static summary => summary.Schema)
+                .Where(static schema => schema.LifecycleState == CatalogLifecycleState.Active));
+        }
+        catch (InvalidOperationException exception)
+        {
+            _logger.LogWarning(exception, "The schemas to create a tracker from could not be read.");
+            SchemaOptions.Clear();
+        }
+        OnPropertyChanged(nameof(HasSchemaOptions));
     }
 
     private async Task LoadCopySourcesAsync()
@@ -1025,6 +1124,9 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         SyncReview = null;
         _targetProject = null;
         _selectedCopySource = null;
+        _selectedSchema = null;
+        _detachTracker = null;
+        _detachSchemaName = string.Empty;
         _name = string.Empty;
         _typedConfirmation = string.Empty;
         _creationMode = TrackerCreationMode.Blank;
@@ -1039,6 +1141,9 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(CreationMode));
         OnPropertyChanged(nameof(IsBlankMode));
         OnPropertyChanged(nameof(IsCopyMode));
+        OnPropertyChanged(nameof(IsSchemaMode));
+        OnPropertyChanged(nameof(SelectedSchema));
+        OnPropertyChanged(nameof(SchemaPreview));
         OnPropertyChanged(nameof(ShowApplyTracker));
         OnPropertyChanged(nameof(PrepareTrackerLabel));
         OnPropertyChanged(nameof(CanPermanentlyDelete));
@@ -1062,6 +1167,7 @@ public sealed class CatalogManagementViewModel : INotifyPropertyChanged
         _applyTrackerCommand.NotifyCanExecuteChanged();
         _confirmRecycleCommand.NotifyCanExecuteChanged();
         _confirmPurgeCommand.NotifyCanExecuteChanged();
+        _confirmDetachCommand.NotifyCanExecuteChanged();
         ApplySyncCommand.NotifyCanExecuteChanged();
         UseSourceForAllCommand.NotifyCanExecuteChanged();
         KeepCopyForAllCommand.NotifyCanExecuteChanged();

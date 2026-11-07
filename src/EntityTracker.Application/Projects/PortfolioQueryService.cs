@@ -12,7 +12,8 @@ public sealed class PortfolioQueryService(
     IDependencyRepository dependencyRepository,
     IProgressHistoryRepository progressHistoryRepository,
     EffectiveDependencyResolver effectiveDependencyResolver,
-    ProgressSnapshotCalculator snapshotCalculator)
+    ProgressSnapshotCalculator snapshotCalculator,
+    ISchemaStore? schemaStore = null)
 {
     public async Task<PortfolioDashboard> GetPortfolioAsync(
         CancellationToken cancellationToken = default)
@@ -66,12 +67,17 @@ public sealed class PortfolioQueryService(
         Dictionary<TrackerId, TrackerProgressSummary> summaries = await LoadSummariesAsync(
             trackers,
             cancellationToken);
+        Dictionary<SchemaId, string> schemaNames = schemaStore is null || trackers.All(static t => t.SchemaId is null)
+            ? []
+            : (await schemaStore.GetByProjectAsync(projectId, cancellationToken))
+                .ToDictionary(static summary => summary.Schema.Id, static summary => summary.Schema.Name);
         TrackerDashboardSummary[] cards = trackers.Select(tracker => new TrackerDashboardSummary(
             tracker.Id,
             tracker.ProjectId,
             tracker.Name,
             summaries[tracker.Id],
-            tracker.CopiedFromTrackerId)).ToArray();
+            tracker.CopiedFromTrackerId,
+            tracker.SchemaId is { } schemaId ? schemaNames.GetValueOrDefault(schemaId) : null)).ToArray();
         return new ProjectDashboard(project, cards, Aggregate(cards.Select(static card => card.Progress)));
     }
 

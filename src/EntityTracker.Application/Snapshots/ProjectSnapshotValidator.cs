@@ -217,6 +217,43 @@ public static class ProjectSnapshotValidator
         if (snapshot.Trackers.Select(t => t.Name.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() != snapshot.Trackers.Count)
             throw new InvalidDataException("Tracker names must be unique within a Project.");
         ValidateSchemas(snapshot);
+        ValidateSchemaLinks(snapshot);
+    }
+
+    /// <summary>
+    /// Format 12: a Tracker's schema link names a schema of the Project, links each schema entity at most
+    /// once and each of the Tracker's own entities at most once, and its dependencies stay within it.
+    /// </summary>
+    private static void ValidateSchemaLinks(ProjectSnapshot snapshot)
+    {
+        HashSet<Guid> schemaIds = (snapshot.Schemas ?? []).Select(static s => s.Id).ToHashSet();
+        foreach (SnapshotTracker tracker in snapshot.Trackers)
+        {
+            if (tracker.SchemaLink is not { } link) continue;
+            if (snapshot.FormatVersion < ProjectSnapshot.FirstSchemaLinkFormatVersion)
+                throw new InvalidDataException("Schema links are not supported in this snapshot format.");
+            if (link.Entities is null || !schemaIds.Contains(link.SchemaId))
+                throw new InvalidDataException("A Tracker is linked to a schema the Project doesn't have.");
+            HashSet<Guid> entityIds = tracker.Entities
+                .Where(static e => e.LifecycleState != nameof(EntityLifecycleState.Placeholder)).Select(static e => e.Id).ToHashSet();
+            HashSet<Guid> linkedSchemaEntities = [];
+            HashSet<Guid> linkedEntities = [];
+            foreach (SnapshotSchemaLinkEntity entity in link.Entities)
+                if (entity is null || entity.SchemaEntityId == Guid.Empty ||
+                    !linkedSchemaEntities.Add(entity.SchemaEntityId))
+                    throw new InvalidDataException("A Tracker's schema link has an invalid entity.");
+            foreach (SnapshotSchemaLinkEntity entity in link.Entities)
+            {
+                if (string.IsNullOrWhiteSpace(entity.Name) || entity.Name != entity.Name.Trim() ||
+                    entity.GroupName is null || entity.GroupName != entity.GroupName.Trim() ||
+                    entity.EntityId is { } id && (!entityIds.Contains(id) || !linkedEntities.Add(id)) ||
+                    entity.Dependencies is null ||
+                    entity.Dependencies.Distinct().Count() != entity.Dependencies.Count ||
+                    entity.Dependencies.Any(target => target == entity.SchemaEntityId ||
+                                                      !linkedSchemaEntities.Contains(target)))
+                    throw new InvalidDataException("A Tracker's schema link has an invalid entity.");
+            }
+        }
     }
 
     /// <summary>

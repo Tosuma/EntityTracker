@@ -78,6 +78,49 @@ public sealed class SchemaMergeTests
         Assert.Equal("Schema: Model / Schema entity: Purchase (local) / Sale (remote) / Name", conflict.Display!.Title);
     }
 
+    [Fact]
+    public void SchemaLinks_MergeWithoutAsking()
+    {
+        Guid trackerId = Guid.NewGuid();
+        Guid orderEntity = Guid.NewGuid();
+        Guid customerEntity = Guid.NewGuid();
+        SnapshotSchemaLinkEntity Linked(Guid schemaEntity, Guid entity, string name, params Guid[] dependencies) =>
+            new(schemaEntity, entity, name, "", dependencies);
+        ProjectSnapshot WithLink(SnapshotSchemaLink? link) => Snapshot(
+            Entity(Order, "Order", "", Customer), Entity(Customer, "Customer", "")) with
+        {
+            Trackers =
+            [
+                new SnapshotTracker(trackerId, ProjectId, "Team A", "Active", Time, Time, null, null,
+                    [TrackerEntity(orderEntity, trackerId, "Order"), TrackerEntity(customerEntity, trackerId, "Customer")],
+                    [], [], SchemaLink: link)
+            ]
+        };
+        SnapshotSchemaLink basis = new(SchemaId,
+            [Linked(Order, orderEntity, "Order", Customer), Linked(Customer, customerEntity, "Customer")]);
+        // Both sides pushed: local renamed Order in its baseline, remote a different name and Customer's too.
+        SnapshotSchemaLink local = new(SchemaId,
+            [Linked(Order, orderEntity, "Sales order", Customer), Linked(Customer, customerEntity, "Customer")]);
+        SnapshotSchemaLink remote = new(SchemaId,
+            [Linked(Order, orderEntity, "Purchase", Customer), Linked(Customer, customerEntity, "Client")]);
+
+        ProjectMergeResult result = new ProjectSnapshotMerger().Merge(WithLink(basis), WithLink(local), WithLink(remote));
+
+        Assert.Empty(result.Conflicts);
+        // Order's baseline differs on both sides, so it is left out and linked again by name on the next push;
+        // Customer changed on one side only. Order's baseline dependency on Customer goes with it.
+        SnapshotSchemaLinkEntity customer = Assert.Single(Assert.Single(result.Snapshot.Trackers).SchemaLink!.Entities);
+        Assert.Equal("Client", customer.Name);
+
+        // A detach on either side wins over a push on the other.
+        result = new ProjectSnapshotMerger().Merge(WithLink(basis), WithLink(null), WithLink(remote));
+        Assert.Empty(result.Conflicts);
+        Assert.Null(Assert.Single(result.Snapshot.Trackers).SchemaLink);
+    }
+
+    private static SnapshotEntity TrackerEntity(Guid id, Guid trackerId, string name) => new(
+        id, trackerId, name, "NotStarted", "", "Active", null, "", "", Time, Time, Time, []);
+
     private static ProjectSnapshot Snapshot(params SnapshotSchemaEntity[] entities) => new(
         ProjectSnapshot.CurrentFormatVersion,
         new SnapshotProject(ProjectId, "Project", "Active", Time, Time, null),

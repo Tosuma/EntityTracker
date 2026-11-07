@@ -71,6 +71,7 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<ITrackerRepository, SqliteTrackerRepository>();
         services.AddSingleton<IProjectTrackerStore, SqliteProjectTrackerStore>();
         services.AddSingleton<ISchemaStore, SqliteSchemaStore>();
+        services.AddSingleton<ISchemaLinkStore, SqliteSchemaLinkStore>();
         services.AddSingleton<IProjectSnapshotStore, SqliteProjectSnapshotStore>();
         services.AddSingleton<IProjectSnapshotCodec, ProjectSnapshotJsonCodec>();
         services.AddSingleton<IProjectSyncLinkStore>(new JsonProjectSyncLinkStore(
@@ -157,6 +158,7 @@ internal static class ScreenshotServiceProviderFactory
         services.AddSingleton<TrackerManagementService>();
         services.AddSingleton<EntityTracker.Application.Schemas.SchemaManagementService>();
         services.AddSingleton<EntityTracker.Application.Schemas.SchemaEditingService>();
+        services.AddSingleton<EntityTracker.Application.Schemas.SchemaTrackerService>();
         services.AddSingleton<TrackerSyncService>();
         services.AddSingleton<CatalogNameValidationService>();
         services.AddSingleton<PortfolioQueryService>();

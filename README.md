@@ -44,10 +44,11 @@ EntityTracker keeps those concerns separate:
   entity in one offline web page; copy or save charts as PNG files.
 - **Project portfolio** — compare entity-weighted Project/Tracker progress, persisted trends, and
   normalized entity differences without opening another window or database.
-- **Safe catalog management** — create blank or copied Trackers and rename, recycle, restore, or
-  guardedly purge Projects, Trackers and schemas.
+- **Safe catalog management** — create blank, copied or schema-based Trackers and rename, recycle,
+  restore, or guardedly purge Projects, Trackers and schemas.
 - **Schemas** — describe a Project's shared structure once: which entities exist, their groups and
-  how they depend on each other.
+  how they depend on each other. Create Trackers from a schema and push its later changes to all of
+  them in one review.
 - **Local-first reliability** — SQLite persistence, automatic daily and pre-migration backups,
   rolling logs, and documented recovery procedures.
 - **Accessible Fluent workflow** — built-in .NET 10 WPF Fluent controls, Light/Dark/System themes,
@@ -295,6 +296,40 @@ entity that others depend on lists them first, and removes those dependencies wi
 Schemas are part of the Project, so Git sync shares them with everyone who has it. Changes made on
 different computers are merged: a dependency one person added and another person removed both take
 effect, and two entities added with the same name become one.
+
+### Create Trackers from a schema and push changes to them
+
+In **Create tracker**, choose **From schema** and the schema to start from. The new Tracker gets the
+schema's entities with their groups and dependencies, all Not started, and stays linked to the
+schema. Its dashboard card shows "Schema: ‹name›". The Tracker is free to change: its entities'
+statuses, notes, developers, priorities and due dates are its own, and it can rename, regroup, add or
+archive entities as it needs.
+
+![Create tracker with From schema chosen](images/light/create-tracker-schema.png)
+
+The schema editor shows the schema's changes since they were last pushed. **Push to trackers** opens
+one review for every Tracker made from the schema. Each Tracker entity stays linked to its schema
+entity by ID, and the push compares three states: the schema now, the schema as it was at the last
+push, and the Tracker. Changes only the schema made apply without asking, and changes only the
+Tracker made are kept. Where both changed the same thing differently, the review asks: **Use
+schema** or **Keep tracker**, one at a time or for all.
+
+- An entity added to the schema is added as Not started. If the Tracker already has an entity with
+  that name that isn't linked yet, it is linked to it instead, and any difference is asked about.
+- An entity removed from the schema is archived in the Tracker, so its progress can be restored. If
+  the Tracker changed it since the last push, the review asks first; Keep tracker leaves it as the
+  Tracker's own entity.
+- After a push every Tracker is in step with the schema, also where you kept the Tracker's value:
+  that difference isn't asked about again until the schema changes it again.
+- A push is refused, and changes nothing, if the schema or a Tracker changed after the review
+  opened. Open the review again.
+
+![Push review: what applies to each Tracker, and a difference to decide](images/light/schema-push.png)
+
+A Tracker card's **…** menu has **Detach from schema**. A detached Tracker keeps everything it has,
+but schema changes no longer reach it, and it can't be attached again. Pushes are off while a schema
+is in the recycle bin; permanently deleting it detaches all its Trackers. The links are part of the
+Project, so Git sync shares them too.
 
 ### Manage Tracker lifecycle
 

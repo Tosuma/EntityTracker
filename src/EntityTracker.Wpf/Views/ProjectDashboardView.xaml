@@ -337,8 +337,14 @@
                                     <RowDefinition Height="*" />
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
-                                <TextBlock FontSize="19" FontWeight="SemiBold" Text="{Binding Name}"
-                                           TextTrimming="CharacterEllipsis" />
+                                <StackPanel>
+                                    <TextBlock FontSize="19" FontWeight="SemiBold" Text="{Binding Name}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock x:Name="TrackerSchemaText" Margin="0,2,0,0"
+                                               Foreground="{DynamicResource Brush.Text.Secondary}"
+                                               Text="{Binding SchemaText}" TextTrimming="CharacterEllipsis"
+                                               Visibility="{Binding HasSchema, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                </StackPanel>
                                 <StackPanel Grid.Row="1" Margin="0,12">
                                     <TextBlock Text="{Binding Progress.ActiveEntityCount, StringFormat={}{0} active entities}" />
                                     <StackPanel Margin="0,4,0,0" Background="Transparent">
@@ -695,6 +701,12 @@
                         </Style>
                     </Button.Style>
                 </Button>
+                <Button x:Name="DetachTrackerAction" Margin="0,0,0,6"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                        Click="OnDetachTracker" Content="Detach from schema"
+                        ToolTip="Make this tracker independent of its schema"
+                        AutomationProperties.Name="{Binding Name, StringFormat=Detach tracker {0} from its schema}"
+                        Visibility="{Binding HasSchema, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 <Button x:Name="RecycleTrackerAction" HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Left"
                         Click="OnRecycleTracker" Content="Recycle"

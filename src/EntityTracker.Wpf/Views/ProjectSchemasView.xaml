@@ -99,6 +99,7 @@
               Visibility="{Binding DataContext.IsEditing, ElementName=SchemasRoot, Converter={StaticResource BooleanToVisibilityConverter}}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <DockPanel Margin="0,0,0,18">
@@ -131,7 +132,34 @@
                 </StackPanel>
             </DockPanel>
 
-            <Grid Grid.Row="1" Visibility="{Binding IsListView, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <!-- The schema's changes since its last push, and the push itself. -->
+            <Border x:Name="SchemaPushBar" Grid.Row="1" Margin="0,0,0,14" Padding="14,10"
+                    DataContext="{Binding Push}" Style="{StaticResource EntityTrackerCardStyle}"
+                    Visibility="{Binding DataContext.HasPush, ElementName=SchemaEditorPage, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <DockPanel>
+                    <Button x:Name="PushSchemaButton" DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Top"
+                            Command="{Binding OpenReviewCommand}" Content="Push to trackers"
+                            ToolTip="Review and apply the schema's changes to the trackers made from it" />
+                    <Grid VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Visibility="{Binding ShowSummaryOnly, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <Expander x:Name="SchemaPendingChanges" Header="{Binding Summary}"
+                                  AutomationProperties.Name="Changes not yet pushed"
+                                  Visibility="{Binding HasPendingChanges, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <ItemsControl Margin="0,6,0,0" ItemsSource="{Binding PendingChanges}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Margin="0,2" Text="{Binding StringFormat=• {0}}" TextWrapping="Wrap" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Expander>
+                    </Grid>
+                </DockPanel>
+            </Border>
+
+            <Grid Grid.Row="2" Visibility="{Binding IsListView, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" MinWidth="320" />
                     <ColumnDefinition Width="18" />
@@ -265,7 +293,7 @@
                 </Border>
             </Grid>
 
-            <Border Grid.Row="1" BorderBrush="{DynamicResource Brush.Border.Default}" BorderThickness="1"
+            <Border Grid.Row="2" BorderBrush="{DynamicResource Brush.Border.Default}" BorderThickness="1"
                     CornerRadius="6" ClipToBounds="True" DataContext="{Binding Graph}"
                     Visibility="{Binding DataContext.IsGraphView, ElementName=SchemaEditorPage, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <Grid>
@@ -290,6 +318,89 @@
                             Command="{Binding FitToViewCommand}" Content="Fit to view"
                             Style="{StaticResource SecondaryButtonStyle}" />
                 </Grid>
+            </Border>
+
+            <!-- The push review covers the list and the graph while it is open. -->
+            <Border x:Name="SchemaPushReview" Grid.Row="2" Panel.ZIndex="1" Padding="18"
+                    DataContext="{Binding Push}" Style="{StaticResource EntityTrackerCardStyle}"
+                    Background="{DynamicResource Brush.Surface.Page}"
+                    Visibility="{Binding IsReviewOpen, Converter={StaticResource BooleanToVisibilityConverter}, FallbackValue=Collapsed}">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+                        <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="Push to trackers" />
+                        <TextBlock Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}" TextWrapping="Wrap"
+                                   Text="Changes only the schema made apply without asking. Where a tracker changed the same thing, choose which to keep. Statuses, notes, developers, priorities, due dates and Filter active are never changed." />
+                    </StackPanel>
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                                    Visibility="{Binding HasConflicts, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <Button Margin="0,0,8,0" Command="{Binding UseSchemaForAllCommand}" Content="Use schema for all" />
+                            <Button Command="{Binding KeepTrackersForAllCommand}" Content="Keep trackers for all" />
+                        </StackPanel>
+                        <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding ReviewSummary}"
+                                   AutomationProperties.LiveSetting="Polite" />
+                    </DockPanel>
+                    <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+                        <Border Margin="0,0,0,12" Style="{StaticResource ErrorMessageStyle}"
+                                Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock AutomationProperties.LiveSetting="Assertive" Text="{Binding ErrorMessage}" TextWrapping="Wrap" />
+                        </Border>
+                        <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                            <Button x:Name="ApplyPushButton" Margin="0,0,8,0" Command="{Binding ApplyCommand}" Content="Push"
+                                    Style="{StaticResource PrimaryButtonStyle}" />
+                            <Button Command="{Binding CancelReviewCommand}" Content="Cancel" />
+                        </StackPanel>
+                    </StackPanel>
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="SchemaPushTrackers" ItemsSource="{Binding ReviewTrackers}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,0,0,8" Padding="12" Style="{StaticResource EntityTrackerCardStyle}">
+                                        <StackPanel>
+                                            <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding TrackerName}" />
+                                            <TextBlock Margin="0,6,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
+                                                       Text="Already up to date."
+                                                       Visibility="{Binding IsUpToDate, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                            <StackPanel Margin="0,6,0,0"
+                                                        Visibility="{Binding HasAutomaticChanges, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="{Binding AutomaticHeading}" />
+                                                <ItemsControl ItemsSource="{Binding AutomaticChanges}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock Margin="0,2,0,0" Text="{Binding StringFormat=• {0}}" TextWrapping="Wrap" />
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                            <ItemsControl ItemsSource="{Binding Conflicts}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Margin="0,10,0,0">
+                                                            <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
+                                                            <StackPanel Margin="0,4,0,0" Orientation="Horizontal">
+                                                                <!-- Labels hold names that may contain "_", so they are plain text, not access keys. -->
+                                                                <RadioButton Margin="0,0,18,0" GroupName="{Binding ChoiceGroup}"
+                                                                             AutomationProperties.Name="{Binding UseSchemaLabel}"
+                                                                             IsChecked="{Binding UseSchema, Mode=TwoWay}">
+                                                                    <TextBlock Text="{Binding UseSchemaLabel}" />
+                                                                </RadioButton>
+                                                                <RadioButton GroupName="{Binding ChoiceGroup}"
+                                                                             AutomationProperties.Name="{Binding KeepTrackerLabel}"
+                                                                             IsChecked="{Binding KeepTracker, Mode=TwoWay}">
+                                                                    <TextBlock Text="{Binding KeepTrackerLabel}" />
+                                                                </RadioButton>
+                                                            </StackPanel>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
             </Border>
         </Grid>
     </Grid>

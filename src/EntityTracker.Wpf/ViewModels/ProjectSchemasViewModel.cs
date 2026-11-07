@@ -29,6 +29,7 @@ public sealed class ProjectSchemasViewModel : INotifyPropertyChanged
 {
     private readonly SchemaManagementService _management;
     private readonly SchemaEditingService _editing;
+    private readonly SchemaTrackerService? _trackers;
     private readonly CatalogManagementViewModel _catalog;
     private readonly NotificationCenter? _notifications;
     private readonly Func<string, bool>? _confirmDiscard;
@@ -38,8 +39,9 @@ public sealed class ProjectSchemasViewModel : INotifyPropertyChanged
 
     public ProjectSchemasViewModel(Project project, SchemaManagementService management,
         SchemaEditingService editing, CatalogManagementViewModel catalog, NotificationCenter? notifications = null,
-        Func<string, bool>? confirmDiscard = null, ILogger? logger = null)
+        Func<string, bool>? confirmDiscard = null, ILogger? logger = null, SchemaTrackerService? trackers = null)
     {
+        _trackers = trackers;
         _logger = logger ?? NullLogger.Instance;
         _confirmDiscard = confirmDiscard;
         ArgumentNullException.ThrowIfNull(project);
@@ -125,8 +127,10 @@ public sealed class ProjectSchemasViewModel : INotifyPropertyChanged
     {
         try
         {
-            Editor = new SchemaEditorViewModel(await _editing.GetContentAsync(schemaId, cancellationToken),
-                _editing, _notifications, _logger);
+            SchemaEditorViewModel editor = new(await _editing.GetContentAsync(schemaId, cancellationToken),
+                _editing, _notifications, _logger, _trackers);
+            await editor.RefreshPushAsync(cancellationToken);
+            Editor = editor;
         }
         catch (InvalidOperationException exception)
         {

@@ -57,7 +57,7 @@ public sealed class SchemaEditorViewModel : INotifyPropertyChanged
     private bool _isBusy;
 
     public SchemaEditorViewModel(SchemaContent content, SchemaEditingService editing,
-        NotificationCenter? notifications = null, ILogger? logger = null)
+        NotificationCenter? notifications = null, ILogger? logger = null, SchemaTrackerService? trackers = null)
     {
         ArgumentNullException.ThrowIfNull(content);
         _logger = logger ?? NullLogger.Instance;
@@ -86,6 +86,9 @@ public sealed class SchemaEditorViewModel : INotifyPropertyChanged
         CancelRemoveCommand = new RelayCommand(() => IsRemoveConfirmationOpen = false);
         ShowListCommand = new RelayCommand(() => IsGraphView = false);
         ShowGraphCommand = new RelayCommand(() => IsGraphView = true);
+        Push = trackers is null
+            ? null
+            : new SchemaPushViewModel(content.Schema.Id, trackers, IsEditable, notifications, _logger);
         Load(content);
     }
 
@@ -109,6 +112,10 @@ public sealed class SchemaEditorViewModel : INotifyPropertyChanged
         .ToArray();
 
     public DependencyGraphViewModel Graph { get; }
+
+    /// <summary>The schema's unpushed changes and the push review; null where pushing isn't available.</summary>
+    public SchemaPushViewModel? Push { get; }
+    public bool HasPush => Push is not null;
 
     public string SearchText
     {
@@ -256,7 +263,12 @@ public sealed class SchemaEditorViewModel : INotifyPropertyChanged
     public async Task ReloadAsync(CancellationToken cancellationToken = default)
     {
         Load(await _editing.GetContentAsync(Schema.Id, cancellationToken));
+        await RefreshPushAsync(cancellationToken);
     }
+
+    /// <summary>Reads the changes since the last push again.</summary>
+    public Task RefreshPushAsync(CancellationToken cancellationToken = default) =>
+        Push?.RefreshAsync(IsEditable, cancellationToken) ?? Task.CompletedTask;
 
     /// <summary>Throws away the form's unsaved changes.</summary>
     public void DiscardChanges() => CancelEdit();

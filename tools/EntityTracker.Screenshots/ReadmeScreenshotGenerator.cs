@@ -154,8 +154,10 @@ internal sealed class ReadmeScreenshotGenerator
 
             shell.ProjectReport!.Audience = EntityTracker.Reporting.ProjectReports.ReportAudience.Client;
 
-            // The Schemas page, and a schema open in its editor and as a graph.
+            // The Schemas page, and a schema open in its editor and as a graph, with changes to push to a
+            // tracker made from it. That tracker is purged afterwards, so later pages don't show it.
             SchemaId orderModel = await SeedSchemasAsync(provider, project.Id, cancellationToken);
+            TrackerId schemaTracker = await SeedSchemaChangesAsync(provider, orderModel, cancellationToken);
             await shell.NavigateAsync(ShellDestination.Schemas, cancellationToken);
             await renderer.CaptureAsync("project-schemas.png", settleMilliseconds: 500);
             await shell.SchemasPage!.OpenAsync(orderModel, cancellationToken);
@@ -164,7 +166,14 @@ internal sealed class ReadmeScreenshotGenerator
             await renderer.CaptureAsync("schema-editor.png", settleMilliseconds: 500);
             schemaEditor.IsGraphView = true;
             await renderer.CaptureAsync("schema-graph.png", settleMilliseconds: 1500);
+            schemaEditor.IsGraphView = false;
+            await schemaEditor.Push!.OpenReviewAsync();
+            await renderer.CaptureAsync("schema-push.png", settleMilliseconds: 500);
+            schemaEditor.Push.CancelReviewCommand.Execute(null);
             shell.SchemasPage.CloseEditor();
+            TrackerManagementService schemaTrackers = provider.GetRequiredService<TrackerManagementService>();
+            await schemaTrackers.RecycleAsync(schemaTracker, cancellationToken);
+            await schemaTrackers.PurgeAsync(new PurgeTrackerRequest(schemaTracker), cancellationToken);
             await shell.NavigateAsync(ShellDestination.ProjectDashboard, cancellationToken);
             // Synced as of now, so the card shows the synced icon after the earlier screenshots' edits.
             ProjectSyncLink repositoryFixture = await SyncedLinkAsync();
@@ -258,6 +267,18 @@ internal sealed class ReadmeScreenshotGenerator
                 "project-comparison.png");
 
             await CaptureTrackerLifecycleAsync(shell, renderer, cancellationToken);
+
+            shell.Catalog.OpenCreateTracker(project);
+            await WaitUntilAsync(
+                () => shell.Catalog.HasSchemaOptions,
+                "The schemas to create a tracker from did not finish loading.",
+                cancellationToken);
+            shell.Catalog.CreationMode = TrackerCreationMode.Schema;
+            shell.Catalog.Name = "Storefront rollout";
+            shell.Catalog.SelectedSchema = shell.Catalog.SchemaOptions.Single(
+                schema => schema.Name == "Order platform model");
+            await renderer.CaptureAsync("create-tracker-schema.png");
+            shell.Catalog.CancelCommand.Execute(null);
 
             shell.Catalog.OpenCreateTracker(project);
             shell.Catalog.CreationMode = TrackerCreationMode.Copy;
@@ -941,6 +962,36 @@ internal sealed class ReadmeScreenshotGenerator
         await editing.SaveEntityAsync(reporting.Id,
             new SchemaEntityEdit(null, "Sales summary", "Reports", ["Order export", "Invoice export"]), cancellationToken);
         return orderModel.Id;
+    }
+
+    /// <summary>
+    /// A tracker made from the schema, then later changes on both sides: the tracker regroups Payment, and
+    /// the schema renames Price list, adds Refund and regroups Payment too, which the push asks about.
+    /// </summary>
+    private static async Task<TrackerId> SeedSchemaChangesAsync(IServiceProvider provider, SchemaId schemaId,
+        CancellationToken cancellationToken)
+    {
+        SchemaTrackerService trackers = provider.GetRequiredService<SchemaTrackerService>();
+        SchemaEditingService editing = provider.GetRequiredService<SchemaEditingService>();
+        Tracker tracker = await trackers.CreateTrackerAsync(schemaId, "Storefront rollout", cancellationToken);
+        TrackedEntity payment = (await provider.GetRequiredService<IEntityRepository>()
+                .GetAllAsync(tracker.Id, cancellationToken))
+            .Single(entity => entity.SourceName == "Payment");
+        payment.ChangeGroupName("Billing");
+        await provider.GetRequiredService<ITrackedStateStore>().ApplyAsync(tracker.Id,
+            new TrackedStateChangeSet([], [], [], entitiesWithGroupNameToUpdate: [payment]), cancellationToken);
+
+        SchemaContent content = await editing.GetContentAsync(schemaId, cancellationToken);
+        SchemaEntity Find(string name) => content.Entities.Single(entity => entity.Name == name);
+        await editing.SaveEntityAsync(schemaId,
+            new SchemaEntityEdit(Find("Price list").Id, "Price book", "Catalogue", ["Product", "Currency"]),
+            cancellationToken);
+        await editing.SaveEntityAsync(schemaId,
+            new SchemaEntityEdit(Find("Payment").Id, "Payment", "Payments", ["Invoice", "Currency"]),
+            cancellationToken);
+        await editing.SaveEntityAsync(schemaId,
+            new SchemaEntityEdit(null, "Refund", "Payments", ["Payment"]), cancellationToken);
+        return tracker.Id;
     }
 
     private static async Task WaitUntilAsync(

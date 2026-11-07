@@ -36,8 +36,22 @@
                             <TextBlock Margin="0,18,0,6" FontWeight="SemiBold" Text="Starting point" />
                             <StackPanel Orientation="Horizontal">
                                 <RadioButton Margin="0,0,18,0" Content="Blank" GroupName="CreationMode" IsChecked="{Binding IsBlankMode, Mode=OneWay}" Checked="OnBlankChecked" />
+                                <RadioButton x:Name="FromSchemaOption" Margin="0,0,18,0" Content="From schema" GroupName="CreationMode"
+                                             IsChecked="{Binding IsSchemaMode, Mode=OneWay}" Checked="OnSchemaChecked"
+                                             IsEnabled="{Binding HasSchemaOptions}" ToolTip="Create a schema from the Project dashboard first." ToolTipService.ShowOnDisabled="True"
+                                             Visibility="{Binding CanCreateFromSchema, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                 <RadioButton Content="Copy tracker" GroupName="CreationMode" IsChecked="{Binding IsCopyMode, Mode=OneWay}" Checked="OnCopyChecked"
                                              IsEnabled="{Binding HasCopySources}" ToolTip="Create or import a tracker before copying." ToolTipService.ShowOnDisabled="True" />
+                            </StackPanel>
+                            <StackPanel Margin="0,16,0,0" Visibility="{Binding IsSchemaMode, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <Label x:Name="SchemaSourceLabel" Content="Schema" />
+                                <ComboBox x:Name="SchemaSourceBox" AutomationProperties.LabeledBy="{Binding ElementName=SchemaSourceLabel}"
+                                          DisplayMemberPath="Name"
+                                          ItemsSource="{Binding SchemaOptions}"
+                                          SelectedItem="{Binding SelectedSchema}" />
+                                <Border Margin="0,12,0,0" Padding="12" Style="{StaticResource EntityTrackerCardStyle}">
+                                    <TextBlock Text="{Binding SchemaPreview}" TextWrapping="Wrap" />
+                                </Border>
                             </StackPanel>
                             <StackPanel Margin="0,16,0,0" Visibility="{Binding IsCopyMode, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <Label x:Name="CopySourceLabel" Content="Source tracker" />
@@ -167,6 +181,11 @@
                             <TextBlock Margin="0,10,0,0" Text="This is reversible. The item will disappear from active selectors and metrics immediately." TextWrapping="Wrap" />
                             </StackPanel>
 
+                            <StackPanel x:Name="DetachConfirmationSection"
+                                        Visibility="{Binding IsDetachConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock Text="{Binding DetachText}" TextWrapping="Wrap" />
+                            </StackPanel>
+
                             <StackPanel Visibility="{Binding IsPurgeConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <TextBlock Foreground="{DynamicResource Brush.Accent}" FontWeight="SemiBold"
                                        Text="This action cannot be undone." />
@@ -203,6 +222,9 @@
                             Visibility="{Binding IsTrackerSync, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <Button Margin="0,0,8,0" Command="{Binding ConfirmRecycleCommand}" Content="Recycle" Style="{StaticResource DangerButtonStyle}"
                             Visibility="{Binding IsRecycleConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <Button x:Name="ConfirmDetachButton" Margin="0,0,8,0" Command="{Binding ConfirmDetachCommand}" Content="Detach"
+                            Style="{StaticResource DangerButtonStyle}"
+                            Visibility="{Binding IsDetachConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <Button Margin="0,0,8,0" Command="{Binding ConfirmPurgeCommand}" Content="Permanently delete" Style="{StaticResource DangerButtonStyle}"
                             Visibility="{Binding IsPurgeConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <Button x:Name="CancelButton" Command="{Binding CancelCommand}" IsCancel="True">

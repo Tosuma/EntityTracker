@@ -100,10 +100,12 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         DueDateSettingsViewModel? dueDates = null,
         IProjectSnapshotStore? projectSnapshots = null,
         SchemaManagementService? schemaManagement = null,
-        SchemaEditingService? schemaEditing = null)
+        SchemaEditingService? schemaEditing = null,
+        SchemaTrackerService? schemaTrackers = null)
     {
         _schemaManagement = schemaManagement;
         _schemaEditing = schemaEditing;
+        _schemaTrackers = schemaTrackers;
         Diagnostics = diagnostics;
         _reportBuilder = reportBuilder;
         _reportFiles = reportFiles;
@@ -357,6 +359,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private ProjectReportViewModel? _projectReport;
     private readonly SchemaManagementService? _schemaManagement;
     private readonly SchemaEditingService? _schemaEditing;
+    private readonly SchemaTrackerService? _schemaTrackers;
     private ProjectSchemasViewModel? _schemasPage;
 
     public ProjectDevelopersViewModel? Developers
@@ -1184,7 +1187,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             SchemasPage = SelectedProject is null || _schemaManagement is null || _schemaEditing is null
                 ? null
                 : new ProjectSchemasViewModel(SelectedProject, _schemaManagement, _schemaEditing, Catalog,
-                    Notifications, _discardConfirmation.ConfirmDiscard, _logger);
+                    Notifications, _discardConfirmation.ConfirmDiscard, _logger, _schemaTrackers);
         SelectedDestination = destination;
         if (CurrentWorkspace is not null && IsTrackerDestination(destination))
         {
