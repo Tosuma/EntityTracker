@@ -274,7 +274,7 @@ beside the list: its group, what it depends on and what depends on it.
 
 ![Schema shown as a dependency tree](images/light/schema-graph.png)
 
-**Edit** in the details, or **New entity** on either tab, opens the entity dialog. As in a Tracker,
+**Edit** in the details, or **New entity** (Ctrl+N) on either tab, opens the entity dialog. As in a Tracker,
 **Create and add another** creates the entity and keeps the dialog open for the next one. To add a
 dependency, type or choose a name and select **Add**. A name the schema doesn't have yet is offered
 as **Add ‹name› to the schema**: saving the entity adds that entity too, so a schema never holds

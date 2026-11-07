@@ -1834,7 +1834,12 @@ public sealed class PresentationConfigurationTests
         XElement graphSearch = Named("SchemaGraphSearchBox");
         Assert.Equal("{Binding Graph}", (string?)graphSearch.Attribute("DataContext"));
         Assert.Equal("{Binding FindCommand}", (string?)graphSearch.Attribute("SubmitCommand"));
-        Assert.Equal("OnPreviewKeyDown", (string?)page.Root!.Attribute("PreviewKeyDown"));
+        // The window passes the keys on, so Ctrl+F and Esc work wherever the focus is.
+        Assert.Contains(LoadWpfXaml("MainWindow.xaml").Descendants(), static element =>
+            element.Name.LocalName == "ProjectSchemasView" &&
+            element.Attributes().Any(static attribute => attribute.Name.LocalName == "Name" && attribute.Value == "SchemasView"));
+        string window = File.ReadAllText(Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf", "MainWindow.xaml.cs"));
+        Assert.Contains("SchemasView.HandleShortcut(e)", window, StringComparison.Ordinal);
         // New entity is in the toolbar both pages share.
         Assert.Equal("{Binding NewEntityCommand}", (string?)Named("NewSchemaEntityButton").Attribute("Command"));
         // The details pane is read-only: it has text and Edit, no input fields.

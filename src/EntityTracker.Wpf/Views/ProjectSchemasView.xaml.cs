@@ -30,28 +30,36 @@ public partial class ProjectSchemasView : UserControl
     }
 
     /// <summary>
-    /// The open schema's search keys, as on a Tracker's Overview and graph: Ctrl+F goes to the open tab's
-    /// search. Esc first closes the graph's suggestions, then leaves the search box and keeps the search;
-    /// the next Esc closes the details, and the one after that clears the search. The entity dialog handles
-    /// its own Esc.
+    /// The open schema's keys, as on a Tracker's pages, called by the window so they work wherever the
+    /// focus is: Ctrl+F goes to the open tab's search and Ctrl+N opens New entity. Esc first closes the
+    /// graph's suggestions, then leaves the search box and keeps the search; the next Esc closes the
+    /// details, and the one after that clears the search. The entity dialog handles its own keys.
     /// </summary>
-    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    /// <returns>Whether the key was used.</returns>
+    public bool HandleShortcut(KeyEventArgs e)
     {
         if (SchemaEditorPage.DataContext is not SchemaEditorViewModel { Form.IsOpen: false } editor ||
-            !SchemaEditorPage.IsVisible) return;
-        if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+            !SchemaEditorPage.IsVisible) return false;
+        bool control = Keyboard.Modifiers == ModifierKeys.Control;
+        switch (e.Key)
         {
-            if (editor.IsGraphView) SchemaGraphSearchBox.Focus();
-            else
-            {
-                SchemaSearchBox.Focus();
-                SchemaSearchBox.SelectAll();
-            }
-            e.Handled = true;
-            return;
+            case Key.F when control:
+                if (editor.IsGraphView) SchemaGraphSearchBox.Focus();
+                else
+                {
+                    SchemaSearchBox.Focus();
+                    SchemaSearchBox.SelectAll();
+                }
+                return true;
+            case Key.N when control:
+                if (!editor.NewEntityCommand.CanExecute(null)) return false;
+                editor.NewEntityCommand.Execute(null);
+                return true;
+            case Key.Escape when Keyboard.Modifiers == ModifierKeys.None:
+                return LeaveSearch(editor);
+            default:
+                return false;
         }
-        if (e.Key != Key.Escape || Keyboard.Modifiers != ModifierKeys.None) return;
-        e.Handled = LeaveSearch(editor);
     }
 
     /// <summary>Takes one step out of the search on Esc; returns whether there was one to take.</summary>
