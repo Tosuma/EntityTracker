@@ -183,6 +183,10 @@ Destructive actions require confirmation where the workflow already calls for it
   applied, and closing it with chosen changes asks before discarding them, as the editor does.
   The toolbar that opens it keeps a quick "Set status to" box with a secondary Apply status button,
   so a status-only change needs no panel; the Edit button stays the toolbar's one primary action.
+- More actions: "…" on cards and page headers and "⋮" on table rows open the native menu (`ContextMenu`
+  through `ActionMenu.Open`). Recycle is coral in that menu (`DangerMenuItemStyle`). A label doesn't repeat
+  what the card already says: **Rename**, **Recycle**. Export is a popup because it says what will be
+  exported before you choose a format.
 - Table column headers: a filterable column opens its flyout (filter values and, where it applies,
   Sort). A column with nothing to filter, such as Entity, sorts on click instead: A–Z, Z–A, then the
   default order. The whole header takes the click, not only its title. Both show the active sort

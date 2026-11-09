@@ -209,6 +209,40 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void TheCoralMenuItemTemplateIsSetTheWayTheFluentStyleSetsItsOwn()
+    {
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement style = LoadWpfXaml("Themes", "EntityTrackerComponents.xaml").Descendants()
+            .Single(element => (string?)element.Attribute(x + "Key") == "DangerMenuItemStyle");
+
+        // Fluent's MenuItem style chooses a template per role with triggers, and a trigger beats a setter.
+        XElement template = style.Descendants().Single(static element => element.Name.LocalName == "ControlTemplate");
+        XElement trigger = template.Ancestors().First(static element => element.Name.LocalName == "Trigger");
+        Assert.Equal("Role", (string?)trigger.Attribute("Property"));
+        Assert.Equal("SubmenuItem", (string?)trigger.Attribute("Value"));
+    }
+
+    [Theory]
+    [InlineData("PortfolioView.xaml", "OnRecycleProject")]
+    [InlineData("ProjectDashboardView.xaml", "OnRecycleTracker")]
+    [InlineData("ProjectSchemasView.xaml", "OnRecycleSchema")]
+    public void ACardsMenuIsTheNativeDropdownWithACoralRecycle(string view, string recycleHandler)
+    {
+        string wpfRoot = Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf");
+        XDocument page = XDocument.Load(Path.Combine(wpfRoot, "Views", view));
+
+        XElement recycle = page.Descendants().Single(element => element.Name.LocalName == "MenuItem" &&
+            (string?)element.Attribute("Click") == recycleHandler);
+        Assert.Equal("Re_cycle", (string?)recycle.Attribute("Header"));
+        Assert.Equal("{StaticResource DangerMenuItemStyle}", (string?)recycle.Attribute("Style"));
+        Assert.StartsWith("{Binding Name", (string?)recycle.Attributes()
+            .Single(attribute => attribute.Name.LocalName == "AutomationProperties.Name"), StringComparison.Ordinal);
+        Assert.Equal("_Rename", (string?)recycle.ElementsBeforeSelf().First().Attribute("Header"));
+        Assert.Equal("ContextMenu", recycle.Parent!.Name.LocalName);
+        Assert.DoesNotContain(page.Descendants(), element => element.Name.LocalName == "Canvas");
+    }
+
+    [Fact]
     public void NotificationsAnimateInAndOutRegardlessOfTheWindowsAnimationSetting()
     {
         string wpfRoot = Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf");
@@ -462,7 +496,7 @@ public sealed class PresentationConfigurationTests
         ],
             sources);
 
-        // Only the danger button and the summary filter card (shared by the Overview and the Entity
+        // Only the danger button and menu item and the summary filter card (shared by the Overview and the Entity
         // comparison) replace a Fluent template.
         XDocument components = LoadWpfXaml("Themes", "EntityTrackerComponents.xaml");
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
@@ -472,7 +506,7 @@ public sealed class PresentationConfigurationTests
                 .Attribute(x + "Key") ?? string.Empty)
             .Distinct()
             .ToArray();
-        Assert.Equal(["SummaryFilterButtonStyle", "DangerButtonStyle"], templatedStyles);
+        Assert.Equal(["SummaryFilterButtonStyle", "DangerButtonStyle", "DangerMenuItemStyle"], templatedStyles);
     }
 
     [Fact]
