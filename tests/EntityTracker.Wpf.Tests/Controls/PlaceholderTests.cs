@@ -17,7 +17,6 @@ public sealed class PlaceholderTests
     {
         PlaceholderAdorner adorner = Assert.IsType<PlaceholderAdorner>(Placeholder.GetAdorner(textBox));
         Assert.Equal("Search active entities", adorner.Text);
-        Assert.Same(textBox, adorner.AdornedElement);
         Assert.Equal(Visibility.Visible, adorner.Visibility);
         Assert.False(adorner.IsHitTestVisible);
 
@@ -29,17 +28,42 @@ public sealed class PlaceholderTests
     });
 
     [Fact]
+    public void TheHintIsPartOfItsFieldSoWhatCoversTheFieldCoversIt() => Run((panel, textBox, comboBox) =>
+    {
+        // #187: a hint in the window's adorner layer showed through the update screen.
+        Assert.True(Placeholder.GetAdorner(textBox)!.IsDescendantOf(textBox));
+        Assert.True(Placeholder.GetAdorner(comboBox)!.IsDescendantOf(comboBox));
+    });
+
+    [Fact]
     public void HidesWithItsCollapsedField() => Run((panel, textBox, _) =>
     {
         PlaceholderAdorner adorner = Placeholder.GetAdorner(textBox)!;
 
         textBox.Visibility = Visibility.Collapsed;
         Pump(0.05);
-        Assert.Equal(Visibility.Collapsed, adorner.Visibility);
+        Assert.False(adorner.IsVisible);
 
         textBox.Visibility = Visibility.Visible;
         Pump(0.05);
-        Assert.Equal(Visibility.Visible, adorner.Visibility);
+        Assert.True(adorner.IsVisible);
+    });
+
+    [Fact]
+    public void AFieldThatStartsCollapsedGetsItsHintWhenShown() => Run((panel, _, _) =>
+    {
+        TextBox later = new() { Width = 200, Visibility = Visibility.Collapsed };
+        Placeholder.SetText(later, "Type the name to confirm");
+        panel.Children.Add(later);
+        Pump(0.05);
+        Assert.Null(Placeholder.GetAdorner(later));
+
+        later.Visibility = Visibility.Visible;
+        Pump(0.05);
+
+        PlaceholderAdorner adorner = Assert.IsType<PlaceholderAdorner>(Placeholder.GetAdorner(later));
+        Assert.True(adorner.IsVisible);
+        Assert.Equal("Type the name to confirm", adorner.Text);
     });
 
     [Fact]
@@ -47,7 +71,7 @@ public sealed class PlaceholderTests
     {
         PlaceholderAdorner adorner = Assert.IsType<PlaceholderAdorner>(Placeholder.GetAdorner(comboBox));
         TextBox input = Assert.IsType<TextBox>(comboBox.Template.FindName("PART_EditableTextBox", comboBox));
-        Assert.Same(input, adorner.AdornedElement);
+        Assert.True(adorner.IsDescendantOf(input));
         Assert.Equal(Visibility.Visible, adorner.Visibility);
 
         comboBox.Text = "billing";
@@ -64,18 +88,19 @@ public sealed class PlaceholderTests
     [Fact]
     public void LeavesTheAdornerLayerWhenUnloadedAndReturnsWhenLoadedAgain() => Run((panel, textBox, _) =>
     {
-        AdornerLayer layer = AdornerLayer.GetAdornerLayer(textBox)!;
         PlaceholderAdorner adorner = Placeholder.GetAdorner(textBox)!;
+        UIElement textArea = adorner.AdornedElement;
+        AdornerLayer layer = AdornerLayer.GetAdornerLayer(textArea)!;
 
         panel.Children.Remove(textBox);
         Pump(0.05);
         Assert.Null(Placeholder.GetAdorner(textBox));
-        Assert.DoesNotContain(adorner, layer.GetAdorners(textBox) ?? []);
+        Assert.DoesNotContain(adorner, layer.GetAdorners(textArea) ?? []);
 
         panel.Children.Insert(0, textBox);
         Pump(0.05);
         PlaceholderAdorner again = Assert.IsType<PlaceholderAdorner>(Placeholder.GetAdorner(textBox));
-        Assert.Single(layer.GetAdorners(textBox)!);
+        Assert.Single(AdornerLayer.GetAdornerLayer(again.AdornedElement)!.GetAdorners(again.AdornedElement)!);
         Assert.Equal(Visibility.Visible, again.Visibility);
     });
 
