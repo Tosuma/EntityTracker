@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using System.IO;
 using EntityTracker.Application.Dependencies;
 using EntityTracker.Application.History;
@@ -1123,6 +1124,53 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task ApplyBulkStatusAsync_ShowsTheNotificationOnlyAfterTheOverviewHasReloaded()
+    {
+        // #190: reloading blocks the UI thread, which stalled a notification already animating in.
+        NotificationCenter notifications = new();
+        MainWindowViewModel viewModel = CreateViewModel(
+            [Entity(1, "First")],
+            [],
+            out _,
+            notifications: notifications);
+        await viewModel.InitializeAsync();
+        viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
+        viewModel.SelectedBulkStatus = DevelopmentStatus.DevelopmentCompleted;
+        int? completedWhenNotified = null;
+        ((INotifyCollectionChanged)notifications.Items).CollectionChanged +=
+            (_, _) => completedWhenNotified ??= viewModel.DevelopmentCompletedCount;
+
+        await viewModel.ApplyBulkStatusAsync();
+
+        Assert.Equal(1, completedWhenNotified);
+        NotificationItem notice = Assert.Single(notifications.Items);
+        Assert.Equal(("Bulk update", NotificationKind.Success), (notice.Title, notice.Kind));
+    }
+
+    [Fact]
+    public async Task ApplyBulkStatusAsync_WhenTheReloadFails_SaysSoInsteadOfReportingSuccess()
+    {
+        NotificationCenter notifications = new();
+        MainWindowViewModel viewModel = CreateViewModel(
+            [Entity(1, "First")],
+            [],
+            out StubStateStore store,
+            notifications: notifications);
+        await viewModel.InitializeAsync();
+        viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
+        viewModel.SelectedBulkStatus = DevelopmentStatus.DevelopmentCompleted;
+        store.ReadExceptionAfterApply = new InvalidOperationException("Database unavailable");
+
+        await viewModel.ApplyBulkStatusAsync();
+
+        Assert.Equal(1, store.ApplyCount);
+        NotificationItem notice = Assert.Single(notifications.Items);
+        Assert.Equal(("Bulk update", NotificationKind.Failure), (notice.Title, notice.Kind));
+        Assert.Equal("The entities were updated, but the latest overview could not be loaded: Database unavailable",
+            notice.Message);
+    }
+
+    [Fact]
     public async Task ApplyBulkEditAsync_AppliesEveryChosenFieldAndRefreshesSummary()
     {
         TrackedEntity first = Entity(1, "First");
@@ -1443,10 +1491,14 @@ public sealed class MainWindowViewModelTests
         public Task<TrackedEntity?> GetAsync(TrackerId trackerId, EntityId id, CancellationToken cancellationToken = default) =>
             Task.FromResult(_entities.SingleOrDefault(entity => entity.Id == id));
 
+        public Exception? ReadException { get; set; }
+
         public Task<IReadOnlyList<TrackedEntity>> GetAllAsync(
             TrackerId trackerId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<TrackedEntity>>(_entities.ToArray());
+            CancellationToken cancellationToken = default)
+            => ReadException is { } failure
+                ? Task.FromException<IReadOnlyList<TrackedEntity>>(failure)
+                : Task.FromResult<IReadOnlyList<TrackedEntity>>(_entities.ToArray());
 
         Task<IReadOnlyList<EntityAuditTimestamps>> IEntityAuditReader.GetAllAsync(
             TrackerId trackerId,
@@ -1523,6 +1575,9 @@ public sealed class MainWindowViewModelTests
 
         public Exception? Exception { get; set; }
 
+        /// <summary>Makes every read fail once a change has been saved, as a failing reload does.</summary>
+        public Exception? ReadExceptionAfterApply { get; set; }
+
         public Task ApplyAsync(
             TrackerId trackerId,
             TrackedStateChangeSet changeSet,
@@ -1534,6 +1589,8 @@ public sealed class MainWindowViewModelTests
             {
                 return Task.FromException(Exception);
             }
+
+            entityRepository.ReadException = ReadExceptionAfterApply;
 
             foreach (TrackedEntity entity in changeSet.EntitiesToAdd)
             {

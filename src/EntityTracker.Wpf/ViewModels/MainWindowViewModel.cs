@@ -928,9 +928,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
                 cancellationToken);
             operationCompleted = true;
             onSaved?.Invoke();
-            Notify("Bulk update", formatResult(result), NotificationKind.Success);
             BusyMessage = "Recomputing workflow readiness and progress…";
             await LoadOverviewAndProgressAsync(cancellationToken);
+            // After the reload: swapping the rows blocks the UI thread, which would stall the
+            // notification's entry animation halfway.
+            if (HasOverviewError)
+                Notify("Bulk update", "The entities were updated, but the latest overview could not be loaded.",
+                    NotificationKind.Failure);
+            else
+                Notify("Bulk update", formatResult(result), NotificationKind.Success);
             PersistedStateChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
