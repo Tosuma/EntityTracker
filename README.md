@@ -543,7 +543,8 @@ screen and on paper:
   the physical data model changes;
 - **Progress over time** says that implemented entities are those that can be migrated with the tool
   (Rework needed, Reworking, Completed and Reconciled), and that the dashed Active entities line is the
-  projected number to migrate, updated during the project;
+  projected number to migrate, updated during the project. A client report draws only those two lines;
+  an Internal report also draws the entities in progress, not started and blocked, as the app does;
 - **Weekly implemented change** shows two bars a week: the **net change** (entities that became
   implemented minus those that stopped being implemented, below zero in a week that went backwards)
   and the entities **in progress** at the end of the week.

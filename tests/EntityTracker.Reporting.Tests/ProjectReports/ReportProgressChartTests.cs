@@ -12,7 +12,7 @@ public sealed class ReportProgressChartTests
     [Fact]
     public void TheImplementedChartHasAFlatTargetAtTodaysActiveEntities()
     {
-        ReportChart chart = Chart(ProgressChartKind.ImplementedOverTime);
+        ReportChart chart = Chart(ProgressChartKind.ImplementedOverTime, ReportAudience.Internal);
 
         Assert.Equal(["Implemented", "In progress", "Not started", "Blocked", "Active entities"],
             chart.Series.Select(series => series.Name));
@@ -24,9 +24,21 @@ public sealed class ReportProgressChartTests
     }
 
     [Fact]
+    public void AClientsProgressChartHasOnlyTheImplementedAndActiveEntitiesLines()
+    {
+        ChartSection section = Section(ProgressChartKind.ImplementedOverTime);
+        ReportChart chart = section.ByScope[ReportScope.AllKey];
+
+        Assert.Equal(["Implemented", "Active entities"], chart.Series.Select(series => series.Name));
+        Assert.True(chart.Series[1].Dashed);
+        Assert.Equal(ProgressChartSectionProvider.ClientProgressDescription, section.Description);
+        Assert.Equal(["Implemented", "Active entities"], section.Notes!.Select(note => note.Term));
+    }
+
+    [Fact]
     public void TheProgressChartDrawsTheOtherStatusesInThePiesColours()
     {
-        ReportChart chart = Chart(ProgressChartKind.ImplementedOverTime);
+        ReportChart chart = Chart(ProgressChartKind.ImplementedOverTime, ReportAudience.Internal);
 
         Assert.Equal([ColorScheme.Chart.Categories[2], ColorScheme.Chart.Categories[0], ColorScheme.Chart.Categories[1]],
             chart.Series.Skip(1).Take(3).Select(series => series.Color));
@@ -103,7 +115,7 @@ public sealed class ReportProgressChartTests
     [InlineData(ProgressChartKind.ImplementedOverTime)]
     [InlineData(ProgressChartKind.ReadyAndBlockedOverTime)]
     public void EveryChartCarriesItsDescriptionForTheTitleHint(ProgressChartKind kind) =>
-        Assert.Equal(ProgressChartPresentationBuilder.GetDescription(kind), Section(kind).Description);
+        Assert.Equal(ProgressChartPresentationBuilder.GetDescription(kind), Section(kind, ReportAudience.Internal).Description);
 
     [Fact]
     public void TheWeeklyChartDescribesTheReportsOwnBars() =>
@@ -118,9 +130,10 @@ public sealed class ReportProgressChartTests
         Assert.Contains("heading.title = section.description", script, StringComparison.Ordinal);
     }
 
-    private static ReportChart Chart(ProgressChartKind kind) => Section(kind).ByScope[ReportScope.AllKey];
+    private static ReportChart Chart(ProgressChartKind kind, ReportAudience audience = ReportAudience.Client) =>
+        Section(kind, audience).ByScope[ReportScope.AllKey];
 
-    private static ChartSection Section(ProgressChartKind kind)
+    private static ChartSection Section(ProgressChartKind kind, ReportAudience audience = ReportAudience.Client)
     {
         DateTimeOffset now = new(2026, 8, 12, 9, 0, 0, TimeSpan.Zero);
         Tracker tracker = new(TrackerId.New(), ProjectId.New(), "Core schema", now, now);
@@ -136,7 +149,7 @@ public sealed class ReportProgressChartTests
             Monday,
             Monday.AddDays(7));
         ReportContext context = new(
-            new ProjectReportRequest(tracker.ProjectId, [tracker.Id], ReportAudience.Client, ProgressDateRange.AllHistory),
+            new ProjectReportRequest(tracker.ProjectId, [tracker.Id], audience, ProgressDateRange.AllHistory),
             "Commerce modernization",
             [tracker],
             report,
