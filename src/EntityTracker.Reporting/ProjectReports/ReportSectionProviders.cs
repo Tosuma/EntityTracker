@@ -48,6 +48,10 @@ public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IRepo
         "Each week, how many more entities are implemented than at the start of the week, and how many are in " +
         "progress at its end.";
 
+    /// <summary>Gets the progress chart's description in a client report, which has only these two lines.</summary>
+    public const string ClientProgressDescription =
+        "Each day, the implemented entities, against the active entities today.";
+
     public ReportSection Build(ReportContext context) => new ChartSection(
         ProgressChartPresentationBuilder.GetFileNameSegment(kind),
         ProgressChartPresentationBuilder.GetTitle(kind),
@@ -58,10 +62,14 @@ public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IRepo
             ProgressChartKind.WeeklyNetImplementedChange => ReportChartType.Bars,
             _ => ReportChartType.Line
         },
-        context.Scopes.ToDictionary(scope => scope.Key, scope => Chart(context.ReportFor(scope))),
-        kind == ProgressChartKind.WeeklyNetImplementedChange
-            ? WeeklyDescription
-            : ProgressChartPresentationBuilder.GetDescription(kind),
+        context.Scopes.ToDictionary(scope => scope.Key, scope => Chart(context.ReportFor(scope), context.Request.Audience)),
+        kind switch
+        {
+            ProgressChartKind.WeeklyNetImplementedChange => WeeklyDescription,
+            ProgressChartKind.ImplementedOverTime when context.Request.Audience == ReportAudience.Client =>
+                ClientProgressDescription,
+            _ => ProgressChartPresentationBuilder.GetDescription(kind)
+        },
         NotesFor(kind));
 
     /// <summary>Gets the lines shown under a chart that explain its terms, or null when it needs none.</summary>
@@ -95,7 +103,7 @@ public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IRepo
         _ => null
     };
 
-    private ReportChart Chart(ProgressDashboardReport report) => kind switch
+    private ReportChart Chart(ProgressDashboardReport report, ReportAudience audience) => kind switch
     {
         ProgressChartKind.CurrentStatus => new ReportChart(
             report.CurrentStatusCounts.Select(count => ReportLabels.Status(count.Status)).ToArray(),
@@ -107,13 +115,8 @@ public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IRepo
             [
                 new ReportSeries("Implemented", ColorScheme.Chart.Implemented,
                     report.ImplementedOverTime.Select(point => (double)point.ImplementedCount).ToArray()),
-                // The other statuses in the pie's colours for the same statuses.
-                new ReportSeries("In progress", ReportLabels.SliceColor(ProgressStatusCategory.InProgress),
-                    report.ImplementedOverTime.Select(point => (double)point.InProgressCount).ToArray()),
-                new ReportSeries("Not started", ReportLabels.SliceColor(ProgressStatusCategory.NotStarted),
-                    report.ImplementedOverTime.Select(point => (double)point.NotStartedCount).ToArray()),
-                new ReportSeries("Blocked", ReportLabels.SliceColor(ProgressStatusCategory.Blocked),
-                    report.ImplementedOverTime.Select(point => (double)point.BlockedCount).ToArray()),
+                // Too much detail for a client; the team's report has it, as the app does.
+                .. audience == ReportAudience.Client ? [] : OtherStatusLines(report),
                 // The target: today's number of active entities, flat across the chart, dashed.
                 new ReportSeries("Active entities", ColorScheme.Chart.Target,
                     report.ImplementedOverTime.Select(_ => (double)report.ManagerSummary.ActiveEntityCount).ToArray(),
@@ -140,6 +143,17 @@ public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IRepo
             ]),
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
     };
+
+    /// <summary>The statuses other than implemented, in the pie's colours for the same statuses.</summary>
+    private static ReportSeries[] OtherStatusLines(ProgressDashboardReport report) =>
+    [
+        new("In progress", ReportLabels.SliceColor(ProgressStatusCategory.InProgress),
+            report.ImplementedOverTime.Select(point => (double)point.InProgressCount).ToArray()),
+        new("Not started", ReportLabels.SliceColor(ProgressStatusCategory.NotStarted),
+            report.ImplementedOverTime.Select(point => (double)point.NotStartedCount).ToArray()),
+        new("Blocked", ReportLabels.SliceColor(ProgressStatusCategory.Blocked),
+            report.ImplementedOverTime.Select(point => (double)point.BlockedCount).ToArray())
+    ];
 
     /// <summary>
     /// The entities in progress on the week's last day with data: its Sunday, or the last day of the
