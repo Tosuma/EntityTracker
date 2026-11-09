@@ -134,6 +134,9 @@ public sealed class NotificationCenter : INotifyPropertyChanged
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasItems)));
     }
 
+    /// <summary>Gets how long a notice with an Undo button stays.</summary>
+    public static TimeSpan UndoDisplayTime { get; } = TimeSpan.FromSeconds(20);
+
     public event PropertyChangedEventHandler? PropertyChanged;
     public bool HasItems => _items.Count > 0;
     public Func<ProjectId, Task>? NavigateToProjectAsync { get; set; }
@@ -161,6 +164,18 @@ public sealed class NotificationCenter : INotifyPropertyChanged
         NotificationItem item = Add(title, message, NotificationKind.Information);
         item.Update(message, NotificationKind.Information, actionLabel, action);
         ScheduleExpiry(item);
+        return item;
+    }
+
+    /// <summary>
+    /// A success notice with an Undo button. It stays longer than other notices, to give time to spot a
+    /// mistake and react.
+    /// </summary>
+    public NotificationItem ShowUndo(string title, string message, Func<Task> undo)
+    {
+        NotificationItem item = Add(title, message, NotificationKind.Success);
+        item.Update(message, NotificationKind.Success, "Undo", undo);
+        ScheduleExpiry(item, UndoDisplayTime);
         return item;
     }
 
@@ -259,13 +274,13 @@ public sealed class NotificationCenter : INotifyPropertyChanged
     }
 
     /// <summary>Removes information and success notices after a while; failures stay until dismissed.</summary>
-    private async void ScheduleExpiry(NotificationItem item)
+    private async void ScheduleExpiry(NotificationItem item, TimeSpan? displayTime = null)
     {
         if (item.Kind == NotificationKind.Failure) return;
         int version = item.Version;
         try
         {
-            await Task.Delay(_displayTime, _timeProvider);
+            await Task.Delay(displayTime ?? _displayTime, _timeProvider);
             if (IsActive(item) && item.Version == version &&
                 item.Kind is not (NotificationKind.Progress or NotificationKind.ActionNeeded))
                 Remove(item);

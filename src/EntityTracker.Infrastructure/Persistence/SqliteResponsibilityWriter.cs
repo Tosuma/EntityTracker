@@ -45,6 +45,36 @@ internal static class SqliteResponsibilityWriter
             throw new InvalidOperationException("The entity or selected Developer is no longer available.");
     }
 
+    /// <summary>Continues an ended period, undoing the removal that ended it.</summary>
+    public static Task ReopenAsync(SqliteConnection connection, SqliteTransaction transaction,
+        TrackerId trackerId, Guid periodId, CancellationToken cancellationToken) =>
+        ChangePeriodAsync(connection, transaction, trackerId, periodId,
+            "UPDATE responsibility_periods SET ended_at_utc = NULL WHERE id = $id AND ended_at_utc IS NOT NULL",
+            cancellationToken);
+
+    /// <summary>Removes a current period, undoing the addition that started it.</summary>
+    public static Task DeleteCurrentAsync(SqliteConnection connection, SqliteTransaction transaction,
+        TrackerId trackerId, Guid periodId, CancellationToken cancellationToken) =>
+        ChangePeriodAsync(connection, transaction, trackerId, periodId,
+            "DELETE FROM responsibility_periods WHERE id = $id AND ended_at_utc IS NULL",
+            cancellationToken);
+
+    private static async Task ChangePeriodAsync(SqliteConnection connection, SqliteTransaction transaction,
+        TrackerId trackerId, Guid periodId, string statement, CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = statement + """
+
+              AND entity_id IN (SELECT id FROM tracked_entities
+                                WHERE tracker_id = $tracker AND lifecycle_state = 'Active');
+            """;
+        command.Parameters.AddWithValue("$id", periodId.ToString("D"));
+        command.Parameters.AddWithValue("$tracker", SqlitePersistenceValues.Format(trackerId));
+        if (await command.ExecuteNonQueryAsync(cancellationToken) != 1)
+            throw new InvalidOperationException("The responsible developer changed before the undo could be saved.");
+    }
+
     public static async Task AddCurrentAsync(SqliteConnection connection,
         SqliteTransaction transaction, TrackerId trackerId, ResponsibilityAddition addition,
         DateTimeOffset now, CancellationToken cancellationToken)

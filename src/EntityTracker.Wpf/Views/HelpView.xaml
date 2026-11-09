@@ -62,6 +62,7 @@
                         <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Recycle hides a Project or Tracker while keeping it recoverable; Restore returns it." />
                         <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Archive hides an entity; restore it from Archived." />
                         <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Permanently delete removes the item and its listed data after you type its exact name. It cannot be undone." />
+                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• The notice after a bulk update, or after archiving or restoring an entity, has Undo for 20 seconds. Entities changed since are left alone." />
                     </StackPanel>
                 </Border>
             </UniformGrid>
