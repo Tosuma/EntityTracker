@@ -549,6 +549,13 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(() => NotificationScrollViewer.ScrollToEnd(),
             System.Windows.Threading.DispatcherPriority.Loaded);
 
+    /// <summary>
+    /// The height scale of a notice before it opens: too small to see, but not zero. WPF can't work out a
+    /// width through a zero scale, so the text would wrap as if in no width at all and the notice's height
+    /// would glide up to that before coming back.
+    /// </summary>
+    private const double NotificationClosedScale = 0.001;
+
     /// <summary>How long a leaving notice takes to slide out of the window to the left.</summary>
     internal static readonly TimeSpan NotificationSlideOut = TimeSpan.FromMilliseconds(300);
 
@@ -587,7 +594,7 @@ public partial class MainWindow : Window
 
         Duration duration = TimeSpan.FromMilliseconds(220);
         CubicEase easeOut = new() { EasingMode = EasingMode.EaseOut };
-        ScaleTransform scale = new(1, 0);
+        ScaleTransform scale = new(1, NotificationClosedScale);
         container.LayoutTransform = scale;
         TranslateTransform slide = new(0, 12);
         card.RenderTransform = slide;
@@ -596,7 +603,7 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(() =>
         {
             scale.BeginAnimation(ScaleTransform.ScaleYProperty,
-                new DoubleAnimation(0, 1, duration) { EasingFunction = easeOut });
+                new DoubleAnimation(NotificationClosedScale, 1, duration) { EasingFunction = easeOut });
             slide.BeginAnimation(TranslateTransform.YProperty,
                 new DoubleAnimation(12, 0, duration) { EasingFunction = easeOut });
             card.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration));

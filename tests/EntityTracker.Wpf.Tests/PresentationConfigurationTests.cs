@@ -191,6 +191,9 @@ public sealed class PresentationConfigurationTests
             loaded.IndexOf("Dispatcher.BeginInvoke", StringComparison.Ordinal) <
             loaded.IndexOf("scale.BeginAnimation", StringComparison.Ordinal));
         Assert.Contains("DispatcherPriority.ApplicationIdle", loaded, StringComparison.Ordinal);
+        // A zero scale leaves the text no width, so the notice would overshoot while opening.
+        Assert.Contains("new(1, NotificationClosedScale)", loaded, StringComparison.Ordinal);
+        Assert.Contains("new DoubleAnimation(NotificationClosedScale, 1, duration)", loaded, StringComparison.Ordinal);
     }
 
     [Fact]
