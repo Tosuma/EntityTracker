@@ -235,7 +235,7 @@
                                     Visibility="{Binding CanCancelSync, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             <Button Margin="0,0,8,0" Content="Sync now" Command="{Binding SyncCommand}"
                                     AutomationProperties.HelpText="Commit the project snapshot and sync it with the repository now"
-                                    Style="{StaticResource PrimaryButtonStyle}" />
+                                    Style="{StaticResource SecondaryButtonStyle}" />
                             <Button Content="Details" Command="{Binding ToggleDetailsCommand}"
                                     AutomationProperties.HelpText="Show the repository path, branch, upstream and actions" />
                         </StackPanel>
@@ -290,9 +290,15 @@
                         <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
                             <Button Margin="0,0,8,0" Content="Link repository" Command="{Binding LinkCommand}"
                                     AutomationProperties.HelpText="Link an existing Git repository to this project" />
-                            <Button Margin="0,0,8,0" Content="Sync now" Command="{Binding SyncCommand}"
+                            <!-- The main action only while something is waiting to be synced. -->
+                            <Button x:Name="SyncNowPrimaryButton" Margin="0,0,8,0" Content="Sync now" Command="{Binding SyncCommand}"
                                     AutomationProperties.HelpText="Commit the project snapshot and sync it with the repository now"
+                                    Visibility="{Binding HasPendingAction, Converter={StaticResource BooleanToVisibilityConverter}}"
                                     Style="{StaticResource PrimaryButtonStyle}" />
+                            <Button x:Name="SyncNowQuietButton" Margin="0,0,8,0" Content="Sync now" Command="{Binding SyncCommand}"
+                                    AutomationProperties.HelpText="Commit the project snapshot and sync it with the repository now"
+                                    Visibility="{Binding HasNoPendingAction, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
                             <Button Content="Unlink" Command="{Binding UnlinkCommand}"
                                     AutomationProperties.Name="Unlink Git repository" />
                             <Button Margin="8,0,0,0" Content="Cancel sync"

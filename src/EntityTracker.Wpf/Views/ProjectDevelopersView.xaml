@@ -136,7 +136,7 @@
                                Text="{Binding Developers.PendingRetirementMessage}" />
                     <StackPanel Margin="0,20,0,0" HorizontalAlignment="Right" Orientation="Horizontal">
                         <Button Margin="0,0,8,0" Content="_Retire developer" Command="{Binding Developers.ConfirmRetirementCommand}"
-                                Style="{StaticResource PrimaryButtonStyle}" />
+                                Style="{StaticResource DangerButtonStyle}" />
                         <Button x:Name="CancelRetirementButton" Content="Cancel"
                                 Command="{Binding Developers.CancelRetirementCommand}"
                                 IsCancel="True" IsDefault="True"
