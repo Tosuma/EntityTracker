@@ -288,21 +288,14 @@
                                     Style="{StaticResource SecondaryIconButtonStyle}">
                                 <controls:Icon IconKey="Icon.ArrowClockwise" />
                             </Button>
-                            <Button x:Name="OverviewNewEntityButton"
-                                    Margin="0,0,8,0"
-                                    Command="{Binding OpenCreateEntityCommand}"
-                                    AutomationProperties.Name="New entity"
-                                    ToolTip="New entity (Ctrl+N)"
-                                    Style="{StaticResource SecondaryButtonStyle}">
-                                <controls:IconLabel IconKey="Icon.Add" Text="New entity" />
-                            </Button>
                             <Button x:Name="OverviewExportButton"
+                                    Margin="0,0,8,0"
                                     ToolTip="Export as Excel or CSV (Ctrl+E)"
                                     AutomationProperties.Name="Export overview"
                                     AutomationProperties.HelpText="Choose Excel or CSV export"
                                     PreviewMouseDown="OnOverviewExportButtonPreviewMouseDown"
                                     Click="OnOverviewExportButtonClick"
-                                    Style="{StaticResource PrimaryButtonStyle}">
+                                    Style="{StaticResource SecondaryButtonStyle}">
                                 <controls:IconLabel IconKey="Icon.ArrowExportUp" Text="Export" />
                             </Button>
                             <Popup x:Name="OverviewExportPopup"
@@ -337,6 +330,13 @@
                                     </StackPanel>
                                 </Border>
                             </Popup>
+                            <Button x:Name="OverviewNewEntityButton"
+                                    Command="{Binding OpenCreateEntityCommand}"
+                                    AutomationProperties.Name="New entity"
+                                    ToolTip="New entity (Ctrl+N)"
+                                    Style="{StaticResource PrimaryButtonStyle}">
+                                <controls:IconLabel IconKey="Icon.Add" Text="New entity" />
+                            </Button>
                         </WrapPanel>
                         <StackPanel>
                             <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Overview" />
@@ -969,17 +969,16 @@
                                     Content="Fit to view"
                                     ToolTip="Fit the whole map in view (0)"
                                     Style="{StaticResource SecondaryButtonStyle}" />
-                            <Button Margin="0,0,8,0"
-                                    Command="{Binding DataContext.OpenCreateEntityCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                    AutomationProperties.Name="New entity"
-                                    ToolTip="New entity (Ctrl+N)"
-                                    Style="{StaticResource SecondaryButtonStyle}">
-                                <controls:IconLabel IconKey="Icon.Add" Text="New entity" />
-                            </Button>
-                            <Button Command="{Binding ExportPngCommand}"
+                            <Button Margin="0,0,8,0" Command="{Binding ExportPngCommand}"
                                     Content="Export PNG"
                                     AutomationProperties.HelpText="Save the dependency graph as a PNG image"
-                                    Style="{StaticResource PrimaryButtonStyle}" />
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Command="{Binding DataContext.OpenCreateEntityCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    AutomationProperties.Name="New entity"
+                                    ToolTip="New entity (Ctrl+N)"
+                                    Style="{StaticResource PrimaryButtonStyle}">
+                                <controls:IconLabel IconKey="Icon.Add" Text="New entity" />
+                            </Button>
                         </WrapPanel>
                         <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Dependency graph" />
                     </DockPanel>

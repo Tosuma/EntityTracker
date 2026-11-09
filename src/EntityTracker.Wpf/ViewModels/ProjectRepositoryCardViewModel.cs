@@ -141,6 +141,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
         }
     }
     public bool HasPendingAction => !string.IsNullOrEmpty(PendingAction);
+    public bool HasNoPendingAction => !HasPendingAction;
 
     public async Task RefreshAsync(CancellationToken token = default)
     {
@@ -324,7 +325,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
         foreach (string name in new[] { nameof(IsLinked), nameof(IsBusy), nameof(RepositoryPath),
                      nameof(Branch), nameof(Upstream), nameof(LastResult), nameof(LastSyncTiming),
                      nameof(HasLastSyncTiming), nameof(PendingAction),
-                     nameof(HasPendingAction), nameof(CanCancelSync), nameof(IsCompact),
+                     nameof(HasPendingAction), nameof(HasNoPendingAction), nameof(CanCancelSync), nameof(IsCompact),
                      nameof(CanHideDetails) })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         _linkCommand.NotifyCanExecuteChanged();

@@ -137,7 +137,7 @@
                                     </Grid.ColumnDefinitions>
                                     <Button Margin="0,0,8,0" Click="OnOpenProject" Content="Open dashboard"
                                             AutomationProperties.Name="{Binding Name, StringFormat=Open project {0}}"
-                                            Style="{StaticResource PrimaryButtonStyle}" />
+                                            Style="{StaticResource SecondaryButtonStyle}" />
                                     <Button Grid.Column="1" Click="OnProjectActionsClick"
                                             Style="{StaticResource SecondaryIconButtonStyle}"
                                                   ToolTip="Project actions"

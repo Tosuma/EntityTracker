@@ -228,6 +228,67 @@ public sealed class PresentationConfigurationTests
         Assert.DoesNotContain(page.Descendants(), element => element.Name.LocalName == "Canvas");
     }
 
+    [Theory]
+    [InlineData("TrackerWorkspaceView.xaml")]
+    [InlineData("ProjectSchemasView.xaml")]
+    public void NewEntityIsAPagesPrimaryAction(string view)
+    {
+        XDocument page = LoadWpfXaml("Views", view);
+
+        IEnumerable<XElement> newEntity = page.Descendants().Where(static element =>
+            element.Name.LocalName == "Button" &&
+            ((string?)element.Attribute("Command"))?.Contains("OpenCreateEntityCommand", StringComparison.Ordinal) == true ||
+            (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "NewSchemaEntityButton");
+        Assert.NotEmpty(newEntity);
+        Assert.All(newEntity, static button =>
+            Assert.Equal("{StaticResource PrimaryButtonStyle}", (string?)button.Attribute("Style")));
+    }
+
+    [Theory]
+    [InlineData("PortfolioView.xaml", "OnOpenProject", null)]
+    [InlineData("ProjectDashboardView.xaml", "OnOpenTracker", null)]
+    [InlineData("ProjectSchemasView.xaml", null, "OpenSchemaCommand")]
+    public void RepeatedCardsHaveNoPrimaryButton(string view, string? click, string? command)
+    {
+        XElement open = LoadWpfXaml("Views", view).Descendants().Single(element =>
+            element.Name.LocalName == "Button" &&
+            (click is not null
+                ? (string?)element.Attribute("Click") == click
+                : ((string?)element.Attribute("Command"))?.Contains(command!, StringComparison.Ordinal) == true));
+
+        Assert.Equal("{StaticResource SecondaryButtonStyle}", (string?)open.Attribute("Style"));
+    }
+
+    [Fact]
+    public void ExportIsSecondaryAndRetiringIsCoral()
+    {
+        XDocument workspace = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
+        Assert.Equal("{StaticResource SecondaryButtonStyle}", (string?)workspace.Descendants()
+            .Single(static element => (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "OverviewExportButton")
+            .Attribute("Style"));
+        Assert.Equal("{StaticResource SecondaryButtonStyle}", (string?)workspace.Descendants()
+            .Single(static element => (string?)element.Attribute("Command") == "{Binding ExportPngCommand}")
+            .Attribute("Style"));
+
+        XElement retire = LoadWpfXaml("Views", "ProjectDevelopersView.xaml").Descendants()
+            .Single(static element => (string?)element.Attribute("Content") == "_Retire developer");
+        Assert.Equal("{StaticResource DangerButtonStyle}", (string?)retire.Attribute("Style"));
+    }
+
+    [Fact]
+    public void SyncNowIsThePrimaryActionOnlyWhileSomethingIsWaiting()
+    {
+        XDocument dashboard = LoadWpfXaml("Views", "ProjectDashboardView.xaml");
+        XName name = XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml");
+        XElement primary = dashboard.Descendants().Single(element => (string?)element.Attribute(name) == "SyncNowPrimaryButton");
+        XElement quiet = dashboard.Descendants().Single(element => (string?)element.Attribute(name) == "SyncNowQuietButton");
+
+        Assert.Equal("{StaticResource PrimaryButtonStyle}", (string?)primary.Attribute("Style"));
+        Assert.Contains("HasPendingAction", (string?)primary.Attribute("Visibility"), StringComparison.Ordinal);
+        Assert.Equal("{StaticResource SecondaryButtonStyle}", (string?)quiet.Attribute("Style"));
+        Assert.Contains("HasNoPendingAction", (string?)quiet.Attribute("Visibility"), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void NotificationsAnimateInAndOutRegardlessOfTheWindowsAnimationSetting()
     {
