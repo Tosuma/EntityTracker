@@ -7,7 +7,7 @@
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </UserControl.Resources>
     <!-- The tabs only choose the page; each page is shown by the shell as before, so its guards still apply. -->
-    <TabControl x:Name="Tabs" Padding="0" BorderThickness="0" Background="Transparent"
+    <TabControl x:Name="Tabs" Style="{DynamicResource TextTabControlStyle}"
                 AutomationProperties.Name="Project pages"
                 ItemContainerStyle="{DynamicResource TextTabItemStyle}"
                 SelectionChanged="OnSelectionChanged">

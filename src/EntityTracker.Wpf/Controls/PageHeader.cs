@@ -24,8 +24,7 @@ public sealed class PageHeader : DockPanel
         new PropertyMetadata(null, static (d, e) => ((PageHeader)d).ShowHeading((UIElement?)e.NewValue)));
 
     public static readonly DependencyProperty TabsProperty = DependencyProperty.Register(
-        nameof(Tabs), typeof(UIElement), typeof(PageHeader),
-        new PropertyMetadata(null, static (d, e) => ((PageHeader)d).ShowTabs((UIElement?)e.OldValue, (UIElement?)e.NewValue)));
+        nameof(Tabs), typeof(UIElement), typeof(PageHeader));
 
     private readonly TextBlock _title = new() { VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _description = new() { Margin = new Thickness(0, 4, 0, 0), Visibility = Visibility.Collapsed };
@@ -64,7 +63,7 @@ public sealed class PageHeader : DockPanel
         set => SetValue(HeadingProperty, value);
     }
 
-    /// <summary>Gets or sets a row of tabs, shown between the heading and the description.</summary>
+    /// <summary>Gets or sets a row of tabs, across the whole header between the heading and the description.</summary>
     public UIElement? Tabs
     {
         get => (UIElement?)GetValue(TabsProperty);
@@ -74,6 +73,17 @@ public sealed class PageHeader : DockPanel
     protected override void OnInitialized(EventArgs e)
     {
         base.OnInitialized(e);
+        if (Tabs is not null)
+        {
+            // Docked first, so they run under the toolbar too; the description goes below the tabs.
+            _text.Children.Remove(_description);
+            _description.Margin = new Thickness(0, 8, 0, 0);
+            SetDock(_description, Dock.Bottom);
+            SetDock(Tabs, Dock.Bottom);
+            Children.Insert(0, _description);
+            Children.Insert(1, Tabs);
+        }
+
         // Last, so the toolbar added in XAML docks first and the heading takes the room that is left.
         Children.Add(_text);
     }
@@ -85,12 +95,4 @@ public sealed class PageHeader : DockPanel
     }
 
     private void ShowHeading(UIElement? heading) => _headingRow.Child = heading ?? _title;
-
-    private void ShowTabs(UIElement? previous, UIElement? tabs)
-    {
-        if (previous is not null)
-            _text.Children.Remove(previous);
-        if (tabs is not null)
-            _text.Children.Insert(1, tabs);
-    }
 }

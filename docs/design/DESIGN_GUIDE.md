@@ -185,6 +185,8 @@ Destructive actions require confirmation where the workflow already calls for it
   so a status-only change needs no panel; the Edit button stays the toolbar's one primary action.
 - Page headers: every page starts with `PageHeader`: a title or, for a breadcrumb, `Heading`; optional
   `Tabs` and a description; and the toolbar as its child, in a `WrapPanel` with `PageToolbarStyle`.
+- Tabs: `TextTabControlStyle` and `TextTabItemStyle` put text tabs on a line across the page, with a short bar
+  under the selected tab. A tab keeps the room of its bold label, so selecting one doesn't move the others.
 - Text roles: page headings use `PageHeadingTextStyle`, section headings `SectionHeadingTextStyle` (one size on
   every page), card names `CardTitleTextStyle`, details panes `DetailsTitleTextStyle` and summary numbers
   `MetricValueTextStyle` or `CompactMetricValueTextStyle`. Don't set a size at 16 px or larger on a page.

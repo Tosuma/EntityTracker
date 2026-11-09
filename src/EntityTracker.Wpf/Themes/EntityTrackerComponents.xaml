@@ -274,20 +274,37 @@
 
         <!-- Text tabs: the hover highlight of the app's buttons, and for the selected tab a
              semibold label over a short bar, as the sidebar marks its selected page. -->
+        <!-- A row of tabs that chooses what is shown elsewhere: the tabs on a line across the page. -->
+        <Style x:Key="TextTabControlStyle" TargetType="{x:Type TabControl}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TabControl}">
+                        <Border BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Brush.Border.Medium}">
+                            <TabPanel IsItemsHost="True" HorizontalAlignment="Left" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="TextTabItemStyle" TargetType="{x:Type TabItem}">
             <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
             <Setter Property="Padding" Value="12,7" />
-            <Setter Property="Margin" Value="0,0,4,0" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
-                        <Border x:Name="TabSurface" Background="Transparent" CornerRadius="4"
+                        <!-- The gap is inside the tab: TabPanel takes a tab's own margin off its width, which
+                             would cut off the highlight's right corners. -->
+                        <Border x:Name="TabSurface" Margin="0,0,4,0" Background="Transparent" CornerRadius="4"
                                 SnapsToDevicePixels="True">
                             <Grid>
-                                <ContentPresenter x:Name="TabHeader" Margin="{TemplateBinding Padding}"
+                                <!-- Keeps the room the bold label needs, so selecting a tab doesn't move the others. -->
+                            <TextBlock x:Name="TabWidthKeeper" Margin="{TemplateBinding Padding}" FontWeight="SemiBold"
+                                       Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}"
+                                       Visibility="Hidden" />
+                            <ContentPresenter x:Name="TabHeader" Margin="{TemplateBinding Padding}"
                                                   ContentSource="Header" RecognizesAccessKey="True"
                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                <Border x:Name="SelectionBar" Height="3" Margin="12,0,12,1"
+                                <Border x:Name="SelectionBar" Height="3" Margin="12,0,12,0"
                                         VerticalAlignment="Bottom" CornerRadius="1.5"
                                         Background="{DynamicResource Brush.Text.Primary}"
                                         Visibility="Collapsed" />

@@ -382,6 +382,26 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void TabsKeepTheRoomOfTheirBoldLabelAndSitOnALine()
+    {
+        XName key = XName.Get("Key", "http://schemas.microsoft.com/winfx/2006/xaml");
+        XName name = XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml");
+        XDocument components = LoadWpfXaml("Themes", "EntityTrackerComponents.xaml");
+
+        XElement keeper = components.Descendants().Single(element => (string?)element.Attribute(name) == "TabWidthKeeper");
+        Assert.Equal("Hidden", (string?)keeper.Attribute("Visibility"));
+        Assert.Equal("SemiBold", (string?)keeper.Attribute("FontWeight"));
+
+        XElement line = components.Descendants().Single(element => (string?)element.Attribute(key) == "TextTabControlStyle")
+            .Descendants().Single(static element => element.Name.LocalName == "Border");
+        Assert.Equal("0,0,0,1", (string?)line.Attribute("BorderThickness"));
+
+        // TabPanel takes a tab's own margin off its width, which cuts off the highlight's right corners.
+        XElement tab = components.Descendants().Single(element => (string?)element.Attribute(key) == "TextTabItemStyle");
+        Assert.DoesNotContain(tab.Elements(), static setter => (string?)setter.Attribute("Property") == "Margin");
+    }
+
+    [Fact]
     public void AnOpenSchemaHasABreadcrumbInPlaceOfTheProjectTabs()
     {
         XDocument schemas = LoadWpfXaml("Views", "ProjectSchemasView.xaml");
@@ -668,7 +688,7 @@ public sealed class PresentationConfigurationTests
                 .Attribute(x + "Key") ?? string.Empty)
             .Distinct()
             .ToArray();
-        Assert.Equal(["SummaryFilterButtonStyle", "DangerButtonStyle", "DangerMenuItemStyle", "TextTabItemStyle"], templatedStyles);
+        Assert.Equal(["SummaryFilterButtonStyle", "DangerButtonStyle", "DangerMenuItemStyle", "TextTabControlStyle", "TextTabItemStyle"], templatedStyles);
     }
 
     [Fact]
