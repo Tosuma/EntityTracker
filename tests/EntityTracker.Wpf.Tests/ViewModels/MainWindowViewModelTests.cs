@@ -1171,6 +1171,133 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task Undo_PutsABulkUpdateBackOnceFromItsNotice()
+    {
+        NotificationCenter notifications = new();
+        MainWindowViewModel viewModel = CreateViewModel(
+            [Entity(1, "First")],
+            [],
+            out StubStateStore store,
+            notifications: notifications);
+        await viewModel.InitializeAsync();
+        viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
+        viewModel.SelectedBulkStatus = DevelopmentStatus.DevelopmentCompleted;
+        await viewModel.ApplyBulkStatusAsync();
+        NotificationItem notice = Assert.Single(notifications.Items);
+        Assert.Equal(("Undo", NotificationKind.Success), (notice.ActionLabel, notice.Kind));
+
+        notice.ActionCommand!.Execute(null);
+        await WaitUntilAsync(() => notifications.Items.Any(static item => item.Title == "Undo") && !viewModel.IsBusy);
+        // Pressing the button of a notice already used does nothing.
+        notice.ActionCommand!.Execute(null);
+
+        Assert.Equal(2, store.ApplyCount);
+        Assert.Equal(1, viewModel.NotStartedCount);
+        Assert.Equal(0, viewModel.DevelopmentCompletedCount);
+        NotificationItem undone = Assert.Single(notifications.Items);
+        Assert.Equal(("Undo", NotificationKind.Success), (undone.Title, undone.Kind));
+        Assert.Equal("1 entity put back as before.", undone.Message);
+    }
+
+    [Fact]
+    public async Task Undo_OnlyTheLatestChangeCanBeUndone()
+    {
+        NotificationCenter notifications = new();
+        MainWindowViewModel viewModel = CreateViewModel(
+            [Entity(1, "First")],
+            [],
+            out StubStateStore store,
+            notifications: notifications);
+        await viewModel.InitializeAsync();
+        viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
+        viewModel.SelectedBulkStatus = DevelopmentStatus.DevelopmentCompleted;
+        await viewModel.ApplyBulkStatusAsync();
+        NotificationItem first = Assert.Single(notifications.Items);
+        viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
+        viewModel.SelectedBulkStatus = DevelopmentStatus.Reconciled;
+
+        await viewModel.ApplyBulkStatusAsync();
+
+        Assert.DoesNotContain(first, notifications.Items);
+        Assert.Equal("Undo", Assert.Single(notifications.Items).ActionLabel);
+        first.ActionCommand!.Execute(null);
+        await Task.Delay(50);
+        Assert.Equal(2, store.ApplyCount);
+    }
+
+    [Fact]
+    public async Task Undo_IsWithdrawnWhenTheTrackerIsLeft()
+    {
+        NotificationCenter notifications = new();
+        MainWindowViewModel viewModel = CreateViewModel(
+            [Entity(1, "First")],
+            [],
+            out StubStateStore store,
+            notifications: notifications);
+        await viewModel.InitializeAsync();
+        viewModel.UpdateOverviewSelection(viewModel.OverviewItems);
+        viewModel.SelectedBulkStatus = DevelopmentStatus.DevelopmentCompleted;
+        await viewModel.ApplyBulkStatusAsync();
+        NotificationItem notice = Assert.Single(notifications.Items);
+
+        viewModel.PrepareForDeactivation();
+
+        Assert.Empty(notifications.Items);
+        notice.ActionCommand!.Execute(null);
+        await Task.Delay(50);
+        Assert.Equal(1, store.ApplyCount);
+    }
+
+    [Fact]
+    public async Task Undo_RestoresAnArchivedEntityAndArchivesARestoredOne()
+    {
+        NotificationCenter notifications = new();
+        MainWindowViewModel viewModel = CreateViewModel(
+            [Entity(1, "Customer")],
+            [],
+            out StubStateStore store,
+            notifications: notifications);
+        await viewModel.InitializeAsync();
+        viewModel.EditOverviewEntityCommand.Execute(Assert.Single(viewModel.OverviewItems));
+        viewModel.Editor.RequestArchiveCommand.Execute(null);
+        viewModel.Editor.ConfirmArchiveCommand.Execute(null);
+        await WaitUntilAsync(() => !viewModel.Editor.IsOpen && notifications.Items.Count == 1);
+        NotificationItem archived = Assert.Single(notifications.Items);
+        Assert.Equal(("Archive entity", "Customer was archived.", "Undo"),
+            (archived.Title, archived.Message, archived.ActionLabel));
+
+        archived.ActionCommand!.Execute(null);
+        await WaitUntilAsync(() => viewModel.OverviewItems.Count == 1 && !viewModel.IsBusy);
+
+        Assert.Single(store.AppliedChangeSet!.EntityIdsToRestore);
+        Assert.Equal("Customer was restored.", Assert.Single(notifications.Items).Message);
+    }
+
+    [Fact]
+    public async Task Undo_WaitsWhileAnEditIsOpen()
+    {
+        NotificationCenter notifications = new();
+        MainWindowViewModel viewModel = CreateViewModel(
+            [Entity(1, "First"), Entity(2, "Second")],
+            [],
+            out StubStateStore store,
+            notifications: notifications);
+        await viewModel.InitializeAsync();
+        viewModel.UpdateOverviewSelection([viewModel.OverviewItems[0]]);
+        viewModel.SelectedBulkStatus = DevelopmentStatus.DevelopmentCompleted;
+        await viewModel.ApplyBulkStatusAsync();
+        NotificationItem notice = Assert.Single(notifications.Items);
+        viewModel.EditOverviewEntityCommand.Execute(viewModel.OverviewItems[1]);
+        await WaitUntilAsync(() => viewModel.Editor.IsOpen);
+
+        notice.ActionCommand!.Execute(null);
+        await WaitUntilAsync(() => notifications.Items.Count == 2);
+
+        Assert.Equal(1, store.ApplyCount);
+        Assert.Contains(notice, notifications.Items);
+    }
+
+    [Fact]
     public async Task ApplyBulkEditAsync_AppliesEveryChosenFieldAndRefreshesSummary()
     {
         TrackedEntity first = Entity(1, "First");

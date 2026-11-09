@@ -132,7 +132,7 @@ public sealed class BulkEntityUpdateService
         List<ResponsibilityAddition> additions = [];
         List<ResponsibilityRemoval> removals = [];
         Dictionary<EntityId, TrackedEntity> updatesById = [];
-        int changedCount = 0;
+        List<BulkEntityUndoItem> undoItems = [];
         foreach (EntityId selectedId in selectedIds)
         {
             TrackedEntity entity = entitiesById[selectedId];
@@ -160,19 +160,7 @@ public sealed class BulkEntityUpdateService
 
             if (statusChanged || priorityChanged || dueDateChanged)
             {
-                TrackedEntity updated = new(
-                    entity.Id,
-                    trackerId,
-                    entity.SourceName,
-                    targetStatus,
-                    entity.Notes,
-                    entity.LifecycleState,
-                    targetPriority,
-                    entity.ResponsibleDeveloper,
-                    entity.GroupName,
-                    entity.FilterActive,
-                    entity.SharedNotes,
-                    targetDueDate);
+                TrackedEntity updated = WithValues(entity, trackerId, targetStatus, targetPriority, targetDueDate);
                 updatesById[entity.Id] = updated;
                 if (statusChanged) progressUpdates.Add(updated);
                 if (priorityChanged) priorityUpdates.Add(updated);
@@ -181,10 +169,17 @@ public sealed class BulkEntityUpdateService
 
             if (statusChanged || priorityChanged || dueDateChanged || responsibilityChanged)
             {
-                changedCount++;
+                undoItems.Add(new BulkEntityUndoItem(
+                    entity.Id,
+                    entity.SourceName,
+                    statusChanged ? new FieldUndo<DevelopmentStatus>(entity.Status, targetStatus) : null,
+                    priorityChanged ? new FieldUndo<int?>(entity.RequestedPriority, targetPriority) : null,
+                    dueDateChanged ? new FieldUndo<DateOnly?>(entity.DueDate, targetDueDate) : null,
+                    responsibilityChanged ? update.Responsibility : null));
             }
         }
 
+        int changedCount = undoItems.Count;
         int unchangedCount = selectedIds.Length - changedCount;
         if (changedCount == 0)
         {
@@ -218,6 +213,143 @@ public sealed class BulkEntityUpdateService
                 entitiesWithDueDateToUpdate: dueDateUpdates),
             cancellationToken);
 
-        return new BulkEntityUpdateResult(changedCount, unchangedCount);
+        return new BulkEntityUpdateResult(changedCount, unchangedCount, new BulkEntityUndo(undoItems));
     }
+
+    /// <summary>
+    /// Puts back what a bulk update changed, in one save, as a new change: statuses append to the history.
+    /// An entity changed since then, in a field the update set, is left alone and named in the result.
+    /// A developer the update added is taken off again and one it removed gets their ended period back, so
+    /// the responsibility timeline shows no trace of the mistake.
+    /// </summary>
+    public async Task<BulkEntityUndoResult> UndoAsync(
+        TrackerId trackerId,
+        BulkEntityUndo undo,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(trackerId);
+        ArgumentNullException.ThrowIfNull(undo);
+
+        Task<IReadOnlyList<TrackedEntity>> entitiesTask =
+            _entityRepository.GetAllAsync(trackerId, cancellationToken);
+        Task<IReadOnlyList<EntityDependency>> dependenciesTask =
+            _dependencyRepository.GetAllAsync(trackerId, cancellationToken);
+        await Task.WhenAll(entitiesTask, dependenciesTask);
+        TrackedEntity[] entities = (await entitiesTask).ToArray();
+        IReadOnlyList<EntityDependency> dependencies = await dependenciesTask;
+        TrackerStateValidator.EnsureOwned(trackerId, entities, dependencies);
+        Dictionary<EntityId, TrackedEntity> entitiesById = entities.ToDictionary(static entity => entity.Id);
+        IReadOnlyList<ResponsibilityPeriod> periods =
+            _responsibilityPeriods is not null && undo.Items.Any(static item => item.Responsibility is not null)
+                ? await _responsibilityPeriods.GetByTrackerAsync(trackerId, cancellationToken)
+                : [];
+
+        List<TrackedEntity> progressUpdates = [];
+        List<TrackedEntity> priorityUpdates = [];
+        List<TrackedEntity> dueDateUpdates = [];
+        List<Guid> periodsToReopen = [];
+        List<Guid> periodsToDelete = [];
+        Dictionary<EntityId, TrackedEntity> updatesById = [];
+        List<string> notRestored = [];
+        int restoredCount = 0;
+        foreach (BulkEntityUndoItem item in undo.Items)
+        {
+            ResponsibilityPeriod? period = item.Responsibility is null ? null : PeriodToPutBack(item, periods);
+            if (!entitiesById.TryGetValue(item.EntityId, out TrackedEntity? entity) ||
+                entity.LifecycleState != EntityLifecycleState.Active ||
+                ChangedSince(entity, item) ||
+                (item.Responsibility is not null && period is null))
+            {
+                notRestored.Add(item.Name);
+                continue;
+            }
+
+            if (item.Status is not null || item.Priority is not null || item.DueDate is not null)
+            {
+                TrackedEntity restored = WithValues(
+                    entity,
+                    trackerId,
+                    item.Status is { } status ? status.Before : entity.Status,
+                    item.Priority is { } priority ? priority.Before : entity.RequestedPriority,
+                    item.DueDate is { } dueDate ? dueDate.Before : entity.DueDate);
+                updatesById[entity.Id] = restored;
+                if (item.Status is not null) progressUpdates.Add(restored);
+                if (item.Priority is not null) priorityUpdates.Add(restored);
+                if (item.DueDate is not null) dueDateUpdates.Add(restored);
+            }
+
+            if (period is not null)
+                (item.Responsibility!.Add ? periodsToDelete : periodsToReopen).Add(period.Id);
+            restoredCount++;
+        }
+
+        if (restoredCount == 0)
+        {
+            return new BulkEntityUndoResult(0, notRestored);
+        }
+
+        ProgressSnapshotState? snapshot = null;
+        if (progressUpdates.Count > 0)
+        {
+            TrackedEntity[] candidateEntities = entities
+                .Select(entity => updatesById.GetValueOrDefault(entity.Id) ?? entity)
+                .ToArray();
+            snapshot = _snapshotCalculator.Calculate(
+                candidateEntities,
+                _effectiveDependencyResolver.Resolve(candidateEntities, dependencies));
+        }
+
+        await _store.ApplyAsync(
+            trackerId,
+            new TrackedStateChangeSet(
+                [],
+                [],
+                [],
+                entitiesWithProgressToUpdate: progressUpdates,
+                progressSnapshotAfterChanges: snapshot,
+                entitiesWithRequestedPriorityToUpdate: priorityUpdates,
+                entitiesWithDueDateToUpdate: dueDateUpdates,
+                responsibilityPeriodsToReopen: periodsToReopen,
+                responsibilityPeriodsToDelete: periodsToDelete),
+            cancellationToken);
+        return new BulkEntityUndoResult(restoredCount, notRestored);
+    }
+
+    /// <summary>Gets whether a field the update set no longer holds what the update put there.</summary>
+    private static bool ChangedSince(TrackedEntity entity, BulkEntityUndoItem item) =>
+        (item.Status is { } status && entity.Status != status.After) ||
+        (item.Priority is { } priority && entity.RequestedPriority != priority.After) ||
+        (item.DueDate is { } dueDate && entity.DueDate != dueDate.After);
+
+    /// <summary>
+    /// The period to undo: the current one of a developer the update added, or the latest ended one of a
+    /// developer it removed. Null when the assignment has changed since.
+    /// </summary>
+    private static ResponsibilityPeriod? PeriodToPutBack(
+        BulkEntityUndoItem item, IReadOnlyList<ResponsibilityPeriod> periods)
+    {
+        BulkResponsibilityChange change = item.Responsibility!;
+        ResponsibilityPeriod[] own = periods
+            .Where(period => period.EntityId == item.EntityId && period.DeveloperId == change.DeveloperId)
+            .ToArray();
+        ResponsibilityPeriod? current = own.FirstOrDefault(static period => period.IsCurrent);
+        if (change.Add) return current;
+        return current is not null ? null : own.MaxBy(static period => period.EndedAtUtc);
+    }
+
+    private static TrackedEntity WithValues(
+        TrackedEntity entity, TrackerId trackerId, DevelopmentStatus status, int? priority, DateOnly? dueDate) =>
+        new(
+            entity.Id,
+            trackerId,
+            entity.SourceName,
+            status,
+            entity.Notes,
+            entity.LifecycleState,
+            priority,
+            entity.ResponsibleDeveloper,
+            entity.GroupName,
+            entity.FilterActive,
+            entity.SharedNotes,
+            dueDate);
 }

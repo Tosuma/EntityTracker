@@ -49,6 +49,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     private readonly AsyncCommand _openIdentitySettingsCommand;
     private string? _assignmentGuidance;
     private readonly BulkEntityUpdateService _bulkEntityUpdateService;
+    private readonly EntityLifecycleService _entityLifecycleService;
+    private NotificationItem? _undoNotice;
     private readonly IContextDiscardConfirmation _discardConfirmation;
     private readonly ILogger<MainWindowViewModel> _logger;
     private readonly AsyncCommand _refreshCommand;
@@ -142,6 +144,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             developers is null ? null : new DeveloperPickerViewModel(trackerId, developers),
             () => discardConfirmation.ConfirmDiscard("The new entity has unfinished changes."));
         ManualCreation.PropertyChanged += OnManualCreationPropertyChanged;
+        _entityLifecycleService = entityLifecycleService;
         Editor = new EntityDependencyEditorViewModel(
             trackerId,
             entityDependencyEditorService,
@@ -714,6 +717,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     public void PrepareForDeactivation()
     {
         _isWorkspaceActive = false;
+        WithdrawUndo();
         ActiveTable.CloseOpenFilter();
         ArchivedTable.CloseOpenFilter();
         CloseEntityDetails();
@@ -935,6 +939,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
             if (HasOverviewError)
                 Notify("Bulk update", "The entities were updated, but the latest overview could not be loaded.",
                     NotificationKind.Failure);
+            else if (result.Undo is { } undo)
+                OfferUndo("Bulk update", formatResult(result), token => UndoBulkUpdateAsync(undo, token));
             else
                 Notify("Bulk update", formatResult(result), NotificationKind.Success);
             PersistedStateChanged?.Invoke(this, EventArgs.Empty);
@@ -1025,6 +1031,94 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     private void Notify(string title, string message, NotificationKind kind) =>
         _notifications?.Show(title, message, kind);
+
+    /// <summary>Confirms a change with an Undo button. Only the latest change can be undone.</summary>
+    private void OfferUndo(
+        string title,
+        string message,
+        Func<CancellationToken, Task<(string Message, NotificationKind Kind)>> undo)
+    {
+        WithdrawUndo();
+        if (_notifications is null) return;
+        NotificationItem? notice = null;
+        notice = _undoNotice = _notifications.ShowUndo(title, message, () => RunUndoAsync(notice!, undo));
+    }
+
+    private void WithdrawUndo()
+    {
+        if (_undoNotice is not { } notice) return;
+        _undoNotice = null;
+        _notifications?.Dismiss(notice);
+    }
+
+    private async Task RunUndoAsync(
+        NotificationItem notice,
+        Func<CancellationToken, Task<(string Message, NotificationKind Kind)>> undo)
+    {
+        // Pressed twice, or the Tracker's page was left: this notice no longer stands for the latest change.
+        if (!ReferenceEquals(_undoNotice, notice)) return;
+        if (IsBusy || ManualCreation.IsBusy || ManualCreation.IsOpen || Editor.IsOpen || BulkEdit.IsOpen)
+        {
+            Notify("Undo", "Finish or close what you are working on, then press Undo.", NotificationKind.Information);
+            return;
+        }
+
+        WithdrawUndo();
+        IsBusy = true;
+        BusyMessage = "Undoing the change…";
+        bool saved = false;
+        try
+        {
+            (string message, NotificationKind kind) = await undo(CancellationToken.None);
+            saved = true;
+            await LoadOverviewAndProgressAsync(CancellationToken.None);
+            Notify("Undo", message, kind);
+            PersistedStateChanged?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "The change could not be undone (saved: {Saved}).", saved);
+            Notify("Undo", saved
+                ? $"The change was undone, but the latest overview could not be loaded: {exception.Message}"
+                : $"The change could not be undone: {exception.Message}",
+                NotificationKind.Failure);
+        }
+        finally
+        {
+            EndBusyOperation();
+        }
+    }
+
+    private async Task<(string Message, NotificationKind Kind)> UndoBulkUpdateAsync(
+        BulkEntityUndo undo,
+        CancellationToken cancellationToken)
+    {
+        BulkEntityUndoResult result = await _bulkEntityUpdateService.UndoAsync(_trackerId, undo, cancellationToken);
+        string restored = result.RestoredCount == 1 ? "1 entity" : $"{result.RestoredCount} entities";
+        return result.NotRestored.Count == 0
+            ? ($"{restored} put back as before.", NotificationKind.Success)
+            : result.RestoredCount == 0
+                ? ($"Nothing was undone: changed since the update: {string.Join(", ", result.NotRestored)}.",
+                    NotificationKind.Failure)
+                : ($"{restored} put back as before. Left alone, changed since the update: " +
+                   $"{string.Join(", ", result.NotRestored)}.", NotificationKind.Information);
+    }
+
+    private void OfferUndoOfArchive(TrackedEntity entity) =>
+        OfferUndo("Archive entity", $"{entity.SourceName} was archived.", async token =>
+        {
+            EntityRestorationResult result = await _entityLifecycleService.RestoreAsync(_trackerId, entity.Id, token);
+            return result.IsSuccess
+                ? ($"{entity.SourceName} was restored.", NotificationKind.Success)
+                : ($"{entity.SourceName} could not be restored: {string.Join(" ", result.Errors)}",
+                    NotificationKind.Failure);
+        });
+
+    private void OfferUndoOfRestore(TrackedEntity entity) =>
+        OfferUndo("Restore entity", $"{entity.SourceName} was restored.", async token =>
+            await _entityLifecycleService.TryArchiveAsync(_trackerId, entity.Id, token)
+                ? ($"{entity.SourceName} was archived again.", NotificationKind.Success)
+                : ($"{entity.SourceName} is no longer active, so it was left as it is.", NotificationKind.Failure));
 
     private void ReplaceOverviewItems(
         IReadOnlyList<EntityOverviewRow> items,
@@ -1174,6 +1268,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
                     row => row.EntityId == createdEntityId);
             }
 
+            WithdrawUndo();
             if (createdRow is not null && !ManualCreation.IsOpen)
             {
                 SelectedEntityDetails = new EntityDetailsViewModel(createdRow);
@@ -1199,6 +1294,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     private async Task OnDependencyEditsPersistedAsync()
     {
+        WithdrawUndo();
         try
         {
             await LoadOverviewAndProgressAsync(CancellationToken.None);
@@ -1214,10 +1310,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     private async Task OnEntityArchivedAsync()
     {
+        TrackedEntity? archived = Editor.CurrentEditPlan?.Entity;
         SelectedTab = MainWindowTab.Overview;
         try
         {
             await LoadOverviewAndProgressAsync(CancellationToken.None);
+            if (archived is not null && !HasOverviewError) OfferUndoOfArchive(archived);
             PersistedStateChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception exception)
@@ -1230,6 +1328,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     private async Task OnEntityRestoredAsync()
     {
+        TrackedEntity? restored = Editor.ArchivedDetails?.Entity;
         ManualCreation.Reset();
         ActiveTable.ClearAllFiltersAndSort();
         ActiveTable.ClearSearchCommand.Execute(null);
@@ -1237,6 +1336,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
         try
         {
             await LoadOverviewAndProgressAsync(CancellationToken.None);
+            if (restored is not null && !HasOverviewError) OfferUndoOfRestore(restored);
             PersistedStateChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception exception)
@@ -1249,6 +1349,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     private async Task OnEntityPurgedAsync()
     {
+        WithdrawUndo();
         SelectedTab = MainWindowTab.Archived;
         try
         {
@@ -1585,6 +1686,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable
 
     public void Dispose()
     {
+        WithdrawUndo();
         ActiveTable.ProjectionChanging -= OnActiveTableProjectionChanging;
         ArchivedTable.ProjectionChanging -= OnArchivedTableProjectionChanging;
         ActiveTable.PropertyChanged -= OnActiveTablePropertyChanged;

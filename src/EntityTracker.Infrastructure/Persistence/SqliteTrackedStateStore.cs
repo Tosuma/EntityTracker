@@ -148,6 +148,14 @@ public sealed class SqliteTrackedStateStore : ITrackedStateStore, ITrackerSyncSt
             await SqliteResponsibilityWriter.RemoveCurrentAsync(connection, transaction,
                 trackerId, removal, appliedAtUtc.ToUniversalTime(), cancellationToken);
 
+        foreach (Guid periodId in changeSet.ResponsibilityPeriodsToReopen)
+            await SqliteResponsibilityWriter.ReopenAsync(connection, transaction,
+                trackerId, periodId, cancellationToken);
+
+        foreach (Guid periodId in changeSet.ResponsibilityPeriodsToDelete)
+            await SqliteResponsibilityWriter.DeleteCurrentAsync(connection, transaction,
+                trackerId, periodId, cancellationToken);
+
         foreach (TrackedEntity entity in changeSet.EntitiesToUpdate)
         {
             await UpdateEntityAsync(

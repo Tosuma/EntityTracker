@@ -364,6 +364,106 @@ public sealed class BulkEntityUpdateServiceTests
         Assert.Equal(0, store.ApplyCount);
     }
 
+    [Fact]
+    public async Task UndoAsync_PutsBackWhatTheUpdateChangedAndNothingElse()
+    {
+        DateOnly due = new(2026, 12, 1);
+        TrackedEntity changed = Entity(1, "Changed", requestedPriority: 4, dueDate: due);
+        TrackedEntity matched = Entity(2, "Matched", DevelopmentStatus.DevelopmentCompleted, requestedPriority: 2);
+        RecordingStore store = new();
+        BulkEntityUpdateResult result = await CreateService([changed, matched], [], store).ApplyAsync(
+            [changed.Id, matched.Id],
+            new BulkEntityUpdate(DevelopmentStatus.DevelopmentCompleted, new RequestedPriorityChange(2)));
+        BulkEntityUndo undo = Assert.IsType<BulkEntityUndo>(result.Undo);
+        Assert.Equal(changed.Id, Assert.Single(undo.Items).EntityId);
+        TrackedEntity after = Entity(1, "Changed", DevelopmentStatus.DevelopmentCompleted, requestedPriority: 2, dueDate: due);
+
+        BulkEntityUndoResult undone = await CreateService([after, matched], [], store)
+            .UndoAsync(TestTrackerId, undo);
+
+        Assert.Equal(1, undone.RestoredCount);
+        Assert.Empty(undone.NotRestored);
+        Assert.Equal(2, store.ApplyCount);
+        TrackedStateChangeSet changeSet = Assert.IsType<TrackedStateChangeSet>(store.LastChangeSet);
+        TrackedEntity status = Assert.Single(changeSet.EntitiesWithProgressToUpdate);
+        Assert.Equal((changed.Id, DevelopmentStatus.NotStarted), (status.Id, status.Status));
+        Assert.Equal(4, Assert.Single(changeSet.EntitiesWithRequestedPriorityToUpdate).RequestedPriority);
+        // The due date wasn't part of the update, so it is left out of the undo.
+        Assert.Empty(changeSet.EntitiesWithDueDateToUpdate);
+        Assert.Equal(1, changeSet.ProgressSnapshotAfterChanges!.ReadyCount);
+    }
+
+    [Fact]
+    public async Task UndoAsync_LeavesAnEntityChangedSinceAndRestoresTheRestInOneSave()
+    {
+        TrackedEntity first = Entity(1, "First");
+        TrackedEntity second = Entity(2, "Second");
+        TrackedEntity third = Entity(3, "Third");
+        RecordingStore store = new();
+        BulkEntityUpdateResult result = await CreateService([first, second, third], [], store).ApplyAsync(
+            [first.Id, second.Id, third.Id],
+            new BulkEntityUpdate(DevelopmentStatus.InProgress));
+        TrackedEntity[] later =
+        [
+            Entity(1, "First", DevelopmentStatus.InProgress),
+            Entity(2, "Second", DevelopmentStatus.Reconciled),
+            Entity(3, "Third", DevelopmentStatus.InProgress, EntityLifecycleState.Archived)
+        ];
+
+        BulkEntityUndoResult undone = await CreateService(later, [], store).UndoAsync(TestTrackerId, result.Undo!);
+
+        Assert.Equal(1, undone.RestoredCount);
+        Assert.Equal(["Second", "Third"], undone.NotRestored);
+        Assert.Equal(2, store.ApplyCount);
+        Assert.Equal(first.Id, Assert.Single(store.LastChangeSet!.EntitiesWithProgressToUpdate).Id);
+    }
+
+    [Fact]
+    public async Task UndoAsync_ASecondUndoFindsNothingLeftToPutBack()
+    {
+        TrackedEntity entity = Entity(1, "First");
+        RecordingStore store = new();
+        BulkEntityUpdateResult result = await CreateService([entity], [], store).ApplyAsync(
+            [entity.Id], new BulkEntityUpdate(DevelopmentStatus.InProgress));
+
+        // The entity is back at its old status, so the update's value is no longer there.
+        BulkEntityUndoResult undone = await CreateService([entity], [], store).UndoAsync(TestTrackerId, result.Undo!);
+
+        Assert.Equal(0, undone.RestoredCount);
+        Assert.Equal(["First"], undone.NotRestored);
+        Assert.Equal(1, store.ApplyCount);
+    }
+
+    [Fact]
+    public async Task UndoAsync_ReopensARemovedDevelopersPeriodAndDeletesAnAddedOne()
+    {
+        DeveloperId developer = DeveloperId.New();
+        TrackedEntity removedFrom = Entity(1, "Removed from");
+        TrackedEntity addedTo = Entity(2, "Added to");
+        TrackedEntity reassigned = Entity(3, "Reassigned");
+        ResponsibilityPeriod older = Period(removedFrom, developer, ended: true);
+        ResponsibilityPeriod ended = new(Guid.NewGuid(), removedFrom.Id, developer,
+            DateTimeOffset.UnixEpoch.AddDays(2), DateTimeOffset.UnixEpoch.AddDays(3));
+        ResponsibilityPeriod added = Period(addedTo, developer);
+        BulkEntityUndo undo = new(
+        [
+            new BulkEntityUndoItem(removedFrom.Id, "Removed from", Responsibility: new BulkResponsibilityChange(developer, false)),
+            new BulkEntityUndoItem(addedTo.Id, "Added to", Responsibility: new BulkResponsibilityChange(developer, true)),
+            // Removed from it by the update, but assigned again since.
+            new BulkEntityUndoItem(reassigned.Id, "Reassigned", Responsibility: new BulkResponsibilityChange(developer, false))
+        ]);
+        RecordingStore store = new();
+
+        BulkEntityUndoResult undone = await CreateService(
+                [removedFrom, addedTo, reassigned], [], store, [older, ended, added, Period(reassigned, developer)])
+            .UndoAsync(TestTrackerId, undo);
+
+        Assert.Equal(2, undone.RestoredCount);
+        Assert.Equal(["Reassigned"], undone.NotRestored);
+        Assert.Equal(ended.Id, Assert.Single(store.LastChangeSet!.ResponsibilityPeriodsToReopen));
+        Assert.Equal(added.Id, Assert.Single(store.LastChangeSet.ResponsibilityPeriodsToDelete));
+    }
+
     private static BulkEntityUpdateService CreateService(
         IReadOnlyList<TrackedEntity> entities,
         IReadOnlyList<PersistedDependency> dependencies,

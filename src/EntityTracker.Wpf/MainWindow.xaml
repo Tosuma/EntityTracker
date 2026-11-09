@@ -271,6 +271,7 @@
                                                 <Button Margin="0,8,0,0" HorizontalAlignment="Left"
                                                         Padding="8,3" FontSize="12"
                                                         Command="{Binding ActionCommand}"
+                                                        AutomationProperties.Name="{Binding ActionLabel}"
                                                         IsEnabled="{Binding IsActionEnabled}"
                                                         Visibility="{Binding HasAction, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                         Style="{StaticResource SecondaryButtonStyle}">

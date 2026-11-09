@@ -435,6 +435,11 @@ The notification center reports how many entities changed and how many already m
 
 ![Bulk edit panel setting a priority and adding a responsible developer on four selected entities](images/light/bulk-edit.png)
 
+The notice that confirms a bulk update, or archiving or restoring an entity, has **Undo** for 20 seconds.
+Undo puts back what that change changed, in one save, and only the latest change can be undone. It is a
+new change, so the charts show both and it syncs like any other edit. An entity changed since then is
+left alone, and the notice names it.
+
 Every entity has two kinds of notes. **Internal notes** are only for the team and never appear in
 a client report. **Shared notes** are meant for the client and appear in both client and internal
 Project reports. Both are synchronized with the Project's Git repository.

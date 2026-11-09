@@ -25,7 +25,9 @@ public sealed class TrackedStateChangeSet
         IEnumerable<ResponsibilityPeriod>? responsibilityPeriodsToCopy = null,
         IEnumerable<ResponsibilityAddition>? responsibilityAdditions = null,
         IEnumerable<ResponsibilityRemoval>? responsibilityRemovals = null,
-        IEnumerable<TrackedEntity>? entitiesWithDueDateToUpdate = null)
+        IEnumerable<TrackedEntity>? entitiesWithDueDateToUpdate = null,
+        IEnumerable<Guid>? responsibilityPeriodsToReopen = null,
+        IEnumerable<Guid>? responsibilityPeriodsToDelete = null)
     {
         EntitiesToAdd = entitiesToAdd.ToArray();
         EntitiesToUpdate = entitiesToUpdate.ToArray();
@@ -47,7 +49,15 @@ public sealed class TrackedStateChangeSet
         ResponsibilityAdditions = (responsibilityAdditions ?? []).ToArray();
         ResponsibilityRemovals = (responsibilityRemovals ?? []).ToArray();
         EntitiesWithDueDateToUpdate = (entitiesWithDueDateToUpdate ?? []).ToArray();
+        ResponsibilityPeriodsToReopen = (responsibilityPeriodsToReopen ?? []).ToArray();
+        ResponsibilityPeriodsToDelete = (responsibilityPeriodsToDelete ?? []).ToArray();
     }
+
+    /// <summary>Ended periods that continue again, undoing a removal.</summary>
+    public IReadOnlyList<Guid> ResponsibilityPeriodsToReopen { get; }
+
+    /// <summary>Current periods that never should have been, undoing an addition.</summary>
+    public IReadOnlyList<Guid> ResponsibilityPeriodsToDelete { get; }
 
     public IReadOnlyList<TrackedEntity> EntitiesToAdd { get; }
 
@@ -96,5 +106,7 @@ public sealed class TrackedStateChangeSet
             ResponsibilitySelections.Count > 0 ||
             ResponsibilityPeriodsToCopy.Count > 0 ||
             ResponsibilityAdditions.Count > 0 ||
-            ResponsibilityRemovals.Count > 0;
+            ResponsibilityRemovals.Count > 0 ||
+            ResponsibilityPeriodsToReopen.Count > 0 ||
+            ResponsibilityPeriodsToDelete.Count > 0;
 }
