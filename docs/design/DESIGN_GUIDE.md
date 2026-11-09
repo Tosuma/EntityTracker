@@ -183,8 +183,8 @@ Destructive actions require confirmation where the workflow already calls for it
   applied, and closing it with chosen changes asks before discarding them, as the editor does.
   The toolbar that opens it keeps a quick "Set status to" box with a secondary Apply status button,
   so a status-only change needs no panel; the Edit button stays the toolbar's one primary action.
-- Primary actions: a page header has at most one primary (dark) button, placed last, and repeated cards have
-  none. New entity leads on Tracker and schema pages; exports are secondary. Sync now is primary only while
+- Primary actions: a page header has at most one primary (dark) button, placed last, and **Open** on a
+  card is primary too, since it's what the card is for. New entity leads on Tracker and schema pages; exports are secondary. Sync now is primary only while
   something is waiting to be synced.
 - Coral confirms anything that removes something from view: Archive, Recycle, Retire and Permanently delete.
 - More actions: "…" on cards and page headers and "⋮" on table rows open the native menu (`ContextMenu`

@@ -262,7 +262,7 @@ public sealed class PresentationConfigurationTests
     [InlineData("PortfolioView.xaml", "OnOpenProject", null)]
     [InlineData("ProjectDashboardView.xaml", "OnOpenTracker", null)]
     [InlineData("ProjectSchemasView.xaml", null, "OpenSchemaCommand")]
-    public void RepeatedCardsHaveNoPrimaryButton(string view, string? click, string? command)
+    public void OpeningACardIsItsPrimaryAction(string view, string? click, string? command)
     {
         XElement open = LoadWpfXaml("Views", view).Descendants().Single(element =>
             element.Name.LocalName == "Button" &&
@@ -270,7 +270,7 @@ public sealed class PresentationConfigurationTests
                 ? (string?)element.Attribute("Click") == click
                 : ((string?)element.Attribute("Command"))?.Contains(command!, StringComparison.Ordinal) == true));
 
-        Assert.Equal("{StaticResource SecondaryButtonStyle}", (string?)open.Attribute("Style"));
+        Assert.Equal("{StaticResource PrimaryButtonStyle}", (string?)open.Attribute("Style"));
     }
 
     [Fact]
