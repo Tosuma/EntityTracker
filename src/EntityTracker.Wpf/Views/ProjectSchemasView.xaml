@@ -69,7 +69,7 @@
                                                     Command="{Binding DataContext.OpenSchemaCommand, ElementName=SchemasRoot}"
                                                     CommandParameter="{Binding}"
                                                     AutomationProperties.Name="{Binding Name, StringFormat=Open schema {0}}"
-                                                    Style="{StaticResource SecondaryButtonStyle}" />
+                                                    Style="{StaticResource PrimaryButtonStyle}" />
                                             <Button Click="OnSchemaActionsClick" ToolTip="Schema actions"
                                                     AutomationProperties.Name="{Binding Name, StringFormat=Actions for schema {0}}"
                                                     Style="{StaticResource SecondaryIconButtonStyle}">

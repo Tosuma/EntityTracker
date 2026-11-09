@@ -379,7 +379,7 @@
                                     </Grid.ColumnDefinitions>
                                     <Button Margin="0,0,8,0" Click="OnOpenTracker" Content="Open"
                                             AutomationProperties.Name="{Binding Name, StringFormat=Open tracker {0}}"
-                                            Style="{StaticResource SecondaryButtonStyle}" />
+                                            Style="{StaticResource PrimaryButtonStyle}" />
                                     <Button Grid.Column="1" Click="OnTrackerActionsClick"
                                             Style="{StaticResource SecondaryIconButtonStyle}"
                                                   ToolTip="Tracker actions"

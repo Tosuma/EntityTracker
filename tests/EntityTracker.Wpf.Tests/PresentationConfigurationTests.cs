@@ -208,6 +208,20 @@ public sealed class PresentationConfigurationTests
         Assert.Contains("new DoubleAnimation(NotificationClosedScale, 1, duration)", loaded, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void TheCoralMenuItemTemplateIsSetTheWayTheFluentStyleSetsItsOwn()
+    {
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement style = LoadWpfXaml("Themes", "EntityTrackerComponents.xaml").Descendants()
+            .Single(element => (string?)element.Attribute(x + "Key") == "DangerMenuItemStyle");
+
+        // Fluent's MenuItem style chooses a template per role with triggers, and a trigger beats a setter.
+        XElement template = style.Descendants().Single(static element => element.Name.LocalName == "ControlTemplate");
+        XElement trigger = template.Ancestors().First(static element => element.Name.LocalName == "Trigger");
+        Assert.Equal("Role", (string?)trigger.Attribute("Property"));
+        Assert.Equal("SubmenuItem", (string?)trigger.Attribute("Value"));
+    }
+
     [Theory]
     [InlineData("PortfolioView.xaml", "OnRecycleProject")]
     [InlineData("ProjectDashboardView.xaml", "OnRecycleTracker")]
@@ -248,7 +262,7 @@ public sealed class PresentationConfigurationTests
     [InlineData("PortfolioView.xaml", "OnOpenProject", null)]
     [InlineData("ProjectDashboardView.xaml", "OnOpenTracker", null)]
     [InlineData("ProjectSchemasView.xaml", null, "OpenSchemaCommand")]
-    public void RepeatedCardsHaveNoPrimaryButton(string view, string? click, string? command)
+    public void OpeningACardIsItsPrimaryAction(string view, string? click, string? command)
     {
         XElement open = LoadWpfXaml("Views", view).Descendants().Single(element =>
             element.Name.LocalName == "Button" &&
@@ -256,7 +270,7 @@ public sealed class PresentationConfigurationTests
                 ? (string?)element.Attribute("Click") == click
                 : ((string?)element.Attribute("Command"))?.Contains(command!, StringComparison.Ordinal) == true));
 
-        Assert.Equal("{StaticResource SecondaryButtonStyle}", (string?)open.Attribute("Style"));
+        Assert.Equal("{StaticResource PrimaryButtonStyle}", (string?)open.Attribute("Style"));
     }
 
     [Fact]

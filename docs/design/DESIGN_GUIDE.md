@@ -188,8 +188,8 @@ Destructive actions require confirmation where the workflow already calls for it
 - Text roles: page headings use `PageHeadingTextStyle`, section headings `SectionHeadingTextStyle` (one size on
   every page), card names `CardTitleTextStyle`, details panes `DetailsTitleTextStyle` and summary numbers
   `MetricValueTextStyle` or `CompactMetricValueTextStyle`. Don't set a size at 16 px or larger on a page.
-- Primary actions: a page header has at most one primary (dark) button, placed last, and repeated cards have
-  none. New entity leads on Tracker and schema pages; exports are secondary. Sync now is primary only while
+- Primary actions: a page header has at most one primary (dark) button, placed last, and **Open** on a
+  card is primary too, since it's what the card is for. New entity leads on Tracker and schema pages; exports are secondary. Sync now is primary only while
   something is waiting to be synced.
 - Coral confirms anything that removes something from view: Archive, Recycle, Retire and Permanently delete.
 - More actions: "…" on cards and page headers and "⋮" on table rows open the native menu (`ContextMenu`
