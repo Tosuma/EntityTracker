@@ -530,7 +530,7 @@ work just as in the solar system. The chosen view is remembered.
 
 Open **Project report** from the Project dashboard to create a report for the client, who never
 needs EntityTracker. Tick the Trackers to include (one, a few or all), choose who it is for, and
-pick the progress period: all history, the last 30, 60 or 90 days, or a custom range. **Export HTML…** saves a single web page that works completely offline:
+pick the progress period: all history, the last 30, 60 or 90 days, or a custom range. **Export HTML** saves a single web page that works completely offline:
 it holds the summary, three progress charts (for all selected Trackers together or one at a time),
 and a table of the entities with search and filters. The search matches names the same way as the
 app, so "cust pref" and "legalentity" work there too. The status filters always list every status

@@ -96,9 +96,11 @@
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                     <Button Margin="0,0,8,0" Content="Preview in browser" Command="{Binding PreviewCommand}"
                             AutomationProperties.Name="Preview the report in the browser" />
-                    <Button Content="Export HTML…" Command="{Binding ExportCommand}"
+                    <Button Command="{Binding ExportCommand}"
                             Style="{StaticResource PrimaryButtonStyle}"
-                            AutomationProperties.Name="Export the report as an HTML file" />
+                            AutomationProperties.Name="Export the report as an HTML file">
+                        <controls:IconLabel IconKey="Icon.ArrowExportUp" Text="Export HTML" />
+                    </Button>
                 </StackPanel>
                 <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding IncludedSummary}" />
             </DockPanel>

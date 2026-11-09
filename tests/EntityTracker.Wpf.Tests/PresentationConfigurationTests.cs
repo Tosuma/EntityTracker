@@ -339,6 +339,20 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void ExportingTheReportUsesTheSameIconAsExportingTheOverview()
+    {
+        XElement label = LoadWpfXaml("Views", "ProjectReportView.xaml").Descendants()
+            .Single(static element => (string?)element.Attribute("Command") == "{Binding ExportCommand}")
+            .Elements().Single(static element => element.Name.LocalName == "IconLabel");
+        XElement overview = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml").Descendants()
+            .Single(static element => (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "OverviewExportButton")
+            .Elements().Single(static element => element.Name.LocalName == "IconLabel");
+
+        Assert.Equal("Export HTML", (string?)label.Attribute("Text"));
+        Assert.Equal((string?)overview.Attribute("IconKey"), (string?)label.Attribute("IconKey"));
+    }
+
+    [Fact]
     public void SettingsGroupsAreTheSameSizeAsOtherSectionHeadings()
     {
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
