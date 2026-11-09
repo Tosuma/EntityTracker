@@ -179,6 +179,24 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void ANoticeStartsItsEntryAnimationOnceTheWindowIsIdle()
+    {
+        // #190: an animation started in a frame spent on a slow reload is over before it is first drawn.
+        string code = File.ReadAllText(Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory),
+            "src", "EntityTracker.Wpf", "MainWindow.xaml.cs"));
+        string loaded = code[code.IndexOf("private void OnNotificationLoaded", StringComparison.Ordinal)..];
+        loaded = loaded[..loaded.IndexOf("private void AnimateNotificationExit", StringComparison.Ordinal)];
+
+        Assert.True(
+            loaded.IndexOf("Dispatcher.BeginInvoke", StringComparison.Ordinal) <
+            loaded.IndexOf("scale.BeginAnimation", StringComparison.Ordinal));
+        Assert.Contains("DispatcherPriority.ApplicationIdle", loaded, StringComparison.Ordinal);
+        // A zero scale leaves the text no width, so the notice would overshoot while opening.
+        Assert.Contains("new(1, NotificationClosedScale)", loaded, StringComparison.Ordinal);
+        Assert.Contains("new DoubleAnimation(NotificationClosedScale, 1, duration)", loaded, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void NotificationsAnimateInAndOutRegardlessOfTheWindowsAnimationSetting()
     {
         string wpfRoot = Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf");
