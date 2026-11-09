@@ -23,9 +23,28 @@ public sealed record RequestedPriorityChange(int? Value);
 public sealed record BulkResponsibilityChange(DeveloperId DeveloperId, bool Add);
 
 /// <summary>
-/// Reports how many uniquely selected entities changed or already matched the update.
+/// Reports how many uniquely selected entities changed or already matched the update, and how to undo it
+/// (null when nothing changed).
 /// </summary>
-public sealed record BulkEntityUpdateResult(int ChangedCount, int UnchangedCount)
+public sealed record BulkEntityUpdateResult(int ChangedCount, int UnchangedCount, BulkEntityUndo? Undo = null)
 {
     public int SelectedCount => ChangedCount + UnchangedCount;
 }
+
+/// <summary>What a value was before an update, and what the update made it.</summary>
+public sealed record FieldUndo<T>(T Before, T After);
+
+/// <summary>What one bulk update changed, for each entity it changed.</summary>
+public sealed record BulkEntityUndo(IReadOnlyList<BulkEntityUndoItem> Items);
+
+/// <summary>The fields an update changed on one entity; a field it left alone is null.</summary>
+public sealed record BulkEntityUndoItem(
+    EntityId EntityId,
+    string Name,
+    FieldUndo<DevelopmentStatus>? Status = null,
+    FieldUndo<int?>? Priority = null,
+    FieldUndo<DateOnly?>? DueDate = null,
+    BulkResponsibilityChange? Responsibility = null);
+
+/// <summary>How many entities an undo restored, and the names of those changed since, which it left alone.</summary>
+public sealed record BulkEntityUndoResult(int RestoredCount, IReadOnlyList<string> NotRestored);

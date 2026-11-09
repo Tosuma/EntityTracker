@@ -8,6 +8,20 @@ namespace EntityTracker.Wpf.Tests.Services;
 public sealed class NotificationCenterTests
 {
     [Fact]
+    public async Task AnUndoNoticeOutlastsOrdinaryNoticesAndHasItsButton()
+    {
+        NotificationCenter center = new(displayTime: TimeSpan.FromMilliseconds(30));
+        NotificationItem undo = center.ShowUndo("Bulk update", "2 entities updated.", () => Task.CompletedTask);
+
+        await Task.Delay(80);
+
+        Assert.Equal(TimeSpan.FromSeconds(20), NotificationCenter.UndoDisplayTime);
+        Assert.Equal([undo], center.Items);
+        Assert.Equal("Undo", undo.ActionLabel);
+        Assert.Equal(NotificationKind.Success, undo.Kind);
+    }
+
+    [Fact]
     public async Task RequiredUpdateNoticeCannotBeDismissedOrExpire()
     {
         NotificationCenter center = new(displayTime: TimeSpan.FromMilliseconds(30));

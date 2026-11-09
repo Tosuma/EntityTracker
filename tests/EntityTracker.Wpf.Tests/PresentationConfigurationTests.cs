@@ -179,6 +179,18 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void ANoticesButtonIsNamedForScreenReaders()
+    {
+        string wpfRoot = Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf");
+        XDocument window = XDocument.Load(Path.Combine(wpfRoot, "MainWindow.xaml"));
+        XElement action = window.Descendants().Single(element => element.Name.LocalName == "Button" &&
+            (string?)element.Attribute("Command") == "{Binding ActionCommand}");
+
+        Assert.Equal("{Binding ActionLabel}", (string?)action.Attributes()
+            .Single(attribute => attribute.Name.LocalName == "AutomationProperties.Name"));
+    }
+
+    [Fact]
     public void ANoticeStartsItsEntryAnimationOnceTheWindowIsIdle()
     {
         // #190: an animation started in a frame spent on a slow reload is over before it is first drawn.

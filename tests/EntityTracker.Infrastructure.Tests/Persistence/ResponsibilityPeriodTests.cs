@@ -51,6 +51,43 @@ public sealed class ResponsibilityPeriodTests
     }
 
     [Fact]
+    public async Task Undo_ReopensAnEndedPeriodAndDeletesACurrentOneInOneSave()
+    {
+        await using TemporarySqliteFile file = new();
+        MutableTimeProvider time = new(new DateTimeOffset(2026, 10, 2, 10, 0, 0, TimeSpan.Zero));
+        SqliteDatabase database = new(file.DatabasePath, time);
+        await database.InitializeAsync();
+        Tracker tracker = Assert.Single(await new SqliteTrackerRepository(database).GetAllAsync());
+        ProjectDeveloperService developers = new(new SqliteProjectDeveloperStore(database), time);
+        ProjectDeveloper alice = await developers.CreateAsync(tracker.ProjectId, "AL");
+        ProjectDeveloper bob = await developers.CreateAsync(tracker.ProjectId, "BO");
+        TrackedEntity entity = new(EntityId.New(), tracker.Id, "Feature");
+        SqliteTrackedStateStore store = new(database);
+        SqliteResponsibilityPeriodRepository periods = new(database);
+        await store.ApplyAsync(tracker.Id, new TrackedStateChangeSet([entity], [], [],
+            responsibilitySelections: [new ResponsibilitySelection(entity.Id, [alice.Id])]));
+        DateTimeOffset started = time.GetUtcNow();
+        time.Advance(TimeSpan.FromHours(1));
+        await store.ApplyAsync(tracker.Id, new TrackedStateChangeSet([], [], [],
+            responsibilityRemovals: [new ResponsibilityRemoval(entity.Id, alice.Id)],
+            responsibilityAdditions: [new ResponsibilityAddition(entity.Id, bob.Id)]));
+        ResponsibilityPeriod[] afterUpdate = (await periods.GetByEntityAsync(entity.Id)).ToArray();
+        Guid aliceEnded = afterUpdate.Single(period => period.DeveloperId == alice.Id).Id;
+        Guid bobAdded = afterUpdate.Single(period => period.DeveloperId == bob.Id).Id;
+
+        await store.ApplyAsync(tracker.Id, new TrackedStateChangeSet([], [], [],
+            responsibilityPeriodsToReopen: [aliceEnded], responsibilityPeriodsToDelete: [bobAdded]));
+
+        ResponsibilityPeriod restored = Assert.Single(await periods.GetByEntityAsync(entity.Id));
+        Assert.Equal((aliceEnded, started), (restored.Id, restored.StartedAtUtc));
+        Assert.True(restored.IsCurrent);
+
+        // A period already put back fails the whole save rather than half applying it.
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.ApplyAsync(tracker.Id,
+            new TrackedStateChangeSet([], [], [], responsibilityPeriodsToReopen: [aliceEnded])));
+    }
+
+    [Fact]
     public async Task AddCurrent_AssignsAlongsideOthersOnceAtWriteTimeAndRejectsRetiredDeveloper()
     {
         await using TemporarySqliteFile file = new();
