@@ -3,14 +3,16 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace EntityTracker.Wpf.Controls;
 
 /// <summary>
 /// Shows a grey hint in an empty text field, such as "Search active entities", and hides it as soon as
 /// something is typed. Set <c>controls:Placeholder.Text</c> on a <see cref="TextBox"/> or an editable
-/// <see cref="ComboBox"/>. The hint is drawn by an adorner over the field's text area, so the theme's
-/// templates stay as they are; it doesn't replace the field's label or automation name.
+/// <see cref="ComboBox"/>. The hint is an adorner in the field's own text area, the layer the field's caret
+/// is drawn in, so the theme's templates stay as they are and whatever covers the field covers its hint too.
+/// It doesn't replace the field's label or automation name.
 /// </summary>
 public static class Placeholder
 {
@@ -54,7 +56,7 @@ public static class Placeholder
 
         public void Attach()
         {
-            if (Adorner is not null) return;
+            if (_input is not null) return;
             // An editable ComboBox types into the text box of its template.
             _input = field as TextBox;
             if (field is ComboBox comboBox)
@@ -62,24 +64,25 @@ public static class Placeholder
                 comboBox.ApplyTemplate();
                 _input = comboBox.Template?.FindName("PART_EditableTextBox", comboBox) as TextBox;
             }
-            if (_input is null || AdornerLayer.GetAdornerLayer(_input) is not { } layer) return;
+            if (_input is null) return;
 
-            Adorner = new PlaceholderAdorner(_input, GetText(field));
-            layer.Add(Adorner);
             _input.TextChanged += OnInputChanged;
-            field.IsVisibleChanged += OnFieldChanged;
-            field.IsEnabledChanged += OnFieldChanged;
-            Refresh();
+            field.IsVisibleChanged += OnFieldVisibleChanged;
+            field.IsEnabledChanged += OnFieldEnabledChanged;
+            AddAdorner();
         }
 
         public void Detach()
         {
-            if (Adorner is null || _input is null) return;
-            AdornerLayer.GetAdornerLayer(_input)?.Remove(Adorner);
+            if (_input is null) return;
+            if (Adorner is not null)
+            {
+                AdornerLayer.GetAdornerLayer(Adorner.AdornedElement)?.Remove(Adorner);
+                Adorner = null;
+            }
             _input.TextChanged -= OnInputChanged;
-            field.IsVisibleChanged -= OnFieldChanged;
-            field.IsEnabledChanged -= OnFieldChanged;
-            Adorner = null;
+            field.IsVisibleChanged -= OnFieldVisibleChanged;
+            field.IsEnabledChanged -= OnFieldEnabledChanged;
             _input = null;
         }
 
@@ -87,33 +90,57 @@ public static class Placeholder
         {
             if (Adorner is null || _input is null) return;
             Adorner.Text = GetText(field);
-            // An adorner stays on screen when its field is collapsed, so it follows the field's visibility.
-            Adorner.Visibility = field.IsVisible && _input.Text.Length == 0 && Adorner.Text.Length > 0
+            Adorner.Visibility = _input.Text.Length == 0 && Adorner.Text.Length > 0
                 ? Visibility.Visible
                 : Visibility.Collapsed;
             Adorner.Opacity = field.IsEnabled ? 1 : 0.6;
         }
 
+        /// <summary>
+        /// Adds the hint to the layer inside the field. That layer only exists once the field has been laid
+        /// out, which a field on a page or dialog that isn't showing hasn't been yet.
+        /// </summary>
+        private void AddAdorner()
+        {
+            if (Adorner is not null || _input is null) return;
+            _input.ApplyTemplate();
+            if (_input.Template?.FindName("PART_ContentHost", _input) is not ScrollViewer { Content: FrameworkElement textArea } ||
+                AdornerLayer.GetAdornerLayer(textArea) is not { } layer)
+            {
+                return;
+            }
+
+            Adorner = new PlaceholderAdorner(textArea, _input, GetText(field));
+            layer.Add(Adorner);
+            Refresh();
+        }
+
         private void OnInputChanged(object sender, TextChangedEventArgs e) => Refresh();
 
-        private void OnFieldChanged(object sender, DependencyPropertyChangedEventArgs e) => Refresh();
+        private void OnFieldEnabledChanged(object sender, DependencyPropertyChangedEventArgs e) => Refresh();
+
+        private void OnFieldVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            // Loaded priority: after the layout that gives a field shown for the first time its layer.
+            if (Adorner is null && field.IsVisible)
+                field.Dispatcher.BeginInvoke(AddAdorner, DispatcherPriority.Loaded);
+        }
     }
 }
 
-/// <summary>Draws a placeholder hint where the adorned text box's text starts.</summary>
+/// <summary>Draws a placeholder hint where a text box's text starts: at its text area, which it adorns.</summary>
 internal sealed class PlaceholderAdorner : Adorner
 {
     public static readonly DependencyProperty ForegroundProperty = DependencyProperty.Register(
         nameof(Foreground), typeof(Brush), typeof(PlaceholderAdorner),
         new FrameworkPropertyMetadata(SystemColors.GrayTextBrush, FrameworkPropertyMetadataOptions.AffectsRender));
 
-    // A text box draws its text this far inside its padding.
-    private const double TextInset = 2;
-
+    private readonly TextBox _input;
     private string _text;
 
-    public PlaceholderAdorner(TextBox input, string text) : base(input)
+    public PlaceholderAdorner(FrameworkElement textArea, TextBox input, string text) : base(textArea)
     {
+        _input = input;
         _text = text;
         IsHitTestVisible = false;
         // The theme's secondary text colour, so the hint follows light and dark mode.
@@ -139,29 +166,24 @@ internal sealed class PlaceholderAdorner : Adorner
 
     protected override void OnRender(DrawingContext drawingContext)
     {
-        TextBox input = (TextBox)AdornedElement;
-        Thickness border = input.BorderThickness;
-        Thickness padding = input.Padding;
-        double left = border.Left + padding.Left + TextInset;
-        double width = input.ActualWidth - left - border.Right - padding.Right - TextInset;
+        double width = AdornedElement.RenderSize.Width;
         if (_text.Length == 0 || width <= 0) return;
 
-        FormattedText text = new(_text, CultureInfo.CurrentUICulture, input.FlowDirection,
-            new Typeface(input.FontFamily, input.FontStyle, input.FontWeight, input.FontStretch),
-            input.FontSize, Foreground, VisualTreeHelper.GetDpi(this).PixelsPerDip)
+        FormattedText text = new(_text, CultureInfo.CurrentUICulture, _input.FlowDirection,
+            new Typeface(_input.FontFamily, _input.FontStyle, _input.FontWeight, _input.FontStretch),
+            _input.FontSize, Foreground, VisualTreeHelper.GetDpi(this).PixelsPerDip)
         {
             MaxTextWidth = width,
             MaxLineCount = 1,
             Trimming = TextTrimming.CharacterEllipsis
         };
-        double contentTop = border.Top + padding.Top;
-        double contentHeight = input.ActualHeight - contentTop - border.Bottom - padding.Bottom;
-        double top = input.VerticalContentAlignment switch
+        double spare = Math.Max(0, AdornedElement.RenderSize.Height - text.Height);
+        double top = _input.VerticalContentAlignment switch
         {
-            VerticalAlignment.Center => contentTop + Math.Max(0, (contentHeight - text.Height) / 2),
-            VerticalAlignment.Bottom => contentTop + Math.Max(0, contentHeight - text.Height),
-            _ => contentTop
+            VerticalAlignment.Center => spare / 2,
+            VerticalAlignment.Bottom => spare,
+            _ => 0
         };
-        drawingContext.DrawText(text, new Point(left, top));
+        drawingContext.DrawText(text, new Point(0, top));
     }
 }

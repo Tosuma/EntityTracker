@@ -258,9 +258,8 @@ internal sealed class WpfScreenshotRenderer(Window window, string outputDirector
         int width = Math.Max(1, (int)Math.Ceiling(visual.ActualWidth));
         int height = Math.Max(1, (int)Math.Ceiling(visual.ActualHeight));
         RenderTargetBitmap raw = new(width, height, Dpi, Dpi, PixelFormats.Pbgra32);
-        // Text-box placeholders never appear in a capture. A field's hint is an adorner: one in the window's
-        // adorner layer falls outside the rendered visual, but one inside scrolled content is drawn in that
-        // content's own layer, so it is hidden while rendering.
+        // Text-box placeholders never appear in a capture. A field's hint is an adorner inside the field, so
+        // it would be drawn with it; it is hidden while rendering.
         UIElement[] hints = VisibleDescendants(visual).OfType<PlaceholderAdorner>().ToArray<UIElement>();
         foreach (UIElement hint in hints)
         {
