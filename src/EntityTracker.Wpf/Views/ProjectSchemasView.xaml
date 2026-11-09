@@ -79,8 +79,11 @@
                                                 <controls:Icon IconKey="Icon.MoreHorizontal" Size="18" />
                                                 <Button.ContextMenu>
                                                     <ContextMenu Placement="Bottom">
-                                                        <MenuItem Header="_Rename schema…" Click="OnRenameSchema" />
-                                                        <MenuItem Header="Re_cycle schema…" Click="OnRecycleSchema" />
+                                                        <MenuItem Header="_Rename" Click="OnRenameSchema"
+                                                                  AutomationProperties.Name="{Binding Name, StringFormat=Rename schema {0}}" />
+                                                        <MenuItem Header="Re_cycle" Click="OnRecycleSchema"
+                                                                  AutomationProperties.Name="{Binding Name, StringFormat=Recycle schema {0}}"
+                                                                  Style="{StaticResource DangerMenuItemStyle}" />
                                                     </ContextMenu>
                                                 </Button.ContextMenu>
                                             </Button>

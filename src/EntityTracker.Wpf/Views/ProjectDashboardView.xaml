@@ -201,7 +201,7 @@
                 <controls:Icon IconKey="Icon.MoreHorizontal" />
                 <Button.ContextMenu>
                     <ContextMenu Placement="Bottom">
-                        <MenuItem Header="_Rename project…" Click="OnRenameProject" />
+                        <MenuItem Header="_Rename" Click="OnRenameProject" AutomationProperties.Name="Rename project" />
                         <MenuItem Header="Recycle _bin…" Click="OnOpenRecycleBin"
                                   ToolTip="Recycled trackers and schemas of this project, to restore or permanently delete" />
                     </ContextMenu>
@@ -215,8 +215,7 @@
                        Text="{Binding ProjectReporting.Dashboard.Project.Name}" />
         </StackPanel>
     </DockPanel>
-    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
-                  ScrollChanged="OnDashboardScrollChanged">
+    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <StackPanel>
             <Border Margin="0,0,0,12" Style="{StaticResource InfoMessageStyle}"
                     Visibility="{Binding ProjectReporting.IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -379,16 +378,30 @@
                                     <Button Margin="0,0,8,0" Click="OnOpenTracker" Content="Open"
                                             AutomationProperties.Name="{Binding Name, StringFormat=Open tracker {0}}"
                                             Style="{StaticResource PrimaryButtonStyle}" />
-                                    <ToggleButton x:Name="TrackerActionsToggle" Grid.Column="1"
-                                                  Padding="10,5"
-                                                  MinHeight="{DynamicResource Height.Control}"
+                                    <Button Grid.Column="1" Click="OnTrackerActionsClick"
+                                            Style="{StaticResource SecondaryIconButtonStyle}"
                                                   ToolTip="Tracker actions"
                                                   AutomationProperties.Name="{Binding Name, StringFormat=Actions for tracker {0}}"
-                                                  AutomationProperties.HelpText="Show tracker actions"
-                                                  Checked="OnTrackerActionsChecked"
-                                                  Unchecked="OnTrackerActionsUnchecked">
+                                                  AutomationProperties.HelpText="Show tracker actions">
                                         <controls:Icon IconKey="Icon.MoreHorizontal" Size="18" />
-                                    </ToggleButton>
+                                        <Button.ContextMenu>
+                                            <ContextMenu Placement="Bottom">
+                                                <MenuItem Header="_Rename" Click="OnRenameTracker"
+                                                          AutomationProperties.Name="{Binding Name, StringFormat=Rename tracker {0}}" />
+                                                <MenuItem x:Name="ConvertTrackerAction" Header="_Convert to schema…" Click="OnConvertTracker"
+                                                          ToolTip="Make a schema from this tracker and link its copies to it"
+                                                          AutomationProperties.Name="{Binding Name, StringFormat=Convert tracker {0} to a schema}"
+                                                          Visibility="{Binding CanConvertToSchema, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                <MenuItem x:Name="DetachTrackerAction" Header="_Detach from schema" Click="OnDetachTracker"
+                                                          ToolTip="Make this tracker independent of its schema"
+                                                          AutomationProperties.Name="{Binding Name, StringFormat=Detach tracker {0} from its schema}"
+                                                          Visibility="{Binding HasSchema, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                <MenuItem Header="Re_cycle" Click="OnRecycleTracker"
+                                                          AutomationProperties.Name="{Binding Name, StringFormat=Recycle tracker {0}}"
+                                                          Style="{StaticResource DangerMenuItemStyle}" />
+                                            </ContextMenu>
+                                        </Button.ContextMenu>
+                                    </Button>
                                 </Grid>
                             </Grid>
                         </Border>
@@ -670,41 +683,5 @@
             </Border>
         </StackPanel>
     </ScrollViewer>
-    <Canvas x:Name="TrackerActionLayer" Grid.RowSpan="2" Panel.ZIndex="1" ClipToBounds="True"
-            SizeChanged="OnTrackerActionLayerSizeChanged">
-        <Border x:Name="TrackerActionsMenu" MinWidth="190" Padding="8"
-                Background="{DynamicResource Brush.Surface.Page}"
-                BorderBrush="{DynamicResource Brush.Border.Medium}"
-                BorderThickness="1" CornerRadius="0,0,6,6"
-                Visibility="Collapsed"
-                PreviewKeyDown="OnTrackerActionsPreviewKeyDown">
-            <Border.Effect>
-                <DropShadowEffect BlurRadius="10" Opacity="0.16" ShadowDepth="2" />
-            </Border.Effect>
-            <StackPanel>
-                <Button x:Name="RenameTrackerAction" Margin="0,0,0,6"
-                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                        Click="OnRenameTracker" Content="Rename"
-                        AutomationProperties.Name="{Binding Name, StringFormat=Rename tracker {0}}" />
-                <Button x:Name="ConvertTrackerAction" Margin="0,0,0,6"
-                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                        Click="OnConvertTracker" Content="Convert to schema…"
-                        ToolTip="Make a schema from this tracker and link its copies to it"
-                        AutomationProperties.Name="{Binding Name, StringFormat=Convert tracker {0} to a schema}"
-                        Visibility="{Binding CanConvertToSchema, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                <Button x:Name="DetachTrackerAction" Margin="0,0,0,6"
-                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                        Click="OnDetachTracker" Content="Detach from schema"
-                        ToolTip="Make this tracker independent of its schema"
-                        AutomationProperties.Name="{Binding Name, StringFormat=Detach tracker {0} from its schema}"
-                        Visibility="{Binding HasSchema, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                <Button x:Name="RecycleTrackerAction" HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Click="OnRecycleTracker" Content="Recycle"
-                        AutomationProperties.Name="{Binding Name, StringFormat=Recycle tracker {0}}"
-                        Style="{StaticResource DangerButtonStyle}" />
-            </StackPanel>
-        </Border>
-    </Canvas>
     </Grid>
 </UserControl>
