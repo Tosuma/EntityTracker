@@ -256,7 +256,8 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <DockPanel Margin="0,0,0,14">
+                    <controls:PageHeader Title="Overview"
+                                         Description="Entities are ordered by due date, then priority, while dependencies remain before the entities that use them.">
                         <WrapPanel Style="{StaticResource PageToolbarStyle}">
                             <TextBlock Margin="0,0,12,0"
                                        VerticalAlignment="Center"
@@ -338,13 +339,7 @@
                                 <controls:IconLabel IconKey="Icon.Add" Text="New entity" />
                             </Button>
                         </WrapPanel>
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Overview" />
-                            <TextBlock Margin="0,3,0,0"
-                                       Foreground="{DynamicResource Brush.Text.Secondary}"
-                                       Text="Entities are ordered by due date, then priority, while dependencies remain before the entities that use them." />
-                        </StackPanel>
-                    </DockPanel>
+                    </controls:PageHeader>
 
                     <WrapPanel Grid.Row="1" Margin="0,0,0,6">
 
@@ -366,8 +361,7 @@
                             <StackPanel>
                                 <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Total" />
                                 <TextBlock Margin="0,3,0,0"
-                                           FontSize="22"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource MetricValueTextStyle}"
                                            Text="{Binding TotalEntityCount}" />
                             </StackPanel>
                         </Button>
@@ -391,8 +385,7 @@
                             <StackPanel>
                                 <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Not started" />
                                 <TextBlock Margin="0,3,0,0"
-                                           FontSize="22"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource MetricValueTextStyle}"
                                            Text="{Binding NotStartedCount}" />
                             </StackPanel>
                         </Button>
@@ -416,8 +409,7 @@
                             <StackPanel>
                                 <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="In progress" />
                                 <TextBlock Margin="0,3,0,0"
-                                           FontSize="22"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource MetricValueTextStyle}"
                                            Text="{Binding InProgressCount}" />
                             </StackPanel>
                         </Button>
@@ -441,8 +433,7 @@
                             <StackPanel>
                                 <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Rework needed" />
                                 <TextBlock Margin="0,3,0,0"
-                                           FontSize="22"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource MetricValueTextStyle}"
                                            Text="{Binding ReworkNeededCount}" />
                             </StackPanel>
                         </Button>
@@ -465,7 +456,7 @@
                             </Button.Style>
                             <StackPanel>
                                 <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Reworking" />
-                                <TextBlock Margin="0,3,0,0" FontSize="22" FontWeight="SemiBold"
+                                <TextBlock Margin="0,3,0,0" Style="{StaticResource MetricValueTextStyle}"
                                            Text="{Binding ReworkingCount}" />
                             </StackPanel>
                         </Button>
@@ -488,7 +479,7 @@
                             </Button.Style>
                             <StackPanel>
                                 <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Blocked" />
-                                <TextBlock Margin="0,3,0,0" FontSize="22" FontWeight="SemiBold"
+                                <TextBlock Margin="0,3,0,0" Style="{StaticResource MetricValueTextStyle}"
                                            Text="{Binding BlockedCount}" />
                             </StackPanel>
                         </Button>
@@ -513,8 +504,7 @@
                             <StackPanel>
                                 <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Completed" />
                                 <TextBlock Margin="0,3,0,0"
-                                           FontSize="22"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource MetricValueTextStyle}"
                                            Text="{Binding DevelopmentCompletedCount}" />
                             </StackPanel>
                         </Button>
@@ -539,8 +529,7 @@
                             <StackPanel>
                                 <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Reconciled" />
                                 <TextBlock Margin="0,3,0,0"
-                                           FontSize="22"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource MetricValueTextStyle}"
                                            Text="{Binding ReconciledCount}" />
                             </StackPanel>
                         </Button>
@@ -566,8 +555,7 @@
                             <StackPanel>
                                 <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Not relevant" />
                                 <TextBlock Margin="0,3,0,0"
-                                           FontSize="22"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource MetricValueTextStyle}"
                                            Text="{Binding NotRelevantCount}" />
                             </StackPanel>
                         </Button>
@@ -901,8 +889,7 @@
                                 Visibility="{Binding ShowOverviewEmptyState, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <TextBlock HorizontalAlignment="Center"
-                                           FontSize="18"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource SectionHeadingTextStyle}"
                                            Foreground="{DynamicResource Brush.Text.Secondary}"
                                            Text="No active entities" />
                                 <TextBlock Margin="0,7,0,0"
@@ -917,8 +904,7 @@
                                 Visibility="{Binding ShowOverviewSearchEmptyState, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <TextBlock HorizontalAlignment="Center"
-                                           FontSize="18"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource SectionHeadingTextStyle}"
                                            Foreground="{DynamicResource Brush.Text.Secondary}"
                                            Text="No matching entities" />
                                 <TextBlock Margin="0,7,0,12"
@@ -949,7 +935,7 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <DockPanel Margin="0,0,0,12">
+                    <controls:PageHeader Title="Dependency graph">
                         <WrapPanel Style="{StaticResource PageToolbarStyle}">
                             <TextBlock Margin="0,0,12,0"
                                        VerticalAlignment="Center"
@@ -980,8 +966,7 @@
                                 <controls:IconLabel IconKey="Icon.Add" Text="New entity" />
                             </Button>
                         </WrapPanel>
-                        <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Dependency graph" />
-                    </DockPanel>
+                    </controls:PageHeader>
 
                     <WrapPanel Grid.Row="1" Margin="0,0,0,8">
                         <!-- Searches like the dependency search: word-aware suggestions, arrow keys,
@@ -1187,7 +1172,8 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <DockPanel Margin="0,0,0,14">
+                    <controls:PageHeader Title="Archived"
+                                         Description="Inspect archived metadata or restore an entity to the active dependency graph.">
                         <WrapPanel Style="{StaticResource PageToolbarStyle}">
                             <Button Margin="0,0,8,0"
                                     Command="{Binding ArchivedTable.ClearAllFiltersCommand}"
@@ -1213,13 +1199,7 @@
                                 <controls:Icon IconKey="Icon.ArrowClockwise" />
                             </Button>
                         </WrapPanel>
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Archived" />
-                            <TextBlock Margin="0,3,0,0"
-                                       Foreground="{DynamicResource Brush.Text.Secondary}"
-                                       Text="Inspect archived metadata or restore an entity to the active dependency graph." />
-                        </StackPanel>
-                    </DockPanel>
+                    </controls:PageHeader>
 
                     <StackPanel Grid.Row="2">
                         <TextBlock Margin="0,0,0,8"
@@ -1356,8 +1336,7 @@
                                 Visibility="{Binding ShowArchivedEmptyState, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <TextBlock HorizontalAlignment="Center"
-                                           FontSize="18"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource SectionHeadingTextStyle}"
                                            Foreground="{DynamicResource Brush.Text.Secondary}"
                                            Text="No archived entities" />
                                 <TextBlock Margin="0,7,0,0"
@@ -1372,8 +1351,7 @@
                                 Visibility="{Binding ShowArchivedSearchEmptyState, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <TextBlock HorizontalAlignment="Center"
-                                           FontSize="18"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource SectionHeadingTextStyle}"
                                            Foreground="{DynamicResource Brush.Text.Secondary}"
                                            Text="No matching archived entities" />
                                 <TextBlock Margin="0,7,0,12"
@@ -1458,10 +1436,7 @@
                         </Button>
                     </StackPanel>
                     <StackPanel Grid.Row="1">
-                        <TextBlock AutomationProperties.HeadingLevel="Level2"
-                                   FontSize="20"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource Brush.Text.Primary}"
+                        <TextBlock Style="{StaticResource DetailsTitleTextStyle}"
                                    Text="{Binding SourceName}"
                                    TextWrapping="Wrap" />
                         <TextBlock Margin="0,3,0,0"
@@ -1478,8 +1453,7 @@
                             Command="{Binding DataContext.BackFromResponsibilityHistoryCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                             Style="{StaticResource SecondaryButtonStyle}" />
                     <StackPanel Margin="12,0,0,0">
-                        <TextBlock AutomationProperties.HeadingLevel="Level2" FontSize="20"
-                                   FontWeight="SemiBold" Text="Responsibility history" />
+                        <TextBlock Style="{StaticResource DetailsTitleTextStyle}" Text="Responsibility history" />
                         <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}"
                                    Text="{Binding SourceName}" TextWrapping="Wrap" />
                     </StackPanel>

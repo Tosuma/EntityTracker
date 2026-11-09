@@ -1,6 +1,7 @@
 <UserControl x:Class="EntityTracker.Wpf.Views.HelpView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:EntityTracker.Wpf.Controls">
     <UserControl.Resources>
         <!-- One point of a help card: a bullet and a wrapped line, so each card reads as a short list. -->
         <Style x:Key="HelpPointStyle" TargetType="TextBlock" BasedOn="{StaticResource PageDescriptionTextStyle}">
@@ -15,12 +16,7 @@
                   HorizontalScrollBarVisibility="Disabled"
                   ScrollViewer.CanContentScroll="False">
         <StackPanel MaxWidth="1040" HorizontalAlignment="Left">
-            <StackPanel>
-                <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Help" />
-                <TextBlock Margin="0,4,0,0"
-                           Style="{StaticResource PageDescriptionTextStyle}"
-                           Text="A concise guide to navigation, tracker status, reports, lifecycle actions, keyboard shortcuts and Project Git synchronization." />
-            </StackPanel>
+            <controls:PageHeader Margin="0" Title="Help" Description="A concise guide to navigation, tracker status, reports, lifecycle actions, keyboard shortcuts and Project Git synchronization." />
 
             <TextBlock Margin="0,24,0,8" Style="{StaticResource SectionHeadingTextStyle}" Text="Working in EntityTracker" />
             <UniformGrid Columns="2">

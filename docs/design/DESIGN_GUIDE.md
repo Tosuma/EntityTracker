@@ -183,6 +183,11 @@ Destructive actions require confirmation where the workflow already calls for it
   applied, and closing it with chosen changes asks before discarding them, as the editor does.
   The toolbar that opens it keeps a quick "Set status to" box with a secondary Apply status button,
   so a status-only change needs no panel; the Edit button stays the toolbar's one primary action.
+- Page headers: every page starts with `PageHeader`: a title or, for a breadcrumb, `Heading`; an optional
+  description; and the toolbar as its child, in a `WrapPanel` with `PageToolbarStyle`.
+- Text roles: page headings use `PageHeadingTextStyle`, section headings `SectionHeadingTextStyle` (one size on
+  every page), card names `CardTitleTextStyle`, details panes `DetailsTitleTextStyle` and summary numbers
+  `MetricValueTextStyle` or `CompactMetricValueTextStyle`. Don't set a size at 16 px or larger on a page.
 - Primary actions: a page header has at most one primary (dark) button, placed last, and repeated cards have
   none. New entity leads on Tracker and schema pages; exports are secondary. Sync now is primary only while
   something is waiting to be synced.

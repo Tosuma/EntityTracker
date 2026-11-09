@@ -7,17 +7,18 @@
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <!-- The breadcrumb's first part goes back to the Project dashboard, which the sidebar shows as
                  the current location while this page is open. -->
-            <DockPanel Margin="0,0,0,4">
-                <Button DockPanel.Dock="Right" VerticalAlignment="Center" Content="Retired developers"
+            <controls:PageHeader Description="Manage the developers available within this Project.">
+                <WrapPanel Style="{StaticResource PageToolbarStyle}">
+                    <Button Content="Retired developers"
                         Command="{Binding Developers.OpenRetiredCommand}"
                         AutomationProperties.HelpText="Show retired developers, to edit or restore them" />
-                <!-- Centred beside the button, as the dashboard's and other pages' headings are beside their toolbars. -->
-                <TextBlock x:Name="DevelopersHeading" VerticalAlignment="Center" Style="{StaticResource PageHeadingTextStyle}">
+                </WrapPanel>
+                <controls:PageHeader.Heading>
+                    <TextBlock x:Name="DevelopersHeading" VerticalAlignment="Center" Style="{StaticResource PageHeadingTextStyle}">
                     <Hyperlink Command="{Binding NavigateCommand}"
                                CommandParameter="{x:Static viewModels:ShellDestination.ProjectDashboard}"
                                AutomationProperties.HelpText="Go back to the project dashboard"
@@ -26,12 +27,9 @@
                     <Run Foreground="{DynamicResource Brush.Text.Secondary}" Text=" › " />
                     <Run Text="Developers" />
                 </TextBlock>
-            </DockPanel>
-            <StackPanel Grid.Row="1" Margin="0,0,0,18">
-                <TextBlock Margin="0,4,0,0" Style="{StaticResource PageDescriptionTextStyle}"
-                           Text="Manage the developers available within this Project." TextWrapping="Wrap" />
-            </StackPanel>
-            <Grid Grid.Row="2" controls:Layout.StackWhenCompact="True">
+                </controls:PageHeader.Heading>
+            </controls:PageHeader>
+            <Grid Grid.Row="1" controls:Layout.StackWhenCompact="True">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="2*" />
                     <ColumnDefinition Width="24" />
@@ -58,7 +56,7 @@
                                          Text="{Binding Developers.SearchQuery, UpdateSourceTrigger=PropertyChanged}" />
                                 <controls:Icon DockPanel.Dock="Right" Margin="0,0,6,0" VerticalAlignment="Center" Size="16"
                                                Foreground="{DynamicResource Brush.Text.Secondary}" IconKey="Icon.Search" />
-                                <TextBlock VerticalAlignment="Center" FontSize="18" FontWeight="SemiBold"
+                                <TextBlock VerticalAlignment="Center" Style="{StaticResource SectionHeadingTextStyle}"
                                            Text="Available developers" />
                             </DockPanel>
                             <DataGrid Grid.Row="1" Margin="0,12,0,0" AutoGenerateColumns="False"
@@ -93,7 +91,7 @@
                 <Border Grid.Column="2" Padding="16" VerticalAlignment="Top"
                         Style="{StaticResource EntityTrackerCardStyle}">
                     <StackPanel>
-                        <TextBlock FontSize="18" FontWeight="SemiBold" Text="{Binding Developers.EditorTitle}" />
+                        <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="{Binding Developers.EditorTitle}" />
                         <TextBlock Margin="0,8,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
                                    Text="Initials are unique among available developers in this Project."
                                    TextWrapping="Wrap" />

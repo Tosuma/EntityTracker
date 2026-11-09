@@ -1,6 +1,7 @@
 <UserControl x:Class="EntityTracker.Wpf.Views.SettingsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:EntityTracker.Wpf.Controls"
              xmlns:configuration="clr-namespace:EntityTracker.Infrastructure.Configuration;assembly=EntityTracker.Infrastructure"
              xmlns:viewModels="clr-namespace:EntityTracker.Wpf.ViewModels"
              xmlns:services="clr-namespace:EntityTracker.Wpf.Services"
@@ -8,7 +9,6 @@
     <UserControl.Resources>
         <!-- Separates groups of cards on a settings page, such as Overview and Dependency graph. -->
         <Style x:Key="SettingsGroupHeadingStyle" TargetType="TextBlock" BasedOn="{StaticResource SectionHeadingTextStyle}">
-            <Setter Property="FontSize" Value="18" />
             <Setter Property="Padding" Value="0,0,0,6" />
         </Style>
         <Style x:Key="SettingsPageStyle" TargetType="StackPanel">
@@ -26,11 +26,7 @@
             <ColumnDefinition Width="180" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
-        <StackPanel Grid.ColumnSpan="2">
-            <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Settings" />
-            <TextBlock Margin="0,4,0,20" Style="{StaticResource PageDescriptionTextStyle}"
-                       Text="Changes apply immediately and are saved locally." />
-        </StackPanel>
+        <controls:PageHeader Grid.ColumnSpan="2" Title="Settings" Description="Changes apply immediately and are saved locally." />
         <ListBox x:Name="SettingsCategoryList" Grid.Row="1" Margin="0,0,20,0"
                  VerticalAlignment="Top"
                  Background="Transparent" BorderThickness="0"
@@ -317,7 +313,7 @@
                             <!-- What an offered update brings, or what changed in this version. -->
                             <StackPanel x:Name="AboutWhatsNew" Margin="0,14,0,0" DataContext="{Binding WhatsNew}"
                                         Visibility="{Binding HasEntries, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <TextBlock FontSize="16" FontWeight="SemiBold" Text="{Binding Heading}" />
+                                <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="{Binding Heading}" />
                                 <ScrollViewer Margin="0,8,0,0" MaxHeight="320" VerticalScrollBarVisibility="Auto"
                                               AutomationProperties.Name="{Binding Heading}">
                                     <ItemsControl Margin="0,0,14,0" ItemsSource="{Binding Entries}"
@@ -342,7 +338,7 @@
                             Style="{StaticResource EntityTrackerCardStyle}"
                             DataContext="{Binding Diagnostics}">
                         <StackPanel>
-                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="Logs" />
+                            <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="Logs" />
                             <TextBlock x:Name="AboutTestDataFolder" Margin="0,4,0,4"
                                        Foreground="{DynamicResource Brush.Review.Warning.Header}" TextWrapping="Wrap"
                                        Text="{Binding TestDataFolderNote}"

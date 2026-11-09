@@ -10,10 +10,10 @@
     </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <StackPanel MaxWidth="1100" HorizontalAlignment="Left" DataContext="{Binding ProjectReport}" controls:ChartThemeFollower.Target="{Binding Charts}">
-            <!-- The heading row is as tall as a toolbar, with the heading centred, so the breadcrumb sits where
-                 it does on the dashboard and the other pages that have a toolbar. -->
-            <Grid x:Name="ReportHeadingRow" MinHeight="{DynamicResource Height.Control}">
-            <TextBlock VerticalAlignment="Center" Style="{StaticResource PageHeadingTextStyle}">
+            <controls:PageHeader x:Name="ReportHeader"
+                                 Description="Create a report of this Project to share. It is one web page that works offline: open it in any browser, search it, and print it to PDF if a document is needed.">
+                <controls:PageHeader.Heading>
+                    <TextBlock VerticalAlignment="Center" Style="{StaticResource PageHeadingTextStyle}">
                 <Hyperlink Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                            CommandParameter="{x:Static viewModels:ShellDestination.ProjectDashboard}"
                            AutomationProperties.HelpText="Go back to the project dashboard"
@@ -22,9 +22,8 @@
                 <Run Foreground="{DynamicResource Brush.Text.Secondary}" Text=" › " />
                 <Run Text="Project report" />
             </TextBlock>
-            </Grid>
-            <TextBlock Margin="0,4,0,18" Style="{StaticResource PageDescriptionTextStyle}" TextWrapping="Wrap"
-                       Text="Create a report of this Project to share. It is one web page that works offline: open it in any browser, search it, and print it to PDF if a document is needed." />
+                </controls:PageHeader.Heading>
+            </controls:PageHeader>
 
             <Border Padding="16" Margin="0,0,0,14" Style="{StaticResource EntityTrackerCardStyle}">
                 <StackPanel>
@@ -35,7 +34,7 @@
                             <Button Content="Select none" Command="{Binding SelectNoneCommand}"
                                     AutomationProperties.Name="Select no Trackers" />
                         </StackPanel>
-                        <TextBlock FontSize="18" FontWeight="SemiBold" Text="Trackers" />
+                        <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="Trackers" />
                     </DockPanel>
                     <TextBlock Margin="0,0,0,8" Style="{StaticResource PageDescriptionTextStyle}" TextWrapping="Wrap"
                                Text="Choose which Trackers the report covers: one, a few or all." />
@@ -58,7 +57,7 @@
                         <ColumnDefinition Width="220" />
                     </Grid.ColumnDefinitions>
                     <StackPanel>
-                        <Label Padding="0" FontSize="18" FontWeight="SemiBold" Content="Report for"
+                        <Label Style="{StaticResource SectionHeadingLabelStyle}" Content="Report for"
                                Target="{Binding ElementName=ReportAudienceSelector}" />
                         <ComboBox x:Name="ReportAudienceSelector" Margin="0,8,0,0" HorizontalAlignment="Left" MinWidth="200"
                                   AutomationProperties.Name="Report for"
@@ -69,7 +68,7 @@
                                    Text="{Binding AudienceDescription}" />
                     </StackPanel>
                     <StackPanel Grid.Column="2">
-                        <Label Padding="0" FontSize="18" FontWeight="SemiBold" Content="Progress period"
+                        <Label Style="{StaticResource SectionHeadingLabelStyle}" Content="Progress period"
                                Target="{Binding ElementName=ReportRangeSelector}" />
                         <ComboBox x:Name="ReportRangeSelector" Margin="0,8,0,0"
                                   AutomationProperties.Name="Progress period"
@@ -110,7 +109,7 @@
                         <TextBlock DockPanel.Dock="Right" VerticalAlignment="Bottom"
                                    Style="{StaticResource PageDescriptionTextStyle}" Text="{Binding Charts.DateSummary}" />
                         <StackPanel>
-                            <Label Padding="0" FontSize="18" FontWeight="SemiBold" Content="Progress charts"
+                            <Label Style="{StaticResource SectionHeadingLabelStyle}" Content="Progress charts"
                                    Target="{Binding ElementName=ReportChartScopeSelector}" />
                             <TextBlock Margin="0,4,0,8" Style="{StaticResource PageDescriptionTextStyle}" TextWrapping="Wrap"
                                        Text="The report's charts for the chosen progress period. Pick one Tracker or all chosen Trackers together; save or copy a chart as an image for slides and e-mails." />
@@ -136,7 +135,7 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Entities by development status"
+                                    <TextBlock VerticalAlignment="Center" Style="{StaticResource SectionHeadingTextStyle}" TextWrapping="Wrap" Text="Entities by development status"
                                ToolTip="How many active entities have each development status now." AutomationProperties.HelpText="How many active entities have each development status now." />
                                     <!-- Save image… and Copy image in one menu, so each chart header has one quiet button. -->
                                     <Button Grid.Column="2" Margin="8,0,0,0" Click="OnChartActionsClick"
@@ -172,7 +171,7 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Progress over time"
+                                    <TextBlock VerticalAlignment="Center" Style="{StaticResource SectionHeadingTextStyle}" TextWrapping="Wrap" Text="Progress over time"
                                ToolTip="Implemented, in progress, not started and blocked entities each day, against today's active total." AutomationProperties.HelpText="Implemented, in progress, not started and blocked entities each day, against today's active total." />
                                     <!-- Save image… and Copy image in one menu, so each chart header has one quiet button. -->
                                     <Button Grid.Column="2" Margin="8,0,0,0" Click="OnChartActionsClick"
@@ -210,7 +209,7 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Ready to start vs waiting on dependencies over time"
+                                    <TextBlock VerticalAlignment="Center" Style="{StaticResource SectionHeadingTextStyle}" TextWrapping="Wrap" Text="Ready to start vs waiting on dependencies over time"
                                ToolTip="Each day, the entities ready to start and those waiting on a dependency, since changes are recorded." AutomationProperties.HelpText="Each day, the entities ready to start and those waiting on a dependency, since changes are recorded." />
                                     <!-- Save image… and Copy image in one menu, so each chart header has one quiet button. -->
                                     <Button Grid.Column="2" Margin="8,0,0,0" Click="OnChartActionsClick"
@@ -248,7 +247,7 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Text="Weekly implemented change"
+                                    <TextBlock VerticalAlignment="Center" Style="{StaticResource SectionHeadingTextStyle}" TextWrapping="Wrap" Text="Weekly implemented change"
                                ToolTip="Each week, how many entities became implemented and how many stopped being implemented." AutomationProperties.HelpText="Each week, how many entities became implemented and how many stopped being implemented." />
                                     <!-- Save image… and Copy image in one menu, so each chart header has one quiet button. -->
                                     <Button Grid.Column="2" Margin="8,0,0,0" Click="OnChartActionsClick"

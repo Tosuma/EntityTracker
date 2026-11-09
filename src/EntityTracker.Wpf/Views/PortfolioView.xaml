@@ -9,7 +9,7 @@
         <RowDefinition Height="*" />
     </Grid.RowDefinitions>
     <!-- The header stays put while the page below it scrolls. -->
-    <DockPanel x:Name="PageHeader" Grid.Row="0" Margin="0,0,0,18">
+    <controls:PageHeader x:Name="PageHeader" Grid.Row="0" Title="Portfolio">
         <WrapPanel Style="{StaticResource PageToolbarStyle}">
             <Button Margin="0,0,8,0" Click="OnImportProject" Content="Import project"
                     AutomationProperties.HelpText="Import a project from an existing Git checkout"
@@ -19,10 +19,7 @@
             <Button Click="OnCreateProject" Content="Create project"
                     Style="{StaticResource PrimaryButtonStyle}" />
         </WrapPanel>
-        <StackPanel VerticalAlignment="Center">
-            <TextBlock Style="{StaticResource PageHeadingTextStyle}" Text="Portfolio" />
-        </StackPanel>
-    </DockPanel>
+    </controls:PageHeader>
     <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <StackPanel>
             <Border Margin="0,0,0,12" Style="{StaticResource InfoMessageStyle}"
@@ -50,7 +47,7 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <TextBlock Margin="0,0,0,10" FontSize="20" FontWeight="SemiBold" Text="Projects" />
+            <TextBlock Margin="0,0,0,10" Style="{StaticResource SectionHeadingTextStyle}" Text="Projects" />
             <Border Margin="0,0,0,16" Padding="20">
                 <Border.Style>
                     <Style TargetType="Border" BasedOn="{StaticResource EntityTrackerCardStyle}">
@@ -63,7 +60,7 @@
                     </Style>
                 </Border.Style>
                 <StackPanel>
-                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="No active projects" />
+                    <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="No active projects" />
                     <TextBlock Margin="0,6,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
                                Text="Create a project to organize related implementation trackers."
                                TextWrapping="Wrap" />
@@ -88,18 +85,18 @@
                                     <controls:SyncStatusIcon DockPanel.Dock="Right" Margin="8,0,0,0" Size="18"
                                                              VerticalAlignment="Center"
                                                              ProjectId="{Binding ProjectId.Value}" />
-                                    <TextBlock FontSize="19" FontWeight="SemiBold" Text="{Binding Name}"
+                                    <TextBlock Style="{StaticResource CardTitleTextStyle}" Text="{Binding Name}"
                                                TextTrimming="CharacterEllipsis" />
                                 </DockPanel>
                                 <StackPanel Grid.Row="1" Margin="0,14">
                                     <UniformGrid Columns="2">
                                         <StackPanel Margin="0,0,8,10">
                                             <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Trackers" />
-                                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="{Binding ActiveTrackerCount}" />
+                                            <TextBlock Style="{StaticResource CompactMetricValueTextStyle}" Text="{Binding ActiveTrackerCount}" />
                                         </StackPanel>
                                         <StackPanel Margin="0,0,0,10">
                                             <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Active entities" />
-                                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="{Binding Progress.ActiveEntityCount}" />
+                                            <TextBlock Style="{StaticResource CompactMetricValueTextStyle}" Text="{Binding Progress.ActiveEntityCount}" />
                                         </StackPanel>
                                         <StackPanel Margin="0,0,8,10" Background="Transparent">
                                             <StackPanel.ToolTip>

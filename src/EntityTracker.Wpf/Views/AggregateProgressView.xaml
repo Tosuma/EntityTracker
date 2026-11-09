@@ -18,7 +18,7 @@
                           SelectedValuePath="Value" />
             </StackPanel>
             <StackPanel>
-                <TextBlock FontSize="18" FontWeight="SemiBold" Text="Aggregate progress" />
+                <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="Aggregate progress" />
                 <TextBlock Margin="0,3,0,0"
                            Foreground="{DynamicResource Brush.Text.Secondary}"
                            Text="Entity-weighted status and persisted implementation history." />
@@ -67,7 +67,7 @@
                     <Rectangle Width="5" Margin="0,0,10,0" RadiusX="2.5" RadiusY="2.5" Fill="Transparent" />
                     <StackPanel Grid.Column="1">
                         <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Active" />
-                        <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.ActiveEntityCount}" />
+                        <TextBlock Style="{StaticResource MetricValueTextStyle}" Text="{Binding Report.ManagerSummary.ActiveEntityCount}" />
                     </StackPanel>
                 </Grid>
                 <Grid Margin="4">
@@ -85,7 +85,7 @@
                                                            Reworking="{Binding Report.ManagerSummary.ReworkingEntityCount}" />
                         </StackPanel.ToolTip>
                         <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Implemented" />
-                        <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.ImplementedEntityCount}" />
+                        <TextBlock Style="{StaticResource MetricValueTextStyle}" Text="{Binding Report.ManagerSummary.ImplementedEntityCount}" />
                         <controls:ImplementedComposition Width="120" Margin="0,4,0,0" HorizontalAlignment="Left" Completed="{Binding Report.ManagerSummary.DevelopmentCompletedEntityCount}"
                                                          Reconciled="{Binding Report.ManagerSummary.ReconciledEntityCount}"
                                                          ReworkNeeded="{Binding Report.ManagerSummary.ReworkNeededEntityCount}"
@@ -101,7 +101,7 @@
                     <Rectangle Width="5" Margin="0,0,10,0" RadiusX="2.5" RadiusY="2.5" Fill="{DynamicResource Brush.Status.Reconciled}" />
                     <StackPanel Grid.Column="1">
                         <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Reconciled" />
-                        <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.ReconciledEntityCount}" />
+                        <TextBlock Style="{StaticResource MetricValueTextStyle}" Text="{Binding Report.ManagerSummary.ReconciledEntityCount}" />
                     </StackPanel>
                 </Grid>
                 <Grid Margin="4">
@@ -112,7 +112,7 @@
                     <Rectangle Width="5" Margin="0,0,10,0" RadiusX="2.5" RadiusY="2.5" Fill="{DynamicResource Brush.WorkStatus.Ready}" />
                     <StackPanel Grid.Column="1">
                         <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Ready" />
-                        <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.ReadyEntityCount}" />
+                        <TextBlock Style="{StaticResource MetricValueTextStyle}" Text="{Binding Report.ManagerSummary.ReadyEntityCount}" />
                     </StackPanel>
                 </Grid>
                 <Grid Margin="4">
@@ -124,7 +124,7 @@
                     <StackPanel Grid.Column="1">
                         <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Waiting on dependencies"
                                        TextTrimming="CharacterEllipsis" ToolTip="Waiting on dependencies" />
-                        <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.WaitingOnDependenciesEntityCount}" />
+                        <TextBlock Style="{StaticResource MetricValueTextStyle}" Text="{Binding Report.ManagerSummary.WaitingOnDependenciesEntityCount}" />
                     </StackPanel>
                 </Grid>
                 <Grid Margin="4">
@@ -135,7 +135,7 @@
                     <Rectangle Width="5" Margin="0,0,10,0" RadiusX="2.5" RadiusY="2.5" Fill="{DynamicResource Brush.Status.Blocked}" />
                     <StackPanel Grid.Column="1">
                         <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Blocked" />
-                        <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding Report.ManagerSummary.ManuallyBlockedEntityCount}" />
+                        <TextBlock Style="{StaticResource MetricValueTextStyle}" Text="{Binding Report.ManagerSummary.ManuallyBlockedEntityCount}" />
                     </StackPanel>
                 </Grid>
             </UniformGrid>
@@ -159,7 +159,7 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <TextBlock Margin="0,0,0,8" FontSize="16" FontWeight="SemiBold"
+                    <TextBlock Margin="0,0,0,8" Style="{StaticResource SectionHeadingTextStyle}"
                                Text="Entities by development status"
                                ToolTip="How many active entities have each development status now." AutomationProperties.HelpText="How many active entities have each development status now." />
                     <Border Grid.Row="1" Background="{DynamicResource Brush.Surface.Card}">
@@ -175,7 +175,7 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <TextBlock Margin="0,0,0,8" FontSize="16" FontWeight="SemiBold"
+                    <TextBlock Margin="0,0,0,8" Style="{StaticResource SectionHeadingTextStyle}"
                                Text="Progress over time"
                                ToolTip="Implemented, in progress, not started and blocked entities each day, against today's active total." AutomationProperties.HelpText="Implemented, in progress, not started and blocked entities each day, against today's active total." />
                     <Border Grid.Row="1" Background="{DynamicResource Brush.Surface.Card}">
