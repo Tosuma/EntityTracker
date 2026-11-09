@@ -589,13 +589,18 @@ public partial class MainWindow : Window
         CubicEase easeOut = new() { EasingMode = EasingMode.EaseOut };
         ScaleTransform scale = new(1, 0);
         container.LayoutTransform = scale;
-        scale.BeginAnimation(ScaleTransform.ScaleYProperty,
-            new DoubleAnimation(0, 1, duration) { EasingFunction = easeOut });
         TranslateTransform slide = new(0, 12);
         card.RenderTransform = slide;
-        slide.BeginAnimation(TranslateTransform.YProperty,
-            new DoubleAnimation(12, 0, duration) { EasingFunction = easeOut });
-        card.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration));
+        // At zero height until the window is idle: an animation's clock starts from the current frame, so
+        // one started in a frame spent on a slow page reload would already be over when it is first drawn.
+        Dispatcher.BeginInvoke(() =>
+        {
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty,
+                new DoubleAnimation(0, 1, duration) { EasingFunction = easeOut });
+            slide.BeginAnimation(TranslateTransform.YProperty,
+                new DoubleAnimation(12, 0, duration) { EasingFunction = easeOut });
+            card.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, duration));
+        }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
     }
 
     /// <summary>
