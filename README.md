@@ -72,7 +72,7 @@ The deterministic screenshot suite contains matching [`images/light`](images/lig
 [`images/dark`](images/dark) captures for every state shown below. The README uses the light set
 for consistency.
 
-From a Project dashboard, select **Developers** to manage that Project's developer directory.
+On a Project, select the **Developers** tab to manage that Project's developer directory.
 Search by initials or display name in the box above the available-developers list, which scrolls
 independently. Use the form on the right to add a developer or edit a selected one.
 Initials are required and unique among available developers in the Project; retired records can
@@ -255,7 +255,7 @@ Overview after the normal unsaved-work confirmation.
 
 ### Describe a Project's structure with schemas
 
-Open **Schemas** from the Project dashboard to see the Project's schemas. A schema lists which
+Open the **Schemas** tab of a Project to see the Project's schemas. A schema lists which
 entities exist and how they depend on each other, with an optional group for each. It holds no
 progress: statuses, notes and developers belong to the Trackers. **Create schema** names a new one
 and opens it; a card's **…** menu renames it or moves it to the Project's recycle bin, where it can
@@ -528,7 +528,7 @@ work just as in the solar system. The chosen view is remembered.
 
 ### Share a Project report
 
-Open **Project report** from the Project dashboard to create a report for the client, who never
+Open the **Report** tab of a Project to create a report for the client, who never
 needs EntityTracker. Tick the Trackers to include (one, a few or all), choose who it is for, and
 pick the progress period: all history, the last 30, 60 or 90 days, or a custom range. **Export HTML** saves a single web page that works completely offline:
 it holds the summary, three progress charts (for all selected Trackers together or one at a time),

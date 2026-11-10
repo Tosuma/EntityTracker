@@ -428,6 +428,56 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
     }
 
     [Fact]
+    public async Task ComingBackToADashboard_ReloadsItOnlyWhenItsProjectChanged()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "First entity");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        Assert.True(await shell.NavigateAsync(ShellDestination.ProjectDashboard));
+        ProjectDashboard? loaded = shell.ProjectDashboard;
+        Assert.NotNull(loaded);
+
+        // Nothing changed: the same dashboard is shown again, without a reload.
+        Assert.True(await shell.NavigateAsync(ShellDestination.Developers));
+        Assert.True(await shell.NavigateAsync(ShellDestination.ProjectDashboard));
+        Assert.Same(loaded, shell.ProjectDashboard);
+        Assert.False(shell.ProjectReporting!.IsBusy);
+
+        // A change to the Project reloads it the next time.
+        Assert.True(await shell.NavigateAsync(ShellDestination.Developers));
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "Added elsewhere");
+        Assert.True(await shell.NavigateAsync(ShellDestination.ProjectDashboard));
+        Assert.NotSame(loaded, shell.ProjectDashboard);
+        Assert.Contains(shell.ProjectReporting!.Comparison!.Rows, static row => row.DisplayName == "Added elsewhere");
+    }
+
+    [Fact]
+    public async Task ComingBackToThePortfolio_ReloadsItOnlyWhenAProjectChanged()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "First entity");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        Assert.True(await shell.NavigateAsync(ShellDestination.Portfolio));
+        PortfolioDashboard? loaded = shell.Portfolio;
+        Assert.NotNull(loaded);
+
+        Assert.True(await shell.NavigateAsync(ShellDestination.Help));
+        Assert.True(await shell.NavigateAsync(ShellDestination.Portfolio));
+        Assert.Same(loaded, shell.Portfolio);
+
+        Assert.True(await shell.NavigateAsync(ShellDestination.Help));
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "Added elsewhere");
+        Assert.True(await shell.NavigateAsync(ShellDestination.Portfolio));
+        Assert.NotSame(loaded, shell.Portfolio);
+    }
+
+    [Fact]
     public async Task TrackerSwitch_RefreshesTrackerDataAndDefersHiddenProjectPagesUntilNavigation()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();

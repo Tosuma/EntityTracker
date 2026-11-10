@@ -5,7 +5,7 @@ namespace EntityTracker.Wpf.Controls;
 
 /// <summary>
 /// The top of every page: a heading, in a row as tall as a toolbar so it sits at the same height on every
-/// page, an optional description below it, and the page's toolbar. Set <see cref="Title"/>, or
+/// page, optional tabs and a description below it, and the page's toolbar. Set <see cref="Title"/>, or
 /// <see cref="Heading"/> for a breadcrumb, and add the toolbar as a child (a WrapPanel with
 /// PageToolbarStyle, which also moves it under the heading in the compact layout).
 /// </summary>
@@ -22,6 +22,9 @@ public sealed class PageHeader : DockPanel
     public static readonly DependencyProperty HeadingProperty = DependencyProperty.Register(
         nameof(Heading), typeof(UIElement), typeof(PageHeader),
         new PropertyMetadata(null, static (d, e) => ((PageHeader)d).ShowHeading((UIElement?)e.NewValue)));
+
+    public static readonly DependencyProperty TabsProperty = DependencyProperty.Register(
+        nameof(Tabs), typeof(UIElement), typeof(PageHeader));
 
     private readonly TextBlock _title = new() { VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _description = new() { Margin = new Thickness(0, 4, 0, 0), Visibility = Visibility.Collapsed };
@@ -60,9 +63,27 @@ public sealed class PageHeader : DockPanel
         set => SetValue(HeadingProperty, value);
     }
 
+    /// <summary>Gets or sets a row of tabs, across the whole header between the heading and the description.</summary>
+    public UIElement? Tabs
+    {
+        get => (UIElement?)GetValue(TabsProperty);
+        set => SetValue(TabsProperty, value);
+    }
+
     protected override void OnInitialized(EventArgs e)
     {
         base.OnInitialized(e);
+        if (Tabs is not null)
+        {
+            // Docked first, so they run under the toolbar too; the description goes below the tabs.
+            _text.Children.Remove(_description);
+            _description.Margin = new Thickness(0, 8, 0, 0);
+            SetDock(_description, Dock.Bottom);
+            SetDock(Tabs, Dock.Bottom);
+            Children.Insert(0, _description);
+            Children.Insert(1, Tabs);
+        }
+
         // Last, so the toolbar added in XAML docks first and the heading takes the room that is left.
         Children.Add(_text);
     }

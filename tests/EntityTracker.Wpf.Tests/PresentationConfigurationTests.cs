@@ -366,6 +366,53 @@ public sealed class PresentationConfigurationTests
         Assert.Equal((string?)overview.Attribute("IconKey"), (string?)label.Attribute("IconKey"));
     }
 
+    [Theory]
+    [InlineData("ProjectDashboardView.xaml", "ProjectDashboard")]
+    [InlineData("ProjectReportView.xaml", "ProjectReport")]
+    [InlineData("ProjectDevelopersView.xaml", "Developers")]
+    [InlineData("ProjectSchemasView.xaml", "Schemas")]
+    public void ProjectPagesCarryTheProjectTabsUnderTheName(string view, string page)
+    {
+        XElement tabs = Assert.Single(LoadWpfXaml("Views", view).Descendants(), static element =>
+            element.Name.LocalName == "ProjectTabs");
+
+        Assert.Equal(page, (string?)tabs.Attribute("Current"));
+        Assert.Equal("PageHeader.Tabs", tabs.Parent!.Name.LocalName);
+        Assert.NotNull(tabs.Parent.Parent!.Attribute("Title"));
+    }
+
+    [Fact]
+    public void TabsKeepTheRoomOfTheirBoldLabelAndSitOnALine()
+    {
+        XName key = XName.Get("Key", "http://schemas.microsoft.com/winfx/2006/xaml");
+        XName name = XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml");
+        XDocument components = LoadWpfXaml("Themes", "EntityTrackerComponents.xaml");
+
+        XElement keeper = components.Descendants().Single(element => (string?)element.Attribute(name) == "TabWidthKeeper");
+        Assert.Equal("Hidden", (string?)keeper.Attribute("Visibility"));
+        Assert.Equal("SemiBold", (string?)keeper.Attribute("FontWeight"));
+
+        XElement line = components.Descendants().Single(element => (string?)element.Attribute(key) == "TextTabControlStyle")
+            .Descendants().Single(static element => element.Name.LocalName == "Border");
+        Assert.Equal("0,0,0,1", (string?)line.Attribute("BorderThickness"));
+
+        // TabPanel takes a tab's own margin off its width, which cuts off the highlight's right corners.
+        XElement tab = components.Descendants().Single(element => (string?)element.Attribute(key) == "TextTabItemStyle");
+        Assert.DoesNotContain(tab.Elements(), static setter => (string?)setter.Attribute("Property") == "Margin");
+    }
+
+    [Fact]
+    public void AnOpenSchemaHasABreadcrumbInPlaceOfTheProjectTabs()
+    {
+        XDocument schemas = LoadWpfXaml("Views", "ProjectSchemasView.xaml");
+        XElement editor = schemas.Descendants().Single(static element =>
+            (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "SchemaEditorPage");
+
+        Assert.DoesNotContain(editor.Descendants(), static element => element.Name.LocalName == "ProjectTabs");
+        Assert.Contains(editor.Descendants(), static element =>
+            (string?)element.Attribute("Command") == "{Binding DataContext.BackToListCommand, ElementName=SchemasRoot}");
+    }
+
     [Fact]
     public void SettingsGroupsAreTheSameSizeAsOtherSectionHeadings()
     {
@@ -641,7 +688,7 @@ public sealed class PresentationConfigurationTests
                 .Attribute(x + "Key") ?? string.Empty)
             .Distinct()
             .ToArray();
-        Assert.Equal(["SummaryFilterButtonStyle", "DangerButtonStyle", "DangerMenuItemStyle"], templatedStyles);
+        Assert.Equal(["SummaryFilterButtonStyle", "DangerButtonStyle", "DangerMenuItemStyle", "TextTabControlStyle", "TextTabItemStyle"], templatedStyles);
     }
 
     [Fact]
@@ -1956,13 +2003,10 @@ public sealed class PresentationConfigurationTests
         Assert.Equal("True", (string?)cancel.Attribute("IsCancel"));
     }
 
-    [Theory]
-    [InlineData("ProjectDevelopersView.xaml")]
-    [InlineData("ProjectReportView.xaml")]
-    [InlineData("ProjectSchemasView.xaml")]
-    public void ProjectPages_StartTheirHeadingWithABreadcrumbBackToTheDashboard(string view)
+    [Fact]
+    public void ProjectPages_StartAnOpenSchemasHeadingWithABreadcrumbBackToTheDashboard()
     {
-        XDocument document = LoadWpfXaml("Views", view);
+        XDocument document = LoadWpfXaml("Views", "ProjectSchemasView.xaml");
 
         Assert.DoesNotContain(document.Descendants(), element =>
             (string?)element.Attribute("Content") == "Back to project");
@@ -1980,13 +2024,12 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
-    public void Schemas_AreReachedFromTheDashboardAndEditedThroughDetailsAndADialog()
+    public void Schemas_AreReachedFromTheProjectTabsAndEditedThroughDetailsAndADialog()
     {
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
-        XDocument dashboard = LoadWpfXaml("Views", "ProjectDashboardView.xaml");
-        XElement open = Assert.Single(dashboard.Descendants(), element =>
-            (string?)element.Attribute(x + "Name") == "OpenSchemasButton");
-        Assert.Equal("Schemas", (string?)open.Attribute("Content"));
+        XElement open = Assert.Single(LoadWpfXaml("Views", "ProjectTabs.xaml").Descendants(), element =>
+            (string?)element.Attribute(x + "Name") == "SchemasTab");
+        Assert.Equal("Schemas", (string?)open.Attribute("Header"));
         Assert.Equal("{Binding CanManageSchemas, Converter={StaticResource BooleanToVisibilityConverter}}",
             (string?)open.Attribute("Visibility"));
         Assert.Contains(LoadWpfXaml("MainWindow.xaml").Descendants(), element =>
@@ -2012,7 +2055,10 @@ public sealed class PresentationConfigurationTests
             .Select(static element => (string?)element.Attribute("Header")));
         // The tabs highlight on hover like the app's buttons, and mark the selected tab with a bar, not a
         // filled box.
-        XElement tabTemplate = Assert.Single(tabs.Descendants(), static element =>
+        Assert.Equal("{StaticResource TextTabItemStyle}", (string?)tabs.Attribute("ItemContainerStyle"));
+        XElement tabStyle = LoadWpfXaml("Themes", "EntityTrackerComponents.xaml").Descendants().Single(static element =>
+            (string?)element.Attribute(XName.Get("Key", "http://schemas.microsoft.com/winfx/2006/xaml")) == "TextTabItemStyle");
+        XElement tabTemplate = Assert.Single(tabStyle.Descendants(), static element =>
             element.Name.LocalName == "ControlTemplate" && (string?)element.Attribute("TargetType") == "TabItem");
         XElement hover = Assert.Single(tabTemplate.Descendants(), static element =>
             element.Name.LocalName == "Trigger" && (string?)element.Attribute("Property") == "IsMouseOver");

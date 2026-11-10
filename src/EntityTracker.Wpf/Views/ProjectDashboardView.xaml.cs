@@ -146,15 +146,6 @@ public partial class ProjectDashboardView : UserControl
         if (Shell.SelectedProject is not null) Shell.Catalog.OpenRenameProject(Shell.SelectedProject);
     }
 
-    private async void OnOpenDevelopers(object sender, RoutedEventArgs e) =>
-        await Shell.NavigateAsync(ShellDestination.Developers);
-
-    private async void OnOpenSchemas(object sender, RoutedEventArgs e) =>
-        await Shell.NavigateAsync(ShellDestination.Schemas);
-
-    private async void OnOpenProjectReport(object sender, RoutedEventArgs e) =>
-        await Shell.NavigateAsync(ShellDestination.ProjectReport);
-
     private async void OnOpenRecycleBin(object sender, RoutedEventArgs e) =>
         await Shell.Catalog.OpenRecycleBinAsync(Shell.SelectedProject);
 
