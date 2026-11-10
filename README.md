@@ -657,7 +657,12 @@ A new **major** version is required: Project sync pauses and the workspace asks 
 update. A new minor or patch version is only offered: a notification says it is available, with
 **Update**, Settings and its **About** category show a dot until it is installed, and **Settings ›
 About** has **Update** too.
-Updating syncs your changes first, as closing does.
+Updating syncs your changes first, as closing does. While a Project sync is running, the button reads
+**Update after sync**: the update waits for the sync, then goes ahead, and **Cancel update** in its
+notification stops it. An unsaved edit or an open dialog has to be finished first.
+
+The app checks for updates every 15 minutes. **Check for updates** in **Settings › About** checks now,
+and a notification says whether EntityTracker is up to date.
 
 **What's new** lists what an update brings, one entry per version: every version after yours, so
 versions you skip are included. It shows in **Settings › About** under the update and on the
