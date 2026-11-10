@@ -79,9 +79,12 @@ public sealed class NotificationCenterTests
     }
 
     [Fact]
-    public void ClosingNoticeIgnoresUpdatesAndIsNotReusedOrRepeated()
+    public async Task ClosingNoticeIgnoresUpdatesAndIsNotReusedOrRepeated()
     {
-        NotificationCenter center = new(exitDuration: TimeSpan.FromSeconds(5));
+        // The test ends each closing animation itself, one at a time; real timers would end all three
+        // together on pool threads, where they raced on the list.
+        ManualTimeProvider clock = new();
+        NotificationCenter center = new(clock, exitDuration: TimeSpan.FromSeconds(5));
         ProjectId projectId = new(Guid.NewGuid());
         NotificationItem action = center.RequireAction("Sync", "Push failed", "Retry",
             () => Task.CompletedTask, projectId);
@@ -99,6 +102,12 @@ public sealed class NotificationCenterTests
         Assert.Equal(NotificationKind.ActionNeeded, action.Kind);
         Assert.Null(center.FindActionForProject(projectId));
         Assert.NotSame(failure, center.Show("Portfolio", "Could not load.", NotificationKind.Failure));
+
+        foreach (NotificationItem closing in new[] { action, progress, failure })
+        {
+            clock.FireNext();
+            await WaitUntilAsync(() => !center.Items.Contains(closing));
+        }
     }
 
     [Fact]
@@ -190,4 +199,30 @@ public sealed class NotificationCenterTests
     private static Task WaitUntilAsync(Func<bool> condition,
         [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(condition))] string description = "") =>
         TestWait.UntilAsync(condition, description);
+
+    /// <summary>A clock whose timers fire only when the test says so, in the order they were started.</summary>
+    private sealed class ManualTimeProvider : TimeProvider
+    {
+        private readonly Queue<(TimerCallback Callback, object? State)> _timers = new();
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            lock (_timers) _timers.Enqueue((callback, state));
+            return new ManualTimer();
+        }
+
+        public void FireNext()
+        {
+            (TimerCallback callback, object? state) timer;
+            lock (_timers) timer = _timers.Dequeue();
+            timer.callback(timer.state);
+        }
+
+        private sealed class ManualTimer : ITimer
+        {
+            public bool Change(TimeSpan dueTime, TimeSpan period) => true;
+            public void Dispose() { }
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        }
+    }
 }
