@@ -4,50 +4,51 @@ using EntityTracker.Wpf.ViewModels;
 
 namespace EntityTracker.Wpf.Tests.ViewModels;
 
+/// <summary>A merge conflict reads as push review's changes do: a sentence, then the values to choose from.</summary>
 public sealed class ProjectMergeReviewViewModelTests
 {
     [Fact]
-    public void IndividualAndBulkChoicesRequireEveryConflictToBeResolved()
+    public void AChangeBothSidesMadeSaysSoAndShowsWhatItWasBefore()
     {
-        ProjectMergeReviewViewModel review = new([
-            new ProjectMergeConflict("Project/Name", ProjectConflictKind.Field,
-                "Before", "Local", "Remote"),
-            new ProjectMergeConflict("Tracker/1/Entity/2/Notes", ProjectConflictKind.Field,
-                "Before", "Own note", "Other note")
-        ]);
-        Assert.False(review.AllResolved);
-        Assert.Throws<InvalidOperationException>(() => review.Decisions());
-        review.Rows[0].IsLocal = true;
-        Assert.False(review.AllResolved);
-        review.Rows[1].IsRemote = true;
-        Assert.True(review.AllResolved);
-        Assert.Equal(MergeSide.Local, review.Decisions()["Project/Name"]);
-        Assert.Equal(MergeSide.Remote, review.Decisions()["Tracker/1/Entity/2/Notes"]);
-        review.ChooseAll(MergeSide.Local);
-        Assert.All(review.Decisions().Values, side => Assert.Equal(MergeSide.Local, side));
+        ProjectMergeChoiceRow row = Row(ProjectConflictKind.Field, "Check stock levels");
+
+        Assert.Equal("Both this computer and the repository changed Orders: internal notes.", row.Description);
+        Assert.True(row.HasBase);
+        Assert.Equal("Check stock levels", row.BaseValue);
     }
 
     [Fact]
-    public void DisplayTextDoesNotReplaceConflictDecisionPath()
+    public void AnAdditionHasNoEarlierValueToShow()
     {
-        const string path = "Tracker/00000000-0000-0000-0000-000000000001";
-        ProjectMergeReviewViewModel review = new([
-            new ProjectMergeConflict(path, ProjectConflictKind.Addition,
-                null, "{\"Name\":\"Local\"}", "{\"Name\":\"Remote\"}")
-            {
-                Display = new ProjectMergeConflictDisplay("Tracker: Local / Remote",
-                    "Not present", "Name: Local", "Name: Remote")
-            }
-        ]);
+        ProjectMergeChoiceRow row = Row(ProjectConflictKind.Addition, "Not present");
 
-        ProjectMergeChoiceRow row = Assert.Single(review.Rows);
-        Assert.Equal("Tracker: Local / Remote", row.Title);
-        Assert.Equal("Not present", row.BaseValue);
-        Assert.Equal("Name: Local", row.LocalValue);
-        Assert.Equal("Name: Remote", row.RemoteValue);
-        Assert.Equal("Local value for Tracker: Local / Remote", row.LocalAutomationName);
-        Assert.Equal("Keep remote value for Tracker: Local / Remote", row.KeepRemoteAutomationName);
-        row.IsRemote = true;
-        Assert.Equal(MergeSide.Remote, review.Decisions()[path]);
+        Assert.Equal("This computer and the repository each added Orders: internal notes differently.", row.Description);
+        Assert.False(row.HasBase);
     }
+
+    [Fact]
+    public void TheSummaryCountsWhatIsDecidedAndApplyNeedsEveryOne()
+    {
+        ProjectMergeReviewViewModel review = new([Conflict("a", ProjectConflictKind.Field, "x"), Conflict("b", ProjectConflictKind.Field, "y")]);
+        Assert.Equal("0 of 2 conflicts decided. Choose a version for each to apply.", review.Summary);
+        Assert.False(review.AllResolved);
+
+        review.Rows[0].IsLocal = true;
+        Assert.Equal("1 of 2 conflicts decided. Choose a version for each to apply.", review.Summary);
+
+        review.ChooseAll(MergeSide.Remote);
+        Assert.Equal("All 2 conflicts decided.", review.Summary);
+        Assert.True(review.AllResolved);
+        Assert.All(review.Decisions().Values, static side => Assert.Equal(MergeSide.Remote, side));
+    }
+
+    private static ProjectMergeChoiceRow Row(ProjectConflictKind kind, string baseValue) =>
+        new(Conflict("Tracker/1", kind, baseValue));
+
+    private static ProjectMergeConflict Conflict(string path, ProjectConflictKind kind, string baseValue) =>
+        new(path, kind, baseValue, "Local", "Remote")
+        {
+            Display = new ProjectMergeConflictDisplay("Orders: internal notes", baseValue,
+                "Add invoice validation before release", "Coordinate rollout with the fulfillment team")
+        };
 }
