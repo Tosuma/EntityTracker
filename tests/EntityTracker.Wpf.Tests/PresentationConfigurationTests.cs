@@ -2238,6 +2238,16 @@ public sealed class PresentationConfigurationTests
         XElement itemStyle = list.Descendants().First(static element => element.Name.LocalName == "Style");
 
         Assert.Equal("{StaticResource NavigationListItemStyle}", (string?)itemStyle.Attribute("BasedOn"));
+
+        // Selecting or focusing an item changes only colours, never sizes, so the list never moves.
+        XElement style = LoadWpfXaml("Themes", "EntityTrackerComponents.xaml").Descendants().Single(static element =>
+            (string?)element.Attribute(XName.Get("Key", "http://schemas.microsoft.com/winfx/2006/xaml")) == "NavigationListItemStyle");
+        Assert.DoesNotContain(style.Descendants(), static element => element.Name.LocalName == "Setter" &&
+            (string?)element.Attribute("Property") is "BorderThickness" or "Padding" or "Margin" or "FontWeight" &&
+            element.Ancestors().Any(static ancestor => ancestor.Name.LocalName == "Trigger"));
+        // No box around a clicked item: only the keyboard's focus outline, as in the sidebar.
+        Assert.DoesNotContain(style.Descendants(), static element =>
+            element.Name.LocalName == "Trigger" && (string?)element.Attribute("Property") == "IsKeyboardFocused");
     }
 
     [Fact]
