@@ -225,15 +225,10 @@
                             <Button Margin="0,0,8,0" Content="Cancel sync" Command="{Binding CancelSyncCommand}"
                                     AutomationProperties.HelpText="Cancel a waiting or running project sync"
                                     Visibility="{Binding CanCancelSync, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                            <Button Margin="0,0,8,0" Content="Sync now" Command="{Binding SyncCommand}"
+                            <Button Content="Sync now" Command="{Binding SyncCommand}"
                                     AutomationProperties.HelpText="Commit the project snapshot and sync it with the repository now"
                                     Style="{StaticResource SecondaryButtonStyle}" />
-                            <Button Content="Details" Command="{Binding ToggleDetailsCommand}"
-                                    AutomationProperties.HelpText="Show the repository path, branch, upstream and actions" />
                         </StackPanel>
-                        <Button DockPanel.Dock="Right" VerticalAlignment="Center" Content="Hide details"
-                                Command="{Binding ToggleDetailsCommand}"
-                                Visibility="{Binding CanHideDetails, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         <StackPanel x:Name="CompactRepositoryRow" Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Style="{StaticResource SectionHeadingTextStyle}" VerticalAlignment="Center" Text="Git repository" />
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
@@ -247,16 +242,27 @@
                             </StackPanel>
                         </StackPanel>
                     </DockPanel>
-                    <StackPanel>
-                        <StackPanel.Style>
-                            <Style TargetType="StackPanel">
+                    <!-- The details unfold in place while nothing needs doing; an unlinked Project or a
+                         pending action shows them without the Details header. -->
+                    <Expander x:Name="RepositoryDetails" Margin="0,6,0,0" Header="Details"
+                              IsExpanded="{Binding ShowDetails, Mode=TwoWay}"
+                              AutomationProperties.HelpText="Show the repository path, branch, upstream and actions">
+                        <Expander.Style>
+                            <Style TargetType="Expander" BasedOn="{StaticResource {x:Type Expander}}">
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsCompact}" Value="True">
-                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    <DataTrigger Binding="{Binding CanFoldDetails}" Value="False">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Expander">
+                                                    <ContentPresenter />
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
-                        </StackPanel.Style>
+                        </Expander.Style>
+                    <StackPanel>
                         <!-- The Project's sync state: the same icon as in the header and the Portfolio,
                              with its sentence beside it. -->
                         <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
@@ -299,6 +305,7 @@
                                     AutomationProperties.HelpText="Cancel a waiting or running project sync" />
                         </StackPanel>
                     </StackPanel>
+                    </Expander>
                 </StackPanel>
             </Border>
 
@@ -663,7 +670,7 @@
                               VirtualizingPanel.VirtualizationMode="Recycling">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Entity"
-                                                Binding="{Binding DisplayName}"
+                                                Binding="{Binding DisplayName}" ElementStyle="{StaticResource CenteredCellTextStyle}"
                                                 IsReadOnly="True"
                                                 MinWidth="180"
                                                 Width="220" />

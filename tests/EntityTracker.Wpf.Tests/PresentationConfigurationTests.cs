@@ -688,7 +688,7 @@ public sealed class PresentationConfigurationTests
                 .Attribute(x + "Key") ?? string.Empty)
             .Distinct()
             .ToArray();
-        Assert.Equal(["SummaryFilterButtonStyle", "DangerButtonStyle", "DangerMenuItemStyle", "TextTabControlStyle", "TextTabItemStyle"], templatedStyles);
+        Assert.Equal(["SummaryFilterButtonStyle", "DangerButtonStyle", "DangerMenuItemStyle", "TextTabControlStyle", "TextTabItemStyle", "NavigationListItemStyle"], templatedStyles);
     }
 
     [Fact]
@@ -2184,6 +2184,43 @@ public sealed class PresentationConfigurationTests
         // Each title has the same style, through the control.
         Assert.DoesNotContain(page.Descendants(), static element =>
             element.Name.LocalName == "TextBlock" && (string?)element.Attribute("FontSize") is "20" or "22");
+    }
+
+    [Fact]
+    public void EveryTablesTextIsCentredInItsRow()
+    {
+        string views = Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf", "Views");
+        XElement[] columns = Directory.GetFiles(views, "*.xaml")
+            .SelectMany(static file => XDocument.Load(file).Descendants())
+            .Where(static element => element.Name.LocalName == "DataGridTextColumn")
+            .ToArray();
+
+        Assert.NotEmpty(columns);
+        Assert.All(columns, static column =>
+            Assert.Equal("{StaticResource CenteredCellTextStyle}", (string?)column.Attribute("ElementStyle")));
+    }
+
+    [Fact]
+    public void SettingsCategoriesUseTheSidebarsSelectedLook()
+    {
+        XElement list = LoadWpfXaml("Views", "SettingsView.xaml").Descendants().Single(static element =>
+            (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "SettingsCategoryList");
+        XElement itemStyle = list.Descendants().First(static element => element.Name.LocalName == "Style");
+
+        Assert.Equal("{StaticResource NavigationListItemStyle}", (string?)itemStyle.Attribute("BasedOn"));
+    }
+
+    [Fact]
+    public void TheGitCardsDetailsUnfoldInPlace()
+    {
+        XDocument dashboard = LoadWpfXaml("Views", "ProjectDashboardView.xaml");
+        XElement details = dashboard.Descendants().Single(static element =>
+            (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "RepositoryDetails");
+
+        Assert.Equal("Expander", details.Name.LocalName);
+        Assert.Equal("{Binding ShowDetails, Mode=TwoWay}", (string?)details.Attribute("IsExpanded"));
+        Assert.DoesNotContain(dashboard.Descendants(), static element =>
+            element.Name.LocalName == "Button" && (string?)element.Attribute("Content") is "Details" or "Hide details");
     }
 
     [Fact]

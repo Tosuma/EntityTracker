@@ -205,8 +205,8 @@
                           SelectionMode="Single"
                           SelectionUnit="FullRow">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Width="2*" MinWidth="160" Binding="{Binding Name}" Header="Entity" />
-                        <DataGridTextColumn Width="*" MinWidth="100" Binding="{Binding GroupDisplay}" Header="Group" />
+                        <DataGridTextColumn Width="2*" MinWidth="160" Binding="{Binding Name}" Header="Entity" ElementStyle="{StaticResource CenteredCellTextStyle}" />
+                        <DataGridTextColumn Width="*" MinWidth="100" Binding="{Binding GroupDisplay}" Header="Group" ElementStyle="{StaticResource CenteredCellTextStyle}" />
                         <DataGridTextColumn Width="110" Binding="{Binding DependencyCount}" Header="Dependencies"
                                             ElementStyle="{StaticResource CenteredCellTextStyle}" />
                     </DataGrid.Columns>

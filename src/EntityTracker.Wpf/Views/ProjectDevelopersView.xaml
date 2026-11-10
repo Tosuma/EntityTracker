@@ -50,14 +50,13 @@
                                 <TextBlock VerticalAlignment="Center" Style="{StaticResource SectionHeadingTextStyle}"
                                            Text="Available developers" />
                             </DockPanel>
-                            <DataGrid Grid.Row="1" Margin="0,12,0,0" AutoGenerateColumns="False"
-                                      CanUserAddRows="False" IsReadOnly="True"
+                            <DataGrid Grid.Row="1" Margin="0,12,0,0" Style="{StaticResource EntityTrackerDataGridStyle}"
                                       VerticalScrollBarVisibility="Auto"
                                       ItemsSource="{Binding Developers.Available}"
                                       AutomationProperties.Name="Available developers">
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Initials" Width="90" Binding="{Binding Initials}" />
-                                    <DataGridTextColumn Header="Display name" Width="*" Binding="{Binding DisplayName}" />
+                                    <DataGridTextColumn Header="Initials" Width="90" Binding="{Binding Initials}" ElementStyle="{StaticResource CenteredCellTextStyle}" />
+                                    <DataGridTextColumn Header="Display name" Width="*" Binding="{Binding DisplayName}" ElementStyle="{StaticResource CenteredCellTextStyle}" />
                                     <DataGridTemplateColumn Header="Actions" Width="145">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>

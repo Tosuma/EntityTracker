@@ -200,6 +200,10 @@ Destructive actions require confirmation where the workflow already calls for it
   **Large** (up to 960, as tall as the page allows) for editors and reviews. The title has one style
   (`DialogTitleTextStyle`); the footer puts the commit first and Cancel last on the right, and an action
   that removes something alone on the left.
+- Show more: details that unfold in place use an `Expander` (the Git card's Details, a schema's unpushed
+  changes); a button only opens another view. Tables use `EntityTrackerDataGridStyle`, and every text
+  column centres its text in the row (`CenteredCellTextStyle`). A list that chooses what a page shows,
+  such as Settings' categories, uses `NavigationListItemStyle`: the sidebar's selected look.
 - More actions: "…" on cards and page headers and "⋮" on table rows open the native menu (`ContextMenu`
   through `ActionMenu.Open`). Recycle is coral in that menu (`DangerMenuItemStyle`). A label doesn't repeat
   what the card already says: **Rename**, **Recycle**. Export is a popup because it says what will be
