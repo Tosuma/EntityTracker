@@ -116,7 +116,7 @@
                 <Label Margin="0,12,0,0" Padding="0" Target="{Binding ElementName=DeveloperDisplayNameBox}"
                        Content="_Display name (optional)" />
                 <TextBox x:Name="DeveloperDisplayNameBox" Margin="0,4,0,0"
-                         controls:Placeholder.Text="Full name (optional)"
+                         controls:Placeholder.Text="Display name"
                          AutomationProperties.Name="Developer display name"
                          Text="{Binding Developers.DisplayName, UpdateSourceTrigger=PropertyChanged}" />
                 <Border x:Name="DeveloperError" Margin="0,12,0,0" Style="{StaticResource ErrorMessageStyle}"
