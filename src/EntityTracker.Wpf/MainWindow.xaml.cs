@@ -53,7 +53,13 @@ public partial class MainWindow : Window
         TextFieldFocus.KeepInWindow(this);
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         if (_updates is not null) _updates.StateChanged += OnUpdateStateChanged;
-        _editTimer.Tick += (_, _) => RefreshUpdateBlock();
+        _editTimer.Tick += (_, _) =>
+        {
+            RefreshUpdateBlock();
+            // A sync's end isn't always announced after it stops counting, so the Update label is read here too.
+            _viewModel.RefreshProjectSyncRunning();
+        };
+        _viewModel.OfferUpdateCheck(CheckForUpdatesAsync);
         ((System.Collections.Specialized.INotifyCollectionChanged)_viewModel.Notifications.Items)
             .CollectionChanged += OnNotificationsChanged;
     }
@@ -380,13 +386,56 @@ public partial class MainWindow : Window
         // A source build has no installed version to update.
         if (_updates is null) return;
         string? tag = _updates.AvailableTag;
-        string? version = tag is not null && AppReleaseVersion.TryParse(tag, out AppReleaseVersion release)
-            ? $"{release.Major}.{release.Minor}.{release.Patch}"
-            : null;
+        string? version = ShortVersion(tag);
         _viewModel.OfferUpdate(version, () => InstallAvailableUpdateAsync("Settings › About"));
         if (version is null || tag is null || tag == _announcedUpdate) return;
         _announcedUpdate = tag;
         _ = AnnounceAvailableUpdateAsync(tag, version);
+    }
+
+    private static string? ShortVersion(string? tag) =>
+        tag is not null && AppReleaseVersion.TryParse(tag, out AppReleaseVersion release)
+            ? $"{release.Major}.{release.Minor}.{release.Patch}"
+            : null;
+
+    /// <summary>Settings › About's Check for updates: checks now and says the result in a notice.</summary>
+    private async Task CheckForUpdatesAsync()
+    {
+        if (_updates is null || _updates.State == AppUpdateState.Development)
+        {
+            _viewModel.Notifications.Show("Updates",
+                "This copy of EntityTracker was built from source, so it has no updates to check.");
+            return;
+        }
+        if (_updates.IsRequired)
+        {
+            _viewModel.Notifications.Show("Updates",
+                $"EntityTracker {ShortVersion(_updates.RequiredTag) ?? _updates.RequiredTag} is required. Close and update to continue.");
+            return;
+        }
+        Logger.LogInformation("Checking for updates, as asked in Settings › About.");
+        NotificationItem notice = _viewModel.Notifications.BeginProgress("Updates", "Checking for updates…");
+        try
+        {
+            await _updates.CheckAsync();
+        }
+        catch (Exception error)
+        {
+            Logger.LogWarning(error, "The update check asked for in Settings › About failed.");
+        }
+        if (_updates.State == AppUpdateState.Available && ShortVersion(_updates.AvailableTag) is { } available)
+            _viewModel.Notifications.Complete(notice,
+                $"EntityTracker {available} is available. Update from Settings › About.", NotificationKind.Information);
+        else if (_updates.IsRequired)
+            _viewModel.Notifications.Complete(notice,
+                $"EntityTracker {ShortVersion(_updates.RequiredTag) ?? _updates.RequiredTag} is required. Close and update to continue.",
+                NotificationKind.Information);
+        else if (_updates.State == AppUpdateState.Offline)
+            _viewModel.Notifications.Complete(notice,
+                "Couldn't check for updates." + (_updates.OfflineReason is { } reason ? " " + reason : ""),
+                NotificationKind.Failure);
+        else
+            _viewModel.Notifications.Complete(notice, $"EntityTracker {_viewModel.AppVersion} is up to date.");
     }
 
     /// <summary>The "Update available" notice, with the newest version's headline once its notes are read.</summary>
@@ -402,25 +451,42 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Installs the offered version: once nothing is running or unsaved, syncs the changes not synced
-    /// yet (as closing does), then starts the updater and closes.
+    /// Installs the offered version: waits for a running sync or operation (Cancel update stops it), syncs
+    /// the changes not synced yet (as closing does), then starts the updater and closes. An unsaved edit
+    /// or an open dialog stops it, as only the user can finish those.
     /// </summary>
     private async Task InstallAvailableUpdateAsync(string from)
     {
         if (_updating || _updates?.AvailableTag is not { } tag) return;
-        if (HasInProgressWork())
+        if (CurrentUpdateBlocker() == UpdateBlocker.Work)
         {
-            Logger.LogInformation("The update to {Tag} was not started from {From}: work is in progress.", tag, from);
+            Logger.LogInformation("The update to {Tag} was not started from {From}: an edit or dialog is open.", tag, from);
             _viewModel.Notifications.Show("Update not started",
-                "Finish or close the current edit, dialog or sync, then update.", NotificationKind.Failure);
+                "Finish or close the current edit or dialog, then update.", NotificationKind.Failure);
             return;
         }
         _updating = true;
         Logger.LogInformation("Update to {Tag} started from {From}.", tag, from);
         NotificationItem notice = _viewModel.Notifications.BeginProgress("Updating EntityTracker",
             "Syncing your changes before updating…");
+        using CancellationTokenSource waiting = new();
         try
         {
+            if (CurrentUpdateBlocker() != UpdateBlocker.None)
+            {
+                Logger.LogInformation("The update to {Tag} waits for the running sync or operation.", tag);
+                _viewModel.Notifications.Progress(notice, UpdateWait.Describe(CurrentUpdateBlocker()));
+                _viewModel.Notifications.SetAction(notice, "Cancel update", () =>
+                {
+                    waiting.Cancel();
+                    return Task.CompletedTask;
+                });
+                await UpdateWait.UntilFreeAsync(CurrentUpdateBlocker,
+                    message => _viewModel.Notifications.Progress(notice, message),
+                    TimeSpan.FromMilliseconds(250), waiting.Token);
+                // Restarting drops Cancel update: from here the update goes ahead.
+                _viewModel.Notifications.Restart(notice, "Syncing your changes before updating…");
+            }
             if (await _viewModel.HasUnsyncedProjectChangesAsync() &&
                 await _viewModel.SyncBeforeClosingAsync() is { } problem)
             {
@@ -434,6 +500,13 @@ public partial class MainWindow : Window
             _closeWithoutSync = true;
             System.Windows.Application.Current.Shutdown();
         }
+        catch (OperationCanceledException) when (waiting.IsCancellationRequested)
+        {
+            Logger.LogInformation("The update to {Tag} was cancelled while it waited.", tag);
+            _viewModel.Notifications.Complete(notice,
+                "The update was cancelled. Update from Settings › About when you're ready.", NotificationKind.Information);
+            _updating = false;
+        }
         catch (Exception error)
         {
             Logger.LogError(error, "The updater could not be started.");
@@ -441,6 +514,13 @@ public partial class MainWindow : Window
             _updating = false;
         }
     }
+
+    /// <summary>What an update has to wait for now; an edit or dialog first, as only the user can end it.</summary>
+    private UpdateBlocker CurrentUpdateBlocker() =>
+        _viewModel.CurrentWorkspace?.HasUnsavedWork == true || _viewModel.IsModalOpen ? UpdateBlocker.Work :
+        _viewModel.HasActiveProjectSync ? UpdateBlocker.Sync :
+        _viewModel.IsBusy || _viewModel.CurrentWorkspace?.IsBusy == true ? UpdateBlocker.Operation :
+        UpdateBlocker.None;
 
     private void OnUpdateClick(object sender, RoutedEventArgs e) => _ = RunUpdateAsync();
 

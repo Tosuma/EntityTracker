@@ -181,6 +181,37 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void SettingsAbout_ChecksForUpdatesAndUpdatesAfterARunningSync()
+    {
+        // #214: About checks for updates on demand, and Update waits for a running sync instead of refusing.
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XDocument settings = LoadWpfXaml("Views", "SettingsView.xaml");
+        XElement Named(string name) => settings.Descendants().Single(element => (string?)element.Attribute(x + "Name") == name);
+
+        XElement check = Named("AboutCheckForUpdatesButton");
+        XElement update = Named("AboutUpdateButton");
+        Assert.Equal("{Binding CheckForUpdatesCommand}", (string?)check.Attribute("Command"));
+        Assert.Equal("{StaticResource SecondaryButtonStyle}", (string?)check.Attribute("Style"));
+        // Icon and text, at the card's right edge, beside the line each acts on.
+        XElement checkLabel = Assert.Single(check.Elements(), static element => element.Name.LocalName == "IconLabel");
+        Assert.Equal(("Icon.ArrowClockwise", "Check for updates"), ((string?)checkLabel.Attribute("IconKey"), (string?)checkLabel.Attribute("Text")));
+        XElement updateLabel = Assert.Single(update.Elements(), static element => element.Name.LocalName == "IconLabel");
+        Assert.Equal(("Icon.ArrowDownload", "{Binding UpdateLabel}"), ((string?)updateLabel.Attribute("IconKey"), (string?)updateLabel.Attribute("Text")));
+        foreach (XElement button in new[] { check, update })
+        {
+            Assert.Equal("Right", (string?)button.Attribute("DockPanel.Dock"));
+            Assert.Equal("DockPanel", button.Parent!.Name.LocalName);
+        }
+
+        string code = File.ReadAllText(Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf", "MainWindow.xaml.cs"));
+        int start = code.IndexOf("private async Task InstallAvailableUpdateAsync(", StringComparison.Ordinal);
+        string install = code[start..code.IndexOf("private UpdateBlocker CurrentUpdateBlocker()", start, StringComparison.Ordinal)];
+        Assert.Contains("UpdateWait.UntilFreeAsync(CurrentUpdateBlocker", install, StringComparison.Ordinal);
+        Assert.Contains("\"Cancel update\"", install, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.OfferUpdateCheck(CheckForUpdatesAsync);", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ANoticesButtonIsNamedForScreenReaders()
     {
         string wpfRoot = Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf");
