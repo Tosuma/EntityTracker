@@ -17,13 +17,13 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <DockPanel Margin="0,0,0,18">
+            <controls:PageHeader Description="A schema lists which entities exist in this project and how they depend on each other. It holds no progress: trackers keep their own statuses, notes and developers.">
                 <WrapPanel Style="{StaticResource PageToolbarStyle}">
                     <Button x:Name="CreateSchemaButton" Command="{Binding CreateSchemaCommand}" Content="Create schema"
                             Style="{StaticResource PrimaryButtonStyle}" />
                 </WrapPanel>
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock Style="{StaticResource PageHeadingTextStyle}">
+                <controls:PageHeader.Heading>
+                    <TextBlock VerticalAlignment="Center" Style="{StaticResource PageHeadingTextStyle}">
                         <Hyperlink Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                    CommandParameter="{x:Static viewModels:ShellDestination.ProjectDashboard}"
                                    AutomationProperties.HelpText="Go back to the project dashboard"
@@ -32,18 +32,15 @@
                         <Run Foreground="{DynamicResource Brush.Text.Secondary}" Text=" › " />
                         <Run Text="Schemas" />
                     </TextBlock>
-                </StackPanel>
-            </DockPanel>
+                </controls:PageHeader.Heading>
+            </controls:PageHeader>
             <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                 <StackPanel>
-                    <TextBlock Margin="0,0,0,18" MaxWidth="900" HorizontalAlignment="Left" TextWrapping="Wrap"
-                               Style="{StaticResource PageDescriptionTextStyle}"
-                               Text="A schema lists which entities exist in this project and how they depend on each other. It holds no progress: trackers keep their own statuses, notes and developers." />
                     <Border x:Name="SchemasEmptyState" MaxWidth="560" HorizontalAlignment="Left" Padding="18"
                             Style="{StaticResource EntityTrackerCardStyle}"
                             Visibility="{Binding ShowEmptyState, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <StackPanel>
-                            <TextBlock FontSize="17" FontWeight="SemiBold" Text="No schemas yet" />
+                            <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="No schemas yet" />
                             <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Style="{StaticResource PageDescriptionTextStyle}"
                                        Text="Create a schema to describe the entities your trackers share." />
                         </StackPanel>
@@ -60,7 +57,7 @@
                                             <RowDefinition Height="*" />
                                             <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
-                                        <TextBlock FontSize="19" FontWeight="SemiBold" Text="{Binding Name}"
+                                        <TextBlock Style="{StaticResource CardTitleTextStyle}" Text="{Binding Name}"
                                                    TextTrimming="CharacterEllipsis" />
                                         <StackPanel Grid.Row="1" Margin="0,12">
                                             <TextBlock Text="{Binding EntityCountText}" />
@@ -107,7 +104,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <DockPanel Margin="0,0,0,12">
+            <controls:PageHeader>
                 <WrapPanel Style="{StaticResource PageToolbarStyle}">
                     <!-- The page's search, as on a Tracker's Overview: focused by Ctrl+F, with how many entities it
                          shows. The Dependency graph tab finds an entity the way a Tracker's graph does. -->
@@ -148,8 +145,8 @@
                             ToolTip="Add an entity to this schema"
                             Style="{StaticResource PrimaryButtonStyle}" />
                 </WrapPanel>
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock Style="{StaticResource PageHeadingTextStyle}">
+                <controls:PageHeader.Heading>
+                    <TextBlock VerticalAlignment="Center" Style="{StaticResource PageHeadingTextStyle}">
                         <Hyperlink Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                    CommandParameter="{x:Static viewModels:ShellDestination.ProjectDashboard}"
                                    AutomationProperties.HelpText="Go back to the project dashboard"
@@ -163,8 +160,8 @@
                         <Run Foreground="{DynamicResource Brush.Text.Secondary}" Text=" › " />
                         <Run Text="{Binding SchemaName, Mode=OneWay}" />
                     </TextBlock>
-                </StackPanel>
-            </DockPanel>
+                </controls:PageHeader.Heading>
+            </controls:PageHeader>
 
             <!-- The schema's changes since its last push, and the push itself. -->
             <Border x:Name="SchemaPushBar" Grid.Row="1" Margin="0,0,0,12" Padding="14,10"
@@ -262,7 +259,7 @@
                            Visibility="{Binding ShowNoEntities, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 <StackPanel x:Name="SchemaNoMatches" HorizontalAlignment="Center" VerticalAlignment="Center"
                             Visibility="{Binding ShowNoMatches, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <TextBlock HorizontalAlignment="Center" FontSize="18" FontWeight="SemiBold" Text="No matching entities" />
+                    <TextBlock HorizontalAlignment="Center" Style="{StaticResource SectionHeadingTextStyle}" Text="No matching entities" />
                     <TextBlock Margin="0,4,0,12" HorizontalAlignment="Center" Foreground="{DynamicResource Brush.Text.Secondary}"
                                Text="No entity's name or group contains the search." />
                     <Button HorizontalAlignment="Center" Command="{Binding ClearSearchCommand}" Content="Clear search"
@@ -309,8 +306,8 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock VerticalAlignment="Center" AutomationProperties.HeadingLevel="Level2"
-                                   FontSize="20" FontWeight="SemiBold" Text="{Binding Name}" TextWrapping="Wrap" />
+                        <TextBlock VerticalAlignment="Center" Style="{StaticResource DetailsTitleTextStyle}"
+                                   Text="{Binding Name}" TextWrapping="Wrap" />
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
                             <Button x:Name="EditSchemaEntityButton" Margin="8,0,8,0" Content="Edit"
                                     AutomationProperties.Name="{Binding Name, StringFormat=Edit entity {0}}"
@@ -403,7 +400,7 @@
                                                             AutomationProperties.Name="{Binding TrackerName, StringFormat=Decide later for {0}}" />
                                                 </StackPanel>
                                                 <StackPanel VerticalAlignment="Center">
-                                                    <TextBlock FontSize="15" FontWeight="SemiBold" Text="{Binding TrackerName}" />
+                                                    <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="{Binding TrackerName}" />
                                                     <TextBlock Margin="0,2,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
                                                                Text="{Binding DecidedText}"
                                                                Visibility="{Binding HasChanges, Converter={StaticResource BooleanToVisibilityConverter}}" />

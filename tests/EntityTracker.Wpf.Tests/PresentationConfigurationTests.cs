@@ -303,6 +303,80 @@ public sealed class PresentationConfigurationTests
         Assert.Contains("HasNoPendingAction", (string?)quiet.Attribute("Visibility"), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("PortfolioView.xaml", 1)]
+    [InlineData("ProjectDashboardView.xaml", 1)]
+    [InlineData("ProjectDevelopersView.xaml", 1)]
+    [InlineData("ProjectReportView.xaml", 1)]
+    [InlineData("ProjectSchemasView.xaml", 2)]
+    [InlineData("HelpView.xaml", 1)]
+    [InlineData("SettingsView.xaml", 1)]
+    [InlineData("TrackerWorkspaceView.xaml", 3)]
+    public void EveryPageUsesTheSharedHeader(string view, int headers)
+    {
+        XDocument page = LoadWpfXaml("Views", view);
+
+        Assert.Equal(headers, page.Descendants().Count(static element => element.Name.LocalName == "PageHeader"));
+        // A breadcrumb is the one heading a page writes itself, and it goes inside the header.
+        Assert.All(page.Descendants().Where(static element =>
+                (string?)element.Attribute("Style") == "{StaticResource PageHeadingTextStyle}"),
+            static heading => Assert.Equal("PageHeader.Heading", heading.Parent!.Name.LocalName));
+    }
+
+    [Theory]
+    [InlineData("AggregateProgressView.xaml")]
+    [InlineData("PortfolioView.xaml")]
+    [InlineData("ProjectDashboardView.xaml")]
+    [InlineData("ProjectReportView.xaml")]
+    [InlineData("SettingsView.xaml")]
+    public void SectionHeadingsAndRepeatedValuesTakeTheirSizeFromTheTheme(string view)
+    {
+        XDocument page = LoadWpfXaml("Views", view);
+
+        // Anything at a heading's size or larger has a named role; smaller text may still set its own size.
+        Assert.DoesNotContain(page.Descendants(), static element =>
+            element.Name.LocalName is "TextBlock" or "Label" &&
+            int.TryParse((string?)element.Attribute("FontSize"), out int size) && size >= 16);
+    }
+
+    [Fact]
+    public void ALabelUsedAsASectionHeadingHasTheThemesTextColour()
+    {
+        // A style of its own replaces the Fluent Label style, colour included, so dark mode needs this.
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement label = LoadWpfXaml("Themes", "EntityTrackerTypography.xaml").Descendants()
+            .Single(element => (string?)element.Attribute(x + "Key") == "SectionHeadingLabelStyle");
+
+        Assert.Contains(label.Elements(), static setter =>
+            (string?)setter.Attribute("Property") == "Foreground" &&
+            (string?)setter.Attribute("Value") == "{DynamicResource Brush.Text.Primary}");
+    }
+
+    [Fact]
+    public void ExportingTheReportUsesTheSameIconAsExportingTheOverview()
+    {
+        XElement label = LoadWpfXaml("Views", "ProjectReportView.xaml").Descendants()
+            .Single(static element => (string?)element.Attribute("Command") == "{Binding ExportCommand}")
+            .Elements().Single(static element => element.Name.LocalName == "IconLabel");
+        XElement overview = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml").Descendants()
+            .Single(static element => (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "OverviewExportButton")
+            .Elements().Single(static element => element.Name.LocalName == "IconLabel");
+
+        Assert.Equal("Export HTML", (string?)label.Attribute("Text"));
+        Assert.Equal((string?)overview.Attribute("IconKey"), (string?)label.Attribute("IconKey"));
+    }
+
+    [Fact]
+    public void SettingsGroupsAreTheSameSizeAsOtherSectionHeadings()
+    {
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement group = LoadWpfXaml("Views", "SettingsView.xaml").Descendants()
+            .Single(element => (string?)element.Attribute(x + "Key") == "SettingsGroupHeadingStyle");
+
+        Assert.Equal("{StaticResource SectionHeadingTextStyle}", (string?)group.Attribute("BasedOn"));
+        Assert.DoesNotContain(group.Elements(), static setter => (string?)setter.Attribute("Property") == "FontSize");
+    }
+
     [Fact]
     public void NotificationsAnimateInAndOutRegardlessOfTheWindowsAnimationSetting()
     {
@@ -692,7 +766,7 @@ public sealed class PresentationConfigurationTests
         Assert.DoesNotContain("SchemaSynchronization", workspace, StringComparison.Ordinal);
         Assert.DoesNotContain("ImportCsv", workspace, StringComparison.Ordinal);
         Assert.Contains(help.Descendants(), element =>
-            element.Name.LocalName == "TextBlock" && (string?)element.Attribute("Text") == "Help");
+            element.Name.LocalName == "PageHeader" && (string?)element.Attribute("Title") == "Help");
         Assert.DoesNotContain("PostgreSQL", helpText, StringComparison.Ordinal);
         Assert.DoesNotContain("Copy SQL", helpText, StringComparison.Ordinal);
         Assert.DoesNotContain("CSV", helpText, StringComparison.Ordinal);

@@ -184,7 +184,7 @@
         <RowDefinition Height="*" />
     </Grid.RowDefinitions>
     <!-- The header stays put while the page below it scrolls. -->
-    <DockPanel x:Name="PageHeader" Grid.Row="0" Margin="0,0,0,18">
+    <controls:PageHeader x:Name="PageHeader" Grid.Row="0" Title="{Binding ProjectReporting.Dashboard.Project.Name}">
         <WrapPanel Style="{StaticResource PageToolbarStyle}">
             <!-- The Project's pages, then its less frequent actions in "…", then the main action. -->
             <Button Margin="0,0,8,0" Click="OnOpenProjectReport" Content="Project report"
@@ -210,11 +210,7 @@
             <Button Click="OnCreateTracker" Content="Create tracker"
                     Style="{StaticResource PrimaryButtonStyle}" />
         </WrapPanel>
-        <StackPanel VerticalAlignment="Center">
-            <TextBlock Style="{StaticResource PageHeadingTextStyle}"
-                       Text="{Binding ProjectReporting.Dashboard.Project.Name}" />
-        </StackPanel>
-    </DockPanel>
+    </controls:PageHeader>
     <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <StackPanel>
             <Border Margin="0,0,0,12" Style="{StaticResource InfoMessageStyle}"
@@ -243,7 +239,7 @@
                                 Command="{Binding ToggleDetailsCommand}"
                                 Visibility="{Binding CanHideDetails, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         <StackPanel x:Name="CompactRepositoryRow" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" Text="Git repository" />
+                            <TextBlock Style="{StaticResource SectionHeadingTextStyle}" VerticalAlignment="Center" Text="Git repository" />
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
                                         Visibility="{Binding IsCompact, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <controls:SyncStatusIcon Margin="12,0,0,0" Size="18" VerticalAlignment="Center"
@@ -310,7 +306,7 @@
                 </StackPanel>
             </Border>
 
-            <TextBlock Margin="0,0,0,10" FontSize="20" FontWeight="SemiBold" Text="Trackers" />
+            <TextBlock Margin="0,0,0,10" Style="{StaticResource SectionHeadingTextStyle}" Text="Trackers" />
             <Border Margin="0,0,0,16" Padding="20">
                 <Border.Style>
                     <Style TargetType="Border" BasedOn="{StaticResource EntityTrackerCardStyle}">
@@ -323,7 +319,7 @@
                     </Style>
                 </Border.Style>
                 <StackPanel>
-                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="No active trackers" />
+                    <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="No active trackers" />
                     <TextBlock Margin="0,6,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
                                Text="Create a blank tracker or copy an existing tracker."
                                TextWrapping="Wrap" />
@@ -343,7 +339,7 @@
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
                                 <StackPanel>
-                                    <TextBlock FontSize="19" FontWeight="SemiBold" Text="{Binding Name}"
+                                    <TextBlock Style="{StaticResource CardTitleTextStyle}" Text="{Binding Name}"
                                                TextTrimming="CharacterEllipsis" />
                                     <TextBlock x:Name="TrackerSchemaText" Margin="0,2,0,0"
                                                Foreground="{DynamicResource Brush.Text.Secondary}"
@@ -434,7 +430,7 @@
                                      Text="{Binding ProjectReporting.SearchQuery, UpdateSourceTrigger=PropertyChanged}" />
                         </StackPanel>
                         <StackPanel>
-                            <TextBlock FontSize="20" FontWeight="SemiBold" Text="Entity comparison" />
+                            <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="Entity comparison" />
                             <TextBlock Margin="0,3,0,0"
                                        Foreground="{DynamicResource Brush.Text.Secondary}"
                                        Text="{Binding ProjectReporting.ComparisonSummary}" />
@@ -460,8 +456,7 @@
                             <StackPanel>
                                 <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Total" />
                                 <TextBlock Margin="0,3,0,0"
-                                           FontSize="22"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource MetricValueTextStyle}"
                                            Text="{Binding ProjectReporting.TotalEntityCount}" />
                             </StackPanel>
                         </Button>
@@ -485,8 +480,7 @@
                             <StackPanel>
                                 <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Missing" />
                                 <TextBlock Margin="0,3,0,0"
-                                           FontSize="22"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource MetricValueTextStyle}"
                                            Text="{Binding ProjectReporting.MissingCount}" />
                             </StackPanel>
                         </Button>
@@ -510,8 +504,7 @@
                             <StackPanel>
                                 <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Different scope" />
                                 <TextBlock Margin="0,3,0,0"
-                                           FontSize="22"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource MetricValueTextStyle}"
                                            Text="{Binding ProjectReporting.DifferentScopeCount}" />
                             </StackPanel>
                         </Button>
@@ -535,8 +528,7 @@
                             <StackPanel>
                                 <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Done vs stuck" />
                                 <TextBlock Margin="0,3,0,0"
-                                           FontSize="22"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource MetricValueTextStyle}"
                                            Text="{Binding ProjectReporting.DoneVsStuckCount}" />
                             </StackPanel>
                         </Button>
@@ -560,8 +552,7 @@
                             <StackPanel>
                                 <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Blocked" />
                                 <TextBlock Margin="0,3,0,0"
-                                           FontSize="22"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource MetricValueTextStyle}"
                                            Text="{Binding ProjectReporting.BlockedCount}" />
                             </StackPanel>
                         </Button>
@@ -585,8 +576,7 @@
                             <StackPanel>
                                 <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Waiting on dependencies" />
                                 <TextBlock Margin="0,3,0,0"
-                                           FontSize="22"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource MetricValueTextStyle}"
                                            Text="{Binding ProjectReporting.WaitingOnDependenciesCount}" />
                             </StackPanel>
                         </Button>
@@ -610,8 +600,7 @@
                             <StackPanel>
                                 <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Rework" />
                                 <TextBlock Margin="0,3,0,0"
-                                           FontSize="22"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource MetricValueTextStyle}"
                                            Text="{Binding ProjectReporting.ReworkCount}" />
                             </StackPanel>
                         </Button>
@@ -635,8 +624,7 @@
                             <StackPanel>
                                 <TextBlock Foreground="{DynamicResource Brush.Text.Secondary}" Text="Unresolved" />
                                 <TextBlock Margin="0,3,0,0"
-                                           FontSize="22"
-                                           FontWeight="SemiBold"
+                                           Style="{StaticResource MetricValueTextStyle}"
                                            Text="{Binding ProjectReporting.UnresolvedCount}" />
                             </StackPanel>
                         </Button>
