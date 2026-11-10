@@ -226,6 +226,10 @@ public sealed class ProjectDashboardViewModel : INotifyPropertyChanged
         }
     }
 
+    /// <summary>Brings only the Git card up to date, without the loading state of a full refresh.</summary>
+    public Task RefreshRepositoryAsync(CancellationToken cancellationToken = default) =>
+        RepositoryCard?.RefreshAsync(cancellationToken) ?? Task.CompletedTask;
+
     private async Task LoadComparisonAsync(CancellationToken cancellationToken = default)
     {
         await _comparisonGate.WaitAsync(cancellationToken);

@@ -57,6 +57,9 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private readonly TrackerId? _startupTrackerId;
     private readonly AsyncCommand<ShellDestination> _navigateCommand;
     private ShellDestination _selectedDestination = ShellDestination.Portfolio;
+    // The revisions the open dashboards were last loaded at, to skip reloading them when nothing changed.
+    private readonly Dictionary<ProjectId, long> _dashboardRevisionsShown = [];
+    private string? _portfolioRevisionShown;
     private SettingsCategory _selectedSettingsCategory = SettingsCategory.General;
     private Project? _settingsProject;
     private Project? _selectedProject;
@@ -765,7 +768,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             }
             SetDestination(destination);
             if (destination is ShellDestination.Portfolio or ShellDestination.ProjectDashboard)
-                await RefreshVisibleDashboardAsync(cancellationToken);
+                await RefreshVisibleDashboardAsync(cancellationToken, onlyIfChanged: true);
             if (destination == ShellDestination.Developers && Developers is not null)
                 await Developers.RefreshAsync(cancellationToken);
             if (destination == ShellDestination.Schemas && SchemasPage is not null)
@@ -1286,28 +1289,65 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             await RefreshVisibleDashboardAsync(cancellationToken);
     }
 
-    private async Task RefreshVisibleDashboardAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Reloads the Portfolio or Project dashboard that is open. Coming back to one only reloads it when its
+    /// Projects changed since it was last loaded: every write to a Project's data raises its revision.
+    /// </summary>
+    private async Task RefreshVisibleDashboardAsync(CancellationToken cancellationToken, bool onlyIfChanged = false)
     {
         if (SelectedDestination == ShellDestination.Portfolio)
         {
+            // Read before the load, so a write during it leaves the dashboard marked older.
+            string? portfolioRevision = await PortfolioRevisionAsync(cancellationToken);
+            if (onlyIfChanged && Portfolio is not null && !PortfolioReporting.HasError &&
+                portfolioRevision is not null && portfolioRevision == _portfolioRevisionShown)
+                return;
+
             await PortfolioReporting.RefreshAsync(cancellationToken);
             Portfolio = PortfolioReporting.Dashboard;
+            _portfolioRevisionShown = PortfolioReporting.HasError ? null : portfolioRevision;
             return;
         }
         if (SelectedDestination != ShellDestination.ProjectDashboard || SelectedProject is null)
             return;
 
-        if (!_projectDashboards.TryGetValue(
-                SelectedProject.Id,
-                out ProjectDashboardViewModel? projectDashboard))
+        ProjectId projectId = SelectedProject.Id;
+        if (!_projectDashboards.TryGetValue(projectId, out ProjectDashboardViewModel? projectDashboard))
         {
-            projectDashboard = _dashboardFactory.CreateProject(SelectedProject.Id);
-            _projectDashboards.Add(SelectedProject.Id, projectDashboard);
+            projectDashboard = _dashboardFactory.CreateProject(projectId);
+            _projectDashboards.Add(projectId, projectDashboard);
+        }
+
+        long? revision = _projectSnapshots is null
+            ? null
+            : await _projectSnapshots.GetRevisionAsync(projectId, cancellationToken);
+        if (onlyIfChanged && projectDashboard.Dashboard is not null && !projectDashboard.HasError &&
+            revision is not null && _dashboardRevisionsShown.TryGetValue(projectId, out long shown) && shown == revision)
+        {
+            ProjectReporting = projectDashboard;
+            ProjectDashboard = projectDashboard.Dashboard;
+            // The Git card's state isn't part of the revision, so it is always brought up to date, quietly.
+            await projectDashboard.RefreshRepositoryAsync(cancellationToken);
+            return;
         }
 
         await projectDashboard.RefreshAsync(cancellationToken);
         ProjectReporting = projectDashboard;
         ProjectDashboard = projectDashboard.Dashboard;
+        if (revision is { } loaded && !projectDashboard.HasError)
+            _dashboardRevisionsShown[projectId] = loaded;
+        else
+            _dashboardRevisionsShown.Remove(projectId);
+    }
+
+    private async Task<string?> PortfolioRevisionAsync(CancellationToken cancellationToken)
+    {
+        if (_projectSnapshots is null)
+            return null;
+        List<string> parts = [];
+        foreach (Project project in Projects.OrderBy(static project => project.Id.Value))
+            parts.Add($"{project.Id.Value}:{await _projectSnapshots.GetRevisionAsync(project.Id, cancellationToken)}");
+        return string.Join(",", parts);
     }
 
     private async void OnWorkspacePersistedStateChanged(object? sender, EventArgs e)
