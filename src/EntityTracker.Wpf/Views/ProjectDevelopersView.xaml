@@ -12,20 +12,19 @@
             <controls:PageHeader Title="{Binding ProjectContextName}"
                                  Description="Manage the developers available within this Project.">
                 <WrapPanel Style="{StaticResource PageToolbarStyle}">
-                    <Button Content="Retired developers"
+                    <Button Margin="0,0,8,0" Content="Retired developers"
                         Command="{Binding Developers.OpenRetiredCommand}"
-                        AutomationProperties.HelpText="Show retired developers, to edit or restore them" />
+                        AutomationProperties.HelpText="Show retired developers, to edit or restore them" Style="{StaticResource SecondaryButtonStyle}" />
+                    <Button x:Name="NewDeveloperButton" Content="_New developer"
+                            Command="{Binding Developers.OpenNewCommand}"
+                            AutomationProperties.HelpText="Add a developer to this Project"
+                            Style="{StaticResource PrimaryButtonStyle}" />
                 </WrapPanel>
                 <controls:PageHeader.Tabs>
                     <views:ProjectTabs Margin="0,8,0,0" Current="Developers" />
                 </controls:PageHeader.Tabs>
             </controls:PageHeader>
-            <Grid Grid.Row="1" controls:Layout.StackWhenCompact="True">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="2*" />
-                    <ColumnDefinition Width="24" />
-                    <ColumnDefinition Width="1*" />
-                </Grid.ColumnDefinitions>
+            <Grid Grid.Row="1">
                 <Grid Grid.Column="0">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -57,19 +56,26 @@
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="Initials" Width="90" Binding="{Binding Initials}" ElementStyle="{StaticResource CenteredCellTextStyle}" />
                                     <DataGridTextColumn Header="Display name" Width="*" Binding="{Binding DisplayName}" ElementStyle="{StaticResource CenteredCellTextStyle}" />
-                                    <DataGridTemplateColumn Header="Actions" Width="145">
+                                    <DataGridTemplateColumn Width="48">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
-                                                <StackPanel Orientation="Horizontal">
-                                                    <Button Content="Edit" Margin="0,0,6,0"
-                                                            AutomationProperties.Name="{Binding Initials, StringFormat=Edit developer {0}}"
-                                                            Command="{Binding DataContext.Developers.EditCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                            CommandParameter="{Binding}" />
-                                                    <Button Content="Retire"
-                                                            AutomationProperties.Name="{Binding Initials, StringFormat=Retire developer {0}}"
-                                                            Command="{Binding DataContext.Developers.RetireCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                            CommandParameter="{Binding}" />
-                                                </StackPanel>
+                                                <Button x:Name="DeveloperActionsButton" Width="30" Height="28" Padding="0"
+                                                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                        Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                                        ToolTip="Developer actions"
+                                                        AutomationProperties.Name="{Binding Initials, StringFormat=Actions for developer {0}}"
+                                                        Click="OnDeveloperActionsClick">
+                                                    <controls:Icon IconKey="Icon.MoreVertical" Size="18" />
+                                                    <Button.ContextMenu>
+                                                        <ContextMenu>
+                                                            <MenuItem Header="_Edit" Click="OnEditDeveloper"
+                                                                      AutomationProperties.Name="{Binding Initials, StringFormat=Edit developer {0}}" />
+                                                            <MenuItem Header="_Retire" Click="OnRetireDeveloper"
+                                                                      AutomationProperties.Name="{Binding Initials, StringFormat=Retire developer {0}}"
+                                                                      Style="{StaticResource DangerMenuItemStyle}" />
+                                                        </ContextMenu>
+                                                    </Button.ContextMenu>
+                                                </Button>
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
@@ -78,35 +84,48 @@
                         </Grid>
                     </Border>
                 </Grid>
-                <Border Grid.Column="2" Padding="16" VerticalAlignment="Top"
-                        Style="{StaticResource EntityTrackerCardStyle}">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="{Binding Developers.EditorTitle}" />
-                        <TextBlock Margin="0,8,0,0" Foreground="{DynamicResource Brush.Text.Secondary}"
-                                   Text="Initials are unique among available developers in this Project."
-                                   TextWrapping="Wrap" />
-                        <Label Margin="0,16,0,0" Target="{Binding ElementName=DeveloperInitialsBox}" Content="Initials" />
-                        <TextBox x:Name="DeveloperInitialsBox" Margin="0,4,0,0" Padding="9,7"
-                                 controls:Placeholder.Text="Initials, e.g. AB"
-                                 AutomationProperties.Name="Developer initials"
-                                 Text="{Binding Developers.Initials, UpdateSourceTrigger=PropertyChanged}" />
-                        <Label Margin="0,12,0,0" Target="{Binding ElementName=DeveloperDisplayNameBox}" Content="Display name (optional)" />
-                        <TextBox x:Name="DeveloperDisplayNameBox" Margin="0,4,0,0" Padding="9,7"
-                                 controls:Placeholder.Text="Full name (optional)"
-                                 AutomationProperties.Name="Developer display name"
-                                 Text="{Binding Developers.DisplayName, UpdateSourceTrigger=PropertyChanged}" />
-                        <WrapPanel Margin="0,16,0,0">
-                            <Button Command="{Binding Developers.SaveCommand}"
-                                    Content="{Binding Developers.SaveLabel}"
-                                    Style="{StaticResource PrimaryButtonStyle}" />
-                            <Button Margin="8,0,0,0" Command="{Binding Developers.CancelCommand}"
-                                    Content="{Binding Developers.ResetLabel}"
-                                    Style="{StaticResource SecondaryButtonStyle}" />
-                        </WrapPanel>
-                    </StackPanel>
-                </Border>
             </Grid>
         </Grid>
+        <controls:ModalDialog x:Name="DeveloperDialog" Size="Small"
+                              IsOpen="{Binding Developers.IsFormOpen}"
+                              Title="{Binding Developers.EditorTitle}"
+                              Description="Initials are unique among available developers in this Project."
+                              CancelCommand="{Binding Developers.CancelCommand}"
+                              InitialFocus="{Binding ElementName=DeveloperInitialsBox}">
+            <controls:ModalDialog.Footer>
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="SaveDeveloperButton" Margin="0,0,8,0" IsDefault="True"
+                            Command="{Binding Developers.SaveCommand}"
+                            Content="{Binding Developers.SaveLabel}"
+                            Style="{StaticResource PrimaryButtonStyle}" />
+                    <Button x:Name="CreateAnotherDeveloperButton" Margin="0,0,8,0"
+                            Command="{Binding Developers.CreateAnotherCommand}" Content="Create and _add another"
+                            AutomationProperties.HelpText="Create this developer and keep the dialog open for the next one"
+                            Visibility="{Binding Developers.IsNew, Converter={StaticResource BooleanToVisibilityConverter}}"
+                            Style="{StaticResource SecondaryButtonStyle}" />
+                    <Button Content="Cancel" Command="{Binding Developers.CancelCommand}"
+                            Style="{StaticResource SecondaryButtonStyle}" />
+                </StackPanel>
+            </controls:ModalDialog.Footer>
+            <StackPanel>
+                <Label Padding="0" Target="{Binding ElementName=DeveloperInitialsBox}" Content="_Initials" />
+                <TextBox x:Name="DeveloperInitialsBox" Margin="0,4,0,0"
+                         controls:Placeholder.Text="Initials, e.g. AB"
+                         AutomationProperties.Name="Developer initials"
+                         Text="{Binding Developers.Initials, UpdateSourceTrigger=PropertyChanged}" />
+                <Label Margin="0,12,0,0" Padding="0" Target="{Binding ElementName=DeveloperDisplayNameBox}"
+                       Content="_Display name (optional)" />
+                <TextBox x:Name="DeveloperDisplayNameBox" Margin="0,4,0,0"
+                         controls:Placeholder.Text="Full name (optional)"
+                         AutomationProperties.Name="Developer display name"
+                         Text="{Binding Developers.DisplayName, UpdateSourceTrigger=PropertyChanged}" />
+                <Border x:Name="DeveloperError" Margin="0,12,0,0" Style="{StaticResource ErrorMessageStyle}"
+                        Visibility="{Binding Developers.HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <TextBlock AutomationProperties.LiveSetting="Assertive" Text="{Binding Developers.ErrorMessage}"
+                               TextWrapping="Wrap" />
+                </Border>
+            </StackPanel>
+        </controls:ModalDialog>
         <controls:ModalDialog x:Name="RetirementDialog" Size="Small"
                               IsOpen="{Binding Developers.IsRetirementOpen}"
                               Title="{Binding Developers.PendingRetirementInitials, StringFormat=Retire {0}?}"
