@@ -72,8 +72,12 @@ public sealed class ProjectReportViewModel : INotifyPropertyChanged
         Trackers = new ObservableCollection<ReportTrackerChoice>(trackers
             .OrderBy(static tracker => tracker.Name, StringComparer.CurrentCultureIgnoreCase)
             .Select(tracker => new ReportTrackerChoice(tracker, OnSelectionChanged)));
+        ReportLines = ProgressOverTimeLineNames.InOrder
+            .Select(line => new ChartLineOption(line.Line, line.Name, OnReportLinesChanged))
+            .ToArray();
         _exportCommand = new AsyncCommand(ExportAsync, CanRun);
         _previewCommand = new AsyncCommand(PreviewAsync, CanRun);
+        TickReportLines();
         Charts = new ProjectProgressChartsViewModel(projectId, projectName, builder, files,
             () => Trackers.Where(static choice => choice.IsSelected).Select(static choice => choice.Tracker).ToArray(),
             () => IsCustomRangeValid ? CreateRange() : null,
@@ -117,8 +121,24 @@ public sealed class ProjectReportViewModel : INotifyPropertyChanged
             if (!SetField(ref _audience, value)) return;
             OnPropertyChanged(nameof(AudienceDescription));
             OnPropertyChanged(nameof(IncludedSummary));
+            TickReportLines();
         }
     }
+
+    /// <summary>
+    /// The "Progress over time" lines in the report, ticked from Report for: Implemented and Active
+    /// entities for a client, all five for the team. The app's chart and its images keep their own.
+    /// </summary>
+    public IReadOnlyList<ChartLineOption> ReportLines { get; }
+
+    /// <summary>The ticked report lines.</summary>
+    public ProgressOverTimeLines SelectedReportLines => ReportLines
+        .Where(static line => line.IsIncluded)
+        .Aggregate(ProgressOverTimeLines.None, static (lines, line) => lines | line.Line);
+
+    public bool HasReportLinesError => SelectedReportLines == ProgressOverTimeLines.None;
+
+    public string ReportLinesMessage => HasReportLinesError ? "Choose at least one line." : "";
 
     public string AudienceDescription => AudienceOptions.Single(option => option.Audience == Audience).Description;
 
@@ -217,7 +237,8 @@ public sealed class ProjectReportViewModel : INotifyPropertyChanged
         _projectId,
         Trackers.Where(static choice => choice.IsSelected).Select(static choice => choice.Tracker.Id).ToArray(),
         Audience,
-        CreateRange());
+        CreateRange(),
+        SelectedReportLines);
 
     private async Task ExportAsync() => await RunAsync(async report =>
     {
@@ -268,7 +289,21 @@ public sealed class ProjectReportViewModel : INotifyPropertyChanged
         };
     }
 
-    private bool CanRun() => !IsBusy && HasSelection && IsCustomRangeValid;
+    private bool CanRun() => !IsBusy && HasSelection && IsCustomRangeValid && !HasReportLinesError;
+
+    private void TickReportLines()
+    {
+        ProgressOverTimeLines ticked = ProgressOverTimeLineNames.DefaultFor(Audience);
+        foreach (ChartLineOption line in ReportLines) line.IsIncluded = ticked.HasFlag(line.Line);
+    }
+
+    private void OnReportLinesChanged()
+    {
+        OnPropertyChanged(nameof(SelectedReportLines));
+        OnPropertyChanged(nameof(HasReportLinesError));
+        OnPropertyChanged(nameof(ReportLinesMessage));
+        NotifyCommands();
+    }
 
     private void NotifyRangeValidationChanged()
     {

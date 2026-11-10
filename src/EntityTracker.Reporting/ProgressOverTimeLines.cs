@@ -1,6 +1,11 @@
+using EntityTracker.Reporting.ProjectReports;
+
 namespace EntityTracker.Reporting;
 
-/// <summary>The lines of the "Progress over time" chart, to choose which a saved or copied image shows.</summary>
+/// <summary>
+/// The lines of the "Progress over time" chart, to choose which a saved or copied image, or a Project
+/// report, shows.
+/// </summary>
 [Flags]
 public enum ProgressOverTimeLines
 {
@@ -29,4 +34,19 @@ public static class ProgressOverTimeLineNames
         (ProgressOverTimeLines.Blocked, "Blocked"),
         (ProgressOverTimeLines.ActiveEntities, "Active entities")
     ];
+
+    /// <summary>
+    /// Whether <paramref name="lines"/> keeps the series named <paramref name="seriesName"/>. A series that
+    /// isn't one of the lines, such as another chart's, is always kept.
+    /// </summary>
+    public static bool Keeps(ProgressOverTimeLines lines, string? seriesName)
+    {
+        foreach ((ProgressOverTimeLines line, string name) in InOrder)
+            if (name == seriesName) return lines.HasFlag(line);
+        return true;
+    }
+
+    /// <summary>The lines a report for <paramref name="audience"/> starts with: two for a client, all for the team.</summary>
+    public static ProgressOverTimeLines DefaultFor(ReportAudience audience) =>
+        audience == ReportAudience.Client ? ProgressOverTimeLines.Client : ProgressOverTimeLines.All;
 }

@@ -552,8 +552,10 @@ screen and on paper:
   the physical data model changes;
 - **Progress over time** says that implemented entities are those that can be migrated with the tool
   (Rework needed, Reworking, Completed and Reconciled), and that the dashed Active entities line is the
-  projected number to migrate, updated during the project. A client report draws only those two lines;
-  an Internal report also draws the entities in progress, not started and blocked, as the app does;
+  projected number to migrate, updated during the project. Which lines the chart draws is chosen under
+  **Progress over time lines** on the report page. A client report starts with only those two lines;
+  an Internal report starts with all of them, adding the entities in progress, not started and blocked, as
+  the app does. The notes explain only the lines that are drawn;
 - **Weekly implemented change** shows two bars a week: the **net change** (entities that became
   implemented minus those that stopped being implemented, below zero in a week that went backwards)
   and the entities **in progress** at the end of the week.
@@ -571,7 +573,8 @@ Under **Progress charts** on the same page, the app's four progress charts are s
 chosen period: for all chosen Trackers together or for one of them. Point at a chart to read its values,
 and save or copy any chart as a PNG image for slides or e-mails. Saving or copying **Progress over
 time** first asks which lines the image shows: a client report starts with Implemented and Active
-entities, an internal report with all of them. Point at a chart's title for a short
+entities, an internal report with all of them. The live chart always shows all its lines, whatever the
+report's own choice. Point at a chart's title for a short
 description of what it shows. The pie of development statuses uses standard chart colours, without
 borders between the slices. **Progress over time** shows the implemented entities each day, with lines
 for the entities in progress, not started and blocked in the same colours as the pie, and a dashed coral

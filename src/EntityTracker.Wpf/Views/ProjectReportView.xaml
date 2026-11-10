@@ -51,6 +51,10 @@
                             <ColumnDefinition Width="24" />
                             <ColumnDefinition Width="220" />
                         </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
                         <StackPanel>
                             <Label Style="{StaticResource SectionHeadingLabelStyle}" Content="Report for"
                                    Target="{Binding ElementName=ReportAudienceSelector}" />
@@ -83,6 +87,30 @@
                                            Text="{Binding RangeValidationMessage}"
                                            Visibility="{Binding HasRangeValidationError, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             </StackPanel>
+                        </StackPanel>
+                        <!-- The report's own lines; the charts below and their images keep theirs. -->
+                        <StackPanel Grid.Row="1" Grid.ColumnSpan="3" Margin="0,14,0,0">
+                            <Label Style="{StaticResource SectionHeadingLabelStyle}" Content="Progress over time lines"
+                                   Target="{Binding ElementName=ReportLineOptions}" />
+                            <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Style="{StaticResource PageDescriptionTextStyle}"
+                                       Text="The lines the report's Progress over time chart shows. Report for chooses where they start." />
+                            <ItemsControl x:Name="ReportLineOptions" Margin="0,6,0,0" ItemsSource="{Binding ReportLines}"
+                                          AutomationProperties.Name="Progress over time lines in the report">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <CheckBox Margin="0,4,20,0" Content="{Binding Name}" IsChecked="{Binding IsIncluded, Mode=TwoWay}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" AutomationProperties.LiveSetting="Assertive"
+                                       Foreground="{DynamicResource Brush.Text.Primary}"
+                                       Text="{Binding ReportLinesMessage}"
+                                       Visibility="{Binding HasReportLinesError, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -278,7 +306,7 @@
         <!-- Saving or copying "Progress over time" asks which lines the image shows. -->
         <controls:ModalDialog x:Name="ChartLinesDialog" DataContext="{Binding ProjectReport.Charts.LineChoice}"
                               IsOpen="{Binding IsOpen, FallbackValue=False}" Title="{Binding Title}"
-                              Description="Choose the lines the image shows. The chart here and the HTML reports keep theirs."
+                              Description="Choose the lines the image shows. The chart here keeps all of them, and the report uses the lines chosen in its options."
                               CancelCommand="{Binding CancelCommand}">
             <controls:ModalDialog.Footer>
                 <StackPanel Orientation="Horizontal">

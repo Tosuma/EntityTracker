@@ -1228,6 +1228,44 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
     }
 
     [Fact]
+    public async Task ProjectReport_TheReportsProgressLinesStartFromReportForAndGoIntoTheReport()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "customer_account");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        Assert.True(await shell.NavigateAsync(ShellDestination.ProjectReport));
+        ProjectReportViewModel report = shell.ProjectReport!;
+        await WaitUntilAsync(() => Task.FromResult(report.Charts.HasHistoricalData && !report.Charts.IsBusy));
+
+        // A client report starts with two lines, the team's with all five.
+        Assert.Equal(EntityTracker.Reporting.ProgressOverTimeLines.Client, report.SelectedReportLines);
+        report.Audience = EntityTracker.Reporting.ProjectReports.ReportAudience.Internal;
+        Assert.Equal(EntityTracker.Reporting.ProgressOverTimeLines.All, report.SelectedReportLines);
+        report.Audience = EntityTracker.Reporting.ProjectReports.ReportAudience.Client;
+        report.ReportLines.Single(line => line.Name == "Blocked").IsIncluded = true;
+
+        EntityTracker.Reporting.ProjectReports.ProjectReport built = await report.BuildAsync();
+        EntityTracker.Reporting.ProjectReports.ChartSection progress = built.Sections
+            .OfType<EntityTracker.Reporting.ProjectReports.ChartSection>()
+            .Single(section => section.Title == EntityTracker.Reporting.ProgressChartPresentationBuilder.GetTitle(
+                EntityTracker.Reporting.ProgressChartKind.ImplementedOverTime));
+        Assert.Equal(["Implemented", "Blocked", "Active entities"],
+            progress.ByScope.Values.First().Series.Select(series => series.Name));
+        // The page's own chart keeps all five lines.
+        Assert.Equal(5, report.Charts.Presentation.ImplementedSeries.Length);
+
+        // Without a line the report can't be made, and the page says why.
+        foreach (ChartLineOption line in report.ReportLines) line.IsIncluded = false;
+        Assert.True(report.HasReportLinesError);
+        Assert.Equal("Choose at least one line.", report.ReportLinesMessage);
+        Assert.False(report.ExportCommand.CanExecute(null));
+        Assert.False(report.PreviewCommand.CanExecute(null));
+    }
+
+    [Fact]
     public async Task ProjectReport_ChartLinesStartFromTheReportsAudienceAndCancelExportsNothing()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();

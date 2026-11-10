@@ -36,6 +36,28 @@ public sealed class ReportProgressChartTests
     }
 
     [Fact]
+    public void TheReportShowsTheProgressLinesChosenForIt()
+    {
+        // #204: the report's lines are chosen on the page, whoever it is for.
+        ChartSection client = Section(ProgressChartKind.ImplementedOverTime, ReportAudience.Client,
+            ProgressOverTimeLines.Implemented | ProgressOverTimeLines.Blocked);
+        ChartSection team = Section(ProgressChartKind.ImplementedOverTime, ReportAudience.Internal,
+            ProgressOverTimeLines.NotStarted | ProgressOverTimeLines.ActiveEntities);
+
+        Assert.Equal(["Implemented", "Blocked"], client.ByScope[ReportScope.AllKey].Series.Select(series => series.Name));
+        Assert.Equal(["Not started", "Active entities"], team.ByScope[ReportScope.AllKey].Series.Select(series => series.Name));
+        // The notes explain only the lines shown, and the client wording is for the client's two lines.
+        Assert.Equal(["Implemented"], client.Notes!.Select(note => note.Term));
+        Assert.Equal(["Active entities"], team.Notes!.Select(note => note.Term));
+        Assert.Equal(ProgressChartPresentationBuilder.GetDescription(ProgressChartKind.ImplementedOverTime), client.Description);
+        Assert.Equal(ProgressChartSectionProvider.ClientProgressDescription,
+            Section(ProgressChartKind.ImplementedOverTime, ReportAudience.Internal, ProgressOverTimeLines.Client).Description);
+        // Lines are a Progress over time choice; the other charts keep theirs.
+        Assert.Equal(2, Section(ProgressChartKind.WeeklyNetImplementedChange, ReportAudience.Client,
+            ProgressOverTimeLines.Implemented).ByScope[ReportScope.AllKey].Series.Count);
+    }
+
+    [Fact]
     public void TheProgressChartDrawsTheOtherStatusesInThePiesColours()
     {
         ReportChart chart = Chart(ProgressChartKind.ImplementedOverTime, ReportAudience.Internal);
@@ -133,7 +155,8 @@ public sealed class ReportProgressChartTests
     private static ReportChart Chart(ProgressChartKind kind, ReportAudience audience = ReportAudience.Client) =>
         Section(kind, audience).ByScope[ReportScope.AllKey];
 
-    private static ChartSection Section(ProgressChartKind kind, ReportAudience audience = ReportAudience.Client)
+    private static ChartSection Section(ProgressChartKind kind, ReportAudience audience = ReportAudience.Client,
+        ProgressOverTimeLines? lines = null)
     {
         DateTimeOffset now = new(2026, 8, 12, 9, 0, 0, TimeSpan.Zero);
         Tracker tracker = new(TrackerId.New(), ProjectId.New(), "Core schema", now, now);
@@ -149,7 +172,7 @@ public sealed class ReportProgressChartTests
             Monday,
             Monday.AddDays(7));
         ReportContext context = new(
-            new ProjectReportRequest(tracker.ProjectId, [tracker.Id], audience, ProgressDateRange.AllHistory),
+            new ProjectReportRequest(tracker.ProjectId, [tracker.Id], audience, ProgressDateRange.AllHistory, lines),
             "Commerce modernization",
             [tracker],
             report,

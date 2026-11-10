@@ -2308,6 +2308,15 @@ public sealed class PresentationConfigurationTests
         Assert.Equal("{Binding Lines}", (string?)lines.Attribute("ItemsSource"));
         Assert.Contains(lines.Descendants(), static element =>
             element.Name.LocalName == "CheckBox" && (string?)element.Attribute("IsChecked") == "{Binding IsIncluded, Mode=TwoWay}");
+
+        // The report has its own lines, in its options, apart from the charts and their images.
+        XElement reportLines = report.Descendants().Single(element => (string?)element.Attribute(x + "Name") == "ReportLineOptions");
+        Assert.Equal("{Binding ReportLines}", (string?)reportLines.Attribute("ItemsSource"));
+        Assert.Contains(reportLines.Descendants(), static element =>
+            element.Name.LocalName == "CheckBox" && (string?)element.Attribute("IsChecked") == "{Binding IsIncluded, Mode=TwoWay}");
+        Assert.DoesNotContain(reportLines.Ancestors(), static element => element.Name.LocalName == "ModalDialog");
+        Assert.Contains(report.Descendants(), static element =>
+            (string?)element.Attribute("Text") == "{Binding ReportLinesMessage}");
     }
 
     [Fact]

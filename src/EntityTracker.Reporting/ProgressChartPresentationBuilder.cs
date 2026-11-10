@@ -28,13 +28,11 @@ public sealed class ProgressChartPresentationBuilder
     {
         ProgressChartPresentation presentation = Build(report, includeExportPieLabels: true, ProgressChartTheme.Light);
         if (lines == ProgressOverTimeLines.All) return presentation;
-        HashSet<string> kept = ProgressOverTimeLineNames.InOrder
-            .Where(line => lines.HasFlag(line.Line))
-            .Select(static line => line.Name)
-            .ToHashSet(StringComparer.Ordinal);
         return presentation with
         {
-            ImplementedSeries = presentation.ImplementedSeries.Where(series => kept.Contains(series.Name ?? "")).ToArray()
+            ImplementedSeries = presentation.ImplementedSeries
+                .Where(series => ProgressOverTimeLineNames.Keeps(lines, series.Name))
+                .ToArray()
         };
     }
 

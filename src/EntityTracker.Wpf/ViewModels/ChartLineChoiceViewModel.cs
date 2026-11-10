@@ -89,27 +89,3 @@ public sealed class ChartLineChoiceViewModel : INotifyPropertyChanged
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
-
-/// <summary>A line that a saved or copied chart image can show.</summary>
-public sealed class ChartLineOption(ProgressOverTimeLines line, string name, Action changed) : INotifyPropertyChanged
-{
-    private bool _isIncluded;
-
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    public ProgressOverTimeLines Line { get; } = line;
-
-    public string Name { get; } = name;
-
-    public bool IsIncluded
-    {
-        get => _isIncluded;
-        set
-        {
-            if (_isIncluded == value) return;
-            _isIncluded = value;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsIncluded)));
-            changed();
-        }
-    }
-}

@@ -18,12 +18,20 @@ public enum ReportVisibility
     InternalOnly
 }
 
-/// <summary>What to put in a Project report.</summary>
+/// <summary>
+/// What to put in a Project report. <paramref name="Lines"/> chooses the "Progress over time" lines;
+/// without it the audience's own are used: two for a client, all five for the team.
+/// </summary>
 public sealed record ProjectReportRequest(
     ProjectId ProjectId,
     IReadOnlyList<TrackerId> TrackerIds,
     ReportAudience Audience,
-    ProgressDateRange Range);
+    ProgressDateRange Range,
+    ProgressOverTimeLines? Lines = null)
+{
+    /// <summary>The "Progress over time" lines the report shows.</summary>
+    public ProgressOverTimeLines ProgressLines => Lines ?? ProgressOverTimeLineNames.DefaultFor(Audience);
+}
 
 /// <summary>
 /// One Tracker in the report, or the combination of all selected Trackers. Sections hold their
