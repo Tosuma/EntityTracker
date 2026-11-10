@@ -1,79 +1,58 @@
-using System.ComponentModel;
 using System.Windows;
-using EntityTracker.Application.GitSync;
+using System.Windows.Controls;
+using System.Windows.Threading;
+
+using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels;
 
 namespace EntityTracker.Wpf.Views;
 
-/// <summary>The Git name and email to save, and where: the global or this repository's configuration.</summary>
-public sealed record GitIdentityChoice(string Name, string Email, GitConfigScope Scope);
-
-/// <summary>
-/// Asks for the missing Git commit identity during Portfolio › Import project. Closing the window
-/// counts as pressing Cancel, so it also asks for confirmation first.
-/// </summary>
-public partial class GitIdentityDialog : Window
+/// <summary>Asks for the missing Git commit identity during Portfolio › Import project.</summary>
+public partial class GitIdentityDialog : UserControl
 {
-    private readonly GitIdentityDialogViewModel _viewModel;
-    private bool _closingConfirmed;
+    public GitIdentityDialog() => InitializeComponent();
 
-    public GitIdentityDialog(string? currentName, string? currentEmail)
+    private InAppDialogs? Dialogs => DataContext as InAppDialogs;
+
+    private GitIdentityDialogViewModel? Question => Dialogs?.GitIdentity;
+
+    /// <summary>The first missing value takes the focus; a name that is already set stays as it is.</summary>
+    private void OnOpened(object? sender, EventArgs e) => Dispatcher.BeginInvoke(() =>
     {
-        InitializeComponent();
-        DataContext = _viewModel = new GitIdentityDialogViewModel(currentName, currentEmail);
-        Loaded += (_, _) =>
+        if (Question is not { } question) return;
+        if (string.IsNullOrWhiteSpace(question.Name) || !string.IsNullOrWhiteSpace(question.Email))
         {
-            // The first missing value takes the focus; a name that is already set stays as it is.
-            if (string.IsNullOrWhiteSpace(currentName) || !string.IsNullOrWhiteSpace(currentEmail))
-            {
-                NameBox.Focus();
-                NameBox.SelectAll();
-            }
-            else
-            {
-                EmailBox.Focus();
-            }
-        };
-        Closing += OnClosing;
-    }
-
-    /// <summary>Shows the dialog; returns what to save, or null when the user cancelled.</summary>
-    public static GitIdentityChoice? Prompt(Window? owner, string? currentName, string? currentEmail)
-    {
-        GitIdentityDialog dialog = new(currentName, currentEmail) { Owner = owner };
-        if (dialog.ShowDialog() != true) return null;
-        GitIdentityDialogViewModel result = dialog._viewModel;
-        return new GitIdentityChoice(result.Name.Trim(), result.Email.Trim(), result.Scope);
-    }
+            NameBox.Focus();
+            NameBox.SelectAll();
+        }
+        else
+        {
+            EmailBox.Focus();
+        }
+    }, DispatcherPriority.Input);
 
     private void OnSave(object sender, RoutedEventArgs e)
     {
-        if (_viewModel.TrySave())
+        if (Question is not { } question) return;
+        if (question.TrySave())
         {
-            _closingConfirmed = true;
-            DialogResult = true;
+            Dialogs!.AnswerGitIdentity(new GitIdentityChoice(question.Name.Trim(), question.Email.Trim(), question.Scope));
             return;
         }
 
-        (_viewModel.IsNameInvalid ? NameBox : EmailBox).Focus();
+        (question.IsNameInvalid ? NameBox : EmailBox).Focus();
     }
 
-    private void OnCancel(object sender, RoutedEventArgs e)
+    /// <summary>Cancel, and Esc, ask for confirmation first; the second press stops the import.</summary>
+    private void OnCancel(object? sender, EventArgs e)
     {
-        if (!_viewModel.RequestCancel())
+        if (Question is not { } question) return;
+        if (!question.RequestCancel())
         {
             CancelButton.Focus();
             return;
         }
 
-        _closingConfirmed = true;
-        DialogResult = false;
-    }
-
-    private void OnClosing(object? sender, CancelEventArgs e)
-    {
-        if (_closingConfirmed || _viewModel.RequestCancel()) return;
-        e.Cancel = true;
-        CancelButton.Focus();
+        Dialogs!.AnswerGitIdentity(null);
     }
 }

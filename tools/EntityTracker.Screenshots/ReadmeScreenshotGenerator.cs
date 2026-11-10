@@ -238,7 +238,8 @@ internal sealed class ReadmeScreenshotGenerator
             notifications.Dismiss(closingNotice);
             await linkStore.SaveAsync(repositoryFixture, cancellationToken);
             await shell.ProjectReporting.RepositoryCard.RefreshAsync(cancellationToken);
-            ProjectMergeReviewDialog mergeDialog = new(new ProjectMergeReviewViewModel([
+            // The questions sync and import ask are dialogs in the main window.
+            var mergeReview = shell.Dialogs.ReviewMergeAsync([
                 new ProjectMergeConflict("Tracker/00000000-0000-0000-0000-000000000001",
                     ProjectConflictKind.Addition, null, "Local Tracker snapshot", "Remote Tracker snapshot")
                 {
@@ -247,23 +248,11 @@ internal sealed class ReadmeScreenshotGenerator
                         "Entity: Orders / Internal notes: Add invoice validation before release",
                         "Entity: Orders / Internal notes: Coordinate rollout with the fulfillment team")
                 }
-            ]))
-            {
-                Owner = window,
-                Height = 550
-            };
-            Grid mergeContent = (Grid)mergeDialog.Content;
-            mergeDialog.Content = null;
-            mergeContent.Margin = new Thickness(0);
-            mergeDialog.Content = new Border { Padding = new Thickness(20), Child = mergeContent };
-            mergeDialog.Show();
-            try
-            {
-                await new WpfScreenshotRenderer(mergeDialog, workspace.StagingDirectory)
-                    .CaptureAsync("project-merge-review.png", settleMilliseconds: 900);
-            }
-            finally { mergeDialog.Close(); }
-            await CaptureGitIdentityDialogAsync(window, workspace.StagingDirectory);
+            ], cancellationToken);
+            await renderer.CaptureAsync("project-merge-review.png", settleMilliseconds: 900);
+            shell.Dialogs.AnswerMergeReview(null);
+            await mergeReview;
+            await CaptureGitIdentityDialogAsync(shell, renderer);
             await CaptureSyncStatesAsync(window, workspace.StagingDirectory);
             await renderer.BringNamedElementIntoViewAndCaptureAsync(
                 "ComparisonGrid",
@@ -517,18 +506,14 @@ internal sealed class ReadmeScreenshotGenerator
     /// Import's Git name and email dialog, as it opens with the name already set, and after Cancel was
     /// pressed once.
     /// </summary>
-    private static async Task CaptureGitIdentityDialogAsync(MainWindow window, string outputDirectory)
+    private static async Task CaptureGitIdentityDialogAsync(ShellViewModel shell, WpfScreenshotRenderer renderer)
     {
-        GitIdentityDialog dialog = new("Alice Brown", null) { Owner = window };
-        dialog.Show();
-        try
-        {
-            WpfScreenshotRenderer renderer = new(dialog, outputDirectory);
-            await renderer.CaptureAsync("git-identity.png", settleMilliseconds: 500);
-            ((GitIdentityDialogViewModel)dialog.DataContext).RequestCancel();
-            await renderer.CaptureAsync("git-identity-confirm-cancel.png", settleMilliseconds: 300);
-        }
-        finally { dialog.Close(); }
+        var question = shell.Dialogs.AskGitIdentityAsync("Alice Brown", null);
+        await renderer.CaptureAsync("git-identity.png", settleMilliseconds: 500);
+        shell.Dialogs.GitIdentity!.RequestCancel();
+        await renderer.CaptureAsync("git-identity-confirm-cancel.png", settleMilliseconds: 300);
+        shell.Dialogs.AnswerGitIdentity(null);
+        await question;
     }
 
     private static async Task CaptureOverviewAsync(

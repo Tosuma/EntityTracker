@@ -19,18 +19,12 @@ public sealed class ProjectRepositoryFolderPicker : IProjectRepositoryFolderPick
     }
 }
 
-public sealed class WpfOutboundDeletionApproval : IOutboundDeletionApproval
+public sealed class WpfOutboundDeletionApproval(InAppDialogs dialogs) : IOutboundDeletionApproval
 {
-    // Sync asks from a background thread; the dialog opens on the UI thread.
+    // Sync asks from a background thread; the dialog opens in the main window, on the UI thread.
     public Task<bool> ApproveAsync(IReadOnlyList<string> deletedObjects, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return UiThread.RunAsync(() =>
-        {
-            Window? owner = System.Windows.Application.Current?.MainWindow;
-            OutboundDeletionApprovalDialog dialog = new(deletedObjects);
-            if (owner is not null) dialog.Owner = owner;
-            return dialog.ShowDialog() == true;
-        });
+        return UiThread.RunAsync(() => dialogs.ApproveDeletionAsync(deletedObjects, cancellationToken)).Unwrap();
     }
 }

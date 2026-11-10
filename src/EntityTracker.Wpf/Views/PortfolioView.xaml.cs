@@ -55,7 +55,7 @@ public partial class PortfolioView : UserControl
             {
                 identityAsked = true;
                 Logger.LogInformation("Git has no commit identity for the checkout; asking for it.");
-                GitIdentityChoice? choice = GitIdentityDialog.Prompt(Window.GetWindow(this),
+                GitIdentityChoice? choice = await Shell.Dialogs.AskGitIdentityAsync(
                     identity.CurrentName, identity.CurrentEmail);
                 if (choice is null)
                 {

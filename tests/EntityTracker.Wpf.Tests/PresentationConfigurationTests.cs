@@ -135,7 +135,9 @@ public sealed class PresentationConfigurationTests
         Assert.DoesNotContain(dialog.Descendants(), element => element.Attributes().Any(attribute =>
             attribute.Name.LocalName == "Value" && attribute.Value == "Collapsed") &&
             labels.Contains(element.Ancestors().FirstOrDefault(ancestor => ancestor.Name.LocalName == "TextBlock")));
-        Assert.Equal("True", (string?)button.Attribute("IsCancel"));
+        // Esc does what Cancel does.
+        XElement modal = Assert.Single(dialog.Root!.Elements(), element => element.Name.LocalName == "ModalDialog");
+        Assert.Equal((string?)button.Attribute("Click"), (string?)modal.Attribute("CancelRequested"));
     }
 
     [Fact]
@@ -867,21 +869,23 @@ public sealed class PresentationConfigurationTests
     public void MergeReviewDialog_ProvidesKeyboardAndScreenReaderContext()
     {
         XDocument review = LoadWpfXaml("Views", "ProjectMergeReviewDialog.xaml");
-        Assert.Equal("Review Project merge", (string?)review.Root?.Attribute("Title"));
-        XElement root = Assert.Single(review.Root!.Elements(), e => e.Name.LocalName == "Grid");
-        Assert.Equal("Cycle", (string?)root.Attribute("KeyboardNavigation.TabNavigation"));
+        // A large dialog in the main window: the control keeps Tab inside and gives the title its heading
+        // level; each conflict is a heading below it.
+        XElement root = Assert.Single(review.Root!.Elements(), e => e.Name.LocalName == "ModalDialog");
+        Assert.Equal("Review Project merge conflicts", (string?)root.Attribute("Title"));
+        Assert.Equal("Large", (string?)root.Attribute("Size"));
         Assert.Contains(review.Descendants(), e =>
-            (string?)e.Attribute("AutomationProperties.HeadingLevel") == "Level1");
-        Assert.Contains(review.Descendants(), e =>
-            (string?)e.Attribute("AutomationProperties.HeadingLevel") == "Level2");
+            (string?)e.Attribute("AutomationProperties.HeadingLevel") == "Level3");
         Assert.Contains(review.Descendants(), e =>
             (string?)e.Attribute("AutomationProperties.Name") == "{Binding BaseAutomationName}");
         Assert.Contains(review.Descendants(), e =>
             (string?)e.Attribute("AutomationProperties.Name") == "{Binding LocalAutomationName}");
         Assert.Contains(review.Descendants(), e =>
             (string?)e.Attribute("AutomationProperties.Name") == "{Binding RemoteAutomationName}");
-        Assert.Contains(review.Descendants(), e =>
-            (string?)e.Attribute("IsCancel") == "True");
+        // Esc cancels the sync, as Cancel sync does.
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement cancel = review.Descendants().Single(e => (string?)e.Attribute(x + "Name") == "CancelButton");
+        Assert.Equal((string?)cancel.Attribute("Click"), (string?)root.Attribute("CancelRequested"));
     }
 
     [Fact]
@@ -2184,6 +2188,23 @@ public sealed class PresentationConfigurationTests
         // Each title has the same style, through the control.
         Assert.DoesNotContain(page.Descendants(), static element =>
             element.Name.LocalName == "TextBlock" && (string?)element.Attribute("FontSize") is "20" or "22");
+    }
+
+    [Theory]
+    [InlineData("GitIdentityDialog.xaml")]
+    [InlineData("ProjectMergeReviewDialog.xaml")]
+    [InlineData("OutboundDeletionApprovalDialog.xaml")]
+    public void ImportAndSyncAskInTheMainWindowNotInAWindowOfTheirOwn(string view)
+    {
+        XDocument dialog = LoadWpfXaml("Views", view);
+
+        Assert.Equal("UserControl", dialog.Root!.Name.LocalName);
+        XElement modal = Assert.Single(dialog.Root.Elements(), element => element.Name.LocalName == "ModalDialog");
+        Assert.Equal("True", (string?)modal.Attribute("UsesStrongScrim"));
+        Assert.Contains(LoadWpfXaml("Views", "InAppDialogsView.xaml").Descendants(), element =>
+            element.Name.LocalName == Path.GetFileNameWithoutExtension(view));
+        Assert.Contains(LoadWpfXaml("MainWindow.xaml").Descendants(), static element =>
+            element.Name.LocalName == "InAppDialogsView" && (string?)element.Attribute("DataContext") == "{Binding Dialogs}");
     }
 
     [Fact]

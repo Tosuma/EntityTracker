@@ -1,24 +1,29 @@
 using System.Windows;
+using System.Windows.Controls;
+
+using EntityTracker.Domain.Collaboration;
+using EntityTracker.Wpf.Services;
 using EntityTracker.Wpf.ViewModels;
 
 namespace EntityTracker.Wpf.Views;
 
-public partial class ProjectMergeReviewDialog : Window
+/// <summary>The merge review a sync asks for when local and remote changes conflict.</summary>
+public partial class ProjectMergeReviewDialog : UserControl
 {
-    public ProjectMergeReviewDialog(ProjectMergeReviewViewModel viewModel)
-    {
-        InitializeComponent();
-        DataContext = viewModel;
-        Loaded += (_, _) => ChooseLocalButton.Focus();
-    }
+    public ProjectMergeReviewDialog() => InitializeComponent();
 
-    private ProjectMergeReviewViewModel Review => (ProjectMergeReviewViewModel)DataContext;
-    private void OnChooseLocal(object sender, RoutedEventArgs e) =>
-        Review.ChooseAll(EntityTracker.Domain.Collaboration.MergeSide.Local);
-    private void OnChooseRemote(object sender, RoutedEventArgs e) =>
-        Review.ChooseAll(EntityTracker.Domain.Collaboration.MergeSide.Remote);
+    private InAppDialogs? Dialogs => DataContext as InAppDialogs;
+
+    private ProjectMergeReviewViewModel? Review => Dialogs?.MergeReview;
+
+    private void OnChooseLocal(object sender, RoutedEventArgs e) => Review?.ChooseAll(MergeSide.Local);
+
+    private void OnChooseRemote(object sender, RoutedEventArgs e) => Review?.ChooseAll(MergeSide.Remote);
+
     private void OnApply(object sender, RoutedEventArgs e)
     {
-        if (Review.AllResolved) DialogResult = true;
+        if (Review is { AllResolved: true } review) Dialogs!.AnswerMergeReview(review.Decisions());
     }
+
+    private void OnCancel(object? sender, EventArgs e) => Dialogs?.AnswerMergeReview(null);
 }

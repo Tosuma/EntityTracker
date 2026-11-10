@@ -167,6 +167,7 @@ public partial class App : System.Windows.Application
                 System.IO.Path.Combine(dataPaths.RootDirectory, "git-sync-links.v1.json"),
                 provider.GetRequiredService<ILogger<JsonProjectSyncLinkStore>>()));
             services.AddSingleton<ILocalGitTransport, SystemGitTransport>();
+            services.AddSingleton<InAppDialogs>();
             services.AddSingleton<IOutboundDeletionApproval, WpfOutboundDeletionApproval>();
             services.AddSingleton<IProjectMergeReview, WpfProjectMergeReview>();
             services.AddSingleton<WpfProjectUnsavedEditsGate>();

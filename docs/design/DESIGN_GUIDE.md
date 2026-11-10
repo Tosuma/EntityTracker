@@ -199,7 +199,9 @@ Destructive actions require confirmation where the workflow already calls for it
   top dialog closes). Sizes: **Small** (560) for questions and short forms, **Medium** (680) for lists,
   **Large** (up to 960, as tall as the page allows) for editors and reviews. The title has one style
   (`DialogTitleTextStyle`); the footer puts the commit first and Cancel last on the right, and an action
-  that removes something alone on the left.
+  that removes something alone on the left. The questions import and sync stop to ask (the Git name and
+  email, a merge review, an approval of repository deletions) are dialogs in the main window too, not
+  windows of their own (`InAppDialogs`).
 - Show more: details that unfold in place use an `Expander` (the Git card's Details, a schema's unpushed
   changes); a button only opens another view. Tables use `EntityTrackerDataGridStyle`, and every text
   column centres its text in the row (`CenteredCellTextStyle`). A list that chooses what a page shows,
