@@ -332,8 +332,7 @@
                             <Button Margin="0,0,8,0" Command="{Binding UseSchemaForAllCommand}" Content="Use schema for all" />
                             <Button Command="{Binding KeepTrackersForAllCommand}" Content="Keep trackers for all" />
                         </StackPanel>
-                        <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding ReviewSummary}"
-                                   TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                        <TextBlock Style="{StaticResource ReviewSummaryTextStyle}" Text="{Binding ReviewSummary}" />
                     </DockPanel>
                     <Border Margin="0,12,0,0" DockPanel.Dock="Bottom" Style="{StaticResource ErrorMessageStyle}"
                                 Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -343,7 +342,7 @@
                         <ItemsControl x:Name="SchemaPushTrackers" ItemsSource="{Binding ReviewTrackers}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Margin="0,0,0,8" Padding="12" Style="{StaticResource EntityTrackerCardStyle}">
+                                    <Border Style="{StaticResource ReviewItemCardStyle}">
                                         <StackPanel>
                                             <DockPanel>
                                                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
@@ -369,19 +368,19 @@
                                             <ItemsControl ItemsSource="{Binding Changes}">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate>
-                                                        <StackPanel Margin="0,10,0,0">
-                                                            <TextBlock TextWrapping="Wrap">
+                                                        <StackPanel>
+                                                            <TextBlock Style="{StaticResource ReviewSentenceTextStyle}">
                                                                 <Run Text="{Binding Description, Mode=OneWay}" />
                                                                 <Run Foreground="{DynamicResource Brush.Text.Secondary}" Text="{Binding ConflictNote, Mode=OneWay}" />
                                                             </TextBlock>
                                                             <StackPanel Margin="0,4,0,0" Orientation="Horizontal">
                                                                 <!-- Labels hold names that may contain "_", so they are plain text, not access keys. -->
-                                                                <RadioButton Margin="0,0,18,0" GroupName="{Binding ChoiceGroup}"
+                                                                <RadioButton Style="{StaticResource ReviewChoiceStyle}" GroupName="{Binding ChoiceGroup}"
                                                                              AutomationProperties.Name="{Binding UseSchemaLabel}"
                                                                              IsChecked="{Binding UseSchema, Mode=TwoWay}">
                                                                     <TextBlock Text="{Binding UseSchemaLabel}" />
                                                                 </RadioButton>
-                                                                <RadioButton GroupName="{Binding ChoiceGroup}"
+                                                                <RadioButton Style="{StaticResource ReviewChoiceStyle}" GroupName="{Binding ChoiceGroup}"
                                                                              AutomationProperties.Name="{Binding KeepTrackerLabel}"
                                                                              IsChecked="{Binding KeepTracker, Mode=TwoWay}">
                                                                     <TextBlock Text="{Binding KeepTrackerLabel}" />

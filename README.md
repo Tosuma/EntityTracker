@@ -74,9 +74,11 @@ for consistency.
 
 On a Project, select the **Developers** tab to manage that Project's developer directory.
 Search by initials or display name in the box above the available-developers list, which scrolls
-independently. Use the form on the right to add a developer or edit a selected one.
+independently. **New developer** opens a dialog to add one, with **Create and add another** for
+several in a row; each row's **⋮** menu edits or retires that developer.
 Initials are required and unique among available developers in the Project; retired records can
-be restored when their initials are free. Retiring a developer requires entering their exact initials.
+be restored when their initials are free. Retiring is confirmed once, and can be undone from
+**Retired developers**.
 The retired list stays hidden until you select **Retired developers**.
 In entity creation or editing, search available Project developers and select everyone currently
 responsible. Add new developers on the Project Developers page. Removing someone ends their current
@@ -225,12 +227,14 @@ range or a search with no matches, and errors inside an open dialog appear next 
 
 ![Project sync action needed in the sidebar notification center](images/light/project-sync-action-needed.png)
 
-The merge review shows each conflicting object with its base, local, and remote values. Choose a
-side for each conflict or apply one choice to all, then confirm the resolved Project state. Only
+The merge review lays out each conflict as push review does: a sentence saying what both sides
+changed, then **Keep this computer's** and **Keep the repository's**, each with the value it keeps, and
+what it was before when there was an earlier value. Choose a side for each conflict or apply one choice
+to all; Apply needs every conflict decided. Only
 changes both sides made differently are asked about; everything else, including what Sync from
 source remembers about earlier syncs, is merged automatically.
 
-![Project merge review with base, local, and remote values and per-conflict choices](images/light/project-merge-review.png)
+![Project merge review: each conflict as a sentence, with the value each choice keeps](images/light/project-merge-review.png)
 
 ### Compare sibling Trackers
 

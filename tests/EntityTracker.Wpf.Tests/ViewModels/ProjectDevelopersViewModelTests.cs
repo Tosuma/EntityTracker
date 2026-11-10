@@ -30,6 +30,62 @@ public sealed class ProjectDevelopersViewModelTests
     }
 
     [Fact]
+    public async Task TheDialogClosesOnCreateAndStaysOpenToAddAnother()
+    {
+        ProjectDevelopersViewModel viewModel = new(ProjectId.New(), new ProjectDeveloperService(new MemoryStore()));
+
+        viewModel.OpenNewCommand.Execute(null);
+        Assert.True(viewModel.IsFormOpen);
+        Assert.Equal("New developer", viewModel.EditorTitle);
+        viewModel.Initials = "AB";
+        viewModel.CreateAnotherCommand.Execute(null);
+        await WaitUntilAsync(() => viewModel.Available.Count == 1 && !viewModel.IsBusy);
+        // Still open, and empty for the next one.
+        Assert.True(viewModel.IsFormOpen);
+        Assert.Equal("", viewModel.Initials);
+
+        viewModel.Initials = "CD";
+        await viewModel.SaveAsync();
+        Assert.False(viewModel.IsFormOpen);
+        Assert.Equal(2, viewModel.Available.Count);
+
+        viewModel.Edit(viewModel.Available[0]);
+        Assert.True(viewModel.IsFormOpen);
+        Assert.Equal("Edit developer", viewModel.EditorTitle);
+        Assert.False(viewModel.CreateAnotherCommand.CanExecute(null));
+        viewModel.Cancel();
+        Assert.False(viewModel.IsFormOpen);
+    }
+
+    [Fact]
+    public async Task AFailedSaveKeepsTheDialogOpenWithTheReason()
+    {
+        ProjectDevelopersViewModel viewModel = new(ProjectId.New(), new ProjectDeveloperService(new MemoryStore()));
+        viewModel.OpenNew();
+        viewModel.Initials = "AB";
+        await viewModel.SaveAsync();
+
+        viewModel.OpenNew();
+        viewModel.Initials = "AB";
+        await viewModel.SaveAsync();
+
+        Assert.True(viewModel.IsFormOpen);
+        Assert.True(viewModel.HasError);
+        Assert.NotEmpty(viewModel.ErrorMessage);
+        viewModel.Initials = "AC";
+        await viewModel.SaveAsync();
+        Assert.False(viewModel.IsFormOpen);
+        Assert.Equal("", viewModel.ErrorMessage);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        for (int attempt = 0; attempt < 200 && !condition(); attempt++)
+            await Task.Delay(10);
+        Assert.True(condition());
+    }
+
+    [Fact]
     public async Task FailedChangesArePostedToTheNotificationCenter()
     {
         ProjectId projectId = ProjectId.New();
@@ -140,6 +196,10 @@ public sealed class ProjectDevelopersViewModelTests
                 _developers.Values.Where(d => d.ProjectId == projectId).ToArray());
         public Task CreateAsync(ProjectDeveloper developer, CancellationToken cancellationToken = default)
         {
+            // As the database does: initials are unique among a Project's available developers.
+            if (_developers.Values.Any(other => other.ProjectId == developer.ProjectId && !other.IsRetired &&
+                    string.Equals(other.Initials, developer.Initials, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException($"The initials {developer.Initials} are already used in this Project.");
             _developers.Add(developer.Id, developer);
             return Task.CompletedTask;
         }

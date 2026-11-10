@@ -206,6 +206,10 @@ Destructive actions require confirmation where the workflow already calls for it
   changes); a button only opens another view. Tables use `EntityTrackerDataGridStyle`, and every text
   column centres its text in the row (`CenteredCellTextStyle`). A list that chooses what a page shows,
   such as Settings' categories, uses `NavigationListItemStyle`: the sidebar's selected look.
+- Reviews of changes (Push to trackers, merge review) share one layout: a summary of what is decided
+  with the "for all" actions beside it, then a card per item, each difference as a sentence
+  (`ReviewSentenceTextStyle`) and its choices under it (`ReviewChoiceStyle`), each choice saying what
+  it keeps. Push may leave items undecided; a merge needs every conflict decided.
 - More actions: "…" on cards and page headers and "⋮" on table rows open the native menu (`ContextMenu`
   through `ActionMenu.Open`). Recycle is coral in that menu (`DangerMenuItemStyle`). A label doesn't repeat
   what the card already says: **Rename**, **Recycle**. Export is a popup because it says what will be

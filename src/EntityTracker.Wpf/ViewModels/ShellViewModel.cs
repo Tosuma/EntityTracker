@@ -391,7 +391,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         Catalog.IsOpen ||
         IsTrackerWorkspace && (CurrentWorkspace!.Editor.IsOpen || CurrentWorkspace.ManualCreation.IsOpen ||
                                CurrentWorkspace.BulkEdit.IsOpen) ||
-        IsDevelopers && (Developers?.IsRetirementOpen == true || Developers?.IsRetiredDialogOpen == true) ||
+        IsDevelopers && (Developers?.IsRetirementOpen == true || Developers?.IsRetiredDialogOpen == true ||
+                         Developers?.IsFormOpen == true) ||
         IsSchemas && SchemasPage?.IsDialogOpen == true ||
         IsProjectReport && ProjectReport?.Charts.LineChoice.IsOpen == true;
 
@@ -410,6 +411,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         if (e.PropertyName is nameof(CatalogManagementViewModel.IsOpen) or
             nameof(ProjectDevelopersViewModel.IsRetirementOpen) or
             nameof(ProjectDevelopersViewModel.IsRetiredDialogOpen) or
+            nameof(ProjectDevelopersViewModel.IsFormOpen) or
             nameof(ProjectSchemasViewModel.IsDialogOpen) or
             nameof(InAppDialogs.IsAnyOpen) or
             nameof(ChartLineChoiceViewModel.IsOpen))
