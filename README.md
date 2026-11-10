@@ -74,9 +74,11 @@ for consistency.
 
 On a Project, select the **Developers** tab to manage that Project's developer directory.
 Search by initials or display name in the box above the available-developers list, which scrolls
-independently. Use the form on the right to add a developer or edit a selected one.
+independently. **New developer** opens a dialog to add one, with **Create and add another** for
+several in a row; each row's **⋮** menu edits or retires that developer.
 Initials are required and unique among available developers in the Project; retired records can
-be restored when their initials are free. Retiring a developer requires entering their exact initials.
+be restored when their initials are free. Retiring is confirmed once, and can be undone from
+**Retired developers**.
 The retired list stays hidden until you select **Retired developers**.
 In entity creation or editing, search available Project developers and select everyone currently
 responsible. Add new developers on the Project Developers page. Removing someone ends their current

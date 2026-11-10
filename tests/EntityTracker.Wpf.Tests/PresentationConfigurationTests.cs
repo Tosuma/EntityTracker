@@ -489,9 +489,18 @@ public sealed class PresentationConfigurationTests
             Path.Combine("Views", "AggregateProgressView.xaml"), Path.Combine("Views", "ProjectDevelopersView.xaml"),
             Path.Combine("Views", "SettingsView.xaml"), Path.Combine("Views", "HelpView.xaml")];
 
+        // What a dialog shows inside itself is not on the page.
+        static string OutsideDialogs(string path)
+        {
+            XDocument document = XDocument.Load(path);
+            document.Descendants().Where(static element => element.Name.LocalName == "ModalDialog").ToList()
+                .ForEach(static dialog => dialog.Remove());
+            return document.ToString(SaveOptions.DisableFormatting);
+        }
+
         string[] offenders = pages
             .SelectMany(page => removed
-                .Where(binding => File.ReadAllText(Path.Combine(wpfRoot, page)).Contains(binding, StringComparison.Ordinal))
+                .Where(binding => OutsideDialogs(Path.Combine(wpfRoot, page)).Contains(binding, StringComparison.Ordinal))
                 .Select(binding => $"{page}: {binding}"))
             .ToArray();
         Assert.Empty(offenders);
@@ -2174,7 +2183,7 @@ public sealed class PresentationConfigurationTests
 
     [Theory]
     [InlineData("CatalogModalView.xaml", 1)]
-    [InlineData("ProjectDevelopersView.xaml", 2)]
+    [InlineData("ProjectDevelopersView.xaml", 3)]
     [InlineData("ProjectSchemasView.xaml", 2)]
     [InlineData("TrackerWorkspaceView.xaml", 5)]
     public void EveryInAppDialogIsAModalDialog(string view, int dialogs)
@@ -2252,6 +2261,30 @@ public sealed class PresentationConfigurationTests
         Assert.Equal("{Binding ShowDetails, Mode=TwoWay}", (string?)details.Attribute("IsExpanded"));
         Assert.DoesNotContain(dashboard.Descendants(), static element =>
             element.Name.LocalName == "Button" && (string?)element.Attribute("Content") is "Details" or "Hide details");
+    }
+
+    [Fact]
+    public void DevelopersAreAddedAndEditedInADialogFromTheHeaderAndTheRowMenu()
+    {
+        XDocument page = LoadWpfXaml("Views", "ProjectDevelopersView.xaml");
+        XName name = XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml");
+        XElement Named(string value) => page.Descendants().Single(element => (string?)element.Attribute(name) == value);
+
+        Assert.Equal("{Binding Developers.OpenNewCommand}", (string?)Named("NewDeveloperButton").Attribute("Command"));
+        Assert.Equal("{StaticResource PrimaryButtonStyle}", (string?)Named("NewDeveloperButton").Attribute("Style"));
+        XElement dialog = Named("DeveloperDialog");
+        Assert.Equal("ModalDialog", dialog.Name.LocalName);
+        Assert.Equal("{Binding Developers.IsFormOpen}", (string?)dialog.Attribute("IsOpen"));
+        Assert.Equal("{Binding Developers.CreateAnotherCommand}", (string?)Named("CreateAnotherDeveloperButton").Attribute("Command"));
+        // Validation stays in the dialog, next to the fields.
+        Assert.Contains(dialog.Descendants(), static element => (string?)element.Attribute("Text") == "{Binding Developers.ErrorMessage}");
+        // Each row's actions are in its "⋮" menu, with Retire coral, and no form stays open beside the list.
+        XElement menu = Named("DeveloperActionsButton").Descendants().Single(static element => element.Name.LocalName == "ContextMenu");
+        Assert.Equal(["_Edit", "_Retire"], menu.Elements().Select(static item => (string?)item.Attribute("Header")));
+        Assert.Equal("{StaticResource DangerMenuItemStyle}", (string?)menu.Elements().Last().Attribute("Style"));
+        Assert.DoesNotContain(page.Descendants(), element =>
+            element.Name.LocalName == "TextBox" && !element.Ancestors().Any(ancestor => ancestor.Name.LocalName == "ModalDialog") &&
+            (string?)element.Attribute(name) != "DeveloperSearchBox");
     }
 
     [Fact]

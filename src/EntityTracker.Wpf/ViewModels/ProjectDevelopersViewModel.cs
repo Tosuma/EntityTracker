@@ -19,6 +19,7 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
     private readonly Func<ProjectId, Task>? _onPersisted;
     private readonly AsyncCommand _saveCommand;
     private readonly AsyncCommand _confirmRetireCommand;
+    private readonly AsyncCommand _createAnotherCommand;
     private IReadOnlyList<ProjectDeveloper> _all = [];
     private IReadOnlyList<ProjectDeveloper> _available = [];
     private IReadOnlyList<ProjectDeveloper> _retired = [];
@@ -32,6 +33,8 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
     private bool _hasError;
     private bool _isBusy;
     private bool _isRetiredDialogOpen;
+    private bool _isFormOpen;
+    private string _errorMessage = string.Empty;
     private ProjectDeveloper? _pendingRetirement;
 
     public ProjectDevelopersViewModel(ProjectId projectId, ProjectDeveloperService service,
@@ -42,9 +45,12 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
         _service = service;
         _onPersisted = onPersisted;
         EditCommand = new RelayCommand<ProjectDeveloper>(Edit, _ => !IsBusy && !HasUnsavedForm);
-        CancelCommand = new RelayCommand(Cancel, () => !IsBusy && (IsEditing || HasUnsavedForm));
-        _saveCommand = new AsyncCommand(SaveAsync,
+        CancelCommand = new RelayCommand(Cancel, () => !IsBusy);
+        _saveCommand = new AsyncCommand(() => SaveAsync(),
             () => !IsBusy && !string.IsNullOrWhiteSpace(Initials));
+        _createAnotherCommand = new AsyncCommand(() => SaveAsync(keepOpen: true),
+            () => !IsBusy && !IsEditing && !string.IsNullOrWhiteSpace(Initials));
+        OpenNewCommand = new RelayCommand(OpenNew, () => !IsBusy);
         RetireCommand = new RelayCommand<ProjectDeveloper>(BeginRetirement,
             developer => !IsBusy && !developer.IsRetired);
         _confirmRetireCommand = new AsyncCommand(ConfirmRetirementAsync,
@@ -72,6 +78,17 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
         private set { if (Set(ref _isRetiredDialogOpen, value)) NotifyCommands(); }
     }
     public bool IsEditing => _editingId is not null;
+    public bool IsNew => _editingId is null;
+
+    /// <summary>Whether the developer dialog is open, for a new developer or an edit.</summary>
+    public bool IsFormOpen
+    {
+        get => _isFormOpen;
+        private set { if (Set(ref _isFormOpen, value)) NotifyCommands(); }
+    }
+
+    /// <summary>Why the last save failed, shown in the dialog; empty when it didn't.</summary>
+    public string ErrorMessage { get => _errorMessage; private set => Set(ref _errorMessage, value); }
     public bool HasUnsavedForm => Initials != _baselineInitials || DisplayName != _baselineDisplayName;
     public bool IsBusy { get => _isBusy; private set { if (Set(ref _isBusy, value)) NotifyCommands(); } }
     /// <summary>Gets whether the last save failed; the reason is in the notification center.</summary>
@@ -84,8 +101,8 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
     public string PendingRetirementMessage => _pendingRetirement is not { } developer ? string.Empty :
         $"{DeveloperLabel(developer)} will no longer be offered when assigning developers. Entities already " +
         "assigned to them keep the assignment and its history. You can restore them from Retired developers.";
-    public string EditorTitle => _editingId is null ? "Add developer" : "Edit developer";
-    public string SaveLabel => IsEditing ? "Save changes" : "Save developer";
+    public string EditorTitle => _editingId is null ? "New developer" : "Edit developer";
+    public string SaveLabel => IsEditing ? "Save changes" : "Create developer";
     public string ResetLabel => IsEditing ? "Cancel edit" : "Clear";
     public string Initials
     {
@@ -106,6 +123,8 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
     public ICommand EditCommand { get; }
     public ICommand CancelCommand { get; }
     public ICommand SaveCommand => _saveCommand;
+    public ICommand CreateAnotherCommand => _createAnotherCommand;
+    public ICommand OpenNewCommand { get; }
     public ICommand RetireCommand { get; }
     public ICommand ConfirmRetirementCommand => _confirmRetireCommand;
     public ICommand CancelRetirementCommand { get; }
@@ -129,8 +148,17 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
         Initials = string.Empty;
         DisplayName = string.Empty;
         HasError = false;
+        ErrorMessage = string.Empty;
         FormModeChanged();
         NotifyCommands();
+    }
+
+    /// <summary>Opens the dialog for a new developer.</summary>
+    public void OpenNew()
+    {
+        if (IsBusy) return;
+        New();
+        IsFormOpen = true;
     }
 
     public void Edit(ProjectDeveloper developer)
@@ -144,17 +172,29 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
         Initials = developer.Initials;
         DisplayName = developer.DisplayName;
         HasError = false;
+        ErrorMessage = string.Empty;
         FormModeChanged();
         NotifyCommands();
+        IsFormOpen = true;
     }
 
-    public void Cancel() => New();
+    /// <summary>Closes the dialog without saving.</summary>
+    public void Cancel()
+    {
+        New();
+        IsFormOpen = false;
+    }
 
-    public async Task SaveAsync()
+    /// <summary>
+    /// Saves the dialog's developer. It closes afterwards, or with <paramref name="keepOpen"/> starts again
+    /// for the next new developer; when the save fails it stays open with the reason.
+    /// </summary>
+    public async Task SaveAsync(bool keepOpen = false)
     {
         if (IsBusy || string.IsNullOrWhiteSpace(Initials)) return;
         IsBusy = true;
         HasError = false;
+        ErrorMessage = string.Empty;
         try
         {
             if (_editingId is null)
@@ -162,6 +202,7 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
             else
                 await _service.ChangeDetailsAsync(_projectId, _editingId, Initials, DisplayName);
             New();
+            IsFormOpen = keepOpen;
             await RefreshAsync();
             if (_onPersisted is not null) await _onPersisted(_projectId);
         }
@@ -229,7 +270,7 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
         if (!HasError)
         {
             CancelRetirement();
-            if (_editingId == developer.Id) New();
+            if (_editingId == developer.Id) Cancel();
         }
     }
 
@@ -253,6 +294,8 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
     private void NotifyCommands()
     {
         _saveCommand.NotifyCanExecuteChanged();
+        _createAnotherCommand.NotifyCanExecuteChanged();
+        ((RelayCommand)OpenNewCommand).NotifyCanExecuteChanged();
         ((RelayCommand)CancelCommand).NotifyCanExecuteChanged();
         ((RelayCommand<ProjectDeveloper>)EditCommand).NotifyCanExecuteChanged();
         ((RelayCommand<ProjectDeveloper>)RetireCommand).NotifyCanExecuteChanged();
@@ -272,6 +315,7 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
     private void FormModeChanged()
     {
         OnPropertyChanged(nameof(IsEditing));
+        OnPropertyChanged(nameof(IsNew));
         OnPropertyChanged(nameof(EditorTitle));
         OnPropertyChanged(nameof(SaveLabel));
         OnPropertyChanged(nameof(ResetLabel));
@@ -281,6 +325,7 @@ public sealed class ProjectDevelopersViewModel : INotifyPropertyChanged
     private void ReportError(string message)
     {
         HasError = true;
+        ErrorMessage = message;
         _notifications?.Show("Developers", message, NotificationKind.Failure);
     }
 
