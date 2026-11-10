@@ -484,5 +484,8 @@
         <views:CatalogModalView Panel.ZIndex="20"
                                 DataContext="{Binding Catalog}"
                                 Visibility="{Binding DataContext.Catalog.IsOpen, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanToVisibilityConverter}}" />
+        <!-- The questions import and sync stop to ask, over the whole window and above the catalog dialogs.
+             The window stays open while closing waits for a sync, so they can be asked then too. -->
+        <views:InAppDialogsView x:Name="InAppDialogsHost" Panel.ZIndex="30" DataContext="{Binding Dialogs}" />
     </Grid>
 </Window>
