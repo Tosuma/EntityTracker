@@ -18,9 +18,25 @@ public sealed class ProgressChartPresentationBuilder
         ProgressChartTheme theme = ProgressChartTheme.Light) =>
         Build(report, includeExportPieLabels: false, theme);
 
-    /// <summary>Builds the charts for a saved or copied image: always light, whatever the app's theme.</summary>
-    public ProgressChartPresentation BuildForExport(ProgressDashboardReport report) =>
-        Build(report, includeExportPieLabels: true, ProgressChartTheme.Light);
+    /// <summary>
+    /// Builds the charts for a saved or copied image: always light, whatever the app's theme. The
+    /// "Progress over time" chart shows only <paramref name="lines"/>; the other charts are unchanged.
+    /// </summary>
+    public ProgressChartPresentation BuildForExport(
+        ProgressDashboardReport report,
+        ProgressOverTimeLines lines = ProgressOverTimeLines.All)
+    {
+        ProgressChartPresentation presentation = Build(report, includeExportPieLabels: true, ProgressChartTheme.Light);
+        if (lines == ProgressOverTimeLines.All) return presentation;
+        HashSet<string> kept = ProgressOverTimeLineNames.InOrder
+            .Where(line => lines.HasFlag(line.Line))
+            .Select(static line => line.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        return presentation with
+        {
+            ImplementedSeries = presentation.ImplementedSeries.Where(series => kept.Contains(series.Name ?? "")).ToArray()
+        };
+    }
 
     private static ProgressChartPresentation Build(
         ProgressDashboardReport report,

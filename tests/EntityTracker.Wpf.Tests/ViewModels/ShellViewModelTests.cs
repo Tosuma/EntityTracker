@@ -1221,6 +1221,33 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
     }
 
     [Fact]
+    public async Task ProjectReport_ChartLinesStartFromTheReportsAudienceAndCancelExportsNothing()
+    {
+        await using ShellHarness harness = await ShellHarness.CreateAsync();
+        await harness.AddEntityAsync(harness.DefaultTracker.Id, "customer_account");
+        using ShellViewModel shell = harness.CreateShell(new EntityTrackerSettings(
+            lastProjectId: harness.DefaultProject.Id, lastTrackerId: harness.DefaultTracker.Id),
+            new RecordingDiscardConfirmation(true));
+        await shell.InitializeAsync();
+        Assert.True(await shell.NavigateAsync(ShellDestination.ProjectReport));
+        ProjectReportViewModel report = shell.ProjectReport!;
+        ProjectProgressChartsViewModel charts = report.Charts;
+        await WaitUntilAsync(() => Task.FromResult(charts.HasHistoricalData && !charts.IsBusy));
+
+        report.Audience = EntityTracker.Reporting.ProjectReports.ReportAudience.Internal;
+        charts.CopyChartCommand.Execute(EntityTracker.Reporting.ProgressChartKind.ImplementedOverTime);
+        Assert.Equal("Copy image", charts.LineChoice.Title);
+        Assert.Equal(EntityTracker.Reporting.ProgressOverTimeLines.All, charts.LineChoice.Selected);
+        foreach (ChartLineOption line in charts.LineChoice.Lines) line.IsIncluded = false;
+        Assert.False(charts.LineChoice.ConfirmCommand.CanExecute(null));
+
+        charts.LineChoice.CancelCommand.Execute(null);
+        Assert.False(charts.LineChoice.IsOpen);
+        Assert.False(shell.IsModalOpen);
+        Assert.Null(harness.ReportFiles.CopiedChart);
+    }
+
+    [Fact]
     public async Task ProjectReport_SavesAndCopiesChartImagesForTheChosenTrackers()
     {
         await using ShellHarness harness = await ShellHarness.CreateAsync();
@@ -1239,7 +1266,15 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
             Assert.NotNull(charts.Presentation);
             Assert.NotEmpty(charts.Presentation!.ImplementedSeries);
 
+            // Progress over time first asks which lines the image shows, starting from a client's two lines.
             charts.SaveChartCommand.Execute(EntityTracker.Reporting.ProgressChartKind.ImplementedOverTime);
+            Assert.True(charts.LineChoice.IsOpen);
+            Assert.Equal("Save image", charts.LineChoice.Title);
+            Assert.Equal(EntityTracker.Reporting.ProgressOverTimeLines.Client, charts.LineChoice.Selected);
+            Assert.True(shell.IsModalOpen);
+            charts.LineChoice.Lines.Single(line => line.Name == "Blocked").IsIncluded = true;
+            charts.LineChoice.ConfirmCommand.Execute(null);
+            Assert.False(charts.LineChoice.IsOpen);
             await WaitUntilAsync(() => Task.FromResult(shell.Notifications.Items.Any(item => item.Title == "Chart image")));
 
             Assert.Contains(shell.Notifications.Items, item => item.Title == "Chart image" && item.Kind == NotificationKind.Success);
@@ -1247,7 +1282,9 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
             Assert.Matches(@"-progress-over-time-[0-9]{8}\.png$", harness.ReportFiles.SuggestedChartName);
             Assert.Equal([0x89, 0x50, 0x4E, 0x47], (await File.ReadAllBytesAsync(chartPath)).Take(4).ToArray());
 
+            // The other charts have no lines to choose, so they copy at once.
             charts.CopyChartCommand.Execute(EntityTracker.Reporting.ProgressChartKind.CurrentStatus);
+            Assert.False(charts.LineChoice.IsOpen);
             await WaitUntilAsync(() => Task.FromResult(harness.ReportFiles.CopiedChart is not null));
             Assert.Equal(0x89, harness.ReportFiles.CopiedChart![0]);
         }

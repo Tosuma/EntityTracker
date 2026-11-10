@@ -22,7 +22,11 @@ public sealed class ProgressChartPngExporter
         _presentationBuilder = presentationBuilder;
     }
 
-    public byte[] RenderPng(ProgressDashboardReport report, ProgressChartKind kind)
+    /// <summary>Renders a chart as a PNG; "Progress over time" shows only <paramref name="lines"/>.</summary>
+    public byte[] RenderPng(
+        ProgressDashboardReport report,
+        ProgressChartKind kind,
+        ProgressOverTimeLines lines = ProgressOverTimeLines.All)
     {
         ArgumentNullException.ThrowIfNull(report);
         if (!Enum.IsDefined(kind))
@@ -36,7 +40,7 @@ public sealed class ProgressChartPngExporter
                 "A chart cannot be exported when the selected range has no progress history.");
         }
 
-        ProgressChartPresentation presentation = _presentationBuilder.BuildForExport(report);
+        ProgressChartPresentation presentation = _presentationBuilder.BuildForExport(report, lines);
         InMemorySkiaSharpChart chart = CreateChart(presentation, kind);
         using MemoryStream chartStream = new();
         chart.SaveImage(chartStream, SKEncodedImageFormat.Png, 100);
@@ -89,10 +93,11 @@ public sealed class ProgressChartPngExporter
         ProgressDashboardReport report,
         ProgressChartKind kind,
         string path,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ProgressOverTimeLines lines = ProgressOverTimeLines.All)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        byte[] png = await Task.Run(() => RenderPng(report, kind), cancellationToken);
+        byte[] png = await Task.Run(() => RenderPng(report, kind, lines), cancellationToken);
         await File.WriteAllBytesAsync(path, png, cancellationToken);
     }
 

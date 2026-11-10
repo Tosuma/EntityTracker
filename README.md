@@ -565,7 +565,9 @@ number.
 
 Under **Progress charts** on the same page, the app's four progress charts are shown live for the
 chosen period: for all chosen Trackers together or for one of them. Point at a chart to read its values,
-and save or copy any chart as a PNG image for slides or e-mails. Point at a chart's title for a short
+and save or copy any chart as a PNG image for slides or e-mails. Saving or copying **Progress over
+time** first asks which lines the image shows: a client report starts with Implemented and Active
+entities, an internal report with all of them. Point at a chart's title for a short
 description of what it shows. The pie of development statuses uses standard chart colours, without
 borders between the slices. **Progress over time** shows the implemented entities each day, with lines
 for the entities in progress, not started and blocked in the same colours as the pie, and a dashed coral

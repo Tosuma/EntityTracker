@@ -77,7 +77,8 @@ public sealed class ProjectReportViewModel : INotifyPropertyChanged
         Charts = new ProjectProgressChartsViewModel(projectId, projectName, builder, files,
             () => Trackers.Where(static choice => choice.IsSelected).Select(static choice => choice.Tracker).ToArray(),
             () => IsCustomRangeValid ? CreateRange() : null,
-            notifications);
+            notifications,
+            () => Audience);
         _ = Charts.ReloadAsync();
         SelectAllCommand = new RelayCommand(() => SetAll(true));
         SelectNoneCommand = new RelayCommand(() => SetAll(false));

@@ -2255,6 +2255,22 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void SavingTheProgressChartAsksWhichLinesInADialog()
+    {
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XDocument report = LoadWpfXaml("Views", "ProjectReportView.xaml");
+        XElement dialog = report.Descendants().Single(element => (string?)element.Attribute(x + "Name") == "ChartLinesDialog");
+
+        Assert.Equal("ModalDialog", dialog.Name.LocalName);
+        Assert.Equal("{Binding ProjectReport.Charts.LineChoice}", (string?)dialog.Attribute("DataContext"));
+        Assert.Equal("{Binding CancelCommand}", (string?)dialog.Attribute("CancelCommand"));
+        XElement lines = dialog.Descendants().Single(element => (string?)element.Attribute(x + "Name") == "ChartLineOptions");
+        Assert.Equal("{Binding Lines}", (string?)lines.Attribute("ItemsSource"));
+        Assert.Contains(lines.Descendants(), static element =>
+            element.Name.LocalName == "CheckBox" && (string?)element.Attribute("IsChecked") == "{Binding IsIncluded, Mode=TwoWay}");
+    }
+
+    [Fact]
     public void PushReviewIsALargeDialogThatEscCancels()
     {
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";

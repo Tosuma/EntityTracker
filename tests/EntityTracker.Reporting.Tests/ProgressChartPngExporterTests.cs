@@ -7,6 +7,17 @@ public sealed class ProgressChartPngExporterTests
     private readonly ProgressChartPngExporter _exporter =
         new(new ProgressChartPresentationBuilder());
 
+    [Fact]
+    public void RenderPng_WithChosenLinesStillProducesAReportSizedImage()
+    {
+        byte[] png = _exporter.RenderPng(CreateReport(), ProgressChartKind.ImplementedOverTime, ProgressOverTimeLines.Client);
+
+        using SKBitmap bitmap = SKBitmap.Decode(png);
+        Assert.NotNull(bitmap);
+        Assert.Equal(ProgressChartPngExporter.ImageWidth, bitmap.Width);
+        Assert.Equal(ProgressChartPngExporter.ImageHeight, bitmap.Height);
+    }
+
     [Theory]
     [InlineData(ProgressChartKind.CurrentStatus)]
     [InlineData(ProgressChartKind.ImplementedOverTime)]
