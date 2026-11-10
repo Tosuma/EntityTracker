@@ -2287,6 +2287,31 @@ public sealed class PresentationConfigurationTests
             (string?)element.Attribute(name) != "DeveloperSearchBox");
     }
 
+    [Theory]
+    [InlineData("ProjectSchemasView.xaml")]
+    [InlineData("ProjectMergeReviewDialog.xaml")]
+    public void BothReviewsShareOneLayout(string view)
+    {
+        XDocument page = LoadWpfXaml("Views", view);
+        string[] styles = page.Descendants().Select(static element => (string?)element.Attribute("Style") ?? "").ToArray();
+
+        foreach (string style in new[] { "ReviewSummaryTextStyle", "ReviewItemCardStyle", "ReviewSentenceTextStyle", "ReviewChoiceStyle" })
+            Assert.Contains($"{{StaticResource {style}}}", styles);
+    }
+
+    [Fact]
+    public void MergeReviewShowsTheValuesInItsChoices()
+    {
+        XDocument review = LoadWpfXaml("Views", "ProjectMergeReviewDialog.xaml");
+        XElement[] choices = review.Descendants().Where(static element => element.Name.LocalName == "RadioButton").ToArray();
+
+        Assert.Equal(["Keep this computer's", "Keep the repository's"], choices.Select(static choice => (string?)choice.Attribute("Content")));
+        // Each choice is followed by the value it keeps, readable in full before choosing.
+        Assert.All(choices, static choice => Assert.Equal("TextBox", ((XElement)choice.NextNode!).Name.LocalName));
+        Assert.Contains(review.Descendants(), static element =>
+            (string?)element.Attribute("Visibility") == "{Binding HasBase, Converter={StaticResource BooleanToVisibilityConverter}}");
+    }
+
     [Fact]
     public void PushReviewIsALargeDialogThatEscCancels()
     {

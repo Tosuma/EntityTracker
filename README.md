@@ -227,12 +227,14 @@ range or a search with no matches, and errors inside an open dialog appear next 
 
 ![Project sync action needed in the sidebar notification center](images/light/project-sync-action-needed.png)
 
-The merge review shows each conflicting object with its base, local, and remote values. Choose a
-side for each conflict or apply one choice to all, then confirm the resolved Project state. Only
+The merge review lays out each conflict as push review does: a sentence saying what both sides
+changed, then **Keep this computer's** and **Keep the repository's**, each with the value it keeps, and
+what it was before when there was an earlier value. Choose a side for each conflict or apply one choice
+to all; Apply needs every conflict decided. Only
 changes both sides made differently are asked about; everything else, including what Sync from
 source remembers about earlier syncs, is merged automatically.
 
-![Project merge review with base, local, and remote values and per-conflict choices](images/light/project-merge-review.png)
+![Project merge review: each conflict as a sentence, with the value each choice keeps](images/light/project-merge-review.png)
 
 ### Compare sibling Trackers
 
