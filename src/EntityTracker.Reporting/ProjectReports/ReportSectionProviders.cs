@@ -48,7 +48,7 @@ public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IRepo
         "Each week, how many more entities are implemented than at the start of the week, and how many are in " +
         "progress at its end.";
 
-    /// <summary>Gets the progress chart's description in a client report, which has only these two lines.</summary>
+    /// <summary>Gets the progress chart's description when it has only a client's two lines.</summary>
     public const string ClientProgressDescription =
         "Each day, the implemented entities, against the active entities today.";
 
@@ -62,15 +62,24 @@ public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IRepo
             ProgressChartKind.WeeklyNetImplementedChange => ReportChartType.Bars,
             _ => ReportChartType.Line
         },
-        context.Scopes.ToDictionary(scope => scope.Key, scope => Chart(context.ReportFor(scope), context.Request.Audience)),
+        context.Scopes.ToDictionary(scope => scope.Key, scope => Chart(context.ReportFor(scope), context.Request.ProgressLines)),
         kind switch
         {
             ProgressChartKind.WeeklyNetImplementedChange => WeeklyDescription,
-            ProgressChartKind.ImplementedOverTime when context.Request.Audience == ReportAudience.Client =>
+            ProgressChartKind.ImplementedOverTime when context.Request.ProgressLines == ProgressOverTimeLines.Client =>
                 ClientProgressDescription,
             _ => ProgressChartPresentationBuilder.GetDescription(kind)
         },
-        NotesFor(kind));
+        NotesFor(kind, context.Request.ProgressLines));
+
+    /// <summary>
+    /// Gets the lines that explain a chart's terms, leaving out the notes for "Progress over time" lines
+    /// the report doesn't show; null when the chart needs none.
+    /// </summary>
+    public static IReadOnlyList<ReportNote>? NotesFor(ProgressChartKind kind, ProgressOverTimeLines lines) =>
+        kind == ProgressChartKind.ImplementedOverTime && NotesFor(kind) is { } notes
+            ? notes.Where(note => ProgressOverTimeLineNames.Keeps(lines, note.Term)).ToArray() is { Length: > 0 } kept ? kept : null
+            : NotesFor(kind);
 
     /// <summary>Gets the lines shown under a chart that explain its terms, or null when it needs none.</summary>
     public static IReadOnlyList<ReportNote>? NotesFor(ProgressChartKind kind) => kind switch
@@ -103,25 +112,29 @@ public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IRepo
         _ => null
     };
 
-    private ReportChart Chart(ProgressDashboardReport report, ReportAudience audience) => kind switch
+    private ReportChart Chart(ProgressDashboardReport report, ProgressOverTimeLines lines) => kind switch
     {
         ProgressChartKind.CurrentStatus => new ReportChart(
             report.CurrentStatusCounts.Select(count => ReportLabels.Status(count.Status)).ToArray(),
             [new ReportSeries("Entities", ColorScheme.Chart.Entities,
                 report.CurrentStatusCounts.Select(count => (double)count.Count).ToArray(),
                 report.CurrentStatusCounts.Select(count => ReportLabels.SliceColor(count.Status)).ToArray())]),
+        // The chosen lines only; a client's report starts with Implemented and Active entities, as the
+        // other statuses are too much detail for a client.
         ProgressChartKind.ImplementedOverTime => new ReportChart(
             report.ImplementedOverTime.Select(point => Date(point.Date)).ToArray(),
-            [
+            new[]
+            {
                 new ReportSeries("Implemented", ColorScheme.Chart.Implemented,
-                    report.ImplementedOverTime.Select(point => (double)point.ImplementedCount).ToArray()),
-                // Too much detail for a client; the team's report has it, as the app does.
-                .. audience == ReportAudience.Client ? [] : OtherStatusLines(report),
-                // The target: today's number of active entities, flat across the chart, dashed.
-                new ReportSeries("Active entities", ColorScheme.Chart.Target,
-                    report.ImplementedOverTime.Select(_ => (double)report.ManagerSummary.ActiveEntityCount).ToArray(),
-                    Dashed: true)
-            ]),
+                    report.ImplementedOverTime.Select(point => (double)point.ImplementedCount).ToArray())
+            }
+            .Concat(OtherStatusLines(report))
+            // The target: today's number of active entities, flat across the chart, dashed.
+            .Append(new ReportSeries("Active entities", ColorScheme.Chart.Target,
+                report.ImplementedOverTime.Select(_ => (double)report.ManagerSummary.ActiveEntityCount).ToArray(),
+                Dashed: true))
+            .Where(series => ProgressOverTimeLineNames.Keeps(lines, series.Name))
+            .ToArray()),
         ProgressChartKind.ReadyAndBlockedOverTime => new ReportChart(
             report.ReadyAndBlockedOverTime.Select(point => Date(point.Date)).ToArray(),
             [

@@ -418,7 +418,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
                                CurrentWorkspace.BulkEdit.IsOpen) ||
         IsDevelopers && (Developers?.IsRetirementOpen == true || Developers?.IsRetiredDialogOpen == true ||
                          Developers?.IsFormOpen == true) ||
-        IsSchemas && SchemasPage?.IsDialogOpen == true;
+        IsSchemas && SchemasPage?.IsDialogOpen == true ||
+        IsProjectReport && ProjectReport?.Charts.LineChoice.IsOpen == true;
 
     /// <summary>
     /// Whether a dialog on the page itself is open. The page dims its own content; the shell then dims
@@ -437,7 +438,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             nameof(ProjectDevelopersViewModel.IsRetiredDialogOpen) or
             nameof(ProjectDevelopersViewModel.IsFormOpen) or
             nameof(ProjectSchemasViewModel.IsDialogOpen) or
-            nameof(InAppDialogs.IsAnyOpen))
+            nameof(InAppDialogs.IsAnyOpen) or
+            nameof(ChartLineChoiceViewModel.IsOpen))
             OnModalStateChanged();
     }
 
@@ -662,7 +664,14 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public ProjectReportViewModel? ProjectReport
     {
         get => _projectReport;
-        private set => SetField(ref _projectReport, value);
+        private set
+        {
+            ProjectReportViewModel? previous = _projectReport;
+            if (!SetField(ref _projectReport, value)) return;
+            if (previous is not null) previous.Charts.LineChoice.PropertyChanged -= OnModalSourceChanged;
+            if (value is not null) value.Charts.LineChoice.PropertyChanged += OnModalSourceChanged;
+            OnModalStateChanged();
+        }
     }
     public bool IsSchemas => SelectedDestination == ShellDestination.Schemas;
 

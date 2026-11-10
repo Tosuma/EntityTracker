@@ -36,6 +36,7 @@ public sealed class ProjectProgressChartsViewModel : INotifyPropertyChanged, ICh
     private readonly NotificationCenter? _notifications;
     private readonly Func<IReadOnlyList<Tracker>> _chosenTrackers;
     private readonly Func<ProgressDateRange?> _range;
+    private readonly Func<ReportAudience> _audience;
     private readonly ProgressChartPresentationBuilder _presentationBuilder = new();
     private readonly ProgressChartPngExporter _exporter;
     private readonly AsyncCommand<ProgressChartKind> _saveChartCommand;
@@ -55,7 +56,8 @@ public sealed class ProjectProgressChartsViewModel : INotifyPropertyChanged, ICh
         IProjectReportFiles files,
         Func<IReadOnlyList<Tracker>> chosenTrackers,
         Func<ProgressDateRange?> range,
-        NotificationCenter? notifications = null)
+        NotificationCenter? notifications = null,
+        Func<ReportAudience>? audience = null)
     {
         _projectId = projectId ?? throw new ArgumentNullException(nameof(projectId));
         _projectName = projectName;
@@ -64,6 +66,7 @@ public sealed class ProjectProgressChartsViewModel : INotifyPropertyChanged, ICh
         _chosenTrackers = chosenTrackers ?? throw new ArgumentNullException(nameof(chosenTrackers));
         _range = range ?? throw new ArgumentNullException(nameof(range));
         _notifications = notifications;
+        _audience = audience ?? (static () => ReportAudience.Internal);
         _exporter = new ProgressChartPngExporter(_presentationBuilder);
         _saveChartCommand = new AsyncCommand<ProgressChartKind>(SaveChartAsync, _ => CanExportCharts);
         _copyChartCommand = new AsyncCommand<ProgressChartKind>(CopyChartAsync, _ => CanExportCharts);
@@ -139,6 +142,9 @@ public sealed class ProjectProgressChartsViewModel : INotifyPropertyChanged, ICh
 
     public ICommand CopyChartCommand => _copyChartCommand;
 
+    /// <summary>Asks which lines a saved or copied "Progress over time" image shows.</summary>
+    public ChartLineChoiceViewModel LineChoice { get; } = new();
+
     /// <summary>
     /// Brings the Tracker choices in line with the Trackers ticked on the page; a Tracker that is no
     /// longer ticked falls back to all chosen Trackers.
@@ -209,20 +215,38 @@ public sealed class ProjectProgressChartsViewModel : INotifyPropertyChanged, ICh
         NotifyState();
     }
 
-    private async Task SaveChartAsync(ProgressChartKind kind) => await ExportAsync(kind, async (report, title) =>
+    /// <summary>
+    /// Saves a chart; "Progress over time" first asks which lines to show, starting from the lines the
+    /// report's audience gets: Implemented and Active entities for a client, all of them otherwise.
+    /// </summary>
+    private Task SaveChartAsync(ProgressChartKind kind) => ChooseLinesThen(kind, save: true, lines => SaveAsync(kind, lines));
+
+    private Task CopyChartAsync(ProgressChartKind kind) => ChooseLinesThen(kind, save: false, lines => CopyAsync(kind, lines));
+
+    private Task ChooseLinesThen(ProgressChartKind kind, bool save, Func<ProgressOverTimeLines, Task> export)
+    {
+        if (kind != ProgressChartKind.ImplementedOverTime) return export(ProgressOverTimeLines.All);
+        ProgressOverTimeLines ticked = _audience() == ReportAudience.Client
+            ? ProgressOverTimeLines.Client
+            : ProgressOverTimeLines.All;
+        LineChoice.Open(save, ticked, export);
+        return Task.CompletedTask;
+    }
+
+    private async Task SaveAsync(ProgressChartKind kind, ProgressOverTimeLines lines) => await ExportAsync(kind, async (report, title) =>
     {
         string date = (report.ManagerSummary.DataAsOfDate ?? DateOnly.FromDateTime(DateTime.Today))
             .ToString("yyyyMMdd", CultureInfo.InvariantCulture);
         string? path = _files.SelectChartPath(
             $"{SafeFileName(_projectName)}-{ProgressChartPresentationBuilder.GetFileNameSegment(kind)}-{date}.png");
         if (path is null) return;
-        await _exporter.SavePngAsync(report, kind, path);
+        await _exporter.SavePngAsync(report, kind, path, lines: lines);
         _notifications?.Show("Chart image", $"Saved {title} as {Path.GetFileName(path)}.", NotificationKind.Success);
     });
 
-    private async Task CopyChartAsync(ProgressChartKind kind) => await ExportAsync(kind, async (report, title) =>
+    private async Task CopyAsync(ProgressChartKind kind, ProgressOverTimeLines lines) => await ExportAsync(kind, async (report, title) =>
     {
-        byte[] png = await Task.Run(() => _exporter.RenderPng(report, kind));
+        byte[] png = await Task.Run(() => _exporter.RenderPng(report, kind, lines));
         _files.CopyChart(png);
         _notifications?.Show("Chart image", $"Copied {title}.", NotificationKind.Success);
     });

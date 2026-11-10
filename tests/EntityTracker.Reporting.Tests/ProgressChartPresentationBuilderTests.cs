@@ -179,6 +179,26 @@ public sealed class ProgressChartPresentationBuilderTests
     }
 
     [Fact]
+    public void BuildForExport_KeepsOnlyTheChosenProgressOverTimeLinesAndLeavesTheOtherChartsAlone()
+    {
+        ProgressDashboardReport report = CreateReport(notStarted: 3, inProgress: 2, rework: 1, completed: 2, reconciled: 2);
+        ProgressChartPresentation all = _builder.BuildForExport(report);
+
+        ProgressChartPresentation client = _builder.BuildForExport(report, ProgressOverTimeLines.Client);
+        ProgressChartPresentation two = _builder.BuildForExport(report, ProgressOverTimeLines.NotStarted | ProgressOverTimeLines.Blocked);
+
+        Assert.Equal(["Implemented", "In progress", "Not started", "Blocked", "Active entities"],
+            all.ImplementedSeries.Select(static series => series.Name));
+        Assert.Equal(["Implemented", "Active entities"], client.ImplementedSeries.Select(static series => series.Name));
+        Assert.Equal(["Not started", "Blocked"], two.ImplementedSeries.Select(static series => series.Name));
+        Assert.Equal(all.CurrentStatusSeries.Length, client.CurrentStatusSeries.Length);
+        Assert.Equal(all.ReadinessSeries.Length, client.ReadinessSeries.Length);
+        Assert.Equal(all.WeeklySeries.Length, client.WeeklySeries.Length);
+        // The app's chart is never narrowed.
+        Assert.Equal(5, _builder.Build(report).ImplementedSeries.Length);
+    }
+
+    [Fact]
     public void BuildForExport_FormatsNonZeroPieLabelsWithCountAndPercentage()
     {
         ProgressChartPresentation presentation = _builder.BuildForExport(CreateReport(

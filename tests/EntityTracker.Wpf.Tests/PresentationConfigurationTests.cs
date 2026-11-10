@@ -2295,6 +2295,31 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void SavingTheProgressChartAsksWhichLinesInADialog()
+    {
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XDocument report = LoadWpfXaml("Views", "ProjectReportView.xaml");
+        XElement dialog = report.Descendants().Single(element => (string?)element.Attribute(x + "Name") == "ChartLinesDialog");
+
+        Assert.Equal("ModalDialog", dialog.Name.LocalName);
+        Assert.Equal("{Binding ProjectReport.Charts.LineChoice}", (string?)dialog.Attribute("DataContext"));
+        Assert.Equal("{Binding CancelCommand}", (string?)dialog.Attribute("CancelCommand"));
+        XElement lines = dialog.Descendants().Single(element => (string?)element.Attribute(x + "Name") == "ChartLineOptions");
+        Assert.Equal("{Binding Lines}", (string?)lines.Attribute("ItemsSource"));
+        Assert.Contains(lines.Descendants(), static element =>
+            element.Name.LocalName == "CheckBox" && (string?)element.Attribute("IsChecked") == "{Binding IsIncluded, Mode=TwoWay}");
+
+        // The report has its own lines, in its options, apart from the charts and their images.
+        XElement reportLines = report.Descendants().Single(element => (string?)element.Attribute(x + "Name") == "ReportLineOptions");
+        Assert.Equal("{Binding ReportLines}", (string?)reportLines.Attribute("ItemsSource"));
+        Assert.Contains(reportLines.Descendants(), static element =>
+            element.Name.LocalName == "CheckBox" && (string?)element.Attribute("IsChecked") == "{Binding IsIncluded, Mode=TwoWay}");
+        Assert.DoesNotContain(reportLines.Ancestors(), static element => element.Name.LocalName == "ModalDialog");
+        Assert.Contains(report.Descendants(), static element =>
+            (string?)element.Attribute("Text") == "{Binding ReportLinesMessage}");
+    }
+
+    [Fact]
     public void DevelopersAreAddedAndEditedInADialogFromTheHeaderAndTheRowMenu()
     {
         XDocument page = LoadWpfXaml("Views", "ProjectDevelopersView.xaml");
