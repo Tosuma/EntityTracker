@@ -199,7 +199,9 @@ Destructive actions require confirmation where the workflow already calls for it
   top dialog closes). Sizes: **Small** (560) for questions and short forms, **Medium** (680) for lists,
   **Large** (up to 960, as tall as the page allows) for editors and reviews. The title has one style
   (`DialogTitleTextStyle`); the footer puts the commit first and Cancel last on the right, and an action
-  that removes something alone on the left.
+  that removes something alone on the left. The questions import and sync stop to ask (the Git name and
+  email, a merge review, an approval of repository deletions) are dialogs in the main window too, not
+  windows of their own (`InAppDialogs`).
 - More actions: "…" on cards and page headers and "⋮" on table rows open the native menu (`ContextMenu`
   through `ActionMenu.Open`). Recycle is coral in that menu (`DangerMenuItemStyle`). A label doesn't repeat
   what the card already says: **Rename**, **Recycle**. Export is a popup because it says what will be

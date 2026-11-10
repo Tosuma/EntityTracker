@@ -104,8 +104,11 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         IProjectSnapshotStore? projectSnapshots = null,
         SchemaManagementService? schemaManagement = null,
         SchemaEditingService? schemaEditing = null,
-        SchemaTrackerService? schemaTrackers = null)
+        SchemaTrackerService? schemaTrackers = null,
+        InAppDialogs? dialogs = null)
     {
+        Dialogs = dialogs ?? new InAppDialogs();
+        Dialogs.PropertyChanged += OnModalSourceChanged;
         _schemaManagement = schemaManagement;
         _schemaEditing = schemaEditing;
         _schemaTrackers = schemaTrackers;
@@ -384,6 +387,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     /// and can't be used, so the dialog is finished or cancelled before anything else happens.
     /// </summary>
     public bool IsModalOpen =>
+        Dialogs.IsAnyOpen ||
         Catalog.IsOpen ||
         IsTrackerWorkspace && (CurrentWorkspace!.Editor.IsOpen || CurrentWorkspace.ManualCreation.IsOpen ||
                                CurrentWorkspace.BulkEdit.IsOpen) ||
@@ -392,16 +396,21 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     /// <summary>
     /// Whether a dialog on the page itself is open. The page dims its own content; the shell then dims
-    /// the sidebar and header to match. The catalog dialogs already cover the whole window.
+    /// the sidebar and header to match. The catalog dialogs, and the questions import and sync ask,
+    /// already cover the whole window.
     /// </summary>
-    public bool IsPageDialogOpen => IsModalOpen && !Catalog.IsOpen;
+    public bool IsPageDialogOpen => IsModalOpen && !Catalog.IsOpen && !Dialogs.IsAnyOpen;
+
+    /// <summary>The questions import and sync stop to ask, shown over the whole window.</summary>
+    public InAppDialogs Dialogs { get; }
 
     private void OnModalSourceChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(CatalogManagementViewModel.IsOpen) or
             nameof(ProjectDevelopersViewModel.IsRetirementOpen) or
             nameof(ProjectDevelopersViewModel.IsRetiredDialogOpen) or
-            nameof(ProjectSchemasViewModel.IsDialogOpen))
+            nameof(ProjectSchemasViewModel.IsDialogOpen) or
+            nameof(InAppDialogs.IsAnyOpen))
             OnModalStateChanged();
     }
 

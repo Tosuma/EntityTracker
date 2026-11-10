@@ -1,37 +1,32 @@
-<Window x:Class="EntityTracker.Wpf.Views.OutboundDeletionApprovalDialog"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Approve outbound deletions" Width="580" Height="460" MinWidth="440" MinHeight="320"
-        WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
-        Background="{DynamicResource Brush.Surface.Page}"
-        Foreground="{DynamicResource Brush.Text.Primary}">
-    <Grid Margin="20" FocusManager.IsFocusScope="True"
-          KeyboardNavigation.TabNavigation="Cycle" KeyboardNavigation.ControlTabNavigation="Cycle">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
-        <TextBlock FontSize="22" FontWeight="SemiBold" Text="Approve repository deletion"
-                   AutomationProperties.HeadingLevel="Level1" />
-        <TextBlock Grid.Row="1" Margin="0,10,0,14"
-                   Text="These items were deleted on this computer since the Project last synced. Sync will remove them from the shared repository too, so everyone who syncs this Project loses them. Approve to sync these deletions, or cancel to sync nothing now."
-                   TextWrapping="Wrap" />
-        <ListBox Grid.Row="2" ItemsSource="{Binding DeletedObjects}" IsTabStop="False"
-                 AutomationProperties.Name="Items to delete from the repository">
-            <ListBox.ItemTemplate>
+<UserControl x:Class="EntityTracker.Wpf.Views.OutboundDeletionApprovalDialog"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:EntityTracker.Wpf.Controls">
+    <!-- Asked by a sync that would delete items from the shared repository; the sync waits for the answer.
+         The control's DataContext is InAppDialogs; the dialog's is the list of items. -->
+    <controls:ModalDialog x:Name="Dialog" UsesStrongScrim="True" Size="Medium" Title="Approve repository deletion"
+                          Description="These items were deleted on this computer since the Project last synced. Sync will remove them from the shared repository too, so everyone who syncs this Project loses them. Approve to sync these deletions, or cancel to sync nothing now."
+                          IsOpen="{Binding DataContext.IsDeletionApprovalOpen, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                          DataContext="{Binding DeletionApproval}"
+                          InitialFocus="{Binding ElementName=CancelButton}"
+                          CancelRequested="OnCancel">
+        <controls:ModalDialog.Footer>
+            <StackPanel Orientation="Horizontal">
+                <!-- Enter must never approve an irreversible deletion: Cancel is the default and starts focused. -->
+                <Button Margin="0,0,8,0" Content="Approve deletion" MinWidth="135"
+                        Click="OnApprove" Style="{StaticResource DangerButtonStyle}"
+                        AutomationProperties.HelpText="Remove these items from the shared repository" />
+                <Button x:Name="CancelButton" Content="Cancel" IsDefault="True" MinWidth="100" Click="OnCancel"
+                        Style="{StaticResource SecondaryButtonStyle}" />
+            </StackPanel>
+        </controls:ModalDialog.Footer>
+        <ItemsControl ItemsSource="{Binding DeletedObjects}" IsTabStop="False"
+                      AutomationProperties.Name="Items to delete from the repository">
+            <ItemsControl.ItemTemplate>
                 <DataTemplate>
                     <TextBlock Padding="4" Text="{Binding}" TextWrapping="Wrap" />
                 </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
-        <StackPanel Grid.Row="3" Margin="0,14,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
-            <!-- Enter must never approve an irreversible deletion: Cancel is the default and starts focused. -->
-            <Button Margin="0,0,8,0" Content="Approve deletion" MinWidth="135"
-                    Click="OnApprove" Style="{StaticResource DangerButtonStyle}"
-                    AutomationProperties.HelpText="Remove these items from the shared repository" />
-            <Button x:Name="CancelButton" Content="Cancel" IsCancel="True" IsDefault="True" MinWidth="100" />
-        </StackPanel>
-    </Grid>
-</Window>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </controls:ModalDialog>
+</UserControl>
