@@ -299,7 +299,7 @@ archive entities as it needs.
 ![Create tracker with From schema chosen](images/light/create-tracker-schema.png)
 
 The schema editor shows the schema's changes since they were last pushed. **Push to trackers** opens
-one review for every Tracker made from the schema. Each Tracker entity stays linked to its schema
+a dialog with one review for every Tracker made from the schema. Each Tracker entity stays linked to its schema
 entity by ID, and the push compares three states: the schema now, the schema as each Tracker last took
 it, and the Tracker. It lists every change the schema made that a Tracker doesn't have yet, and
 nothing is chosen for you: for each change, **Use schema** brings it into the Tracker and **Keep

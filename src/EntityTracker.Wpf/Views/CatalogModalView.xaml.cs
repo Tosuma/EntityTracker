@@ -10,8 +10,6 @@ namespace EntityTracker.Wpf.Views;
 
 public partial class CatalogModalView : UserControl
 {
-    private IInputElement? _focusBeforeOpen;
-
     public CatalogModalView() => InitializeComponent();
     private CatalogManagementViewModel ViewModel => (CatalogManagementViewModel)DataContext;
 
@@ -48,24 +46,9 @@ public partial class CatalogModalView : UserControl
         if ((sender as FrameworkElement)?.DataContext is Tracker tracker) await ViewModel.RequestPurgeAsync(tracker);
     }
 
-    private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
-    {
-        if (e.NewValue is true)
-        {
-            // Every dialog opens at its top, not where the previous one was scrolled to.
-            DialogScroll.ScrollToTop();
-            _focusBeforeOpen = Keyboard.FocusedElement;
-            Dispatcher.BeginInvoke(FocusInitialElement, DispatcherPriority.Input);
-            return;
-        }
-
-        if (_focusBeforeOpen is UIElement element)
-        {
-            Dispatcher.BeginInvoke(() => element.Focus(), DispatcherPriority.Input);
-        }
-
-        _focusBeforeOpen = null;
-    }
+    /// <summary>A dialog with a field to fill in starts there; any other starts on Cancel.</summary>
+    private void OnDialogOpened(object? sender, EventArgs e) =>
+        Dispatcher.BeginInvoke(FocusInitialElement, DispatcherPriority.Input);
 
     private void FocusInitialElement()
     {

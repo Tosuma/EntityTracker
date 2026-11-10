@@ -29,6 +29,13 @@
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
     </Style>
+    <!-- The title of a dialog (ModalDialog). -->
+    <Style x:Key="DialogTitleTextStyle" TargetType="{x:Type TextBlock}">
+        <Setter Property="AutomationProperties.HeadingLevel" Value="Level2" />
+        <Setter Property="FontSize" Value="20" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+    </Style>
     <!-- The name on a repeated card, such as a Project or a Tracker. -->
     <Style x:Key="CardTitleTextStyle" TargetType="{x:Type TextBlock}">
         <Setter Property="AutomationProperties.HeadingLevel" Value="Level3" />

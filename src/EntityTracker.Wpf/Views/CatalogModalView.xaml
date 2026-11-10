@@ -2,23 +2,42 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:EntityTracker.Wpf.Controls">
-    <Grid Background="{DynamicResource Brush.Overlay.Strong}"
-          IsVisibleChanged="OnIsVisibleChanged"
-          FocusManager.IsFocusScope="True"
-          KeyboardNavigation.TabNavigation="Cycle"
-          KeyboardNavigation.ControlTabNavigation="Cycle">
-        <Border Width="680"
-                MaxHeight="680"
-                Padding="24"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Background="{DynamicResource Brush.Surface.Page}"
-                Style="{StaticResource EntityTrackerCardStyle}">
-            <Grid>
-                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                <TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding DialogTitle}" />
-
-                <ScrollViewer x:Name="DialogScroll" Grid.Row="1" Margin="0,18" VerticalScrollBarVisibility="Auto">
+    <!-- The catalog dialogs cover the whole window, so they dim it more than a page's own dialogs. -->
+    <controls:ModalDialog x:Name="CatalogDialog" Size="Medium" UsesStrongScrim="True"
+                          IsOpen="{Binding IsOpen}" Title="{Binding DialogTitle}"
+                          CancelCommand="{Binding CancelCommand}" Opened="OnDialogOpened">
+        <controls:ModalDialog.Footer>
+            <StackPanel Orientation="Horizontal">
+                    <!-- Commit first, then Cancel; the recycle bin only lists items, so it is closed instead. -->
+                    <Button Margin="0,0,8,0" Command="{Binding SubmitNameCommand}" Content="Save" Style="{StaticResource PrimaryButtonStyle}"
+                            Visibility="{Binding IsNameDialog, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <Button x:Name="CreateTrackerButton" Margin="0,0,8,0" Command="{Binding PrepareTrackerCommand}" Content="Create tracker"
+                            Style="{StaticResource PrimaryButtonStyle}"
+                            Visibility="{Binding IsTrackerCreation, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <Button x:Name="ConfirmConvertButton" Margin="0,0,8,0" Command="{Binding ConfirmConvertCommand}" Content="Convert"
+                            Style="{StaticResource PrimaryButtonStyle}"
+                            Visibility="{Binding IsConvertConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <Button Margin="0,0,8,0" Command="{Binding ConfirmRecycleCommand}" Content="Recycle" Style="{StaticResource DangerButtonStyle}"
+                            Visibility="{Binding IsRecycleConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <Button x:Name="ConfirmDetachButton" Margin="0,0,8,0" Command="{Binding ConfirmDetachCommand}" Content="Detach"
+                            Style="{StaticResource DangerButtonStyle}"
+                            Visibility="{Binding IsDetachConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <Button Margin="0,0,8,0" Command="{Binding ConfirmPurgeCommand}" Content="Permanently delete" Style="{StaticResource DangerButtonStyle}"
+                            Visibility="{Binding IsPurgeConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <Button x:Name="CancelButton" Command="{Binding CancelCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
+                                <Setter Property="Content" Value="Cancel" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsRecycleBin}" Value="True">
+                                        <Setter Property="Content" Value="Close" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+            </StackPanel>
+        </controls:ModalDialog.Footer>
                     <StackPanel>
                         <Grid>
                             <StackPanel Visibility="{Binding IsNameDialog, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -146,39 +165,5 @@
                             </ScrollViewer>
                         </Border>
                     </StackPanel>
-                </ScrollViewer>
-
-                <StackPanel Grid.Row="2" HorizontalAlignment="Right" Orientation="Horizontal">
-                    <!-- Commit first, then Cancel; the recycle bin only lists items, so it is closed instead. -->
-                    <Button Margin="0,0,8,0" Command="{Binding SubmitNameCommand}" Content="Save" Style="{StaticResource PrimaryButtonStyle}"
-                            Visibility="{Binding IsNameDialog, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <Button x:Name="CreateTrackerButton" Margin="0,0,8,0" Command="{Binding PrepareTrackerCommand}" Content="Create tracker"
-                            Style="{StaticResource PrimaryButtonStyle}"
-                            Visibility="{Binding IsTrackerCreation, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <Button x:Name="ConfirmConvertButton" Margin="0,0,8,0" Command="{Binding ConfirmConvertCommand}" Content="Convert"
-                            Style="{StaticResource PrimaryButtonStyle}"
-                            Visibility="{Binding IsConvertConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <Button Margin="0,0,8,0" Command="{Binding ConfirmRecycleCommand}" Content="Recycle" Style="{StaticResource DangerButtonStyle}"
-                            Visibility="{Binding IsRecycleConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <Button x:Name="ConfirmDetachButton" Margin="0,0,8,0" Command="{Binding ConfirmDetachCommand}" Content="Detach"
-                            Style="{StaticResource DangerButtonStyle}"
-                            Visibility="{Binding IsDetachConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <Button Margin="0,0,8,0" Command="{Binding ConfirmPurgeCommand}" Content="Permanently delete" Style="{StaticResource DangerButtonStyle}"
-                            Visibility="{Binding IsPurgeConfirmation, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <Button x:Name="CancelButton" Command="{Binding CancelCommand}" IsCancel="True">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
-                                <Setter Property="Content" Value="Cancel" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsRecycleBin}" Value="True">
-                                        <Setter Property="Content" Value="Close" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
-                </StackPanel>
-            </Grid>
-        </Border>
-    </Grid>
+    </controls:ModalDialog>
 </UserControl>

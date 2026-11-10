@@ -19,11 +19,7 @@ public partial class TrackerWorkspaceView : UserControl
 
     private MainWindowViewModel? _viewModel;
     private EntityDetailsViewModel? _observedDetails;
-    private IInputElement? _focusBeforeEditor;
-    private IInputElement? _focusBeforeCreation;
     private IInputElement? _focusBeforeDetails;
-    private IInputElement? _focusBeforeArchiveConfirmation;
-    private IInputElement? _focusBeforePurgeConfirmation;
     private Button? _lastEntityActionButton;
     private IReadOnlyList<EntityId> _selectionBeforeRowClick = [];
     private DataGrid? _resizingDataGrid;
@@ -142,8 +138,6 @@ public partial class TrackerWorkspaceView : UserControl
         viewModel.OverviewSelectionRestoreRequested += OnOverviewSelectionRestoreRequested;
         viewModel.EntityRevealRequested += OnEntityRevealRequested;
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
-        viewModel.Editor.PropertyChanged += OnEditorPropertyChanged;
-        viewModel.BulkEdit.PropertyChanged += OnBulkEditPropertyChanged;
         viewModel.ManualCreation.PropertyChanged += OnCreationPropertyChanged;
         ObserveDetails(viewModel.SelectedEntityDetails);
     }
@@ -159,8 +153,6 @@ public partial class TrackerWorkspaceView : UserControl
         _viewModel.OverviewSelectionRestoreRequested -= OnOverviewSelectionRestoreRequested;
         _viewModel.EntityRevealRequested -= OnEntityRevealRequested;
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
-        _viewModel.Editor.PropertyChanged -= OnEditorPropertyChanged;
-        _viewModel.BulkEdit.PropertyChanged -= OnBulkEditPropertyChanged;
         _viewModel.ManualCreation.PropertyChanged -= OnCreationPropertyChanged;
         ObserveDetails(null);
         _viewModel = null;
@@ -192,147 +184,44 @@ public partial class TrackerWorkspaceView : UserControl
     }
 
     /// <summary>
-    /// The New entity overlay takes focus into the name field when it opens, again after "Create and add
-    /// another" clears the form, and gives focus back to what opened it when it closes.
+    /// After "Create and add another" clears the form, the focus goes back to the name field; the dialog
+    /// moves the focus in when it opens and back out when it closes.
     /// </summary>
     private void OnCreationPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         ManualEntityCreationViewModel? creation = _viewModel?.ManualCreation;
         if (creation is null) return;
-        if (e.PropertyName == nameof(ManualEntityCreationViewModel.IsOpen))
-        {
-            if (creation.IsOpen)
-            {
-                _focusBeforeCreation = Keyboard.FocusedElement;
-                FocusCreationName();
-                return;
-            }
-
-            IInputElement? restoreTarget = _focusBeforeCreation;
-            _focusBeforeCreation = null;
-            if (restoreTarget is not null)
-                Dispatcher.BeginInvoke(new Action(() => Keyboard.Focus(restoreTarget)));
-            return;
-        }
-
         if (e.PropertyName == nameof(ManualEntityCreationViewModel.EntityName) &&
             creation.IsOpen && creation.EntityName.Length == 0 && !ManualEntityNameTextBox.IsKeyboardFocusWithin)
-            FocusCreationName();
-    }
-
-    private void FocusCreationName() =>
-        Dispatcher.BeginInvoke(new Action(() =>
-        {
-            CreationScrollViewer.ScrollToTop();
-            if (!ManualEntityNameTextBox.Focus())
-                CreationSurface.Focus();
-        }));
-
-    private void OnEditorPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(EntityDependencyEditorViewModel.IsArchiveConfirmationOpen))
-        {
-            if (_viewModel?.Editor.IsArchiveConfirmationOpen == true)
-            {
-                _focusBeforeArchiveConfirmation = Keyboard.FocusedElement;
-                Dispatcher.BeginInvoke(new Action(() => CancelArchiveButton.Focus()));
-            }
-            else
-            {
-                IInputElement? archiveRestoreTarget = _focusBeforeArchiveConfirmation;
-                _focusBeforeArchiveConfirmation = null;
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    if (archiveRestoreTarget is not null && Keyboard.Focus(archiveRestoreTarget) is not null)
-                    {
-                        return;
-                    }
-
-                    ArchiveEntityButton.Focus();
-                }));
-            }
-
-            return;
-        }
-
-        if (e.PropertyName == nameof(EntityDependencyEditorViewModel.IsPurgeConfirmationOpen))
-        {
-            if (_viewModel?.Editor.IsPurgeConfirmationOpen == true)
-            {
-                _focusBeforePurgeConfirmation = Keyboard.FocusedElement;
-                Dispatcher.BeginInvoke(new Action(() => PurgeConfirmationTextBox.Focus()));
-            }
-            else
-            {
-                IInputElement? purgeRestoreTarget = _focusBeforePurgeConfirmation;
-                _focusBeforePurgeConfirmation = null;
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    if (purgeRestoreTarget is not null && Keyboard.Focus(purgeRestoreTarget) is not null)
-                    {
-                        return;
-                    }
-
-                    PurgeEntityButton.Focus();
-                }));
-            }
-
-            return;
-        }
-
-        if (e.PropertyName != nameof(EntityDependencyEditorViewModel.IsOpen))
-        {
-            return;
-        }
-
-        if (_viewModel?.Editor.IsOpen == true)
-        {
-            _focusBeforeEditor = _lastEntityActionButton?.IsVisible == true
-                ? _lastEntityActionButton
-                : Keyboard.FocusedElement;
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                bool focused = _viewModel.Editor.Mode switch
-                {
-                    EntityEditorMode.ArchivedDetails => RestoreEntityButton.Focus(),
-                    _ => EditorStatusComboBox.Focus()
-                };
-                if (!focused)
-                {
-                    EditorSurface.Focus();
-                }
+                CreationScrollViewer.ScrollToTop();
+                ManualEntityNameTextBox.Focus();
             }));
-            return;
-        }
-
-        IInputElement? restoreTarget = _focusBeforeEditor;
-        _focusBeforeEditor = null;
-        if (restoreTarget is not null)
-        {
-            Dispatcher.BeginInvoke(new Action(() => Keyboard.Focus(restoreTarget)));
-        }
     }
 
-    /// <summary>Moves the focus into the bulk edit panel when it opens, and back to its button or the grid.</summary>
-    private void OnBulkEditPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    /// <summary>
+    /// The editor gives the focus back to the row's actions button whose menu opened it, and an archived
+    /// entity's details start on Restore.
+    /// </summary>
+    private void OnEditorOpened(object? sender, EventArgs e)
     {
-        if (e.PropertyName != nameof(BulkEditViewModel.IsOpen) || _viewModel is null)
-        {
-            return;
-        }
+        if (_lastEntityActionButton?.IsVisible == true)
+            EditorOverlay.FocusOnClose = _lastEntityActionButton;
+        if (_viewModel?.Editor.Mode == EntityEditorMode.ArchivedDetails)
+            Dispatcher.BeginInvoke(new Action(() => RestoreEntityButton.Focus()), System.Windows.Threading.DispatcherPriority.Input);
+    }
 
-        bool open = _viewModel.BulkEdit.IsOpen;
-        Dispatcher.BeginInvoke(new Action(() =>
-        {
-            if (open)
-            {
-                if (!BulkEditStatusComboBox.Focus()) BulkEditSurface.Focus();
-            }
-            else if (!(OpenBulkEditButton.IsEnabled && OpenBulkEditButton.Focus()))
-            {
-                OverviewDataGrid.Focus();
-            }
-        }));
+    /// <summary>Esc closes the editor as Cancel does, asking first about unsaved changes.</summary>
+    private void OnEditorCancelRequested(object? sender, EventArgs e) => _viewModel?.TryCloseEditor();
+
+    private void OnBulkEditCancelRequested(object? sender, EventArgs e) => _viewModel?.TryCloseBulkEdit();
+
+    /// <summary>When the button that opened bulk edit can no longer take the focus, the table does.</summary>
+    private void OnBulkEditClosed(object? sender, EventArgs e)
+    {
+        if (!OpenBulkEditButton.IsKeyboardFocused && !(OpenBulkEditButton.IsEnabled && OpenBulkEditButton.Focus()))
+            OverviewDataGrid.Focus();
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -503,50 +392,9 @@ public partial class TrackerWorkspaceView : UserControl
             return;
         }
 
-        if (_viewModel.ManualCreation.IsOpen)
+        // An open dialog closes itself on Esc; the page's own keys wait until it is closed.
+        if (_viewModel.ManualCreation.IsOpen || _viewModel.Editor.IsOpen || _viewModel.BulkEdit.IsOpen)
         {
-            if (_viewModel.ManualCreation.CancelCommand.CanExecute(null))
-                _viewModel.ManualCreation.CancelCommand.Execute(null);
-            e.Handled = true;
-            return;
-        }
-
-        if (_viewModel.Editor.IsArchiveConfirmationOpen)
-        {
-            _viewModel.Editor.CancelArchiveCommand.Execute(null);
-            e.Handled = true;
-            return;
-        }
-
-        if (_viewModel.Editor.IsPurgeConfirmationOpen)
-        {
-            _viewModel.Editor.CancelPurgeCommand.Execute(null);
-            e.Handled = true;
-            return;
-        }
-
-        if (_viewModel.Editor.IsOpen)
-        {
-            _viewModel.TryCloseEditor();
-            e.Handled = true;
-            return;
-        }
-
-        if (_viewModel.BulkEdit.IsOpen)
-        {
-            // Esc first closes an open list or calendar in the panel, then the panel.
-            ComboBox[] lists =
-            [
-                BulkEditStatusComboBox, BulkEditPriorityComboBox, BulkEditDueDateComboBox,
-                BulkEditResponsibilityComboBox, BulkEditDeveloperComboBox
-            ];
-            if (lists.Any(static list => list.IsDropDownOpen) || BulkEditDueDatePicker.IsDropDownOpen)
-            {
-                return;
-            }
-
-            _viewModel.TryCloseBulkEdit();
-            e.Handled = true;
             return;
         }
 

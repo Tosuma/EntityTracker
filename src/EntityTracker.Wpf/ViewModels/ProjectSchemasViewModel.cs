@@ -71,14 +71,26 @@ public sealed class ProjectSchemasViewModel : INotifyPropertyChanged
         private set
         {
             if (ReferenceEquals(_editor, value)) return;
+            if (_editor is not null) _editor.PropertyChanged -= OnEditorPropertyChanged;
             _editor = value;
+            if (_editor is not null) _editor.PropertyChanged += OnEditorPropertyChanged;
             OnPropertyChanged();
             OnPropertyChanged(nameof(IsEditing));
             OnPropertyChanged(nameof(IsListing));
+            OnPropertyChanged(nameof(IsDialogOpen));
         }
     }
 
     public bool IsEditing => Editor is not null;
+
+    /// <summary>Whether a dialog of the open schema is open: its entity dialog or the push review.</summary>
+    public bool IsDialogOpen => Editor?.IsDialogOpen == true;
+
+    private void OnEditorPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SchemaEditorViewModel.IsDialogOpen))
+            OnPropertyChanged(nameof(IsDialogOpen));
+    }
     public bool IsListing => Editor is null;
 
     /// <summary>Whether the open schema's form has changes that are not saved.</summary>

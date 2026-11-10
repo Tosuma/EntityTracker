@@ -1688,48 +1688,31 @@
             </Grid>
         </Border>
 
-        <!-- New entity: the same modal surface as the entity editor, over whichever page opened it. -->
-        <Grid x:Name="CreationOverlay"
-              Panel.ZIndex="100"
-              Background="{DynamicResource Brush.Overlay}"
-              FocusManager.IsFocusScope="True"
-              KeyboardNavigation.ControlTabNavigation="Cycle"
-              KeyboardNavigation.DirectionalNavigation="Cycle"
-              KeyboardNavigation.TabNavigation="Cycle"
-              Visibility="{Binding ManualCreation.IsOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <Border x:Name="CreationSurface"
-                    MaxWidth="960"
-                    MaxHeight="760"
-                    Margin="24"
-                    Padding="22"
-                    HorizontalAlignment="Stretch"
-                    VerticalAlignment="Stretch"
-                    Background="{DynamicResource Brush.Surface.Page}"
-                    BorderBrush="{DynamicResource Brush.Border.Medium}"
-                    BorderThickness="1"
-                    CornerRadius="7"
-                    Focusable="True">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <StackPanel Margin="0,0,0,14">
-                        <TextBlock FontSize="20"
-                                   AutomationProperties.HeadingLevel="Level2"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource Brush.Text.Primary}"
-                                   Text="{Binding DataContext.TrackerContextName, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=New entity in {0}, FallbackValue=New entity}" />
-                        <TextBlock Margin="0,3,0,0"
-                                   Foreground="{DynamicResource Brush.Text.Secondary}"
-                                   Text="Add a new entity and its initial dependencies. A name no entity has yet is kept as an unresolved reference, and is connected when an entity with that name is added."
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
-
+        <!-- New entity, over whichever page opened it. -->
+        <controls:ModalDialog x:Name="CreationOverlay" Panel.ZIndex="100" Size="Large" ScrollsBody="False"
+                              IsOpen="{Binding ManualCreation.IsOpen}"
+                              Title="{Binding DataContext.TrackerContextName, RelativeSource={RelativeSource AncestorType=Window}, StringFormat=New entity in {0}, FallbackValue=New entity}"
+                              Description="Add a new entity and its initial dependencies. A name no entity has yet is kept as an unresolved reference, and is connected when an entity with that name is added."
+                              CancelCommand="{Binding ManualCreation.CancelCommand}"
+                              InitialFocus="{Binding ElementName=ManualEntityNameTextBox}">
+            <controls:ModalDialog.Footer>
+                <StackPanel Orientation="Horizontal">
+                        <Button Margin="0,0,8,0"
+                                Command="{Binding ManualCreation.CreateCommand}"
+                                Content="_Create entity"
+                                Style="{StaticResource PrimaryButtonStyle}" />
+                        <Button Margin="0,0,8,0"
+                                Command="{Binding ManualCreation.CreateAnotherCommand}"
+                                Content="Create and _add another"
+                                AutomationProperties.HelpText="Create this entity and keep the form open for the next one"
+                                Style="{StaticResource SecondaryButtonStyle}" />
+                        <Button x:Name="CancelCreationButton"
+                                Command="{Binding ManualCreation.CancelCommand}"
+                                Content="Cancel"
+                                Style="{StaticResource SecondaryButtonStyle}" />
+                </StackPanel>
+            </controls:ModalDialog.Footer>
                     <ScrollViewer x:Name="CreationScrollViewer"
-                                  Grid.Row="1"
                                   HorizontalScrollBarVisibility="Disabled"
                                   VerticalScrollBarVisibility="Auto">
                         <StackPanel>
@@ -1978,70 +1961,58 @@
                                        Visibility="{Binding ManualCreation.HasOperationMessage, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         </StackPanel>
                     </ScrollViewer>
+        </controls:ModalDialog>
 
-                    <StackPanel Grid.Row="2"
-                                Margin="0,12,0,0"
-                                HorizontalAlignment="Right"
-                                Orientation="Horizontal">
-                        <Button Margin="0,0,8,0"
-                                Command="{Binding ManualCreation.CreateCommand}"
-                                Content="_Create entity"
-                                Style="{StaticResource PrimaryButtonStyle}" />
-                        <Button Margin="0,0,8,0"
-                                Command="{Binding ManualCreation.CreateAnotherCommand}"
-                                Content="Create and _add another"
-                                AutomationProperties.HelpText="Create this entity and keep the form open for the next one"
-                                Style="{StaticResource SecondaryButtonStyle}" />
-                        <Button x:Name="CancelCreationButton"
-                                Command="{Binding ManualCreation.CancelCommand}"
-                                Content="Cancel"
-                                Style="{StaticResource SecondaryButtonStyle}" />
-                    </StackPanel>
-                </Grid>
-            </Border>
-        </Grid>
-
-        <Grid x:Name="EditorOverlay"
-              Panel.ZIndex="100"
-              Background="{DynamicResource Brush.Overlay}"
-              FocusManager.IsFocusScope="True"
-              KeyboardNavigation.ControlTabNavigation="Cycle"
-              KeyboardNavigation.DirectionalNavigation="Cycle"
-              KeyboardNavigation.TabNavigation="Cycle"
-              Visibility="{Binding Editor.IsOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <Border x:Name="EditorSurface"
-                    MaxWidth="960"
-                    MaxHeight="760"
-                    Margin="24"
-                    Padding="22"
-                    HorizontalAlignment="Stretch"
-                    VerticalAlignment="Stretch"
-                    Background="{DynamicResource Brush.Surface.Page}"
-                    BorderBrush="{DynamicResource Brush.Border.Medium}"
-                    BorderThickness="1"
-                    CornerRadius="7"
-                    Focusable="True">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <StackPanel Margin="0,0,0,14">
-                        <TextBlock FontSize="20"
-                                   AutomationProperties.HeadingLevel="Level2"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource Brush.Text.Primary}"
-                                   Text="{Binding Editor.ContextTitle}" />
-                        <TextBlock Margin="0,3,0,0"
-                                   Foreground="{DynamicResource Brush.Text.Secondary}"
-                                   Text="{Binding Editor.ContextDescription}"
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
-
+        <!-- The entity editor. The action that removes the entity stays alone on the left; the commit and
+             Cancel (or Close, for a read-only archived entity) sit on the right, commit first. -->
+        <controls:ModalDialog x:Name="EditorOverlay" Panel.ZIndex="100" Size="Large" ScrollsBody="False"
+                              IsOpen="{Binding Editor.IsOpen}"
+                              Title="{Binding Editor.ContextTitle}" Description="{Binding Editor.ContextDescription}"
+                              InitialFocus="{Binding ElementName=EditorStatusComboBox}"
+                              Opened="OnEditorOpened" CancelRequested="OnEditorCancelRequested">
+            <controls:ModalDialog.DestructiveAction>
+                <StackPanel Orientation="Horizontal">
+                        <Button x:Name="ArchiveEntityButton"
+                                Command="{Binding Editor.RequestArchiveCommand}"
+                                Content="Archive entity"
+                                Style="{StaticResource DangerButtonStyle}"
+                                Visibility="{Binding Editor.CanArchive, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <Button
+                                x:Name="PurgeEntityButton"
+                                Command="{Binding Editor.RequestPurgeCommand}"
+                                Content="Permanently delete entity"
+                                Style="{StaticResource DangerButtonStyle}"
+                                Visibility="{Binding Editor.CanPurgeEntity, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                </StackPanel>
+            </controls:ModalDialog.DestructiveAction>
+            <controls:ModalDialog.Footer>
+                <StackPanel Orientation="Horizontal">
+                            <Button Margin="0,0,8,0"
+                                    Command="{Binding Editor.SaveCommand}"
+                                    Content="{Binding Editor.SaveLabel}"
+                                    Style="{StaticResource PrimaryButtonStyle}"
+                                    Visibility="{Binding Editor.ShowSave, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <Button x:Name="RestoreEntityButton"
+                                    Margin="0,0,8,0"
+                                    Command="{Binding Editor.RestoreEntityCommand}"
+                                    Content="Restore entity"
+                                    Style="{StaticResource PrimaryButtonStyle}"
+                                    Visibility="{Binding Editor.CanRestoreEntity, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <Button Command="{Binding Editor.CancelCommand}">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
+                                        <Setter Property="Content" Value="Cancel" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Editor.IsArchivedMode}" Value="True">
+                                                <Setter Property="Content" Value="Close" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                </StackPanel>
+            </controls:ModalDialog.Footer>
                     <ScrollViewer x:Name="EditorScrollViewer"
-                                  Grid.Row="1"
                                   HorizontalScrollBarVisibility="Disabled"
                                   VerticalScrollBarVisibility="Auto">
                         <StackPanel MaxWidth="860" HorizontalAlignment="Stretch">
@@ -2453,179 +2424,83 @@
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
+        </controls:ModalDialog>
 
-                    <!-- The destructive action stays alone on the left; the commit and Cancel (or Close, for
-                         a read-only archived entity) sit on the right, commit first. -->
-                    <DockPanel Grid.Row="2" Margin="0,12,0,0">
-                        <Button x:Name="ArchiveEntityButton" DockPanel.Dock="Left"
-                                Command="{Binding Editor.RequestArchiveCommand}"
-                                Content="Archive entity"
-                                Style="{StaticResource DangerButtonStyle}"
-                                Visibility="{Binding Editor.CanArchive, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                        <Button DockPanel.Dock="Left"
-                                x:Name="PurgeEntityButton"
-                                Command="{Binding Editor.RequestPurgeCommand}"
-                                Content="Permanently delete entity"
-                                Style="{StaticResource DangerButtonStyle}"
-                                Visibility="{Binding Editor.CanPurgeEntity, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                        <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-                            <Button Margin="0,0,8,0"
-                                    Command="{Binding Editor.SaveCommand}"
-                                    Content="{Binding Editor.SaveLabel}"
-                                    Style="{StaticResource PrimaryButtonStyle}"
-                                    Visibility="{Binding Editor.ShowSave, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                            <Button x:Name="RestoreEntityButton"
-                                    Margin="0,0,8,0"
-                                    Command="{Binding Editor.RestoreEntityCommand}"
-                                    Content="Restore entity"
-                                    Style="{StaticResource PrimaryButtonStyle}"
-                                    Visibility="{Binding Editor.CanRestoreEntity, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                            <Button Command="{Binding Editor.CancelCommand}">
-                                <Button.Style>
-                                    <Style TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
-                                        <Setter Property="Content" Value="Cancel" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding Editor.IsArchivedMode}" Value="True">
-                                                <Setter Property="Content" Value="Close" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Button.Style>
-                            </Button>
-                        </StackPanel>
-                    </DockPanel>
+        <!-- Cancel is the default and starts focused, so Enter and Esc keep the entity. -->
+        <controls:ModalDialog x:Name="ArchiveConfirmationDialog" Panel.ZIndex="101" Title="Archive entity?"
+                              IsOpen="{Binding Editor.IsArchiveConfirmationOpen}"
+                              CancelCommand="{Binding Editor.CancelArchiveCommand}"
+                              InitialFocus="{Binding ElementName=CancelArchiveButton}">
+            <controls:ModalDialog.Footer>
+                <StackPanel Orientation="Horizontal">
+                    <Button Margin="0,0,8,0"
+                            Command="{Binding Editor.ConfirmArchiveCommand}"
+                            Content="Archive entity"
+                            Style="{StaticResource DangerButtonStyle}" />
+                    <Button x:Name="CancelArchiveButton"
+                            Command="{Binding Editor.CancelArchiveCommand}"
+                            Content="Cancel"
+                            IsDefault="True"
+                            Style="{StaticResource SecondaryButtonStyle}" />
+                </StackPanel>
+            </controls:ModalDialog.Footer>
+            <TextBlock Foreground="{DynamicResource Brush.Text.Primary}"
+                       Text="{Binding Editor.ArchiveConfirmationMessage}"
+                       TextWrapping="Wrap" />
+        </controls:ModalDialog>
 
-                    <Grid Grid.RowSpan="3"
-                          Panel.ZIndex="10"
-                          Background="{DynamicResource Brush.Overlay}"
-                          FocusManager.IsFocusScope="True"
-                          FocusManager.FocusedElement="{Binding ElementName=CancelArchiveButton}"
-                          Visibility="{Binding Editor.IsArchiveConfirmationOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
-                        <Border x:Name="ArchiveConfirmationSurface"
-                                Width="560"
-                                MaxWidth="560"
-                                Padding="22"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Background="{DynamicResource Brush.Surface.Page}"
-                                BorderBrush="{DynamicResource Brush.Accent}"
-                                BorderThickness="1"
-                                CornerRadius="6">
-                            <StackPanel>
-                                <TextBlock FontSize="20"
-                                           AutomationProperties.HeadingLevel="Level2"
-                                           FontWeight="SemiBold"
-                                           Foreground="{DynamicResource Brush.Text.Primary}"
-                                           Text="Archive entity?" />
-                                <TextBlock Margin="0,10,0,0"
-                                           Foreground="{DynamicResource Brush.Text.Primary}"
-                                           Text="{Binding Editor.ArchiveConfirmationMessage}"
-                                           TextWrapping="Wrap" />
-                                <StackPanel Margin="0,20,0,0"
-                                            HorizontalAlignment="Right"
-                                            Orientation="Horizontal">
-                                    <!-- Cancel is the default and starts focused, so Enter and Esc keep the entity. -->
-                                    <Button Margin="0,0,8,0"
-                                            Command="{Binding Editor.ConfirmArchiveCommand}"
-                                            Content="Archive entity"
-                                            Style="{StaticResource DangerButtonStyle}" />
-                                    <Button x:Name="CancelArchiveButton"
-                                            Command="{Binding Editor.CancelArchiveCommand}"
-                                            Content="Cancel"
-                                            IsDefault="True"
-                                            IsCancel="True"
-                                            Style="{StaticResource SecondaryButtonStyle}" />
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
-                    </Grid>
-
-                    <Grid Grid.RowSpan="3"
-                          Panel.ZIndex="11"
-                          Background="{DynamicResource Brush.Overlay}"
-                          FocusManager.IsFocusScope="True"
-                          FocusManager.FocusedElement="{Binding ElementName=CancelPurgeButton}"
-                          Visibility="{Binding Editor.IsPurgeConfirmationOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
-                        <Border x:Name="PurgeConfirmationSurface"
-                                Width="560"
-                                MaxWidth="560"
-                                Padding="22"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Background="{DynamicResource Brush.Surface.Page}"
-                                BorderBrush="{DynamicResource Brush.Accent}"
-                                BorderThickness="1"
-                                CornerRadius="6">
-                            <StackPanel>
-                                <TextBlock FontSize="20"
-                                           AutomationProperties.HeadingLevel="Level2"
-                                           FontWeight="SemiBold"
-                                           Foreground="{DynamicResource Brush.Text.Primary}"
-                                           Text="Permanently delete entity?" />
-                                <TextBlock Margin="0,10,0,0"
-                                           Foreground="{DynamicResource Brush.Text.Primary}"
-                                           Text="{Binding Editor.PurgeConfirmationMessage}"
-                                           TextWrapping="Wrap" />
-                                <TextBlock Margin="0,14,0,4"
-                                           Foreground="{DynamicResource Brush.Text.Primary}"
-                                           Text="Type the exact entity name to continue:"
-                                           TextWrapping="Wrap" />
-                                <TextBox x:Name="PurgeConfirmationTextBox"
-                                         controls:Placeholder.Text="Type the entity name to confirm"
-                                         AutomationProperties.Name="Exact entity name confirmation"
-                                         Text="{Binding Editor.TypedPurgeConfirmation, UpdateSourceTrigger=PropertyChanged}" />
-                                <StackPanel Margin="0,20,0,0"
-                                            HorizontalAlignment="Right"
-                                            Orientation="Horizontal">
-                                    <Button Margin="0,0,8,0"
-                                            Command="{Binding Editor.ConfirmPurgeCommand}"
-                                            Content="Permanently delete"
-                                            Style="{StaticResource DangerButtonStyle}" />
-                                    <Button x:Name="CancelPurgeButton"
-                                            Command="{Binding Editor.CancelPurgeCommand}"
-                                            Content="Cancel"
-                                            IsDefault="True"
-                                            IsCancel="True"
-                                            Style="{StaticResource SecondaryButtonStyle}" />
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
-                    </Grid>
-                </Grid>
-            </Border>
-        </Grid>
-        <!-- Bulk edit: the same scrim, focus scope and footer as the entity editor. Every field starts at
-             "Keep as is", so Apply changes only what was chosen, on every selected entity. -->
-        <Grid x:Name="BulkEditOverlay"
-              Panel.ZIndex="100"
-              Background="{DynamicResource Brush.Overlay}"
-              FocusManager.IsFocusScope="True"
-              KeyboardNavigation.ControlTabNavigation="Cycle"
-              KeyboardNavigation.DirectionalNavigation="Cycle"
-              KeyboardNavigation.TabNavigation="Cycle"
-              Visibility="{Binding BulkEdit.IsOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <Border x:Name="BulkEditSurface"
-                    Width="560"
-                    MaxWidth="560"
-                    Margin="24"
-                    Padding="22"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    Background="{DynamicResource Brush.Surface.Page}"
-                    BorderBrush="{DynamicResource Brush.Border.Medium}"
-                    BorderThickness="1"
-                    CornerRadius="7"
-                    Focusable="True">
-                <StackPanel>
-                    <TextBlock FontSize="20"
-                               AutomationProperties.HeadingLevel="Level2"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource Brush.Text.Primary}"
-                               Text="{Binding BulkEdit.Title}" />
-                    <TextBlock Margin="0,3,0,16"
-                               Foreground="{DynamicResource Brush.Text.Secondary}"
-                               Text="Choose what to change on every selected entity. Fields left at Keep as is stay as they are."
-                               TextWrapping="Wrap" />
+        <controls:ModalDialog x:Name="PurgeConfirmationDialog" Panel.ZIndex="102" Title="Permanently delete entity?"
+                              IsOpen="{Binding Editor.IsPurgeConfirmationOpen}"
+                              CancelCommand="{Binding Editor.CancelPurgeCommand}"
+                              InitialFocus="{Binding ElementName=PurgeConfirmationTextBox}">
+            <controls:ModalDialog.Footer>
+                <StackPanel Orientation="Horizontal">
+                    <Button Margin="0,0,8,0"
+                            Command="{Binding Editor.ConfirmPurgeCommand}"
+                            Content="Permanently delete"
+                            Style="{StaticResource DangerButtonStyle}" />
+                    <Button x:Name="CancelPurgeButton"
+                            Command="{Binding Editor.CancelPurgeCommand}"
+                            Content="Cancel"
+                            IsDefault="True"
+                            Style="{StaticResource SecondaryButtonStyle}" />
+                </StackPanel>
+            </controls:ModalDialog.Footer>
+            <StackPanel>
+                <TextBlock Foreground="{DynamicResource Brush.Text.Primary}"
+                           Text="{Binding Editor.PurgeConfirmationMessage}"
+                           TextWrapping="Wrap" />
+                <TextBlock Margin="0,14,0,4"
+                           Foreground="{DynamicResource Brush.Text.Primary}"
+                           Text="Type the exact entity name to continue:"
+                           TextWrapping="Wrap" />
+                <TextBox x:Name="PurgeConfirmationTextBox"
+                         controls:Placeholder.Text="Type the entity name to confirm"
+                         AutomationProperties.Name="Exact entity name confirmation"
+                         Text="{Binding Editor.TypedPurgeConfirmation, UpdateSourceTrigger=PropertyChanged}" />
+            </StackPanel>
+        </controls:ModalDialog>
+        <!-- Bulk edit. Every field starts at "Keep as is", so Apply changes only what was chosen, on every
+             selected entity. -->
+        <controls:ModalDialog x:Name="BulkEditOverlay" Panel.ZIndex="100"
+                              IsOpen="{Binding BulkEdit.IsOpen}" Title="{Binding BulkEdit.Title}"
+                              Description="Choose what to change on every selected entity. Fields left at Keep as is stay as they are."
+                              InitialFocus="{Binding ElementName=BulkEditStatusComboBox}"
+                              CancelRequested="OnBulkEditCancelRequested" Closed="OnBulkEditClosed">
+            <controls:ModalDialog.Footer>
+                <StackPanel Orientation="Horizontal">
+                        <Button x:Name="ApplyBulkEditButton"
+                                Margin="0,0,8,0"
+                                AutomationProperties.Name="Apply the changes to the selected entities"
+                                Command="{Binding ApplyBulkEditCommand}"
+                                Content="Apply"
+                                Style="{StaticResource PrimaryButtonStyle}" />
+                        <Button Command="{Binding CancelBulkEditCommand}"
+                                Content="Cancel"
+                                Style="{StaticResource SecondaryButtonStyle}" />
+                </StackPanel>
+            </controls:ModalDialog.Footer>
+            <StackPanel>
                     <Grid x:Name="BulkEditFields">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="130" />
@@ -2702,19 +2577,7 @@
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
-                    <StackPanel Margin="0,12,0,0" HorizontalAlignment="Right" Orientation="Horizontal">
-                        <Button x:Name="ApplyBulkEditButton"
-                                Margin="0,0,8,0"
-                                AutomationProperties.Name="Apply the changes to the selected entities"
-                                Command="{Binding ApplyBulkEditCommand}"
-                                Content="Apply"
-                                Style="{StaticResource PrimaryButtonStyle}" />
-                        <Button Command="{Binding CancelBulkEditCommand}"
-                                Content="Cancel"
-                                Style="{StaticResource SecondaryButtonStyle}" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-        </Grid>
+            </StackPanel>
+        </controls:ModalDialog>
     </Grid>
 </UserControl>

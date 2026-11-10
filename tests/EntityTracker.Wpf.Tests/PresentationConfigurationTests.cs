@@ -889,15 +889,12 @@ public sealed class PresentationConfigurationTests
     {
         XDocument document = LoadWpfXaml("Views", "CatalogModalView.xaml");
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
-        XElement rootGrid = Assert.Single(document.Root!.Elements(), element =>
-            element.Name.LocalName == "Grid");
-
-        Assert.Equal("True", (string?)rootGrid.Attribute("FocusManager.IsFocusScope"));
-        Assert.Equal("Cycle", (string?)rootGrid.Attribute("KeyboardNavigation.TabNavigation"));
-        Assert.Equal("Cycle", (string?)rootGrid.Attribute("KeyboardNavigation.ControlTabNavigation"));
+        // The dialog keeps Tab inside and closes on Esc, as Cancel does.
+        XElement dialog = Assert.Single(document.Root!.Elements(), element =>
+            element.Name.LocalName == "ModalDialog");
         XElement cancel = Assert.Single(document.Descendants(), element =>
             (string?)element.Attribute(x + "Name") == "CancelButton");
-        Assert.Equal("True", (string?)cancel.Attribute("IsCancel"));
+        Assert.Equal((string?)cancel.Attribute("Command"), (string?)dialog.Attribute("CancelCommand"));
     }
 
     [Fact]
@@ -934,16 +931,10 @@ public sealed class PresentationConfigurationTests
         Assert.Contains("MouseWheelScrollRouter", mainWindowCode, StringComparison.Ordinal);
         Assert.Contains("PreviewMouseWheel += OnPreviewMouseWheel", mainWindowCode, StringComparison.Ordinal);
 
+        // The catalog dialogs cover the whole window, so they dim it more.
         XElement modalRoot = Assert.Single(catalog.Root!.Elements(), element =>
-            element.Name.LocalName == "Grid");
-        Assert.Equal(
-            "{DynamicResource Brush.Overlay.Strong}",
-            (string?)modalRoot.Attribute("Background"));
-        XElement modalSurface = Assert.Single(modalRoot.Elements(), element =>
-            element.Name.LocalName == "Border");
-        Assert.Equal(
-            "{DynamicResource Brush.Surface.Page}",
-            (string?)modalSurface.Attribute("Background"));
+            element.Name.LocalName == "ModalDialog");
+        Assert.Equal("True", (string?)modalRoot.Attribute("UsesStrongScrim"));
         XElement error = Assert.Single(catalog.Descendants(), element =>
             (string?)element.Attribute("Text") == "{Binding ErrorMessage}");
         Assert.Equal("ScrollViewer", error.Parent?.Name.LocalName);
@@ -1323,19 +1314,13 @@ public sealed class PresentationConfigurationTests
     {
         XDocument document = LoadWpfXaml("Views", "TrackerWorkspaceView.xaml");
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
-        string[] surfaceNames = ["EditorSurface", "ArchiveConfirmationSurface"];
-
-        foreach (string surfaceName in surfaceNames)
-        {
-            XElement surface = Assert.Single(document.Descendants(), element =>
-                (string?)element.Attribute(x + "Name") == surfaceName);
-            Assert.Equal(
-                "{DynamicResource Brush.Surface.Page}",
-                (string?)surface.Attribute("Background"));
-        }
+        // The dialog control draws its card on the page colour.
+        foreach (string dialogName in new[] { "EditorOverlay", "ArchiveConfirmationDialog", "PurgeConfirmationDialog" })
+            Assert.Equal("ModalDialog", Assert.Single(document.Descendants(), element =>
+                (string?)element.Attribute(x + "Name") == dialogName).Name.LocalName);
 
         XElement editorSurface = Assert.Single(document.Descendants(), element =>
-            (string?)element.Attribute(x + "Name") == "EditorSurface");
+            (string?)element.Attribute(x + "Name") == "EditorOverlay");
         Assert.DoesNotContain(
             editorSurface.Descendants(),
             element => (string?)element.Attribute("Background") ==
@@ -1366,11 +1351,10 @@ public sealed class PresentationConfigurationTests
             element => element.Name.LocalName == "Setter" &&
                 (string?)element.Attribute("Property") == "IsEnabled");
 
+        // The dialog control keeps the focus inside.
         XElement editorOverlay = Assert.Single(document.Descendants(), element =>
             (string?)element.Attribute(x + "Name") == "EditorOverlay");
-        Assert.Equal("True", (string?)editorOverlay.Attribute("FocusManager.IsFocusScope"));
-        Assert.Equal("Cycle", (string?)editorOverlay.Attribute("KeyboardNavigation.TabNavigation"));
-        Assert.Equal("Cycle", (string?)editorOverlay.Attribute("KeyboardNavigation.ControlTabNavigation"));
+        Assert.Equal("ModalDialog", editorOverlay.Name.LocalName);
     }
 
     [Fact]
@@ -1398,12 +1382,8 @@ public sealed class PresentationConfigurationTests
         Assert.Equal("{StaticResource PrimaryButtonStyle}", (string?)openButton.Attribute("Style"));
 
         XElement overlay = Named("BulkEditOverlay");
-        Assert.Equal("{Binding BulkEdit.IsOpen, Converter={StaticResource BooleanToVisibilityConverter}}",
-            (string?)overlay.Attribute("Visibility"));
-        Assert.Equal("{DynamicResource Brush.Overlay}", (string?)overlay.Attribute("Background"));
-        Assert.Equal("True", (string?)overlay.Attribute("FocusManager.IsFocusScope"));
-        Assert.Equal("Cycle", (string?)overlay.Attribute("KeyboardNavigation.TabNavigation"));
-        Assert.Equal("Cycle", (string?)overlay.Attribute("KeyboardNavigation.ControlTabNavigation"));
+        Assert.Equal("ModalDialog", overlay.Name.LocalName);
+        Assert.Equal("{Binding BulkEdit.IsOpen}", (string?)overlay.Attribute("IsOpen"));
         Dictionary<string, string?> fields = overlay.Descendants()
             .Where(element => element.Name.LocalName is "ComboBox" or "DatePicker")
             .ToDictionary(element => (string)element.Attribute(x + "Name")!,
@@ -1483,11 +1463,11 @@ public sealed class PresentationConfigurationTests
         Assert.Contains(dependencyStyle.Descendants(), element =>
             element.Name.LocalName == "VirtualizingStackPanel");
 
+        // The large dialog uses the room the page has, up to its width.
         XElement editorSurface = Assert.Single(document.Descendants(), element =>
-            (string?)element.Attribute(x + "Name") == "EditorSurface");
+            (string?)element.Attribute(x + "Name") == "EditorOverlay");
         Assert.Null(editorSurface.Attribute("MinWidth"));
-        Assert.Equal("Stretch", (string?)editorSurface.Attribute("HorizontalAlignment"));
-        Assert.Equal("Stretch", (string?)editorSurface.Attribute("VerticalAlignment"));
+        Assert.Equal("Large", (string?)editorSurface.Attribute("Size"));
         Assert.Contains(editorSurface.Descendants(), element =>
             (string?)element.Attribute("Visibility") ==
             "{Binding Editor.ShowStandaloneSections, Converter={StaticResource BooleanToVisibilityConverter}}");
@@ -2000,7 +1980,12 @@ public sealed class PresentationConfigurationTests
 
         Assert.True(commitButton.IsBefore(cancel));
         Assert.NotEqual("{StaticResource PrimaryButtonStyle}", (string?)cancel.Attribute("Style"));
-        Assert.Equal("True", (string?)cancel.Attribute("IsCancel"));
+        // Esc does what Cancel does: through the dialog control, or IsCancel in a window of its own.
+        XElement? dialog = cancel.Ancestors().FirstOrDefault(static element => element.Name.LocalName == "ModalDialog");
+        if (dialog is null)
+            Assert.Equal("True", (string?)cancel.Attribute("IsCancel"));
+        else
+            Assert.Equal((string?)cancel.Attribute("Command"), (string?)dialog.Attribute("CancelCommand"));
     }
 
     [Fact]
@@ -2095,8 +2080,8 @@ public sealed class PresentationConfigurationTests
         // The dialog's fields are labelled, a dependency is added by typing or choosing a name, and a new
         // entity can be created with the dialog kept open, as in a Tracker.
         Assert.Equal("{Binding Form}", (string?)Named("SchemaEntityDialog").Attribute("DataContext"));
-        // Esc closes the dialog from any field, before a field can take the key.
-        Assert.Equal("OnDialogPreviewKeyDown", (string?)Named("SchemaEntityDialog").Attribute("PreviewKeyDown"));
+        // Esc closes the dialog from any field, as Cancel does.
+        Assert.Equal("{Binding CancelCommand}", (string?)Named("SchemaEntityDialog").Attribute("CancelCommand"));
         Assert.Equal("{Binding CreateAnotherCommand}",
             (string?)Named("CreateAnotherSchemaEntityButton").Attribute("Command"));
         Assert.Equal("Create and add another", (string?)Named("CreateAnotherSchemaEntityButton").Attribute("Content"));
@@ -2175,13 +2160,42 @@ public sealed class PresentationConfigurationTests
             element.Name.LocalName == "TabItem" && (string?)element.Attribute("Header") == "Add entity");
         XElement overlay = Assert.Single(workspace.Descendants(), element =>
             (string?)element.Attribute(x + "Name") == "CreationOverlay");
-        Assert.Equal("{Binding ManualCreation.IsOpen, Converter={StaticResource BooleanToVisibilityConverter}}",
-            (string?)overlay.Attribute("Visibility"));
-        Assert.Equal("Cycle", (string?)overlay.Attribute("KeyboardNavigation.TabNavigation"));
+        Assert.Equal("ModalDialog", overlay.Name.LocalName);
+        Assert.Equal("{Binding ManualCreation.IsOpen}", (string?)overlay.Attribute("IsOpen"));
         Assert.Contains(overlay.Descendants(), element =>
             (string?)element.Attribute("Command") == "{Binding ManualCreation.CreateAnotherCommand}");
         Assert.Equal(2, workspace.Descendants().Count(element =>
             ((string?)element.Attribute("Command"))?.Contains("OpenCreateEntityCommand", StringComparison.Ordinal) == true));
+    }
+
+    [Theory]
+    [InlineData("CatalogModalView.xaml", 1)]
+    [InlineData("ProjectDevelopersView.xaml", 2)]
+    [InlineData("ProjectSchemasView.xaml", 2)]
+    [InlineData("TrackerWorkspaceView.xaml", 5)]
+    public void EveryInAppDialogIsAModalDialog(string view, int dialogs)
+    {
+        XDocument page = LoadWpfXaml("Views", view);
+
+        Assert.Equal(dialogs, page.Descendants().Count(static element => element.Name.LocalName == "ModalDialog"));
+        // No page dims itself by hand any more.
+        Assert.DoesNotContain(page.Descendants(), static element =>
+            ((string?)element.Attribute("Background"))?.StartsWith("{DynamicResource Brush.Overlay", StringComparison.Ordinal) == true);
+        // Each title has the same style, through the control.
+        Assert.DoesNotContain(page.Descendants(), static element =>
+            element.Name.LocalName == "TextBlock" && (string?)element.Attribute("FontSize") is "20" or "22");
+    }
+
+    [Fact]
+    public void PushReviewIsALargeDialogThatEscCancels()
+    {
+        XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
+        XElement review = LoadWpfXaml("Views", "ProjectSchemasView.xaml").Descendants().Single(element =>
+            (string?)element.Attribute(x + "Name") == "SchemaPushReview");
+
+        Assert.Equal("ModalDialog", review.Name.LocalName);
+        Assert.Equal("Large", (string?)review.Attribute("Size"));
+        Assert.Equal("{Binding CancelReviewCommand}", (string?)review.Attribute("CancelCommand"));
     }
 
     [Fact]
