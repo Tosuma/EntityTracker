@@ -545,6 +545,13 @@ public sealed class ShellViewModelTests(Xunit.Abstractions.ITestOutputHelper out
         Assert.Equal("EntityTracker 3.7.1 is available", settings.ToolTip);
         shell.UpdateAppCommand.Execute(null);
         await WaitUntilAsync(() => updates == 1);
+        // #214: with no sync running the button just updates; Check for updates runs what it was given.
+        Assert.False(shell.IsProjectSyncRunning);
+        Assert.Equal("Update", shell.UpdateLabel);
+        int checks = 0;
+        shell.OfferUpdateCheck(() => { checks++; return Task.CompletedTask; });
+        shell.CheckForUpdatesCommand.Execute(null);
+        await WaitUntilAsync(() => checks == 1);
 
         shell.OfferUpdate(null, null);
 

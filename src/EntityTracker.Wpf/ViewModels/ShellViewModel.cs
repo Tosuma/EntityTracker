@@ -41,6 +41,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     private readonly ProjectSyncIndicators? _syncIndicators;
     private string? _availableUpdateVersion;
     private Func<Task>? _update;
+    private Func<Task>? _checkForUpdates;
+    private bool _isProjectSyncRunning;
     // Kept so the refresh timer isn't collected.
     private readonly DispatcherTimer? _syncIndicatorTimer;
     private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
@@ -144,6 +146,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
         }
         SyncSelectedProjectCommand = new AsyncCommand(SyncSelectedProjectAsync);
         UpdateAppCommand = new AsyncCommand(() => _update?.Invoke() ?? Task.CompletedTask);
+        CheckForUpdatesCommand = new AsyncCommand(() => _checkForUpdates?.Invoke() ?? Task.CompletedTask);
         Catalog = catalogManagement;
         Appearance = appearance;
         AutoSync = autoSyncSettings;
@@ -255,6 +258,28 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     /// <summary>Settings › About's Update button: closes EntityTracker and installs the available version.</summary>
     public ICommand UpdateAppCommand { get; }
+
+    /// <summary>Whether a Project sync is running, so an update started now waits for it.</summary>
+    public bool IsProjectSyncRunning
+    {
+        get => _isProjectSyncRunning;
+        private set
+        {
+            if (SetField(ref _isProjectSyncRunning, value)) OnPropertyChanged(nameof(UpdateLabel));
+        }
+    }
+
+    /// <summary>The Update button's label: during a sync the update waits for it, and says so.</summary>
+    public string UpdateLabel => IsProjectSyncRunning ? "Update after sync" : "Update";
+
+    /// <summary>Reads again whether a Project sync is running.</summary>
+    public void RefreshProjectSyncRunning() => IsProjectSyncRunning = HasActiveProjectSync;
+
+    /// <summary>Settings › About's Check for updates button; the result is a notice.</summary>
+    public ICommand CheckForUpdatesCommand { get; }
+
+    /// <summary>Gives Check for updates what it runs.</summary>
+    public void OfferUpdateCheck(Func<Task> check) => _checkForUpdates = check;
 
     /// <summary>
     /// Offers a newer minor or patch version (null when there is none): Settings › About shows it with
@@ -825,6 +850,7 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
         RefreshSyncIndicators();
+        RefreshProjectSyncRunning();
         ProjectSyncState state = _autoSync!.GetState(projectId);
         if (state.Kind is not (ProjectSyncStateKind.Syncing or ProjectSyncStateKind.Unlinked))
             _ = RefreshVisiblePageAfterSyncAsync(projectId);
