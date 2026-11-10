@@ -334,6 +334,8 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                    <!-- Selecting an item changes only colours, never sizes, so the list never moves. The
+                         keyboard focus shows as WPF's focus outline, only while moving through by keyboard. -->
                     <Border x:Name="ItemSurface" Background="Transparent" CornerRadius="4" SnapsToDevicePixels="True">
                         <Grid>
                             <Border x:Name="SelectionPill" Width="3" Height="16" HorizontalAlignment="Left"
@@ -349,10 +351,6 @@
                         <Trigger Property="IsSelected" Value="True">
                             <Setter TargetName="ItemSurface" Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
                             <Setter TargetName="SelectionPill" Property="Visibility" Value="Visible" />
-                        </Trigger>
-                        <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="ItemSurface" Property="BorderBrush" Value="{DynamicResource Brush.Focus}" />
-                            <Setter TargetName="ItemSurface" Property="BorderThickness" Value="1" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
