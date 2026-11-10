@@ -27,12 +27,12 @@ public partial class ProjectSchemasView : UserControl
     /// The open schema's keys, as on a Tracker's pages, called by the window so they work wherever the
     /// focus is: Ctrl+F goes to the open tab's search and Ctrl+N opens New entity. Esc first closes the
     /// graph's suggestions, then leaves the search box and keeps the search; the next Esc closes the
-    /// details, and the one after that clears the search. The entity dialog handles its own keys.
+    /// details, and the one after that clears the search. The dialogs handle their own keys.
     /// </summary>
     /// <returns>Whether the key was used.</returns>
     public bool HandleShortcut(KeyEventArgs e)
     {
-        if (SchemaEditorPage.DataContext is not SchemaEditorViewModel { Form.IsOpen: false } editor ||
+        if (SchemaEditorPage.DataContext is not SchemaEditorViewModel { IsDialogOpen: false } editor ||
             !SchemaEditorPage.IsVisible) return false;
         bool control = Keyboard.Modifiers == ModifierKeys.Control;
         switch (e.Key)
@@ -71,25 +71,6 @@ public partial class ProjectSchemasView : UserControl
         if (e.Key != Key.Escape || SchemaEditorPage.DataContext is not SchemaEditorViewModel editor) return;
         editor.CloseDetailsCommand.Execute(null);
         e.Handled = true;
-    }
-
-    /// <summary>
-    /// Esc cancels the entity dialog from any of its fields, as in a Tracker's New entity dialog. An open
-    /// drop-down takes the first Esc to close itself.
-    /// </summary>
-    private void OnDialogPreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key != Key.Escape || SchemaDependencyBox.IsDropDownOpen ||
-            SchemaEntityDialog.DataContext is not SchemaEntityFormViewModel form) return;
-        if (form.CancelCommand.CanExecute(null)) form.CancelCommand.Execute(null);
-        e.Handled = true;
-    }
-
-    /// <summary>The dialog starts in its name box.</summary>
-    private void OnDialogVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
-    {
-        if (e.NewValue is true)
-            Dispatcher.BeginInvoke(() => SchemaEntityNameBox.Focus(), System.Windows.Threading.DispatcherPriority.Input);
     }
 
     private void OnRenameSchema(object sender, RoutedEventArgs e)

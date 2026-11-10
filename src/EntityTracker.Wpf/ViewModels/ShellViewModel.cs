@@ -380,14 +380,15 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
 
     /// <summary>
     /// Whether a dialog is open on the current page: the catalog dialogs, the entity editor or New entity
-    /// overlay on a Tracker page, or a Developers dialog. While one is, the sidebar and header are dimmed
+    /// overlay on a Tracker page, a Developers dialog, or a schema's entity dialog or push review. While one is, the sidebar and header are dimmed
     /// and can't be used, so the dialog is finished or cancelled before anything else happens.
     /// </summary>
     public bool IsModalOpen =>
         Catalog.IsOpen ||
         IsTrackerWorkspace && (CurrentWorkspace!.Editor.IsOpen || CurrentWorkspace.ManualCreation.IsOpen ||
                                CurrentWorkspace.BulkEdit.IsOpen) ||
-        IsDevelopers && (Developers?.IsRetirementOpen == true || Developers?.IsRetiredDialogOpen == true);
+        IsDevelopers && (Developers?.IsRetirementOpen == true || Developers?.IsRetiredDialogOpen == true) ||
+        IsSchemas && SchemasPage?.IsDialogOpen == true;
 
     /// <summary>
     /// Whether a dialog on the page itself is open. The page dims its own content; the shell then dims
@@ -399,7 +400,8 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     {
         if (e.PropertyName is nameof(CatalogManagementViewModel.IsOpen) or
             nameof(ProjectDevelopersViewModel.IsRetirementOpen) or
-            nameof(ProjectDevelopersViewModel.IsRetiredDialogOpen))
+            nameof(ProjectDevelopersViewModel.IsRetiredDialogOpen) or
+            nameof(ProjectSchemasViewModel.IsDialogOpen))
             OnModalStateChanged();
     }
 
@@ -635,7 +637,14 @@ public sealed class ShellViewModel : INotifyPropertyChanged, IDisposable
     public ProjectSchemasViewModel? SchemasPage
     {
         get => _schemasPage;
-        private set => SetField(ref _schemasPage, value);
+        private set
+        {
+            ProjectSchemasViewModel? previous = _schemasPage;
+            if (!SetField(ref _schemasPage, value)) return;
+            if (previous is not null) previous.PropertyChanged -= OnModalSourceChanged;
+            if (value is not null) value.PropertyChanged += OnModalSourceChanged;
+            OnModalStateChanged();
+        }
     }
 
     public bool IsOverview => SelectedDestination == ShellDestination.Overview;

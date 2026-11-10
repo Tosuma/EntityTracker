@@ -108,52 +108,31 @@
                 </Border>
             </Grid>
         </Grid>
-        <Grid Background="{DynamicResource Brush.Overlay}"
-              Visibility="{Binding Developers.IsRetirementOpen, Converter={StaticResource BooleanToVisibilityConverter}}"
-              IsVisibleChanged="OnRetirementDialogVisibilityChanged"
-              PreviewKeyDown="OnRetirementDialogPreviewKeyDown"
-              FocusManager.IsFocusScope="True"
-              KeyboardNavigation.TabNavigation="Cycle"
-              KeyboardNavigation.ControlTabNavigation="Cycle">
-            <Border Width="460" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center"
-                    Background="{DynamicResource Brush.Surface.Page}"
-                    Style="{StaticResource EntityTrackerCardStyle}">
-                <StackPanel>
-                    <TextBlock FontSize="22" FontWeight="SemiBold" AutomationProperties.HeadingLevel="Level2"
-                               Text="{Binding Developers.PendingRetirementInitials, StringFormat=Retire {0}?}" />
-                    <TextBlock Margin="0,12,0,0" TextWrapping="Wrap"
-                               Text="{Binding Developers.PendingRetirementMessage}" />
-                    <StackPanel Margin="0,20,0,0" HorizontalAlignment="Right" Orientation="Horizontal">
-                        <Button Margin="0,0,8,0" Content="_Retire developer" Command="{Binding Developers.ConfirmRetirementCommand}"
-                                Style="{StaticResource DangerButtonStyle}" />
-                        <Button x:Name="CancelRetirementButton" Content="Cancel"
-                                Command="{Binding Developers.CancelRetirementCommand}"
-                                IsCancel="True" IsDefault="True"
-                                Style="{StaticResource SecondaryButtonStyle}" />
-                    </StackPanel>
+        <controls:ModalDialog x:Name="RetirementDialog" Size="Small"
+                              IsOpen="{Binding Developers.IsRetirementOpen}"
+                              Title="{Binding Developers.PendingRetirementInitials, StringFormat=Retire {0}?}"
+                              CancelCommand="{Binding Developers.CancelRetirementCommand}"
+                              InitialFocus="{Binding ElementName=CancelRetirementButton}">
+            <controls:ModalDialog.Footer>
+                <StackPanel Orientation="Horizontal">
+                    <Button Margin="0,0,8,0" Content="_Retire developer" Command="{Binding Developers.ConfirmRetirementCommand}"
+                            Style="{StaticResource DangerButtonStyle}" />
+                    <Button x:Name="CancelRetirementButton" Content="Cancel"
+                            Command="{Binding Developers.CancelRetirementCommand}" IsDefault="True"
+                            Style="{StaticResource SecondaryButtonStyle}" />
                 </StackPanel>
-            </Border>
-        </Grid>
-        <Grid Background="{DynamicResource Brush.Overlay}"
-              Visibility="{Binding Developers.IsRetiredDialogOpen, Converter={StaticResource BooleanToVisibilityConverter}}"
-              IsVisibleChanged="OnRetiredDialogVisibilityChanged"
-              PreviewKeyDown="OnRetiredDialogPreviewKeyDown"
-              FocusManager.IsFocusScope="True"
-              KeyboardNavigation.TabNavigation="Cycle"
-              KeyboardNavigation.ControlTabNavigation="Cycle">
-            <Border Width="680" MaxHeight="680" Padding="24"
-                    HorizontalAlignment="Center" VerticalAlignment="Center"
-                    Background="{DynamicResource Brush.Surface.Page}"
-                    Style="{StaticResource EntityTrackerCardStyle}">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="Retired developers" />
-                    <ScrollViewer Grid.Row="1" Margin="0,18" VerticalScrollBarVisibility="Auto">
-                        <StackPanel>
+            </controls:ModalDialog.Footer>
+            <TextBlock TextWrapping="Wrap" Text="{Binding Developers.PendingRetirementMessage}" />
+        </controls:ModalDialog>
+        <controls:ModalDialog x:Name="RetiredDialog" Size="Medium" Title="Retired developers"
+                              IsOpen="{Binding Developers.IsRetiredDialogOpen}"
+                              CancelCommand="{Binding Developers.CloseRetiredCommand}"
+                              InitialFocus="{Binding ElementName=CloseRetiredButton}">
+            <controls:ModalDialog.Footer>
+                <Button x:Name="CloseRetiredButton" Content="Close" Command="{Binding Developers.CloseRetiredCommand}"
+                        Style="{StaticResource SecondaryButtonStyle}" />
+            </controls:ModalDialog.Footer>
+            <StackPanel>
                             <TextBlock Text="Retired developers remain in this Project and may be restored."
                                        TextWrapping="Wrap" />
                             <TextBlock Margin="0,12,0,0" Text="No retired developers match the current search."
@@ -180,11 +159,6 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </StackPanel>
-                    </ScrollViewer>
-                    <Button x:Name="CloseRetiredButton" Grid.Row="2" HorizontalAlignment="Right"
-                            Content="Close" Command="{Binding Developers.CloseRetiredCommand}" IsCancel="True" />
-                </Grid>
-            </Border>
-        </Grid>
+        </controls:ModalDialog>
     </Grid>
 </UserControl>

@@ -194,6 +194,12 @@ Destructive actions require confirmation where the workflow already calls for it
   card is primary too, since it's what the card is for. New entity leads on Tracker and schema pages; exports are secondary. Sync now is primary only while
   something is waiting to be synced.
 - Coral confirms anything that removes something from view: Archive, Recycle, Retire and Permanently delete.
+- Dialogs: every in-app dialog is a `ModalDialog`. It dims the page, keeps Tab inside, moves the focus in
+  and back to what opened it, and closes on Esc (an open list inside takes the first Esc, and only the
+  top dialog closes). Sizes: **Small** (560) for questions and short forms, **Medium** (680) for lists,
+  **Large** (up to 960, as tall as the page allows) for editors and reviews. The title has one style
+  (`DialogTitleTextStyle`); the footer puts the commit first and Cancel last on the right, and an action
+  that removes something alone on the left.
 - More actions: "…" on cards and page headers and "⋮" on table rows open the native menu (`ContextMenu`
   through `ActionMenu.Open`). Recycle is coral in that menu (`DangerMenuItemStyle`). A label doesn't repeat
   what the card already says: **Rename**, **Recycle**. Export is a popup because it says what will be
@@ -215,7 +221,7 @@ Destructive actions require confirmation where the workflow already calls for it
   dependency tree, without status colours to explain.
   Between the heading and the tabs, a card says whether the schema's Trackers are up to date; when
   they aren't, it expands to list the unpushed changes, with Push to trackers at its right. The push
-  review covers either tab: what a push does on one line, that a push never changes progress fields
+  review is a Large dialog over the open schema: what a push does on one line, that a push never changes progress fields
   on a quieter line of its own, then one card per Tracker. A card lists each change with Use schema
   and Keep tracker radio buttons, neither preselected, says how many are decided, and has Use schema
   for all, Keep tracker for all and Decide later; the same choices for every Tracker sit above the

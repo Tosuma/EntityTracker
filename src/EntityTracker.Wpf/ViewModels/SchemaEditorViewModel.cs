@@ -90,6 +90,8 @@ public sealed class SchemaEditorViewModel : INotifyPropertyChanged
         {
             if (e.PropertyName == nameof(SchemaEntityFormViewModel.HasUnsavedChanges))
                 OnPropertyChanged(nameof(HasUnsavedChanges));
+            if (e.PropertyName == nameof(SchemaEntityFormViewModel.IsOpen))
+                OnPropertyChanged(nameof(IsDialogOpen));
         };
         _newEntityCommand = new RelayCommand(StartNewEntity, () => IsEditable);
         _editCommand = new RelayCommand(EditSelected, () => IsEditable && _selectedRow is not null);
@@ -98,6 +100,12 @@ public sealed class SchemaEditorViewModel : INotifyPropertyChanged
         Push = trackers is null
             ? null
             : new SchemaPushViewModel(content.Schema.Id, trackers, IsEditable, notifications, logger);
+        if (Push is not null)
+            Push.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(SchemaPushViewModel.IsReviewOpen))
+                    OnPropertyChanged(nameof(IsDialogOpen));
+            };
         Load(content);
     }
 
@@ -132,6 +140,9 @@ public sealed class SchemaEditorViewModel : INotifyPropertyChanged
     /// <summary>The schema's unpushed changes and the push review; null where pushing isn't available.</summary>
     public SchemaPushViewModel? Push { get; }
     public bool HasPush => Push is not null;
+
+    /// <summary>Whether the entity dialog or the push review is open.</summary>
+    public bool IsDialogOpen => Form.IsOpen || Push?.IsReviewOpen == true;
 
     public string SearchText
     {

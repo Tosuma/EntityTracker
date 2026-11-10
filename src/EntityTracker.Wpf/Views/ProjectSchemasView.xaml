@@ -306,14 +306,20 @@
                 </DockPanel>
             </Border>
 
-            <!-- The push review covers the tab's content, and the details pane, while it is open. -->
-            <Border x:Name="SchemaPushReview" Grid.Row="3" Panel.ZIndex="60" Padding="18"
-                    DataContext="{Binding Push}" Style="{StaticResource EntityTrackerCardStyle}"
-                    Background="{DynamicResource Brush.Surface.Page}"
-                    Visibility="{Binding IsReviewOpen, Converter={StaticResource BooleanToVisibilityConverter}, FallbackValue=Collapsed}">
+            <!-- The push review: a dialog over the open schema, as large as the page allows. -->
+            <controls:ModalDialog x:Name="SchemaPushReview" Grid.RowSpan="4" Panel.ZIndex="90" Size="Large"
+                                  ScrollsBody="False" Title="Push to trackers" DataContext="{Binding Push}"
+                                  IsOpen="{Binding IsReviewOpen, FallbackValue=False}"
+                                  CancelCommand="{Binding CancelReviewCommand}">
+                <controls:ModalDialog.Footer>
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="ApplyPushButton" Margin="0,0,8,0" Command="{Binding ApplyCommand}" Content="Push"
+                                    Style="{StaticResource PrimaryButtonStyle}" />
+                            <Button Command="{Binding CancelReviewCommand}" Content="Cancel" />
+                    </StackPanel>
+                </controls:ModalDialog.Footer>
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
-                        <TextBlock Style="{StaticResource SectionHeadingTextStyle}" Text="Push to trackers" />
                         <TextBlock x:Name="SchemaPushIntro" Margin="0,6,0,0" TextWrapping="Wrap"
                                    Text="These are the schema's changes since its last push that each tracker doesn't have yet. Choose Use schema to bring a change into the tracker, or Keep tracker to decline it. A change you leave undecided isn't pushed now and is offered again next time, so each tracker can be handled when it suits." />
                         <TextBlock x:Name="SchemaPushUntouched" Margin="0,6,0,0" Style="{StaticResource PageDescriptionTextStyle}"
@@ -329,17 +335,10 @@
                         <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding ReviewSummary}"
                                    TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
                     </DockPanel>
-                    <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
-                        <Border Margin="0,0,0,12" Style="{StaticResource ErrorMessageStyle}"
+                    <Border Margin="0,12,0,0" DockPanel.Dock="Bottom" Style="{StaticResource ErrorMessageStyle}"
                                 Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <TextBlock AutomationProperties.LiveSetting="Assertive" Text="{Binding ErrorMessage}" TextWrapping="Wrap" />
                         </Border>
-                        <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-                            <Button x:Name="ApplyPushButton" Margin="0,0,8,0" Command="{Binding ApplyCommand}" Content="Push"
-                                    Style="{StaticResource PrimaryButtonStyle}" />
-                            <Button Command="{Binding CancelReviewCommand}" Content="Cancel" />
-                        </StackPanel>
-                    </StackPanel>
                     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                         <ItemsControl x:Name="SchemaPushTrackers" ItemsSource="{Binding ReviewTrackers}">
                             <ItemsControl.ItemTemplate>
@@ -399,25 +398,35 @@
                         </ItemsControl>
                     </ScrollViewer>
                 </DockPanel>
-            </Border>
+            </controls:ModalDialog>
             <!-- The entity dialog, for New entity and Edit, as a Tracker's New entity dialog. -->
-            <Grid x:Name="SchemaEntityDialog" Grid.RowSpan="4" Panel.ZIndex="100"
-                  Background="{DynamicResource Brush.Overlay}"
-                  FocusManager.IsFocusScope="True"
-                  KeyboardNavigation.TabNavigation="Cycle"
-                  DataContext="{Binding Form}" PreviewKeyDown="OnDialogPreviewKeyDown"
-                  IsVisibleChanged="OnDialogVisibleChanged"
-                  Visibility="{Binding IsOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
-                <Border x:Name="SchemaEntityForm" Width="560" MaxHeight="700" Margin="24" Padding="22"
-                        HorizontalAlignment="Center" VerticalAlignment="Center"
-                        Background="{DynamicResource Brush.Surface.Page}"
-                        BorderBrush="{DynamicResource Brush.Border.Medium}" BorderThickness="1" CornerRadius="7">
-                    <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Margin="0,0,0,14" FontSize="20" FontWeight="SemiBold"
-                                   AutomationProperties.HeadingLevel="Level2"
-                                   Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
-                        <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
-                            <Border Margin="0,0,0,12" Style="{StaticResource ErrorMessageStyle}"
+            <controls:ModalDialog x:Name="SchemaEntityDialog" Grid.RowSpan="4" Panel.ZIndex="100"
+                                  ScrollsBody="False" DataContext="{Binding Form}"
+                                  IsOpen="{Binding IsOpen}" Title="{Binding Title}"
+                                  CancelCommand="{Binding CancelCommand}"
+                                  InitialFocus="{Binding ElementName=SchemaEntityNameBox}">
+                <controls:ModalDialog.DestructiveAction>
+                    <Button Command="{Binding RequestRemoveCommand}" Content="Remove…"
+                                        AutomationProperties.Name="Remove entity from the schema"
+                                        Style="{StaticResource DangerButtonStyle}"
+                                        Visibility="{Binding IsExistingEntity, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                </controls:ModalDialog.DestructiveAction>
+                <controls:ModalDialog.Footer>
+                    <StackPanel Orientation="Horizontal">
+                                    <Button x:Name="SaveSchemaEntityButton" Margin="0,0,8,0" Command="{Binding SaveCommand}"
+                                            Content="{Binding SaveLabel}" Style="{StaticResource PrimaryButtonStyle}" />
+                                    <Button x:Name="CreateAnotherSchemaEntityButton" Margin="0,0,8,0"
+                                            Command="{Binding CreateAnotherCommand}" Content="Create and add another"
+                                            AutomationProperties.HelpText="Create this entity and keep the dialog open for the next one"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Visibility="{Binding IsNewEntity, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                    <Button Command="{Binding CancelCommand}" Content="Cancel"
+                                            Style="{StaticResource SecondaryButtonStyle}" />
+                    </StackPanel>
+                </controls:ModalDialog.Footer>
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+                        <Border Margin="0,0,0,12" Style="{StaticResource ErrorMessageStyle}"
                                     Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <TextBlock AutomationProperties.LiveSetting="Assertive" Text="{Binding ErrorMessage}" TextWrapping="Wrap" />
                             </Border>
@@ -435,24 +444,7 @@
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
-                            <DockPanel>
-                                <Button DockPanel.Dock="Left" Command="{Binding RequestRemoveCommand}" Content="Remove…"
-                                        AutomationProperties.Name="Remove entity from the schema"
-                                        Style="{StaticResource DangerButtonStyle}"
-                                        Visibility="{Binding IsExistingEntity, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-                                    <Button x:Name="SaveSchemaEntityButton" Margin="0,0,8,0" Command="{Binding SaveCommand}"
-                                            Content="{Binding SaveLabel}" Style="{StaticResource PrimaryButtonStyle}" />
-                                    <Button x:Name="CreateAnotherSchemaEntityButton" Margin="0,0,8,0"
-                                            Command="{Binding CreateAnotherCommand}" Content="Create and add another"
-                                            AutomationProperties.HelpText="Create this entity and keep the dialog open for the next one"
-                                            Style="{StaticResource SecondaryButtonStyle}"
-                                            Visibility="{Binding IsNewEntity, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                    <Button Command="{Binding CancelCommand}" Content="Cancel"
-                                            Style="{StaticResource SecondaryButtonStyle}" />
-                                </StackPanel>
-                            </DockPanel>
-                        </StackPanel>
+                    </StackPanel>
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel>
                                 <TextBlock Margin="0,0,0,12" TextWrapping="Wrap" Text="{Binding OperationMessage}"
@@ -507,9 +499,8 @@
                                            Visibility="{Binding HasNewDependencyNames, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             </StackPanel>
                         </ScrollViewer>
-                    </DockPanel>
-                </Border>
-            </Grid>
+                </DockPanel>
+            </controls:ModalDialog>
         </Grid>
     </Grid>
 </UserControl>
