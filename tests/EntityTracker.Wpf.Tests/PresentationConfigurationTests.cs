@@ -690,7 +690,7 @@ public sealed class PresentationConfigurationTests
                 .Attribute(x + "Key") ?? string.Empty)
             .Distinct()
             .ToArray();
-        Assert.Equal(["SummaryFilterButtonStyle", "DangerButtonStyle", "DangerMenuItemStyle", "TextTabControlStyle", "TextTabItemStyle"], templatedStyles);
+        Assert.Equal(["SummaryFilterButtonStyle", "DangerButtonStyle", "DangerMenuItemStyle", "TextTabControlStyle", "TextTabItemStyle", "NavigationListItemStyle"], templatedStyles);
     }
 
     [Fact]
@@ -2205,6 +2205,53 @@ public sealed class PresentationConfigurationTests
             element.Name.LocalName == Path.GetFileNameWithoutExtension(view));
         Assert.Contains(LoadWpfXaml("MainWindow.xaml").Descendants(), static element =>
             element.Name.LocalName == "InAppDialogsView" && (string?)element.Attribute("DataContext") == "{Binding Dialogs}");
+    }
+
+    [Fact]
+    public void EveryTablesTextIsCentredInItsRow()
+    {
+        string views = Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf", "Views");
+        XElement[] columns = Directory.GetFiles(views, "*.xaml")
+            .SelectMany(static file => XDocument.Load(file).Descendants())
+            .Where(static element => element.Name.LocalName == "DataGridTextColumn")
+            .ToArray();
+
+        Assert.NotEmpty(columns);
+        Assert.All(columns, static column =>
+            Assert.Equal("{StaticResource CenteredCellTextStyle}", (string?)column.Attribute("ElementStyle")));
+    }
+
+    [Fact]
+    public void SettingsCategoriesUseTheSidebarsSelectedLook()
+    {
+        XElement list = LoadWpfXaml("Views", "SettingsView.xaml").Descendants().Single(static element =>
+            (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "SettingsCategoryList");
+        XElement itemStyle = list.Descendants().First(static element => element.Name.LocalName == "Style");
+
+        Assert.Equal("{StaticResource NavigationListItemStyle}", (string?)itemStyle.Attribute("BasedOn"));
+
+        // Selecting or focusing an item changes only colours, never sizes, so the list never moves.
+        XElement style = LoadWpfXaml("Themes", "EntityTrackerComponents.xaml").Descendants().Single(static element =>
+            (string?)element.Attribute(XName.Get("Key", "http://schemas.microsoft.com/winfx/2006/xaml")) == "NavigationListItemStyle");
+        Assert.DoesNotContain(style.Descendants(), static element => element.Name.LocalName == "Setter" &&
+            (string?)element.Attribute("Property") is "BorderThickness" or "Padding" or "Margin" or "FontWeight" &&
+            element.Ancestors().Any(static ancestor => ancestor.Name.LocalName == "Trigger"));
+        // No box around a clicked item: only the keyboard's focus outline, as in the sidebar.
+        Assert.DoesNotContain(style.Descendants(), static element =>
+            element.Name.LocalName == "Trigger" && (string?)element.Attribute("Property") == "IsKeyboardFocused");
+    }
+
+    [Fact]
+    public void TheGitCardsDetailsUnfoldInPlace()
+    {
+        XDocument dashboard = LoadWpfXaml("Views", "ProjectDashboardView.xaml");
+        XElement details = dashboard.Descendants().Single(static element =>
+            (string?)element.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "RepositoryDetails");
+
+        Assert.Equal("Expander", details.Name.LocalName);
+        Assert.Equal("{Binding ShowDetails, Mode=TwoWay}", (string?)details.Attribute("IsExpanded"));
+        Assert.DoesNotContain(dashboard.Descendants(), static element =>
+            element.Name.LocalName == "Button" && (string?)element.Attribute("Content") is "Details" or "Hide details");
     }
 
     [Fact]

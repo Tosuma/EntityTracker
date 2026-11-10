@@ -325,6 +325,39 @@
             </Setter>
         </Style>
 
+    <!-- An item in a list that chooses what a page shows, such as Settings' categories: the sidebar's
+         selected look (a short bar on the left and a tinted background) in the page's colours. -->
+    <Style x:Key="NavigationListItemStyle" TargetType="{x:Type ListBoxItem}">
+        <Setter Property="Margin" Value="0,2" />
+        <Setter Property="Padding" Value="12,8" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text.Primary}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                    <!-- Selecting an item changes only colours, never sizes, so the list never moves. The
+                         keyboard focus shows as WPF's focus outline, only while moving through by keyboard. -->
+                    <Border x:Name="ItemSurface" Background="Transparent" CornerRadius="4" SnapsToDevicePixels="True">
+                        <Grid>
+                            <Border x:Name="SelectionPill" Width="3" Height="16" HorizontalAlignment="Left"
+                                    VerticalAlignment="Center" CornerRadius="1.5"
+                                    Background="{DynamicResource Brush.Text.Primary}" Visibility="Collapsed" />
+                            <ContentPresenter Margin="{TemplateBinding Padding}" />
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="ItemSurface" Property="Background" Value="{DynamicResource Brush.Surface.Hover}" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="ItemSurface" Property="Background" Value="{DynamicResource Brush.Surface.Selected}" />
+                            <Setter TargetName="SelectionPill" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- The first part of a page heading breadcrumb ("Project › Developers"): the parent page as a link
          inside the heading's TextBlock, quieter than the heading and underlined on hover or focus. -->
     <Style x:Key="BreadcrumbLinkStyle" TargetType="{x:Type Hyperlink}">

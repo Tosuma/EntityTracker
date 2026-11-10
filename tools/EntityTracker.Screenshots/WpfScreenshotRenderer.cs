@@ -85,6 +85,8 @@ internal sealed class WpfScreenshotRenderer(Window window, string outputDirector
     internal async Task CaptureWithTextOverrideAsync(
         string fileName, string actualText, string screenshotText, int settleMilliseconds = 150)
     {
+        // Content that has just been unfolded, such as an Expander's, exists only after a layout pass.
+        await SettleAsync();
         TextBlock pathLabel = FindVisualDescendants<TextBlock>(Root)
             .SingleOrDefault(label => label.Text == actualText)
             ?? throw new InvalidOperationException("The repository path label was not rendered.");

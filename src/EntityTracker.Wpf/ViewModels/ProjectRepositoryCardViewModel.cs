@@ -73,6 +73,21 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
     /// <summary>Whether the details can be folded back into the status row.</summary>
     public bool CanHideDetails => IsLinked && !HasPendingAction && _showDetails;
 
+    /// <summary>Whether the details fold under a Details header: while linked and nothing needs doing.</summary>
+    public bool CanFoldDetails => IsLinked && !HasPendingAction;
+
+    /// <summary>Gets or sets whether the folded details are shown.</summary>
+    public bool ShowDetails
+    {
+        get => _showDetails;
+        set
+        {
+            if (_showDetails == value) return;
+            _showDetails = value;
+            Notify();
+        }
+    }
+
     /// <summary>Shows or hides the repository's details while the card would be compact.</summary>
     public ICommand ToggleDetailsCommand => _toggleDetailsCommand ??= new RelayCommand(() =>
     {
@@ -326,7 +341,7 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
                      nameof(Branch), nameof(Upstream), nameof(LastResult), nameof(LastSyncTiming),
                      nameof(HasLastSyncTiming), nameof(PendingAction),
                      nameof(HasPendingAction), nameof(HasNoPendingAction), nameof(CanCancelSync), nameof(IsCompact),
-                     nameof(CanHideDetails) })
+                     nameof(CanHideDetails), nameof(CanFoldDetails), nameof(ShowDetails) })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         _linkCommand.NotifyCanExecuteChanged();
         _syncCommand.NotifyCanExecuteChanged();

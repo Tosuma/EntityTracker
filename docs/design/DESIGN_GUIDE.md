@@ -202,6 +202,10 @@ Destructive actions require confirmation where the workflow already calls for it
   that removes something alone on the left. The questions import and sync stop to ask (the Git name and
   email, a merge review, an approval of repository deletions) are dialogs in the main window too, not
   windows of their own (`InAppDialogs`).
+- Show more: details that unfold in place use an `Expander` (the Git card's Details, a schema's unpushed
+  changes); a button only opens another view. Tables use `EntityTrackerDataGridStyle`, and every text
+  column centres its text in the row (`CenteredCellTextStyle`). A list that chooses what a page shows,
+  such as Settings' categories, uses `NavigationListItemStyle`: the sidebar's selected look.
 - More actions: "…" on cards and page headers and "⋮" on table rows open the native menu (`ContextMenu`
   through `ActionMenu.Open`). Recycle is coral in that menu (`DangerMenuItemStyle`). A label doesn't repeat
   what the card already says: **Rename**, **Recycle**. Export is a popup because it says what will be

@@ -34,7 +34,7 @@
                  ItemsSource="{Binding SettingsCategories}"
                  SelectedItem="{Binding SelectedSettingsCategory, Mode=TwoWay}">
             <ListBox.ItemContainerStyle>
-                <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                <Style TargetType="ListBoxItem" BasedOn="{StaticResource NavigationListItemStyle}">
                     <Setter Property="AutomationProperties.Name"
                             Value="{Binding Converter={x:Static services:SettingsCategoryLabelConverter.Instance}}" />
                     <Style.Triggers>
