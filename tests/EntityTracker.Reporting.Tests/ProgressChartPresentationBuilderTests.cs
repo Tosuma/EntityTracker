@@ -143,6 +143,28 @@ public sealed class ProgressChartPresentationBuilderTests
     }
 
     [Fact]
+    public void TheLineChartsArePlainLinesWithoutADotOnEveryPoint()
+    {
+        // #217: over a long period a dot on every day crowds the chart.
+        ProgressDashboardReport report = CreateReport(notStarted: 3, inProgress: 2, rework: 1, completed: 2, reconciled: 2);
+
+        foreach (ProgressChartPresentation presentation in new[]
+                 {
+                     _builder.Build(report, ProgressChartTheme.Light), _builder.Build(report, ProgressChartTheme.Dark),
+                     _builder.BuildForExport(report)
+                 })
+        {
+            Assert.All(presentation.ImplementedSeries.Concat(presentation.ReadinessSeries), series =>
+            {
+                LineSeries<int> line = Assert.IsType<LineSeries<int>>(series);
+                Assert.Equal(0, line.GeometrySize);
+                Assert.Null(line.GeometryStroke);
+                Assert.Null(line.GeometryFill);
+            });
+        }
+    }
+
+    [Fact]
     public void Build_DrawsTodaysActiveEntitiesAsAFlatTargetAndTwoWeeklyBars()
     {
         DateOnly monday = new(2026, 8, 3);

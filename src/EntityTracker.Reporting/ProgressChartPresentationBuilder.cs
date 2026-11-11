@@ -69,7 +69,10 @@ public sealed class ProgressChartPresentationBuilder
                     .ToArray(),
                 Stroke = new SolidColorPaint(ProgressChartPalette.Implemented, 3),
                 Fill = new SolidColorPaint(ProgressChartPalette.Implemented.WithAlpha(35)),
-                GeometrySize = 5
+                // Plain lines: over a long period a dot on every day crowds the chart.
+                GeometrySize = 0,
+                GeometryStroke = null,
+                GeometryFill = null
             },
             // The other statuses as plain lines, in the pie's colours for the same statuses.
             CreateStatusLine("In progress", ProgressStatusCategory.InProgress,
@@ -107,7 +110,9 @@ public sealed class ProgressChartPresentationBuilder
                     .ToArray(),
                 Stroke = new SolidColorPaint(ProgressChartPalette.ReadyTrend, 3),
                 Fill = null,
-                GeometrySize = 5
+                GeometrySize = 0,
+                GeometryStroke = null,
+                GeometryFill = null
             },
             new LineSeries<int>
             {
@@ -117,7 +122,9 @@ public sealed class ProgressChartPresentationBuilder
                     .ToArray(),
                 Stroke = new SolidColorPaint(ProgressChartPalette.WaitingTrend, 3),
                 Fill = null,
-                GeometrySize = 5
+                GeometrySize = 0,
+                GeometryStroke = null,
+                GeometryFill = null
             }
         ];
 
@@ -176,8 +183,9 @@ public sealed class ProgressChartPresentationBuilder
         Values = values.ToArray(),
         Stroke = new SolidColorPaint(ProgressChartPalette.From(ProgressChartPalette.Category(status, theme)), 2),
         Fill = null,
-        GeometrySize = 3,
-        GeometryStroke = new SolidColorPaint(ProgressChartPalette.From(ProgressChartPalette.Category(status, theme)), 2)
+        GeometrySize = 0,
+        GeometryStroke = null,
+        GeometryFill = null
     };
 
     public static string GetTitle(ProgressChartKind kind) => kind switch

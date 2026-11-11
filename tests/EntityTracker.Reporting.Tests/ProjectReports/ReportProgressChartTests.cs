@@ -74,6 +74,17 @@ public sealed class ReportProgressChartTests
         Assert.Contains("if (series.dashed)", ProjectReportHtmlWriter.Asset("report.js"), StringComparison.Ordinal);
 
     [Fact]
+    public void TheReportsLinesHaveADotOnlyOnThePointedAtDay()
+    {
+        // #217: plain lines; the dot shows the day the tooltip is for, and goes again.
+        string script = ProjectReportHtmlWriter.Asset("report.js");
+
+        Assert.Contains("var radius = 0;", script, StringComparison.Ordinal);
+        Assert.Contains("d.circles[index].setAttribute(\"r\", 5);", script, StringComparison.Ordinal);
+        Assert.Contains("c.setAttribute(\"r\", radius);", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheWeeklyChartHasANetChangeAndAnInProgressBarEachWeek()
     {
         ChartSection section = Section(ProgressChartKind.WeeklyNetImplementedChange);
