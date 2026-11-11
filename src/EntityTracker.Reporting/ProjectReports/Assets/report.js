@@ -368,7 +368,8 @@
     var x = function (i) { return box.left + (count === 1 ? box.plotWidth / 2 : i / (count - 1) * box.plotWidth); };
     var guide = svg("line", { y1: box.top, y2: box.top + box.plotHeight, "class": "guide" });
     box.node.appendChild(guide);
-    var radius = count > 60 ? 1.5 : 3;
+    // Plain lines: a point's dot shows only while it is pointed at, so a long period stays readable.
+    var radius = 0;
     var drawn = chart.series.map(function (series) {
       var points = series.values.map(function (v, i) { return [x(i), box.y(v)]; });
       var line = svg("polyline", {

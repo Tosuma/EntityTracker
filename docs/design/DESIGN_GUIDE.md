@@ -84,6 +84,9 @@ across the charts. Its target line (today's active entities) is Coral (`Chart.Ta
 stays apart from the orange Blocked line; the weekly chart's
 increase and decrease bars are `Chart.Increase` and `Chart.Decrease`, side by side. Every chart title shows
 a short description when pointed at (`ProgressChartPresentationBuilder.GetDescription`).
+The line charts (Progress over time, and Ready to start vs waiting on dependencies) are plain lines, without a
+dot on every point: over a long period the dots crowd the chart. In the exported report, a dot shows only
+on the day being pointed at, with its tooltip.
 
 | Meaning | Color | Graph mark |
 | --- | --- | --- |
