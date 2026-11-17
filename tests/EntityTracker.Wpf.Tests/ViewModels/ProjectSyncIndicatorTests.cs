@@ -77,6 +77,17 @@ public sealed class ProjectSyncIndicatorTests
             ProjectSyncIndicator.From(Link("Current", 5), State(ProjectSyncStateKind.UpdatePaused), 9, Now).Kind);
 
     [Fact]
+    public void AnUnreachableRemoteIsAWaitNotAProblem()
+    {
+        ProjectSyncIndicator indicator = ProjectSyncIndicator.From(Link("Current", 5, Now.AddMinutes(-3)),
+            State(ProjectSyncStateKind.Offline, "EntityTracker couldn't reach the Git remote."), 6, Now);
+
+        Assert.Equal(ProjectSyncIndicatorKind.Paused, indicator.Kind);
+        Assert.StartsWith("Sync is waiting for the Git remote", indicator.Label, StringComparison.Ordinal);
+        Assert.Contains("Last synced at ", indicator.Label, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WithoutAKnownSyncTimeTheLabelLeavesItOut()
     {
         Assert.Equal("Changes not synced yet.",

@@ -197,7 +197,7 @@ public sealed class SystemGitTransport : ILocalGitTransport
             {
                 _logger.LogWarning("Another Git program seems to be using {Repository}: {LockFiles}.",
                     root, string.Join(", ", recent));
-                throw new InvalidOperationException(
+                throw new ProjectSyncRepositoryBusyException(
                     $"Another Git program is using this repository ({recent[0]} exists). Retry shortly. " +
                     "If no Git program is running, EntityTracker removes the lock itself after 10 minutes.");
             }
@@ -630,7 +630,11 @@ public sealed class SystemGitTransport : ILocalGitTransport
     private async Task RunRemoteAsync(string root, string[] args, CancellationToken token)
     {
         try { await RunAsync(root, args, token); }
-        catch (ProjectSyncAuthenticationException) { throw; }
+        catch (Exception exception) when (exception is ProjectSyncAuthenticationException or
+                                              ProjectSyncNetworkException or ProjectSyncRepositoryBusyException)
+        {
+            throw;
+        }
         catch (InvalidOperationException error)
         {
             throw new InvalidOperationException(
@@ -798,10 +802,13 @@ public sealed class SystemGitTransport : ILocalGitTransport
             if (process.ExitCode != 0 && !allowFailure)
             {
                 LogFailure(root, args, process.ExitCode, elapsed, stderr);
-                if (args[0] is "fetch" or "push" && LooksLikeAuthenticationFailure(stderr))
-                    throw new ProjectSyncAuthenticationException(
-                        "Git authentication failed. Repair access with command-line Git outside EntityTracker, then retry.");
-                throw new InvalidOperationException($"Git {args[0]} failed. Check the repository with system Git and retry.");
+                throw ClassifyFailure(args[0], stderr) switch
+                {
+                    GitFailureKind.Authentication => new ProjectSyncAuthenticationException(AuthenticationMessage),
+                    GitFailureKind.Network => new ProjectSyncNetworkException(NetworkMessage),
+                    GitFailureKind.RepositoryBusy => new ProjectSyncRepositoryBusyException(RepositoryBusyMessage),
+                    _ => new InvalidOperationException($"Git {args[0]} failed. Check the repository with system Git and retry.")
+                };
             }
             if (process.ExitCode != 0)
                 _logger.LogDebug("Git {Command} in {Repository} returned {ExitCode} (allowed) in {ElapsedMs} ms.",
@@ -822,6 +829,8 @@ public sealed class SystemGitTransport : ILocalGitTransport
             }
             _logger.LogError("Git {Command} in {Repository} timed out after {LimitSeconds} s awake.",
                 Describe(args), root ?? "(no repository)", limit.TotalSeconds);
+            // Fetch and push spend their time on the network, so running out of time means the remote is out of reach.
+            if (args[0] is "fetch" or "push") throw new ProjectSyncNetworkException(NetworkMessage);
             throw new TimeoutException($"Git {args[0]} timed out. Check the repository and retry.");
         }
         catch (System.ComponentModel.Win32Exception exception)
@@ -880,7 +889,7 @@ public sealed class SystemGitTransport : ILocalGitTransport
         if (message.Length > MaxLoggedErrorChars) message = message[..MaxLoggedErrorChars] + " [...]";
         _logger.LogError("Git {Command} in {Repository} failed with exit code {ExitCode} after {ElapsedMs} ms{Kind}: {GitError}",
             Describe(args), root ?? "(no repository)", exitCode, elapsed.ElapsedMilliseconds,
-            args[0] is "fetch" or "push" && LooksLikeAuthenticationFailure(stderr) ? " (authentication)" : "",
+            ClassifyFailure(args[0], stderr) is var kind && kind != GitFailureKind.Other ? $" ({kind})" : "",
             LogRedaction.Redact(message));
     }
 
@@ -898,12 +907,48 @@ public sealed class SystemGitTransport : ILocalGitTransport
         "write-tree", "commit-tree", "update-ref", "cat-file", "log", "restore"
     };
 
-    private static bool LooksLikeAuthenticationFailure(byte[] stderr)
+    internal const string AuthenticationMessage =
+        "Git authentication failed. Repair access with command-line Git outside EntityTracker, then retry.";
+
+    internal const string NetworkMessage =
+        "EntityTracker couldn't reach the Git remote. Check the network connection; sync tries again automatically.";
+
+    internal const string RepositoryBusyMessage =
+        "Another Git program is using this repository. Retry shortly.";
+
+    /// <summary>Why a Git command failed, as far as its error output tells.</summary>
+    internal enum GitFailureKind { Other, Authentication, Network, RepositoryBusy }
+
+    private static readonly string[] AuthenticationFragments =
+    [
+        "authentication failed", "permission denied", "could not read username",
+        "terminal prompts disabled", "publickey", "access denied", "invalid credentials"
+    ];
+
+    private static readonly string[] NetworkFragments =
+    [
+        "could not resolve host", "could not resolve hostname", "connection was reset", "connection reset",
+        "connection refused", "connection timed out", "operation timed out", "timed out after",
+        "failed to connect", "couldn't connect", "network is unreachable", "no route to host",
+        "recv failure", "send failure", "schannel: failed to receive"
+    ];
+
+    /// <summary>
+    /// Sorts a failed command by Git's error output. Authentication and network problems only count for
+    /// fetch and push, which reach the remote; a lock another Git program holds counts for any command.
+    /// </summary>
+    internal static GitFailureKind ClassifyFailure(string verb, byte[] stderr)
     {
         string message = Encoding.UTF8.GetString(stderr);
-        return new[] { "authentication failed", "permission denied", "could not read username",
-            "terminal prompts disabled", "publickey", "access denied", "invalid credentials" }
-            .Any(fragment => message.Contains(fragment, StringComparison.OrdinalIgnoreCase));
+        bool Has(string fragment) => message.Contains(fragment, StringComparison.OrdinalIgnoreCase);
+        if (verb is "fetch" or "push")
+        {
+            if (AuthenticationFragments.Any(Has)) return GitFailureKind.Authentication;
+            if (NetworkFragments.Any(Has)) return GitFailureKind.Network;
+        }
+        if (Has("cannot lock ref") || (Has(".lock") && (Has("unable to create") || Has("file exists"))))
+            return GitFailureKind.RepositoryBusy;
+        return GitFailureKind.Other;
     }
 
     internal static void ValidateCommand(IReadOnlyList<string> args)

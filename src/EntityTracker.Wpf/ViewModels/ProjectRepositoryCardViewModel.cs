@@ -142,6 +142,8 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
                 ProjectSyncStateKind.UpdatePaused =>
                     "Update EntityTracker or restore access to the app release check.",
                 ProjectSyncStateKind.Failed => "Check the repository and use Sync now to retry.",
+                ProjectSyncStateKind.Offline =>
+                    "Check the network connection. Sync tries again automatically, or use Sync now.",
                 _ => string.Empty
             };
             if (action.Length > 0) return action;
@@ -273,7 +275,8 @@ public sealed class ProjectRepositoryCardViewModel : INotifyPropertyChanged, IDi
             if (notice is not null)
             {
                 bool review = error is ProjectSyncReviewRequiredException;
-                bool retry = _link?.SyncStatus is "PendingPush" or "PendingRemote";
+                bool retry = _link?.SyncStatus is "PendingPush" or "PendingRemote" ||
+                             error is ProjectSyncNetworkException or ProjectSyncRepositoryBusyException;
                 _notifications?.NeedAction(notice, error.Message,
                     review ? "Review" : retry ? "Sync now" : "Open project",
                     review || retry ? () => SyncAsync(notice) : () =>

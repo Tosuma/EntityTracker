@@ -206,6 +206,13 @@ public sealed partial class ProjectGitSyncService(
             _log.LogInformation("{Operation} was put off: an entity is being edited.", operation);
             throw;
         }
+        catch (ProjectSyncNetworkException exception)
+        {
+            // Expected after waking or on a train: the next sync tries again. Git's own message is logged above.
+            _log.LogWarning("{Operation} couldn't reach the Git remote after {ElapsedMs} ms.", operation, ElapsedMs(started));
+            AppLogging.MarkLogged(exception);
+            throw;
+        }
         catch (Exception exception) when (exception is ProjectSyncUpdateRequiredException
                                               or ProjectSyncIdentityRequiredException
                                               or ProjectSyncVersionCheckUnavailableException
