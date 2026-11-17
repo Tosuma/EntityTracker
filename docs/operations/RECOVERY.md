@@ -16,6 +16,7 @@ settings.json                  local appearance, active context, and automatic s
 git-sync-links.v1.json         local Project-to-checkout associations and sync state
 backups\v<schema-version>\    automatic SQLite backups grouped by source schema version
 logs\                          daily application logs
+sync-recovery\                 copies of snapshot files an interrupted sync left behind
 ```
 
 The settings file is created when appearance, active context, or automatic sync is saved. It must
@@ -88,6 +89,23 @@ selected in Settings (enabled and five minutes by default). Manual **Sync now** 
 when automatic sync is disabled. A Project with an unfinished edit resumes after the edit is saved
 or closed; another linked Project can sync meanwhile. Conflicts and outbound deletions require
 manual review or approval. Only inbound changes that alter SQLite create a pre-apply backup.
+
+A sync that is cut off while it writes the snapshot (the laptop goes to sleep or shuts down, or the
+app is closed) can leave the checkout with changed, staged or new `.entitytracker` files, and
+sometimes a Git lock file such as `.git/index.lock`. The next sync repairs that by itself:
+
+- It removes Git lock files from before the last system start or older than 10 minutes. A more
+  recent lock may belong to another Git program, so the sync reports it and tries again later.
+- When every change is under `.entitytracker`, it puts those files back as they are at the last
+  commit, and then writes the Project from the database again. Nothing is lost: the files are only an
+  export of the database. A copy of the discarded files is kept in `sync-recovery` in the data folder.
+- Changes outside `.entitytracker`, a merge or rebase in progress, or a detached HEAD still stop the
+  sync until they are resolved with Git.
+
+The sync result then ends with "The checkout was repaired after an interrupted sync", and the log
+lists what was removed. Git commands that write the checkout always run to the end, even when a
+sync is cancelled, and their time limits count only time the computer is awake. A sync writes only
+the snapshot files that changed.
 
 If the Project card says **Authentication required**, use command-line Git in the existing checkout
 to repair the credential helper, key, host trust, or remote access; then retry **Sync now**. If it
