@@ -27,18 +27,54 @@ public sealed class SystemGitTransport : ILocalGitTransport
         "fetch", "push", "commit", "merge", "add", "write-tree", "commit-tree", "update-ref"
     };
 
+    /// <summary>
+    /// Commands that write the repository. They run to their end even when the sync is cancelled or their
+    /// time limit passes: killing one part-way leaves <c>index.lock</c> and a half-staged checkout.
+    /// </summary>
+    private static readonly HashSet<string> RunToEndVerbs = new(StringComparer.Ordinal)
+    {
+        "add", "commit", "write-tree", "commit-tree", "update-ref", "merge", "restore"
+    };
+
+    private static readonly string[] RestoreSnapshotArgs =
+        ["restore", "--source=HEAD", "--staged", "--worktree", "--", ".entitytracker"];
+
+    /// <summary>
+    /// A Git lock file this old belongs to no running Git command: every command EntityTracker runs has a
+    /// shorter time limit, and other Git tools hold a lock only for a moment.
+    /// </summary>
+    internal static readonly TimeSpan StaleLockAge = TimeSpan.FromMinutes(10);
+
+    /// <summary>How long a sync waits for a recent lock file to go away before it reports it.</summary>
+    private static readonly TimeSpan RecentLockWait = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// The time limits count only time the computer is awake: the watchdog adds at most
+    /// <see cref="MaxWatchdogStep"/> per check, so a computer that sleeps mid-command doesn't kill it on wake.
+    /// </summary>
+    private static readonly TimeSpan WatchdogTick = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan MaxWatchdogStep = TimeSpan.FromSeconds(5);
+
     private const int MaxLoggedErrorChars = 4096;
+    private const int MaxLoggedDirtyPaths = 5;
 
     private readonly ILogger<SystemGitTransport> _logger;
+    private readonly string _recoveryDirectory;
+    private readonly TimeProvider _clock;
 
     /// <summary>
     /// Every Git command is logged: commands that change the repository or reach the remote at
     /// Information, read-only ones at Debug, and every failure at Error with Git's own message, with
-    /// any credentials removed (<see cref="LogRedaction"/>).
+    /// any credentials removed (<see cref="LogRedaction"/>). Snapshot files that
+    /// <see cref="RepairInterruptedSyncAsync"/> discards are first copied under
+    /// <paramref name="recoveryDirectory"/> (by default a folder in the temporary folder).
     /// </summary>
-    public SystemGitTransport(ILogger<SystemGitTransport>? logger = null)
+    public SystemGitTransport(ILogger<SystemGitTransport>? logger = null, string? recoveryDirectory = null,
+        TimeProvider? clock = null)
     {
         _logger = logger ?? NullLogger<SystemGitTransport>.Instance;
+        _recoveryDirectory = recoveryDirectory ?? Path.Combine(Path.GetTempPath(), "entitytracker-sync-recovery");
+        _clock = clock ?? TimeProvider.System;
     }
 
     public async Task<IAsyncDisposable> LockAsync(string path, CancellationToken cancellationToken = default)
@@ -60,6 +96,122 @@ public sealed class SystemGitTransport : ILocalGitTransport
         }
         _logger.LogWarning("Gave up waiting for another Git operation on {Repository} after 20 seconds.", full);
         throw new TimeoutException("Another Git operation is using this repository. Retry shortly.");
+    }
+
+    public async Task<GitCheckoutRepair> RepairInterruptedSyncAsync(string path, bool discardSnapshotChanges,
+        CancellationToken cancellationToken = default)
+    {
+        string root = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);
+        string gitDirectory = Path.Combine(root, ".git");
+        // Anything else (a missing folder, a linked worktree) is reported by InspectAsync.
+        if (!Directory.Exists(gitDirectory)) return GitCheckoutRepair.None;
+
+        IReadOnlyList<string> removedLocks = await RemoveStaleLocksAsync(root, gitDirectory, cancellationToken);
+        if (!discardSnapshotChanges ||
+            File.Exists(Path.Combine(gitDirectory, "MERGE_HEAD")) ||
+            Directory.Exists(Path.Combine(gitDirectory, "rebase-merge")) ||
+            Directory.Exists(Path.Combine(gitDirectory, "rebase-apply")) ||
+            (await RunAsync(root, ["symbolic-ref", "--quiet", "--short", "HEAD"], cancellationToken, true)).Trim().Length == 0 ||
+            (await RunAsync(root, ["rev-parse", "--verify", "HEAD"], cancellationToken, true)).Trim().Length == 0)
+            return new GitCheckoutRepair(removedLocks, [], null);
+
+        IReadOnlyList<(string Code, string Path)> dirty = ParseStatus(await RunBytesAsync(root,
+            ["status", "--porcelain=v1", "-z", "--untracked-files=all"], cancellationToken));
+        // Changes outside the snapshot are the user's; the sync stops and InspectAsync names them.
+        if (dirty.Count == 0 || dirty.Any(entry => !IsSnapshotPath(entry.Path)))
+            return new GitCheckoutRepair(removedLocks, [], null);
+
+        // The snapshot files are an export of the local database, which the sync writes again, so nothing
+        // is lost. They are copied aside anyway, for anyone who wants to see what was there.
+        string[] paths = dirty.Select(entry => entry.Path).Distinct(StringComparer.Ordinal).ToArray();
+        string folder = Path.Combine(_recoveryDirectory,
+            _clock.GetUtcNow().ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + "-" + Path.GetFileName(root));
+        string? recoveryFolder = null;
+        foreach (string relative in paths)
+        {
+            string source = SafeSnapshotPath(root, relative);
+            if (!File.Exists(source)) continue;
+            string copy = Path.Combine(folder, relative.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(copy)!);
+            File.Copy(source, copy, overwrite: true);
+            recoveryFolder = folder;
+        }
+
+        foreach ((string code, string relative) in dirty.Where(entry => entry.Code == "??"))
+            File.Delete(SafeSnapshotPath(root, relative));
+        if (dirty.Any(entry => entry.Code != "??"))
+            await RunAsync(root, RestoreSnapshotArgs, CancellationToken.None);
+        _logger.LogInformation(
+            "Put {Count} snapshot files in {Repository} back as they are at HEAD; an interrupted sync had left them changed, staged or new. Copies are in {RecoveryFolder}.",
+            paths.Length, root, recoveryFolder ?? "(none: the files had been deleted)");
+        return new GitCheckoutRepair(removedLocks, paths, recoveryFolder);
+    }
+
+    /// <summary>
+    /// Removes the Git lock files a killed Git command leaves behind: those in <c>.git</c> itself (such as
+    /// <c>index.lock</c>) and under <c>.git/refs</c>. Only a lock older than the last system start or older
+    /// than <see cref="StaleLockAge"/> is removed; a recent one may belong to another Git tool that is
+    /// running, so the sync waits briefly for it and then reports it.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> RemoveStaleLocksAsync(string root, string gitDirectory,
+        CancellationToken token)
+    {
+        DateTime now = _clock.GetUtcNow().UtcDateTime;
+        DateTime started = DateTime.UtcNow - TimeSpan.FromMilliseconds(Environment.TickCount64);
+        DateTime threshold = started > now - StaleLockAge ? started : now - StaleLockAge;
+        List<string> removed = [];
+        Stopwatch waited = Stopwatch.StartNew();
+        while (true)
+        {
+            List<string> recent = [];
+            foreach (string lockFile in FindLockFiles(gitDirectory))
+            {
+                string name = Path.GetRelativePath(root, lockFile).Replace(Path.DirectorySeparatorChar, '/');
+                DateTime written;
+                try { written = File.GetLastWriteTimeUtc(lockFile); }
+                catch (IOException)
+                {
+                    // Not logged: the Git command that held the lock removed it meanwhile.
+                    continue;
+                }
+                if (written >= threshold)
+                {
+                    recent.Add(name);
+                    continue;
+                }
+                try
+                {
+                    File.Delete(lockFile);
+                    removed.Add(name);
+                    _logger.LogInformation("Removed the stale Git lock {LockFile} in {Repository}, last written {Written:u}.",
+                        name, root, written);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    _logger.LogWarning(exception, "Could not remove the stale Git lock {LockFile} in {Repository}.", name, root);
+                    recent.Add(name);
+                }
+            }
+            if (recent.Count == 0) return removed;
+            if (waited.Elapsed >= RecentLockWait)
+            {
+                _logger.LogWarning("Another Git program seems to be using {Repository}: {LockFiles}.",
+                    root, string.Join(", ", recent));
+                throw new InvalidOperationException(
+                    $"Another Git program is using this repository ({recent[0]} exists). Retry shortly. " +
+                    "If no Git program is running, EntityTracker removes the lock itself after 10 minutes.");
+            }
+            await Task.Delay(TimeSpan.FromMilliseconds(250), token);
+        }
+    }
+
+    private static IEnumerable<string> FindLockFiles(string gitDirectory)
+    {
+        IEnumerable<string> top = Directory.EnumerateFiles(gitDirectory, "*.lock", SearchOption.TopDirectoryOnly);
+        string refs = Path.Combine(gitDirectory, "refs");
+        return Directory.Exists(refs)
+            ? top.Concat(Directory.EnumerateFiles(refs, "*.lock", SearchOption.AllDirectories))
+            : top;
     }
 
     public async Task<GitWorkingTreeState> InspectAsync(string path, CancellationToken cancellationToken = default)
@@ -98,7 +250,13 @@ public sealed class SystemGitTransport : ILocalGitTransport
         if (string.IsNullOrWhiteSpace(branch)) throw new ProjectSyncConfigurationException("Check out the linked branch with Git outside EntityTracker, then retry.");
         await RequireCommitIdentityAsync(root, cancellationToken);
         byte[] status = await RunBytesAsync(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], cancellationToken);
-        if (status.Length > 0) throw new InvalidOperationException("The working tree must be clean before linking or syncing.");
+        if (status.Length > 0)
+        {
+            IReadOnlyList<(string Code, string Path)> dirty = ParseStatus(status);
+            _logger.LogWarning("The checkout {Repository} has {Count} changed, staged or untracked paths, such as {Paths}.",
+                root, dirty.Count, string.Join(", ", dirty.Take(MaxLoggedDirtyPaths).Select(entry => $"{entry.Code} {entry.Path}")));
+            throw new InvalidOperationException("The working tree must be clean before linking or syncing.");
+        }
         byte[] tracked = await RunBytesAsync(root, ["ls-files", "-z"], cancellationToken);
         string[] paths = SplitNull(tracked);
         if (paths.Length > MaxSnapshotFiles)
@@ -137,23 +295,12 @@ public sealed class SystemGitTransport : ILocalGitTransport
     {
         string root = Path.GetFullPath(path);
         ValidateSnapshotBudget(package.Files);
-        foreach (string oldPath in oldFiles.Keys.Except(package.Files.Keys, StringComparer.Ordinal))
-        {
-            File.Delete(SafeSnapshotPath(root, oldPath));
-        }
-        foreach ((string relative, byte[] bytes) in package.Files)
-        {
-            string destination = SafeSnapshotPath(root, relative);
-            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-            EnsureNoLinks(root, relative);
-            await File.WriteAllBytesAsync(destination, bytes, cancellationToken);
-        }
-        await RunAsync(root, ["add", "-A", "--", ".entitytracker"], cancellationToken);
-        string staged = await RunAsync(root, ["diff", "--cached", "--name-only", "-z"], cancellationToken);
-        if (SplitNull(Encoding.UTF8.GetBytes(staged)).Any(p => !IsSnapshotPath(p)))
-            throw new InvalidOperationException("Unexpected staged paths. Unstage them outside EntityTracker before retrying.");
-        await RunAsync(root, ["commit", "-m", "Update EntityTracker project snapshot", "--only", "--", ".entitytracker"], cancellationToken);
-        return (await RunAsync(root, ["rev-parse", "--verify", "HEAD"], cancellationToken)).Trim();
+        cancellationToken.ThrowIfCancellationRequested();
+        // From here the checkout changes. The steps run to their end, so a cancelled sync never leaves it
+        // half-written or half-staged.
+        await WriteSnapshotFilesAsync(root, oldFiles, package);
+        await RunAsync(root, ["commit", "-m", "Update EntityTracker project snapshot", "--only", "--", ".entitytracker"], CancellationToken.None);
+        return (await RunAsync(root, ["rev-parse", "--verify", "HEAD"], CancellationToken.None)).Trim();
     }
 
     public Task<GitRemoteState> FetchAsync(string path, CancellationToken cancellationToken = default) =>
@@ -395,13 +542,15 @@ public sealed class SystemGitTransport : ILocalGitTransport
             oldFiles.Any(pair => !current.SnapshotFiles.TryGetValue(pair.Key, out byte[]? bytes) ||
                                  !bytes.AsSpan().SequenceEqual(pair.Value)))
             throw new InvalidOperationException("The checkout changed before the merge commit. Retry.");
-        await WriteSnapshotFilesAsync(path, oldFiles, package, cancellationToken);
-        string tree = (await RunAsync(path, ["write-tree"], cancellationToken)).Trim();
+        cancellationToken.ThrowIfCancellationRequested();
+        // From here the checkout changes; the steps run to their end (see CommitSnapshotAsync).
+        await WriteSnapshotFilesAsync(path, oldFiles, package);
+        string tree = (await RunAsync(path, ["write-tree"], CancellationToken.None)).Trim();
         string commit = (await RunAsync(path,
             ["commit-tree", tree, "-p", localHead, "-p", remoteHead,
-             "-m", "Merge EntityTracker project snapshots"], cancellationToken)).Trim();
+             "-m", "Merge EntityTracker project snapshots"], CancellationToken.None)).Trim();
         await RunAsync(path, ["update-ref", "refs/heads/" + current.Branch,
-            commit, localHead], cancellationToken);
+            commit, localHead], CancellationToken.None);
         GitWorkingTreeState finished = await InspectAsync(path, cancellationToken);
         if (finished.Head != commit || finished.SnapshotFiles.Count != package.Files.Count ||
             package.Files.Any(pair => !finished.SnapshotFiles.TryGetValue(pair.Key, out byte[]? bytes) ||
@@ -410,9 +559,14 @@ public sealed class SystemGitTransport : ILocalGitTransport
         return commit;
     }
 
+    /// <summary>
+    /// Writes the snapshot into the checkout and stages it. <paramref name="oldFiles"/> are the snapshot files
+    /// of the clean checkout: files that are gone are deleted, and only files whose content changed are
+    /// written. That keeps the checkout changed for as short a time as possible (a large Project has
+    /// thousands of files). Not cancellable: once it starts, it finishes.
+    /// </summary>
     private async Task WriteSnapshotFilesAsync(string path,
-        IReadOnlyDictionary<string, byte[]> oldFiles, ProjectSnapshotPackage package,
-        CancellationToken cancellationToken)
+        IReadOnlyDictionary<string, byte[]> oldFiles, ProjectSnapshotPackage package)
     {
         string root = Path.GetFullPath(path);
         ValidateSnapshotBudget(package.Files);
@@ -420,15 +574,21 @@ public sealed class SystemGitTransport : ILocalGitTransport
         {
             File.Delete(SafeSnapshotPath(root, oldPath));
         }
+        int written = 0;
         foreach ((string relative, byte[] bytes) in package.Files)
         {
+            if (oldFiles.TryGetValue(relative, out byte[]? previous) && previous.AsSpan().SequenceEqual(bytes))
+                continue;
             string destination = SafeSnapshotPath(root, relative);
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             EnsureNoLinks(root, relative);
-            await File.WriteAllBytesAsync(destination, bytes, cancellationToken);
+            await File.WriteAllBytesAsync(destination, bytes, CancellationToken.None);
+            written++;
         }
-        await RunAsync(root, ["add", "-A", "--", ".entitytracker"], cancellationToken);
-        string staged = await RunAsync(root, ["diff", "--cached", "--name-only", "-z"], cancellationToken);
+        _logger.LogDebug("Wrote {Written} of {Total} snapshot files in {Repository}; the others were unchanged.",
+            written, package.Files.Count, root);
+        await RunAsync(root, ["add", "-A", "--", ".entitytracker"], CancellationToken.None);
+        string staged = await RunAsync(root, ["diff", "--cached", "--name-only", "-z"], CancellationToken.None);
         if (SplitNull(Encoding.UTF8.GetBytes(staged)).Any(p => !IsSnapshotPath(p)))
             throw new InvalidOperationException("Unexpected staged paths. Unstage them outside EntityTracker before retrying.");
     }
@@ -603,8 +763,10 @@ public sealed class SystemGitTransport : ILocalGitTransport
     {
         ValidateCommand(args);
         TimeSpan limit = TimeSpan.FromSeconds(args[0] is "fetch" or "push" ? 120 : 30);
-        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
-        timeout.CancelAfter(limit);
+        // A command that writes the repository finishes even when the sync is cancelled or out of time.
+        bool runToEnd = RunToEndVerbs.Contains(args[0]);
+        CancellationToken caller = runToEnd ? CancellationToken.None : token;
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(caller);
         Stopwatch elapsed = Stopwatch.StartNew();
         ProcessStartInfo start = new("git")
         {
@@ -626,7 +788,10 @@ public sealed class SystemGitTransport : ILocalGitTransport
             if (!process.Start()) throw new InvalidOperationException("System Git could not start.");
             Task<byte[]> output = ReadBoundedAsync(process.StandardOutput.BaseStream, timeout.Token);
             Task<byte[]> error = ReadBoundedAsync(process.StandardError.BaseStream, timeout.Token);
-            await process.WaitForExitAsync(timeout.Token);
+            Task exited = process.WaitForExitAsync(timeout.Token);
+            if (!await CompletesWithinAwakeTimeAsync(exited, runToEnd ? null : limit, caller))
+                timeout.Cancel();
+            await exited;
             byte[] result = await output;
             // Git's stderr is never shown to the user (URLs and credentials may appear); it is logged redacted.
             byte[] stderr = await error;
@@ -650,12 +815,12 @@ public sealed class SystemGitTransport : ILocalGitTransport
         catch (OperationCanceledException)
         {
             if (!process.HasExited) process.Kill(entireProcessTree: true);
-            if (token.IsCancellationRequested)
+            if (caller.IsCancellationRequested)
             {
                 _logger.LogInformation("Git {Command} in {Repository} was cancelled.", Describe(args), root ?? "(no repository)");
                 throw;
             }
-            _logger.LogError("Git {Command} in {Repository} timed out after {LimitSeconds} s.",
+            _logger.LogError("Git {Command} in {Repository} timed out after {LimitSeconds} s awake.",
                 Describe(args), root ?? "(no repository)", limit.TotalSeconds);
             throw new TimeoutException($"Git {args[0]} timed out. Check the repository and retry.");
         }
@@ -664,6 +829,49 @@ public sealed class SystemGitTransport : ILocalGitTransport
             _logger.LogError(exception, "Git could not be started; is Git installed and on PATH?");
             throw new InvalidOperationException("System Git is unavailable. Install Git 2.30 or later.", exception);
         }
+    }
+
+    /// <summary>
+    /// Waits for <paramref name="task"/>, and returns false when it is still running after
+    /// <paramref name="limit"/> of time awake (no limit when null). Time the computer spends asleep, when the
+    /// command can't make progress, doesn't count: each check adds at most <see cref="MaxWatchdogStep"/>.
+    /// </summary>
+    private static async Task<bool> CompletesWithinAwakeTimeAsync(Task task, TimeSpan? limit, CancellationToken token)
+    {
+        TimeSpan counted = TimeSpan.Zero;
+        long last = Stopwatch.GetTimestamp();
+        while (!task.IsCompleted)
+        {
+            using CancellationTokenSource tick = CancellationTokenSource.CreateLinkedTokenSource(token);
+            await Task.WhenAny(task, Task.Delay(WatchdogTick, tick.Token));
+            tick.Cancel();
+            if (task.IsCompleted || token.IsCancellationRequested) return true;
+            long now = Stopwatch.GetTimestamp();
+            TimeSpan step = Stopwatch.GetElapsedTime(last, now);
+            last = now;
+            counted += step > MaxWatchdogStep ? MaxWatchdogStep : step;
+            if (limit is { } max && counted >= max) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Parses <c>git status --porcelain=v1 -z</c>: the two-letter code and path of each entry. A rename or
+    /// copy also lists its source path, with the same code.
+    /// </summary>
+    internal static IReadOnlyList<(string Code, string Path)> ParseStatus(byte[] status)
+    {
+        string[] parts = SplitNull(status);
+        List<(string Code, string Path)> entries = [];
+        for (int i = 0; i < parts.Length; i++)
+        {
+            if (parts[i].Length < 4) continue;
+            string code = parts[i][..2];
+            entries.Add((code, parts[i][3..]));
+            if ((code.Contains('R') || code.Contains('C')) && i + 1 < parts.Length)
+                entries.Add((code, parts[++i]));
+        }
+        return entries;
     }
 
     private void LogFailure(string? root, string[] args, int exitCode, Stopwatch elapsed, byte[] stderr)
@@ -687,7 +895,7 @@ public sealed class SystemGitTransport : ILocalGitTransport
     {
         "--version", "rev-parse", "symbolic-ref", "config", "status", "ls-files",
         "for-each-ref", "add", "diff", "commit", "fetch", "merge-base", "merge", "push", "ls-tree", "show",
-        "write-tree", "commit-tree", "update-ref", "cat-file", "log"
+        "write-tree", "commit-tree", "update-ref", "cat-file", "log", "restore"
     };
 
     private static bool LooksLikeAuthenticationFailure(byte[] stderr)
@@ -709,6 +917,7 @@ public sealed class SystemGitTransport : ILocalGitTransport
             (args[0] == "merge" && (args.Count != 3 || args[1] != "--ff-only")) ||
             (args[0] == "cat-file" && (args.Count != 2 || args[1] != "--batch")) ||
             (args[0] == "write-tree" && args.Count != 1) ||
+            (args[0] == "restore" && !args.SequenceEqual(RestoreSnapshotArgs)) ||
             (args[0] == "commit-tree" && (args.Count != 8 || args[2] != "-p" ||
                 args[4] != "-p" || args[6] != "-m")) ||
             (args[0] == "log" && (args.Count != 6 || args[1] != "--reverse" ||

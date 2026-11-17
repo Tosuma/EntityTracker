@@ -3,6 +3,7 @@ using EntityTracker.Application.Persistence;
 using EntityTracker.Domain;
 
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 
 using EntityTracker.Application.Diagnostics;
@@ -50,6 +51,19 @@ public sealed record GitWorkingTreeState(
     string RootPath, string Branch, string? UpstreamIdentity, string? Head,
     IReadOnlyDictionary<string, byte[]> SnapshotFiles);
 
+/// <summary>
+/// What <see cref="ILocalGitTransport.RepairInterruptedSyncAsync"/> cleaned up: stale Git lock files, and
+/// snapshot files an interrupted sync left changed, staged or untracked (copied to
+/// <paramref name="RecoveryFolder"/> first).
+/// </summary>
+public sealed record GitCheckoutRepair(IReadOnlyList<string> RemovedLocks, IReadOnlyList<string> DiscardedPaths,
+    string? RecoveryFolder)
+{
+    public static GitCheckoutRepair None { get; } = new([], [], null);
+
+    public bool Repaired => RemovedLocks.Count > 0 || DiscardedPaths.Count > 0;
+}
+
 /// <summary>One commit as listed between two commits: its ID, parents, subject and changed paths.</summary>
 public sealed record GitCommitSummary(string Id, IReadOnlyList<string> Parents, string Subject,
     IReadOnlyList<string> ChangedPaths);
@@ -72,6 +86,16 @@ public interface ILocalGitTransport
         throw new NotSupportedException("Git configuration is unavailable.");
 
     Task<IAsyncDisposable> LockAsync(string path, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Repairs what an interrupted sync leaves behind, before the checkout is inspected: removes Git lock
+    /// files no running Git can own, and, when <paramref name="discardSnapshotChanges"/> is set and every
+    /// change is under <c>.entitytracker/</c>, puts those files back as they are at HEAD (they are only an
+    /// export of the local database, which the sync writes again). Called while holding <see cref="LockAsync"/>.
+    /// </summary>
+    Task<GitCheckoutRepair> RepairInterruptedSyncAsync(string path, bool discardSnapshotChanges,
+        CancellationToken cancellationToken = default) => Task.FromResult(GitCheckoutRepair.None);
+
     Task<GitWorkingTreeState> InspectAsync(string path, CancellationToken cancellationToken = default);
     Task<string> CommitSnapshotAsync(string path, IReadOnlyDictionary<string, byte[]> oldFiles,
         ProjectSnapshotPackage package, CancellationToken cancellationToken = default);
@@ -239,7 +263,7 @@ public sealed partial class ProjectGitSyncService(
     {
         if (versionGate is not null) await versionGate.EnsureSyncAllowedAsync(token);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        await using IAsyncDisposable guard = await git.LockAsync(path, token);
+        await using IAsyncDisposable guard = await LockAndRepairAsync(path, false, token);
         GitWorkingTreeState state = await git.InspectAsync(path, token);
         IReadOnlyList<ProjectSyncLink> existing = await links.ReadAllAsync(token);
         if (existing.Any(link => link.ProjectId == projectId.Value &&
@@ -286,7 +310,7 @@ public sealed partial class ProjectGitSyncService(
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         if (projects is null || backup is null)
             throw new InvalidOperationException("Project import is unavailable in this application configuration.");
-        await using IAsyncDisposable guard = await git.LockAsync(path, token);
+        await using IAsyncDisposable guard = await LockAndRepairAsync(path, false, token);
         GitWorkingTreeState state = await git.InspectAsync(path, token);
         IReadOnlyList<ProjectSyncLink> existingLinks = await links.ReadAllAsync(token);
         if (existingLinks.Any(link => link.SyncStatus != "RemoteDeletedLocalKept" &&
@@ -413,16 +437,25 @@ public sealed partial class ProjectGitSyncService(
     {
         ProjectSyncTimingCollector collector = new(progress, _log);
         string outcome = "Completed";
+        StrongBox<bool> repaired = new();
         try
         {
             ProjectSyncLink result = await LoggedAsync(mode == ProjectSyncMode.Automatic ? "Auto-sync" : "Sync",
-                $"Project {projectId.Value:D}", () => SyncCoreAsync(projectId, localName, token, collector, mode), Describe);
+                $"Project {projectId.Value:D}", () => SyncCoreAsync(projectId, localName, token, collector, mode, repaired),
+                Describe);
             if (result.SyncStatus is "PendingPush" or "PendingRemote") outcome = "Action needed";
+            bool save = false;
             if (result.SyncStatus == "Current")
             {
                 result = result with { LastSyncedAtUtc = _clock.GetUtcNow() };
-                await links.SaveAsync(result, token);
+                save = true;
             }
+            if (repaired.Value && result.SyncStatus != "Deleted")
+            {
+                result = result with { LastResult = $"{result.LastResult}. {RepairedNote}" };
+                save = true;
+            }
+            if (save) await links.SaveAsync(result, token);
             return result;
         }
         catch (OperationCanceledException) { outcome = "Cancelled"; throw; }
@@ -431,8 +464,41 @@ public sealed partial class ProjectGitSyncService(
         finally { timing?.Report(collector.Finish(outcome)); }
     }
 
+    /// <summary>Added to the sync result when the sync first repaired what an interrupted sync left behind.</summary>
+    internal const string RepairedNote = "The checkout was repaired after an interrupted sync";
+
+    /// <summary>
+    /// Takes the repository lock, then repairs what an interrupted sync left behind
+    /// (<see cref="ILocalGitTransport.RepairInterruptedSyncAsync"/>). Only a sync of a linked Project discards
+    /// snapshot changes; link, import and purge only remove stale lock files.
+    /// </summary>
+    private async Task<IAsyncDisposable> LockAndRepairAsync(string path, bool discardSnapshotChanges,
+        CancellationToken token, StrongBox<bool>? repaired = null)
+    {
+        IAsyncDisposable guard = await git.LockAsync(path, token);
+        try
+        {
+            GitCheckoutRepair repair = await git.RepairInterruptedSyncAsync(path, discardSnapshotChanges, token);
+            if (repair.Repaired)
+            {
+                _log.LogWarning(
+                    "Repaired the checkout after an interrupted sync: removed {LockCount} stale Git lock files and put back {FileCount} snapshot files as they are at HEAD{Copies}.",
+                    repair.RemovedLocks.Count, repair.DiscardedPaths.Count,
+                    repair.RecoveryFolder is null ? "" : $" (copies in {repair.RecoveryFolder})");
+                if (repaired is not null) repaired.Value = true;
+            }
+            return guard;
+        }
+        catch
+        {
+            await guard.DisposeAsync();
+            throw;
+        }
+    }
+
     private async Task<ProjectSyncLink> SyncCoreAsync(ProjectId projectId, string? localName,
-        CancellationToken token, IProgress<ProjectSyncPhase>? progress, ProjectSyncMode mode)
+        CancellationToken token, IProgress<ProjectSyncPhase>? progress, ProjectSyncMode mode,
+        StrongBox<bool> repaired)
     {
         if (versionGate is not null) await versionGate.EnsureSyncAllowedAsync(token);
         progress?.Report(ProjectSyncPhase.CheckingEdits);
@@ -442,7 +508,7 @@ public sealed partial class ProjectGitSyncService(
             throw new InvalidOperationException("This Project is not linked to a repository.");
         if (link.SyncStatus == "RemoteDeletedLocalKept")
             throw new InvalidOperationException("The shared Project was deleted; this local Project is unlinked.");
-        await using IAsyncDisposable guard = await git.LockAsync(link.RepositoryPath, token);
+        await using IAsyncDisposable guard = await LockAndRepairAsync(link.RepositoryPath, true, token, repaired);
         GitWorkingTreeState state = await git.InspectAsync(link.RepositoryPath, token);
         if (!PathEquals(state.RootPath, link.RepositoryPath) || state.Branch != link.Branch ||
             state.UpstreamIdentity != link.UpstreamIdentity)
