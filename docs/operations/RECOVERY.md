@@ -107,6 +107,11 @@ lists what was removed. Git commands that write the checkout always run to the e
 sync is cancelled, and their time limits count only time the computer is awake. A sync writes only
 the snapshot files that changed.
 
+When the Git remote can't be reached (no network, a name that doesn't resolve, a dropped connection,
+or a fetch or push that runs out of time), the sync icon shows that sync is waiting, not that it needs
+attention, and the next sync tries again; **Sync now** retries sooner. When another Git program holds
+a lock on the repository, the sync says so; retry once that program is done.
+
 If the Project card says **Authentication required**, use command-line Git in the existing checkout
 to repair the credential helper, key, host trust, or remote access; then retry **Sync now**. If it
 says **Configuration invalid**, restore the checkout and its expected branch/upstream, or unlink

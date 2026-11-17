@@ -193,6 +193,24 @@ public sealed class ProjectAutoSyncServiceTests
         Assert.DoesNotContain("secret", service.GetState(failed).LastResult);
     }
 
+    [Fact]
+    public async Task AnUnreachableRemoteIsOfflineAndALockedRepositorySaysSo()
+    {
+        ProjectId offline = ProjectId.New();
+        ProjectId busy = ProjectId.New();
+        using ProjectAutoSyncService service = new(new LinkStore(Link(offline), Link(busy)),
+            (id, _) => id == offline
+                ? throw new ProjectSyncNetworkException("EntityTracker couldn't reach the Git remote.")
+                : throw new ProjectSyncRepositoryBusyException("Another Git program is using this repository."));
+
+        await service.RunPassAsync();
+
+        Assert.Equal(ProjectSyncStateKind.Offline, service.GetState(offline).Kind);
+        Assert.Equal("EntityTracker couldn't reach the Git remote.", service.GetState(offline).LastResult);
+        Assert.Equal(ProjectSyncStateKind.Failed, service.GetState(busy).Kind);
+        Assert.Equal("Another Git program is using this repository.", service.GetState(busy).LastResult);
+    }
+
     [Theory]
     [InlineData(1)]
     [InlineData(5)]

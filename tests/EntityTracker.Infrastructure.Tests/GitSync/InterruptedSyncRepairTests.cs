@@ -89,7 +89,7 @@ public sealed class InterruptedSyncRepairTests
         repo.Snapshots.Change(Snapshot(repo.ProjectId, "Second"));
         string indexLock = repo.LeaveLock(".git/index.lock", TimeSpan.Zero);
 
-        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        ProjectSyncRepositoryBusyException error = await Assert.ThrowsAsync<ProjectSyncRepositoryBusyException>(() =>
             repo.Service.SyncNowAsync(repo.ProjectId));
 
         Assert.Contains("Another Git program is using this repository", error.Message, StringComparison.Ordinal);

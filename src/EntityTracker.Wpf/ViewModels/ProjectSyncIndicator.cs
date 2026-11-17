@@ -48,6 +48,9 @@ public sealed record ProjectSyncIndicator(ProjectSyncIndicatorKind Kind, string 
                 return new(ProjectSyncIndicatorKind.NeedsAttention, $"Sync needs attention: {state.LastResult}");
             case ProjectSyncStateKind.UpdatePaused:
                 return new(ProjectSyncIndicatorKind.Paused, "Sync is paused until EntityTracker is updated." + lastSynced);
+            case ProjectSyncStateKind.Offline:
+                return new(ProjectSyncIndicatorKind.Paused, "Sync is waiting for the Git remote: it couldn't be reached, " +
+                    "and sync tries again automatically." + lastSynced);
         }
         bool pending = link.SyncStatus is "Pending" or "PendingPush" or "PendingRemote" or "PendingDeletion";
         if (pending || revision > link.LastRevision)

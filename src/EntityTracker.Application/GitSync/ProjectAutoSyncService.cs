@@ -13,7 +13,9 @@ namespace EntityTracker.Application.GitSync;
 public enum ProjectSyncStateKind
 {
     Unlinked, Idle, Syncing, UpToDate, LocalPending, DeletionApproval,
-    Conflict, AuthenticationRequired, ConfigurationInvalid, UpdatePaused, Failed
+    Conflict, AuthenticationRequired, ConfigurationInvalid, UpdatePaused, Failed,
+    /// <summary>The Git remote couldn't be reached; the next sync tries again.</summary>
+    Offline
 }
 
 public sealed record ProjectSyncState(ProjectSyncStateKind Kind, string LastResult,
@@ -262,6 +264,7 @@ public sealed class ProjectAutoSyncService : IDisposable
         ProjectSyncDeletionApprovalRequiredException => ProjectSyncStateKind.DeletionApproval,
         ProjectSyncReviewRequiredException or ProjectNameCollisionException => ProjectSyncStateKind.Conflict,
         ProjectSyncAuthenticationException => ProjectSyncStateKind.AuthenticationRequired,
+        ProjectSyncNetworkException => ProjectSyncStateKind.Offline,
         ProjectSyncUpdateRequiredException or ProjectSyncVersionCheckUnavailableException =>
             ProjectSyncStateKind.UpdatePaused,
         ProjectSyncConfigurationException or ProjectSnapshotFormatVersionException or
@@ -273,7 +276,8 @@ public sealed class ProjectAutoSyncService : IDisposable
     private static string SafeResult(Exception error) => error switch
     {
         ProjectSyncDeletionApprovalRequiredException or ProjectSyncReviewRequiredException or
-            ProjectSyncAuthenticationException or ProjectSyncConfigurationException => error.Message,
+            ProjectSyncAuthenticationException or ProjectSyncConfigurationException or
+            ProjectSyncNetworkException or ProjectSyncRepositoryBusyException => error.Message,
         ProjectNameCollisionException => "Choose a unique local Project name with Sync now.",
         ProjectSyncUpdateRequiredException or ProjectSyncVersionCheckUnavailableException =>
             error.Message,
@@ -307,6 +311,15 @@ public sealed class ProjectAutoSyncService : IDisposable
 }
 
 public sealed class ProjectSyncAuthenticationException(string message) : InvalidOperationException(message);
+
+/// <summary>
+/// The Git remote couldn't be reached: no network, a name that doesn't resolve, a dropped connection or a fetch
+/// or push that ran out of time. Expected to clear by itself, so it doesn't need the user's attention.
+/// </summary>
+public sealed class ProjectSyncNetworkException(string message) : InvalidOperationException(message);
+
+/// <summary>Another Git program holds a lock on the repository, so Git couldn't change it.</summary>
+public sealed class ProjectSyncRepositoryBusyException(string message) : InvalidOperationException(message);
 public class ProjectSyncConfigurationException(string message) : InvalidOperationException(message);
 
 /// <summary>
