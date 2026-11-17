@@ -194,6 +194,87 @@ public sealed class ProjectAutoSyncServiceTests
     }
 
     [Fact]
+    public async Task APausedServiceStartsNoSyncUntilResumed()
+    {
+        int syncs = 0;
+        using ProjectAutoSyncService service = new(new LinkStore(Link(ProjectId.New())), (id, _) =>
+        {
+            Interlocked.Increment(ref syncs);
+            return Task.FromResult(Link(id) with { SyncStatus = "Current" });
+        });
+
+        service.Pause("the computer is going to sleep");
+        await service.RunPassAsync();
+        Assert.True(service.IsPaused);
+        Assert.Equal(0, syncs);
+
+        service.Resume("the computer woke up");
+        await service.RunPassAsync();
+        Assert.False(service.IsPaused);
+        Assert.Equal(1, syncs);
+    }
+
+    [Fact]
+    public async Task SyncSoonRunsAPassWithoutWaitingForTheInterval()
+    {
+        ManualTimeProvider clock = new();
+        TaskCompletionSource second = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int passes = 0;
+        using ProjectAutoSyncService service = new(new LinkStore(Link(ProjectId.New())), (id, _) =>
+        {
+            if (Interlocked.Increment(ref passes) == 2) second.TrySetResult();
+            return Task.FromResult(Link(id) with { SyncStatus = "Current" });
+        }, intervalMinutes: 60, clock: clock);
+
+        service.Start();
+        await clock.FirstDue.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        service.SyncSoon("the network is back");
+
+        await second.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(2, Volatile.Read(ref passes));
+    }
+
+    [Fact]
+    public async Task SyncSoonDoesNothingWhileAutomaticSyncIsOffOrPaused()
+    {
+        int syncs = 0;
+        using ProjectAutoSyncService off = new(new LinkStore(Link(ProjectId.New())), (id, _) =>
+        {
+            Interlocked.Increment(ref syncs);
+            return Task.FromResult(Link(id) with { SyncStatus = "Current" });
+        }, enabled: false);
+        using ProjectAutoSyncService paused = new(new LinkStore(Link(ProjectId.New())), (id, _) =>
+        {
+            Interlocked.Increment(ref syncs);
+            return Task.FromResult(Link(id) with { SyncStatus = "Current" });
+        });
+        paused.Pause("the session is ending");
+
+        off.Start();
+        paused.Start();
+        off.SyncSoon("the network is back");
+        paused.SyncSoon("the network is back");
+        await Task.Delay(TimeSpan.FromMilliseconds(300));
+
+        Assert.Equal(0, Volatile.Read(ref syncs));
+    }
+
+    [Fact]
+    public async Task WaitUntilIdleReturnsWhenTheSyncFinishesOrTheLimitPasses()
+    {
+        ProjectId project = ProjectId.New();
+        using ProjectAutoSyncService service = new(new LinkStore(Link(project)),
+            (id, _) => Task.FromResult(Link(id)));
+
+        Assert.True(await service.WaitUntilIdleAsync(TimeSpan.Zero));
+        service.BeginManual(project);
+        Assert.False(await service.WaitUntilIdleAsync(TimeSpan.FromMilliseconds(150)));
+        Task<bool> waiting = service.WaitUntilIdleAsync(TimeSpan.FromSeconds(5));
+        service.EndManual(project);
+        Assert.True(await waiting);
+    }
+
+    [Fact]
     public async Task AnUnreachableRemoteIsOfflineAndALockedRepositorySaysSo()
     {
         ProjectId offline = ProjectId.New();

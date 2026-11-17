@@ -330,12 +330,18 @@ public sealed class ProjectGitSyncTests
         repo.Git("config", "branch.main.merge", "refs/heads/main");
         CapturingLogger<SystemGitTransport> logger = new();
 
-        await Assert.ThrowsAnyAsync<InvalidOperationException>(() => new SystemGitTransport(logger).FetchAsync(repo.Root));
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() =>
+            new SystemGitTransport(logger) { NetworkRetryDelay = TimeSpan.Zero }.FetchAsync(repo.Root));
 
-        CapturingLogger<SystemGitTransport>.Entry failure = Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
-        Assert.Contains("Git fetch", failure.Message, StringComparison.Ordinal);
-        Assert.Contains("exit code", failure.Message, StringComparison.Ordinal);
-        Assert.Contains("127.0.0.1", failure.Message, StringComparison.Ordinal);
+        // The fetch can't reach the remote, so it is tried once more: one failure logged for each try.
+        CapturingLogger<SystemGitTransport>.Entry[] failures = logger.Entries.Where(entry => entry.Level == LogLevel.Error).ToArray();
+        Assert.Equal(2, failures.Length);
+        Assert.All(failures, failure =>
+        {
+            Assert.Contains("Git fetch", failure.Message, StringComparison.Ordinal);
+            Assert.Contains("exit code", failure.Message, StringComparison.Ordinal);
+            Assert.Contains("127.0.0.1", failure.Message, StringComparison.Ordinal);
+        });
         Assert.All(logger.Entries, entry => Assert.DoesNotContain("supersecret", entry.Message, StringComparison.Ordinal));
         // The read-only commands before the fetch are logged too, at Debug.
         Assert.Contains(logger.Entries, entry => entry.Level == LogLevel.Debug &&

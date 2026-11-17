@@ -39,6 +39,10 @@ public partial class App : System.Windows.Application
     private ILogger? _crashLogger;
     private IApplicationThemeService? _themeService;
     private SingleInstanceCoordinator? _singleInstance;
+    private SyncPowerWatcher? _powerWatcher;
+
+    /// <summary>How long closing the app waits for a running sync before stopping it.</summary>
+    private static readonly TimeSpan ExitSyncWait = TimeSpan.FromSeconds(3);
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -244,6 +248,9 @@ public partial class App : System.Windows.Application
             mainWindow.Title = dataPaths.WindowTitle;
             MainWindow = mainWindow;
             mainWindow.Show();
+            _powerWatcher = new SyncPowerWatcher(_serviceProvider.GetRequiredService<ProjectAutoSyncService>(),
+                _serviceProvider.GetRequiredService<ILogger<SyncPowerWatcher>>());
+            _powerWatcher.Attach();
 
             if (startupWarnings.Length > 0)
             {
@@ -375,8 +382,36 @@ public partial class App : System.Windows.Application
             System.Windows.Threading.DispatcherPriority.ApplicationIdle);
     }
 
+    /// <summary>
+    /// Windows is shutting down, restarting or logging off. The window's Closing event doesn't come then, so a
+    /// running sync gets its time here (<see cref="SessionEndSyncGuard"/>). The dispatcher keeps running
+    /// while it waits, since a manual sync reports back on the UI thread.
+    /// </summary>
+    protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
+    {
+        base.OnSessionEnding(e);
+        if (_serviceProvider?.GetService<ProjectAutoSyncService>() is not { } autoSync) return;
+        IntPtr window = MainWindow is null ? IntPtr.Zero : new System.Windows.Interop.WindowInteropHelper(MainWindow).Handle;
+        SessionEndSyncGuard guard = new(autoSync, _logger);
+        _logger?.LogInformation("Windows is ending the session ({Reason}).", e.ReasonSessionEnding);
+        System.Windows.Threading.DispatcherFrame frame = new();
+        Task finished = guard.FinishSyncAsync(reason => ShutdownBlock.Create(window, reason),
+            () => ShutdownBlock.Destroy(window));
+        finished.ContinueWith(_ => frame.Continue = false, TaskScheduler.Default);
+        if (!finished.IsCompleted) System.Windows.Threading.Dispatcher.PushFrame(frame);
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
+        _powerWatcher?.Dispose();
+        if (_serviceProvider?.GetService<ProjectAutoSyncService>() is { } autoSync)
+        {
+            // Closing stops a running sync; give it a moment to finish first, so it isn't cut off part-way.
+            autoSync.Pause("EntityTracker is closing");
+            if (autoSync.HasActiveSync &&
+                !Task.Run(() => autoSync.WaitUntilIdleAsync(ExitSyncWait)).GetAwaiter().GetResult())
+                _logger?.LogWarning("A Project sync was still running when EntityTracker closed.");
+        }
         _serviceProvider?.GetService<ProjectAutoSyncService>()?.Dispose();
         _serviceProvider?.GetService<AppUpdateService>()?.Dispose();
         _singleInstance?.Dispose();

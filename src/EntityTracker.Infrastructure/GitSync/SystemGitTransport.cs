@@ -627,7 +627,27 @@ public sealed class SystemGitTransport : ILocalGitTransport
         return (remote, upstream);
     }
 
+    /// <summary>How long a fetch or push that couldn't reach the remote waits before its one retry.</summary>
+    internal TimeSpan NetworkRetryDelay { get; init; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Runs a fetch or push. One that can't reach the remote is tried once more after
+    /// <see cref="NetworkRetryDelay"/>, since a connection often comes back within seconds (for example just
+    /// after waking). Authentication and other failures are not retried.
+    /// </summary>
     private async Task RunRemoteAsync(string root, string[] args, CancellationToken token)
+    {
+        try { await RunRemoteOnceAsync(root, args, token); }
+        catch (ProjectSyncNetworkException)
+        {
+            _logger.LogWarning("Git {Verb} in {Repository} couldn't reach the remote; trying once more in {DelaySeconds} s.",
+                args[0], root, NetworkRetryDelay.TotalSeconds);
+            await Task.Delay(NetworkRetryDelay, token);
+            await RunRemoteOnceAsync(root, args, token);
+        }
+    }
+
+    private async Task RunRemoteOnceAsync(string root, string[] args, CancellationToken token)
     {
         try { await RunAsync(root, args, token); }
         catch (Exception exception) when (exception is ProjectSyncAuthenticationException or
