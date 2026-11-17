@@ -21,8 +21,21 @@ public enum ProjectSyncStateKind
 public sealed record ProjectSyncState(ProjectSyncStateKind Kind, string LastResult,
     DateTimeOffset? LastAttemptUtc = null);
 
+/// <summary>
+/// What the app tells automatic sync when Windows sleeps, wakes or ends the session: hold new syncs back,
+/// let them start again, run one soon, and wait for a running one to finish.
+/// </summary>
+public interface IAutoSyncControl
+{
+    bool HasActiveSync { get; }
+    void Pause(string reason);
+    void Resume(string reason);
+    void SyncSoon(string reason);
+    Task<bool> WaitUntilIdleAsync(TimeSpan limit, CancellationToken cancellationToken = default);
+}
+
 /// <summary>Schedules the existing Project sync operation without involving the UI thread.</summary>
-public sealed class ProjectAutoSyncService : IDisposable
+public sealed class ProjectAutoSyncService : IDisposable, IAutoSyncControl
 {
     private readonly IProjectSyncLinkStore _links;
     private readonly Func<ProjectId, CancellationToken, Task<ProjectSyncLink>> _sync;
@@ -38,6 +51,7 @@ public sealed class ProjectAutoSyncService : IDisposable
     private CancellationTokenSource? _currentPass;
     private Task? _loop;
     private volatile bool _enabled;
+    private volatile bool _paused;
     private TimeSpan _interval;
 
     public ProjectAutoSyncService(IProjectSyncLinkStore links,
@@ -79,6 +93,54 @@ public sealed class ProjectAutoSyncService : IDisposable
             enabled ? "on" : "off", intervalMinutes);
         if (!enabled) CancelCurrentPass();
         SignalSettingsChanged();
+    }
+
+    /// <summary>Whether automatic syncs are held back (<see cref="Pause"/>).</summary>
+    public bool IsPaused => _paused;
+
+    /// <summary>
+    /// Holds automatic syncs back, for example while the computer sleeps or the session ends. A sync that is
+    /// already running goes on: stopping it part-way is what this avoids. Manual sync is not affected.
+    /// </summary>
+    public void Pause(string reason)
+    {
+        if (_paused) return;
+        _paused = true;
+        _logger.LogInformation("Automatic sync paused: {Reason}.", reason);
+    }
+
+    /// <summary>Lets automatic syncs start again after <see cref="Pause"/>.</summary>
+    public void Resume(string reason)
+    {
+        if (!_paused) return;
+        _paused = false;
+        _logger.LogInformation("Automatic sync resumed: {Reason}.", reason);
+    }
+
+    /// <summary>
+    /// Runs an automatic sync pass now instead of at the end of the interval, for example once the network is
+    /// back after the computer woke up. Does nothing while automatic sync is off or paused.
+    /// </summary>
+    public void SyncSoon(string reason)
+    {
+        if (!_enabled || _paused) return;
+        _logger.LogInformation("Automatic sync runs now: {Reason}.", reason);
+        SignalSettingsChanged();
+    }
+
+    /// <summary>
+    /// Waits until no sync runs, for at most <paramref name="limit"/>. Returns whether none is running. A sync
+    /// waiting for an open edit counts as running.
+    /// </summary>
+    public async Task<bool> WaitUntilIdleAsync(TimeSpan limit, CancellationToken cancellationToken = default)
+    {
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
+        while (HasActiveSync)
+        {
+            if (System.Diagnostics.Stopwatch.GetElapsedTime(started) >= limit) return false;
+            await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken);
+        }
+        return true;
     }
 
     public void ReportManual(ProjectId projectId, ProjectSyncState state) =>
@@ -165,11 +227,17 @@ public sealed class ProjectAutoSyncService : IDisposable
 
     public async Task RunPassAsync(CancellationToken token = default)
     {
+        if (_paused)
+        {
+            _logger.LogDebug("Automatic sync pass skipped: automatic sync is paused.");
+            return;
+        }
         IReadOnlyList<ProjectSyncLink> links = await _links.ReadAllAsync(token);
         _logger.LogDebug("Automatic sync pass over {LinkCount} linked Projects.", links.Count);
         foreach (ProjectSyncLink link in links.OrderBy(link => link.ProjectId))
         {
             token.ThrowIfCancellationRequested();
+            if (_paused) return;
             if (link.SyncStatus is "RemoteDeletedLocalKept" or "Deleted") continue;
             ProjectId projectId = new(link.ProjectId);
             _states.TryAdd(link.ProjectId, FromLink(link));
@@ -239,7 +307,7 @@ public sealed class ProjectAutoSyncService : IDisposable
         try
         {
             if (_editGate is not null) await _editGate.WaitUntilReadyAsync(projectId, token);
-            if (_enabled && !token.IsCancellationRequested &&
+            if (_enabled && !_paused && !token.IsCancellationRequested &&
                 (await _links.ReadAllAsync(token)).Any(link => link.ProjectId == projectId.Value))
                 await RunProjectAsync(projectId, token);
             else _inFlight.TryRemove(projectId.Value, out _);

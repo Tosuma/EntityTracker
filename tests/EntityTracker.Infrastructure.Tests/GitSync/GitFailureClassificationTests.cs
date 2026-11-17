@@ -49,6 +49,41 @@ public sealed class GitFailureClassificationTests
     }
 
     [Fact]
+    public async Task AFetchThatCantReachTheRemoteIsTriedOnceMore()
+    {
+        using TemporaryRepository repo = TemporaryRepository.Create();
+        repo.Git("remote", "add", "origin", "https://entitytracker-tests.invalid/project.git");
+        repo.Git("config", "branch.main.remote", "origin");
+        repo.Git("config", "branch.main.merge", "refs/heads/main");
+        repo.Git("update-ref", "refs/remotes/origin/main", "HEAD");
+        ListLogger logger = new();
+        SystemGitTransport git = new(logger) { NetworkRetryDelay = TimeSpan.Zero };
+
+        await Assert.ThrowsAsync<ProjectSyncNetworkException>(() => git.FetchAsync(repo.Root));
+
+        Assert.Equal(2, logger.Messages.Count(message => message.StartsWith("Git fetch --no-tags -- origin", StringComparison.Ordinal) &&
+                                                         message.Contains("failed with exit code", StringComparison.Ordinal)));
+        Assert.Single(logger.Messages, message => message.Contains("trying once more", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AFailureThatIsNotANetworkProblemIsNotRetried()
+    {
+        using TemporaryRepository repo = TemporaryRepository.Create();
+        // A remote that is a folder without a repository fails at once, and not on the network: not retried.
+        repo.Git("remote", "add", "origin", Path.Combine(repo.Root, "missing-remote"));
+        repo.Git("config", "branch.main.remote", "origin");
+        repo.Git("config", "branch.main.merge", "refs/heads/main");
+        repo.Git("update-ref", "refs/remotes/origin/main", "HEAD");
+        ListLogger logger = new();
+        SystemGitTransport git = new(logger) { NetworkRetryDelay = TimeSpan.Zero };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => git.FetchAsync(repo.Root));
+
+        Assert.DoesNotContain(logger.Messages, message => message.Contains("trying once more", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task ACommitBlockedByAnotherGitProgramsLockSaysSo()
     {
         using TemporaryRepository repo = TemporaryRepository.Create();
@@ -64,6 +99,23 @@ public sealed class GitFailureClassificationTests
             git.CommitSnapshotAsync(repo.Root, state.SnapshotFiles, package));
 
         Assert.Equal(SystemGitTransport.RepositoryBusyMessage, error.Message);
+    }
+
+    private sealed class ListLogger : Microsoft.Extensions.Logging.ILogger<SystemGitTransport>
+    {
+        private readonly List<string> _messages = [];
+
+        public IReadOnlyList<string> Messages { get { lock (_messages) return _messages.ToArray(); } }
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId,
+            TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            lock (_messages) _messages.Add(formatter(state, exception));
+        }
     }
 
     private sealed class TemporaryRepository : IDisposable

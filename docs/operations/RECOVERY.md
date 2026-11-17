@@ -108,8 +108,15 @@ sync is cancelled, and their time limits count only time the computer is awake. 
 the snapshot files that changed.
 
 When the Git remote can't be reached (no network, a name that doesn't resolve, a dropped connection,
-or a fetch or push that runs out of time), the sync icon shows that sync is waiting, not that it needs
-attention, and the next sync tries again; **Sync now** retries sooner. When another Git program holds
+or a fetch or push that runs out of time), the fetch or push is tried once more after a few seconds.
+If that fails too, the sync icon shows that sync is waiting, not that it needs attention, and the next
+sync tries again; **Sync now** retries sooner.
+
+When the computer goes to sleep, no new automatic sync starts. When it wakes, automatic sync runs as
+soon as the network is back, instead of waiting for the rest of its interval. When Windows shuts
+down, restarts or logs off while a sync runs, EntityTracker asks Windows to wait (shown as "Finishing
+Project sync") and gives the sync up to 10 seconds; closing the app gives it up to 3 seconds. A sync
+cut off anyway is repaired by the next one. When another Git program holds
 a lock on the repository, the sync says so; retry once that program is done.
 
 If the Project card says **Authentication required**, use command-line Git in the existing checkout
