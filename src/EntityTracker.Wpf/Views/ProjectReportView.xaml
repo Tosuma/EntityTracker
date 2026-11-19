@@ -273,7 +273,7 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <TextBlock VerticalAlignment="Center" Style="{StaticResource SectionHeadingTextStyle}" TextWrapping="Wrap" Text="Weekly implemented change"
-                                   ToolTip="Each week, how many entities became implemented and how many stopped being implemented." AutomationProperties.HelpText="Each week, how many entities became implemented and how many stopped being implemented." />
+                                   ToolTip="Each week, the net change in implemented entities, and the entities in progress at its end." AutomationProperties.HelpText="Each week, the net change in implemented entities, and the entities in progress at its end." />
                                         <!-- Save image… and Copy image in one menu, so each chart header has one quiet button. -->
                                         <Button Grid.Column="2" Margin="8,0,0,0" Click="OnChartActionsClick"
                                                 ToolTip="Save or copy this chart as an image"

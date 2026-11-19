@@ -174,8 +174,6 @@ public static class ColorScheme
         public const string Implemented = Base.DeepTeal;
         public const string ReadyTrend = Base.Green60;
         public const string WaitingTrend = Base.Amber;
-        public const string Increase = Base.Green60;
-        public const string Decrease = Base.Coral;
         /// <summary>The target line: the number of active entities the implemented line works towards.</summary>
         public const string Target = Base.Coral;
         /// <summary>

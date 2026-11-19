@@ -97,7 +97,7 @@ public sealed class ReportProgressChartTests
             chart.Series.Select(series => series.Color));
         // 3 up and 2 down, then 1 up and 3 down: a week can go backwards.
         Assert.Equal([1d, -2d], chart.Series[0].Values);
-        // In progress on the week's last day with data: Tuesday of the first week, Monday of the second.
+        // The entities in progress at each week's end, as the dashboard worked them out.
         Assert.Equal([3d, 1d], chart.Series[1].Values);
     }
 
@@ -147,13 +147,9 @@ public sealed class ReportProgressChartTests
     [InlineData(ProgressChartKind.CurrentStatus)]
     [InlineData(ProgressChartKind.ImplementedOverTime)]
     [InlineData(ProgressChartKind.ReadyAndBlockedOverTime)]
+    [InlineData(ProgressChartKind.WeeklyNetImplementedChange)]
     public void EveryChartCarriesItsDescriptionForTheTitleHint(ProgressChartKind kind) =>
         Assert.Equal(ProgressChartPresentationBuilder.GetDescription(kind), Section(kind, ReportAudience.Internal).Description);
-
-    [Fact]
-    public void TheWeeklyChartDescribesTheReportsOwnBars() =>
-        Assert.Equal(ProgressChartSectionProvider.WeeklyDescription,
-            Section(ProgressChartKind.WeeklyNetImplementedChange).Description);
 
     [Fact]
     public void TheReportScriptShowsTheDescriptionWhenPointingAtTheTitle()
@@ -179,7 +175,7 @@ public sealed class ReportProgressChartTests
             ],
             [new(Monday, 3, 2, 6, 1), new(Monday.AddDays(1), 4, 3, 5, 1), new(Monday.AddDays(7), 5, 1, 4, 0)],
             [],
-            [new(Monday, 3, 2), new(Monday.AddDays(7), 1, 3)],
+            [new(Monday, 3, 2, InProgressAtEnd: 3), new(Monday.AddDays(7), 1, 3, InProgressAtEnd: 1)],
             Monday,
             Monday.AddDays(7));
         ReportContext context = new(
