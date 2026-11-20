@@ -2248,6 +2248,21 @@ public sealed class PresentationConfigurationTests
     }
 
     [Fact]
+    public void EveryPageKeepsItsHeaderInPlaceWhileItsContentScrolls()
+    {
+        // A header inside the scrolling content scrolls away with it, Project tabs included.
+        string views = Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf", "Views");
+        XElement[] headers = Directory.GetFiles(views, "*.xaml")
+            .SelectMany(static file => XDocument.Load(file).Descendants())
+            .Where(static element => element.Name.LocalName == "PageHeader")
+            .ToArray();
+
+        Assert.NotEmpty(headers);
+        Assert.All(headers, static header =>
+            Assert.DoesNotContain(header.Ancestors(), static ancestor => ancestor.Name.LocalName == "ScrollViewer"));
+    }
+
+    [Fact]
     public void EveryTablesTextIsCentredInItsRow()
     {
         string views = Path.Combine(FindRepositoryRoot(AppContext.BaseDirectory), "src", "EntityTracker.Wpf", "Views");

@@ -10,15 +10,21 @@
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </UserControl.Resources>
     <Grid>
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <!-- The header and the Project tabs stay in place above the scrolling report, as on the other
+             Project pages. -->
+        <controls:PageHeader x:Name="ReportHeader" MaxWidth="1100" HorizontalAlignment="Left"
+                             Title="{Binding ProjectContextName}"
+                             Description="Create a report of this Project to share. It is one web page that works offline: open it in any browser, search it, and print it to PDF if a document is needed.">
+            <controls:PageHeader.Tabs>
+                <views:ProjectTabs Margin="0,8,0,0" Current="ProjectReport" />
+            </controls:PageHeader.Tabs>
+        </controls:PageHeader>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel MaxWidth="1100" HorizontalAlignment="Left" DataContext="{Binding ProjectReport}" controls:ChartThemeFollower.Target="{Binding Charts}">
-                <controls:PageHeader x:Name="ReportHeader"
-                                     Title="{Binding DataContext.ProjectContextName, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                     Description="Create a report of this Project to share. It is one web page that works offline: open it in any browser, search it, and print it to PDF if a document is needed.">
-                    <controls:PageHeader.Tabs>
-                        <views:ProjectTabs Margin="0,8,0,0" Current="ProjectReport" DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}" />
-                    </controls:PageHeader.Tabs>
-                </controls:PageHeader>
 
                 <Border Padding="16" Margin="0,0,0,14" Style="{StaticResource EntityTrackerCardStyle}">
                     <StackPanel>
@@ -304,7 +310,7 @@
             </StackPanel>
         </ScrollViewer>
         <!-- Saving or copying "Progress over time" asks which lines the image shows. -->
-        <controls:ModalDialog x:Name="ChartLinesDialog" DataContext="{Binding ProjectReport.Charts.LineChoice}"
+        <controls:ModalDialog x:Name="ChartLinesDialog" Grid.RowSpan="2" DataContext="{Binding ProjectReport.Charts.LineChoice}"
                               IsOpen="{Binding IsOpen, FallbackValue=False}" Title="{Binding Title}"
                               Description="Choose the lines the image shows. The chart here keeps all of them, and the report uses the lines chosen in its options."
                               CancelCommand="{Binding CancelCommand}">
