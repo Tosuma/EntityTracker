@@ -12,97 +12,104 @@
             <Setter Property="AutomationProperties.HeadingLevel" Value="Level3" />
         </Style>
     </UserControl.Resources>
-    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                  HorizontalScrollBarVisibility="Disabled"
-                  ScrollViewer.CanContentScroll="False">
-        <StackPanel MaxWidth="1040" HorizontalAlignment="Left">
-            <controls:PageHeader Margin="0" Title="Help" Description="A concise guide to navigation, tracker status, reports, lifecycle actions, keyboard shortcuts and Project Git synchronization." />
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <!-- The header stays in place above the scrolling guide, as on every other page. -->
+        <controls:PageHeader MaxWidth="1040" HorizontalAlignment="Left" Title="Help" Description="A concise guide to navigation, tracker status, reports, lifecycle actions, keyboard shortcuts and Project Git synchronization." />
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      ScrollViewer.CanContentScroll="False">
+            <StackPanel MaxWidth="1040" HorizontalAlignment="Left">
 
-            <TextBlock Margin="0,24,0,8" Style="{StaticResource SectionHeadingTextStyle}" Text="Working in EntityTracker" />
-            <UniformGrid Columns="2">
-                <Border Margin="0,0,6,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource HelpCardTitleStyle}" Text="Portfolio, Project, and Tracker" />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Portfolio lists Projects; a Project dashboard lists its Trackers." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Opening a Tracker makes it the context for Overview, Dependency graph and Archived. New entity on Overview or the graph (Ctrl+N) adds an entity to it." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• A Project's pages are tabs under its name: Dashboard, Report, Developers and Schemas." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Schemas describe which entities a Project has and how they depend on each other, without any progress. A dependency on a new name adds that entity to the schema. An open schema has an Entities tab and a Dependency graph tab; select an entity to see its details, and use Edit or New entity to change the schema." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Create tracker, From schema, starts a Tracker with a schema's entities. Push to trackers in the schema editor lists the schema's later changes for each of its Trackers: choose Use schema or Keep tracker for each, and leave any undecided for a later push. Detach from schema, in a Tracker card's … menu, makes it independent." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• An entity can have several responsible developers, and its details show who was responsible and when. Developers can be added, edited, retired and restored." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• A Tracker that was the source of copies made by earlier versions can be turned into a schema with Convert to schema… in its card&apos;s … menu. Its copies are linked to the schema and keep their progress, and the Tracker goes to the recycle bin." />
-                    </StackPanel>
-                </Border>
-                <Border Margin="6,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource HelpCardTitleStyle}" Text="Development status, Work status, and Blockers" />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Development status is set by you and records detailed progress." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Work status summarizes it: Ready or Waiting on dependencies before work starts, Blocked when set to Blocked, In progress for work or rework, Completed after development, and Reconciled after reconciliation." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Implemented counts development finished at least once (Completed, Reconciled, Rework needed and Reworking); its bar shows those parts, and pointing at it lists their counts. Click % implemented on the Overview to list them." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Not relevant marks an entity that is out of scope in this Tracker: it stays listed, blocks nothing that depends on it, and is left out of progress." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Blockers list unresolved or incomplete dependencies, even when work is already in progress." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• In progress and Reworking share a colour, since both mean the entity is being worked on; Blocked is coral. The dependency graph also marks each node with its status's shape." />
-                    </StackPanel>
-                </Border>
-                <Border Margin="0,0,6,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource HelpCardTitleStyle}" Text="Reports" />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• The Project report shows progress, with each figure explained in words, and every entity for the Trackers you choose." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• It saves as one offline web page, for the client (without internal notes and developer names) or for the team." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Each progress chart can be saved or copied as an image." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Overview's Export saves the entities as a spreadsheet, internal notes and developer names included." />
-                    </StackPanel>
-                </Border>
-                <Border Margin="6,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource HelpCardTitleStyle}" Text="Recycle, Restore, and Permanently delete" />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Recycle hides a Project or Tracker while keeping it recoverable; Restore returns it." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Archive hides an entity; restore it from Archived." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Permanently delete removes the item and its listed data after you type its exact name. It cannot be undone." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• The notice after a bulk update, or after archiving or restoring an entity, has Undo for 20 seconds. Entities changed since are left alone." />
-                    </StackPanel>
-                </Border>
-            </UniformGrid>
+                <TextBlock Margin="0,8,0,8" Style="{StaticResource SectionHeadingTextStyle}" Text="Working in EntityTracker" />
+                <UniformGrid Columns="2">
+                    <Border Margin="0,0,6,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource HelpCardTitleStyle}" Text="Portfolio, Project, and Tracker" />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Portfolio lists Projects; a Project dashboard lists its Trackers." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Opening a Tracker makes it the context for Overview, Dependency graph and Archived. New entity on Overview or the graph (Ctrl+N) adds an entity to it." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• A Project's pages are tabs under its name: Dashboard, Report, Developers and Schemas." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Schemas describe which entities a Project has and how they depend on each other, without any progress. A dependency on a new name adds that entity to the schema. An open schema has an Entities tab and a Dependency graph tab; select an entity to see its details, and use Edit or New entity to change the schema." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Create tracker, From schema, starts a Tracker with a schema's entities. Push to trackers in the schema editor lists the schema's later changes for each of its Trackers: choose Use schema or Keep tracker for each, and leave any undecided for a later push. Detach from schema, in a Tracker card's … menu, makes it independent." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• An entity can have several responsible developers, and its details show who was responsible and when. Developers can be added, edited, retired and restored." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• A Tracker that was the source of copies made by earlier versions can be turned into a schema with Convert to schema… in its card&apos;s … menu. Its copies are linked to the schema and keep their progress, and the Tracker goes to the recycle bin." />
+                        </StackPanel>
+                    </Border>
+                    <Border Margin="6,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource HelpCardTitleStyle}" Text="Development status, Work status, and Blockers" />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Development status is set by you and records detailed progress." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Work status summarizes it: Ready or Waiting on dependencies before work starts, Blocked when set to Blocked, In progress for work or rework, Completed after development, and Reconciled after reconciliation." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Implemented counts development finished at least once (Completed, Reconciled, Rework needed and Reworking); its bar shows those parts, and pointing at it lists their counts. Click % implemented on the Overview to list them." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Not relevant marks an entity that is out of scope in this Tracker: it stays listed, blocks nothing that depends on it, and is left out of progress." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Blockers list unresolved or incomplete dependencies, even when work is already in progress." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• In progress and Reworking share a colour, since both mean the entity is being worked on; Blocked is coral. The dependency graph also marks each node with its status's shape." />
+                        </StackPanel>
+                    </Border>
+                    <Border Margin="0,0,6,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource HelpCardTitleStyle}" Text="Reports" />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• The Project report shows progress, with each figure explained in words, and every entity for the Trackers you choose." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• It saves as one offline web page, for the client (without internal notes and developer names) or for the team." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Each progress chart can be saved or copied as an image." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Overview's Export saves the entities as a spreadsheet, internal notes and developer names included." />
+                        </StackPanel>
+                    </Border>
+                    <Border Margin="6,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource HelpCardTitleStyle}" Text="Recycle, Restore, and Permanently delete" />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Recycle hides a Project or Tracker while keeping it recoverable; Restore returns it." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Archive hides an entity; restore it from Archived." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Permanently delete removes the item and its listed data after you type its exact name. It cannot be undone." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• The notice after a bulk update, or after archiving or restoring an entity, has Undo for 20 seconds. Entities changed since are left alone." />
+                        </StackPanel>
+                    </Border>
+                </UniformGrid>
 
-            <TextBlock Margin="0,12,0,8" Style="{StaticResource SectionHeadingTextStyle}" Text="Keyboard and the dependency graph" />
-            <UniformGrid Columns="2">
-                <Border Margin="0,0,6,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource HelpCardTitleStyle}" Text="Shortcuts on a Tracker" />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Ctrl+1, Ctrl+2, Ctrl+3: Overview, Dependency graph, Archived." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Ctrl+F: search the page; Ctrl+N: new entity." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Ctrl+E: export Overview; F5: refresh." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Esc closes a dialog, a menu or the details pane, or leaves a search box; Enter confirms a dialog's default choice." />
-                    </StackPanel>
-                </Border>
-                <Border Margin="6,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource HelpCardTitleStyle}" Text="Dependency graph" />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Click an entity to select it and highlight its links; Ctrl+click selects more than one." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Double-click, or press Enter, to open the selected entity's details." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• The panel beside the map lists what the selected entity depends on and what needs it; Tab moves into it." />
-                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Drag to pan, scroll to zoom; + and − zoom, 0 fits the whole map, Esc clears the selection." />
-                    </StackPanel>
-                </Border>
-            </UniformGrid>
+                <TextBlock Margin="0,12,0,8" Style="{StaticResource SectionHeadingTextStyle}" Text="Keyboard and the dependency graph" />
+                <UniformGrid Columns="2">
+                    <Border Margin="0,0,6,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource HelpCardTitleStyle}" Text="Shortcuts on a Tracker" />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Ctrl+1, Ctrl+2, Ctrl+3: Overview, Dependency graph, Archived." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Ctrl+F: search the page; Ctrl+N: new entity." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Ctrl+E: export Overview; F5: refresh." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Esc closes a dialog, a menu or the details pane, or leaves a search box; Enter confirms a dialog's default choice." />
+                        </StackPanel>
+                    </Border>
+                    <Border Margin="6,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource HelpCardTitleStyle}" Text="Dependency graph" />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Click an entity to select it and highlight its links; Ctrl+click selects more than one." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Double-click, or press Enter, to open the selected entity's details." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• The panel beside the map lists what the selected entity depends on and what needs it; Tab moves into it." />
+                            <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Drag to pan, scroll to zoom; + and − zoom, 0 fits the whole map, Esc clears the selection." />
+                        </StackPanel>
+                    </Border>
+                </UniformGrid>
 
-            <TextBlock Margin="0,12,0,8" Style="{StaticResource SectionHeadingTextStyle}"
-                       Text="Project Git synchronization" />
-            <Border Margin="0,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource HelpCardTitleStyle}" Text="Setting up" />
-                    <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Install system Git and prepare one dedicated repository per Project outside EntityTracker: clone an existing remote or initialize a repository, check out a branch, and set your Git identity, remote, upstream and credentials with Git." />
-                    <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Then use Import project on Portfolio, or Link repository on the Project dashboard, and select the clean repository root." />
-                    <TextBlock Margin="0,14,0,0" Style="{StaticResource HelpCardTitleStyle}" Text="Syncing" />
-                    <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Automatic sync is on by default and checks linked Projects after startup and at the interval in Settings › Sync. It waits while an edit is unfinished." />
-                    <TextBlock Style="{StaticResource HelpPointStyle}" Text="• What&apos;s new in Settings › About lists what an offered update brings, and after an update what changed since the version you used before." />
-                    <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Sync now is always available, and conflicts and outbound deletions need it for review or approval." />
-                    <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Closing EntityTracker syncs changes not synced yet first; its notice offers Close without syncing. If a Project can&apos;t be synced, EntityTracker stays open and says why." />
-                    <TextBlock Margin="0,14,0,0" Style="{StaticResource HelpCardTitleStyle}" Text="When something goes wrong" />
-                    <TextBlock Style="{StaticResource HelpPointStyle}" Text="• If authentication fails, repair credentials with command-line Git outside EntityTracker." />
-                    <TextBlock Style="{StaticResource HelpPointStyle}" Text="• If a checkout moved, changed branch or upstream, or became invalid, restore it, or unlink and relink its root. The Project dashboard's Git repository card shows the last result." />
-                    <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Before inbound SQLite changes, EntityTracker creates a backup in %LOCALAPPDATA%\EntityTracker\backups\v&lt;schema-version&gt;. Close the app before restoring it, and keep a copy of the current database and repository first." />
-                </StackPanel>
-            </Border>
-        </StackPanel>
-    </ScrollViewer>
+                <TextBlock Margin="0,12,0,8" Style="{StaticResource SectionHeadingTextStyle}"
+                           Text="Project Git synchronization" />
+                <Border Margin="0,0,0,12" Padding="16" Style="{StaticResource EntityTrackerCardStyle}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource HelpCardTitleStyle}" Text="Setting up" />
+                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Install system Git and prepare one dedicated repository per Project outside EntityTracker: clone an existing remote or initialize a repository, check out a branch, and set your Git identity, remote, upstream and credentials with Git." />
+                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Then use Import project on Portfolio, or Link repository on the Project dashboard, and select the clean repository root." />
+                        <TextBlock Margin="0,14,0,0" Style="{StaticResource HelpCardTitleStyle}" Text="Syncing" />
+                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Automatic sync is on by default and checks linked Projects after startup and at the interval in Settings › Sync. It waits while an edit is unfinished." />
+                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• What&apos;s new in Settings › About lists what an offered update brings, and after an update what changed since the version you used before." />
+                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Sync now is always available, and conflicts and outbound deletions need it for review or approval." />
+                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Closing EntityTracker syncs changes not synced yet first; its notice offers Close without syncing. If a Project can&apos;t be synced, EntityTracker stays open and says why." />
+                        <TextBlock Margin="0,14,0,0" Style="{StaticResource HelpCardTitleStyle}" Text="When something goes wrong" />
+                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• If authentication fails, repair credentials with command-line Git outside EntityTracker." />
+                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• If a checkout moved, changed branch or upstream, or became invalid, restore it, or unlink and relink its root. The Project dashboard's Git repository card shows the last result." />
+                        <TextBlock Style="{StaticResource HelpPointStyle}" Text="• Before inbound SQLite changes, EntityTracker creates a backup in %LOCALAPPDATA%\EntityTracker\backups\v&lt;schema-version&gt;. Close the app before restoring it, and keep a copy of the current database and repository first." />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
 </UserControl>
