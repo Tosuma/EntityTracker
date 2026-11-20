@@ -13,8 +13,6 @@ internal static class ProgressChartPalette
     internal static readonly SKColor Implemented = From(ColorScheme.Chart.Implemented);
     internal static readonly SKColor ReadyTrend = From(ColorScheme.Chart.ReadyTrend);
     internal static readonly SKColor WaitingTrend = From(ColorScheme.Chart.WaitingTrend);
-    internal static readonly SKColor Increase = From(ColorScheme.Chart.Increase);
-    internal static readonly SKColor Decrease = From(ColorScheme.Chart.Decrease);
     internal static readonly SKColor Target = From(ColorScheme.Chart.Target);
 
     /// <summary>Gets the text colour of axes, legends and tooltips on the theme's canvas.</summary>

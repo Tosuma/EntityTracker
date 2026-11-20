@@ -158,7 +158,8 @@ public sealed class ProgressDashboardBuilder
 
     /// <summary>
     /// Each week of the range with how many entities became implemented and how many stopped being
-    /// implemented. Ups and downs in the same week are counted apart, so they don't cancel out.
+    /// implemented, and how many are in progress at its end. Ups and downs in the same week are
+    /// counted apart, so they don't cancel out.
     /// </summary>
     private static IReadOnlyList<WeeklyImplementedChange> BuildWeeklyChanges(
         IReadOnlyList<ImplementedProgressPoint> daily,
@@ -177,7 +178,11 @@ public sealed class ProgressDashboardBuilder
 
         return weeks
             .OrderBy(static week => week.Key)
-            .Select(static week => new WeeklyImplementedChange(week.Key, week.Value.Increase, week.Value.Decrease))
+            .Select(week => new WeeklyImplementedChange(
+                week.Key,
+                week.Value.Increase,
+                week.Value.Decrease,
+                daily.LastOrDefault(day => day.Date >= week.Key && day.Date < week.Key.AddDays(7))?.InProgressCount ?? 0))
             .ToArray();
     }
 

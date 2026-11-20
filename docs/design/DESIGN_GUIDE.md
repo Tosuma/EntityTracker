@@ -81,8 +81,10 @@ which are too alike to compare as slices. The slices have no borders, and the le
 The Progress over time chart draws implemented entities as a teal area (`Chart.Implemented`) and In progress,
 Not started and Blocked as thin lines in the pie's colours for those statuses, so a status keeps its colour
 across the charts. Its target line (today's active entities) is Coral (`Chart.Target`) and dashed, so it
-stays apart from the orange Blocked line; the weekly chart's
-increase and decrease bars are `Chart.Increase` and `Chart.Decrease`, side by side. Every chart title shows
+stays apart from the orange Blocked line. The weekly chart has two bars a week, side by side, in the app, its
+images and the exported report alike: the net change in implemented entities in `Chart.Implemented` (below zero
+when more stopped being implemented than became implemented, so its axis has no floor at zero), and the
+entities in progress at the week's end in the pie's In progress colour. Every chart title shows
 a short description when pointed at (`ProgressChartPresentationBuilder.GetDescription`).
 The line charts (Progress over time, and Ready to start vs waiting on dependencies) are plain lines, without a
 dot on every point: over a long period the dots crowd the chart. In the exported report, a dot shows only

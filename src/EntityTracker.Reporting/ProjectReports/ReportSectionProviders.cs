@@ -38,16 +38,10 @@ public sealed class SummarySectionProvider : IReportSectionProvider
 
 /// <summary>
 /// One of the progress charts the app shows, for every scope, with the notes a client needs to read
-/// it. The weekly chart is the report's own: the net change and the entities in progress, where the
-/// app shows increases and decreases.
+/// it.
 /// </summary>
 public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IReportSectionProvider
 {
-    /// <summary>Gets the weekly chart's description in the report, where its bars differ from the app's.</summary>
-    public const string WeeklyDescription =
-        "Each week, how many more entities are implemented than at the start of the week, and how many are in " +
-        "progress at its end.";
-
     /// <summary>Gets the progress chart's description when it has only a client's two lines.</summary>
     public const string ClientProgressDescription =
         "Each day, the implemented entities, against the active entities today.";
@@ -65,7 +59,6 @@ public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IRepo
         context.Scopes.ToDictionary(scope => scope.Key, scope => Chart(context.ReportFor(scope), context.Request.ProgressLines)),
         kind switch
         {
-            ProgressChartKind.WeeklyNetImplementedChange => WeeklyDescription,
             ProgressChartKind.ImplementedOverTime when context.Request.ProgressLines == ProgressOverTimeLines.Client =>
                 ClientProgressDescription,
             _ => ProgressChartPresentationBuilder.GetDescription(kind)
@@ -147,12 +140,10 @@ public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IRepo
             report.WeeklyNetImplementedChange.Select(week => Date(week.WeekStartingMonday)).ToArray(),
             [
                 new ReportSeries("Net change", ColorScheme.Chart.Implemented,
-                    report.WeeklyNetImplementedChange.Select(week => (double)(week.Increase - week.Decrease)).ToArray()),
+                    report.WeeklyNetImplementedChange.Select(week => (double)week.Net).ToArray()),
                 // In the colour the progress chart and the pie give In progress.
                 new ReportSeries("In progress", ReportLabels.SliceColor(ProgressStatusCategory.InProgress),
-                    report.WeeklyNetImplementedChange
-                        .Select(week => (double)InProgressAtEndOf(week.WeekStartingMonday, report.ImplementedOverTime))
-                        .ToArray())
+                    report.WeeklyNetImplementedChange.Select(week => (double)week.InProgressAtEnd).ToArray())
             ]),
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
     };
@@ -167,13 +158,6 @@ public sealed class ProgressChartSectionProvider(ProgressChartKind kind) : IRepo
         new("Blocked", ReportLabels.SliceColor(ProgressStatusCategory.Blocked),
             report.ImplementedOverTime.Select(point => (double)point.BlockedCount).ToArray())
     ];
-
-    /// <summary>
-    /// The entities in progress on the week's last day with data: its Sunday, or the last day of the
-    /// period when the week isn't over.
-    /// </summary>
-    private static int InProgressAtEndOf(DateOnly monday, IReadOnlyList<ImplementedProgressPoint> days) =>
-        days.LastOrDefault(day => day.Date >= monday && day.Date < monday.AddDays(7))?.InProgressCount ?? 0;
 
     private static string Date(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 }

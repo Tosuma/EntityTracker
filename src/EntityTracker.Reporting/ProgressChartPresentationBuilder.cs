@@ -128,21 +128,23 @@ public sealed class ProgressChartPresentationBuilder
             }
         ];
 
-        // Two bars a week, side by side and both upward: entities that became implemented, and
-        // entities that stopped being implemented.
+        // Two bars a week, side by side, as in the report: the net change, below zero when more
+        // entities stopped being implemented than became implemented, and the entities in progress at
+        // the week's end, in the colour the progress chart and the pie give In progress.
         ISeries[] weeklySeries =
         [
             new ColumnSeries<int>
             {
-                Name = "Increase",
-                Values = report.WeeklyNetImplementedChange.Select(static week => week.Increase).ToArray(),
-                Fill = new SolidColorPaint(ProgressChartPalette.Increase)
+                Name = "Net change",
+                Values = report.WeeklyNetImplementedChange.Select(static week => week.Net).ToArray(),
+                Fill = new SolidColorPaint(ProgressChartPalette.Implemented)
             },
             new ColumnSeries<int>
             {
-                Name = "Decrease",
-                Values = report.WeeklyNetImplementedChange.Select(static week => week.Decrease).ToArray(),
-                Fill = new SolidColorPaint(ProgressChartPalette.Decrease)
+                Name = "In progress",
+                Values = report.WeeklyNetImplementedChange.Select(static week => week.InProgressAtEnd).ToArray(),
+                Fill = new SolidColorPaint(ProgressChartPalette.From(
+                    ProgressChartPalette.Category(ProgressStatusCategory.InProgress, theme)))
             }
         ];
 
@@ -161,9 +163,9 @@ public sealed class ProgressChartPresentationBuilder
                 LabelsPaint = CreateTextPaint(theme),
                 SeparatorsPaint = CreateGridPaint(theme)
             }],
+            // No floor at zero: a week's net change can be below it.
             [new Axis
             {
-                MinLimit = 0,
                 MinStep = 1,
                 LabelsPaint = CreateTextPaint(theme),
                 SeparatorsPaint = CreateGridPaint(theme)
@@ -206,7 +208,7 @@ public sealed class ProgressChartPresentationBuilder
         ProgressChartKind.ReadyAndBlockedOverTime =>
             "Each day, the entities ready to start and those waiting on a dependency, since changes are recorded.",
         ProgressChartKind.WeeklyNetImplementedChange =>
-            "Each week, how many entities became implemented and how many stopped being implemented.",
+            "Each week, the net change in implemented entities, and the entities in progress at its end.",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
     };
 

@@ -578,9 +578,10 @@ report's own choice. Point at a chart's title for a short
 description of what it shows. The pie of development statuses uses standard chart colours, without
 borders between the slices. **Progress over time** shows the implemented entities each day, with lines
 for the entities in progress, not started and blocked in the same colours as the pie, and a dashed coral
-target line at today's number of active entities, so you can see how far along the work is. **Weekly implemented change** shows two
-bars a week: the entities that became implemented, and the ones that stopped being implemented, each
-counted from the entities' own status changes. **Ready to start vs waiting on dependencies** shows, for
+target line at today's number of active entities, so you can see how far along the work is. **Weekly implemented change** shows the
+same two bars a week as the report: the net change (entities that became implemented minus those that
+stopped being implemented, counted from the entities' own status changes, and below zero in a week that
+went backwards) and the entities in progress at the end of the week. **Ready to start vs waiting on dependencies** shows, for
 each day, the not started entities that could start and the ones still waiting on a dependency, worked
 out from the statuses, dependencies and archived entities as they were that day. Dependencies entered
 while setting up a Tracker, before its first status change, don't show as movement. The app records

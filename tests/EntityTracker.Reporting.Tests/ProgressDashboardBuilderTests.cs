@@ -195,8 +195,9 @@ public sealed class ProgressDashboardBuilderTests
 
         Assert.Equal(
         [
-            new WeeklyImplementedChange(new DateOnly(2026, 1, 5), 1, 1),
-            new WeeklyImplementedChange(new DateOnly(2026, 1, 12), 1, 0)
+            // In progress on the week's Sunday, and today for the week that isn't over.
+            new WeeklyImplementedChange(new DateOnly(2026, 1, 5), 1, 1, InProgressAtEnd: 1),
+            new WeeklyImplementedChange(new DateOnly(2026, 1, 12), 1, 0, InProgressAtEnd: 0)
         ], report.WeeklyNetImplementedChange);
     }
 
@@ -213,7 +214,8 @@ public sealed class ProgressDashboardBuilderTests
         ProgressDashboardReport report = _builder.Build(
             snapshots, ProgressDateRange.AllHistory, new DateOnly(2026, 1, 7), Utc);
 
-        Assert.Equal([new WeeklyImplementedChange(new DateOnly(2026, 1, 5), 2, 1)], report.WeeklyNetImplementedChange);
+        Assert.Equal([new WeeklyImplementedChange(new DateOnly(2026, 1, 5), 2, 1, InProgressAtEnd: 1)], report.WeeklyNetImplementedChange);
+        Assert.Equal(1, report.WeeklyNetImplementedChange.Single().Net);
     }
 
     private static EntityStatusHistoryEntry Moved(

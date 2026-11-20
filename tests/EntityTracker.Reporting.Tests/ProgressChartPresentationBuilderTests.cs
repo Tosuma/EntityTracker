@@ -99,11 +99,11 @@ public sealed class ProgressChartPresentationBuilderTests
             Assert.IsType<SolidColorPaint>(
                 Assert.IsType<LineSeries<int>>(presentation.ReadinessSeries[1]).Stroke).Color);
         Assert.Equal(
-            SKColor.Parse(ColorScheme.Chart.Increase),
+            SKColor.Parse(ColorScheme.Chart.Implemented),
             Assert.IsType<SolidColorPaint>(
                 Assert.IsType<ColumnSeries<int>>(presentation.WeeklySeries[0]).Fill).Color);
         Assert.Equal(
-            SKColor.Parse(ColorScheme.Chart.Decrease),
+            SKColor.Parse(ColorScheme.Chart.Categories[2]),
             Assert.IsType<SolidColorPaint>(
                 Assert.IsType<ColumnSeries<int>>(presentation.WeeklySeries[1]).Fill).Color);
         Assert.Equal(
@@ -165,13 +165,13 @@ public sealed class ProgressChartPresentationBuilderTests
     }
 
     [Fact]
-    public void Build_DrawsTodaysActiveEntitiesAsAFlatTargetAndTwoWeeklyBars()
+    public void Build_DrawsTodaysActiveEntitiesAsAFlatTargetAndTheReportsWeeklyBars()
     {
         DateOnly monday = new(2026, 8, 3);
         ProgressDashboardReport report = CreateReport(notStarted: 3, inProgress: 2, rework: 1, completed: 2, reconciled: 2) with
         {
             ImplementedOverTime = [new(monday, 2), new(monday.AddDays(1), 4), new(monday.AddDays(7), 5)],
-            WeeklyNetImplementedChange = [new(monday, 3, 1), new(monday.AddDays(7), 1, 0)]
+            WeeklyNetImplementedChange = [new(monday, 1, 3, InProgressAtEnd: 4), new(monday.AddDays(7), 1, 0, InProgressAtEnd: 2)]
         };
 
         ProgressChartPresentation presentation = _builder.Build(report);
@@ -179,12 +179,15 @@ public sealed class ProgressChartPresentationBuilderTests
         LineSeries<int> target = Assert.IsType<LineSeries<int>>(presentation.ImplementedSeries[^1]);
         Assert.Equal("Active entities", target.Name);
         Assert.Equal([10, 10, 10], Assert.IsAssignableFrom<IEnumerable<int>>(target.Values));
-        ColumnSeries<int> increase = Assert.IsType<ColumnSeries<int>>(presentation.WeeklySeries[0]);
-        ColumnSeries<int> decrease = Assert.IsType<ColumnSeries<int>>(presentation.WeeklySeries[1]);
-        Assert.Equal(("Increase", "Decrease"), (increase.Name, decrease.Name));
-        Assert.Equal([3, 1], Assert.IsAssignableFrom<IEnumerable<int>>(increase.Values));
-        Assert.Equal([1, 0], Assert.IsAssignableFrom<IEnumerable<int>>(decrease.Values));
-        Assert.Equal(0, presentation.WeeklyYAxes[0].MinLimit);
+        // As in the report: the net change, below zero in a week where more stopped than became
+        // implemented, and the entities in progress at the week's end.
+        ColumnSeries<int> net = Assert.IsType<ColumnSeries<int>>(presentation.WeeklySeries[0]);
+        ColumnSeries<int> inProgress = Assert.IsType<ColumnSeries<int>>(presentation.WeeklySeries[1]);
+        Assert.Equal(("Net change", "In progress"), (net.Name, inProgress.Name));
+        Assert.Equal([-2, 1], Assert.IsAssignableFrom<IEnumerable<int>>(net.Values));
+        Assert.Equal([4, 2], Assert.IsAssignableFrom<IEnumerable<int>>(inProgress.Values));
+        Assert.Null(presentation.WeeklyYAxes[0].MinLimit);
+        Assert.Equal(0, presentation.CountYAxes[0].MinLimit);
     }
 
     [Theory]
